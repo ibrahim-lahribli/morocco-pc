@@ -27,32 +27,25 @@ CREATE UNIQUE INDEX idx_chipset_manufacturer_name ON chipset(manufacturer_id, na
 -- ---------------------------------------------------------------------------
 -- gpu_chipset (shared lookup: the silicon itself, reusable across board SKUs).
 -- Board dimensions live on gpu_board_spec, NOT here.
--- gpu_chipset columns beyond (manufacturer_id, name) are inferred.
+-- Contains only agreed Layer 1 fields.
 -- ---------------------------------------------------------------------------
 CREATE TABLE gpu_chipset (
     id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     manufacturer_id        UUID NOT NULL REFERENCES manufacturer(id),
     name                   TEXT NOT NULL,
-    architecture           TEXT,
-    compute_units          INTEGER,
-    base_clock_mhz         INTEGER,
-    boost_clock_mhz        INTEGER,
-    tdp_watts              INTEGER,
-    memory_type            TEXT,
-    memory_bus_width_bits  INTEGER,
-    memory_bandwidth_gbps  NUMERIC(6,2),
+    vram_capacity_gb       INTEGER,
+    vram_type              TEXT,
+    memory_bus_width_bit   INTEGER,
+    pcie_interface         TEXT,
+    base_tgp_watts         INTEGER,
     created_at             TIMESTAMP NOT NULL DEFAULT now(),
 
-    CONSTRAINT chk_gpu_chipset_compute_units_positive
-        CHECK (compute_units > 0),
-    CONSTRAINT chk_gpu_chipset_tdp_positive
-        CHECK (tdp_watts > 0),
+    CONSTRAINT chk_gpu_chipset_vram_capacity_positive
+        CHECK (vram_capacity_gb > 0),
     CONSTRAINT chk_gpu_chipset_memory_bus_positive
-        CHECK (memory_bus_width_bits > 0),
-    CONSTRAINT chk_gpu_chipset_memory_bandwidth_positive
-        CHECK (memory_bandwidth_gbps > 0),
-    CONSTRAINT chk_gpu_chipset_boost_ge_base
-        CHECK (boost_clock_mhz IS NULL OR base_clock_mhz IS NULL OR boost_clock_mhz >= base_clock_mhz)
+        CHECK (memory_bus_width_bit > 0),
+    CONSTRAINT chk_gpu_chipset_base_tgp_positive
+        CHECK (base_tgp_watts > 0)
 );
 
 CREATE UNIQUE INDEX idx_gpu_chipset_manufacturer_name ON gpu_chipset(manufacturer_id, name);
@@ -107,9 +100,9 @@ CREATE TABLE gpu_board_spec (
     gpu_chipset_id            UUID NOT NULL REFERENCES gpu_chipset(id),
     board_tgp_watts           INTEGER,
     length_mm                 INTEGER,
-    width_slots               INTEGER,
+    width_slots               NUMERIC(4,2),
     height_mm                 INTEGER,
-    required_power_connectors TEXT,
+    required_power_connectors JSONB,
     recommended_psu_watts     INTEGER,
 
     created_at                TIMESTAMP NOT NULL DEFAULT now(),
