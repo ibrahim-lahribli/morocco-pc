@@ -1,5 +1,5 @@
 -- ===========================================================================
--- Compatibility tables (migration 005)
+-- Compatibility tables (migration 006)
 --
 -- Junction / fact tables that describe real-world compatibility between
 -- products and components:

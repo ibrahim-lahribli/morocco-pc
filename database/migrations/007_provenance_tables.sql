@@ -1,5 +1,5 @@
 -- ===========================================================================
--- Provenance & data-quality infrastructure (migration 006)
+-- Provenance & data-quality infrastructure (migration 007)
 --
 -- Tables that keep untrusted external data out of the canonical product layer
 -- until it has been reviewed and verified:
