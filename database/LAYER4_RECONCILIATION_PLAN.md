@@ -3,7 +3,7 @@
 Status: **PROPOSAL — NOT IMPLEMENTED.** No database changes have been made. Migration 011 has NOT been created or applied.
 
 Prepared: 2026-09-12
-Based on: read-only catalog inspection of the live Neon database plus review of migrations 001–010, `PROJECT_CONTEXT.md`, and `DEVELOPMENT_NOTES.md`.
+Based on: read-only catalog inspection of the live Neon database plus review of migrations 001–010, `CONTEXT.md`, and `DEVELOPMENT_NOTES.md`.
 
 ---
 
@@ -143,7 +143,7 @@ The `product_category` enum itself stays (owned by Layer 1, used by `product_can
 
 ### 2.3 `build_candidate.compatibility_status` NOT NULL DEFAULT 'UNKNOWN' — CHANGE
 
-`PROJECT_CONTEXT.md` principle 5 ("NULL means UNKNOWN") applies to *specifications*; a build's evaluated compatibility is an engine *decision field* and must be explicit. A NULL here is ambiguous between "not yet evaluated" and "evaluated, data unknown" — precisely the ambiguity principle 6 forbids assuming away.
+`CONTEXT.md` principle 5 ("NULL means UNKNOWN") applies to *specifications*; a build's evaluated compatibility is an engine *decision field* and must be explicit. A NULL here is ambiguous between "not yet evaluated" and "evaluated, data unknown" — precisely the ambiguity principle 6 forbids assuming away.
 
 ```sql
 ALTER TABLE build_candidate
@@ -155,7 +155,7 @@ The existing `compatibility_status` enum (PASS/FAIL/UNKNOWN/CONDITIONAL) is reus
 
 ### 2.4 `recommendation_query.scoring_model_id` NOT NULL — CHANGE
 
-`PROJECT_CONTEXT.md` requires each query to record "which `scoring_model` version was used", and `scoring_model` exists so results are reproducible and comparable between algorithm versions. A query without a model cannot be reproduced.
+`CONTEXT.md` requires each query to record "which `scoring_model` version was used", and `scoring_model` exists so results are reproducible and comparable between algorithm versions. A query without a model cannot be reproduced.
 
 ```sql
 ALTER TABLE recommendation_query ALTER COLUMN scoring_model_id SET NOT NULL;
@@ -299,7 +299,7 @@ Legend: KEEP (live object is correct, codify as-is) · CHANGE (live object is wr
 | 26 | No JSONB anywhere in Layer 4 | confirmed | desired | KEEP |
 | 27 | FK direction (L4 → L1/L2/L3 only, 9 FKs) | confirmed | desired | KEEP |
 | 28 | `build_component` mutable with `updated_at` | exists | supports swap/recalculate | KEEP |
-| 29 | `PROJECT_CONTEXT.md` Layer 4 section | tables listed as PLANNED | update to canonical after 011 | FUTURE (doc update after implementation) |
+| 29 | `CONTEXT.md` Layer 4 section | tables listed as PLANNED | update to canonical after 011 | FUTURE (doc update after implementation) |
 | 30 | DEVELOPMENT_NOTES Layer 4 drift entry | now documented (this session) | — | KEEP |
 
 ---
@@ -327,7 +327,7 @@ Existing Neon: existing (undocumented) Layer 4 objects → 011 → canonical Lay
 * No data migration needed (0 rows everywhere).
 * Do not touch migrations 001–010.
 * Do not modify `product_category` or `compatibility_status`; `component_role` is only codified, never altered.
-* After 011 is applied, `PROJECT_CONTEXT.md` Layer 4 section must be updated from PLANNED to canonical (separate doc change).
+* After 011 is applied, `CONTEXT.md` Layer 4 section must be updated from PLANNED to canonical (separate doc change).
 
 ### 5.4 Fresh 001→011 verification
 

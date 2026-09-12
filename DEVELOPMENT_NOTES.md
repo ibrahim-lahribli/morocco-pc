@@ -1,339 +1,230 @@
 # Development Notes
 
-## How to use this file
+Operational knowledge base for `morocco-pc`. Purpose: capture verified workflows, failure modes, and lessons so future agents avoid repeating investigations.
 
-Before performing development work:
+- `CONTEXT.md` = what the project is and how it is designed.
+- `DEVELOPMENT_NOTES.md` = what has been learned while developing it and how to avoid previous mistakes.
 
-1. Read `PROJECT_CONTEXT.md`.
-2. Read this file.
-3. Follow existing successful workflows before trying alternative tools.
-4. Add new lessons when a problem is solved.
+## ENVIRONMENT
 
----
+- Node.js project. Dependencies: `pg` (PostgreSQL client), `dotenv`. Node's built-in test runner for unit tests. No local PostgreSQL required.
+- Database: PostgreSQL on **Neon** (cloud). Single shared development database; not disposable.
+- Connection: `DATABASE_URL` from `.env`. `.env.example` contains the key name only, never a real value.
+- Scripts bootstrap with `require('dotenv').config()` and exit immediately when `DATABASE_URL` is missing.
+- Migration execution: `node scripts/run-migrations.js` applies `database/migrations/*.sql` in sorted filename order, then prints tables / foreign keys / enums / a UUID check. **The runner is not re-runnable against an already-migrated database** (see failure modes).
+- Test execution:
+  - `npm run test:db` — connection + `public` table listing (`scripts/test-db.js`).
+  - `npm run test:unit` — engine unit tests (`node --test "src/**/*.test.js"`).
+  - Targeted DB scripts run directly with `node scripts/<name>.js` (see VERIFIED COMMANDS).
 
-## Known working environment
+## VERIFIED COMMANDS
 
-* Node.js project using `pg` (PostgreSQL client) and `dotenv`.
-* Database: Neon cloud PostgreSQL.
-* Connection string is read from `DATABASE_URL` in `.env`.
-* `npm run test:db` executes `scripts/test-db.js`.
-* Migration runner: `scripts/run-migrations.js` reads all files from `database/migrations/` in sorted filename order and applies them sequentially.
-* Verification scripts exist in `scripts/` (see Testing Lessons section for details).
-* No local PostgreSQL installation is required.
+Commands verified to work in this repository/environment:
 
----
+| Command | What it does | Re-run safe |
+|---|---|---|
+| `npm run test:db` | DB connection + table listing | yes |
+| `node scripts/run-migrations.js` | applies all migrations + verification | only on a fresh DB — see failure modes |
+| `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance constraints (fixture-based) | yes (47/47) |
+| `node scripts/verify-hardware-schema.js` | hardware schema tables/constraints | yes |
+| `node scripts/test-layer3.js` | Layer 3 canonical schema functional tests | yes |
+| `node scripts/test-layer4.js` | Layer 4 canonical schema functional/integration tests (single transaction + SAVEPOINTs) | yes |
+| `node scripts/verify-schema.js` | columns/types for core tables | yes |
+| `node scripts/verify-constraints.js` | indexes / primary keys | yes |
+| `node scripts/verify-fks.js` | foreign keys | yes |
+| `npm run test:unit` | recommendation engine unit tests (`src/recommendation/**`) | yes |
+| `git status`, `git diff`, `git log --oneline`, `git remote -v`, `git mv` | repo inspection / rename | — |
 
-## Database workflow
+Note: commit and push commands were NOT executed in this session (the documentation task explicitly forbade them), so they are not listed as verified.
 
-The verified workflow for schema changes is:
+## KNOWN WORKING TOOLS
 
-1. Create a new migration file in `database/migrations/` with a padded sequential number (e.g. `010_new_feature.sql`).
-2. Write idempotent SQL where practical (`CREATE TABLE IF NOT EXISTS`, `DROP CONSTRAINT IF EXISTS`, etc.).
-3. Apply the migration to the Neon development database using the project's migration runner or direct `psql`.
-4. Run `scripts/run-migrations.js` to confirm the migration applies cleanly and verify tables/FKs/enums are present.
-5. Run existing test suites (`npm run test:db`) to confirm no regressions.
-6. Confirm no unintended tables or columns were introduced.
+### Applying a new migration to the shared Neon database
 
----
+#### Problem
 
-## Tool / workflow lessons
+`scripts/run-migrations.js` re-executes the full sequence every time with no applied-migrations tracking, and `002_enums.sql` uses a bare `CREATE TYPE`. Re-running the full sequence against the already-migrated Neon DB aborts at `type "product_category" already exists`.
 
-### Node script execution
+#### Failure
 
-All database scripts use:
-```js
-require('dotenv').config();
-const { Client } = require('pg');
-const client = new Client({ connectionString: process.env.DATABASE_URL });
-```
+The full-sequence runner cannot be used twice against the live database.
 
-The project does not use a separate migration framework. Migrations are plain `.sql` files applied sequentially by the custom Node script.
+#### Working solution
 
-### Inspect the live database before creating migrations
+1. Create the new `NNN_*.sql` migration in `database/migrations/`.
+2. Apply ONLY that file with a one-off temp script (`pg.Client` + `fs.readFileSync`), run it, verify with read-only catalog queries, then delete the temp script.
+3. Confirm idempotency by applying the new file a second time when its safety gate allows (this is exactly how 011 was applied).
 
-Never assume the live Neon database contains only objects represented by Git migrations. Before creating a new migration, inspect both the repository migrations and the live database catalogs (tables, columns, enums, constraints, indexes) via read-only catalog queries.
+#### Rule for future agents
 
----
+Never re-run the full runner on the live DB. Apply new migration files individually and delete the one-off script afterwards.
 
-## Migration lessons
+### Live-database inspection before corrective migrations
 
----
+#### Problem
 
-## Migration lessons
+The live Neon DB has drifted from the migrations before (undocumented Layer 3 and Layer 4 implementations).
 
-### Migration numbering conflict
+#### Failure
 
-Date: 2026-09-11
+Assuming the live DB matches the migration files leads to corrective migrations that do not apply or silently alter unintended objects.
 
-Problem:
-Two migration files shared the same prefix number (`005_` and `006_`) after earlier additions, creating ambiguous ordering.
+#### Working solution
 
-Attempt:
-Implicit ordering relied on filename sort.
+Inspect the live catalogs first with read-only queries and scripts: `node scripts/test-db.js`, `verify-schema.js`, `verify-constraints.js`, `verify-fks.js`, and one-off read-only SELECTs over `information_schema` / `pg_type`.
 
-Result:
-Files were renamed to resolve the conflict:
-`005_compatibility_tables.sql` -> `006_compatibility_tables.sql`
-`006_provenance_tables.sql` -> `007_provenance_tables.sql`
+#### Rule for future agents
 
-Working method:
-Always use padded sequential numbering (001, 002, ...) and never reuse a number. When resolving a numbering conflict, rename all affected migrations and update internal comments.
+Never assume the live DB contains only the objects in Git migrations. Inspect tables, columns, enums, constraints, indexes, and row counts before planning schema work.
 
-Instruction for future sessions:
-Do not create a migration with a number that already exists in `database/migrations/`. If a numbering conflict is discovered, fix it by renaming the conflicting files and updating references, not by inserting a new number in the middle of the sequence.
+### Git operations
 
----
+#### Working solution
 
-## Schema lessons
+- Working branch: `master`. Remote `origin` = https://github.com/ibrahim-lahribli/morocco-pc.git.
+- Renaming a tracked file preserves history: `git mv <old> <new>` (used this session for `PROJECT_CONTEXT.md` → `CONTEXT.md`).
+- Commit history uses conventional prefixes (feat, fix, docs, test) per `git log --oneline`.
+- Change review: `git status --porcelain`, `git diff`.
 
-### One-to-one PK = FK pattern
+#### Common failures
 
-Hardware specification tables use the same UUID as both PRIMARY KEY and FOREIGN KEY to `product` (or `product_variant`). This enforces one-to-one cardinality and simplifies joins.
+- None recorded this session. Known working-tree noise: untracked `.kilo/kilo.jsonc` (tool config — keep out of commits).
 
-### Partial unique indexes
+#### Rule for future agents
 
-Compatibility tables use partial unique indexes to allow both a family-level rule and an exact-CPU rule to coexist for the same motherboard, while preventing duplicate rules within the same specificity tier.
+Stage only intended files; never stage `.env` or `node_modules`. Do not commit or push during documentation-only tasks unless instructed.
 
-Example:
-```sql
-CREATE UNIQUE INDEX idx_cpu_mb_support_family
-  ON cpu_motherboard_support (motherboard_product_id, cpu_product_family_id)
-  WHERE cpu_product_id IS NULL;
-```
+## IMPORTANT FAILURE MODES
 
-### CHECK constraints for controlled vocabularies
+Deduplicated historical lessons. Each entry records the problem, what failed, the working solution, and the rule for future agents.
 
-`CHECK` constraints enforce:
-* Enum values for status fields (e.g. `compatibility_status`, `assessment_type`).
-* Positive ranges for numeric measurements (e.g. `CHECK (length_mm > 0)`).
-* Cross-column logic (e.g. `threads >= cores`, `boost >= base`).
+### Migration numbering conflict (2026-09-11)
 
-### JSONB for structured but variable data
+Problem: two migration files shared the same numeric prefix (a duplicate number was introduced), making filename-sort ordering ambiguous.
 
-`gpu_board_spec.required_power_connectors` uses JSONB because connector requirements vary by GPU but the schema does not need a full normalised table at Layer 1.
+Failure: ordering was no longer deterministic; `005` and `006` prefixes collided.
 
-### PostgreSQL enum modification
+Working solution: renamed `005_compatibility_tables.sql` → `006_compatibility_tables.sql` and `006_provenance_tables.sql` → `007_provenance_tables.sql`, and updated internal references.
 
-When upgrading a column from `TEXT` to an enum type on an existing database, use a safe cast:
-```sql
-ALTER TABLE component_assessment
-  ALTER COLUMN assessment_type TYPE assessment_type USING assessment_type::text::assessment_type;
-```
+Rule: always use padded sequential numbering (001, 002, …) and never reuse a number. Fix a conflict by renaming the affected files and updating references — never by inserting a new number mid-sequence.
 
-### Foreign-key ordering
+### Hardware schema corrections after 004 (2026-09-11)
 
-Tables must be created before they are referenced. Migration 008 explicitly re-adds a foreign key to `benchmark_source` to handle cases where the table was created before the constraint existed.
+Problem: migration 004 introduced fields that were later removed or changed (inferred GPU fields, incorrect column types).
 
----
+Failure: the initial hardware migration disagreed with the decided architecture.
 
-## Testing lessons
+Working solution: migration 004 was updated to the corrected schema for fresh databases, and a corrective `005_hardware_schema_corrections.sql` was added for the existing database using `IF EXISTS` / `IF NOT EXISTS` and safe casts — no data loss.
 
-### Test scripts
+Rule: after a migration has been applied to a shared environment, add a corrective migration rather than rewriting history. Keep corrective SQL defensively idempotent for fresh and existing databases.
 
-| Script | Purpose |
-|---|---|
-| `npm run test:db` | Runs `scripts/test-db.js` — basic connection and table listing |
-| `scripts/run-migrations.js` | Applies all migrations and verifies tables, FKs, enums |
-| `scripts/verify-schema.js` | Lists columns and types for core identity tables |
-| `scripts/verify-constraints.js` | Lists indexes and primary keys |
-| `scripts/verify-fks.js` | Lists foreign key relationships |
-| `scripts/test-compatibility.js` | Validates compatibility tables, constraints, partial indexes, and provenance data-quality rules |
-| `scripts/verify-hardware-schema.js` | Validates hardware schema tables and constraints |
+### test-compatibility.js cleanup ordering (2026-09-11, pre-existing)
 
-### How to run tests
+Problem: re-runs failed with `ERROR: update or delete on table "product" violates foreign key constraint "motherboard_spec_product_id_fkey"`.
 
-```bash
-npm run test:db
-node scripts/run-migrations.js
-node scripts/test-compatibility.js
-node scripts/verify-hardware-schema.js
-```
+Cause: cleanup deleted `TestCompat%` products before the one-to-one spec rows, `component_assessment`, `benchmark_result`, `store_offer`/`price_history`, `product_variant`/`gpu_board_spec`, and seeded reference rows that FK-reference them; a leftover `memory_type 'TestDDR5Compat'` also blocked re-seeding.
 
-### Important failure modes
+Working solution: dependency-safe cleanup order — junction/compat rows → one-to-one spec rows → Layer 2/3 dependents → provenance/candidate/alias → `product` → reference rows (`product_family`, `chipset`, `socket`, `memory_type`, `manufacturer`). The test now passes 47/47 and is re-runnable.
 
-* `DATABASE_URL is not set in .env` — script exits immediately.
-* `test-compatibility.js` cleans up previous test data by deleting rows with names matching `TestCompat%`. Do not use that prefix for real data.
-* `test-compatibility.js` cleanup order is intentional and must delete ALL rows that FK-reference a `TestCompat%` product BEFORE deleting the `product` row. That includes the one-to-one hardware spec tables (`cpu_spec`, `motherboard_spec`, `cooler_spec`, `case_spec`, `ram_spec`, `ssd_spec`, `psu_spec`), `component_assessment`, `benchmark_result`, `store_offer`/`price_history`, and `product_variant`/`gpu_board_spec`, plus the seeded reference rows (`memory_type 'TestDDR5Compat'`, etc.). If you touch this cleanup, keep that ordering.
-* Constraint violations in test scripts are expected for negative test cases and are handled with `assertRejects`.
+Rule: when adding fixtures, add matching cleanup in dependency-safe order. Never delete `product` before its FK dependents.
 
----
+### No isolated fresh-migration environment (standing limitation)
 
-## Problems encountered
+Problem: a fresh 001→011 migration test requires an empty, isolated PostgreSQL database; none exists (shared Neon only, no local `psql`, no Docker).
 
-### 2026-09-11 — Duplicate migration numbers
+Failure: `run-migrations.js` full re-run on the already-migrated DB aborts at `002_enums.sql` (bare `CREATE TYPE`, not idempotent).
 
-Problem:
-Two migration files shared the same numeric prefix.
+Working solution: none yet. Layer 3 and Layer 4 reconciliations (010/011) were applied in place after confirming the target tables had 0 rows.
 
-Attempt:
-Resolved by renaming files and updating internal references.
+Rule: report fresh-migration as NOT VERIFIED / BLOCKED until an isolated database exists (Docker Postgres, a Neon branch, or a `TEST_DATABASE_URL` pointing at a scratch DB). Do not fake a fresh-migration result against the shared Neon DB.
 
-Result:
-Migration ordering is now deterministic.
+### Neon connection intermittency
 
-Solution:
-Renamed `005_compatibility_tables.sql` to `006_compatibility_tables.sql`.
-Renamed `006_provenance_tables.sql` to `007_provenance_tables.sql`.
+Problem: Neon is a shared cloud service; connections can stall or be slow.
 
-Future instruction:
-Maintain padded sequential numbering. Do not reuse numbers. Rename all affected migrations if a conflict is found.
+Failure: scripts without a timeout can hang; intermittent connectivity was observed during development.
 
----
+Working solution: DB scripts set an explicit connection timeout — e.g. `connectionTimeoutMillis: 15000` in `scripts/test-layer3.js`. Prefer short-lived connections and read-only catalog queries for inspection.
 
-### 2026-09-11 — Hardware schema corrections after initial migration
+Rule: always set explicit timeouts in DB scripts; never assume a long-lived connection.
 
-Problem:
-Initial hardware schema (migration 004) contained fields that were later removed or changed (inferred GPU fields, incorrect column types).
+### Layer 3 schema drift (2026-09-11)
 
-Attempt:
-Added a separate corrective migration (005) that is safe for both fresh and existing databases.
+Problem: live `store` / `store_offer` / `price_history` did not match migration 009 — a pre-existing, undocumented earlier implementation with different CHECK constraints, nullable NOT-NULL columns, extra indexes, and an old offer-level unique constraint.
 
-Result:
-`005_hardware_schema_corrections.sql` applies cleanly to the existing Neon database and to fresh databases.
+Working solution: all three tables had 0 rows, so migration 010 reconciled in place (naive timestamps → `TIMESTAMPTZ`, canonical checks, removed `uq_store_offer_store_product_variant`, canonical indexes).
 
-Solution:
-Migration 004 was updated to the corrected schema. Migration 005 uses `IF EXISTS` / `IF NOT EXISTS` and safe casts to correct existing databases without data loss.
+Rule: migration 009 is the authoritative fresh-DB Layer 3 schema; post-009 changes need new corrective migrations. Multiple offers per store/product/variant are legitimate — do not reintroduce offer-level uniqueness.
 
-Future instruction:
-When a schema change is required after a migration has already been applied to shared environments, add a new corrective migration rather than rewriting history.
+### Layer 4 schema drift (2026-09-12)
 
----
+Problem: the live DB already contained the five Layer 4 tables plus a `component_role` enum — undocumented, empty, and with defects vs the agreed architecture (naive timestamps, nullable `scoring_model_id`, redundant `build_component.category`, `>= 0` price checks, missing uniqueness on ranks/roles).
 
-### 2026-09-11 — Compatibility test cleanup-order failure (pre-existing, unrelated to migration 009)
+Working solution: `011_reconcile_layer4.sql` (dual-mode: fresh-create vs 0-row reconcile, with a safety gate) applied and re-applied to confirm idempotency, then verified with read-only catalog queries. Full details: `database/LAYER4_RECONCILIATION_PLAN.md`.
 
-Problem:
-`scripts/test-compatibility.js` failed during its fixture cleanup on re-runs:
-`ERROR: update or delete on table "product" violates foreign key constraint "motherboard_spec_product_id_fkey" on table "motherboard_spec"`.
+Rule: migration 011 is the canonical Layer 4 schema — do not create Layer 4 tables from scratch. `scripts/test-layer4.js` exercises the canonical schema (single transaction, SAVEPOINTs, rollback).
 
-Cause:
-The test's cleanup deleted `product` rows (name LIKE `TestCompat%`) BEFORE deleting the one-to-one hardware spec rows the test itself creates (`cpu_spec`, `motherboard_spec`, `cooler_spec`, `case_spec`) that FK-reference those products. A first run left the spec rows behind, so every subsequent run violated the FK. After fixing the hardware spec order, the next blocker was leftover `component_assessment` rows (Layer 2 / migration 008) referencing `TestCompatMotherboard`; then `memory_type 'TestDDR5Compat'` was a duplicate-key blocker because the test seeds it but never cleaned it.
+### run-migrations.js non-idempotency (tool limitation)
 
-Dependency / order problem:
-`product` must be the LAST row deleted among everything that references it, and every seeded reference row (spec tables, `component_assessment`, `benchmark_result`, `store_offer`/`price_history`, `product_variant`/`gpu_board_spec`, `memory_type`, `product_family`, `chipset`, `socket`, `manufacturer`) must be removed first.
+Problem: the runner re-executes every file with no applied-migrations tracking; `002_enums.sql` uses a bare `CREATE TYPE`.
 
-Correct cleanup approach:
-1. Delete junction/compat rows for `TestCompat%` products.
-2. Delete one-to-one hardware spec rows (`cpu_spec`, `motherboard_spec`, `cooler_spec`, `case_spec`, `ram_spec`, `ssd_spec`, `psu_spec`) for `TestCompat%` products.
-3. Delete Layer 2/3 product-FK dependents (`component_assessment`, `benchmark_result`, `store_offer`/`price_history`, `product_variant`/`gpu_board_spec`) for `TestCompat%` products.
-4. Delete provenance/candidate/alias/ingestion rows.
-5. Delete `product`, then `product_family`, `chipset`, `socket`, `memory_type`, `manufacturer`.
+Failure: a second full run against the live DB aborts; new migrations (010, 011) had to bypass the runner.
 
-Result:
-Fix applied to `test-compatibility.js` only. No schema/constraint change. Test now passes 47/47 and is re-runnable. The failure was NOT related to migration 009 (009 adds `store`/`store_offer`/`price_history`, which the test never touches).
+Working solution: apply new migration files individually through a one-off temp script, then delete it (011 was additionally re-applied to confirm idempotency).
 
-Instruction for future sessions:
-When adding rows to `test-compatibility.js` fixtures, also add the matching cleanup in dependency-safe order so the test remains re-runnable. Never clean up by deleting `product` before its FK dependents.
+Rule: treat the runner as safe only for the first run on a fresh database; otherwise apply files individually.
 
----
+### Timestamp double-conversion pitfall (migration 011)
 
-### 2026-09-11 — No isolated fresh-migration test environment (current environment limitation)
+Problem: `ALTER COLUMN ... TYPE TIMESTAMPTZ USING col AT TIME ZONE 'UTC'` is only safe for `timestamp without time zone`. If the column is already `TIMESTAMPTZ`, `AT TIME ZONE 'UTC'` produces a naive timestamp that PostgreSQL re-interprets in the session timezone — shifting values on non-UTC sessions.
 
-Problem:
-A fresh 001→009 migration test requires an empty, isolated PostgreSQL database. None is available:
-* `DATABASE_URL` in `.env` points to the single shared Neon development database.
-* No local PostgreSQL (`psql` not installed) and no Docker are available.
-* `scripts/run-migrations.js` re-running the FULL sequence against the already-migrated Neon DB fails at `002_enums.sql` with `type "product_category" already exists` (migration 002 uses plain `CREATE TYPE`, not `IF NOT EXISTS`).
+Working solution: 011 loops over `information_schema.columns` and converts ONLY columns still typed `timestamp without time zone`, so it is safe against both starting states.
 
-Result:
-A genuine fresh 001→009 migration is NOT VERIFIED. Migration 009 does apply cleanly to the existing database and the Layer 3 tables/constraints/indexes are present, but this is not a fresh-DB test.
+Rule: guard timezone-conversion SQL by the starting column type; never assume a single starting state in corrective migrations.
 
-Instruction for future sessions:
-Report fresh-migration as NOT AVAILABLE until an isolated database (e.g., Docker Compose Postgres, a Neon branch, or a `TEST_DATABASE_URL` pointing to a scratch DB) is configured. Do not fake a fresh-migration result against the shared Neon DB.
+## DATABASE LESSONS
 
----
+- The shared Neon database is **not a disposable test database** — never reset, drop, or restore it.
+- Never use destructive reset operations (DROP / TRUNCATE / restore) for testing.
+- Use a transaction for fixture-based functional tests and roll back fixtures — see `scripts/test-layer4.js` (single transaction + SAVEPOINTs + explicit reverse-dependency cleanup + final ROLLBACK). Fixture tests that do not use transactions (`test-compatibility.js`, `verify-hardware-schema.js`) must delete their fixtures explicitly in dependency-safe order.
+- Roll back or delete test fixtures so tests stay re-runnable.
+- Use connection timeouts in scripts (Neon intermittency).
+- Distinguish schema drift from migration history: the live DB has drifted before (Layers 3 and 4) while the migrations became authoritative for fresh databases.
+- Inspect live metadata (tables, columns, enums, constraints, indexes, row counts) before creating corrective migrations.
+- `NULL` means UNKNOWN; UNKNOWN never means PASS. Do not write migrations that blur this distinction.
+- Never claim a fresh migration was verified unless it ran on an isolated empty database.
 
-### 2026-09-11 — Live Neon DB Layer 3 schema drifts from migration 009
+## TESTING LESSONS
 
-Problem:
-The live Neon database's `store` / `store_offer` / `price_history` objects do not exactly match `database/migrations/009_market_tables.sql`. This is pre-existing drift (not introduced by this session; no schema was changed):
-* Price CHECK constraints are named `chk_store_offer_price_nonneg` / `chk_price_history_price_nonneg` (>=0) in the DB vs `chk_store_offer_price_positive` / `chk_price_history_price_positive` (>0) in migration 009.
-* The `_not_empty` CHECK constraints from migration 009 (`chk_store_name_not_empty`, `chk_store_offer_currency_not_empty`, `chk_store_offer_availability_not_empty`, `chk_price_history_currency_not_empty`, `chk_price_history_availability_not_empty`) are absent in the DB.
-* `store_offer.last_checked_at`, `store_offer.availability`, and `price_history.availability` are NULLABLE in the DB but `NOT NULL` in migration 009.
-* The DB has extra indexes not present in migration 009: `idx_store_active`, `idx_price_history_store_offer_id`, `idx_price_history_store_offer_observed` (DESC), and unique `uq_store_offer_store_product_variant`.
+- `npm run test:db` — connection + table listing. No fixtures. Safe to rerun.
+- `node scripts/test-compatibility.js` — Layer 1 compatibility tables, partial unique indexes, provenance/data-quality rules. Uses and cleans `TestCompat%` fixtures. Safe to rerun (47/47). Do **not** use the `TestCompat%` prefix for real data.
+- `node scripts/verify-hardware-schema.js` — hardware spec tables and CHECK constraints. Uses and cleans `Test Product%` / `TEST-%` fixtures. Safe to rerun.
+- `node scripts/test-layer3.js` — Layer 3 canonical schema (columns, CHECKs, indexes, enums). Requires the three Layer 3 tables to be empty; transactional cleanup. Safe to rerun.
+- `node scripts/test-layer4.js` — Layer 4 canonical schema (migration 011): 9-FK layout, CHECKs, uniqueness (ranks, component roles), `component_role` enum; fixture-based with final rollback. Safe to rerun.
+- `npm run test:unit` — pure unit tests for `src/recommendation/**` (Engine 1–2B); no database required.
+- Environmental limitations: fresh 001→011 migration cannot be verified (no isolated DB); DB-backed scripts need network access to Neon and a configured `DATABASE_URL`.
+- Fixture cleanup requirement: everything created must be removed/rolled back in reverse-dependency order; row counts return to baseline.
 
-Result:
-The intended Layer 3 target (migration 009) and the live DB are out of sync.
+## GIT LESSONS
 
-Instruction for future sessions:
-Migration 009 was finalized as the authoritative fresh-database Layer 3 schema. Migration 010 was then created and applied after a safety gate confirmed zero rows in all three Layer 3 tables. It explicitly converted UTC timestamp-without-time-zone values to `TIMESTAMPTZ`, enforced required fields and canonical checks, removed the old offer-level uniqueness, and reconciled indexes.
+- Branch convention: work on `master` (the only branch in the repository).
+- Change checking: `git status --porcelain`, `git diff`, `git log --oneline`.
+- Renames preserve history: `git mv <old> <new>` (verified this session: `PROJECT_CONTEXT.md` → `CONTEXT.md`).
+- Commit history uses conventional prefixes (feat, fix, docs, test) — keep that style.
+- Commit/push: history shows commits on `master` pushed to `origin`, but the exact commit/push commands were NOT re-verified in this session (the task forbade committing). Re-verify a commit/push workflow before relying on it.
+- Common failures: none recorded this session. Working-tree noise: untracked `.kilo/kilo.jsonc` (tool config — keep out of commits).
+- `.env`, `node_modules`, logs are gitignored; never force-add or expose them.
 
-The old unique constraint/index `uq_store_offer_store_product_variant` was removed because legitimate multiple seller/listing records may share the same store, product, and optional variant. The canonical history index is `idx_price_history_store_offer_observed` on `(store_offer_id, observed_at DESC)` plus `idx_price_history_observed_at`; the redundant standalone history foreign-key index is not retained. `idx_store_active` and the four current-offer indexes remain canonical.
+## DOCUMENTATION UPDATE RULE
 
-Neon initially contained an undocumented earlier/independent Layer 3 implementation. It contained no Layer 3 rows, so reconciliation was applied without data migration complexity. Do not rewrite migrations 001-009; future post-009 changes require a new corrective migration.
+At the end of every significant development session, update `DEVELOPMENT_NOTES.md` when you discover:
 
-A true fresh 001→010 migration remains unavailable because no isolated PostgreSQL environment is configured. Neon was reconciled in place, but a fresh migration must not be claimed as verified until a scratch database, Neon branch, Docker PostgreSQL, or equivalent isolated environment is available.
+- a new failure
+- a new working solution
+- an environment limitation
+- a database-specific issue
+- a migration lesson
+- a testing lesson
+- a Git/tooling lesson
 
----
-
-### 2026-09-12 — Live Neon DB Layer 4 tables already exist (undocumented drift)
-
-Problem:
-A read-only architecture review of the live Neon database (catalog queries only — no schema changes were made) discovered that the five planned Layer 4 tables already exist in the live database:
-
-* `recommendation_profile`
-* `recommendation_query`
-* `recommendation_result`
-* `build_candidate`
-* `build_component`
-
-Details:
-* None of these tables is represented in migrations 001–010.
-* An undocumented enum `component_role` also exists, with values CPU, GPU, MOTHERBOARD, RAM, SSD_BOOT, SSD_SECONDARY, PSU, CASE, CPU_COOLER.
-* All five tables currently contained 0 rows at review time.
-* This was a live-database drift/reconciliation situation, similar to the previous Layer 3 incident (see the 2026-09-11 entry above).
-* The existing live tables had several defects versus the agreed Layer 4 architecture (naive timestamps, nullable scoring-model reference, redundant `build_component.category` column, >= 0 price checks, missing uniqueness on ranks and component roles, missing indexes). The full comparison and reconciliation decisions are documented in `database/LAYER4_RECONCILIATION_PLAN.md`.
-* UPDATE (same day): Migration 011 (`011_reconcile_layer4.sql`) has now been created and applied to Neon. See the 2026-09-12 migration 011 entry below for the reconciliation record.
-
-Instruction for future sessions:
-Migration 011 is the canonical Layer 4 schema. Do not create Layer 4 tables or a Layer 4 `CREATE TABLE` migration from scratch — migration 011 reconciles the (previously undocumented, empty) live tables into the authoritative schema per `database/LAYER4_RECONCILIATION_PLAN.md`. Any post-011 Layer 4 change requires a new corrective migration. Fresh 001→011 migration testing remains NOT AVAILABLE until an isolated scratch database exists.
-
----
-
-### 2026-09-12 — Migration 011 created and applied (Layer 4 reconciliation)
-
-Migration:
-`database/migrations/011_reconcile_layer4.sql` created, then applied to the live Neon database. Implements the canonical Layer 4 schema per `database/LAYER4_RECONCILIATION_PLAN.md`.
-
-Main reconciliation approach (dual-mode, like migrations 005/010):
-1. Safety gate (`DO $$ ... RAISE EXCEPTION`): if none of the five Layer 4 tables exist (fresh DB), the canonical schema is created; if all five exist, reconciliation proceeds ONLY when every table has 0 rows and the existing `component_role` enum (if present) has exactly the nine expected values; a partial state or non-empty tables aborts the migration without touching data.
-2. Codify phase: guarded `CREATE TYPE component_role` + canonical `CREATE TABLE IF NOT EXISTS` for the five tables, so a fresh 001→011 run creates the correct schema in one step.
-3. Reconcile phase: `DROP COLUMN IF EXISTS category`; naive→`TIMESTAMPTZ` conversion; `SET NOT NULL` / `SET DEFAULT`; drop-and-re-add of price CHECKs (`> 0`), the new store/price-snapshot consistency CHECK, and canonicalized budget/score/rank CHECKs.
-4. Index phase: unique partial `uq_recommendation_result_query_rank` (non-NULL rank unique per query), unique partial `uq_build_component_role_singular` (one CPU/MOTHERBOARD/PSU/CASE/CPU_COOLER/SSD_BOOT per candidate; GPU/RAM/SSD_SECONDARY multiples allowed), unique `idx_recommendation_profile_name`, plus `idx_build_component_product_variant_id` / `idx_build_component_store_id` and the retained access indexes.
-
-Implementation issues encountered:
-* `scripts/run-migrations.js` re-executes ALL migrations with no applied-migrations tracking, and `002_enums.sql` uses a bare `CREATE TYPE`, so the full runner cannot be re-run against the already-migrated Neon DB. Migration 011 was therefore applied through a one-off temp script (deleted afterwards) that executes only the 011 file — the same situation as 010.
-* No previous migration was modified. `scripts/test-layer4.js`, Layer 4 fixture data, profiles, and builds were deliberately NOT created (per task instructions).
-
-PostgreSQL-specific workaround (timestamp double-conversion):
-A plain `ALTER COLUMN ... TYPE TIMESTAMPTZ USING col AT TIME ZONE 'UTC'` is only safe for `timestamp without time zone` inputs. If the column is already `TIMESTAMPTZ`, `AT TIME ZONE 'UTC'` converts it to a naive timestamp which PostgreSQL then re-interprets in the session's `TimeZone` — shifting values on non-UTC sessions. Migration 011 therefore loops over `information_schema.columns` and executes the conversion ONLY for Layer 4 columns still typed `timestamp without time zone`, making it safe against both starting states.
-
-Neon modified: YES. Migration 011 applied: YES — and a second apply was executed to confirm idempotency (gate re-passed on the now-canonical empty tables).
-
-Post-apply read-only catalog verification (all confirmed):
-* 5 tables present; all still 0 rows.
-* `recommendation_query.scoring_model_id` NOT NULL; `build_candidate.compatibility_status` NOT NULL DEFAULT 'UNKNOWN'; all Layer 4 timestamps `timestamp with time zone`; `build_component.category` gone; `price_checked_at` nullable TIMESTAMPTZ; `recommendation_profile.priority` still INTEGER; no `store_offer_id` column.
-* 6 canonical CHECKs (budget > 0, score 0..100, total_price > 0 or NULL, selected_price > 0, store ⇒ price_checked_at, rank > 0).
-* 9 FKs exactly as planned (L4 → L1/L2/L3 only).
-* Enum `component_role` unchanged (9 expected values).
-* Indexes include the two unique partial indexes and unique profile-name index.
-
-Testing limitations:
-* Fresh 001→011 migration is NOT VERIFIED — no isolated scratch database exists (same standing limitation as 009/010). Do not claim fresh-migration success.
-* Regression: `npm run test:db` passed after the migration. The Layer 4 functional test suite (`scripts/test-layer4.js`) is planned but intentionally not yet created.
-
----
-
-## Rules for updating this file
-
-At the end of every development session:
-
-1. Review whether any new problem was encountered.
-2. Review whether a new successful workflow was discovered.
-3. Review whether an existing instruction turned out to be wrong.
-4. Add or update the relevant entry.
-5. Do not add noise or trivial events.
-6. Do not duplicate architectural documentation unnecessarily.
-7. Never store secrets.
-8. Never claim something was tested if it was not tested.
-
-If a previous instruction becomes obsolete, update it rather than creating contradictory instructions.
+Do not record trivial events. Never store secrets. Never claim something was tested if it was not actually executed.
