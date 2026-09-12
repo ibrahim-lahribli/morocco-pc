@@ -4,7 +4,8 @@
   "description": "Moroccan gaming PC recommendation platform",
   "private": true,
   "scripts": {
-    "test:db": "node scripts/test-db.js"
+    "test:db": "node scripts/test-db.js",
+    "test:unit": "node --test \"src/**/*.test.js\""
   },
   "dependencies": {
     "dotenv": "^17.4.2",
