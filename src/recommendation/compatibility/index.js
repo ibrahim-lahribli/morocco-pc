@@ -23,6 +23,12 @@ const {
   resolvePlatformMemorySupport,
   resolveMotherboardRamMemoryType,
 } = require('./memory');
+const {
+  resolveGpuCaseLength,
+  resolveGpuCaseThickness,
+  resolveGpuPsuWattage,
+  resolveGpuPsuConnectors,
+} = require('./gpu');
 
 module.exports = {
   FINAL_STATUSES,
@@ -37,4 +43,8 @@ module.exports = {
   resolveCaseRadiator,
   resolvePlatformMemorySupport,
   resolveMotherboardRamMemoryType,
+  resolveGpuCaseLength,
+  resolveGpuCaseThickness,
+  resolveGpuPsuWattage,
+  resolveGpuPsuConnectors,
 };
