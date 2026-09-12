@@ -598,7 +598,7 @@ Engine 1 - Compatibility resolver
 
 Engine 2 - Candidate component selector
     Stage 1 shortlists + offer pre-selection (cheapest in-currency in-stock
-    offer per product). Deterministic ordering + caps.
+    offer per product). Deterministic ordering. [Engine 2C: 2A contracts, 2B loader, 2C selector; no offers.]
 
 Engine 3 - Build assembler
     Staged expansion (section 11), budget pruning, completeness rules

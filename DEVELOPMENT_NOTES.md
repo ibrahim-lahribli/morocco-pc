@@ -201,7 +201,8 @@ Rule: guard timezone-conversion SQL by the starting column type; never assume a 
 - `node scripts/verify-hardware-schema.js` — hardware spec tables and CHECK constraints. Uses and cleans `Test Product%` / `TEST-%` fixtures. Safe to rerun.
 - `node scripts/test-layer3.js` — Layer 3 canonical schema (columns, CHECKs, indexes, enums). Requires the three Layer 3 tables to be empty; transactional cleanup. Safe to rerun.
 - `node scripts/test-layer4.js` — Layer 4 canonical schema (migration 011): 9-FK layout, CHECKs, uniqueness (ranks, component roles), `component_role` enum; fixture-based with final rollback. Safe to rerun.
-- `npm run test:unit` — pure unit tests for `src/recommendation/**` (Engine 1–2B); no database required.
+- `npm run test:unit` — pure unit tests for `src/recommendation/**` (Engine 1–2C); no database required.
+- Engine 2C: `selectCandidatePool()` (`src/recommendation/candidates/select.js`) is the canonical pool selector; `pool.test.js` covers eligibility, variant-identity, dedup, global-only `EMPTY_CANDIDATE_POOL`, ordering, determinism, and non-responsibilities. Existing `candidates.test.js` fixtures updated to valid Engine 2B identities (GPU variants carry ids; non-GPU carry null).
 - Environmental limitations: fresh 001→011 migration cannot be verified (no isolated DB); DB-backed scripts need network access to Neon and a configured `DATABASE_URL`.
 - Fixture cleanup requirement: everything created must be removed/rolled back in reverse-dependency order; row counts return to baseline.
 

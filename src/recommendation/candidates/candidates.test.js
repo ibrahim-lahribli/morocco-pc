@@ -299,7 +299,12 @@ test('rejects non-object candidates', () => {
 test('selects only candidates whose role is required', () => {
   const candidates = [
     makeCandidate({ product_id: 'cpu-1', category: 'CPU', component_role: 'CPU' }),
-    makeCandidate({ product_id: 'gpu-1', category: 'GPU', component_role: 'GPU' }),
+    makeCandidate({
+      product_id: 'gpu-1',
+      product_variant_id: 'gpu-var-1',
+      category: 'GPU',
+      component_role: 'GPU',
+    }),
     // CASE is not in required_roles below: must be excluded.
     makeCandidate({ product_id: 'case-1', category: 'CASE', component_role: 'CASE' }),
     makeCandidate({ product_id: 'psu-1', category: 'PSU', component_role: 'PSU' }),
@@ -316,15 +321,27 @@ test('selects multiple eligible candidates', () => {
   const candidates = [
     makeCandidate({ product_id: 'cpu-b' }),
     makeCandidate({ product_id: 'cpu-a' }),
-    makeCandidate({ product_id: 'gpu-z', category: 'GPU', component_role: 'GPU' }),
-    makeCandidate({ product_id: 'gpu-y', category: 'GPU', component_role: 'GPU' }),
+    makeCandidate({
+      product_id: 'gpu-prod',
+      product_variant_id: 'gpu-var-z',
+      category: 'GPU',
+      component_role: 'GPU',
+    }),
+    makeCandidate({
+      product_id: 'gpu-prod',
+      product_variant_id: 'gpu-var-y',
+      category: 'GPU',
+      component_role: 'GPU',
+    }),
   ];
   const input = { ...VALID_INPUT, required_roles: ['CPU', 'GPU'] };
   const { pool } = selectCandidatePool(input, candidates);
   assert.equal(pool.length, 4);
   assert.deepEqual(
-    pool.map((candidate) => `${candidate.component_role}:${candidate.product_id}`),
-    ['CPU:cpu-a', 'CPU:cpu-b', 'GPU:gpu-y', 'GPU:gpu-z']
+    pool.map(
+      (candidate) => `${candidate.component_role}:${candidate.product_id}:${candidate.product_variant_id ?? '-'}`
+    ),
+    ['CPU:cpu-a:-', 'CPU:cpu-b:-', 'GPU:gpu-prod:gpu-var-y', 'GPU:gpu-prod:gpu-var-z']
   );
 });
 
@@ -376,18 +393,28 @@ test('accepts an already-validated selection input', () => {
 
 test('orders by role enum order, then product id, then variant', () => {
   const candidates = [
-    makeCandidate({ product_id: 'b', product_variant_id: 'v2' }),
-    makeCandidate({ product_id: 'a', product_variant_id: 'v1' }),
-    makeCandidate({ product_id: 'b', product_variant_id: null }),
-    makeCandidate({ product_id: 'a', product_variant_id: null }),
-    makeCandidate({ product_id: 'zz', category: 'GPU', component_role: 'GPU' }),
+    makeCandidate({
+      product_id: 'gpu-prod',
+      product_variant_id: 'v2',
+      category: 'GPU',
+      component_role: 'GPU',
+    }),
+    makeCandidate({
+      product_id: 'gpu-prod',
+      product_variant_id: 'v1',
+      category: 'GPU',
+      component_role: 'GPU',
+    }),
+    makeCandidate({ product_id: 'b' }),
+    makeCandidate({ product_id: 'a' }),
+    makeCandidate({ product_id: 'zz', category: 'GPU', component_role: 'GPU', product_variant_id: 'v0' }),
     makeCandidate({ product_id: 'aa', category: 'PSU', component_role: 'PSU' }),
   ];
   const input = { ...VALID_INPUT, required_roles: ['CPU', 'GPU', 'PSU'] };
   const { pool } = selectCandidatePool(input, candidates);
   assert.deepEqual(
     pool.map((candidate) => `${candidate.product_id}:${candidate.product_variant_id ?? '-'}`),
-    ['a:-', 'a:v1', 'b:-', 'b:v2', 'zz:-', 'aa:-']
+    ['a:-', 'b:-', 'gpu-prod:v1', 'gpu-prod:v2', 'zz:v0', 'aa:-']
   );
 });
 
@@ -400,13 +427,12 @@ test('selection is deterministic across input order and repeated runs', () => {
       product_variant_id: variant,
     });
   const base = [
-    mk('c3', 'RAM', 'MEMORY', 'kit-b'),
-    mk('c1', 'GPU', 'GPU'),
+    mk('c1', 'GPU', 'GPU', 'kit-b'),
+    mk('c1', 'GPU', 'GPU', 'kit-a'),
     mk('c2', 'CPU', 'CPU'),
-    mk('c1', 'RAM', 'MEMORY', 'kit-a'),
     mk('c0', 'CASE', 'CASE'),
   ];
-  const input = { ...VALID_INPUT, required_roles: ['CPU', 'GPU', 'RAM', 'CASE'] };
+  const input = { ...VALID_INPUT, required_roles: ['CPU', 'GPU', 'CASE'] };
   const idsOf = (result) =>
     result.pool.map(
       (candidate) =>
@@ -417,19 +443,17 @@ test('selection is deterministic across input order and repeated runs', () => {
   const second = selectCandidatePool(input, [...base].reverse());
   const shuffled = selectCandidatePool(input, [
     mk('c0', 'CASE', 'CASE'),
-    mk('c1', 'RAM', 'MEMORY', 'kit-a'),
+    mk('c1', 'GPU', 'GPU', 'kit-a'),
     mk('c2', 'CPU', 'CPU'),
-    mk('c1', 'GPU', 'GPU'),
-    mk('c3', 'RAM', 'MEMORY', 'kit-b'),
+    mk('c1', 'GPU', 'GPU', 'kit-b'),
   ]);
 
   assert.deepEqual(idsOf(first), idsOf(second));
   assert.deepEqual(idsOf(first), idsOf(shuffled));
   assert.deepEqual(idsOf(first), [
     'c2/CPU/-',
-    'c1/GPU/-',
-    'c1/RAM/kit-a',
-    'c3/RAM/kit-b',
+    'c1/GPU/kit-a',
+    'c1/GPU/kit-b',
     'c0/CASE/-',
   ]);
 });
