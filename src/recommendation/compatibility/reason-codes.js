@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Stable machine-readable reason codes for compatibility results.
  *
  * Reason codes are part of the resolver contract: they may be persisted
@@ -8,6 +8,7 @@
 const REASON_CODES = Object.freeze({
   // CPU <-> motherboard
   CPU_SOCKET_MISMATCH: 'CPU_SOCKET_MISMATCH',
+  CPU_SOCKET_UNKNOWN: 'CPU_SOCKET_UNKNOWN',
   CPU_MOTHERBOARD_SUPPORT_FAIL: 'CPU_MOTHERBOARD_SUPPORT_FAIL',
   CPU_MOTHERBOARD_SUPPORT_UNKNOWN: 'CPU_MOTHERBOARD_SUPPORT_UNKNOWN',
   CPU_MOTHERBOARD_CONDITIONAL_UNVERIFIABLE:
