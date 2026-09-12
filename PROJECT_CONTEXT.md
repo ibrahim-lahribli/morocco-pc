@@ -157,6 +157,10 @@ These are derived compatibility checks. Therefore no separate GPUâ†”case or GPUâ
 * `store_offer` represents the current/latest offer state.
 * `price_history` is an append-only historical record.
 * Historical prices must not be destroyed merely because the current offer changes.
+* `store_offer` references canonical `product` and optionally `product_variant` records.
+* Prices must be positive and required market text fields must be non-empty.
+* Multiple seller/listing rows may exist for the same store, product, and variant; no offer-level unique key is used.
+* Canonical indexes include `idx_store_active`, the four current-offer indexes, and `(store_offer_id, observed_at DESC)` plus `observed_at` indexes for price history.
 
 ---
 
@@ -224,6 +228,7 @@ The current migration order is:
 7. `007_provenance_tables.sql`
 8. `008_benchmark_tables.sql`
 9. `009_market_tables.sql`
+10. `010_reconcile_layer3.sql`
 
 Do not renumber or reorder existing migrations casually.
 
@@ -281,7 +286,7 @@ Completed:
 * Compatibility schema
 * Provenance / data-quality schema
 * Benchmark / scoring Layer 2 foundation
-* Market / Layer 3 foundation (migration 009)
+* Market / Layer 3 canonical schema (migration 009) and Neon reconciliation (migration 010)
 
 In progress / next:
 * Remaining Layer 2 / Layer 3 / Layer 4 implementation

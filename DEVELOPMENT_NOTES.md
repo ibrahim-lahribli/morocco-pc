@@ -145,6 +145,7 @@ node scripts/verify-hardware-schema.js
 
 * `DATABASE_URL is not set in .env` — script exits immediately.
 * `test-compatibility.js` cleans up previous test data by deleting rows with names matching `TestCompat%`. Do not use that prefix for real data.
+* `test-compatibility.js` cleanup order is intentional and must delete ALL rows that FK-reference a `TestCompat%` product BEFORE deleting the `product` row. That includes the one-to-one hardware spec tables (`cpu_spec`, `motherboard_spec`, `cooler_spec`, `case_spec`, `ram_spec`, `ssd_spec`, `psu_spec`), `component_assessment`, `benchmark_result`, `store_offer`/`price_history`, and `product_variant`/`gpu_board_spec`, plus the seeded reference rows (`memory_type 'TestDDR5Compat'`, etc.). If you touch this cleanup, keep that ordering.
 * Constraint violations in test scripts are expected for negative test cases and are handled with `assertRejects`.
 
 ---
@@ -187,6 +188,72 @@ Migration 004 was updated to the corrected schema. Migration 005 uses `IF EXISTS
 
 Future instruction:
 When a schema change is required after a migration has already been applied to shared environments, add a new corrective migration rather than rewriting history.
+
+---
+
+### 2026-09-11 — Compatibility test cleanup-order failure (pre-existing, unrelated to migration 009)
+
+Problem:
+`scripts/test-compatibility.js` failed during its fixture cleanup on re-runs:
+`ERROR: update or delete on table "product" violates foreign key constraint "motherboard_spec_product_id_fkey" on table "motherboard_spec"`.
+
+Cause:
+The test's cleanup deleted `product` rows (name LIKE `TestCompat%`) BEFORE deleting the one-to-one hardware spec rows the test itself creates (`cpu_spec`, `motherboard_spec`, `cooler_spec`, `case_spec`) that FK-reference those products. A first run left the spec rows behind, so every subsequent run violated the FK. After fixing the hardware spec order, the next blocker was leftover `component_assessment` rows (Layer 2 / migration 008) referencing `TestCompatMotherboard`; then `memory_type 'TestDDR5Compat'` was a duplicate-key blocker because the test seeds it but never cleaned it.
+
+Dependency / order problem:
+`product` must be the LAST row deleted among everything that references it, and every seeded reference row (spec tables, `component_assessment`, `benchmark_result`, `store_offer`/`price_history`, `product_variant`/`gpu_board_spec`, `memory_type`, `product_family`, `chipset`, `socket`, `manufacturer`) must be removed first.
+
+Correct cleanup approach:
+1. Delete junction/compat rows for `TestCompat%` products.
+2. Delete one-to-one hardware spec rows (`cpu_spec`, `motherboard_spec`, `cooler_spec`, `case_spec`, `ram_spec`, `ssd_spec`, `psu_spec`) for `TestCompat%` products.
+3. Delete Layer 2/3 product-FK dependents (`component_assessment`, `benchmark_result`, `store_offer`/`price_history`, `product_variant`/`gpu_board_spec`) for `TestCompat%` products.
+4. Delete provenance/candidate/alias/ingestion rows.
+5. Delete `product`, then `product_family`, `chipset`, `socket`, `memory_type`, `manufacturer`.
+
+Result:
+Fix applied to `test-compatibility.js` only. No schema/constraint change. Test now passes 47/47 and is re-runnable. The failure was NOT related to migration 009 (009 adds `store`/`store_offer`/`price_history`, which the test never touches).
+
+Instruction for future sessions:
+When adding rows to `test-compatibility.js` fixtures, also add the matching cleanup in dependency-safe order so the test remains re-runnable. Never clean up by deleting `product` before its FK dependents.
+
+---
+
+### 2026-09-11 — No isolated fresh-migration test environment (current environment limitation)
+
+Problem:
+A fresh 001→009 migration test requires an empty, isolated PostgreSQL database. None is available:
+* `DATABASE_URL` in `.env` points to the single shared Neon development database.
+* No local PostgreSQL (`psql` not installed) and no Docker are available.
+* `scripts/run-migrations.js` re-running the FULL sequence against the already-migrated Neon DB fails at `002_enums.sql` with `type "product_category" already exists` (migration 002 uses plain `CREATE TYPE`, not `IF NOT EXISTS`).
+
+Result:
+A genuine fresh 001→009 migration is NOT VERIFIED. Migration 009 does apply cleanly to the existing database and the Layer 3 tables/constraints/indexes are present, but this is not a fresh-DB test.
+
+Instruction for future sessions:
+Report fresh-migration as NOT AVAILABLE until an isolated database (e.g., Docker Compose Postgres, a Neon branch, or a `TEST_DATABASE_URL` pointing to a scratch DB) is configured. Do not fake a fresh-migration result against the shared Neon DB.
+
+---
+
+### 2026-09-11 — Live Neon DB Layer 3 schema drifts from migration 009
+
+Problem:
+The live Neon database's `store` / `store_offer` / `price_history` objects do not exactly match `database/migrations/009_market_tables.sql`. This is pre-existing drift (not introduced by this session; no schema was changed):
+* Price CHECK constraints are named `chk_store_offer_price_nonneg` / `chk_price_history_price_nonneg` (>=0) in the DB vs `chk_store_offer_price_positive` / `chk_price_history_price_positive` (>0) in migration 009.
+* The `_not_empty` CHECK constraints from migration 009 (`chk_store_name_not_empty`, `chk_store_offer_currency_not_empty`, `chk_store_offer_availability_not_empty`, `chk_price_history_currency_not_empty`, `chk_price_history_availability_not_empty`) are absent in the DB.
+* `store_offer.last_checked_at`, `store_offer.availability`, and `price_history.availability` are NULLABLE in the DB but `NOT NULL` in migration 009.
+* The DB has extra indexes not present in migration 009: `idx_store_active`, `idx_price_history_store_offer_id`, `idx_price_history_store_offer_observed` (DESC), and unique `uq_store_offer_store_product_variant`.
+
+Result:
+The intended Layer 3 target (migration 009) and the live DB are out of sync.
+
+Instruction for future sessions:
+Migration 009 was finalized as the authoritative fresh-database Layer 3 schema. Migration 010 was then created and applied after a safety gate confirmed zero rows in all three Layer 3 tables. It explicitly converted UTC timestamp-without-time-zone values to `TIMESTAMPTZ`, enforced required fields and canonical checks, removed the old offer-level uniqueness, and reconciled indexes.
+
+The old unique constraint/index `uq_store_offer_store_product_variant` was removed because legitimate multiple seller/listing records may share the same store, product, and optional variant. The canonical history index is `idx_price_history_store_offer_observed` on `(store_offer_id, observed_at DESC)` plus `idx_price_history_observed_at`; the redundant standalone history foreign-key index is not retained. `idx_store_active` and the four current-offer indexes remain canonical.
+
+Neon initially contained an undocumented earlier/independent Layer 3 implementation. It contained no Layer 3 rows, so reconciliation was applied without data migration complexity. Do not rewrite migrations 001-009; future post-009 changes require a new corrective migration.
+
+A true fresh 001→010 migration remains unavailable because no isolated PostgreSQL environment is configured. Neon was reconciled in place, but a fresh migration must not be claimed as verified until a scratch database, Neon branch, Docker PostgreSQL, or equivalent isolated environment is available.
 
 ---
 

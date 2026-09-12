@@ -35,6 +35,27 @@ const client = new Client({ connectionString: process.env.DATABASE_URL });
     await client.query(`DELETE FROM cooler_socket_support WHERE cooler_product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
     await client.query(`DELETE FROM case_motherboard_form_factor WHERE case_product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
     await client.query(`DELETE FROM case_radiator_support WHERE case_product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
+// Delete one-to-one hardware spec rows that reference the TestCompat%
+    // products BEFORE deleting the products. Without this, a re-run fails on
+    // the FK from cpu_spec / motherboard_spec / cooler_spec / case_spec (and the
+    // other product_id-keyed spec tables) back to product.
+    await client.query(`DELETE FROM cpu_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
+    await client.query(`DELETE FROM motherboard_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
+    await client.query(`DELETE FROM cooler_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
+    await client.query(`DELETE FROM case_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
+    await client.query(`DELETE FROM ram_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
+    await client.query(`DELETE FROM ssd_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
+    await client.query(`DELETE FROM psu_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
+// Delete Layer 2/3 product-FK dependents (assessment / benchmark / offer /
+    // variant rows that reference TestCompat% products) BEFORE deleting the
+    // products. Prevents re-run failures on component_assessment, benchmark_result,
+    // store_offer, price_history, product_variant (and gpu_board_spec via variant).
+    await client.query(`DELETE FROM price_history WHERE store_offer_id IN (SELECT id FROM store_offer WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%'))`);
+    await client.query(`DELETE FROM store_offer WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
+    await client.query(`DELETE FROM component_assessment WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
+    await client.query(`DELETE FROM benchmark_result WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
+    await client.query(`DELETE FROM gpu_board_spec WHERE product_variant_id IN (SELECT id FROM product_variant WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%'))`);
+    await client.query(`DELETE FROM product_variant WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
     await client.query(`DELETE FROM spec_provenance WHERE target_table IN ('cpu_motherboard_support', 'cooler_socket_support', 'case_motherboard_form_factor', 'case_radiator_support')`);
     await client.query(`DELETE FROM product_candidate WHERE source_identifier LIKE 'TestCompat%'`);
     await client.query(`DELETE FROM ingestion_record WHERE source_identifier LIKE 'TestCompat%'`);
@@ -43,6 +64,7 @@ const client = new Client({ connectionString: process.env.DATABASE_URL });
     await client.query(`DELETE FROM product_family WHERE name IN ('TestCPUFamily', 'TestMBBFamily', 'TestCaseFamily', 'TestCoolerFamily')`);
     await client.query(`DELETE FROM chipset WHERE name = 'TestChipsetCompat'`);
     await client.query(`DELETE FROM socket WHERE name = 'TestSocketCompat'`);
+await client.query(`DELETE FROM memory_type WHERE name = 'TestDDR5Compat'`);
     await client.query(`DELETE FROM manufacturer WHERE name = 'TestManufacturerCompat'`);
 
     // ------------------------------------------------------------------
