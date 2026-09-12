@@ -22,6 +22,9 @@ const ERROR_CODES = Object.freeze({
   INVALID_CANDIDATE: 'INVALID_CANDIDATE',
   // Candidate selection was invoked without the candidates it requires.
   EMPTY_CANDIDATE_POOL: 'EMPTY_CANDIDATE_POOL',
+  // A canonical product maps to multiple incompatible product-keyed category
+  // spec tables; the loader refuses to silently choose one category.
+  CANONICAL_CATEGORY_AMBIGUITY: 'CANONICAL_CATEGORY_AMBIGUITY',
 });
 
 class CandidateSelectionError extends Error {

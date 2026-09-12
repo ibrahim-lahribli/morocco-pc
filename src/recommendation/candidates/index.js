@@ -21,6 +21,7 @@ const {
 const { ERROR_CODES, CandidateSelectionError } = require('./errors');
 const { createCandidateSelectionInput } = require('./input');
 const { createCandidate } = require('./candidate');
+const { loadCandidates } = require('./loader');
 const {
   SELECTION_STAGES,
   IMPLEMENTED_STAGES,
@@ -40,6 +41,7 @@ module.exports = {
   CandidateSelectionError,
   createCandidateSelectionInput,
   createCandidate,
+  loadCandidates,
   SELECTION_STAGES,
   IMPLEMENTED_STAGES,
   selectCandidatePool,

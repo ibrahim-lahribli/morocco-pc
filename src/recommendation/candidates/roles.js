@@ -57,9 +57,10 @@ const PRODUCT_CATEGORIES = Object.freeze([
 ]);
 
 /**
- * Which `product_category` each component role must come from (Layer 1
- * identity: `product.category`). A build_component role maps onto exactly one
- * product category.
+ * Which `product_category` each component role must come from. The product
+ * category is DERIVED from canonical Layer 1 hardware-spec table presence
+ * (there is no `product.category` column in the schema). A build_component
+ * role maps onto exactly one product category.
  */
 const ROLE_CATEGORIES = Object.freeze({
   CPU: 'CPU',
