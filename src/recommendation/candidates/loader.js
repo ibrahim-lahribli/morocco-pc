@@ -64,6 +64,8 @@ const PRODUCT_KEYED_SPEC_BY_CATEGORY = Object.freeze({
  * from this guard because gpu_board_spec is intentionally variant-keyed: a
  * product-level spec plus a GPU variant is a valid canonical data model, not a
  * category conflict (see the Engine 2B investigation report, section 7).
+ * Enforcement is scoped in loadCandidates: only ambiguous ids behind
+ * returned product-keyed candidates fail the load.
  *
  * Returns one row per ACTIVE product that appears in more than one of the seven
  * product-keyed spec tables.
@@ -90,9 +92,13 @@ HAVING count(*) > 1
 /**
  * Build the candidate SQL for a product-keyed category.
  *
- * Union of:
- *   (a) the base product candidate (product_variant_id = NULL), and
- *   (b) one candidate per canonical product_variant row of that product.
+ * Base-only:
+ *   exactly one base product candidate (product_variant_id = NULL);
+ *   generic product_variant rows never create candidates.
+ * Candidate identity follows the key of the canonical hardware specification:
+ * product-keyed spec yields a base product candidate; the variant-keyed GPU
+ * spec yields variant candidates. No product_variant_type, name, or
+ * variant-metadata logic is used.
  *
  * `specTable` is always a trusted identifier from PRODUCT_KEYED_SPEC_BY_CATEGORY.
  */
@@ -104,16 +110,7 @@ SELECT p.id AS product_id,
  WHERE p.lifecycle_status = 'ACTIVE'
    AND EXISTS (SELECT 1 FROM ${specTable} s WHERE s.product_id = p.id)
 
- UNION ALL
-
-SELECT p.id AS product_id,
-       pv.id AS product_variant_id
-  FROM product p
-  JOIN product_variant pv ON pv.product_id = p.id
- WHERE p.lifecycle_status = 'ACTIVE'
-   AND EXISTS (SELECT 1 FROM ${specTable} s WHERE s.product_id = p.id)
-
- ORDER BY product_id ASC, product_variant_id ASC NULLS FIRST;
+ ORDER BY product_id ASC;
 `;
 }
 
@@ -199,22 +196,8 @@ async function loadCandidates(input, db) {
     );
   }
 
-  // 1. Canonical data-integrity guard: never silently choose a category when an
-  //    ACTIVE product maps to multiple product-keyed category spec tables.
-  const ambiguousRows = await queryRows(db, PRODUCT_KEYED_AMBIGUITY_SQL);
-  if (ambiguousRows.length > 0) {
-    const productIds = ambiguousRows
-      .map((row) => String(row.product_id))
-      .filter((value) => value.length > 0)
-      .sort();
-    throw new CandidateSelectionError(
-      ERROR_CODES.CANONICAL_CATEGORY_AMBIGUITY,
-      `Canonical category ambiguity: product(s) appear in multiple product-keyed category spec tables: ${productIds.join(', ')}`,
-      'product_id'
-    );
-  }
-
-  // 2. Load per role in canonical role order, then deterministically re-sort.
+  // 1. Load per role in canonical role order (candidate identity follows the
+  //    key of the canonical hardware specification).
   const candidates = [];
   for (const role of Object.keys(ROLE_ORDER)) {
     if (!validated.required_roles.includes(role)) continue;
@@ -257,6 +240,14 @@ async function loadCandidates(input, db) {
         );
       }
 
+      if (category !== GPU_CATEGORY && productVariantId !== null) {
+        throw new CandidateSelectionError(
+          ERROR_CODES.INVALID_CANDIDATE,
+          'Product-keyed candidate must carry a null product_variant_id',
+          'product_variant_id'
+        );
+      }
+
       candidates.push(
         createCandidate({
           product_id: String(row.product_id),
@@ -264,6 +255,32 @@ async function loadCandidates(input, db) {
           category,
           component_role: role,
         })
+      );
+    }
+  }
+
+  // 2. Scoped canonical category guard: never silently choose a category,
+  //    but only fail when an ambiguous product actually contributed a
+  //    product-keyed candidate to this request. Unrelated catalog issues
+  //    never block valid roles. GPU is variant-keyed and excluded here.
+  const productKeyedIds = new Set();
+  for (const built of candidates) {
+    if (built.category !== GPU_CATEGORY) { productKeyedIds.add(built.product_id); }
+  }
+  if (productKeyedIds.size > 0) {
+    const ambiguousRows = await queryRows(db, PRODUCT_KEYED_AMBIGUITY_SQL);
+    const relevant = [];
+    for (const amb of ambiguousRows) {
+      const pid = amb.product_id;
+      const key = (pid === null || pid === undefined) ? '' : String(pid);
+      if (key.length > 0 && productKeyedIds.has(key)) { relevant.push(key); }
+    }
+    relevant.sort();
+    if (relevant.length > 0) {
+      throw new CandidateSelectionError(
+        ERROR_CODES.CANONICAL_CATEGORY_AMBIGUITY,
+        'Canonical category ambiguity: product(s) appear in multiple product-keyed category spec tables: ' + relevant.join(', '),
+        'product_id'
       );
     }
   }

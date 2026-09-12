@@ -68,6 +68,11 @@ function makeDb(rowsByCategory = {}, ambiguityRows = [], options = {}) {
   };
 }
 
+// Only genuine JOIN ... product_variant clauses count as a variant branch;
+function joinsProductVariant(sql) {
+  return sql.toLowerCase().includes('join product_variant');
+}
+
 // Exclude the product-keyed ambiguity guard, which legitimately references
 // every product-keyed spec table, and keep only the role-identity queries.
 function identityQueries(db) {
@@ -197,21 +202,102 @@ test('GPU comes from gpu_board_spec through product_variant (variant-keyed)', as
 });
 
 // ---------------------------------------------------------------------------
-// Candidate identity
+// Engine 2B correction: canonical candidate identity (product-keyed base-only)
+
 // ---------------------------------------------------------------------------
 
-test('non-GPU base product candidate has product_variant_id = null', async () => {
+test('product-keyed SQL emits exactly one base candidate (no product_variant branch)', async () => {
+  const db = makeDb({ CPU: [{ product_id: 'cpu-1', product_variant_id: null }] });
+  const out = await loadCandidates(input(['CPU']), db);
+  const cpuSql = identityQueries(db).find((sql) => sql.includes('FROM cpu_spec'));
+  assert.ok(cpuSql, 'expected a cpu_spec identity query');
+  assert.ok(!joinsProductVariant(cpuSql), 'product-keyed SQL must be base-only');
+  assert.ok(!cpuSql.toLowerCase().includes('union all'), 'product-keyed SQL must not union a variant branch');
+  assert.equal(out.candidates.length, 1);
+  assert.equal(out.candidates[0].product_id, 'cpu-1');
+  assert.equal(out.candidates[0].product_variant_id, null);
+  assert.equal(out.candidates[0].category, 'CPU');
+  assert.equal(out.candidates[0].component_role, 'CPU');
+});
+
+test('product-keyed CPU spec plus multiple variants yields exactly one base CPU candidate', async () => {
+  const db = makeDb({ CPU: [{ product_id: 'cpu-1', product_variant_id: null }] });
+  const out = await loadCandidates(input(['CPU']), db);
+  assert.equal(out.candidates.length, 1);
+  assert.equal(out.candidates[0].product_id, 'cpu-1');
+  assert.equal(out.candidates[0].product_variant_id, null);
+  assert.equal(out.candidates[0].category, 'CPU');
+  assert.equal(out.candidates[0].component_role, 'CPU');
+});
+
+test('product-keyed motherboard spec plus variants yields exactly one base motherboard candidate', async () => {
+  const db = makeDb({ MOTHERBOARD: [{ product_id: 'mb-1', product_variant_id: null }] });
+  const out = await loadCandidates(input(['MOTHERBOARD']), db);
+  assert.equal(out.candidates.length, 1);
+  assert.equal(out.candidates[0].product_id, 'mb-1');
+  assert.equal(out.candidates[0].product_variant_id, null);
+  assert.equal(out.candidates[0].category, 'MOTHERBOARD');
+  assert.equal(out.candidates[0].component_role, 'MOTHERBOARD');
+});
+
+test('product-keyed RAM, SSD, PSU, CASE and COOLER queries never reference product_variant', async () => {
   const db = makeDb({
-    CPU: [
-      { product_id: 'cpu-1', product_variant_id: null },
-      { product_id: 'cpu-1', product_variant_id: 'cpu-1-v2' },
+    MEMORY: [{ product_id: 'ram-1', product_variant_id: null }],
+    STORAGE: [{ product_id: 'ssd-1', product_variant_id: null }],
+    PSU: [{ product_id: 'psu-1', product_variant_id: null }],
+    CASE: [{ product_id: 'case-1', product_variant_id: null }],
+    COOLER: [{ product_id: 'cooler-1', product_variant_id: null }],
+  });
+  const out = await loadCandidates(input(['RAM', 'SSD_BOOT', 'PSU', 'CASE', 'CPU_COOLER']), db);
+  assert.equal(out.candidates.length, 5);
+  assert.ok(out.candidates.every((c) => c.product_variant_id === null));
+  for (const sql of identityQueries(db)) {
+    assert.ok(!joinsProductVariant(sql), 'product-keyed identity query must be base-only');
+    assert.ok(!sql.toLowerCase().includes('union all'));
+  }
+});
+
+test('non-null variant row for a product-keyed category is rejected, never coerced', async () => {
+  const db = makeDb({ CPU: [{ product_id: 'cpu-1', product_variant_id: 'cpu-1-v2' }] });
+  let err = null;
+  try {
+    await loadCandidates(input(['CPU']), db);
+  } catch (error) {
+    err = error;
+  }
+  assert.ok(err instanceof CandidateSelectionError);
+  assert.equal(err.code, ERROR_CODES.INVALID_CANDIDATE);
+  assert.equal(err.field, 'product_variant_id');
+});
+
+test('GPU still generates one candidate per variant row', async () => {
+  const db = makeDb({
+    GPU: [
+      { product_id: 'gpu-prod', product_variant_id: 'gpu-var-a' },
+      { product_id: 'gpu-prod', product_variant_id: 'gpu-var-b' },
     ],
   });
-  const out = await loadCandidates(input(['CPU']), db);
-  const base = out.candidates.find((c) => c.product_variant_id === null);
-  assert.ok(base, 'expected a base candidate with null variant');
-  const variant = out.candidates.find((c) => c.product_variant_id === 'cpu-1-v2');
-  assert.ok(variant, 'expected a distinct variant candidate to be preserved');
+  const out = await loadCandidates(input(['GPU']), db);
+  assert.equal(out.candidates.length, 2);
+  assert.deepEqual(
+    out.candidates.map((c) => c.product_variant_id),
+    ['gpu-var-a', 'gpu-var-b']
+  );
+  assert.ok(out.candidates.every((c) => c.category === 'GPU'));
+  assert.ok(out.candidates.every((c) => c.component_role === 'GPU'));
+});
+
+test('GPU candidate with null variant is rejected', async () => {
+  const db = makeDb({ GPU: [{ product_id: 'gpu-prod', product_variant_id: null }] });
+  let err = null;
+  try {
+    await loadCandidates(input(['GPU']), db);
+  } catch (error) {
+    err = error;
+  }
+  assert.ok(err instanceof CandidateSelectionError);
+  assert.equal(err.code, ERROR_CODES.INVALID_CANDIDATE);
+  assert.equal(err.field, 'product_variant_id');
 });
 
 test('GPU candidates always preserve the variant ID (never null)', async () => {
@@ -244,19 +330,48 @@ test('no fabricated candidates when the database has zero rows', async () => {
 // Ambiguity
 // ---------------------------------------------------------------------------
 
-test('product appearing in multiple product-keyed spec tables is detected', async () => {
-  const db = makeDb({}, [{ product_id: 'bad-1', category_count: 2 }]);
+test('unrelated malformed product elsewhere does not block a valid CPU request', async () => {
+  const db = makeDb(
+    { CPU: [{ product_id: 'cpu-1', product_variant_id: null }] },
+    [{ product_id: 'bad-1', category_count: 2 }]
+  );
+  const out = await loadCandidates(input(['CPU']), db);
+  assert.equal(out.candidates.length, 1);
+  assert.equal(out.candidates[0].product_id, 'cpu-1');
+});
+
+test('ambiguous product behind a returned candidate still fails the load', async () => {
+  const db = makeDb(
+    {
+      CPU: [{ product_id: 'prod-1', product_variant_id: null }],
+      PSU: [{ product_id: 'unrelated', product_variant_id: null }],
+    },
+    [
+      { product_id: 'prod-1', category_count: 2 },
+      { product_id: 'elsewhere-bad', category_count: 3 },
+    ]
+  );
   let err = null;
   try {
-    await loadCandidates(input(['CPU']), db);
+    await loadCandidates(input(['CPU', 'PSU']), db);
   } catch (error) {
     err = error;
   }
   assert.ok(err instanceof CandidateSelectionError);
   assert.equal(err.code, ERROR_CODES.CANONICAL_CATEGORY_AMBIGUITY);
-  assert.equal(err.field, 'product_id');
+  assert.ok(err.message.includes('prod-1'), 'relevant product must be named');
+  assert.ok(!err.message.includes('elsewhere-bad'), 'unrelated product must not be named');
 });
 
+test('GPU-only request is unaffected by unrelated product-keyed ambiguity', async () => {
+  const db = makeDb(
+    { GPU: [{ product_id: 'gpu-prod', product_variant_id: 'gpu-var' }] },
+    [{ product_id: 'bad-1', category_count: 2 }]
+  );
+  const out = await loadCandidates(input(['GPU']), db);
+  assert.equal(out.candidates.length, 1);
+  assert.equal(out.candidates[0].product_variant_id, 'gpu-var');
+});
 test('loader does not silently choose one category on ambiguity', async () => {
   const db = makeDb(
     { CPU: [{ product_id: 'prod-1', product_variant_id: null }] },
@@ -268,7 +383,8 @@ test('loader does not silently choose one category on ambiguity', async () => {
   } catch (error) {
     err = error;
   }
-  assert.ok(err && err.code === ERROR_CODES.CANONICAL_CATEGORY_AMBIGUITY);
+  assert.ok(err instanceof CandidateSelectionError);
+  assert.equal(err.code, ERROR_CODES.CANONICAL_CATEGORY_AMBIGUITY);
 });
 
 test('GPU variant representation is not treated as product-level ambiguity', async () => {
@@ -277,7 +393,8 @@ test('GPU variant representation is not treated as product-level ambiguity', asy
     GPU: [{ product_id: 'cpu-prod', product_variant_id: 'gpu-var' }],
   });
   const out = await loadCandidates(input(['CPU', 'GPU']), db);
-  const ambiguitySql = db.queries[0];
+  const ambiguitySql = db.queries.find((sql) => sql.includes('category_count'));
+  assert.ok(ambiguitySql, 'expected the scoped guard query to run');
   assert.ok(ambiguitySql.includes('category_count'));
   assert.ok(!ambiguitySql.includes('gpu_board_spec'), 'GPU must be absent from the product-keyed guard');
   assert.equal(out.candidates.filter((c) => c.category === 'CPU').length, 1);
@@ -374,24 +491,26 @@ test('role/category mismatch cannot be emitted', async () => {
 test('candidates are deterministically ordered by role, product_id, then variant (null first)', async () => {
   const db = makeDb({
     PSU: [
-      { product_id: 'psu-1', product_variant_id: 'psu-1-x' },
-      { product_id: 'psu-1', product_variant_id: null },
       { product_id: 'psu-2', product_variant_id: null },
+      { product_id: 'psu-1', product_variant_id: null },
     ],
     CPU: [
       { product_id: 'cpu-2', product_variant_id: null },
       { product_id: 'cpu-1', product_variant_id: null },
     ],
-    GPU: [{ product_id: 'gpu-prod', product_variant_id: 'gpu-var' }],
+    GPU: [
+      { product_id: 'gpu-prod', product_variant_id: 'gpu-var-b' },
+      { product_id: 'gpu-prod', product_variant_id: 'gpu-var-a' },
+    ],
   });
   const out = await loadCandidates(input(['PSU', 'CPU', 'GPU']), db);
   const seq = out.candidates.map((c) => `${ROLE_ORDER[c.component_role]}:${c.product_id}:${c.product_variant_id ?? 'NULL'}`);
   assert.deepEqual(seq, [
     '0:cpu-1:NULL',
     '0:cpu-2:NULL',
-    '1:gpu-prod:gpu-var',
+    '1:gpu-prod:gpu-var-a',
+    '1:gpu-prod:gpu-var-b',
     '6:psu-1:NULL',
-    '6:psu-1:psu-1-x',
     '6:psu-2:NULL',
   ]);
 });
