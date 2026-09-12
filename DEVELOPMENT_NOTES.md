@@ -279,13 +279,47 @@ A read-only architecture review of the live Neon database (catalog queries only 
 Details:
 * None of these tables is represented in migrations 001–010.
 * An undocumented enum `component_role` also exists, with values CPU, GPU, MOTHERBOARD, RAM, SSD_BOOT, SSD_SECONDARY, PSU, CASE, CPU_COOLER.
-* All five tables currently contain 0 rows.
-* This is a live-database drift/reconciliation situation, similar to the previous Layer 3 incident (see the 2026-09-11 entry above).
-* The existing live tables have several defects versus the agreed Layer 4 architecture (naive timestamps, nullable scoring-model reference, redundant `build_component.category` column, >= 0 price checks, missing uniqueness on ranks and component roles, missing indexes). The full comparison and reconciliation decisions are documented in `database/LAYER4_RECONCILIATION_PLAN.md`.
-* Migration 011 has NOT yet been created and has NOT been applied. No database changes were made during this review. The authoritative Layer 4 design is still being finalized in that plan file.
+* All five tables currently contained 0 rows at review time.
+* This was a live-database drift/reconciliation situation, similar to the previous Layer 3 incident (see the 2026-09-11 entry above).
+* The existing live tables had several defects versus the agreed Layer 4 architecture (naive timestamps, nullable scoring-model reference, redundant `build_component.category` column, >= 0 price checks, missing uniqueness on ranks and component roles, missing indexes). The full comparison and reconciliation decisions are documented in `database/LAYER4_RECONCILIATION_PLAN.md`.
+* UPDATE (same day): Migration 011 (`011_reconcile_layer4.sql`) has now been created and applied to Neon. See the 2026-09-12 migration 011 entry below for the reconciliation record.
 
 Instruction for future sessions:
-Do not create Layer 4 tables or a Layer 4 `CREATE TABLE` migration from scratch — the live tables already exist and are empty. Migration 011 must be a reconciliation migration (same pattern as migration 010) that codifies the live objects as the authoritative fresh-database Layer 4 schema and applies the corrections listed in `database/LAYER4_RECONCILIATION_PLAN.md`. Fresh 001→011 migration testing remains NOT AVAILABLE until an isolated scratch database exists.
+Migration 011 is the canonical Layer 4 schema. Do not create Layer 4 tables or a Layer 4 `CREATE TABLE` migration from scratch — migration 011 reconciles the (previously undocumented, empty) live tables into the authoritative schema per `database/LAYER4_RECONCILIATION_PLAN.md`. Any post-011 Layer 4 change requires a new corrective migration. Fresh 001→011 migration testing remains NOT AVAILABLE until an isolated scratch database exists.
+
+---
+
+### 2026-09-12 — Migration 011 created and applied (Layer 4 reconciliation)
+
+Migration:
+`database/migrations/011_reconcile_layer4.sql` created, then applied to the live Neon database. Implements the canonical Layer 4 schema per `database/LAYER4_RECONCILIATION_PLAN.md`.
+
+Main reconciliation approach (dual-mode, like migrations 005/010):
+1. Safety gate (`DO $$ ... RAISE EXCEPTION`): if none of the five Layer 4 tables exist (fresh DB), the canonical schema is created; if all five exist, reconciliation proceeds ONLY when every table has 0 rows and the existing `component_role` enum (if present) has exactly the nine expected values; a partial state or non-empty tables aborts the migration without touching data.
+2. Codify phase: guarded `CREATE TYPE component_role` + canonical `CREATE TABLE IF NOT EXISTS` for the five tables, so a fresh 001→011 run creates the correct schema in one step.
+3. Reconcile phase: `DROP COLUMN IF EXISTS category`; naive→`TIMESTAMPTZ` conversion; `SET NOT NULL` / `SET DEFAULT`; drop-and-re-add of price CHECKs (`> 0`), the new store/price-snapshot consistency CHECK, and canonicalized budget/score/rank CHECKs.
+4. Index phase: unique partial `uq_recommendation_result_query_rank` (non-NULL rank unique per query), unique partial `uq_build_component_role_singular` (one CPU/MOTHERBOARD/PSU/CASE/CPU_COOLER/SSD_BOOT per candidate; GPU/RAM/SSD_SECONDARY multiples allowed), unique `idx_recommendation_profile_name`, plus `idx_build_component_product_variant_id` / `idx_build_component_store_id` and the retained access indexes.
+
+Implementation issues encountered:
+* `scripts/run-migrations.js` re-executes ALL migrations with no applied-migrations tracking, and `002_enums.sql` uses a bare `CREATE TYPE`, so the full runner cannot be re-run against the already-migrated Neon DB. Migration 011 was therefore applied through a one-off temp script (deleted afterwards) that executes only the 011 file — the same situation as 010.
+* No previous migration was modified. `scripts/test-layer4.js`, Layer 4 fixture data, profiles, and builds were deliberately NOT created (per task instructions).
+
+PostgreSQL-specific workaround (timestamp double-conversion):
+A plain `ALTER COLUMN ... TYPE TIMESTAMPTZ USING col AT TIME ZONE 'UTC'` is only safe for `timestamp without time zone` inputs. If the column is already `TIMESTAMPTZ`, `AT TIME ZONE 'UTC'` converts it to a naive timestamp which PostgreSQL then re-interprets in the session's `TimeZone` — shifting values on non-UTC sessions. Migration 011 therefore loops over `information_schema.columns` and executes the conversion ONLY for Layer 4 columns still typed `timestamp without time zone`, making it safe against both starting states.
+
+Neon modified: YES. Migration 011 applied: YES — and a second apply was executed to confirm idempotency (gate re-passed on the now-canonical empty tables).
+
+Post-apply read-only catalog verification (all confirmed):
+* 5 tables present; all still 0 rows.
+* `recommendation_query.scoring_model_id` NOT NULL; `build_candidate.compatibility_status` NOT NULL DEFAULT 'UNKNOWN'; all Layer 4 timestamps `timestamp with time zone`; `build_component.category` gone; `price_checked_at` nullable TIMESTAMPTZ; `recommendation_profile.priority` still INTEGER; no `store_offer_id` column.
+* 6 canonical CHECKs (budget > 0, score 0..100, total_price > 0 or NULL, selected_price > 0, store ⇒ price_checked_at, rank > 0).
+* 9 FKs exactly as planned (L4 → L1/L2/L3 only).
+* Enum `component_role` unchanged (9 expected values).
+* Indexes include the two unique partial indexes and unique profile-name index.
+
+Testing limitations:
+* Fresh 001→011 migration is NOT VERIFIED — no isolated scratch database exists (same standing limitation as 009/010). Do not claim fresh-migration success.
+* Regression: `npm run test:db` passed after the migration. The Layer 4 functional test suite (`scripts/test-layer4.js`) is planned but intentionally not yet created.
 
 ---
 

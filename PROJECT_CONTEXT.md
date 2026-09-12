@@ -170,19 +170,23 @@ These are derived compatibility checks. Therefore no separate GPU↔case or GPU�
 
 | Table | Purpose |
 |---|---|
-| `recommendation_profile` | PLANNED — user preference templates |
-| `recommendation_query` | User requirements and scoring model version used |
-| `recommendation_result` | Query outcome and metadata |
-| `build_candidate` | A candidate build for a query |
-| `build_component` | Products / variants within a candidate build |
+| `recommendation_profile` | User preference templates (canonical since migration 011; `name` is unique) |
+| `recommendation_query` | User requirements and scoring model version used (`scoring_model_id` NOT NULL) |
+| `recommendation_result` | Query outcome and metadata (non-NULL ranks unique per query) |
+| `build_candidate` | A candidate build for a query (`compatibility_status` NOT NULL, default `UNKNOWN`) |
+| `build_component` | Products / variants within a candidate build (no `category` column; `selected_price > 0`; `price_checked_at TIMESTAMPTZ`) |
+
+The `component_role` enum (CPU, GPU, MOTHERBOARD, RAM, SSD_BOOT, SSD_SECONDARY, PSU, CASE, CPU_COOLER) drives `build_component` component roles. At most one CPU, MOTHERBOARD, PSU, CASE, CPU_COOLER, and SSD_BOOT per candidate; multiple GPU, RAM, and SSD_SECONDARY rows are allowed.
 
 ### Key concepts
 
-* A recommendation query records the user's requirements and which `scoring_model` version was used.
+* A recommendation query records the user's requirements and which `scoring_model` version was used. A query without a scoring model cannot be reproduced, so `scoring_model_id` is NOT NULL.
 * A query may generate multiple build candidates.
 * `build_candidate` is query-scoped rather than globally shared.
-* `build_component` connects products / variants to a candidate build.
+* `build_component` connects products / variants to a candidate build. A store price snapshot requires `price_checked_at` (`store_id IS NULL OR price_checked_at IS NOT NULL`); there is deliberately no `store_offer_id` on `build_component` (FUTURE / non-blocking).
+* All Layer 4 timestamps are `TIMESTAMPTZ` (UTC), consistent with the Layer 3 reconciliation.
 * The system should retain scored candidates rather than storing only the winning build. This is important for debugging and tuning the recommendation engine.
+* `recommendation_profile.priority` and `recommendation_query.priority` remain plain INTEGER ordering hints; structured weighting belongs to the versioned `scoring_model` configuration (FUTURE redesign).
 
 ---
 
@@ -229,6 +233,7 @@ The current migration order is:
 8. `008_benchmark_tables.sql`
 9. `009_market_tables.sql`
 10. `010_reconcile_layer3.sql`
+11. `011_reconcile_layer4.sql`
 
 Do not renumber or reorder existing migrations casually.
 
@@ -287,12 +292,14 @@ Completed:
 * Provenance / data-quality schema
 * Benchmark / scoring Layer 2 foundation
 * Market / Layer 3 canonical schema (migration 009) and Neon reconciliation (migration 010)
+* Recommendation / build Layer 4 canonical schema (migration 011, Neon reconciliation applied)
 
 In progress / next:
-* Remaining Layer 2 / Layer 3 / Layer 4 implementation
+* Remaining Layer 2 implementation
 * Product seeding
-* Recommendation-engine development
+* Recommendation-engine development (Layer 4 schema is in place; engine not yet implemented)
 
 PLANNED (not yet implemented):
-* `recommendation_profile` table and associated features
 * Recommendation engine query execution and scoring pipeline
+* Layer 4 functional test suite (`scripts/test-layer4.js` per the reconciliation plan)
+* `store_offer_id` provenance FK on `build_component` (FUTURE / non-blocking)
