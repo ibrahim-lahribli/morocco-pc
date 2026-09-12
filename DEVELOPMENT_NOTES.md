@@ -49,6 +49,14 @@ const client = new Client({ connectionString: process.env.DATABASE_URL });
 
 The project does not use a separate migration framework. Migrations are plain `.sql` files applied sequentially by the custom Node script.
 
+### Inspect the live database before creating migrations
+
+Never assume the live Neon database contains only objects represented by Git migrations. Before creating a new migration, inspect both the repository migrations and the live database catalogs (tables, columns, enums, constraints, indexes) via read-only catalog queries.
+
+---
+
+## Migration lessons
+
 ---
 
 ## Migration lessons
@@ -254,6 +262,30 @@ The old unique constraint/index `uq_store_offer_store_product_variant` was remov
 Neon initially contained an undocumented earlier/independent Layer 3 implementation. It contained no Layer 3 rows, so reconciliation was applied without data migration complexity. Do not rewrite migrations 001-009; future post-009 changes require a new corrective migration.
 
 A true fresh 001→010 migration remains unavailable because no isolated PostgreSQL environment is configured. Neon was reconciled in place, but a fresh migration must not be claimed as verified until a scratch database, Neon branch, Docker PostgreSQL, or equivalent isolated environment is available.
+
+---
+
+### 2026-09-12 — Live Neon DB Layer 4 tables already exist (undocumented drift)
+
+Problem:
+A read-only architecture review of the live Neon database (catalog queries only — no schema changes were made) discovered that the five planned Layer 4 tables already exist in the live database:
+
+* `recommendation_profile`
+* `recommendation_query`
+* `recommendation_result`
+* `build_candidate`
+* `build_component`
+
+Details:
+* None of these tables is represented in migrations 001–010.
+* An undocumented enum `component_role` also exists, with values CPU, GPU, MOTHERBOARD, RAM, SSD_BOOT, SSD_SECONDARY, PSU, CASE, CPU_COOLER.
+* All five tables currently contain 0 rows.
+* This is a live-database drift/reconciliation situation, similar to the previous Layer 3 incident (see the 2026-09-11 entry above).
+* The existing live tables have several defects versus the agreed Layer 4 architecture (naive timestamps, nullable scoring-model reference, redundant `build_component.category` column, >= 0 price checks, missing uniqueness on ranks and component roles, missing indexes). The full comparison and reconciliation decisions are documented in `database/LAYER4_RECONCILIATION_PLAN.md`.
+* Migration 011 has NOT yet been created and has NOT been applied. No database changes were made during this review. The authoritative Layer 4 design is still being finalized in that plan file.
+
+Instruction for future sessions:
+Do not create Layer 4 tables or a Layer 4 `CREATE TABLE` migration from scratch — the live tables already exist and are empty. Migration 011 must be a reconciliation migration (same pattern as migration 010) that codifies the live objects as the authoritative fresh-database Layer 4 schema and applies the corrections listed in `database/LAYER4_RECONCILIATION_PLAN.md`. Fresh 001→011 migration testing remains NOT AVAILABLE until an isolated scratch database exists.
 
 ---
 
