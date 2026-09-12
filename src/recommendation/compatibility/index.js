@@ -15,6 +15,14 @@ const {
   resolveCpuMotherboardSupport,
 } = require('./cpu-motherboard');
 const { resolveCoolerSocketSupport } = require('./cooler');
+const {
+  resolveCaseMotherboardFormFactor,
+  resolveCaseRadiator,
+} = require('./case-radiator');
+const {
+  resolvePlatformMemorySupport,
+  resolveMotherboardRamMemoryType,
+} = require('./memory');
 
 module.exports = {
   FINAL_STATUSES,
@@ -25,4 +33,8 @@ module.exports = {
   resolveCpuMotherboardSocket,
   resolveCpuMotherboardSupport,
   resolveCoolerSocketSupport,
+  resolveCaseMotherboardFormFactor,
+  resolveCaseRadiator,
+  resolvePlatformMemorySupport,
+  resolveMotherboardRamMemoryType,
 };
