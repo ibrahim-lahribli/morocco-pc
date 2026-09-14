@@ -1,5 +1,5 @@
 /**
- * Engine 2D - Filtering stage (B2-B context loader + B2-D filter).
+ * Engine 2D - Filtering stage (B2-B context loader + B2-D filter + B2-G pipeline).
  *
  * Public surface:
  *
@@ -19,11 +19,17 @@
  *   CONTEXT_COMPAT_KEYS     - canonical compat sub-context keys of the
  *     B2-B context.
  *
+ *   filterCandidatesForRecommendation() - B2-G: canonical public Engine 2D
+ *     filtering-stage entry point. Composes loadFilteringContext(pool, db)
+ *     -> filterCandidates(context) and returns the filtering result
+ *     (see ./pipeline). Re-exported here without duplicating logic.
+ *
  * Budget filtering, scoring, build generation and persistence belong to
  * later stages/engines. Candidate and error contracts are reused from
  * Engine 2 (../candidates); this module defines no parallel contracts.
  */
 const { loadFilteringContext, CONTEXT_COMPAT_KEYS } = require('./context-loader');
 const { filterCandidates, CANDIDATE_STATUSES } = require('./filter');
+const { filterCandidatesForRecommendation } = require('./pipeline');
 
-module.exports = { loadFilteringContext, CONTEXT_COMPAT_KEYS, filterCandidates, CANDIDATE_STATUSES };
+module.exports = { loadFilteringContext, CONTEXT_COMPAT_KEYS, filterCandidates, CANDIDATE_STATUSES, filterCandidatesForRecommendation };
