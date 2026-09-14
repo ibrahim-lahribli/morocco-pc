@@ -466,7 +466,13 @@ Key rules:
   assembled builds per query (e.g. 500); exceeding it prunes by partial price
   before assembly.
 * Budget pruning is applied INCREMENTALLY: once a partial combo's minimum
-  possible total exceeds budget, that branch is abandoned.
+  possible total exceeds budget, that branch is abandoned. Boundary
+  (`docs/RECOMMENDATION_ENGINE_DECISIONS.md`, Engine 3 contract decisions
+  2026-09-14, Decision 5): `current_cost == budget` is retained; only
+  `current_cost > budget` prunes. Partial-build cost is the cumulative
+  selected-component sum; Engine 3 consumes (never invents) the selected
+  in-currency offer price, in the query's single currency with no
+  conversion.
 * Elimination ordering matters: CPU->MB filtering removes the largest branch
   factor first (socket is highly selective), then RAM (memory_type), then PSU
   (wattage), then case (form factor), then cooler (socket + TDP).

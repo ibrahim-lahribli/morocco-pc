@@ -304,3 +304,271 @@ persistence / ranking
 No code changes. Documentation only. Engine 2D's implementation in `src/recommendation/filtering/` is unchanged. Engine 3's existing responsibility for "budget pruning" (section 17) is confirmed and clarified as incremental during staged build assembly. The pipeline in section 2 is updated to remove the separate "Budget filtering" stage 3, with budget pruning merged into build assembly.
 
 ---
+
+## Engine 3 contract decisions (2026-09-14)
+
+Date: 2026-09-14. Architecture/contract decision pass only. No Engine 3
+implementation, no Engine 3 barrel/orchestrator, no Engine 2E, no Engine 2
+root orchestrator, no Engine 2D behavior change, no `{ results }` contract
+change, no new compatibility/scoring/ranking/persistence logic.
+
+Resolves the five Engine 3 implementation-critical semantics (input
+universe, REJECT handling, UNKNOWN handling, build assembly contract,
+budget contract). Supplements (does not replace) the
+`Engine 2D / Engine 3 boundary (2026-09-14)` Option B decision.
+
+### Decision 1 -- Engine 3 input universe (adopted)
+
+Engine 3 receives the complete Engine 2D `{ results }` output, including
+PASS, UNKNOWN, and REJECT entries.
+
+- Rationale: preserves compatibility traceability; keeps Engine 2D
+  responsible only for determining compatibility; keeps downstream
+  interpretation in Engine 3; avoids silently creating another filtering
+  boundary before Engine 3.
+- Engine 3, not Engine 2D, owns interpretation of candidate status for
+  build expansion. This is a consumption rule; the 2D contract
+  (`src/recommendation/filtering/filter.js` `filterCandidates` -> frozen
+  `{ results }`, each result `{ product_id, product_variant_id, category,
+  component_role, status: PASS | UNKNOWN | REJECT, reason, relationships }`)
+  is unchanged.
+- Engine 3 input contract (minimum):
+
+```text
+Engine3Input
+  results: frozen 2D result array (PASS + UNKNOWN + REJECT, unmutated)
+  budget: budget_amount (> 0) + currency (single, per-query)
+    -- source: recommendation_query / Engine 2A selection input
+    (src/recommendation/candidates/input.js)
+  query/build configuration: required_roles + GPU-requirement inputs
+    (use_case / resolution / profile mapping) -- shape frozen at Engine 3
+    design time; no additional fields invented here
+```
+
+- Remaining budget/build-configuration fields are established only by
+  Decisions 4/5 below. No other fields invented.
+
+### Decision 2 -- REJECT handling (adopted)
+
+REJECT entries remain present in the Engine 3 input for traceability, but
+Engine 3 excludes them from build expansion.
+
+- Semantic rule:
+
+```text
+REJECT -> never selectable for a build
+PASS   -> eligible
+UNKNOWN -> governed by Decision 3
+```
+
+- Do not mutate or rewrite the 2D result array. Engine 3 may derive an
+  internal eligible-candidate view (REJECT excluded); this is derived data,
+  not a mutation of the 2D input.
+- This is an Engine 3 consumption rule, not a change to Engine 2D.
+  Consistent with architecture section 3.1 (FAIL -> REJECT, hard safety)
+  and the Option B boundary (REJECT must not participate in expansion).
+
+### Decision 3 -- UNKNOWN handling (adopted)
+
+UNKNOWN candidates remain eligible for build expansion.
+
+- Do not convert UNKNOWN to REJECT. Do not apply a numeric penalty during
+  Engine 3 assembly. Do not invent scoring penalties here.
+
+```text
+PASS    -> known compatible, eligible
+UNKNOWN -> compatibility unresolved, still eligible
+REJECT  -> known incompatible, ineligible
+```
+
+- Engine 3 preserves UNKNOWN builds/candidates so later stages can
+  distinguish them. Build-level UNKNOWN aggregation (architecture
+  section 10, worst-of) and scoring/penalty semantics
+  (`unknown_compat_penalty` in `scoring_model.configuration`, Decision 3a/3b
+  -- Engine 4 concern) remain downstream and are NOT Engine 3 logic. No
+  `unknown_compat_penalty` logic is added to Engine 3.
+- Contradiction check: no existing contract contradicts this. Architecture
+  section 3.1 ("Allow WITH uncertainty penalty") and section 10
+  ("persisted, penalized, ranked below PASS") describe downstream
+  scoring/persistence behavior, not Engine 3 assembly; Decision 3 binds the
+  penalty parameter to Engine 4 scoring. Engine 3 applying no penalty is
+  therefore consistent, not contradictory.
+
+### Decision 4 -- Build assembly contract (from existing contracts)
+
+Minimum immutable in-memory representation needed by Engine 3. No database
+persistence in Engine 3. No ranking/scoring fields unless already required
+by an existing contract (none are -- scoring lives in Engine 4 per
+architecture sections 8–9).
+
+Build state: a partial build is an immutable ordered mapping
+role -> selected entry, plus `current_cost` (partial_cost, see Decision 5).
+Each selected entry preserves: `component_role`, `product_id`,
+`product_variant_id` (nullable), `status` (PASS | UNKNOWN carried from the
+2D result; REJECT never present per Decision 2), and the selected component
+price carried from offer pre-selection (architecture section 7: cheapest
+in-currency in-stock `store_offer.price` per product -- carrier wiring
+unresolved, see Decision 5 gap).
+
+Candidate identity (reused, not reinvented): the Engine 2 contract
+(`src/recommendation/candidates/candidate.js` `createCandidate`):
+
+```text
+product_id
+product_variant_id
+category
+component_role
+```
+
+No second identity scheme. Engine 3 keys expansion by
+`(product_id, product_variant_id, component_role)`; `category` is carried
+for traceability (derivable from role via `ROLE_CATEGORIES`).
+
+Expansion order (existing, architecture section 11 steps 1–8; steps 9–10
+validate/score are downstream, not Engine 3 expansion):
+
+```text
+CPU
+-> MOTHERBOARD
+-> RAM
+-> GPU
+-> PSU
+-> CASE
+-> CPU_COOLER
+-> SSD_BOOT
+```
+
+Optional/additional roles per section 12: SSD_SECONDARY (0..n), RAM kits
+(1..n within slot limits), GPU (0..1; multi-GPU FUTURE). No new optional
+roles. GPU mandatory/optional per section 12 (iGPU presence +
+use_case/profile override) is a completeness rule on finished builds, not
+an expansion-stage invention.
+
+Determinism (preserved): within-role candidate order is inherited from the
+Engine 2C pool order (role enum order, `product_id` ASC, null-variant-first
+then `product_variant_id` ASC; `select.js` / `loader.js`
+`compareCandidates`), which Engine 2D preserves per role bucket
+(`filter.js`: results concatenated in canonical `COMPONENT_ROLES` order,
+bucket order preserved). Section 11 tie-breaks (product name ASC, then
+product id ASC) apply to shortlist generation; Engine 3 introduces no
+randomness, no timestamps, no new tie-break keys.
+
+Duplicates / multiplicity (existing): singular roles -- at most one
+selected component per build (migration 011
+`uq_build_component_role_singular`; `roles.js` `SINGULAR_ROLES`): CPU,
+MOTHERBOARD, PSU, CASE, CPU_COOLER, SSD_BOOT. Multiple-selection roles per
+the same contracts: GPU / RAM / SSD_SECONDARY. Engine 3 enforces singular
+uniqueness during expansion; multiplicity follows section 12 limits.
+
+Output: Engine 3 produces an in-memory collection of build candidates
+(partial + complete builds with the state above). No `build_candidate` /
+`build_component` writes, no ranking/scoring fields, no persistence.
+
+### Decision 5 -- Budget contract (adopted for incremental pruning)
+
+Boundary (from architecture section 3 hard-constraint 11 +
+section 11 incremental rule):
+
+```text
+current_cost <= budget -> eligible (retain branch)
+current_cost == budget -> retain branch
+current_cost > budget  -> prune branch
+```
+
+Incremental pruning -- after each component addition:
+
+```text
+new_cost = current_cost + selected_component_price
+new_cost > budget -> prune branch immediately (do not wait for complete build)
+```
+
+Partial-build cost:
+
+```text
+partial_cost = Σ selected component prices (currently present in the branch)
+```
+
+Consistent with `build_candidate.total_price = SUM(selected_price)`
+(architecture section 7); partial cost is the running prefix of that sum.
+
+Budget scope: the component total represented by the build. No shipping,
+tax, accessories, or other costs (none defined by any existing contract;
+none added).
+
+Currency: query's single currency only (`recommendation_query.currency`;
+`store_offer.currency = query.currency`; architecture section 7). No
+currency conversion in Engine 3 (none exists; none invented). A build
+mixing currencies is impossible by construction.
+
+Price requirement -- UNRESOLVED (only remaining decision): Engine 3 must
+not invent or fetch prices; it consumes the price supplied by the
+established candidate/offer contract. If a candidate required for expansion
+has no usable price, Engine 3 must not invent a price or silently treat it
+as zero. Repository evidence: architecture section 7 REQUIRES upstream
+exclusion ("every component in an assembled build requires at least one
+store_offer row in the query currency. A product with no offer in the query
+currency is simply not a candidate (generation stage), not a rejected
+build"; "offer selection happens BEFORE scoring (stage 1 pre-selects the
+cheapest in-stock offer per product)"; "budget uses current
+store_offer.price ... availability not OUT_OF_STOCK";
+`store_offer.price NOT NULL` + `CHECK (price > 0)`, migration 009). But the
+implemented contracts do NOT carry that price: Engine 2B loader
+(`src/recommendation/candidates/loader.js`) "never reads prices, offers…
+never filters on budget"; Engine 2C selector (`select.js`)
+"Non-responsibilities: …budget/price…"; candidate record (`candidate.js`)
+is exactly `{ product_id, product_variant_id, category, component_role }`
+-- no price field; Engine 2D filter output carries no price field. No
+implemented contract defines the price-carrier (field, cheapest-per-product
+rule execution point, or no-offer exclusion enforcement) between stage 1
+and Engine 3. Per the task validation rule this is reported as the ONLY
+remaining decision rather than inventing behavior. See Verdict below.
+
+### Consequences / trade-offs
+
+- Complete-input + derived-eligible-view keeps traceability (REJECT reasons
+  auditable) at the cost of Engine 3 holding the full result array in
+  memory; negligible relative to build-combinatorics cost.
+- UNKNOWN-eligible preserves pool depth under sparse seeding (avoids false
+  negatives) at the cost of larger expansion fan-out; downstream scoring
+  demotion (Engine 4) and build-level UNKNOWN marking (section 10) carry
+  the safety signal instead of assembly-time rejection.
+- Incremental `cost > budget` pruning cuts combinatorics early but requires
+  a usable price on every expandable candidate -- which is exactly why the
+  price-carrier gap blocks implementation (Engine 3 cannot prune without it
+  and must not invent prices).
+- Freezing expansion order/multiplicity/determinism to existing contracts
+  avoids a second identity/ordering scheme but defers GPU-optional
+  completeness and cap/top-K policy (`candidate_caps.top_k_per_role`,
+  `max_builds_per_query`) to Engine 3 design time.
+
+### Validation against task checklist
+
+1. Option B architecture internally consistent -- yes (§2 pipeline + §17
+   boundaries + this section agree; no 2E, no root orchestrator).
+2. Engine 2D contract unchanged -- yes (frozen `{ results }`,
+   PASS/UNKNOWN/REJECT preserved; `src/recommendation/filtering/`
+   untouched).
+3. Engine 3 is the first consumer of 2D -- yes (Decisions 1/2).
+4. REJECT cannot enter expansion -- yes (Decision 2).
+5. UNKNOWN distinguishable and eligible -- yes (Decision 3).
+6. Budget pruning during staged expansion -- yes (Decision 5).
+7. `cost == budget` eligible -- yes.
+8. `cost > budget` pruned -- yes.
+9. Partial cost = cumulative selected-component cost -- yes.
+10. No Engine 2E / root orchestrator as production architecture -- yes
+    (both explicitly rejected, consistent with prior Option B decision).
+
+### Verdict for this pass
+
+```text
+VERDICT: DECISION REQUIRED
+```
+
+Sole unresolved contract: price/offer attachment wiring (which stage
+attaches the selected in-currency offer price to each candidate and
+enforces the section-7 no-offer exclusion in code). All five decisions are
+otherwise fully documented above without contradiction or invented
+dependencies. Engine 3 remains NOT IMPLEMENTED (no source files created or
+modified by this pass).
+
+---
