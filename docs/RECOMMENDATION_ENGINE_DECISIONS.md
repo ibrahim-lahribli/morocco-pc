@@ -243,6 +243,64 @@ First coding task remains: Engine 1 with fixture unit tests following the
 `selectCandidatePool()` in `src/recommendation/candidates/select.js` is the single canonical pool selector (no second implementation): validated Engine 2A input + Engine 2B records in, deterministic eligible pool out. Variant identity follows Engine 2B (GPU variant-level, non-GPU product-level), enforced without normalization. Exact duplicate `(product_id, product_variant_id, component_role)` identities dedup deterministically (first wins); distinct GPU variants retained. Empty-pool contract is global-only: `EMPTY_CANDIDATE_POOL` when the raw list is empty or the filtered pool is empty; partial pools returned as-is with no fabrication or substitution. Pure in-memory: no DB, no compat, no budget, no scoring.
 
 
----
 
-End of document.
+## Engine 2D / Engine 3 boundary (2026-09-14)
+
+### Current situation
+
+The pipeline in section 2 of the architecture document lists "Budget filtering" as a separate stage 3. Section 17 assigns "budget pruning" to Engine 3. Engine 2D (`src/recommendation/filtering/`) is a hard-compatibility filtering stage that explicitly excludes budget concerns from its scope.
+
+### Problem
+
+Without an explicit decision, there is ambiguity about where budget filtering belongs:
+- As a separate stage between Engine 2D and Engine 3 (a hypothetical "Engine 2E")
+- As part of Engine 3's staged build assembly
+- As part of Engine 2D's compatibility filtering
+
+Putting budget in Engine 2D would violate the HARD/SOFT separation: budget is a soft constraint, while Engine 2D owns hard compatibility only. A separate Engine 2E stage would add latency and complexity for little benefit.
+
+### Proposed decision (RECOMMENDED)
+
+Adopt **Option B**: Engine 3 owns budget pruning during staged build assembly.
+
+1. Engine 2D owns hard component compatibility only.
+2. Engine 2D does not perform budget filtering.
+3. Engine 2D does not score, rank, assemble builds, or persist results.
+4. Engine 2D's existing `{ results }` output contract remains unchanged.
+5. Engine 2D continues to distinguish `PASS` / `UNKNOWN` / `REJECT`.
+6. Engine 3 is the downstream consumer responsible for interpreting compatibility results during build expansion.
+7. Known incompatible (`REJECT`) candidates must not participate in build expansion.
+8. `UNKNOWN` must remain distinguishable from `REJECT`; no new Engine 2D policy for UNKNOWN handling is introduced.
+9. Budget pruning occurs incrementally during Engine 3 staged build expansion, not as a separate stage.
+10. There is no Engine 2E budget-filtering stage.
+11. No Engine 2 Root orchestrator is introduced as part of this decision.
+
+The intended flow is:
+
+```text
+Engine 2C candidate pool
+        ↓
+Engine 2D hard compatibility filtering
+        ↓
+Engine 3 staged build assembly
+        ↓
+Engine 3 budget pruning (incremental during expansion)
+        ↓
+assessment / scoring
+        ↓
+validation
+        ↓
+persistence / ranking
+```
+
+### Alternatives
+
+* **Option A — Engine 2D owns budget filtering**: rejected. It would violate the HARD/SOFT separation by mixing hard compatibility with soft budget constraints, and expand Engine 2D beyond its compatibility contract.
+* **Option C — Separate Engine 2E stage**: rejected. It would add a separate stage between Engine 2D and Engine 3, increasing latency and complexity. Budget pruning is more effective when done incrementally during staged build expansion than as a separate pass.
+* **Option D — Engine 2 Root orchestrator**: rejected. Unnecessary for this decision; Engine 2D and Engine 3 are already well-defined with clear boundaries.
+
+### Impact
+
+No code changes. Documentation only. Engine 2D's implementation in `src/recommendation/filtering/` is unchanged. Engine 3's existing responsibility for "budget pruning" (section 17) is confirmed and clarified as incremental during staged build assembly. The pipeline in section 2 is updated to remove the separate "Budget filtering" stage 3, with budget pruning merged into build assembly.
+
+---

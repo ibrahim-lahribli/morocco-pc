@@ -81,13 +81,12 @@ that Engines 1-6 (section 17) must implement against.
 recommendation_query
         |  1. candidate generation
         |  2. hard compatibility filtering
-        |  3. budget filtering
-        |  4. component assessment lookup
-        |  5. scoring
-        |  6. build assembly
-        |  7. build validation
-        |  8. candidate persistence
-        |  9. ranking
+        |  3. component assessment lookup
+        |  4. scoring
+        |  5. build assembly + budget pruning
+        |  6. build validation
+        |  7. candidate persistence
+        |  8. ranking
         v
 recommendation_result
 ```
@@ -96,20 +95,21 @@ recommendation_result
 |---|-------|-------|--------|-------------|-------------|----------------|----------------|
 | 1 | Candidate generation | recommendation_query + profile | bounded per-role product shortlists (with active offers) | product, product_variant, *_spec, store_offer, recommendation_profile | No (creates pool) | No | Yes |
 | 2 | Hard compatibility filtering | candidate pool | pool with hard-incompatible combos pruned | cpu_motherboard_support, cooler_socket_support, case_motherboard_form_factor, case_radiator_support, platform_memory_support + derived numerics (section 5) | YES | No | Yes |
-| 3 | Budget filtering | surviving pool | pool within budget | pre-selected store_offer rows | YES | No | Yes |
-| 4 | Assessment lookup | surviving pool | per-product assessment vectors | component_assessment | No | No (feeds scoring) | Yes |
-| 5 | Scoring | assessed pool | component + build scores | component_assessment + scoring_model.configuration | No (soft stage) | YES | Yes (model pinned by query.scoring_model_id) |
-| 6 | Build assembly | top-scoring combos | in-memory build: role -> components + offers | store_offer, store | No | No | Yes (tie-break rules required) |
-| 7 | Build validation | assembled builds | validated builds + build-level compatibility_status | all compatibility tables re-checked as a whole (wattage budget, connector subset, cooler TDP) | YES | No | Yes |
-| 8 | Candidate persistence | validated builds | build_candidate + build_component rows | build_candidate, build_component, store_offer (price snapshot) | No | No | Yes |
-| 9 | Ranking | persisted candidates | ranked candidates | build_candidate (score) | No (presentation) | No | Yes (deterministic tie-break) |
-| 10 | Result record | ranked candidates | recommendation_result rows | recommendation_result | No | No | Yes |
+| 3 | Assessment lookup | surviving pool | per-product assessment vectors | component_assessment | No | No (feeds scoring) | Yes |
+| 4 | Scoring | assessed pool | component + build scores | component_assessment + scoring_model.configuration | No (soft stage) | YES | Yes (model pinned by query.scoring_model_id) |
+| 5 | Build assembly + budget pruning | top-scoring combos | in-memory builds (budget pruned incrementally during staged expansion) | store_offer, store | YES (budget + hard-incompatible during expansion) | No | Yes (tie-break rules required) |
+| 6 | Build validation | assembled builds | validated builds + build-level compatibility_status | all compatibility tables re-checked as a whole (wattage budget, connector subset, cooler TDP) | YES | No | Yes |
+| 7 | Candidate persistence | validated builds | build_candidate + build_component rows | build_candidate, build_component, store_offer (price snapshot) | No | No | Yes |
+| 8 | Ranking | persisted candidates | ranked candidates | build_candidate (score) | No (presentation) | No | Yes (deterministic tie-break) |
+| 9 | Result record | ranked candidates | recommendation_result rows | recommendation_result | No | No | Yes |
 
 Rules:
 
-* Stages 1-3 must run in this order; early pruning is what keeps the
-  combinatorics tractable (section 11).
-* Only stages 2, 3 and 7 eliminate candidates; stage 5 only reorders.
+* Stages 1-2 must run in this order; early hard-compatibility pruning is
+  what keeps the combinatorics tractable (section 11).
+* Budget pruning occurs incrementally during staged build expansion
+  (stage 5), not as a separate stage.
+* Only stages 2, 5 and 6 eliminate candidates; stage 4 only reorders.
 * Every stage is deterministic. No randomness. `price_checked_at` records
   WHEN the price snapshot was taken; it never influences WHICH offer is
   selected (section 14).
@@ -601,8 +601,8 @@ Engine 2 - Candidate component selector
     offer per product). Deterministic ordering. [Engine 2C: 2A contracts, 2B loader, 2C selector; no offers.]
 
 Engine 3 - Build assembler
-    Staged expansion (section 11), budget pruning, completeness rules
-    (section 12). Output: in-memory builds.
+    Staged expansion (section 11) with incremental budget pruning,
+    completeness rules (section 12). Output: in-memory builds.
 
 Engine 4 - Scoring engine
     Reads scoring_model.configuration; assessment aggregation, neutral/penalty
