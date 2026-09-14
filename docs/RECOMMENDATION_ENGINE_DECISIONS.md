@@ -1,11 +1,14 @@
 ﻿# Recommendation Engine Decisions
 
-Date: 2026-09-12. Resolves the three items listed under
+Date: 2026-09-14 (updated). Resolves the three items originally listed under
 "Needs clarification before coding" in
-`docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` (section 18). Documentation only:
-no DB, no migrations, no code, no fixtures, no commit.
+`docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` (section 18, Decisions 1-3),
+the Engine 2D/Engine 3 boundary contract (Decisions 4-5), AND the Stage 1
+offer pre-selection contract (Decision 6) required before Engine 3
+implementation. Documentation only: no DB, no migrations, no code, no
+fixtures, no commit.
 
-The three items (quoted verbatim from the architecture document):
+The original three items (quoted verbatim from the architecture document):
 
 1. **"Confirmation of the section 3.2 asymmetric UNKNOWN policy (especially:
    platform_memory_support absence = REJECT; zero-radiator case + liquid cooler
@@ -558,17 +561,224 @@ remaining decision rather than inventing behavior. See Verdict below.
 10. No Engine 2E / root orchestrator as production architecture -- yes
     (both explicitly rejected, consistent with prior Option B decision).
 
+## Decision 6 - Stage 1 offer pre-selection contract
+
+Date: 2026-09-14. Architecture/contract decision pass only. No offer
+selection implementation, no price-carrier module, no Engine 3 module,
+no Engine 3 barrel/orchestrator, no Engine 2E, no Engine 2 ROOT
+orchestrator, no Engine 2D behavior change, no `{ results }` contract
+change, no new compatibility/scoring/ranking/persistence logic.
+
+Resolves the sole remaining pricing/offer boundary required before Engine 3:
+where and how Engine 2 Stage 1 selects and attaches the authoritative
+component offer/price required by Engine 3 budget pruning.
+
+### Current situation
+
+The architecture assigns offer pre-selection to Engine 2 / Stage 1
+(candidate generation, upstream of Engine 2D and Engine 3). Architecture
+§7 defines the intended behavior: candidate generation uses active offers;
+the query currency determines offer currency; unavailable/out-of-stock
+offers are excluded; products without an eligible offer are not candidates;
+Stage 1 pre-selects the cheapest eligible offer per product.
+
+The implementation does not provide this behavior. The implemented
+contracts do NOT carry price: Engine 2B loader (`loader.js`) "never reads
+prices, offers… never filters on budget"; Engine 2C selector
+(`select.js`) "Non-responsibilities: …budget/price…"; candidate record
+(`candidate.js`) is exactly
+`{ product_id, product_variant_id, category, component_role }` -- no
+price field; Engine 2D filter output carries no price field.
+
+### 1. Ownership (RESOLVED)
+
+```text
+Engine 2 Stage 1 owns offer selection and price attachment
+```
+
+Confirmed by:
+* Architecture §17: "Engine 2 / Stage 1 shortlists + offer pre-selection
+  (cheapest in-currency in-stock offer per product)"
+* Architecture §7: "Offer selection happens BEFORE scoring (stage 1
+  pre-selects the cheapest in-stock offer per product)"
+* `doubts.txt` lines 115-117: "2B → no offer selection; 2C → explicitly
+  no offers; 2D → no prices"
+* `loader.js` line 31: "never reads prices, offers… never filters on
+  budget"
+* `select.js` line 53: "Non-responsibilities: …budget/price…"
+
+This responsibility must NOT move to: Engine 2C selector, Engine 2D,
+Engine 3, Engine 2E, or a new Engine 2 ROOT orchestrator.
+
+### 2. Pipeline position (RESOLVED)
+
+```text
+Engine 2C candidate pool
+        ↓
+Stage 1 offer pre-selection / price attachment
+        ↓
+Engine 2D compatibility
+        ↓
+Engine 3 assembly + budget pruning
+```
+
+Confirmed by architecture §7 ("BEFORE scoring"), §17 boundary diagram,
+and the module-level evidence above. The logical stage responsibility is
+between the 2C candidate pool and the 2D compatibility filter.
+
+### 3. Eligible offer contract (PARTIALLY RESOLVED)
+
+From architecture §7 and migration 009, the following rules are defined:
+
+| Rule | Source |
+|------|--------|
+| `offer.product_id` (+ `product_variant_id` where applicable) belongs to the candidate product | migration 009 `store_offer` FK |
+| `offer.currency == query.currency` | §7 "filters store_offer.currency = query.currency" |
+| `availability != OUT_OF_STOCK` | §7 "availability not OUT_OF_STOCK" |
+| `price > 0` | migration 009 `CHECK (price > 0)` + `NOT NULL` |
+
+**DECISION REQUIRED: exact freshness predicate.** Architecture §7 says
+"the freshest snapshot for the product" but defines no explicit threshold
+(e.g., `last_checked_at > NOW() - INTERVAL '7 days'`). The
+`store_offer.last_checked_at` column exists (migration 009) but no
+freshness WHERE clause is specified anywhere in the architecture, schema,
+or code. CONTEXT.md describes `store_offer` as "current/latest offer
+state" but this is a data-model description, not a selection predicate.
+No maximum age, recency window, or staleness rule is defined.
+
+### 4. Selection cardinality (RESOLVED)
+
+Each expandable product candidate has exactly one selected offer/price
+after Stage 1 offer pre-selection. The selected offer is the cheapest
+eligible offer for that product in the query currency. This is one
+selected price per product, not a list of offers. No multi-offer carriage.
+
+Confirmed by §7: "stage 1 pre-selects the cheapest in-stock offer per
+product."
+
+### 5. Cheapest-offer tie-break (DECISION REQUIRED)
+
+**No deterministic tie-break exists** in:
+* Architecture documentation (no mention of price-tie resolution)
+* Migrations (no `ORDER BY price, store_id` convention)
+* Source code (no `price ASC` SQL pattern anywhere)
+* Any existing offer/store identity ordering
+
+The only "cheaper wins" reference (architecture line 509) is for final
+ranking (`total_price ASC`), not for offer selection.
+`doubts.txt` lines 150-152 explicitly lists "ties" and "store priority"
+as open questions.
+
+When two offers have identical `price` in the same `currency`, neither
+the schema nor the architecture specifies which wins. Engine 3 requires
+deterministic input.
+
+```text
+DECISION REQUIRED
+```
+
+### 6. No-offer behavior (RESOLVED)
+
+```text
+no eligible offer → candidate excluded before Engine 3
+```
+
+Confirmed by §7: "A product with no offer in the query currency is simply
+not a candidate (generation stage), not a rejected build." This
+exclusion occurs at Stage 1. Engine 3 must never be responsible for
+discovering that a candidate has no price. Missing price is NOT
+represented as: zero, NULL, UNKNOWN, or REJECT. It is an upstream
+candidate-generation exclusion.
+
+### 7. Price carrier (PARTIALLY RESOLVED)
+
+From architecture §7 persistence snapshot + migration 011
+`build_component` schema, the minimum fields are determined:
+
+| Field | Source |
+|-------|--------|
+| `selected_price` | §7 "copies store_offer.price into selected_price" |
+| `currency` | §7 "store_offer.currency into currency" |
+| `store_id` | §7 "store_offer.store_id into store_id" |
+| `price_checked_at` | §7 "now()-at-selection into price_checked_at" |
+
+`store_offer_id` is explicitly NOT required (§7: "store_offer_id
+provenance FK remains FUTURE / explicitly not added").
+
+`createCandidate()` is NOT the price carrier (candidate.js line 9: "Price
+and score are deliberately absent: pricing belongs to offer pre-selection
+and scores to Engine 4"). No price fields are added to the Engine 2D
+result.
+
+**DECISION REQUIRED: exact carrier shape.** The four fields above are
+determined, but the in-memory structural representation between Stage 1
+output and Engine 3 consumption is not specified. Whether the carrier is
+a new wrapper type, a parallel map keyed by candidate identity, or an
+extended record is not defined by any existing contract. The
+architecture calls this "carrier wiring unresolved."
+
+### 8. Engine 2D relationship (RESOLVED)
+
+Engine 2D compatibility remains price-agnostic:
+
+```text
+2D result = compatibility facts
+price carrier = Stage 1 offer-selection output
+```
+
+They must not be conflated. Engine 2D result is
+`{ results: [candidate verdicts] }` with PASS/UNKNOWN/REJECT. `filter.js`
+has no price fields. Engine 3 consumes both concepts through the
+established pipeline contract, without requiring Engine 3 to query the
+database.
+
+### 9. Persistence relationship (RESOLVED)
+
+* Stage 1 selected price is the authoritative input for build assembly.
+* Engine 3 uses that price for incremental budget pruning (Decision 5).
+* Persistence later (Engine 5) snapshots the selected price into
+  `build_component.selected_price`.
+* Persistence does not perform the original offer selection.
+* Engine 3 does not write persistence records.
+* No `store_offer_id` requirement (§7: FUTURE / non-blocking).
+
+### 10. Implementation status (RESOLVED)
+
+Nothing implemented. No offer-selection logic exists in any source file.
+No Engine 3 module exists (`src/recommendation/` contains only
+`candidates/`, `compatibility/`, `filtering/`). No Engine 2E or root
+orchestrator exists.
+
+### Consequences / trade-offs
+
+- Incremental `cost > budget` pruning (Decision 5) requires a usable
+  price on every expandable candidate -- which is exactly why the
+  price-carrier gap blocks implementation (Engine 3 cannot prune without
+  it and must not invent prices).
+- The three remaining decisions (freshness predicate, deterministic
+  tie-break, carrier shape) are implementation-critical: Stage 1 cannot
+  be built without them, and Engine 3 cannot safely consume their output.
+- All other points (ownership, pipeline position, cardinality, no-offer
+  behavior, 2D boundary, persistence) are fully resolved from existing
+  architecture and schema without contradiction.
+
 ### Verdict for this pass
 
 ```text
 VERDICT: DECISION REQUIRED
 ```
 
-Sole unresolved contract: price/offer attachment wiring (which stage
-attaches the selected in-currency offer price to each candidate and
-enforces the section-7 no-offer exclusion in code). All five decisions are
-otherwise fully documented above without contradiction or invented
-dependencies. Engine 3 remains NOT IMPLEMENTED (no source files created or
-modified by this pass).
+Three implementation-critical contracts remain unresolved:
+
+| # | Gap | Impact |
+|---|-----|--------|
+| 1 | **Exact freshness predicate** — no `last_checked_at` threshold defined anywhere in architecture, schema, or code | Stage 1 cannot exclude stale offers without a rule |
+| 2 | **Deterministic price tie-break** — no rule when two offers have identical `price` in the same `currency` | Engine 3 receives non-deterministic input |
+| 3 | **Price carrier exact shape** — four fields determined, but in-memory structural representation unspecified | The boundary contract between Stage 1 and Engine 3 is incomplete |
+
+No existing contracts contradict the adopted Engine 2 / Engine 3
+architecture. All six decisions are otherwise fully documented above
+without contradiction or invented dependencies. Engine 3 remains NOT
+IMPLEMENTED (no source files created or modified by this pass).
 
 ---

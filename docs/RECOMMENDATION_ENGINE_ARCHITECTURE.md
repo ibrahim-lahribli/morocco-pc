@@ -605,6 +605,14 @@ Engine 1 - Compatibility resolver
 Engine 2 - Candidate component selector
     Stage 1 shortlists + offer pre-selection (cheapest in-currency in-stock
     offer per product). Deterministic ordering. [Engine 2C: 2A contracts, 2B loader, 2C selector; no offers.]
+    Logical pipeline (Decision 6):
+      Engine 2C candidate pool
+        → Stage 1 offer pre-selection / price attachment (owns offer
+          selection + price attachment; cheapest eligible offer per
+          product; no-offer exclusion; price carrier = selected_price,
+          currency, store_id, price_checked_at)
+        → Engine 2D compatibility (price-agnostic; consumes 2D verdicts
+          + price carrier)
 
 Engine 3 - Build assembler
     Staged expansion (section 11) with incremental budget pruning,
@@ -642,19 +650,39 @@ existing `scripts/test-*.js` transaction/rollback style.
   pricing on build_component; scoring_model as sole weight source; staged
   candidate generation; GPU-optional rules; worst-of compatibility aggregation;
   deterministic ranking and explanation.
+* Stage 1 offer pre-selection ownership (Engine 2 Stage 1), pipeline
+  position (between 2C and 2D), eligible-offer rules (product match,
+  currency match, not OUT_OF_STOCK, price > 0), one-offer cardinality,
+  no-offer exclusion, price-agnostic 2D, persistence relationship
+  (Decision 6 -- all resolved from existing architecture/schema).
 
 ### Needs clarification before coding
 
 1. Confirmation of the section 3.2 asymmetric UNKNOWN policy (especially:
   platform_memory_support absence = REJECT; zero-radiator case + liquid cooler
   = REJECT) - these trade false negatives for safety and should be explicitly
-  signed off.
+  signed off. **RESOLVED (Decision 1).**
 2. The dual-memory motherboard gap (section 6): decide whether Engine 1
   additionally treats `ram_spec.memory_type_id != motherboard_spec.memory_type_id`
-  as REJECT (recommended) or waits for the schema fix.
+  as REJECT (recommended) or waits for the schema fix. **RESOLVED (Decision 2).**
 3. The first `scoring_model` row: its `configuration` JSONB shape (weights,
   caps, neutral baseline, penalty parameters) must be defined and seeded
-  before Engine 4 (a seed, subject to the normal seed workflow).
+  before Engine 4 (a seed, subject to the normal seed workflow). **RESOLVED (Decision 3).**
+4. **Stage 1 offer pre-selection: exact freshness predicate.** Architecture §7
+  says "the freshest snapshot" but defines no explicit `last_checked_at`
+  threshold. No maximum age, recency window, or staleness rule exists in
+  the architecture, schema, or code. Required before Stage 1 implementation.
+  **DECISION REQUIRED (Decision 6, gap 1).**
+5. **Stage 1 offer pre-selection: deterministic price tie-break.** When two
+  eligible offers have identical `price` in the same `currency`, no
+  deterministic selection rule exists in architecture, schema, migrations,
+  or code. Engine 3 requires deterministic input. **DECISION REQUIRED
+  (Decision 6, gap 2).**
+6. **Stage 1 offer pre-selection: price-carrier shape.** The four carrier
+  fields are determined (`selected_price`, `currency`, `store_id`,
+  `price_checked_at` -- architecture §7, migration 011), but the in-memory
+  structural representation between Stage 1 output and Engine 3 consumption
+  is not specified. **DECISION REQUIRED (Decision 6, gap 3).**
 
 ### Future / non-blocking
 
