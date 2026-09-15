@@ -211,7 +211,7 @@ async function queryRows(db, sql, params) {
 // ---------------------------------------------------------------------------
 
 const CPU_SPEC_SQL = `
-SELECT cs.product_id, cs.socket_id, p.product_family_id
+SELECT cs.product_id, cs.socket_id, p.product_family_id, cs.integrated_gpu_present
   FROM cpu_spec cs
   JOIN product p ON p.id = cs.product_id
  WHERE cs.product_id = ANY($1::uuid[])
@@ -345,6 +345,7 @@ function normalizeSpecForRole(role, row) {
       return {
         socket_id: row.socket_id ?? null,
         product_family_id: row.product_family_id ?? null,
+        integrated_gpu_present: row.integrated_gpu_present ?? null,
       };
     case 'MOTHERBOARD':
       return {

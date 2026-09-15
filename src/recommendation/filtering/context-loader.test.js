@@ -125,7 +125,7 @@ function emptyRoutes() {
 
 function singleOfEachRoutes() {
   const routes = emptyRoutes();
-  routes.CPU = [{ product_id: U(1), socket_id: P(1), product_family_id: P(10) }];
+  routes.CPU = [{ product_id: U(1), socket_id: P(1), product_family_id: P(10), integrated_gpu_present: true }];
   routes.MOTHERBOARD = [{ product_id: U(2), socket_id: P(1), form_factor: 'ATX', memory_type_id: P(20) }];
   routes.RAM = [{ product_id: U(3), memory_type_id: P(20) }];
   routes.GPU = [{
@@ -182,7 +182,7 @@ test('specs keys use p:/v: prefixes and SQL rows are normalized', async () => {
   const { context } = await fullContext();
 
   assert.deepEqual(context.specs['p:' + U(1)], {
-    socket_id: P(1), product_family_id: P(10),
+    socket_id: P(1), product_family_id: P(10), integrated_gpu_present: true,
   });
   assert.deepEqual(context.specs['p:' + U(2)], {
     socket_id: P(1), form_factor: 'ATX', memory_type_id: P(20),
@@ -198,6 +198,41 @@ test('specs keys use p:/v: prefixes and SQL rows are normalized', async () => {
   });
   // JSONB blob stays structured (never stringified).
   assert.equal(typeof context.specs['v:' + V(1)].required_power_connectors, 'object');
+});
+
+test('cpu specs: integrated_gpu_present tri-state is preserved exactly', async () => {
+  // The CPU spec query must project the column: the fake DB returns canned
+  // rows, so projection is verified on the recorded statement.
+  const calls = [];
+  const recordingDb = createDb(singleOfEachRoutes(), { record: calls });
+  await loadFilteringContext(poolResult(fullPool()), recordingDb);
+  const cpuCall = calls.find((c) => c.sql.includes(SQL.CPU));
+  assert.ok(cpuCall, 'expected a cpu_spec query');
+  assert.ok(cpuCall.sql.includes('cs.integrated_gpu_present'));
+
+  // SQL tri-state: true -> true, false -> false, NULL -> null. Strict
+  // equality proves no truthiness conversion (false never becomes null).
+  for (const [label, value, expected] of [
+    ['true', true, true],
+    ['false', false, false],
+    ['NULL', null, null],
+  ]) {
+    const routes = singleOfEachRoutes();
+    routes.CPU = [{
+      product_id: U(1), socket_id: P(1), product_family_id: P(10),
+      integrated_gpu_present: value,
+    }];
+    const { context } = await fullContext(routes);
+    const actual = context.specs['p:' + U(1)].integrated_gpu_present;
+    assert.equal(actual, expected, label);
+    assert.equal(typeof actual === 'boolean', expected !== null, label);
+  }
+
+  // An absent property in a fake row normalizes to null (never false).
+  const absentRoutes = singleOfEachRoutes();
+  absentRoutes.CPU = [{ product_id: U(1), socket_id: P(1), product_family_id: P(10) }];
+  const { context: absent } = await fullContext(absentRoutes);
+  assert.equal(absent.specs['p:' + U(1)].integrated_gpu_present, null);
 });
 
 test('psu power_connectors normalization: boolean and counts, NULL preserved', async () => {
