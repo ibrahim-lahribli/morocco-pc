@@ -743,7 +743,7 @@ discovering that a candidate has no price. Missing price is NOT
 represented as: zero, NULL, UNKNOWN, or REJECT. It is an upstream
 candidate-generation exclusion.
 
-### 7. Price carrier (PARTIALLY RESOLVED)
+### 7. Price carrier (RESOLVED -- Engine 3 priceKey/validatePrices contract)
 
 From architecture §7 persistence snapshot + migration 011
 `build_component` schema, the minimum fields are determined:
@@ -763,7 +763,19 @@ and score are deliberately absent: pricing belongs to offer pre-selection
 and scores to Engine 4"). No price fields are added to the Engine 2D
 result.
 
-**DECISION REQUIRED: exact carrier shape.** The four fields above are
+Update 2026-09-16: the exact carrier shape is RESOLVED by the EXISTING
+Engine 3 price-carrier contract (`src/recommendation/assembly/prices.js`).
+Stage 1 reuses `priceKey` / `validatePrices` without reimplementation and
+without introducing a new carrier policy. The carrier is a null-prototype
+map keyed by `priceKey(product_id, product_variant_id, component_role)`;
+every entry holds exactly the four established fields (`selected_price`,
+`currency`, `store_id`, `price_checked_at`); the map is validated by
+`validatePrices()` and returned as a frozen null-prototype carrier of
+frozen entries inside the frozen Stage 1 result `{ input, pool, prices }`.
+
+Historical finding (2026-09-14, preserved verbatim; the former
+"DECISION REQUIRED" status of the exact carrier shape is superseded by the
+reuse of the existing Engine 3 contract above): The four fields above are
 determined, but the in-memory structural representation between Stage 1
 output and Engine 3 consumption is not specified. Whether the carrier is
 a new wrapper type, a parallel map keyed by candidate identity, or an
@@ -795,12 +807,25 @@ database.
 * Engine 3 does not write persistence records.
 * No `store_offer_id` requirement (§7: FUTURE / non-blocking).
 
-### 10. Implementation status (RESOLVED)
+### 10. Implementation status (IMPLEMENTED 2026-09-16)
 
-Nothing implemented. No offer-selection logic exists in any source file.
-No Engine 3 module exists (`src/recommendation/` contains only
-`candidates/`, `compatibility/`, `filtering/`). No Engine 2E or root
-orchestrator exists.
+Update 2026-09-16: Engine 2 Stage 1 offer pre-selection is IMPLEMENTED.
+The implementation lives under `src/recommendation/offers/`:
+
+* `src/recommendation/offers/select.js` -- `selectOfferPrices` and
+  `SELECT_OFFER_PRICES_SQL` (the Stage 1 entry point)
+* `src/recommendation/offers/index.js` -- the boundary-only public barrel
+  of `src/recommendation/offers/`
+* `src/recommendation/offers/select.test.js` -- unit tests for the
+  Stage 1 contract
+
+Still true: no Engine 2E and no Engine 2 root orchestrator exist, and no
+caller wiring connects Stage 1 to Engine 3.
+
+Historical finding (2026-09-14, preserved verbatim): Nothing implemented.
+No offer-selection logic exists in any source file. No Engine 3 module
+exists (`src/recommendation/` contains only `candidates/`,
+`compatibility/`, `filtering/`). No Engine 2E or root orchestrator exists.
 
 ### Consequences / trade-offs
 
@@ -838,7 +863,11 @@ ASC, store_offer.id ASC`, take the first (total order; the all-keys-equal
 case cannot occur). The rows above are preserved as the historical
 2026-09-14 finding. The product-level vs variant-level offer applicability
 question recorded in section 3 is RESOLVED by Decision 9 (strict exact
-matching in both directions; no fallback, no cross-variant matching).
+matching in both directions; no fallback, no cross-variant matching). Gap
+3 (exact carrier shape) is likewise RESOLVED without a new policy: Stage
+1 reuses the existing Engine 3 price-carrier contract (`priceKey` /
+`validatePrices`, `src/recommendation/assembly/prices.js`); see sections
+7 and 10 for the corrected carrier and implementation statuses.
 
 No existing contracts contradict the adopted Engine 2 / Engine 3
 architecture. All six decisions are otherwise fully documented above
