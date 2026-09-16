@@ -14,6 +14,12 @@ applicability rule explicitly chosen by the product owner on 2026-09-16.
 With Decision 9, every Stage 1 offer-selection eligibility policy that
 Decision 6 recorded as DECISION REQUIRED is resolved.
 
+Update 2026-09-16 (query-contract decision pass): Decision 10 (below)
+binds the data-loading layer's query-side contract -- the required_roles
+loader constant, the fail-closed use_case NULL policy, and the exact
+gpu_required_use_cases vocabulary -- as explicit product decisions of the
+same date, alongside Decisions 7-9.
+
 The original three items (quoted verbatim from the architecture document):
 
 1. **"Confirmation of the section 3.2 asymmetric UNKNOWN policy (especially:
@@ -1136,5 +1142,152 @@ NULL, UNKNOWN, or REJECT (Decision 6, section 6).
 * The rule adds no field, no store priority, and no multi-key fallback, and
   composes with Decisions 7 and 8 into a single deterministic eligibility +
   selection rule.
+
+---
+
+## Decision 10 - Query-contract derivation: required_roles, use_case NULL policy, GPU-required vocabulary (2026-09-16)
+
+Date: 2026-09-16. Product-owner decision pass binding the future
+data-loading layer's query-side contract. Resolves the three items the
+2026-09-16 read-only investigation classified as undecided: the
+required_roles derivation rule, the NULL/blank use_case policy, and the
+exact gpu_required_use_cases value list. Documentation only: no loader
+module, no orchestrator, no code change, no migration, no seed, no test
+change, no engine-module change.
+
+### Authority for this decision
+
+No repository fact fixes any of the three rules: required_roles has no
+schema column (migration 011) and no documented derivation (its only
+decision-doc mention, Engine 3 contract Decision 1, freezes the shape, not
+the source); recommendation_query.use_case and
+recommendation_profile.use_case are nullable free TEXT with no enum, CHECK,
+or default (migration 011; no use-case enum exists anywhere in migrations
+002-011); the gpu_required_use_cases list exists only as the Decision 3(a)
+example list. Therefore the rules below are explicit NEW product decisions
+adopted in the 2026-09-16 decision pass -- not repository-derived facts and
+not engineering defaults adopted silently. Repository evidence constrains
+the option space (recorded per rule); the adopted choice is the product
+owner's. No existing contract contradicts the adopted rules; Rule 1 is the
+only derivation consistent with architecture sections 11-12 and the
+implemented Engine 3 expansion order.
+
+### Rule 1 - required_roles derivation (adopted)
+
+required_roles for every recommendation query is the loader-derived
+constant, in canonical component_role enum order:
+
+```text
+['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'PSU', 'CASE', 'CPU_COOLER', 'SSD_BOOT']
+```
+
+* Exactly the eight-role set of architecture section 11 staged generation
+  (steps 1-8) and of Engine 3 EXPANSION_ORDER (assemble.js).
+* GPU is included because section 12 makes GPU requiredness a per-CPU
+  decision (Engine 3 Step 3): without GPU candidates loaded, every REQUIRED
+  path yields zero builds, silently contradicting section 12.
+* SSD_SECONDARY is excluded: it has no section 11 generation step and
+  Engine 3 never buckets it.
+* NOT query- or profile-variable. Per-query role variation requires a new
+  schema column (none exists on recommendation_query or
+  recommendation_profile; none proposed) and is out of scope; Engine 3
+  contract Decision 1 "no additional fields invented here" stands.
+* Carries no multiplicity (Engine 2A: "Order is preserved; it is NOT a
+  traversal order"); RAM 1..n kits and GPU 0..1 remain section 12
+  build-completeness rules, not role-list entries.
+* Rejected alternatives: query/profile-driven roles (no schema support);
+  omitting GPU (contradicts section 12 REQUIRED semantics);
+  use-case-conditional role lists (no documented rule; arbitrary).
+
+### Rule 2 - use_case NULL/blank policy (adopted)
+
+The loading layer FAILS CLOSED on a recommendation_query row whose use_case
+is NULL or blank: the Engine 2A contract rejects it (MISSING_REQUIRED_FIELD
+for a NULL value, INVALID_FIELD_VALUE for a blank string) and no selection
+input is produced. No profile fallback, no synthetic default, no
+normalization, no engine change.
+
+* Consistent with: Engine 2A requires a non-blank use_case
+  (candidates/input.js); Engine 3 requires a non-blank use_case
+  (assembly/input.js); both contracts never default; the repository-wide
+  principle that missing data is never permissive (CONTEXT.md).
+* The profile fallback (recommendation_profile.use_case when the query
+  value is NULL; section 12: "recommendation_profile /
+  recommendation_query.use_case carries this decision") is recorded as the
+  explicitly ALLOWED FUTURE EXTENSION. It requires a loader profile read
+  (no current contract defines one) and must be adopted as its own
+  decision before any loader implements it. It is never a silent default.
+* A synthetic default value is REJECTED ("never defaulted"; Decision 3(a)
+  "no silent defaults").
+* Accepted consequence: rows with NULL/blank use_case are not processable
+  until a value is set.
+
+### Rule 3 - GPU-required vocabulary (adopted)
+
+The canonical gpu_required_use_cases value list is exactly:
+
+```text
+["GAMING", "WORKSTATION"]
+```
+
+* The Decision 3(a) example list, matching section 12 semantics ("gaming or
+  workstation profiles ... REQUIRE a discrete GPU").
+* Seeds of scoring_model.configuration MUST use this exact list.
+* recommendation_query.use_case and recommendation_profile.use_case values
+  MUST come from this same vocabulary.
+* Strict byte matching is intentional and unchanged (Engine 3 Step 3): no
+  trimming, no case folding. A value outside the vocabulary does not match
+  the list and falls through to the integrated-GPU rule -- never an error,
+  never normalized.
+* Recorded hazard: with strict matching and no enum/FK/CHECK on the TEXT
+  columns, a configuration/query spelling mismatch silently degrades
+  REQUIRED to per-iGPU OPTIONAL with no detection anywhere. Accepted as a
+  seeding/query-creation discipline; no schema enforcement is added here.
+* Rejected alternatives: free-form vocabulary (accepts the hazard);
+  case-insensitive or trimmed matching (would modify frozen Engine 3
+  gpu-policy.js).
+
+### Complete query-contract rule set (after this decision)
+
+For one recommendation_query row, the future data-loading layer derives:
+
+```text
+budget_amount   = row.budget_amount   (NUMERIC -> JS number; > 0 by CHECK)
+currency        = row.currency        (TEXT; format enforced only by Engine 2A)
+use_case        = row.use_case        (MUST be non-blank -- Rule 2)
+required_roles  = Rule 1 constant     (all eight roles, canonical order)
+```
+
+and the Engine 3 GPU/cap inputs are sourced from scoring_model.configuration
+(gpu_required_use_cases = the Rule 3 list; candidate_caps =
+{ top_k_per_role, max_builds_per_query } per Decision 3(a)) and from per-CPU
+integrated-GPU presence. The integrated_gpu_present SOURCING (dedicated
+CPU-spec query vs 2D context reuse) and the scoring-model LOADING contract
+(which module reads scoring_model.configuration, its validation, and the
+missing/inactive-row behavior) remain DECISION REQUIRED and are NOT
+resolved by this decision.
+
+### Scope and boundaries (unchanged by this decision)
+
+* No engine module changes: Engine 2A/2B/2C/2D, Engine 3 Steps 1-4, Stage 1
+  offer pre-selection, and the 2D context loader are untouched.
+* top_k_per_role ownership (section 11 Stage-1 shortlisting vs Engine 3
+  contract data) is NOT re-decided; the implemented Engine 3 contract
+  stands ("Validated ONLY, never applied"; "The per-role cap from the
+  input contract is left alone here").
+* No DB row is seeded; no migration is created; no tests are added or
+  changed; no module path or name is chosen for the data-loading layer.
+
+### Consequences / trade-offs
+
+* The recommendation_query -> Engine 2A mapping is fully specified for the
+  first time, removing the last query-side blocker for the future
+  data-loading layer (except scoring-model loading and iGPU sourcing,
+  which are separate decisions).
+* Fail-closed use_case keeps NULL rows unprocessable until updated; the
+  profile fallback remains available as a future additive extension
+  without contract change.
+* The vocabulary binding makes configuration/query agreement a seeding
+  discipline; strict matching keeps enforcement out of engine code.
 
 ---
