@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const { assembleBuilds, EXPANSION_ORDER } = require('./assemble');
 const { priceKey, validatePrices } = require('./prices');
+const { validateEngine3Input } = require('./input');
 const { ROLE_CATEGORIES, COMPONENT_ROLES } = require('../candidates/roles');
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
 
@@ -1083,6 +1084,156 @@ test('assemble.js uses only the four allowed engine requires', () => {
     m[1].replace(/\s/g, '')
   );
   assert.deepEqual(exportsFound, ['assembleBuilds,EXPANSION_ORDER']);
+});
+
+// ---------------------------------------------------------------------------
+// Cross-module composition (Step 5 audit): Step 1 -> Step 2 -> Step 4
+// ---------------------------------------------------------------------------
+
+test('full pipeline composes: Step 1 frozen input + Step 2 carrier + Step 4 assembly', () => {
+  const results = [...fullSet('a'), verdict('GPU', 'gpu-a')];
+  const rawCarrier = Object.create(null);
+  for (const v of results) {
+    Object.defineProperty(rawCarrier, priceKey(v.product_id, v.product_variant_id, v.component_role), {
+      value: { selected_price: 100, currency: 'MAD', store_id: STORE_A, price_checked_at: TS },
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  const rawInput = engineInput({
+    results,
+    integrated: { 'a-cpu': true },
+    // Arbitrary order on purpose: required_roles must never drive traversal.
+    requiredRoles: ['SSD_BOOT', 'PSU', 'RAM', 'CPU_COOLER', 'CASE', 'CPU', 'MOTHERBOARD', 'GPU'],
+    prices: rawCarrier,
+  });
+
+  // Step 1 preserves the raw carrier by reference: no copy, no freeze, no normalization.
+  const validated = validateEngine3Input(rawInput);
+  assert.equal(validated.prices, rawInput.prices);
+  assert.equal(Object.isFrozen(validated.prices), false);
+
+  // Step 2 validates the preserved carrier; Step 4 consumes the re-injected result.
+  const prices = validatePrices(rawInput.prices);
+  const out = assembleBuilds({ ...validated, prices });
+
+  // OPTIONAL GPU: the GPU build first, then exactly one omit build.
+  assert.equal(out.builds.length, 2);
+  assert.equal(idsOf(out.builds[0]).GPU, 'gpu-a');
+  assert.equal(idsOf(out.builds[1]).GPU, undefined);
+  assert.deepEqual(rolesOf(out.builds[0]), [...EXPANSION_ORDER]);
+  assert.deepEqual(rolesOf(out.builds[1]), EXPANSION_ORDER.filter((role) => role !== 'GPU'));
+
+  // Price identity across the composition: exact frozen carrier entries.
+  assert.equal(out.builds[0].total_price, 800);
+  assert.equal(out.builds[1].total_price, 700);
+  for (const build of out.builds) {
+    for (const c of build.components) {
+      assert.equal(c.price, prices[priceKey(c.product_id, c.product_variant_id, c.component_role)]);
+      assert.equal(c.price.currency, build.currency);
+      assert.ok(Object.isFrozen(c.price));
+    }
+  }
+  assert.ok(Object.isFrozen(out));
+  for (const build of out.builds) {
+    assert.ok(Object.isFrozen(build));
+    assert.ok(Object.isFrozen(build.components));
+  }
+});
+
+test('full pipeline immutability: the complete composition never mutates caller-owned data', () => {
+  const results = [...fullSet('a'), verdict('GPU', 'gpu-a')];
+  const gpuRequired = ['gaming', '3d-rendering'];
+  const integrated = { 'a-cpu': true, 'cpu-x': false };
+  const caps = { top_k_per_role: 3, max_builds_per_query: 10 };
+  const requiredRoles = ['RAM', 'SSD_BOOT', 'CPU'];
+  const rawCarrier = Object.create(null);
+  for (const v of results) {
+    Object.defineProperty(rawCarrier, priceKey(v.product_id, v.product_variant_id, v.component_role), {
+      value: { selected_price: 100, currency: 'MAD', store_id: STORE_A, price_checked_at: TS },
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  const rawInput = {
+    results,
+    budget_amount: 100000,
+    currency: 'MAD',
+    required_roles: requiredRoles,
+    use_case: 'office',
+    gpu_required_use_cases: gpuRequired,
+    integrated_gpu_present: integrated,
+    candidate_caps: caps,
+    prices: rawCarrier,
+  };
+
+  const before = snapshot(rawInput);
+  const cpuKey = priceKey('a-cpu', null, 'CPU');
+  const gpuKey = priceKey('gpu-a', 'gpu-a-var', 'GPU');
+  const beforeCpuEntry = snapshot(rawCarrier[cpuKey]);
+
+  const validated = validateEngine3Input(rawInput); // Step 1
+  const prices = validatePrices(rawInput.prices); // Step 2
+  const out = assembleBuilds({ ...validated, prices }); // Step 4
+
+  assert.equal(out.builds.length, 2);
+
+  // Caller-owned structures still match their pre-run snapshots...
+  assert.deepEqual(snapshot(rawInput), before);
+  assert.deepEqual(snapshot(rawCarrier[cpuKey]), beforeCpuEntry);
+  // ...and none of them was frozen along the way.
+  for (const target of [
+    rawInput,
+    results,
+    ...results,
+    gpuRequired,
+    integrated,
+    caps,
+    requiredRoles,
+    rawCarrier,
+  ]) {
+    assert.equal(Object.isFrozen(target), false, 'caller-owned data must stay unfrozen');
+  }
+  assert.equal(Object.isFrozen(rawCarrier[gpuKey]), false);
+
+  // The emitted hierarchy is frozen, and prices are the frozen carrier entries.
+  assert.ok(Object.isFrozen(out));
+  for (const build of out.builds) {
+    assert.ok(Object.isFrozen(build));
+    assert.ok(Object.isFrozen(build.components));
+    for (const c of build.components) {
+      assert.ok(Object.isFrozen(c));
+      assert.ok(Object.isFrozen(c.price));
+      assert.equal(c.price, prices[priceKey(c.product_id, c.product_variant_id, c.component_role)]);
+    }
+  }
+});
+
+test('full pipeline determinism: repeated composition from identical input is deeply equal', () => {
+  const results = [...fullSet('a', { gpu: true }), verdict('GPU', 'gpu-a')];
+  const rawInput = engineInput({ results, integrated: { 'a-cpu': true }, maxBuilds: 10 });
+  const before = snapshot(rawInput);
+
+  // The frozen Step 1 output is consumed by Step 4 directly: its frozen copies
+  // of results / caps / GPU inputs are what assembly reads.
+  const run = () => {
+    const validated = validateEngine3Input(rawInput);
+    assert.ok(Object.isFrozen(validated));
+    return snapshot(assembleBuilds(validated));
+  };
+
+  const first = run();
+  const second = run();
+  assert.deepEqual(second, first);
+  assert.deepEqual(snapshot(rawInput), before);
+
+  // Identical ordering run over run, including the omit build's position.
+  const ids = (out) => out.builds.map((b) => b.components.map((c) => c.product_id));
+  const a = assembleBuilds(validateEngine3Input(rawInput));
+  const b = assembleBuilds(validateEngine3Input(rawInput));
+  assert.deepEqual(ids(b), ids(a));
 });
 
 
