@@ -20,6 +20,16 @@ loader constant, the fail-closed use_case NULL policy, and the exact
 gpu_required_use_cases vocabulary -- as explicit product decisions of the
 same date, alongside Decisions 7-9.
 
+Update 2026-09-16 (scoring-model loader decision pass): Decision 11 (below)
+binds the future scoring-model loader contract -- exact-ID model selection
+by `recommendation_query.scoring_model_id`, the DB-to-validated-domain
+validation boundary over the complete Decision 3(a) configuration, the
+`SCORING_MODEL_UNAVAILABLE` fail-fast error, and the exact configuration
+failure mappings -- resolving the scoring-model loading item Decision 10
+left as DECISION REQUIRED. Documentation only: no loader module, no
+orchestrator, no code change, no migration, no seed, no test change, no
+engine-module change.
+
 The original three items (quoted verbatim from the architecture document):
 
 1. **"Confirmation of the section 3.2 asymmetric UNKNOWN policy (especially:
@@ -1267,6 +1277,10 @@ CPU-spec query vs 2D context reuse) and the scoring-model LOADING contract
 missing/inactive-row behavior) remain DECISION REQUIRED and are NOT
 resolved by this decision.
 
+Update 2026-09-16: the scoring-model LOADING half of the preceding sentence
+is RESOLVED by Decision 11 (below). The integrated_gpu_present SOURCING
+half remains DECISION REQUIRED (see Decision 11, unresolved iGPU items).
+
 ### Scope and boundaries (unchanged by this decision)
 
 * No engine module changes: Engine 2A/2B/2C/2D, Engine 3 Steps 1-4, Stage 1
@@ -1291,3 +1305,268 @@ resolved by this decision.
   discipline; strict matching keeps enforcement out of engine code.
 
 ---
+
+## Decision 11 - Scoring-model loader contract (2026-09-16)
+
+Date: 2026-09-16. Product decision pass binding the future scoring-model
+loader contract. Resolves the scoring-model loading item Decision 10 left
+as DECISION REQUIRED ("which module reads scoring_model.configuration,
+its validation, and the missing/inactive-row behavior"). Documentation
+only: no loader module, no orchestrator, no code change, no migration, no
+seed, no test change, no engine-module change. The loader is NOT
+implemented by this decision.
+
+### Authority for this decision (repository evidence)
+
+* Architecture section 8: the engine reads the model by
+  `recommendation_query.scoring_model_id` and FAILS FAST if the model is
+  missing or inactive. Selection by pinned FK plus fail-fast is therefore
+  repository-derived; the exact query shape, validation boundary, and
+  error codes below are the new Decision 11 contract.
+* Migration 008 (`scoring_model`): `configuration JSONB` nullable;
+  `is_active BOOLEAN NOT NULL DEFAULT true`; UNIQUE(name, version). The DB
+  enforces no configuration shape, no required keys, no types, no ranges,
+  and no single-active-model rule.
+* Migration 011: `recommendation_query.scoring_model_id` is NOT NULL (FK
+  to `scoring_model.id`).
+* Decision 3(a): the complete `scoring_model.configuration` contract
+  (`role_weights`, `type_weights`, `neutral_baseline`,
+  `no_evidence_penalty`, `unknown_compat_penalty`,
+  `confidence_multipliers`, `staleness`, `candidate_caps`,
+  `gpu_required_use_cases`) with "every key REQUIRED, engine fails fast
+  otherwise" and no silent defaults.
+* Decision 10: canonical GPU vocabulary `["GAMING", "WORKSTATION"]`,
+  strict byte matching, out-of-vocabulary fall-through to the iGPU rule;
+  `candidate_caps` sourcing; `required_roles` and `use_case` NULL policy.
+  Decision 10 explicitly left scoring-model loading and iGPU sourcing
+  DECISION REQUIRED.
+* Engine 3 (implemented): `validateEngine3Input()`
+  (`src/recommendation/assembly/input.js`) validates `candidate_caps` as a
+  strict closed two-key object and `gpu_required_use_cases` structurally;
+  `assembleBuilds()` consumes `max_builds_per_query` as its traversal halt
+  cap and leaves the per-role cap alone; `resolveGpuRequirement()`
+  (`gpu-policy.js`) is pure and assumes already-validated input.
+* Error vocabulary (`src/recommendation/candidates/errors.js`):
+  `INVALID_INPUT`, `MISSING_REQUIRED_FIELD`, `INVALID_FIELD_VALUE` (plus
+  unrelated `INVALID_CANDIDATE`, `EMPTY_CANDIDATE_POOL`, and others). No
+  production scoring-model loader exists anywhere in the codebase.
+
+### Rule 1 - Model selection: pinned FK only (adopted)
+
+The scoring model is selected ONLY by the
+`recommendation_query.scoring_model_id` foreign key. The future loader
+MUST query that exact model ID. It MUST NOT discover the active model
+globally, choose the latest model, choose by name/version, substitute
+another model, or fall back to another active model. `is_active` is an
+eligibility check, not a model-discovery mechanism.
+
+Required behavior:
+
+```text
+scoring_model_id
+    ↓
+load exact scoring_model row
+    ↓
+row missing → fail fast
+    ↓
+row exists but is_active != true → fail fast
+    ↓
+row active → validate configuration
+```
+
+### Rule 2 - Exact loader query contract (adopted)
+
+The future loader MUST perform an exact-ID lookup equivalent to:
+
+```sql
+SELECT
+    id,
+    name,
+    version,
+    description,
+    configuration,
+    is_active,
+    created_at,
+    updated_at
+FROM scoring_model
+WHERE id = $1;
+```
+
+Do NOT add `AND is_active = true` to the SQL: folding eligibility into
+the lookup collapses "no row returned" (missing) into "row returned
+inactive", and the loader must distinguish all four outcomes:
+
+1. no row returned → missing → `SCORING_MODEL_UNAVAILABLE` (Rule 5);
+2. row returned with `is_active` not true → inactive →
+   `SCORING_MODEL_UNAVAILABLE` (Rule 5);
+3. row returned active but configuration invalid/missing → configuration
+   failure mappings (Rule 4);
+4. valid active model → validated domain object carrying the COMPLETE
+   validated configuration (Rule 3).
+
+### Rule 3 - Configuration validation boundary (adopted)
+
+The future scoring-model loader is the DB to validated domain boundary.
+It owns validation of the COMPLETE Decision 3(a) configuration -- not
+merely the Engine 3 subset (`candidate_caps`,
+`gpu_required_use_cases`) that has a consumer today.
+
+The loader MUST validate: required keys; exact expected
+container/object structure; value types; numeric ranges; required nested
+structures; strict `candidate_caps` shape (Rule 7);
+`gpu_required_use_cases` (Rule 8); and every other configuration field
+frozen by Decision 3(a) (`role_weights`, `type_weights`,
+`neutral_baseline`, `no_evidence_penalty`, `unknown_compat_penalty`,
+`confidence_multipliers`, `staleness`).
+
+There must be no silent defaults, no partial acceptance, no normalization
+that changes the documented contract, and no acceptance of
+`configuration = NULL`. The returned model must preserve the complete
+validated configuration rather than reconstructing only the subset
+currently consumed by Engine 3, so future consumers (notably Engine 4
+scoring) receive exactly what was validated.
+
+### Rule 4 - Configuration failure semantics (adopted)
+
+Exact mappings (reusing the existing error vocabulary; no new generic
+code):
+
+* `configuration IS NULL` → configuration missing →
+  `MISSING_REQUIRED_FIELD`, field `configuration`.
+* Top-level configuration is not a JSON object (including array/scalar)
+  → `INVALID_INPUT`, field `configuration`.
+* Required configuration key missing → `MISSING_REQUIRED_FIELD`, exact
+  nested field path (e.g. `candidate_caps.top_k_per_role`).
+* Unknown configuration key → `INVALID_FIELD_VALUE`, exact field/path
+  (e.g. `candidate_caps.extra`).
+* Wrong type → `INVALID_FIELD_VALUE`, exact field/path.
+* Invalid numeric/range value → `INVALID_FIELD_VALUE`, exact field/path.
+* Malformed nested structure → `INVALID_FIELD_VALUE` unless it is
+  specifically a missing required field, exact field/path.
+
+Do NOT introduce a generic `MALFORMED_CONFIGURATION` error code. The
+nested-path convention mirrors the implemented Engine 3 input contract.
+
+### Rule 5 - Missing/inactive scoring model error (adopted)
+
+A single dedicated error code:
+
+```text
+SCORING_MODEL_UNAVAILABLE
+```
+
+Use it for BOTH: the pinned `scoring_model.id` does not exist; and the
+pinned model exists but `is_active` is not true. The error must identify
+the model ID through the structured error field/context mechanism already
+used by the repository (the `field`/context slot on
+`CandidateSelectionError`), without embedding sensitive database
+information. Do NOT use `INVALID_CANDIDATE`, `EMPTY_CANDIDATE_POOL`, or
+another unrelated existing error code for this condition. This is a
+fail-fast loader error: there is no fallback and no substitution
+behavior.
+
+### Rule 6 - Engine 3 boundary remains unchanged (adopted)
+
+Do NOT redefine Engine 3 validation. The separation stands:
+
+```text
+scoring-model loader
+    ↓
+validated scoring-model configuration
+
+Engine 3 input boundary
+    ↓
+validateEngine3Input()
+    ↓
+assembly
+    ↓
+gpu-policy assumes validated input
+```
+
+The loader validates the scoring model as a model/configuration.
+`validateEngine3Input()` continues validating the Engine 3 input contract.
+Do not move GPU policy validation into `gpu-policy.js`: that module stays
+pure and continues to assume already-validated input.
+
+### Rule 7 - candidate_caps (adopted)
+
+`candidate_caps` is a strict closed object with exactly:
+
+```json
+{
+  "top_k_per_role": "positive integer",
+  "max_builds_per_query": "positive integer"
+}
+```
+
+Both keys required; no extra keys; both values must be positive integers.
+The loader must validate AND preserve both values.
+
+Explicitly unresolved: `max_builds_per_query` currently has an Engine 3
+assembly consumer (`assembleBuilds()` traversal halt cap), while
+`top_k_per_role` is currently validated/preserved but its
+application/ownership remains a separate downstream design decision
+(Decision 10 scope note; Engine 3 "Validated ONLY, never applied").
+Decision 11 does NOT silently assign that responsibility to the loader or
+to Engine 3.
+
+### Rule 8 - gpu_required_use_cases: Decision 10 preserved exactly (adopted)
+
+Runtime validation is structural only: required array; each entry must be
+a nonblank string; empty array is structurally valid; duplicates allowed;
+whitespace/case preserved (no trimming, no case folding, no runtime
+vocabulary enforcement). The canonical seeded vocabulary remains
+`["GAMING", "WORKSTATION"]`; out-of-vocabulary values MUST NOT cause
+loader rejection merely for being outside that vocabulary. GPU policy
+semantics remain exactly: (1) use case present in `gpu_required_use_cases`
+→ REQUIRED; (2) otherwise, if
+`integrated_gpu_present[selectedCpuProductId] === true` → OPTIONAL; (3)
+otherwise → REQUIRED.
+
+### Explicitly unresolved: iGPU sourcing (NOT decided)
+
+Decision 11 does NOT invent an iGPU database/query contract. The exact
+source/query for `integrated_gpu_present`, the exact returned shape
+(`{ cpuProductId: true | false | null }`), and the behavior when a CPU
+specification is missing remain UNRESOLVED and must be resolved before
+Engine 3 receives production iGPU data. Decision 11 is not closed on this
+point.
+
+Evidence note (why unresolved, not absent): migration 004 defines
+`cpu_spec.integrated_gpu_present BOOLEAN` (nullable) with NULL-is-UNKNOWN
+architecture semantics (section 12); the Engine 2D context loader DOES
+carry that column into its normalized CPU spec entry today. What is still
+missing is the authoritative contract for how that per-CPU value becomes
+the Engine 3 `integrated_gpu_present` map: which query the future
+data-loading layer runs (dedicated CPU-spec query vs 2D context reuse),
+the exact map shape it returns, and the missing-CPU-spec behavior. That
+handoff contract does not exist in the architecture, migrations, or
+implemented code, so Decision 11 records it as open rather than inventing
+it.
+
+### Scope and boundaries (non-goals)
+
+* No loader module is created; no module path or name is chosen.
+* No seeding of scoring models; no migration; no schema enforcement added
+  (the DB still enforces no configuration shape and no single active
+  model).
+* No Engine 3 change: validation, assembly, and GPU policy are untouched.
+* No new iGPU query or shape invented (see unresolved items above).
+* No downstream ownership of `top_k_per_role` assigned (see Rule 7).
+* Decisions 1-10 are not rewritten; only the Decision 10 pointer above is
+  annotated for consistency.
+
+### Consequences / trade-offs
+
+* Exact-ID selection plus `SCORING_MODEL_UNAVAILABLE` makes a missing or
+  deactivated pinned model a loud, diagnosable loader failure instead of a
+  silent substitution -- at the cost that queries pinned to a bad model
+  are unprocessable until re-pinned.
+* Full-configuration validation at the loader keeps Engine 3 (and future
+  Engine 4) consumers on an identical contract, but means seeds must carry
+  the complete Decision 3(a) shape even when only the Engine 3 subset has
+  a consumer today.
+* Keeping iGPU sourcing and `top_k_per_role` ownership explicitly open
+  avoids inventing contracts the investigation did not establish, but
+  leaves two handoffs the data-loading layer still cannot build without
+  follow-up decisions.
