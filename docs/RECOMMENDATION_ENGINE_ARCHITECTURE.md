@@ -655,6 +655,20 @@ existing `scripts/test-*.js` transaction/rollback style.
   currency match, not OUT_OF_STOCK, price > 0), one-offer cardinality,
   no-offer exclusion, price-agnostic 2D, persistence relationship
   (Decision 6 -- all resolved from existing architecture/schema).
+* Stage 1 offer-selection freshness predicate (Decision 7, 2026-09-16):
+  `store_offer.last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'`
+  -- 30-day maximum age, INCLUSIVE boundary, evaluated with PostgreSQL
+  `CURRENT_TIMESTAMP` / `now()` (transaction-start time); future
+  `last_checked_at` values accepted as fresh.
+* Stage 1 equal-price tie-break (Decision 8, 2026-09-16): among the eligible
+  offers for a candidate, `ORDER BY price ASC, store_offer.id ASC`, take the
+  first. `store_offer.id` is the unique primary key, so the ordering is total
+  and the all-keys-equal case cannot occur; no further fallback key exists.
+* Stage 1 product/variant offer applicability (Decision 9, 2026-09-16):
+  STRICT exact matching, no fallback and no cross-variant matching --
+  variant-keyed candidates (GPU today) require
+  `offer.product_variant_id = candidate.product_variant_id`; product-keyed
+  candidates require `offer.product_variant_id IS NULL`.
 
 ### Needs clarification before coding
 
@@ -670,19 +684,43 @@ existing `scripts/test-*.js` transaction/rollback style.
   before Engine 4 (a seed, subject to the normal seed workflow). **RESOLVED (Decision 3).**
 4. **Stage 1 offer pre-selection: exact freshness predicate.** Architecture §7
   says "the freshest snapshot" but defines no explicit `last_checked_at`
-  threshold. No maximum age, recency window, or staleness rule exists in
+  threshold. No maximum age, recency window, or staleness rule existed in
   the architecture, schema, or code. Required before Stage 1 implementation.
-  **DECISION REQUIRED (Decision 6, gap 1).**
+  **RESOLVED (Decision 7, 2026-09-16):** 30-day maximum age with INCLUSIVE
+  boundary, i.e. `last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'`,
+  evaluated with PostgreSQL `CURRENT_TIMESTAMP` / `now()` (transaction-start
+  time, constant within a transaction); future `last_checked_at` values
+  accepted as fresh. Supersedes the former "DECISION REQUIRED (Decision 6,
+  gap 1)" status; see `docs/RECOMMENDATION_ENGINE_DECISIONS.md`, Decision 7.
 5. **Stage 1 offer pre-selection: deterministic price tie-break.** When two
   eligible offers have identical `price` in the same `currency`, no
-  deterministic selection rule exists in architecture, schema, migrations,
-  or code. Engine 3 requires deterministic input. **DECISION REQUIRED
-  (Decision 6, gap 2).**
+  deterministic selection rule existed in architecture, schema, migrations,
+  or code. Engine 3 requires deterministic input. **RESOLVED (Decision 8,
+  2026-09-16):** `ORDER BY price ASC, store_offer.id ASC`, take the first --
+  `store_offer.id` is the unique primary key, so the ordering is total and
+  the all-keys-equal case cannot occur. Supersedes the former "DECISION
+  REQUIRED (Decision 6, gap 2)" status; see
+  `docs/RECOMMENDATION_ENGINE_DECISIONS.md`, Decision 8.
 6. **Stage 1 offer pre-selection: price-carrier shape.** The four carrier
   fields are determined (`selected_price`, `currency`, `store_id`,
   `price_checked_at` -- architecture §7, migration 011), but the in-memory
   structural representation between Stage 1 output and Engine 3 consumption
   is not specified. **DECISION REQUIRED (Decision 6, gap 3).**
+7. **Stage 1 offer pre-selection: product-level vs variant-level offer
+  applicability.** `store_offer.product_variant_id` is nullable, and the
+  implemented candidate-identity rules make `GPU` candidates variant-keyed
+  (`product_variant_id` non-null) while all non-GPU roles are product-keyed
+  (`product_variant_id` null). No contract stated whether a candidate with a
+  specific `product_variant_id` may be satisfied by an offer with
+  `product_variant_id = NULL`, or whether a product-keyed candidate may be
+  satisfied by a variant-specific offer; Decision 6 section 3 records the
+  rule only as "`product_id` (+ `product_variant_id` where applicable)".
+  **RESOLVED (Decision 9, 2026-09-16):** STRICT exact matching in both
+  directions, with no fallback and no cross-variant matching --
+  variant-keyed candidates (GPU today) require
+  `offer.product_variant_id = candidate.product_variant_id`; product-keyed
+  candidates require `offer.product_variant_id IS NULL`. See
+  `docs/RECOMMENDATION_ENGINE_DECISIONS.md`, Decision 9.
 
 ### Future / non-blocking
 

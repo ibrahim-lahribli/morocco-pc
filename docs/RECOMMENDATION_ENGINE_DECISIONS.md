@@ -8,6 +8,12 @@ offer pre-selection contract (Decision 6) required before Engine 3
 implementation. Documentation only: no DB, no migrations, no code, no
 fixtures, no commit.
 
+Update 2026-09-16: Decisions 7, 8, and 9 (below) record the Stage 1
+freshness policy, the equal-price tie-break, and the product/variant offer
+applicability rule explicitly chosen by the product owner on 2026-09-16.
+With Decision 9, every Stage 1 offer-selection eligibility policy that
+Decision 6 recorded as DECISION REQUIRED is resolved.
+
 The original three items (quoted verbatim from the architecture document):
 
 1. **"Confirmation of the section 3.2 asymmetric UNKNOWN policy (especially:
@@ -626,18 +632,21 @@ Confirmed by architecture §7 ("BEFORE scoring"), §17 boundary diagram,
 and the module-level evidence above. The logical stage responsibility is
 between the 2C candidate pool and the 2D compatibility filter.
 
-### 3. Eligible offer contract (PARTIALLY RESOLVED)
+### 3. Eligible offer contract (RESOLVED -- Decisions 7 and 9)
 
 From architecture §7 and migration 009, the following rules are defined:
 
 | Rule | Source |
 |------|--------|
-| `offer.product_id` (+ `product_variant_id` where applicable) belongs to the candidate product | migration 009 `store_offer` FK |
+| `offer.product_id` = candidate `product_id`, with exact variant applicability: `offer.product_variant_id = candidate.product_variant_id` for variant-keyed candidates, or `offer.product_variant_id IS NULL` for product-keyed candidates (no fallback, no cross-variant matching) | migration 009 `store_offer` FK + Decision 9 (2026-09-16) |
 | `offer.currency == query.currency` | §7 "filters store_offer.currency = query.currency" |
 | `availability != OUT_OF_STOCK` | §7 "availability not OUT_OF_STOCK" |
 | `price > 0` | migration 009 `CHECK (price > 0)` + `NOT NULL` |
 
-**DECISION REQUIRED: exact freshness predicate.** Architecture §7 says
+**Freshness predicate -- RESOLVED (2026-09-16, product-owner decision;
+Decision 7).** Historical finding (2026-09-14, preserved verbatim; the
+former "DECISION REQUIRED" status of the freshness predicate is superseded
+by Decision 7): Architecture §7 says
 "the freshest snapshot for the product" but defines no explicit threshold
 (e.g., `last_checked_at > NOW() - INTERVAL '7 days'`). The
 `store_offer.last_checked_at` column exists (migration 009) but no
@@ -645,6 +654,36 @@ freshness WHERE clause is specified anywhere in the architecture, schema,
 or code. CONTEXT.md describes `store_offer` as "current/latest offer
 state" but this is a data-model description, not a selection predicate.
 No maximum age, recency window, or staleness rule is defined.
+
+Adopted policy (exact rule -- Decision 7, 2026-09-16):
+
+| Aspect | Adopted rule |
+|--------|--------------|
+| Window | 30-day maximum age of `store_offer.last_checked_at` |
+| Boundary | INCLUSIVE -- an offer exactly at the cutoff is fresh |
+| Predicate | `last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'` |
+| Time source | PostgreSQL `CURRENT_TIMESTAMP` / `now()` = transaction-start time (constant for the whole transaction; NOT `statement_timestamp()`, NOT `clock_timestamp()`) |
+| Future `last_checked_at` | ACCEPTED as fresh; never rejected solely for being later than the evaluation timestamp |
+
+**Product/variant applicability -- RESOLVED (2026-09-16, product-owner
+decision; Decision 9).** Historical finding (2026-09-14, preserved): the
+table row "`offer.product_id` (+ `product_variant_id` where applicable)
+belongs to the candidate product" left it unresolved whether an offer with
+`product_variant_id = NULL` may satisfy a variant-keyed candidate, and
+whether a variant-specific offer may satisfy a product-keyed candidate.
+
+Adopted policy (exact rule -- Decision 9, 2026-09-16): STRICT exact matching
+in both directions; no fallback and no cross-variant matching.
+
+| Candidate | Required offer match | Product-level offer (`product_variant_id IS NULL`) | Offer for a different variant |
+|-----------|----------------------|---------------------------------------------------|-------------------------------|
+| variant-keyed (GPU today) | `offer.product_id = candidate.product_id` AND `offer.product_variant_id = candidate.product_variant_id` | NOT eligible | NOT eligible |
+| product-keyed (all non-GPU roles) | `offer.product_id = candidate.product_id` AND `offer.product_variant_id IS NULL` | eligible -- the only eligible shape | NOT eligible |
+
+Eligibility is therefore fully determined: this rule, plus the currency
+match, `availability != OUT_OF_STOCK`, `price > 0`, and the adopted
+freshness predicate (Decision 7). The winner among eligible offers is chosen
+by the adopted tie-break (Decision 8).
 
 ### 4. Selection cardinality (RESOLVED)
 
@@ -656,7 +695,7 @@ selected price per product, not a list of offers. No multi-offer carriage.
 Confirmed by §7: "stage 1 pre-selects the cheapest in-stock offer per
 product."
 
-### 5. Cheapest-offer tie-break (DECISION REQUIRED)
+### 5. Cheapest-offer tie-break (RESOLVED -- Decision 8)
 
 **No deterministic tie-break exists** in:
 * Architecture documentation (no mention of price-tie resolution)
@@ -671,11 +710,25 @@ as open questions.
 
 When two offers have identical `price` in the same `currency`, neither
 the schema nor the architecture specifies which wins. Engine 3 requires
-deterministic input.
+deterministic input. (Historical finding of 2026-09-14, preserved; the
+former "DECISION REQUIRED" status of this item is superseded by Decision 8
+below.)
+
+Adopted policy (exact rule -- Decision 8, 2026-09-16):
 
 ```text
-DECISION REQUIRED
+eligible offers for the candidate
+    -> ORDER BY price ASC, store_offer.id ASC
+    -> first offer wins
 ```
+
+`store_offer.id` is the unique primary key (migration 009:
+`id UUID PRIMARY KEY DEFAULT gen_random_uuid()`), so this ordering is total:
+the all-keys-equal case cannot occur, and no further fallback key is defined
+or needed. Both keys are ascending; the second key uses PostgreSQL's `uuid`
+comparison. The first key (`price ASC`) restates the already-established
+objective "cheapest eligible offer in the query currency" (section 4); this
+decision only fixes what happens on equal prices.
 
 ### 6. No-offer behavior (RESOLVED)
 
@@ -776,9 +829,283 @@ Three implementation-critical contracts remain unresolved:
 | 2 | **Deterministic price tie-break** — no rule when two offers have identical `price` in the same `currency` | Engine 3 receives non-deterministic input |
 | 3 | **Price carrier exact shape** — four fields determined, but in-memory structural representation unspecified | The boundary contract between Stage 1 and Engine 3 is incomplete |
 
+Update 2026-09-16: gap 1 (freshness predicate) is RESOLVED by Decision 7 --
+a 30-day window on `store_offer.last_checked_at`, inclusive boundary,
+evaluated with PostgreSQL `CURRENT_TIMESTAMP` / `now()` (transaction-start
+time), with future `last_checked_at` accepted as fresh. Gap 2
+(deterministic price tie-break) is RESOLVED by Decision 8 -- `ORDER BY price
+ASC, store_offer.id ASC`, take the first (total order; the all-keys-equal
+case cannot occur). The rows above are preserved as the historical
+2026-09-14 finding. The product-level vs variant-level offer applicability
+question recorded in section 3 is RESOLVED by Decision 9 (strict exact
+matching in both directions; no fallback, no cross-variant matching).
+
 No existing contracts contradict the adopted Engine 2 / Engine 3
 architecture. All six decisions are otherwise fully documented above
 without contradiction or invented dependencies. Engine 3 remains NOT
 IMPLEMENTED (no source files created or modified by this pass).
+
+---
+
+## Decision 7 - Stage 1 freshness policy (2026-09-16)
+
+Date: 2026-09-16. Product-owner decision pass. Resolves ONLY gap 1 of
+Decision 6, section 3 (the exact freshness predicate). Documentation only:
+no offer-selection implementation, no SQL, no migration, no seed, no test
+change, no Engine 2D change, no Engine 3 change.
+
+### Authority for this decision
+
+Decision 6, section 3 recorded that no freshness value existed anywhere in
+the repository (architecture, schema, migrations, or code). Therefore the
+values below are an explicit NEW product decision taken on 2026-09-16 --
+not a repository-derived fact, and not an engineering default adopted
+silently. They are recorded here exactly as decided.
+
+### Adopted policy (exact rule)
+
+| # | Aspect | Adopted rule |
+|---|--------|--------------|
+| F1 | Freshness window | Maximum age of `store_offer.last_checked_at` is 30 days. |
+| F2 | Boundary | INCLUSIVE: an offer whose `last_checked_at` is exactly 30 days before the evaluation time is fresh. |
+| F3 | Time basis | PostgreSQL `CURRENT_TIMESTAMP` / `now()` -- transaction-start time (`transaction_timestamp()`), constant for every statement in the transaction. NOT `statement_timestamp()`, NOT `clock_timestamp()`. |
+| F4 | Future timestamps | A `last_checked_at` later than the evaluation timestamp is ACCEPTED as fresh; never rejected solely for being in the future. |
+
+Canonical predicate:
+
+```sql
+store_offer.last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
+```
+
+Stated without SQL: an eligible offer's scrape/check time is not older than
+30 days relative to the transaction-start time of the evaluating
+transaction; the 30-day boundary instant itself is inclusive; a future check
+time does not fail the predicate.
+
+### Why the time basis is stated explicitly
+
+PostgreSQL defines `CURRENT_TIMESTAMP` / `now()` /
+`transaction_timestamp()` as the time at the START of the current
+transaction, so the predicate yields one stable answer for every statement
+in that transaction. `statement_timestamp()` (start of the current
+statement) and `clock_timestamp()` (actual wall-clock time at evaluation)
+were explicitly NOT adopted: they would let the eligible-offer set differ
+within a single logical operation depending on statement or evaluation
+timing. The adopted transaction-start basis keeps selection deterministic
+and reproducible for a fixed database state + query (architecture §14).
+
+### Scope and boundaries (unchanged by this decision)
+
+* Stage 1 ownership, pipeline position (between Engine 2C and Engine 2D),
+  cardinality (exactly one selected offer per candidate), no-offer
+  exclusion (candidate excluded upstream; never represented as 0, NULL,
+  UNKNOWN, or REJECT), the price-agnostic Engine 2D boundary, and the
+  persistence relationship are NOT modified (Decision 6, sections 1, 2, 4,
+  6, 8, 9, 10).
+* The selection objective is unchanged: the cheapest eligible offer in the
+  query currency. This decision only narrows eligibility by adding the
+  adopted freshness predicate to the already-established rules (product
+  match, currency match, availability is not OUT_OF_STOCK, `price > 0`).
+* Engine 3 continues to consume the already-selected price carrier and does
+  not evaluate freshness; Engine 2D remains price-agnostic.
+* Not decided by Decision 7: the deterministic equal-price tie-break and the
+  product-level vs variant-level offer applicability question (Decision 6,
+  sections 5 and 3). (Both were subsequently resolved on 2026-09-16: the
+  tie-break by Decision 8, the applicability question by Decision 9.)
+
+### Consequences / trade-offs
+
+* 30 days tolerates realistic scraper cadence gaps for the seeded catalog
+  while still excluding genuinely stale offers; it is permissive enough
+  that a sparse role can still be satisfied by an older snapshot.
+* Inclusive boundary + transaction-start time means repeated statements in
+  one transaction see the same eligible set, while a later transaction may
+  legitimately cross the boundary as wall-clock time advances (freshness is
+  time-dependent by definition, so architecture §14 reproducibility holds
+  for a fixed database state + query + evaluation transaction, not across
+  time).
+* Accepting future timestamps means clock skew or a pre-dated scrape cannot
+  silently drop an otherwise valid offer; no data-quality rejection is
+  invented here.
+
+---
+
+## Decision 8 - Stage 1 equal-price tie-break (2026-09-16)
+
+Date: 2026-09-16. Product-owner decision pass. Resolves Decision 6,
+section 5 and architecture section 18 item 5 (the deterministic
+equal-price tie-break). Documentation only: no offer-selection
+implementation, no SQL, no migration, no seed, no test change, no Engine 2D
+change, no Engine 3 change.
+
+### Authority for this decision
+
+Decision 6, section 5 recorded that no deterministic tie-break existed
+anywhere in the repository: no price-tie resolution in the architecture, no
+`ORDER BY price, store_id` convention in the migrations, no `price ASC` SQL
+pattern in the code, no store-priority field on `store` (`store` has only
+id, name, website_url, country_code, currency_code, is_active, created_at,
+updated_at), and multiple offers per store/product/variant are legitimate by
+schema design (migration 010 removed the old offer-level unique
+constraint). Therefore the rule below is an explicit NEW product decision
+taken on 2026-09-16 -- not a repository-derived fact and not an engineering
+default adopted silently.
+
+### Adopted policy (exact rule)
+
+```text
+given: the eligible offers for one candidate -- all already in the query
+       currency, availability not OUT_OF_STOCK, price > 0, and satisfying
+       the adopted freshness predicate (Decision 7)
+order: price ASC, then store_offer.id ASC
+take:  the first offer
+```
+
+* Primary key: `price ASC` (cheapest first) -- the unchanged selection
+  objective ("cheapest eligible offer in the query currency", Decision 6
+  section 4).
+* Tie-break key: `store_offer.id ASC` -- a single key, ascending. In
+  PostgreSQL, `store_offer.id` is `uuid PRIMARY KEY DEFAULT
+  gen_random_uuid()` (migration 009) and is compared by the `uuid` type's
+  comparison.
+* Direction: both keys ASC, stated explicitly because the decision must fix
+  direction, not only the column.
+* All-keys-equal case: IMPOSSIBLE BY CONSTRUCTION. Because
+  `store_offer.id` is the unique primary key, no two distinct eligible
+  offers can share both the price and the id; the ordering is total, so no
+  further fallback key is defined, needed, or permitted.
+* Determinism: the same database state + query yields the same selected
+  offer, independent of insertion order, physical row order, or query plan
+  (no reliance on an unordered result set). Engine 3 therefore receives
+  deterministic input.
+
+### Scope and boundaries (unchanged)
+
+* This decision fixes ONLY the equal-price case. The eligibility rules
+  (product match, currency match, availability is not OUT_OF_STOCK,
+  `price > 0`, adopted freshness predicate) and the selection objective are
+  unchanged.
+* Stage 1 ownership, pipeline position (between Engine 2C and Engine 2D),
+  cardinality (exactly one selected offer per candidate), no-offer
+  exclusion (candidate excluded upstream; never represented as 0, NULL,
+  UNKNOWN, or REJECT), the price-agnostic Engine 2D boundary, and the
+  persistence relationship are NOT modified (Decision 6, sections 1, 2, 4,
+  6, 8, 9, 10).
+* Engine 3 continues to consume the already-selected price carrier and does
+  not re-select offers; Engine 2D remains price-agnostic.
+* The product-level vs variant-level offer applicability question
+  (Decision 6, section 3) is NOT decided here; it was subsequently resolved
+  by Decision 9 (2026-09-16).
+
+### Consequences / trade-offs
+
+* `store_offer.id ASC` is fully deterministic and needs no new schema field,
+  no store-priority ranking, and no second tie-break level.
+* It encodes no commercial preference between stores: for equal prices the
+  winner is an implementation-stable identity, not a "preferred retailer".
+  A store-priority policy would require a NEW decision (and probably schema
+  support); none is invented here.
+* Because UUIDs are effectively random, the tie-break is stable but
+  arbitrary. That is intentional: determinism is the requirement, not
+  fairness.
+
+---
+
+## Decision 9 - Stage 1 product-level vs variant-level offer applicability (2026-09-16)
+
+Date: 2026-09-16. Product-owner decision pass. Resolves Decision 6,
+section 3 (the "`(+ product_variant_id where applicable)`" ambiguity) and
+architecture section 18 item 7. Documentation only: no offer-selection
+implementation, no SQL, no migration, no seed, no test change, no Engine 2D
+change, no Engine 3 change.
+
+### Authority for this decision
+
+Decision 6, section 3 recorded the rule only as "`offer.product_id`
+(+ `product_variant_id` where applicable) belongs to the candidate
+product", and the pre-existing open-questions material listed "product vs
+variant offers" as unresolved. Existing repository facts constrain only
+candidate identity: the implementation enforces `GPU` candidates
+variant-keyed (`product_variant_id` non-null) and all non-GPU roles
+product-keyed (`product_variant_id` null), while
+`store_offer.product_variant_id` is nullable (migration 009) with no
+eligibility rule attached. Therefore the rule below is an explicit NEW
+product decision taken on 2026-09-16 -- not a repository-derived fact and
+not an engineering default adopted silently.
+
+### Adopted policy (exact rule)
+
+STRICT product/variant applicability: no fallback and no cross-variant
+matching, in either direction.
+
+For a VARIANT-KEYED candidate (a candidate carrying a specific
+`product_variant_id`; today that is every `GPU` candidate):
+
+```text
+store_offer.product_id         = candidate.product_id
+store_offer.product_variant_id = candidate.product_variant_id
+```
+
+A product-level offer (`product_variant_id IS NULL`) must NOT satisfy a
+variant-keyed candidate, and an offer for a different variant of the same
+product must NOT satisfy it.
+
+For a PRODUCT-KEYED candidate (all non-GPU roles; `product_variant_id` is
+null):
+
+```text
+store_offer.product_id         = candidate.product_id
+store_offer.product_variant_id IS NULL
+```
+
+A variant-specific offer must NOT satisfy a product-keyed candidate.
+
+There is no fallback or cross-variant matching in either direction.
+
+### Complete Stage 1 eligibility rule set (after Decisions 7, 8 and 9)
+
+An offer is eligible for a candidate only when ALL of the following hold:
+
+1. exact product/variant applicability per this decision (Decision 9);
+2. `offer.currency = query.currency` (architecture section 7);
+3. `offer.availability != 'OUT_OF_STOCK'` (architecture section 7);
+4. `offer.price > 0` (schema CHECK, migration 009);
+5. `offer.last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'`
+   (Decision 7: 30-day inclusive window, transaction-start time, future
+   timestamps accepted as fresh).
+
+Winner selection: among the eligible offers, `ORDER BY price ASC,
+store_offer.id ASC`, take the first (Decision 8). Exactly one selected
+offer/price per candidate (Decision 6, section 4). A candidate with zero
+eligible offers is excluded upstream and must never be represented as 0,
+NULL, UNKNOWN, or REJECT (Decision 6, section 6).
+
+### Scope and boundaries (unchanged)
+
+* Stage 1 ownership, pipeline position (between Engine 2C and Engine 2D),
+  cardinality, no-offer exclusion, the price-agnostic Engine 2D boundary,
+  and the persistence relationship are NOT modified (Decision 6, sections
+  1, 2, 4, 6, 8, 9, 10).
+* Engine 3 continues to consume the already-selected price carrier; it does
+  not query offers and does not resolve applicability. Engine 2D remains
+  price-agnostic.
+* No schema change is introduced or proposed: `store_offer.product_variant_id`
+  stays nullable exactly as migration 009 defines it; this decision only
+  rules on which offer rows are eligible.
+
+### Consequences / trade-offs
+
+* Strict matching keeps a GPU candidate's price tied to the exact variant
+  whose physical properties (`gpu_board_spec`: length, slot width, height,
+  connectors, board TGP) the compatibility checks evaluated; a product-level
+  price would not correspond to the variant that was checked.
+* Cost: a variant-keyed GPU whose offers exist only at product level has zero
+  eligible offers and is excluded upstream, even though a listing exists.
+  That false-negative risk is accepted as the trade-off for strict
+  correctness; it is a data/ingestion concern (record offers at variant
+  level), not an engine fallback.
+* The rule adds no field, no store priority, and no multi-key fallback, and
+  composes with Decisions 7 and 8 into a single deterministic eligibility +
+  selection rule.
 
 ---
