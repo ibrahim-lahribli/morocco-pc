@@ -25,6 +25,10 @@ const ERROR_CODES = Object.freeze({
   // A canonical product maps to multiple incompatible product-keyed category
   // spec tables; the loader refuses to silently choose one category.
   CANONICAL_CATEGORY_AMBIGUITY: 'CANONICAL_CATEGORY_AMBIGUITY',
+  // The pinned scoring model (recommendation_query.scoring_model_id) does not
+  // exist or is not active. Fail-fast: no discovery, no substitution, no
+  // fallback (Decision 11, Rule 5).
+  SCORING_MODEL_UNAVAILABLE: 'SCORING_MODEL_UNAVAILABLE',
 });
 
 class CandidateSelectionError extends Error {

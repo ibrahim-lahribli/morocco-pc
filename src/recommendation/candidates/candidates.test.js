@@ -213,6 +213,46 @@ test('errors expose a machine-readable shape', () => {
   });
 });
 
+test('ERROR_CODES is frozen and carries the canonical vocabulary', () => {
+  // The vocabulary stays frozen; entries are never renamed or removed.
+  assert.ok(Object.isFrozen(ERROR_CODES));
+
+  // Decision 11 Rule 5: the fail-fast scoring-model loader code exists and is
+  // expressed through the same CandidateSelectionError mechanism.
+  assert.equal(ERROR_CODES.SCORING_MODEL_UNAVAILABLE, 'SCORING_MODEL_UNAVAILABLE');
+
+  // Every pre-existing code remains unchanged, in its original order.
+  assert.deepEqual(Object.keys(ERROR_CODES), [
+    'INVALID_INPUT',
+    'MISSING_REQUIRED_FIELD',
+    'INVALID_FIELD_VALUE',
+    'INVALID_COMPONENT_ROLE',
+    'ROLE_CATEGORY_MISMATCH',
+    'INVALID_CANDIDATE',
+    'EMPTY_CANDIDATE_POOL',
+    'CANONICAL_CATEGORY_AMBIGUITY',
+    'SCORING_MODEL_UNAVAILABLE',
+  ]);
+});
+
+test('the scoring-model error reuses the existing error mechanism', () => {
+  const error = new CandidateSelectionError(
+    ERROR_CODES.SCORING_MODEL_UNAVAILABLE,
+    'Pinned scoring model "abc" is unavailable',
+    'abc'
+  );
+  assert.ok(error instanceof Error);
+  assert.equal(error.name, 'CandidateSelectionError');
+  assert.equal(error.code, ERROR_CODES.SCORING_MODEL_UNAVAILABLE);
+  assert.equal(error.field, 'abc');
+  assert.deepEqual(error.toJSON(), {
+    name: 'CandidateSelectionError',
+    code: 'SCORING_MODEL_UNAVAILABLE',
+    field: 'abc',
+    message: error.message,
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Candidate record contract
 // ---------------------------------------------------------------------------
