@@ -16,16 +16,19 @@ const assert = require('node:assert/strict');
 
 const index = require('./index');
 const { loadFilteringContext, CONTEXT_COMPAT_KEYS } = require('./context-loader');
+const { buildIntegratedGpuPresentMap } = require('./igpu-map');
 const { filterCandidates, CANDIDATE_STATUSES } = require('./filter');
 const { filterCandidatesForRecommendation } = require('./pipeline');
 
-test('filtering barrel exposes the canonical five-export public API', () => {
-  // The five expected exports exist - and only those five.
+test('filtering barrel exposes the canonical six-export public API', () => {
+  // The six expected exports exist - and only those six. (The sixth is the
+  // Decision 11 iGPU handoff, resolved 2026-09-17.)
   assert.deepEqual(
     Object.keys(index).sort(),
     [
       'loadFilteringContext',
       'CONTEXT_COMPAT_KEYS',
+      'buildIntegratedGpuPresentMap',
       'filterCandidates',
       'CANDIDATE_STATUSES',
       'filterCandidatesForRecommendation',
@@ -37,6 +40,9 @@ test('filtering barrel exposes the canonical five-export public API', () => {
   assert.strictEqual(index.CONTEXT_COMPAT_KEYS, CONTEXT_COMPAT_KEYS);
   assert.strictEqual(index.filterCandidates, filterCandidates);
   assert.strictEqual(index.CANDIDATE_STATUSES, CANDIDATE_STATUSES);
+
+  // The Decision 11 iGPU handoff is re-exported by identity - no wrapper, no copy.
+  assert.strictEqual(index.buildIntegratedGpuPresentMap, buildIntegratedGpuPresentMap);
 
   // The canonical entry point is re-exported by identity - no wrapper, no copy.
   assert.strictEqual(index.filterCandidatesForRecommendation, filterCandidatesForRecommendation);

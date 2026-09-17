@@ -30,6 +30,19 @@ left as DECISION REQUIRED. Documentation only: no loader module, no
 orchestrator, no code change, no migration, no seed, no test change, no
 engine-module change.
 
+Update 2026-09-17 (iGPU sourcing decision pass): Decision 11's explicitly
+unresolved iGPU sourcing item (below) is RESOLVED. The authoritative source
+of `integrated_gpu_present` is the EXISTING Engine 2D normalized CPU-spec
+context (`context.specs['p:<product_id>'].integrated_gpu_present`, already
+loaded by `CPU_SPEC_SQL` and normalized to true | false | null by
+context-loader.js). No dedicated CPU-spec query is introduced. Engine 3
+receives exactly `{ [cpuProductId]: true | false | null }`; a missing
+CPU-spec row becomes `null`. Only strict `true` means GPU OPTIONAL;
+`false`, `null`, and missing all require GPU. Engine 3's GPU policy
+(`resolveGpuRequirement()`) is unchanged. Implemented as the minimal handoff
+`src/recommendation/filtering/igpu-map.js` with contract tests; see the
+resolution block under Decision 11 below.
+
 The original three items (quoted verbatim from the architecture document):
 
 1. **"Confirmation of the section 3.2 asymmetric UNKNOWN policy (especially:
@@ -1281,6 +1294,9 @@ Update 2026-09-16: the scoring-model LOADING half of the preceding sentence
 is RESOLVED by Decision 11 (below). The integrated_gpu_present SOURCING
 half remains DECISION REQUIRED (see Decision 11, unresolved iGPU items).
 
+Update 2026-09-17: the integrated_gpu_present SOURCING half is now also
+RESOLVED -- see the resolution block under Decision 11 below.
+
 ### Scope and boundaries (unchanged by this decision)
 
 * No engine module changes: Engine 2A/2B/2C/2D, Engine 3 Steps 1-4, Stage 1
@@ -1543,6 +1559,43 @@ the exact map shape it returns, and the missing-CPU-spec behavior. That
 handoff contract does not exist in the architecture, migrations, or
 implemented code, so Decision 11 records it as open rather than inventing
 it.
+
+### Resolution 2026-09-17: iGPU sourcing RESOLVED (additive)
+
+Update 2026-09-17: the iGPU sourcing item explicitly left unresolved above
+is now resolved by product decision. The contract, recorded additively so
+the original decision text above stays intact:
+
+* **Authoritative source**: the EXISTING Engine 2D normalized CPU-spec
+  context. `context.specs['p:<product_id>'].integrated_gpu_present` -- a
+  column already selected by `CPU_SPEC_SQL` and already normalized by
+  context-loader.js to strictly `true | false | null` (DB NULL preserved).
+* **No dedicated CPU-spec query**: the data-loading layer must NOT add a
+  second cpu_spec lookup; the Engine 2D context is the single source.
+* **Handoff shape**: Engine 3 receives exactly
+  `{ [cpuProductId]: true | false | null }`.
+* **Missing CPU-spec row**: a candidate CPU with no `cpu_spec` row (no
+  `p:<id>` spec entry) becomes the explicit value `null` -- never
+  `undefined` (the Engine 3 input contract rejects undefined).
+* **GPU-requirement semantics** (unchanged policy, only `=== true` makes a
+  GPU optional):
+  ```text
+  true    -> GPU OPTIONAL
+  false   -> GPU REQUIRED
+  null    -> GPU REQUIRED
+  missing -> null -> GPU REQUIRED
+  ```
+* **Engine 3 GPU policy unchanged**: `resolveGpuRequirement()` keeps the
+  existing rule order (GPU-required use case first, then `=== true` ->
+  OPTIONAL, otherwise REQUIRED). Only the DATA supplied to it is new.
+* **Implementation status (IMPLEMENTED 2026-09-17)**: the minimal handoff
+  lives in `src/recommendation/filtering/igpu-map.js`
+  (`buildIntegratedGpuPresentMap(context)`, pure, DB-free, deterministic,
+  frozen output) with contract tests in
+  `src/recommendation/filtering/igpu-map.test.js`, re-exported through
+  `src/recommendation/filtering/index.js`. No orchestrator, no
+  `top_k_per_role` application, no scoring-model loader change, no
+  migration, no seed, no database operation.
 
 ### Scope and boundaries (non-goals)
 

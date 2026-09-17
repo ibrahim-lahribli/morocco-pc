@@ -19,6 +19,12 @@
  *   CONTEXT_COMPAT_KEYS     - canonical compat sub-context keys of the
  *     B2-B context.
  *
+ *   buildIntegratedGpuPresentMap() - Decision 11 (iGPU sourcing, resolved
+ *     2026-09-17): derives the Engine 3 `integrated_gpu_present` handoff map
+ *     { [cpu_product_id]: true | false | null } directly from the frozen
+ *     Engine 2D context (no dedicated CPU-spec query; missing cpu_spec row
+ *     -> null) (see ./igpu-map).
+ *
  *   filterCandidatesForRecommendation() - B2-G: canonical public Engine 2D
  *     filtering-stage entry point. Composes loadFilteringContext(pool, db)
  *     -> filterCandidates(context) and returns the filtering result
@@ -29,7 +35,8 @@
  * Engine 2 (../candidates); this module defines no parallel contracts.
  */
 const { loadFilteringContext, CONTEXT_COMPAT_KEYS } = require('./context-loader');
+const { buildIntegratedGpuPresentMap } = require('./igpu-map');
 const { filterCandidates, CANDIDATE_STATUSES } = require('./filter');
 const { filterCandidatesForRecommendation } = require('./pipeline');
 
-module.exports = { loadFilteringContext, CONTEXT_COMPAT_KEYS, filterCandidates, CANDIDATE_STATUSES, filterCandidatesForRecommendation };
+module.exports = { loadFilteringContext, CONTEXT_COMPAT_KEYS, buildIntegratedGpuPresentMap, filterCandidates, CANDIDATE_STATUSES, filterCandidatesForRecommendation };
