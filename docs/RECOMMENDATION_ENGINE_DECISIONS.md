@@ -1623,3 +1623,78 @@ the original decision text above stays intact:
   avoids inventing contracts the investigation did not establish, but
   leaves two handoffs the data-loading layer still cannot build without
   follow-up decisions.
+---
+
+## Decision 14 — `top_k_per_role` retention semantics
+
+Date: 2026-09-17. Contract-freezing product decision pass. Resolves the retention question left open by Decision 12 (ranking/top-K ownership) using the candidate score defined by Decision 13. Documentation/decision only: no implementation of ranking, no top-K application, no `roleCaps`, no Engine 3 change, no scoring change, no migration, no database operation.
+
+### Rule 1 — Per-role scope
+
+`candidate_caps.top_k_per_role = K` applies independently to each `component_role`. The ranking/top-K stage is executed per role bucket; the K value is identical for every role and comes from a single configuration key.
+
+### Rule 2 — Eligible candidates
+
+Only `PASS` and `UNKNOWN` candidates entering the ranking stage are eligible for retention. `REJECT` candidates are excluded before ranking/top-K and are never eligible.
+
+### Rule 3 — Ranking
+
+Eligible candidates in each role bucket are ordered by the candidate-ranking score defined by Decision 13, with higher score ranked first. The score formula itself is owned by Decision 13 and is not changed or redefined here.
+
+### Rule 4 — Retention
+
+**Selected semantics: A — Hard upper bound.**
+
+For each `component_role`:
+
+1. Rank eligible candidates by candidate score descending (Rule 3), using the deterministic candidate ordering of Rule 5 to resolve equal scores.
+2. Retain the candidates occupying the first K positions of that ordering.
+3. Discard every candidate after position K.
+
+Formal semantics:
+
+```text
+retained_count <= K
+retained_count = min(K, eligible_count)
+```
+
+Consequently: if fewer than K eligible candidates exist, all of them are retained; if K or more exist, exactly K are retained. If the Kth and (K+1)th candidates have equal scores, the deterministic tie-break of Rule 5 still selects exactly K — equal scores never expand retention beyond K.
+
+### Rule 5 — Equal-score handling
+
+**Authorized: YES.** The existing `compareCandidates()` ordering (`src/recommendation/candidates/select.js` / `loader.js`) is the authorized deterministic tie-break for equal candidate scores. The full retention-ordering key chain is:
+
+```text
+1. candidate score                    DESC   (Decision 13 score)
+2. component_role enum order          (ROLE_ORDER; constant within a role bucket)
+3. product_id                         ASC
+4. product_variant_id                 NULL first, then ASC
+```
+
+Because this chain ends in unique identity keys, it is a total order over the candidates of a role bucket; the candidate at position K is therefore always uniquely and reproducibly determined. Under Rule 4's hard-upper-bound semantics, this ordering does determine whether an equal-score candidate at the K boundary survives. No new comparator, ordering scheme, or additional tie-break level is introduced.
+
+### Rule 6 — Pipeline position
+
+The resulting per-role top-K candidate sets are passed to Engine 3 after scoring/ranking/top-K processing, as established by Decision 12. This decision changes nothing in Engine 3: its validation, assembly, and "per-role cap validated only, never applied" stance remain untouched.
+
+### Rule 7 — `max_builds_per_query`
+
+`candidate_caps.max_builds_per_query` remains independent of this decision and continues to limit completed builds during Engine 3 assembly (traversal halt cap). It is not a retention, ranking, or per-role parameter.
+
+### Rule 8 — Configuration source
+
+`candidate_caps.top_k_per_role` remains the sole source of the K value. No separate `roleCaps` configuration, no per-role override structure, and no additional configuration key is introduced. Its existing validation contract (positive integer, strict two-key `candidate_caps` object) is unchanged.
+
+---
+
+## Final Status
+
+```text
+Decision 14: RESOLVED
+Selected semantics: A — Hard upper bound
+Tie-break: existing compareCandidates() authorized — YES
+```
+
+Unambiguous one-sentence semantics for the implementation task:
+
+> For each `component_role`, after excluding `REJECT` candidates, eligible (`PASS`/`UNKNOWN`) candidates are ordered by candidate score descending with the existing `compareCandidates()` chain (role enum order, `product_id` ASC, `product_variant_id` NULL-first then ASC) as the deterministic tie-break, and exactly the first `candidate_caps.top_k_per_role` (K) candidates are retained — `retained_count <= K` always, exactly K whenever at least K eligible candidates exist — and that set is then passed to Engine 3, with `max_builds_per_query` remaining an independent Engine 3 build-count cap.
