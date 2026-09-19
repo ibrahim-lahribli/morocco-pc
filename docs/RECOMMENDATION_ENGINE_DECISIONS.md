@@ -43,6 +43,18 @@ CPU-spec row becomes `null`. Only strict `true` means GPU OPTIONAL;
 `src/recommendation/filtering/igpu-map.js` with contract tests; see the
 resolution block under Decision 11 below.
 
+Update 2026-09-19 (dangling-reference reconciliation): Decision 14 referenced
+"Decision 12" (ranking/top-K ownership) and "Decision 13" (candidate-ranking
+score formula), neither of which had ever been recorded -- the document jumped
+from Decision 11 straight to Decision 14. Investigation found no
+implementation of either contract in `src/recommendation/**` or
+`database/migrations/**` (evidence in the two entries below). Decisions 12 and
+13 are therefore recorded retroactively as `TBD - not yet decided` stubs,
+Decision 14 is marked PROVISIONAL / blocked on them, and Decision 14's
+recorded date is corrected from 2026-09-17 to 2026-09-18 to match its
+recording commit 0c2225c. Decisions 1-11 are unchanged. Documentation only:
+no code change, no migration, no commit.
+
 The original three items (quoted verbatim from the architecture document):
 
 1. **"Confirmation of the section 3.2 asymmetric UNKNOWN policy (especially:
@@ -1625,9 +1637,165 @@ the original decision text above stays intact:
   follow-up decisions.
 ---
 
+## Decision 12 - Ranking / top-K ownership and pipeline position (recorded retroactively 2026-09-19)
+
+### Current situation
+
+No Decision 12 was ever recorded. This document numbers Decisions 1-11 and
+then jumps to Decision 14, whose intro text ("the retention question left
+open by Decision 12 (ranking/top-K ownership)") and Rule 6 ("passed to
+Engine 3 ... as established by Decision 12") both reference it. The reference
+is dangling: a repository-wide search of every markdown file found Decision 12
+mentioned ONLY inside Decision 14. Nothing named "Decision 12" exists in this
+document, in `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md`, or anywhere else.
+
+### What Decision 14 assumes Decision 12 establishes
+
+1. **Ownership of the ranking / top-K stage** as a distinct pipeline stage,
+   and that Decision 12 explicitly left the RETENTION semantics (hard cap vs
+   expansion vs threshold) open for Decision 14 to resolve.
+2. **Pipeline position**: scoring -> ranking -> top-K processing happens
+   BEFORE the candidate set reaches Engine 3, and the resulting per-role
+   top-K sets are what Engine 3 receives as input.
+
+Decision 14's intro depends on (1); Decision 14 Rule 6 depends on (2).
+
+### Status
+
+```text
+TBD - not yet decided
+```
+
+No product decision is made here. This entry exists only to remove a dangling
+reference and to record, with evidence, that the referenced decision was never
+taken.
+
+### Evidence: no matching implementation exists
+
+* `src/recommendation/scoring/configuration.js:241-242` -- `candidate_caps` is
+  "Validated and preserved only -- never applied here (Decision 11 Rule 7)."
+* `src/recommendation/scoring/load-scoring-model.js:35` and `:138` -- the
+  loader performs "no `top_k_per_role` application (validated and preserved
+  only), no scoring, no ranking".
+* `src/recommendation/scoring/index.js:17-18` -- "NOT owned here: ... the
+  `top_k_per_role` application, Engine 3 assembly, Engine 4 scoring, ranking".
+* `src/recommendation/assembly/input.js:44-45` and `:237` -- the Engine 3
+  input contract documents `candidate_caps` as "Validated ONLY, never
+  applied."
+* Repository search for any per-role retention/top-K stage (`applyTopK`,
+  `retainTopK`, `rankCandidates`, `topKPerRole`) returns no results in `src/`
+  or `scripts/`.
+* Decision 10's scope note (this document) confirms `top_k_per_role` ownership
+  "is NOT re-decided; the implemented Engine 3 contract stands ('Validated
+  ONLY, never applied')."
+
+### Impact
+
+Until Decision 12 is taken, no component owns the ranking/top-K stage and
+nothing in `src/recommendation/` may apply `top_k_per_role`. Decision 14
+Rules 4 and 6 cannot be implemented without it.
+
+### Verdict for this pass
+
+```text
+VERDICT: TBD - NOT YET DECIDED
+```
+
+---
+
+## Decision 13 - Candidate-ranking score formula (recorded retroactively 2026-09-19)
+
+### Current situation
+
+No Decision 13 was ever recorded. Decision 14 references it four times:
+"the candidate score defined by Decision 13" (intro), "the candidate-ranking
+score defined by Decision 13 ... The score formula itself is owned by
+Decision 13" (Rule 3), "candidate score DESC (Decision 13 score)" (Rule 5,
+first key), and "after scoring/ranking/top-K processing" (Rule 6). The
+reference is dangling: a repository-wide search of every markdown file found
+Decision 13 mentioned ONLY inside Decision 14.
+
+### What Decision 14 assumes Decision 13 establishes
+
+1. A single **numeric, DESC-sortable "candidate score"** per candidate, where
+   a higher value is better.
+2. The score **FORMULA** itself (weighting, neutral baseline, penalties,
+   confidence/staleness treatment), frozen and owned by Decision 13 and
+   explicitly not redefined by Decision 14.
+
+Decision 14 Rule 3, the first key of Rule 5's ordering chain, and the
+"scoring" step named in Rule 6 all depend on it.
+
+### Status
+
+```text
+TBD - not yet decided
+```
+
+No product decision is made here. This entry exists only to remove a dangling
+reference and to record, with evidence, that the referenced decision was never
+taken.
+
+### Evidence: no matching implementation exists
+
+* `src/recommendation/scoring/` contains only the Decision 11 loader and its
+  configuration validator (`load-scoring-model.js`, `configuration.js`). They
+  validate the presence/shape/ranges of `role_weights`, `type_weights`,
+  `neutral_baseline`, `no_evidence_penalty`, `unknown_compat_penalty`,
+  `confidence_multipliers` and `staleness`, but perform no aggregation, no
+  weighting arithmetic and no penalty application.
+* Repository search for any scoring arithmetic (`scoreCandidate`,
+  `computeScore`, `rankingScore`, `candidateScore`, `computeBuildScore`)
+  returns no results in `src/` or `scripts/`.
+* The schema carries the score VALUE without defining its formula:
+  `database/migrations/011_reconcile_layer4.sql:162,165`
+  (`build_candidate.score NUMERIC` with a 0..100 CHECK) and `:189,192`
+  (`recommendation_result.rank INTEGER` with a `> 0` CHECK).
+* `CONTEXT.md:41-42` and `:47` record Engine 4 scoring arithmetic and the
+  Engines 5-6 ranking stage as absent, and
+  `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` (section 9 and the section 11
+  shortlist note) describes scoring/top-K semantics as prose only.
+
+### Impact
+
+Until Decision 13 is taken there is no candidate score to rank or sort by, so
+Decision 14 Rules 3-5 cannot be implemented. Decision 11's loader contract is
+unaffected: model configuration is validated and preserved, but unused
+arithmetically.
+
+### Verdict for this pass
+
+```text
+VERDICT: TBD - NOT YET DECIDED
+```
+
+---
+
 ## Decision 14 — `top_k_per_role` retention semantics
 
-Date: 2026-09-17. Contract-freezing product decision pass. Resolves the retention question left open by Decision 12 (ranking/top-K ownership) using the candidate score defined by Decision 13. Documentation/decision only: no implementation of ranking, no top-K application, no `roleCaps`, no Engine 3 change, no scoring change, no migration, no database operation.
+Date: 2026-09-18 (corrected from the recorded 2026-09-17 to match its recording commit `0c2225c`, dated 2026-09-18). Contract-freezing product decision pass. Resolves the retention question left open by Decision 12 (ranking/top-K ownership) using the candidate score defined by Decision 13. Documentation/decision only: no implementation of ranking, no top-K application, no `roleCaps`, no Engine 3 change, no scoring change, no migration, no database operation.
+
+### Status: PROVISIONAL — blocked on Decisions 12 and 13
+
+Decision 14 references two decisions that were never recorded; both are now
+entered above as `TBD - not yet decided` (Decision 12: ranking/top-K ownership
+and pipeline position; Decision 13: candidate-ranking score formula).
+Consequently this decision is PROVISIONAL and cannot be implemented as
+written:
+
+* Rule 3 ("Ranking") and the first key of Rule 5's ordering chain depend on the
+  candidate-ranking score formula owned by Decision 13 — which does not exist.
+* Rule 6 ("Pipeline position") depends on the ranking/top-K ownership and
+  position established by Decision 12 — which does not exist.
+* Rule 4 ("Retention") is internally coherent but has no input: it cannot be
+  applied without the ranking stage and score it consumes.
+
+Nothing in `src/recommendation/**` implements ranking, top-K application, or
+scoring arithmetic (see the evidence blocks under Decisions 12 and 13), so no
+code contradicts these rules; the block is procedural, not a conflict. Rules
+1, 2, 4, 5 (tie-break chain), 7 and 8 remain valid as recorded. The rules
+below are preserved verbatim; this status block is additive, and Decision 14
+becomes RESOLVED only once Decisions 12 and 13 are decided.
 
 ### Rule 1 — Per-role scope
 
@@ -1690,7 +1858,9 @@ The resulting per-role top-K candidate sets are passed to Engine 3 after scoring
 ## Final Status
 
 ```text
-Decision 14: RESOLVED
+Decision 12: TBD - not yet decided (ranking / top-K ownership, pipeline position)
+Decision 13: TBD - not yet decided (candidate-ranking score formula)
+Decision 14: PROVISIONAL - blocked on Decisions 12 and 13
 Selected semantics: A — Hard upper bound
 Tie-break: existing compareCandidates() authorized — YES
 ```
