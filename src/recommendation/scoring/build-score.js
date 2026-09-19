@@ -22,24 +22,26 @@
  * STEP 2 (./effective-score).
  *
  * Consumes:  single argument object carrying `build` (a frozen Engine 3
- *            build: { components: [...], total_price, currency }), the
- *            frozen assessment map from ./load-assessments, the validated
- *            Decision 3(a) configuration, `nowMs`, and
- *            `unknownPairwiseCount`.
+ *            build: { components: [...], total_price, currency,
+ *            unknown_pairwise_count }), the frozen assessment map from
+ *            ./load-assessments, the validated Decision 3(a) configuration,
+ *            `nowMs`, and `unknownPairwiseCount`. In the batch form
+ *            (computeBuildScores) `unknownPairwiseCounts` is OPTIONAL: an
+ *            explicit array wins (injection stays supported for callers that
+ *            derive the count differently); when absent, the count is read
+ *            per build from `build.unknown_pairwise_count` (Decision 15).
  * Produces:  one build score (number in [0, 100]), or - for the batch form -
  *            a frozen { scores: [...] } array index-aligned with the input
  *            builds in discovery order.
  *
- * BLOCKING QUESTION B1 (2026-09-19 plan, item 2/7): NOTHING in the pipeline
- * currently retains which pairwise compatibility checks resolved UNKNOWN.
- * Engine 2D computes pair statuses transiently and keeps only per-relationship
- * best-of-partner statuses (filter.js:543-563); Engine 3 emits components
- * carrying only the candidate verdict status (assemble.js:319-328). The
- * Decision 13 count therefore has NO producer today. `unknownPairwiseCount`
- * is an explicit INJECTED input until a product decision defines the
- * producer (reinterpretation as build-level countable data / per-build pair
- * recomputation / an Engine 2D-3 output extension). This module does not
- * touch filtering/ or assembly/ - flagged separately per the plan.
+ * BLOCKING QUESTION B1 (2026-09-19 plan, item 2/7): RESOLVED (2026-09-19,
+ * Decision 15 in docs/RECOMMENDATION_ENGINE_DECISIONS.md). Engine 2D now
+ * counts, per verdict, the pairwise checks whose aggregated status resolved
+ * UNKNOWN (filter.js `unknown_pairwise_count`), and Engine 3 sums those
+ * counts per assembled build (assemble.js `unknown_pairwise_count`). The
+ * count is a plain integer carry-forward: pair-identity lists and per-build
+ * pair recomputation were rejected (Decision 15). Nothing in this module
+ * re-derives compatibility; it consumes the producer's number.
  *
  * Role domain (Engine 3 v1 contract): builds carry at most one component per
  * EXPANSION_ORDER role (assemble.js traversal; one verdict per role, GPU
@@ -152,7 +154,7 @@ function validateUnknownPairwiseCount(unknownPairwiseCount) {
     fail(
       ERROR_CODES.MISSING_REQUIRED_FIELD,
       'unknownPairwiseCount',
-      '"unknownPairwiseCount" is required (BLOCKING QUESTION B1: injected until a producer exists)'
+      '"unknownPairwiseCount" is required (the Engine 3 build\'s "unknown_pairwise_count" or an explicit injected count, Decision 15)'
     );
   }
   if (!Number.isInteger(unknownPairwiseCount) || unknownPairwiseCount < 0) {
@@ -304,22 +306,32 @@ function computeBuildScore({ build, assessments, configuration, nowMs, unknownPa
  * An empty build list yields an empty scores array (scoring zero builds is
  * not an error; Engine 3 may legitimately return { builds: [] }).
  *
+ * `unknownPairwiseCounts` is OPTIONAL (Decision 15): when provided, it must
+ * be an array aligned with `builds` by index and wins as-is (injection
+ * kept); when absent, the count is read per build from
+ * `build.unknown_pairwise_count`, and a missing/invalid build count fails
+ * fast through the existing per-count validation.
+ *
  * @param {object} args { builds, assessments, configuration, nowMs,
- *                        unknownPairwiseCounts }
+ *                        unknownPairwiseCounts? }
  * @returns {object} frozen { scores: [ { build_index, build_score }, ... ] }
  */
 function computeBuildScores({ builds, assessments, configuration, nowMs, unknownPairwiseCounts }) {
   if (!Array.isArray(builds)) {
     fail(ERROR_CODES.INVALID_FIELD_VALUE, 'builds', '"builds" must be an array of Engine 3 builds');
   }
-  if (unknownPairwiseCounts === undefined || unknownPairwiseCounts === null) {
-    fail(
-      ERROR_CODES.MISSING_REQUIRED_FIELD,
-      'unknownPairwiseCounts',
-      '"unknownPairwiseCounts" is required (BLOCKING QUESTION B1: injected until a producer exists)'
+  let counts = unknownPairwiseCounts;
+  if (counts === undefined || counts === null) {
+    // Decision 15: fall back to the build-carried count. Per-index validity
+    // (missing / negative / non-integer) fails fast through the existing
+    // validateUnknownPairwiseCount inside computeBuildScore.
+    counts = builds.map((build) =>
+      build !== null && typeof build === 'object' && !Array.isArray(build)
+        ? build.unknown_pairwise_count
+        : undefined
     );
   }
-  if (!Array.isArray(unknownPairwiseCounts) || unknownPairwiseCounts.length !== builds.length) {
+  if (!Array.isArray(counts) || counts.length !== builds.length) {
     fail(
       ERROR_CODES.INVALID_FIELD_VALUE,
       'unknownPairwiseCounts',
@@ -336,7 +348,7 @@ function computeBuildScores({ builds, assessments, configuration, nowMs, unknown
           assessments,
           configuration,
           nowMs,
-          unknownPairwiseCount: unknownPairwiseCounts[index],
+          unknownPairwiseCount: counts[index],
         }),
       })
     );

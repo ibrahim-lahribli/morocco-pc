@@ -302,6 +302,103 @@ test('B2-D: UNKNOWN caused by absent partner role - zero partners is never a FAI
   assert.equal(ram.relationships.platform_memory, FINAL_STATUSES.PASS);
 });
 
+test('B2-D: unknown_pairwise_count is 0 when every evaluated pair passes', () => {
+  const result = filterCandidates(goldenContext());
+  assert.equal(result.results.length, 8);
+  for (const entry of result.results) {
+    assert.equal(entry.unknown_pairwise_count, 0, entry.component_role);
+  }
+});
+
+test('B2-D: unknown_pairwise_count counts the UNKNOWN pairs, per direction, ignoring PASS/FAIL', () => {
+  // A second motherboard on the same socket with no matching exact/family
+  // support record: the CPU's cpu_motherboard pairs are PASS (MB_ID) and
+  // UNKNOWN (the unsupported board) -> count 1, relationship PASS (best-of).
+  const unsupportedMbId = U(20);
+  const pool = [
+    makeCandidate('CPU', CPU_ID),
+    makeCandidate('MOTHERBOARD', MB_ID),
+    makeCandidate('MOTHERBOARD', unsupportedMbId),
+  ];
+  const specs = {
+    ...goldenSpecs(),
+    ['p:' + unsupportedMbId]: motherboardSpec(), // same socket: socket check passes
+  };
+  const compat = goldenCompat();
+  compat.cpu_motherboard_exact = {
+    [MB_ID]: [cpuMotherboardExactRow()],
+    [unsupportedMbId]: [cpuMotherboardExactRow({ cpu_product_id: U(99) })],
+  };
+  compat.cpu_motherboard_family = {
+    [unsupportedMbId]: [cpuMotherboardFamilyRow({ cpu_product_family_id: P(31) })],
+  };
+  const result = filterCandidates(buildContext({
+    pool, specs, platform_by_socket: goldenPlatformBySocket(), compat,
+  }));
+
+  // CPU: pair vs MB_ID is PASS (not counted), pair vs the unsupported board
+  // is UNKNOWN (counted); best-of keeps the relationship PASS.
+  const cpu = findResult(result, 'CPU', CPU_ID);
+  assert.equal(cpu.relationships.cpu_motherboard, FINAL_STATUSES.PASS);
+  assert.equal(cpu.unknown_pairwise_count, 1);
+
+  // MB_ID: its single pair (vs the CPU) passes: count 0.
+  const supportedMb = findResult(result, 'MOTHERBOARD', MB_ID);
+  assert.equal(supportedMb.unknown_pairwise_count, 0);
+
+  // The unsupported board evaluates the same pair from its own side
+  // (symmetric) and that one pair is UNKNOWN: count 1.
+  const unsupportedMb = findResult(result, 'MOTHERBOARD', unsupportedMbId);
+  assert.equal(unsupportedMb.relationships.cpu_motherboard, FINAL_STATUSES.UNKNOWN);
+  assert.equal(unsupportedMb.unknown_pairwise_count, 1);
+});
+
+test('B2-D: unknown_pairwise_count - zero partners contributes 0 even when the relationship is UNKNOWN', () => {
+  const context = buildContext({
+    pool: [makeCandidate('CPU', CPU_ID), makeCandidate('RAM', RAM_ID)],
+    specs: { ['p:' + CPU_ID]: cpuSpec(), ['p:' + RAM_ID]: ramSpec() },
+    platform_by_socket: goldenPlatformBySocket(),
+    compat: goldenCompat(),
+  });
+
+  const result = filterCandidates(context);
+  const cpu = findResult(result, 'CPU', CPU_ID);
+  // Two vacuous relationship-level UNKNOWNs (no MOTHERBOARD / CPU_COOLER
+  // candidates at all): no pair exists, so nothing is counted.
+  assert.equal(cpu.relationships.cpu_motherboard, FINAL_STATUSES.UNKNOWN);
+  assert.equal(cpu.relationships.cooler_socket, FINAL_STATUSES.UNKNOWN);
+  assert.equal(cpu.unknown_pairwise_count, 0);
+});
+
+test('B2-D: unknown_pairwise_count - FAIL pairs are not counted and REJECT verdicts carry the count', () => {
+  const mismatchedMbId = U(21);
+  const pool = [
+    makeCandidate('CPU', CPU_ID),
+    makeCandidate('MOTHERBOARD', MB_ID),
+    makeCandidate('MOTHERBOARD', mismatchedMbId), // different socket -> pair FAIL
+  ];
+  const specs = {
+    ...goldenSpecs(),
+    ['p:' + mismatchedMbId]: motherboardSpec({ socket_id: OTHER_SOCKET_ID }),
+  };
+  const result = filterCandidates(buildContext({
+    pool, specs, platform_by_socket: goldenPlatformBySocket(), compat: goldenCompat(),
+  }));
+
+  // CPU: pairs PASS (MB_ID) and FAIL (mismatched board) - neither resolves
+  // UNKNOWN, so the count stays 0 while best-of keeps the relationship PASS.
+  const cpu = findResult(result, 'CPU', CPU_ID);
+  assert.equal(cpu.relationships.cpu_motherboard, FINAL_STATUSES.PASS);
+  assert.equal(cpu.unknown_pairwise_count, 0);
+
+  // The mismatched board's single pair FAILs -> REJECT. REJECT verdicts
+  // still carry the field (uniform contract).
+  const mismatched = findResult(result, 'MOTHERBOARD', mismatchedMbId);
+  assert.equal(mismatched.status, CANDIDATE_STATUSES.REJECT);
+  assert.equal(mismatched.relationships.cpu_motherboard, FINAL_STATUSES.FAIL);
+  assert.equal(mismatched.unknown_pairwise_count, 0);
+});
+
 test('B2-D: UNKNOWN caused by unresolved/null data - null CPU socket stays UNKNOWN', () => {
   const specs = goldenSpecs();
   specs['p:' + CPU_ID] = cpuSpec({ socket_id: null });
@@ -742,7 +839,7 @@ test('B2-D: result records preserve the Engine 2C candidate identity exactly', (
       );
       assert.deepEqual(Object.keys(entry).sort(), [
         'category', 'component_role', 'product_id', 'product_variant_id',
-        'reason', 'relationships', 'status',
+        'reason', 'relationships', 'status', 'unknown_pairwise_count',
       ]);
       assert.ok(Object.isFrozen(entry));
       assert.ok(Object.isFrozen(entry.relationships));

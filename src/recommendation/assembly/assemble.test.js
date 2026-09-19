@@ -37,6 +37,8 @@ function verdict(role, productId, overrides = {}) {
     status: overrides.status || 'PASS',
     reason: overrides.reason !== undefined ? overrides.reason : null,
     relationships: overrides.relationships !== undefined ? overrides.relationships : {},
+    unknown_pairwise_count:
+      overrides.unknown_pairwise_count !== undefined ? overrides.unknown_pairwise_count : 0,
   };
 }
 
@@ -839,8 +841,18 @@ test('builds and components carry exactly the documented keys', () => {
     engineInput({ results, integrated: { 'a-cpu': true } })
   );
   const withGpu = out.builds.find((b) => idsOf(b).GPU === 'gpu-a');
-  assert.deepEqual(Object.keys(withGpu).sort(), ['components', 'currency', 'total_price']);
-  assert.deepEqual(Object.keys(withGpu), ['components', 'total_price', 'currency']);
+  assert.deepEqual(Object.keys(withGpu).sort(), [
+    'components',
+    'currency',
+    'total_price',
+    'unknown_pairwise_count',
+  ]);
+  assert.deepEqual(Object.keys(withGpu), [
+    'components',
+    'total_price',
+    'currency',
+    'unknown_pairwise_count',
+  ]);
   for (const c of withGpu.components) {
     assert.deepEqual(Object.keys(c).sort(), [
       'category',
@@ -862,6 +874,74 @@ test('builds and components carry exactly the documented keys', () => {
   assert.ok(!('reason' in withGpu.components[0]));
   assert.ok(!('relationships' in withGpu.components[0]));
   assert.ok(!('SSD_SECONDARY' in idsOf(withGpu)));
+});
+
+test('builds carry unknown_pairwise_count summed from their picked verdicts', () => {
+  const results = [
+    verdict('CPU', 'cpu-1', { unknown_pairwise_count: 3 }),
+    verdict('MOTHERBOARD', 'mb-1', { unknown_pairwise_count: 2 }),
+    verdict('RAM', 'ram-1'),
+    verdict('PSU', 'psu-1'),
+    verdict('CASE', 'case-1'),
+    verdict('CPU_COOLER', 'cooler-1'),
+    verdict('SSD_BOOT', 'ssd-1'),
+  ];
+  const out = assembleBuilds(
+    engineInput({ results, integrated: { 'cpu-1': true } })
+  );
+  assert.equal(out.builds.length, 1);
+  assert.equal(out.builds[0].unknown_pairwise_count, 5);
+  // The count is per-build data only: components never carry it.
+  for (const c of out.builds[0].components) {
+    assert.ok(!('unknown_pairwise_count' in c));
+  }
+  assert.ok(Object.isFrozen(out.builds[0]));
+});
+
+test('the GPU-omit path contributes 0 to unknown_pairwise_count', () => {
+  const results = [
+    ...fullSet('a'),
+    verdict('GPU', 'gpu-a', { unknown_pairwise_count: 4 }),
+  ];
+  const out = assembleBuilds(
+    engineInput({ results, integrated: { 'a-cpu': true } })
+  );
+  assert.equal(out.builds.length, 2);
+  for (const build of out.builds) {
+    const expected = idsOf(build).GPU === 'gpu-a' ? 4 : 0;
+    assert.equal(build.unknown_pairwise_count, expected);
+  }
+});
+
+test('verdict unknown_pairwise_count gate fails fast', () => {
+  const base = [
+    verdict('CPU', 'cpu-1'),
+    verdict('MOTHERBOARD', 'mb-1'),
+    verdict('RAM', 'ram-1'),
+    verdict('PSU', 'psu-1'),
+    verdict('CASE', 'case-1'),
+    verdict('CPU_COOLER', 'cooler-1'),
+    verdict('SSD_BOOT', 'ssd-1'),
+  ];
+  const missing = base.map((v) => {
+    const { unknown_pairwise_count, ...rest } = v;
+    void unknown_pairwise_count;
+    return rest;
+  });
+  const negative = verdict('CPU', 'cpu-1', { unknown_pairwise_count: -1 });
+  const fractional = verdict('CPU', 'cpu-1', { unknown_pairwise_count: 1.5 });
+  const cases = [
+    [missing, ERROR_CODES.MISSING_REQUIRED_FIELD, 'results.0.unknown_pairwise_count'],
+    [[negative, ...base.slice(1)], ERROR_CODES.INVALID_FIELD_VALUE, 'results.0.unknown_pairwise_count'],
+    [[fractional, ...base.slice(1)], ERROR_CODES.INVALID_FIELD_VALUE, 'results.0.unknown_pairwise_count'],
+  ];
+  for (const [results, code, field] of cases) {
+    assert.throws(
+      () => assembleBuilds(engineInput({ results, integrated: { 'cpu-1': true } })),
+      (e) => e instanceof CandidateSelectionError && e.code === code && e.field === field,
+      `${code} at ${field}`
+    );
+  }
 });
 
 test('component price is the exact frozen carrier object (identity, not copy)', () => {

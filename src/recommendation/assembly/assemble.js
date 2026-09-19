@@ -22,6 +22,12 @@
  * The price held on each emitted component is the exact carrier object
  * returned by lookupPrice: kept by reference, never cloned, never edited.
  *
+ * Each emitted build also carries unknown_pairwise_count (Decision 15): the
+ * integer sum of the picked verdicts' unknown_pairwise_count, folded in the
+ * same EXPANSION_ORDER pass as the running total. The GPU-omit path picks no
+ * GPU verdict and therefore contributes 0. This per-build count is the
+ * Decision 13 producer that Engine 4 consumes downstream.
+ *
  * Pure: no database access, no I/O, no clock reads.
  */
 
@@ -65,6 +71,7 @@ const VERDICT_FIELDS = Object.freeze([
   'status',
   'reason',
   'relationships',
+  'unknown_pairwise_count',
 ]);
 
 const PARTICIPATING_ROLES = new Set(EXPANSION_ORDER);
@@ -165,10 +172,11 @@ function readTraversalInputs(engine3Input) {
 }
 
 /**
- * Enforce the verdict identity assembly depends on: all seven Engine 2D
+ * Enforce the verdict identity assembly depends on: all eight Engine 2D
  * fields present, a known role, the canonical category for participating
- * roles, the Engine 2 variant identity rule, a known verdict state, and a
- * relationships map. REJECT verdicts are validated here and left out of
+ * roles, the Engine 2 variant identity rule, a known verdict state, a
+ * relationships map, and a non-negative integer unknown_pairwise_count
+ * (Decision 15). REJECT verdicts are validated here and left out of
  * expansion by the caller.
  */
 function validateVerdict(entry, index) {
@@ -192,6 +200,7 @@ function validateVerdict(entry, index) {
     component_role,
     status,
     relationships,
+    unknown_pairwise_count,
   } = entry;
   if (typeof product_id !== 'string' || product_id.length === 0) {
     fail(
@@ -255,6 +264,13 @@ function validateVerdict(entry, index) {
       `Result entry "${where}" has invalid "relationships"`
     );
   }
+  if (!Number.isInteger(unknown_pairwise_count) || unknown_pairwise_count < 0) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      `${where}.unknown_pairwise_count`,
+      `Result entry "${where}" must carry a non-negative integer "unknown_pairwise_count"`
+    );
+  }
   return entry;
 }
 
@@ -309,6 +325,7 @@ function assembleBuilds(engine3Input) {
   function finishPath(picked, runningTotal) {
     const components = [];
     let total = 0;
+    let unknownPairwiseCount = 0;
     for (const role of EXPANSION_ORDER) {
       if (!Object.prototype.hasOwnProperty.call(picked, role)) {
         continue;
@@ -316,6 +333,7 @@ function assembleBuilds(engine3Input) {
       const verdict = picked[role];
       const price = lookupPrice(traversal.prices, verdict);
       total += price.selected_price;
+      unknownPairwiseCount += verdict.unknown_pairwise_count;
       components.push(
         Object.freeze({
           component_role: verdict.component_role,
@@ -332,6 +350,7 @@ function assembleBuilds(engine3Input) {
       components: Object.freeze(components),
       total_price: total,
       currency: traversal.currency,
+      unknown_pairwise_count: unknownPairwiseCount,
     };
     deepFreeze(build);
     builds.push(build);

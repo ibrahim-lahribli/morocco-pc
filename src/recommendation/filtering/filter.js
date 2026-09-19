@@ -54,6 +54,16 @@
  *     A candidate is rejectable as soon as one relationship definitively
  *     fails.
  *
+ *   Unknown-pair count (Decision 15, additive): while pairs are evaluated,
+ *     the number of pair records whose aggregated status resolved UNKNOWN is
+ *     counted per candidate and emitted as unknown_pairwise_count - the
+ *     Decision 13 producer Engine 4's build score consumes. Only actual pair
+ *     evaluations count: an empty partner bucket contributes 0 (its vacuous
+ *     relationship-level UNKNOWN is not a pairwise check). Each relationship
+ *     is evaluated from both participating roles, so a symmetric UNKNOWN
+ *     product pair is counted once per direction. REJECT verdicts carry the
+ *     count too (uniform contract; they never enter assembly).
+ *
  * Status vocabulary: pair / relationship statuses reuse Engine 1's
  * FINAL_STATUSES (PASS / FAIL / UNKNOWN); the candidate verdict applies the
  * stage-2 engine action from the architecture (section 3.1): FAIL maps to
@@ -82,6 +92,8 @@
  *     status        PASS | UNKNOWN | REJECT
  *     reason        REASON_CODES value or null (decisive relationship)
  *     relationships { [relationship key]: PASS | FAIL | UNKNOWN }
+ *     unknown_pairwise_count  integer >= 0 (pairs that resolved UNKNOWN,
+ *                             Decision 15; the Decision 13 count producer)
  *   }
  *
  * Determinism: candidates are evaluated in canonical COMPONENT_ROLES order
@@ -534,10 +546,13 @@ function firstReasonWithStatus(pairs, status) {
 /**
  * Evaluate one candidate: every applicable relationship against the
  * partner-role bucket, then the candidate verdict (FAIL -> REJECT, else any
- * UNKNOWN -> UNKNOWN, else all-PASS -> PASS).
+ * UNKNOWN -> UNKNOWN, else all-PASS -> PASS). Also counts the pair records
+ * whose aggregated status resolved UNKNOWN (unknown_pairwise_count,
+ * Decision 15).
  */
 function evaluateCandidate(context, role, candidate) {
   const evaluatedRelationships = [];
+  let unknownPairwiseCount = 0;
 
   for (const relationshipKey of ROLE_RELATIONSHIPS[role]) {
     const partnerRole = RELATIONSHIP_PARTNER_ROLE[relationshipKey][role];
@@ -547,6 +562,12 @@ function evaluateCandidate(context, role, candidate) {
     for (const partner of partners) {
       const checks = evaluatePairChecks(context, relationshipKey, role, candidate, partner);
       pairs.push(aggregateCompatibilityResults(checks));
+    }
+
+    for (const pair of pairs) {
+      if (pair.status === FINAL_STATUSES.UNKNOWN) {
+        unknownPairwiseCount += 1;
+      }
     }
 
     const status = bestPartnerStatus(pairs.map((pair) => pair.status));
@@ -586,6 +607,7 @@ function evaluateCandidate(context, role, candidate) {
     status,
     reason,
     relationships: Object.freeze(relationships),
+    unknown_pairwise_count: unknownPairwiseCount,
   });
 }
 

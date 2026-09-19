@@ -4,9 +4,11 @@
 // Engine 4 (Decision 13 STEP 3): focused tests for the build score.
 //
 // Scope: the (role, type) weighted average with renormalized missing roles,
-// the per-occurrence UNKNOWN penalty and the [0, 100] clamp, the injected
-// unknownPairwiseCount contract (BLOCKING QUESTION B1), the build-shape and
-// coverage guards (A4/A5/A6), the batch form, and the failure mapping.
+// the per-occurrence UNKNOWN penalty and the [0, 100] clamp, the
+// unknownPairwiseCount contract (BLOCKING QUESTION B1, resolved by Decision
+// 15: an injected array wins; the build-carried unknown_pairwise_count is
+// the batch fallback), the build-shape and coverage guards (A4/A5/A6), the
+// batch form, and the failure mapping.
 // STEP 1 arithmetic is NOT re-tested here (see effective-score.test.js).
 // ---------------------------------------------------------------------------
 
@@ -68,11 +70,12 @@ function component(role, productId) {
   });
 }
 
-function makeBuild(components) {
+function makeBuild(components, unknownPairwiseCount = 0) {
   return Object.freeze({
     components: Object.freeze(components),
     total_price: components.length * 100,
     currency: 'MAD',
+    unknown_pairwise_count: unknownPairwiseCount,
   });
 }
 
@@ -270,17 +273,89 @@ test('computeBuildScores requires counts aligned with builds by index', async ()
     'unknownPairwiseCounts',
     'length mismatch'
   );
+});
+
+// Decision 15: the build-carried count is the batch fallback -----------------
+
+test('Decision 15: computeBuildScores falls back to each build unknown_pairwise_count', () => {
+  const config = makeConfiguration();
+  const withCount = makeBuild([component('CPU', P1), component('MOTHERBOARD', P2)], 2);
+  const zeroCount = makeBuild([component('CPU', P1)]);
+  const fromBuilds = computeBuildScores({
+    builds: [withCount, zeroCount],
+    assessments: makeAssessments(),
+    configuration: config,
+    nowMs: NOW_MS,
+  });
+  const injected = computeBuildScores({
+    builds: [withCount, zeroCount],
+    assessments: makeAssessments(),
+    configuration: config,
+    nowMs: NOW_MS,
+    unknownPairwiseCounts: [2, 0],
+  });
+  // The fallback is exactly the injected form's producer result.
+  assert.deepEqual(fromBuilds, injected);
+  assert.ok(Math.abs(fromBuilds.scores[0].build_score - (34 / 0.525 - 2 * 5)) < 1e-9);
+  assert.ok(Math.abs(fromBuilds.scores[1].build_score - 19 / 0.275) < 1e-9);
+  assert.ok(Object.isFrozen(fromBuilds));
+  assert.ok(Object.isFrozen(fromBuilds.scores));
+  assert.ok(Object.isFrozen(fromBuilds.scores[0]));
+
+  // An explicit empty array still wins for an empty build list.
+  const empty = computeBuildScores({
+    builds: [],
+    assessments: {},
+    configuration: config,
+    nowMs: NOW_MS,
+  });
+  assert.deepEqual(empty.scores, []);
+  assert.ok(Object.isFrozen(empty.scores));
+});
+
+test('Decision 15: a build without a valid unknown_pairwise_count fails fast in the batch form', async () => {
+  const noCount = {
+    components: Object.freeze([component('CPU', P1)]),
+    total_price: 100,
+    currency: 'MAD',
+  };
   assertError(
     await rejectionOf(() =>
       computeBuildScores({
-        builds: [fullBuild()],
+        builds: [noCount],
         assessments: makeAssessments(),
         configuration: makeConfiguration(),
         nowMs: NOW_MS,
       })
     ),
     ERROR_CODES.MISSING_REQUIRED_FIELD,
-    'unknownPairwiseCounts',
-    'absent counts'
+    'unknownPairwiseCount',
+    'build without count'
+  );
+  assertError(
+    await rejectionOf(() =>
+      computeBuildScores({
+        builds: [makeBuild([component('CPU', P1)], -1)],
+        assessments: makeAssessments(),
+        configuration: makeConfiguration(),
+        nowMs: NOW_MS,
+      })
+    ),
+    ERROR_CODES.INVALID_FIELD_VALUE,
+    'unknownPairwiseCount',
+    'negative build count'
+  );
+  assertError(
+    await rejectionOf(() =>
+      computeBuildScores({
+        builds: [makeBuild([component('CPU', P1)], 1.5)],
+        assessments: makeAssessments(),
+        configuration: makeConfiguration(),
+        nowMs: NOW_MS,
+      })
+    ),
+    ERROR_CODES.INVALID_FIELD_VALUE,
+    'unknownPairwiseCount',
+    'non-integer build count'
   );
 });

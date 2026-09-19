@@ -62,6 +62,17 @@ blocked only on Decision 12 (still TBD). Decisions 1-11 and Decision 14's
 rules are unchanged. Documentation only: no code change, no migration, no
 commit.
 
+Update 2026-09-19 (UNKNOWN pairwise-count producer decision pass): Decision
+15 (below) resolves BLOCKING QUESTION B1 raised by the Engine 4 build-score
+plan -- Decision 13's `unknown_compat_penalty * count` term had no producer,
+so the count was injected. Engine 2D now emits `unknown_pairwise_count` per
+verdict (the count of pair records whose aggregated status resolved UNKNOWN),
+Engine 3 sums it per assembled build, and Engine 4's batch scorer falls back
+to the build-carried count when no explicit `unknownPairwiseCounts` array is
+injected. Decision 13's formula is unchanged; the change is additive
+data-plumbing (Engine 2D/3/4 + contract tests), recorded here as the product
+decision.
+
 The original three items (quoted verbatim from the architecture document):
 
 1. **"Confirmation of the section 3.2 asymmetric UNKNOWN policy (especially:
@@ -1927,6 +1938,92 @@ The resulting per-role top-K candidate sets are passed to Engine 3 after scoring
 
 ---
 
+## Decision 15 — UNKNOWN pairwise-count producer (Decision 13's B1)
+
+Date: 2026-09-19 (product decision + implementation pass). Resolves BLOCKING
+QUESTION B1 raised by the 2026-09-19 Engine 4 build-score plan
+(`scoring/build-score.js`, item 2/7): nothing in the pipeline retained which
+pairwise compatibility checks resolved UNKNOWN, so Decision 13's
+`unknown_compat_penalty * count of UNKNOWN pairwise compatibility checks` term
+had no producer and the count was an injected input.
+
+### Status: RESOLVED
+
+### Decision
+
+The count is carried forward as a plain integer through the existing engine
+outputs. One field name, `unknown_pairwise_count` (non-negative integer), on
+two existing frozen objects:
+
+* **Engine 2D verdict** (`filterCandidates`, `src/recommendation/filtering/
+  filter.js`): the number of pair records — one per (candidate, partner)
+  evaluation across the role's applicable relationships — whose aggregated
+  status resolved UNKNOWN (worst-of FAIL > UNKNOWN > PASS).
+* **Engine 3 build** (`assembleBuilds`, `src/recommendation/assembly/
+  assemble.js`): the integer sum of the picked verdicts'
+  `unknown_pairwise_count`, folded in the same EXPANSION_ORDER pass as the
+  running total. The GPU-omit path picks no GPU verdict and contributes 0;
+  the DFS traversal itself is unchanged.
+
+**Counting semantics:**
+
+* Only actual pair evaluations count. An empty partner bucket contributes 0 —
+  its vacuous relationship-level UNKNOWN (zero partners) is not a pairwise
+  check because no pair exists.
+* Every relationship is evaluated from both participating roles, so a
+  symmetric UNKNOWN product pair is counted once per direction. This
+  compounds under Decision 13's per-occurrence penalty, which is the
+  documented intent ("multiple silent UNKNOWNs must not be under-penalized").
+* REJECT verdicts carry the count too (uniform verdict contract) but never
+  enter assembly.
+
+**Consumption (Engine 4):** `computeBuildScore` is unchanged — its
+`unknownPairwiseCount` validation already accepts any non-negative integer.
+`computeBuildScores` makes `unknownPairwiseCounts` OPTIONAL: an explicit
+array still wins (injection kept for callers that derive the count
+differently); when absent, the count is read per build from
+`build.unknown_pairwise_count`, and a missing/invalid build count fails fast
+with the existing error codes.
+
+**Rejected alternatives:**
+
+* Pair-identity lists carried through builds — rejected: Engine 2D pairs are
+  candidate-vs-pool evaluations, so a carried list would name partners that
+  are not in the build, making "in the build" data misleading, and Decision
+  13 consumes only a count.
+* Per-build pair recomputation among the chosen components only — rejected
+  for now: it would put Engine 1 evaluation inside Engine 3, a boundary
+  change beyond this data-plumbing gap; it remains available as a future
+  producer decision if the counting unit is ever redefined.
+
+### Rationale
+
+* Minimal additive plumbing: one integer field per frozen output object, no
+  restructuring, no renamed exports, no new error codes (the existing
+  MISSING_REQUIRED_FIELD / INVALID_FIELD_VALUE vocabulary is reused).
+* The integer maps 1:1 onto the existing `unknownPairwiseCounts` batch
+  contract, so Engine 4's Decision 13 STEP 3 arithmetic is untouched.
+* The list and recomputation variants change what the count MEANS; this
+  decision only fills the producer gap while preserving Decision 13's
+  formula verbatim.
+
+### Impact
+
+* Decision 13's formula text is unchanged; its previously injected input now
+  has a producer. Decision 12/14 remain unchanged (Decision 12 still TBD).
+* Implemented in the same pass: `filtering/filter.js` (per-verdict count),
+  `assembly/assemble.js` (per-build sum + verdict gate), `scoring/
+  build-score.js` (batch fallback + B1 note resolution), with contract tests
+  in the three suites. No database change, no migration.
+
+### Verdict for this pass
+
+```text
+VERDICT: RESOLVED - UNKNOWN pairwise-count producer adopted (integer carry-forward: Engine 2D verdict -> Engine 3 build -> Engine 4 batch fallback)
+```
+
+---
+
 ## Final Status
 
 ```text
@@ -1935,6 +2032,7 @@ Decision 13: RESOLVED (candidate-ranking score formula, adopted 2026-09-19)
 Decision 14: PROVISIONAL - blocked on Decision 12 only (ranking/top-K ownership, pipeline position)
 Selected semantics: A — Hard upper bound
 Tie-break: existing compareCandidates() authorized — YES
+Decision 15: RESOLVED (UNKNOWN pairwise-count producer, adopted 2026-09-19)
 ```
 
 Unambiguous one-sentence semantics for the implementation task:

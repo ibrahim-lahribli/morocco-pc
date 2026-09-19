@@ -252,6 +252,7 @@ test('pipeline: composes the real loader and filter into the filtered result', a
       cooler_socket: FINAL_STATUSES.PASS,
       platform_memory: FINAL_STATUSES.PASS,
     },
+    unknown_pairwise_count: 0,
   });
 });
 
