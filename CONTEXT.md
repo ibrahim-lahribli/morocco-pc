@@ -26,20 +26,26 @@ Implemented:
 - **Layer 2 — Performance / Assessment**: schema only (`benchmark_source`, `benchmark`, `benchmark_result`, `component_assessment`, `scoring_model`). Migration 008. No data or scoring yet.
 - **Layer 3 — Market**: canonical schema (`store`, `store_offer`, `price_history`) reconciled to the live database. Migrations 009–010.
 - **Layer 4 — Recommendation**: canonical schema (`recommendation_profile`, `recommendation_query`, `recommendation_result`, `build_candidate`, `build_component` + `component_role` enum) reconciled to the live database. Migration 011 applied and catalog-verified (tables currently empty).
-- **Engine (pure JS, `src/recommendation/`)**: Engine 1 compatibility resolver and Engine 2 / 2A / 2B / 2C candidate selection are implemented and covered by unit tests (`npm run test:unit`). Roadmap contract: `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md`.
+- **Engine (pure JS, `src/recommendation/`)** — implemented and covered by unit tests (`npm run test:unit`; 499 tests as of 2026-09-18):
+  - **Engine 1** — compatibility resolver (`compatibility/`).
+  - **Engine 2** — 2A contracts, 2B DB loader, 2C pool selector (`candidates/`); **2D hard-compatibility filtering** (`filtering/`); **Stage 1 offer pre-selection** (`offers/`).
+  - **Engine 3** — build assembly Steps 1–4 + public barrel (`assembly/`): `validateEngine3Input`, price carrier (`priceKey` / `validatePrices` / `lookupPrice`), `resolveGpuRequirement`, `assembleBuilds` + `EXPANSION_ORDER`. GPU-input loading and pipeline orchestration remain future.
+  - **Scoring-model loader** (Decision 11, `scoring/`): `loadScoringModel`, `validateScoringModelConfiguration`; 2D→3 iGPU handoff `buildIntegratedGpuPresentMap` (`filtering/igpu-map.js`).
+  - Roadmap contract: `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md`; decision record: `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 
 Environment: PostgreSQL on **Neon** (cloud); no local PostgreSQL. Current migration: `011_reconcile_layer4.sql`.
 
 Currently next:
-- **Engine 3** — build assembler (staged expansion, budget pruning, completeness rules).
-- **Engine 4** — scoring engine (reads `scoring_model.configuration`).
+- **Engine 3 completion** — GPU-input loading into the Engine 3 contract (`gpu_required_use_cases` from the scoring model, iGPU presence via `buildIntegratedGpuPresentMap`) and pipeline wiring.
+- **Query data-loading layer** — `recommendation_query` → Engine 2A input per Decision 10 (required_roles constant, fail-closed `use_case`).
+- **Engine 4** — scoring arithmetic (assessment aggregation, neutral/penalty policy) on top of the implemented scoring-model loader.
 - **Engine 5** — ranking + result persistence (transactional `recommendation_result` rows).
 - **Engine 6** — explanation generation.
-- Product seeding; Layer 2 benchmark/assessment data.
+- Product/store-offer seeding; Layer 2 benchmark/assessment data.
 
 NOT implemented:
-- End-to-end query → build → score → rank pipeline (Engines 3–6).
-- Product data seeding (`database/seeds/` is empty).
+- End-to-end query → build → score → rank pipeline: no orchestrator wires 2C → Stage 1 → 2D → Engine 3 → scoring → persistence; Engine 4 scoring arithmetic and Engines 5–6 are absent.
+- Product data seeding — no `database/seeds/` directory exists; the live catalog contains only test-fixture products (`Test Product%` / `TEST-SKU-%` / `TestCompat%`).
 - An isolated environment to verify a fresh 001→011 migration (see `DEVELOPMENT_NOTES.md`).
 
 ## ARCHITECTURE
@@ -65,11 +71,11 @@ Four data layers; pure-JS engine modules in `src/recommendation/` mirror the sch
 - `store`, `store_offer` (current/latest offer state), `price_history` (append-only).
 - Multiple legitimate offers may exist for the same store/product/variant.
 
-### Layer 4 — Recommendation Engine (schema IMPLEMENTED; engines 3–6 PLANNED)
+### Layer 4 — Recommendation Engine (schema IMPLEMENTED; Engine 3 assembly Steps 1–4 + scoring-model loader IMPLEMENTED; Engine 4 scoring arithmetic, Engines 5–6 PLANNED)
 
 - `recommendation_profile`, `recommendation_query`, `recommendation_result`, `build_candidate`, `build_component`.
 - `component_role` enum (CPU, GPU, MOTHERBOARD, RAM, SSD_BOOT, SSD_SECONDARY, PSU, CASE, CPU_COOLER) drives build roles: at most one CPU/MOTHERBOARD/PSU/CASE/CPU_COOLER/SSD_BOOT per candidate; multiple GPU/RAM/SSD_SECONDARY allowed.
-- Engine status: Engine 1 compatibility ✓, Engine 2 candidates ✓ (2A contracts, 2B DB loader, 2C pure pool selector), Engine 3 assembler, Engine 4 scoring, Engine 5 ranking/persistence, Engine 6 explanations.
+- Engine status: Engine 1 compatibility ✓; Engine 2 candidates ✓ (2A contracts, 2B DB loader, 2C pool selector) with 2D filtering ✓ and Stage 1 offer pre-selection ✓; Engine 3 assembly Steps 1–4 ✓ (GPU-input loading + orchestration pending); Decision 11 scoring-model loader ✓ (Engine 4 scoring arithmetic pending); Engine 5 ranking/persistence; Engine 6 explanations.
 
 ## DATABASE
 

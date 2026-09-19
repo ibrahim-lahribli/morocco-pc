@@ -182,6 +182,14 @@ Working solution: 011 loops over `information_schema.columns` and converts ONLY 
 
 Rule: guard timezone-conversion SQL by the starting column type; never assume a single starting state in corrective migrations.
 
+### Documentation status drift (2026-09-18)
+
+Problem: engine implementation commits landed without updating CONTEXT.md's status sections. Both `CONTEXT.md` and this file were last touched at `3131ab5` (feat(engine2c), 2026-09-12) while later commits (2026-09-14…18) implemented Engine 2D filtering, Stage 1 offer pre-selection (`offers/`), Engine 3 assembly Steps 1–4 + barrel (`assembly/`), and the Decision 11 scoring-model loader (`scoring/`) — leaving CURRENT STATUS / "Currently next" / "NOT implemented" stale for 6 days.
+
+Failure: any agent trusting CONTEXT.md's "NOT implemented (Engines 3–6)" would re-implement existing modules or mis-plan follow-up work.
+
+Rule: update CONTEXT.md's status sections in the same session/commit that lands engine code; never trust status sections without cross-checking `git log -1 -- src/recommendation/<module>` dates first.
+
 ## DATABASE LESSONS
 
 - The shared Neon database is **not a disposable test database** — never reset, drop, or restore it.
@@ -205,6 +213,9 @@ Rule: guard timezone-conversion SQL by the starting column type; never assume a 
 - Engine 2C: `selectCandidatePool()` (`src/recommendation/candidates/select.js`) is the canonical pool selector; `pool.test.js` covers eligibility, variant-identity, dedup, global-only `EMPTY_CANDIDATE_POOL`, ordering, determinism, and non-responsibilities. Existing `candidates.test.js` fixtures updated to valid Engine 2B identities (GPU variants carry ids; non-GPU carry null).
 - Environmental limitations: fresh 001→011 migration cannot be verified (no isolated DB); DB-backed scripts need network access to Neon and a configured `DATABASE_URL`.
 - Fixture cleanup requirement: everything created must be removed/rolled back in reverse-dependency order; row counts return to baseline.
+- 2026-09-18 reconciliation run (all verified live): `npm run test:unit` = 499 pass / 0 fail, covering Engine 1, Engine 2 (2A–2D), Stage 1 offers, Engine 3 assembly Steps 1–4, and the Decision 11 scoring-model loader + iGPU handoff (supersedes the "Engine 1–2C" scope note above). DB scripts: test-compatibility 47/47, verify-hardware-schema 31/31, test-layer4 67/67 (+ verified clean rollback), test-layer3 full mode PASS.
+- `node scripts/test-layer3.js` is flag-gated: a bare run executes ONLY the preflight. Full coverage requires `node scripts/test-layer3.js --verify --functional` (verified 2026-09-18: Preflight / Metadata / Functional all PASS).
+- Fixture leftovers observed (2026-09-18): the live DB still holds 20 fixture products (10 × `Test Product%`/`TEST-SKU-%`, 4 × `TestCompat%`, plus their manufacturers) — pre-existing rows from earlier runs, not created by that day's passing runs (each script deletes only its own run's fixtures; cause of the leftovers not investigated). Account for these when checking "row counts return to baseline".
 
 ## GIT LESSONS
 
@@ -215,6 +226,7 @@ Rule: guard timezone-conversion SQL by the starting column type; never assume a 
 - Commit/push: history shows commits on `master` pushed to `origin`, but the exact commit/push commands were NOT re-verified in this session (the task forbade committing). Re-verify a commit/push workflow before relying on it.
 - Common failures: none recorded this session. Working-tree noise: untracked `.kilo/kilo.jsonc` (tool config — keep out of commits).
 - `.env`, `node_modules`, logs are gitignored; never force-add or expose them.
+- Non-interactive/agent shells: plain `git log` / `git diff` open an interactive pager and can hang the session; use `git --no-pager log ...` / `git --no-pager diff ...` (verified 2026-09-18).
 
 ## DOCUMENTATION UPDATE RULE
 
