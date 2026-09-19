@@ -55,6 +55,13 @@ recorded date is corrected from 2026-09-17 to 2026-09-18 to match its
 recording commit 0c2225c. Decisions 1-11 are unchanged. Documentation only:
 no code change, no migration, no commit.
 
+Update 2026-09-19 (scoring decision pass): Decision 13 (below) is RESOLVED --
+the candidate-ranking score formula is adopted (candidate/build score split,
+STEP 1-3). Decision 14's score blocker is gone; it remains PROVISIONAL,
+blocked only on Decision 12 (still TBD). Decisions 1-11 and Decision 14's
+rules are unchanged. Documentation only: no code change, no migration, no
+commit.
+
 The original three items (quoted verbatim from the architecture document):
 
 1. **"Confirmation of the section 3.2 asymmetric UNKNOWN policy (especially:
@@ -1703,70 +1710,133 @@ VERDICT: TBD - NOT YET DECIDED
 
 ---
 
-## Decision 13 - Candidate-ranking score formula (recorded retroactively 2026-09-19)
+## Decision 13 - Candidate-ranking score formula (2026-09-19)
+
+Date: 2026-09-19. Product decision pass resolving the candidate-ranking score
+formula Decision 14 references (intro, Rule 3, Rule 5's first key, Rule 6) and
+that the 2026-09-19 reconciliation entry recorded as a `TBD - not yet decided`
+stub. Documentation only: no scoring module, no Engine 4 implementation, no
+code change, no migration, no seed, no test change, no commit.
 
 ### Current situation
 
-No Decision 13 was ever recorded. Decision 14 references it four times:
-"the candidate score defined by Decision 13" (intro), "the candidate-ranking
-score defined by Decision 13 ... The score formula itself is owned by
-Decision 13" (Rule 3), "candidate score DESC (Decision 13 score)" (Rule 5,
-first key), and "after scoring/ranking/top-K processing" (Rule 6). The
-reference is dangling: a repository-wide search of every markdown file found
-Decision 13 mentioned ONLY inside Decision 14.
-
-### What Decision 14 assumes Decision 13 establishes
-
-1. A single **numeric, DESC-sortable "candidate score"** per candidate, where
-   a higher value is better.
-2. The score **FORMULA** itself (weighting, neutral baseline, penalties,
-   confidence/staleness treatment), frozen and owned by Decision 13 and
-   explicitly not redefined by Decision 14.
-
-Decision 14 Rule 3, the first key of Rule 5's ordering chain, and the
-"scoring" step named in Rule 6 all depend on it.
-
-### Status
-
-```text
-TBD - not yet decided
-```
-
-No product decision is made here. This entry exists only to remove a dangling
-reference and to record, with evidence, that the referenced decision was never
-taken.
-
-### Evidence: no matching implementation exists
+No candidate score exists anywhere in the repository. Decision 14 references
+Decision 13 four times: "the candidate score defined by Decision 13" (intro),
+"the candidate-ranking score defined by Decision 13 ... The score formula
+itself is owned by Decision 13" (Rule 3), "candidate score DESC (Decision 13
+score)" (Rule 5, first key), and "after scoring/ranking/top-K processing"
+(Rule 6). The prior stub recorded the dangling reference; the findings below
+are preserved because they remain true:
 
 * `src/recommendation/scoring/` contains only the Decision 11 loader and its
   configuration validator (`load-scoring-model.js`, `configuration.js`). They
-  validate the presence/shape/ranges of `role_weights`, `type_weights`,
-  `neutral_baseline`, `no_evidence_penalty`, `unknown_compat_penalty`,
-  `confidence_multipliers` and `staleness`, but perform no aggregation, no
-  weighting arithmetic and no penalty application.
-* Repository search for any scoring arithmetic (`scoreCandidate`,
-  `computeScore`, `rankingScore`, `candidateScore`, `computeBuildScore`)
-  returns no results in `src/` or `scripts/`.
+  validate the presence/shape/ranges of the Decision 3(a) configuration but
+  perform no aggregation, no weighting arithmetic and no penalty application.
 * The schema carries the score VALUE without defining its formula:
   `database/migrations/011_reconcile_layer4.sql:162,165`
   (`build_candidate.score NUMERIC` with a 0..100 CHECK) and `:189,192`
   (`recommendation_result.rank INTEGER` with a `> 0` CHECK).
-* `CONTEXT.md:41-42` and `:47` record Engine 4 scoring arithmetic and the
-  Engines 5-6 ranking stage as absent, and
-  `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` (section 9 and the section 11
-  shortlist note) describes scoring/top-K semantics as prose only.
+
+### Decision
+
+SPLIT: two related scores, same underlying computation, different aggregation
+level.
+
+* **Candidate score** (per product, per role): ranks single products within
+  one role for Decision 14's `top_k_per_role` retention (Decision 14 Rules
+  3-5). Runs pre-assembly.
+* **Build score** (per assembled build): feeds `build_candidate.score`. Runs
+  post-assembly, in Engine 4.
+
+STEP 1 - effective score per (product, assessment_type), using
+`component_assessment` (product_id, assessment_type, score, confidence,
+assessed_at; migration 008) and the Decision 3(a) configuration fields
+(`neutral_baseline`, `no_evidence_penalty`, `confidence_multipliers`,
+`staleness`):
+
+```text
+if no component_assessment row exists for (product_id, type)
+   OR the row's score column is NULL:
+    effective = max(0, neutral_baseline - no_evidence_penalty)
+else:
+    age_days  = now - assessed_at
+    decay     = max(0, 1 - staleness.per_day_decay
+                        * min(age_days, staleness.max_age_days))
+    decayed   = assessment.score * decay
+    mult      = confidence_multipliers[assessment.confidence]
+    effective = neutral_baseline + mult * (decayed - neutral_baseline)
+```
+
+STEP 2 - candidate_score(product, role) using role_weights[role]:
+
+```text
+candidate_score(product, role)
+    = sum_type[ role_weights[role][type] * effective(product, type) ]
+      / sum_type[ role_weights[role][type] ]
+```
+
+STEP 3 - build_score using role_weights AND type_weights, plus
+unknown_compat_penalty:
+
+```text
+build_score_raw
+    = sum_(role,type)[ role_weights[role][type] * type_weights[type]
+                       * effective(component_in_role, type) ]
+      / sum_(role,type)[ role_weights[role][type] * type_weights[type] ]
+
+build_score = clamp(build_score_raw
+                    - (unknown_compat_penalty
+                       * count of UNKNOWN pairwise compatibility checks
+                         in the build),
+                    0, 100)
+```
+
+### Rationale
+
+The four open points the formula had to fix, each with its one-line rationale:
+
+* **Staleness decay: LINEAR (not exponential)** -- matches
+  `staleness.per_day_decay`'s [0,1] contract
+  (`src/recommendation/scoring/configuration.js:31`) as a literal daily-loss
+  rate; `max_age_days` becomes a hard floor.
+* **Confidence handling: BLEND TOWARD `neutral_baseline` (not
+  multiply-toward-zero)** -- low confidence means "uncertain," not "bad";
+  straight multiplication would over-punish a real high measured score.
+* **`unknown_compat_penalty`: applied PER-OCCURRENCE (not once per build)** --
+  compounds with multiple UNKNOWN pairs; consistent with the Engine 2D
+  best-of-partner finding (`src/recommendation/filtering/filter.js:43-48`:
+  any pair UNKNOWN -> UNKNOWN keeps the board eligible), so multiple silent
+  UNKNOWNs must not be under-penalized.
+* **Missing/optional role in a build: EXCLUDED from the weighted average
+  (renormalize denominator), not penalized** -- absence of an optional role is
+  "not applicable," not "bad," consistent with Engine 3's `required_roles`
+  distinction (Decision 10, Rule 1).
+
+component_assessment.score is nullable (migration 008) — a row with a qualitative assessment (rating/summary) but no numeric score is treated identically to no-row-exists, since STEP 1 has no number to decay or blend without one. Consistent with the config contract's no-silent-defaults pattern.
 
 ### Impact
 
-Until Decision 13 is taken there is no candidate score to rank or sort by, so
-Decision 14 Rules 3-5 cannot be implemented. Decision 11's loader contract is
-unaffected: model configuration is validated and preserved, but unused
-arithmetically.
+* Decision 14: Rule 3 ("Ranking") and the first key of Rule 5's ordering chain
+  now have a defined input -- the score blocker is gone. Decision 14 remains
+  PROVISIONAL blocked only on Decision 12 (ranking/top-K ownership + pipeline
+  position). Rule 3's "the score formula itself is owned by Decision 13 and is
+  not changed or redefined here" stands.
+* No code change: no scoring module is added and Engine 4 does not exist;
+  Decision 11's loader contract is unaffected -- the validated configuration
+  it returns becomes the arithmetic input of the formulas above when Engine 4
+  is implemented.
+* No schema change: `component_assessment` (migration 008) already carries
+  (product_id, assessment_type, score 0..100, confidence, assessed_at), and
+  `build_candidate.score NUMERIC` (0..100 CHECK) plus
+  `recommendation_result.rank INTEGER` already carry the values these formulas
+  produce.
+* Final Status (below) updated: Decision 13 -> RESOLVED; Decision 12 unchanged
+  (TBD); Decision 14 unchanged (PROVISIONAL).
 
 ### Verdict for this pass
 
 ```text
-VERDICT: TBD - NOT YET DECIDED
+VERDICT: RESOLVED - candidate-ranking score formula adopted (STEP 1-3 above)
 ```
 
 ---
@@ -1796,6 +1866,8 @@ code contradicts these rules; the block is procedural, not a conflict. Rules
 1, 2, 4, 5 (tie-break chain), 7 and 8 remain valid as recorded. The rules
 below are preserved verbatim; this status block is additive, and Decision 14
 becomes RESOLVED only once Decisions 12 and 13 are decided.
+
+Update 2026-09-19: Decision 13 is now RESOLVED (candidate-ranking score formula, above); this decision remains blocked only on Decision 12 (ranking/top-K ownership + pipeline position).
 
 ### Rule 1 — Per-role scope
 
@@ -1859,8 +1931,8 @@ The resulting per-role top-K candidate sets are passed to Engine 3 after scoring
 
 ```text
 Decision 12: TBD - not yet decided (ranking / top-K ownership, pipeline position)
-Decision 13: TBD - not yet decided (candidate-ranking score formula)
-Decision 14: PROVISIONAL - blocked on Decisions 12 and 13
+Decision 13: RESOLVED (candidate-ranking score formula, adopted 2026-09-19)
+Decision 14: PROVISIONAL - blocked on Decision 12 only (ranking/top-K ownership, pipeline position)
 Selected semantics: A — Hard upper bound
 Tie-break: existing compareCandidates() authorized — YES
 ```
