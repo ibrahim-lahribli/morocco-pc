@@ -33,6 +33,8 @@ Commands verified to work in this repository/environment:
 | `node scripts/verify-constraints.js` | indexes / primary keys | yes |
 | `node scripts/verify-fks.js` | foreign keys | yes |
 | `npm run test:unit` | recommendation engine unit tests (`src/recommendation/**`) | yes |
+| `npm run seed` | applies `database/seeds/*.sql` in order (DML-only, idempotent) | yes (WHERE NOT EXISTS guards; fixed AND/OR precedence 2026-09-19) |
+| `node scripts/run-seeds.js --dry-run` | reports seed statement counts without executing | yes |
 | `git status`, `git diff`, `git log --oneline`, `git remote -v`, `git mv` | repo inspection / rename | — |
 
 Note: commit and push commands were NOT executed in this session (the documentation task explicitly forbade them), so they are not listed as verified.
@@ -155,6 +157,12 @@ Problem: live `store` / `store_offer` / `price_history` did not match migration 
 Working solution: all three tables had 0 rows, so migration 010 reconciled in place (naive timestamps → `TIMESTAMPTZ`, canonical checks, removed `uq_store_offer_store_product_variant`, canonical indexes).
 
 Rule: migration 009 is the authoritative fresh-DB Layer 3 schema; post-009 changes need new corrective migrations. Multiple offers per store/product/variant are legitimate — do not reintroduce offer-level uniqueness.
+
+### Minimal seed set (2026-09-19)
+
+Working solution: `database/seeds/001_minimal_builds.sql` (15 products, 16 variants-offers-assessable candidates: 2 CPUs incl. one iGPU for the OPTIONAL path, 1 GPU product x 2 variants, 2 MB/RAM/SSD/PSU/case/cooler) + `scoring_model seed-minimal-v1/1.0.0` with the complete Decision 3(a) JSONB + `scripts/run-seeds.js` (`npm run seed`, `--dry-run`), verified: re-run safe, live `verify-schema.js` shows no `product_variant.overrides` column (CONTEXT.md:111 is doc-drift), one-off E2E (temp script, deleted) ran Engine 1→2→3→4 live: GAMING and OFFICE both yield 25 capped builds with PASS+UNKNOWN verdicts and finite scores.
+
+Rule: seeds are DML-only, idempotent `INSERT ... WHERE NOT EXISTS` on natural keys, `Seed %`/`SEED-` prefixed, applied via `run-seeds.js` — never through `run-migrations.js`. Layer-4 tables stay empty (Engine 5 future). `product_variant.overrides` doc-drift stays open for a later reconciliation pass.
 
 ### Layer 4 schema drift (2026-09-12)
 

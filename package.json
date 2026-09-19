@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "test:db": "node scripts/test-db.js",
-    "test:unit": "node --test \"src/**/*.test.js\""
+    "test:unit": "node --test \"src/**/*.test.js\"",
+    "seed": "node scripts/run-seeds.js"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
