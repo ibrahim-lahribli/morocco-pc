@@ -16,13 +16,25 @@ const assert = require('node:assert/strict');
 const scoring = require('./index');
 const loader = require('./load-scoring-model');
 const configuration = require('./configuration');
+const assessments = require('./load-assessments');
+const effective = require('./effective-score');
+const candidate = require('./candidate-score');
+const build = require('./build-score');
 
-test('scoring barrel exposes exactly the four-export public API', () => {
+test('scoring barrel exposes exactly the twelve-export public API', () => {
   assert.deepEqual(Object.keys(scoring), [
     'loadScoringModel',
     'SELECT_SCORING_MODEL_SQL',
     'validateScoringModelConfiguration',
     'SCORING_MODEL_CONFIGURATION_KEYS',
+    'loadComponentAssessments',
+    'SELECT_COMPONENT_ASSESSMENTS_SQL',
+    'selectAssessmentRow',
+    'computeEffectiveScore',
+    'computeCandidateScore',
+    'computeCandidateScores',
+    'computeBuildScore',
+    'computeBuildScores',
   ]);
 });
 
@@ -37,6 +49,15 @@ test('scoring barrel re-exports every export by identity - no wrapper, no copy',
     scoring.SCORING_MODEL_CONFIGURATION_KEYS,
     configuration.SCORING_MODEL_CONFIGURATION_KEYS
   );
+  // Engine 4 (Decision 13 STEP 1-3).
+  assert.strictEqual(scoring.loadComponentAssessments, assessments.loadComponentAssessments);
+  assert.strictEqual(scoring.SELECT_COMPONENT_ASSESSMENTS_SQL, assessments.SELECT_COMPONENT_ASSESSMENTS_SQL);
+  assert.strictEqual(scoring.selectAssessmentRow, effective.selectAssessmentRow);
+  assert.strictEqual(scoring.computeEffectiveScore, effective.computeEffectiveScore);
+  assert.strictEqual(scoring.computeCandidateScore, candidate.computeCandidateScore);
+  assert.strictEqual(scoring.computeCandidateScores, candidate.computeCandidateScores);
+  assert.strictEqual(scoring.computeBuildScore, build.computeBuildScore);
+  assert.strictEqual(scoring.computeBuildScores, build.computeBuildScores);
 });
 
 test('scoring barrel adds no logic of its own', () => {
