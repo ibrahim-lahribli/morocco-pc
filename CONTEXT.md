@@ -26,7 +26,7 @@ Implemented:
 - **Layer 2 — Performance / Assessment**: schema only (`benchmark_source`, `benchmark`, `benchmark_result`, `component_assessment`, `scoring_model`). Migration 008. No data or scoring yet.
 - **Layer 3 — Market**: canonical schema (`store`, `store_offer`, `price_history`) reconciled to the live database. Migrations 009–010.
 - **Layer 4 — Recommendation**: canonical schema (`recommendation_profile`, `recommendation_query`, `recommendation_result`, `build_candidate`, `build_component` + `component_role` enum) reconciled to the live database. Migration 011 applied and catalog-verified (tables currently empty).
-- **Engine (pure JS, `src/recommendation/`)** — implemented and covered by unit tests (`npm run test:unit`; 528 tests as of 2026-09-19):
+- **Engine (pure JS, `src/recommendation/`)** — implemented and covered by unit tests (`npm run test:unit`; 584 tests as of 2026-09-19):
   - **Engine 1** — compatibility resolver (`compatibility/`).
   - **Engine 2** — 2A contracts, 2B DB loader, 2C pool selector (`candidates/`); **2D hard-compatibility filtering** (`filtering/`); **Stage 1 offer pre-selection** (`offers/`).
   - **Engine 3** — build assembly Steps 1–4 + GPU-input loading + assembly entry point + public barrel (`assembly/`): `validateEngine3Input`, price carrier (`priceKey` / `validatePrices` / `lookupPrice`), `resolveGpuRequirement`, `assembleBuilds` + `EXPANSION_ORDER`, `buildGpuInputs` (GPU-input loading: `gpu_required_use_cases` from the scoring model, iGPU presence via `buildIntegratedGpuPresentMap`, `use_case` from the Engine 2A input), `assembleBuildsForRecommendation` (Steps 1 → 2 → 4 composed over already-loaded Engine 2 sources, DB-free). Cross-engine query → build → score → rank orchestration and the query data-loading layer remain future.
@@ -38,7 +38,6 @@ Environment: PostgreSQL on **Neon** (cloud); no local PostgreSQL. Current migrat
 Currently next:
 - **Engine 3 orchestration** — a cross-engine orchestrator wiring the DB-backed loaders (query data-loading → 2C → Stage 1 → 2D → scoring-model loading) into `assembleBuildsForRecommendation`; the Engine 3 GPU-input loading and assembly wiring itself are done.
 - **Query data-loading layer** — `recommendation_query` → Engine 2A input per Decision 10 (required_roles constant, fail-closed `use_case`).
-- **Engine 4** — scoring arithmetic (assessment aggregation, neutral/penalty policy) on top of the implemented scoring-model loader.
 - **Engine 5** — ranking + result persistence (transactional `recommendation_result` rows).
 - **Engine 6** — explanation generation.
 - Product/store-offer seeding; Layer 2 benchmark/assessment data.
@@ -71,11 +70,11 @@ Four data layers; pure-JS engine modules in `src/recommendation/` mirror the sch
 - `store`, `store_offer` (current/latest offer state), `price_history` (append-only).
 - Multiple legitimate offers may exist for the same store/product/variant.
 
-### Layer 4 — Recommendation Engine (schema IMPLEMENTED; Engine 3 assembly Steps 1–4 + scoring-model loader IMPLEMENTED; Engine 4 scoring arithmetic, Engines 5–6 PLANNED)
+### Layer 4 — Recommendation Engine (schema IMPLEMENTED; Engine 3 assembly Steps 1–4 + scoring-model loader IMPLEMENTED; Engine 4 scoring arithmetic (Decision 13 STEP 1-3 + Decision 15) IMPLEMENTED; Engine 5 ranking/persistence PLANNED; Engine 6 explanations PLANNED)
 
 - `recommendation_profile`, `recommendation_query`, `recommendation_result`, `build_candidate`, `build_component`.
 - `component_role` enum (CPU, GPU, MOTHERBOARD, RAM, SSD_BOOT, SSD_SECONDARY, PSU, CASE, CPU_COOLER) drives build roles: at most one CPU/MOTHERBOARD/PSU/CASE/CPU_COOLER/SSD_BOOT per candidate; multiple GPU/RAM/SSD_SECONDARY allowed.
-- Engine status: Engine 1 compatibility ✓; Engine 2 candidates ✓ (2A contracts, 2B DB loader, 2C pool selector) with 2D filtering ✓ and Stage 1 offer pre-selection ✓; Engine 3 assembly Steps 1–4 + GPU-input loading + assembly entry point ✓ (cross-engine orchestration pending); Decision 11 scoring-model loader ✓ (Engine 4 scoring arithmetic pending); Engine 5 ranking/persistence; Engine 6 explanations.
+- Engine status: Engine 1 compatibility ✓; Engine 2 candidates ✓ (2A contracts, 2B DB loader, 2C pool selector) with 2D filtering ✓ and Stage 1 offer pre-selection ✓; Engine 3 assembly Steps 1–4 + GPU-input loading + assembly entry point ✓ (cross-engine orchestration pending); Decision 11 scoring-model loader ✓; Engine 4 scoring arithmetic (Decision 13 STEP 1-3 + Decision 15) ✓; Engine 5 ranking/persistence; Engine 6 explanations.
 
 ## DATABASE
 
