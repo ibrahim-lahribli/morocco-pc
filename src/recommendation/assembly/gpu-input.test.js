@@ -283,6 +283,7 @@ function engine3InputFrom(gpuInputs, results = []) {
     integrated_gpu_present: gpuInputs.integrated_gpu_present,
     candidate_caps: { top_k_per_role: 5, max_builds_per_query: 10 },
     prices: Object.create(null),
+    filtering_context: { candidates: {}, specs: {}, platform_by_socket: {}, compat: {} },
   };
 }
 

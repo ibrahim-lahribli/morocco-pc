@@ -13,7 +13,7 @@
  *         |                               use_case + gpu_required_use_cases +
  *         |                               integrated_gpu_present
  *         v
- *   nine-field Engine 3 input
+ *   ten-field Engine 3 input
  *         |  validateEngine3Input(...)  - Step 1 (./input): contract + freezing
  *         |  validatePrices(...)        - Step 2 (./prices): price carrier
  *         v
@@ -41,6 +41,11 @@
  *                           module's own stance is unchanged (it still receives
  *                           whatever results its caller provides).
  *   prices                  Engine 2 Stage 1 carrier, validated by Step 2.
+ *   filtering_context       Engine 2D filtering context (loadFilteringContext),
+ *                           the same frozen object Decision 11 sources the iGPU
+ *                           map from - passed through by reference so Step 4
+ *                           can re-check picked combinations pairwise
+ *                           (Decision 16).
  *
  * Explicit NON-responsibilities (deliberately absent from this module)
  *   - no database access, no connection, no SQL: the DB-backed loaders
@@ -49,6 +54,8 @@
  *     outputs, so assembly/ stays database-free (same policy as Engine 2D
  *     B2-G, ../filtering/pipeline.js).
  *   - no candidate selection, no offer selection, no compatibility evaluation
+ *     of its own (Decision 16: Step 4 reuses Engine 2D's exported pair
+ *     evaluators over the passed-through context; nothing is re-implemented)
  *   - no scoring, no ranking, no top-K application, no persistence
  *   - no GPU policy decision (Step 3 owns REQUIRED | OPTIONAL)
  *   - no new contracts and no new error codes: the Engine 2 error vocabulary
@@ -87,7 +94,9 @@ function isPlainObject(value) {
  * @param {object} sources.candidatePoolResult Engine 2C result { input, pool }
  *        (or the Engine 2 Stage 1 result { input, pool, prices }).
  * @param {object} sources.filteringContext frozen Engine 2D filtering context
- *        produced by loadFilteringContext - the Decision 11 iGPU source.
+ *        produced by loadFilteringContext - the Decision 11 iGPU source,
+ *        passed through to Step 4 for pairwise branch validation (Decision
+ *        16).
  * @param {object} sources.filterResult Engine 2D filter result { results }
  *        produced by filterCandidates.
  * @param {object} sources.scoringModel validated scoring model produced by
@@ -153,6 +162,8 @@ function assembleBuildsForRecommendation(sources) {
 
   // `candidate_caps` is passed through untouched: Step 1 validates the strict
   // closed two-key shape and Step 4 consumes only `max_builds_per_query`.
+  // `filtering_context` is passed through by reference (already frozen by the
+  // B2-B loader) so Step 4 can gate branches on Engine 2D's pair checks.
   const engine3Input = {
     results: filterResult.results,
     budget_amount: selectionInput.budget_amount,
@@ -163,6 +174,7 @@ function assembleBuildsForRecommendation(sources) {
     integrated_gpu_present: gpuInputs.integrated_gpu_present,
     candidate_caps: scoringModel.configuration.candidate_caps,
     prices,
+    filtering_context: filteringContext,
   };
 
   // --- Steps 1, 2, 4 (unchanged modules; no logic duplicated here) ---------

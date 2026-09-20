@@ -2072,7 +2072,10 @@ with the existing error codes.
 * Per-build pair recomputation among the chosen components only — rejected
   for now: it would put Engine 1 evaluation inside Engine 3, a boundary
   change beyond this data-plumbing gap; it remains available as a future
-  producer decision if the counting unit is ever redefined.
+  producer decision if the counting unit is ever redefined. **(Superseded in
+  part by Decision 16, 2026-09-21: the re-evaluation is adopted for
+  VALIDATION only — the FAIL gate inside Engine 3's DFS — while the count
+  producer chain of this decision stays untouched.)**
 
 ### Rationale
 
@@ -2102,6 +2105,123 @@ VERDICT: RESOLVED - UNKNOWN pairwise-count producer adopted (integer carry-forwa
 
 ---
 
+## Decision 16 — Pairwise branch validation inside Engine 3's DFS
+
+Date: 2026-09-21. Resolves the recurring engine-behavior flag recorded in
+`DEVELOPMENT_NOTES.md` (2026-09-19): Engine 2D's best-of-partner aggregation
+masks pair-level FAILs at the relationship/verdict level — observed twice
+(CPU↔MB exact-SKU override, GPU length) — so two candidates that each carry a
+PASS/UNKNOWN verdict can still form a definite FAIL pair. Engine 2D's verdict
+is per candidate (does this candidate have at least one compatible partner?),
+not per combination; only Engine 3's DFS sees concrete combinations.
+
+### Status: RESOLVED
+
+### Decision
+
+Engine 3's DFS (`assembly/assemble.js`, Step 4) re-checks every tentatively
+picked candidate against every already-picked partner it has a relationship
+with, reusing Engine 2D's own pair evaluators verbatim:
+
+* **Exports:** `filtering/filter.js` additionally exports its eight pair
+  evaluators plus `aggregateCompatibilityResults` and `FINAL_STATUSES`
+  (both re-exports of `../compatibility`). No second implementation and no
+  second vocabulary exist anywhere in the handoff.
+* **Traversal-time checks:** for each role, the relationships whose partner
+  role comes EARLIER in `EXPANSION_ORDER` are checked when the role's
+  candidate is tentatively picked (MOTHERBOARD→cpu_motherboard; RAM→
+  motherboard_memory + platform_memory; PSU→gpu_psu; CASE→case_form_factor +
+  gpu_case; CPU_COOLER→cooler_socket + case_radiator). Canonical resolver
+  argument order is preserved (the newly picked candidate is the canonical
+  left role only for `case_radiator`).
+* **Gate semantics:** a pair aggregates with
+  `aggregateCompatibilityResults` (worst-of FAIL > UNKNOWN > PASS). Any
+  FAIL abandons the branch immediately — the branch is never walked further,
+  exactly like the budget cutoff or an empty role bucket. PASS and UNKNOWN
+  pairs stay eligible (no demotion, no weighting) — the existing eligibility
+  contract is unchanged. The GPU-omit path picks no GPU, so no GPU pair
+  exists and none is evaluated (zero partners is never a FAIL).
+* **Input threading:** the frozen Engine 2D context travels as the TENTH
+  field of the Engine 3 input contract, `filtering_context` — validated for
+  top-level shape only and preserved by reference (the B2-B loader already
+  delivers it deep-frozen; same ownership rule as `prices`).
+  `assembleBuildsForRecommendation` already received the context
+  (`sources.filteringContext`) and passes it through; direct
+  `assembleBuilds` callers must now supply it (fail-closed: a missing or
+  malformed context is INVALID, never silently skipped).
+* **Silent pruning:** there is no new output field, no counter and no log.
+  A pruned branch is indistinguishable from any other exhausted branch;
+  the frozen output contract stays `{ builds }`.
+
+**Explicitly NOT changed:** `unknown_pairwise_count` keeps its Decision 15
+semantics — the per-verdict, per-pool counts summed per build. The DFS's
+re-evaluated pairs are used for the FAIL gate only and are never counted.
+This decision does NOT redefine the counting unit that Decision 15 declined
+to redefine; it only revives the rejected alternative's *validation* use.
+
+**Performance shape:** at most 2 extra pair evaluations per DFS node
+(worst case 8 per complete GPU-present path, 6 per omit path), each a pure
+map-lookup + small resolver call. Pruning only shrinks the explored tree, so
+total work is bounded by the ungated walk plus a small constant; no
+memoization is added.
+
+### Rationale
+
+* The verdict/combination gap is a correctness hole, not a data-plumbing
+  gap: today's DFS assembles combinations (e.g. the seeded
+  `Seed Ryzen 5 8600G` × `Seed MSI PRO B650M-P` exact-SKU FAIL pair) that
+  Engine 2D's own resolvers rate FAIL.
+* Reuse, never reimplement: the DFS consumes the exact functions
+  `evaluateCandidate` wires; the resolvers, aggregation and vocabulary are
+  Engine 1's.
+* Fail-closed: the context is required, so a caller cannot accidentally
+  bypass the gate.
+* Direct module consumption (`assembly/assemble.js` →
+  `../filtering/filter`) follows the established igpu-map precedent; the
+  B2-H public barrel surface is deliberately unchanged.
+
+### Rejected alternatives
+
+* An observable rejected-pair count or log — rejected: would extend the
+  frozen `{ builds }` output contract with no consumer today, and logging
+  violates the module's no-I/O purity.
+* Redefining `unknown_pairwise_count` over the DFS's pairs — rejected:
+  silently revives Decision 15's rejected counting-unit change and breaks
+  the Engine 4 batch contract's meaning.
+* Reordering `EXPANSION_ORDER` topologically so every relationship is
+  checkable at the earliest possible depth — rejected: the traversal order
+  is a frozen, documented contract.
+* An optional context (absent → skip checks) — rejected: fail-open, against
+  the codebase's fail-closed ethos.
+* Memoizing pair results across nodes — rejected: unnecessary at current
+  pool/path sizes; would add state to a pure function.
+* Placing the evaluators on the B2-H public barrel — rejected: no external
+  consumer; the barrel's six-export surface stays frozen.
+
+### Impact
+
+* Engine 3's input contract grows from nine to ten fields
+  (`assembly/input.js`, `pipeline.js`, `assemble.js` headers updated);
+  previously-valid pair-FAIL combinations (like the seeded CPU2+MB1 shape)
+  correctly disappear from `assembleBuilds` output.
+* Test-surface changes: `assemble.test.js`'s source-boundary list drops the
+  `'filtering/'` needle and pins the now-five allowed requires; new Decision
+  16 unit tests (FAIL prune, UNKNOWN eligibility, GPU-pair pruning on both
+  omit/REQUIRED paths, malformed-context fail-fast) and one end-to-end
+  pipeline test cover the behavior. No existing fixture changed: fixtures
+  without spec data read all pairs UNKNOWN, and the pipeline fixture's only
+  pair-FAIL board is already REJECT for every CPU.
+* Resolves the 2026-09-19 recurring best-of-masking flag for the assembly
+  stage (the verdict-level question remains open for Engine 5 separately).
+
+### Verdict for this pass
+
+```text
+VERDICT: RESOLVED - pairwise branch validation adopted (Engine 2D pair evaluators reused inside Engine 3's DFS; FAIL abandons the branch; UNKNOWN/PASS eligible; silent pruning; filtering_context as tenth Engine 3 input field)
+```
+
+---
+
 ## Final Status
 
 ```text
@@ -2111,6 +2231,7 @@ Decision 14: RESOLVED (top_k_per_role retention semantics, resolved 2026-09-20)
 Selected semantics: A — Hard upper bound
 Tie-break: existing compareCandidates() authorized — YES
 Decision 15: RESOLVED (UNKNOWN pairwise-count producer, adopted 2026-09-19)
+Decision 16: RESOLVED (pairwise branch validation inside Engine 3's DFS, adopted 2026-09-21)
 ```
 
 Unambiguous one-sentence semantics for the implementation task:

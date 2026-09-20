@@ -25,7 +25,16 @@ const CONTRACT_FIELDS = [
   'integrated_gpu_present',
   'candidate_caps',
   'prices',
+  'filtering_context',
 ];
+
+/** Minimal frozen Engine 2D context shape (Decision 16; content is unread here). */
+const FILTERING_CONTEXT = Object.freeze({
+  candidates: Object.freeze({}),
+  specs: Object.freeze({}),
+  platform_by_socket: Object.freeze({}),
+  compat: Object.freeze({}),
+});
 
 function makeInput(overrides = {}) {
   return {
@@ -38,6 +47,7 @@ function makeInput(overrides = {}) {
     integrated_gpu_present: { CPU1: true, CPU2: false, CPU3: null },
     candidate_caps: { top_k_per_role: 5, max_builds_per_query: 10 },
     prices: {},
+    filtering_context: FILTERING_CONTEXT,
     ...overrides,
   };
 }
@@ -138,7 +148,7 @@ test('rejects unknown top-level keys', () => {
     () => validateEngine3Input(makeInput({ requiredRoles: ['CPU'] })),
     expectError(ERROR_CODES.INVALID_FIELD_VALUE, 'requiredRoles')
   );
-  // The nine-field vocabulary is closed: even similar-looking spellings fail.
+  // The ten-field vocabulary is closed: even similar-looking spellings fail.
   for (const key of ['result', 'budget', 'role_limits', 'builds', 'limit']) {
     assert.throws(
       () => validateEngine3Input(makeInput({ [key]: 1 })),
@@ -147,10 +157,41 @@ test('rejects unknown top-level keys', () => {
   }
 });
 
-test('accepts exactly the nine-field vocabulary', () => {
+test('accepts exactly the ten-field vocabulary', () => {
   const raw = makeInput();
   assert.deepEqual(Object.keys(raw).sort(), [...CONTRACT_FIELDS].sort());
   assert.ok(Object.isFrozen(validateEngine3Input(raw)));
+});
+
+test('filtering_context: top-level shape only, reference preserved, never frozen', () => {
+  // A present-but-invalid value is INVALID_FIELD_VALUE, never MISSING_REQUIRED_FIELD.
+  assert.throws(
+    () => validateEngine3Input(makeInput({ filtering_context: null })),
+    expectError(ERROR_CODES.INVALID_FIELD_VALUE, 'filtering_context')
+  );
+  for (const bad of ['context', 42, true, ['ctx']]) {
+    assert.throws(
+      () => validateEngine3Input(makeInput({ filtering_context: bad })),
+      expectError(ERROR_CODES.INVALID_FIELD_VALUE, 'filtering_context'),
+      `expected INVALID_FIELD_VALUE for ${JSON.stringify(bad)}`
+    );
+  }
+
+  // The reference is preserved byte-for-byte: no copy, no freeze (the B2-B
+  // loader already delivers a deep-frozen context).
+  const context = {
+    candidates: { CPU: [] },
+    specs: { 'p:cpu': { socket_id: 'am5' } },
+    platform_by_socket: {},
+    compat: {},
+  };
+  const input = validateEngine3Input(makeInput({ filtering_context: context }));
+  assert.strictEqual(input.filtering_context, context);
+  assert.equal(Object.isFrozen(input.filtering_context), false);
+
+  // Content is NOT inspected here: an object of arbitrary shape passes.
+  const shapeless = validateEngine3Input(makeInput({ filtering_context: { anything: true } }));
+  assert.deepEqual(shapeless.filtering_context, { anything: true });
 });
 
 // ---------------------------------------------------------------------------

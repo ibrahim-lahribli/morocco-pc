@@ -7,11 +7,11 @@
  * GPU-requirement inputs, output caps and the price carrier) and has different
  * freezing / ownership requirements.
  *
- * Consumes:  raw Engine3Input - a plain object carrying exactly nine fields.
+ * Consumes:  raw Engine3Input - a plain object carrying exactly ten fields.
  * Produces:  frozen Engine3Input.
  *
  * Responsibilities
- *   - structural validation of the nine-field contract, fail-fast
+ *   - structural validation of the ten-field contract, fail-fast
  *   - freezing the returned value, plus frozen copies of the arrays and maps
  *     this layer is allowed to own
  *
@@ -21,6 +21,8 @@
  *   - no candidate grouping or per-role bucketing
  *   - no GPU policy resolution (`gpu_required_use_cases` / iGPU)
  *   - no price selection and no validation of price entries (owned by prices.js)
+ *   - no pairwise compatibility evaluation (the traversal consumes the context;
+ *     the Engine 2D evaluators own the pair logic)
  *   - no quality assessment, no ordering, no tie-breaking
  *   - no build expansion or traversal, no output-cap application
  *   - no sorting
@@ -46,6 +48,12 @@
  *   prices                    object. Top-level shape only: the price-carrier
  *                             contract is owned by prices.js. The reference is
  *                             preserved and entries are NOT frozen here.
+ *   filtering_context         object. Top-level shape only. The frozen Engine
+ *                             2D context (Decision 16) carrying the pairwise
+ *                             branch-validation data the traversal consumes.
+ *                             The reference is preserved - the B2-B loader
+ *                             already delivers it deep-frozen - never copied
+ *                             and not frozen here (same ownership as prices).
  *
  * Pure: no database access, no framework.
  */
@@ -64,6 +72,7 @@ const ENGINE3_INPUT_FIELDS = Object.freeze([
   'integrated_gpu_present',
   'candidate_caps',
   'prices',
+  'filtering_context',
 ]);
 
 /** `candidate_caps` is a strict two-field contract. */
@@ -101,7 +110,7 @@ function validateEngine3Input(raw) {
     }
   }
 
-  // --- presence of all nine fields (own property, never truthiness) -------
+  // --- presence of all ten fields (own property, never truthiness) -------
   for (const field of ENGINE3_INPUT_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(raw, field)) {
       fail(ERROR_CODES.MISSING_REQUIRED_FIELD, field, `Engine 3 input requires "${field}"`);
@@ -118,6 +127,7 @@ function validateEngine3Input(raw) {
     integrated_gpu_present,
     candidate_caps,
     prices,
+    filtering_context,
   } = raw;
 
   // --- results -------------------------------------------------------------
@@ -286,6 +296,22 @@ function validateEngine3Input(raw) {
     fail(ERROR_CODES.INVALID_FIELD_VALUE, 'prices', '"prices" must be an object');
   }
 
+  // --- filtering_context (top-level shape only) ----------------------------
+  // Decision 16: the frozen Engine 2D context travels by reference into the
+  // traversal. Shape only here: bucket / spec contents belong to the
+  // producing stage and the consuming step, never to this contract gate.
+  if (
+    filtering_context === null ||
+    typeof filtering_context !== 'object' ||
+    Array.isArray(filtering_context)
+  ) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'filtering_context',
+      '"filtering_context" must be an object'
+    );
+  }
+
   // --- frozen result -------------------------------------------------------
   // Shallow copies keep caller-owned objects untouched while guaranteeing the
   // returned structure is immutable. `results` entries and `prices` entries are
@@ -303,6 +329,7 @@ function validateEngine3Input(raw) {
       max_builds_per_query: candidate_caps.max_builds_per_query,
     }),
     prices,
+    filtering_context,
   });
 }
 

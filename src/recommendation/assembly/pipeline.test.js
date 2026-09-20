@@ -67,6 +67,11 @@ const MB_SOCKET_MISMATCH = U(9);
 const CASE = U(10);
 const COOLER = U(11);
 const SSD = U(12);
+// Decision 16 fixture: a second CPU (family B) whose exact-SKU record fails
+// on the budget board, plus a tier board that supports it via its family rule.
+const MB2 = U(13);
+const CPU_FAMILY_B = U(14);
+const FAMILY_B = P(30);
 
 const SOCKET_A = P(1);
 const SOCKET_B = P(2);
@@ -165,6 +170,8 @@ const OFFERS = Object.freeze([
   offerRow(CASE, null, PRICE.CASE, 10),
   offerRow(COOLER, null, PRICE.COOLER, 11),
   offerRow(SSD, null, PRICE.SSD, 12),
+  offerRow(MB2, null, PRICE.MOTHERBOARD, 13),
+  offerRow(CPU_FAMILY_B, null, PRICE.CPU, 14),
 ]);
 
 function routes(cpuRows) {
@@ -175,6 +182,8 @@ function routes(cpuRows) {
       // A definite socket mismatch with every CPU (plus the explicit support
       // FAIL row for the spec-less CPU): REJECT in Engine 2D for every CPU.
       { product_id: MB_SOCKET_MISMATCH, socket_id: SOCKET_B, form_factor: 'ATX', memory_type_id: MEMORY_TYPE },
+      // Decision 16 fixture: a tier board supporting the family-B CPU.
+      { product_id: MB2, socket_id: SOCKET_A, form_factor: 'ATX', memory_type_id: MEMORY_TYPE },
     ],
     RAM: [{ product_id: RAM, memory_type_id: MEMORY_TYPE }],
     GPU: [{
@@ -195,14 +204,36 @@ function routes(cpuRows) {
     // indefinite (UNKNOWN) and Engine 2D's best-of-partner rule would keep the
     // mismatched board eligible. With it, the board is a definite REJECT for
     // every CPU in this fixture.
-    CPU_MB: [{
-      id: F(20),
-      motherboard_product_id: MB_SOCKET_MISMATCH,
-      cpu_product_id: CPU_NO_SPEC_ROW,
-      cpu_product_family_id: null,
-      support_status: 'FAIL',
-      min_bios_version: null,
-    }],
+    CPU_MB: [
+      {
+        id: F(20),
+        motherboard_product_id: MB_SOCKET_MISMATCH,
+        cpu_product_id: CPU_NO_SPEC_ROW,
+        cpu_product_family_id: null,
+        support_status: 'FAIL',
+        min_bios_version: null,
+      },
+      // Decision 16 fixture, seed-shaped (001_minimal_builds.sql): the budget
+      // board carries an exact-SKU FAIL override for the family-B CPU, while
+      // the tier board supports that family - so every candidate stays
+      // individually eligible and only the DFS pair gate sees the FAIL pair.
+      {
+        id: F(21),
+        motherboard_product_id: MB,
+        cpu_product_id: CPU_FAMILY_B,
+        cpu_product_family_id: null,
+        support_status: 'FAIL',
+        min_bios_version: null,
+      },
+      {
+        id: F(22),
+        motherboard_product_id: MB2,
+        cpu_product_id: null,
+        cpu_product_family_id: FAMILY_B,
+        support_status: 'PASS',
+        min_bios_version: null,
+      },
+    ],
     COOLER_SOCKET: [],
     CASE_FF: [],
     CASE_RAD: [],
@@ -219,6 +250,8 @@ function cpuSpecRows() {
     { product_id: CPU_IGPU_FALSE, socket_id: SOCKET_A, product_family_id: null, integrated_gpu_present: false },
     { product_id: CPU_IGPU_NULL, socket_id: SOCKET_A, product_family_id: null, integrated_gpu_present: null },
     // CPU_NO_SPEC_ROW deliberately has no cpu_spec row at all.
+    // Decision 16 fixture: family-B CPU (pool-scoped; absent for other tests).
+    { product_id: CPU_FAMILY_B, socket_id: SOCKET_A, product_family_id: FAMILY_B, integrated_gpu_present: true },
   ];
 }
 
@@ -226,16 +259,22 @@ function cpuSpecRows() {
 // Fixture wiring: the real Engine 2 stages, then the Engine 3 entry point.
 // ---------------------------------------------------------------------------
 
-function candidates({ cpus = [CPU_IGPU_TRUE] } = {}) {
+function candidates({ cpus = [CPU_IGPU_TRUE], motherboards = [MB, MB_SOCKET_MISMATCH] } = {}) {
   const rows = cpus.map((productId) => ({
     product_id: productId,
     product_variant_id: null,
     category: 'CPU',
     component_role: 'CPU',
   }));
+  for (const motherboardId of motherboards) {
+    rows.push({
+      product_id: motherboardId,
+      product_variant_id: null,
+      category: 'MOTHERBOARD',
+      component_role: 'MOTHERBOARD',
+    });
+  }
   rows.push(
-    { product_id: MB, product_variant_id: null, category: 'MOTHERBOARD', component_role: 'MOTHERBOARD' },
-    { product_id: MB_SOCKET_MISMATCH, product_variant_id: null, category: 'MOTHERBOARD', component_role: 'MOTHERBOARD' },
     { product_id: RAM, product_variant_id: null, category: 'MEMORY', component_role: 'RAM' },
     { product_id: GPU, product_variant_id: GPU_VARIANT, category: 'GPU', component_role: 'GPU' },
     { product_id: PSU, product_variant_id: null, category: 'PSU', component_role: 'PSU' },
@@ -255,6 +294,7 @@ async function runPipeline({
   useCase = 'office',
   gpuRequiredUseCases = ['GAMING', 'WORKSTATION'],
   cpus = [CPU_IGPU_TRUE],
+  motherboards = [MB, MB_SOCKET_MISMATCH],
   topK = 5,
   maxBuilds = 10,
 } = {}) {
@@ -265,7 +305,7 @@ async function runPipeline({
     required_roles: REQUIRED_ROLES,
   };
 
-  const poolResult = selectCandidatePool(selectionInput, candidates({ cpus }));
+  const poolResult = selectCandidatePool(selectionInput, candidates({ cpus, motherboards }));
   const db = createDb(routes(cpuSpecRows()));
   const stage1 = await selectOfferPrices(poolResult, db);
   const filteringContext = await loadFilteringContext(stage1, db);
@@ -428,6 +468,52 @@ test('end-to-end: every CPU in one pool resolves its own GPU requirement', async
   assert.deepEqual(gpuCountByCpu[CPU_IGPU_FALSE], { withGpu: 1, withoutGpu: 0 });
   assert.deepEqual(gpuCountByCpu[CPU_IGPU_NULL], { withGpu: 1, withoutGpu: 0 });
   assert.deepEqual(gpuCountByCpu[CPU_NO_SPEC_ROW], { withGpu: 1, withoutGpu: 0 });
+  assert.equal(firstGpuId(run.assembled.builds), GPU);
+});
+
+// ---------------------------------------------------------------------------
+// 1b. Decision 16 pairwise branch validation, end-to-end.
+// ---------------------------------------------------------------------------
+
+test('end-to-end: a pair-FAIL between two eligible candidates never assembles', async () => {
+  // Seed-shaped data (001_minimal_builds.sql): the budget board fails the
+  // family-B CPU via an exact-SKU override, while the tier board supports it
+  // via its family rule. Engine 2D keeps every candidate eligible
+  // (best-of-partner masks the pair at the verdict level); the DFS pair gate
+  // alone removes the family-B CPU x budget-board combination from the builds.
+  const run = await runPipeline({
+    useCase: 'office',
+    cpus: [CPU_IGPU_TRUE, CPU_FAMILY_B],
+    motherboards: [MB, MB_SOCKET_MISMATCH, MB2],
+    maxBuilds: 20,
+  });
+
+  const statusOf = {};
+  for (const entry of run.filterResult.results) {
+    statusOf[entry.product_id] = entry.status;
+  }
+  assert.equal(statusOf[CPU_IGPU_TRUE], 'UNKNOWN');
+  assert.equal(statusOf[CPU_FAMILY_B], 'UNKNOWN');
+  assert.equal(statusOf[MB], 'UNKNOWN');
+  assert.equal(statusOf[MB2], 'UNKNOWN');
+  assert.equal(statusOf[MB_SOCKET_MISMATCH], 'REJECT');
+
+  // Both CPUs are iGPU-true, so each surviving CPU/board combo yields a GPU
+  // build and an omit build: 2 combos for the first CPU, 1 for the family-B
+  // CPU (its budget-board branch dies at the MOTHERBOARD pick) = 6 builds.
+  assert.equal(run.assembled.builds.length, 6);
+  const combos = run.assembled.builds.map(
+    (b) => `${idsOf(b).CPU}/${idsOf(b).MOTHERBOARD}/${idsOf(b).GPU || 'omit'}`
+  );
+  assert.deepEqual(combos, [
+    `${CPU_IGPU_TRUE}/${MB}/${GPU}`,
+    `${CPU_IGPU_TRUE}/${MB}/omit`,
+    `${CPU_IGPU_TRUE}/${MB2}/${GPU}`,
+    `${CPU_IGPU_TRUE}/${MB2}/omit`,
+    `${CPU_FAMILY_B}/${MB2}/${GPU}`,
+    `${CPU_FAMILY_B}/${MB2}/omit`,
+  ]);
+  assert.ok(combos.every((c) => !c.startsWith(`${CPU_FAMILY_B}/${MB}/`)));
   assert.equal(firstGpuId(run.assembled.builds), GPU);
 });
 

@@ -107,6 +107,13 @@
  *
  * Errors: the existing Engine 2 CandidateSelectionError / ERROR_CODES are
  * reused; no new error hierarchy.
+ *
+ * Exports (Decision 16): besides filterCandidates / CANDIDATE_STATUSES, the
+ * eight pair evaluators are exported verbatim so Engine 3's DFS can re-check
+ * tentatively picked combinations against Engine 2D's exact pair logic, with
+ * aggregateCompatibilityResults + FINAL_STATUSES re-exported so the consumer
+ * gates on FAIL inside Engine 1's own vocabulary. No second implementation
+ * and no second vocabulary live anywhere in this handoff.
  */
 
 const { COMPONENT_ROLES } = require('../candidates/roles');
@@ -641,4 +648,20 @@ function filterCandidates(context) {
   return Object.freeze({ results: Object.freeze(results) });
 }
 
-module.exports = { filterCandidates, CANDIDATE_STATUSES };
+module.exports = {
+  filterCandidates,
+  CANDIDATE_STATUSES,
+  // Decision 16 handoff (see the module header): the exact evaluators
+  // evaluateCandidate wires, plus the aggregation + vocabulary the DFS
+  // gate consumes. Exports only - the pair logic itself is unchanged.
+  evaluateCpuMotherboardPair,
+  evaluateCoolerSocketPair,
+  evaluateMotherboardMemoryPair,
+  evaluatePlatformMemoryPair,
+  evaluateCaseFormFactorPair,
+  evaluateCaseRadiatorPair,
+  evaluateGpuCasePair,
+  evaluateGpuPsuPair,
+  aggregateCompatibilityResults,
+  FINAL_STATUSES,
+};

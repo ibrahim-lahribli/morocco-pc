@@ -67,6 +67,16 @@ function carrierFor(verdicts, priceById = {}) {
   return validatePrices(raw);
 }
 
+/** Minimal frozen Engine 2D context: every pair evaluator reads UNKNOWN. */
+function emptyFilteringContext() {
+  return Object.freeze({
+    candidates: Object.freeze({}),
+    specs: Object.freeze({}),
+    platform_by_socket: Object.freeze({}),
+    compat: Object.freeze({}),
+  });
+}
+
 function engineInput({
   results,
   budget = 100000,
@@ -79,6 +89,7 @@ function engineInput({
   priceById = {},
   requiredRoles = ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'PSU', 'CASE', 'CPU_COOLER', 'SSD_BOOT'],
   prices: explicitPrices = null,
+  filteringContext: explicitContext = null,
 }) {
   // Default walk is OPTIONAL: grant every CPU verdict an integrated GPU flag
   // unless the caller says otherwise explicitly (null = auto, {} = REQUIRED).
@@ -100,6 +111,8 @@ function engineInput({
     integrated_gpu_present: integratedMap,
     candidate_caps: { top_k_per_role: topK, max_builds_per_query: maxBuilds },
     prices: explicitPrices || carrierFor(results, priceById),
+    filtering_context:
+      explicitContext !== null ? explicitContext : emptyFilteringContext(),
   };
 }
 
@@ -1096,6 +1109,207 @@ test('reason and relationships never steer or leak into expansion', () => {
   assert.equal(idsOf(out.builds[0]).RAM, 'ram-1');
 });
 
+// ---------------------------------------------------------------------------
+// Decision 16: pairwise branch validation (Engine 2D evaluators, DFS gate)
+// ---------------------------------------------------------------------------
+
+/** A context whose cpu_spec / motherboard_spec entries carry only sockets. */
+function cpuMotherboardContext({ specs = {}, exact = {}, family = {} } = {}) {
+  return Object.freeze({
+    candidates: Object.freeze({}),
+    specs: Object.freeze(specs),
+    platform_by_socket: Object.freeze({}),
+    compat: Object.freeze({
+      cpu_motherboard_exact: Object.freeze(exact),
+      cpu_motherboard_family: Object.freeze(family),
+    }),
+  });
+}
+
+/** A context with only the variant / product spec entries a pair reads. */
+function pairSpecContext(specs) {
+  return Object.freeze({
+    candidates: Object.freeze({}),
+    specs: Object.freeze(specs),
+    platform_by_socket: Object.freeze({}),
+    compat: Object.freeze({}),
+  });
+}
+
+test('Decision 16: a pairwise FAIL with an already-picked partner abandons the branch', () => {
+  // Seed-shaped fixture (database/seeds/001_minimal_builds.sql): two AM5
+  // CPUs, two boards. The budget board carries an exact-SKU FAIL row for
+  // cpu-2 while its family rule still passes cpu-1 - so every verdict stays
+  // individually eligible, but the cpu-2 x budget-board pair is a definite
+  // FAIL that Engine 2D's best-of-partner verdict masked.
+  const filteringContext = cpuMotherboardContext({
+    specs: {
+      'p:cpu-1': { socket_id: 'am5' },
+      'p:cpu-2': { socket_id: 'am5' },
+      'p:mb-budget': { socket_id: 'am5' },
+      'p:mb-tier': { socket_id: 'am5' },
+    },
+    exact: {
+      // Exact-SKU record: cpu-2 is NOT validated on the budget board.
+      'mb-budget': [
+        { cpu_product_id: 'cpu-2', support_status: 'FAIL', min_bios_version: null },
+      ],
+    },
+    family: {
+      'mb-budget': [{ cpu_product_family_id: 'fam-budget', support_status: 'PASS' }],
+      'mb-tier': [
+        { cpu_product_family_id: 'fam-budget', support_status: 'PASS' },
+        { cpu_product_family_id: 'fam-tier', support_status: 'PASS' },
+      ],
+    },
+  });
+  const results = [
+    verdict('CPU', 'cpu-1'),
+    verdict('CPU', 'cpu-2'),
+    verdict('MOTHERBOARD', 'mb-budget'),
+    verdict('MOTHERBOARD', 'mb-tier'),
+    verdict('RAM', 'ram-1'),
+    verdict('GPU', 'gpu-1'),
+    verdict('PSU', 'psu-1'),
+    verdict('CASE', 'case-1'),
+    verdict('CPU_COOLER', 'cooler-1'),
+    verdict('SSD_BOOT', 'ssd-1'),
+  ];
+  const out = assembleBuilds(
+    engineInput({
+      results,
+      integrated: { 'cpu-1': true, 'cpu-2': true },
+      maxBuilds: 100,
+      filteringContext,
+    })
+  );
+
+  // cpu-1 pairs with both boards; cpu-2 only with the tier board - the
+  // cpu-2/mb-budget branch dies at the MOTHERBOARD pick, before descent.
+  const combos = out.builds.map(
+    (b) => `${idsOf(b).CPU}/${idsOf(b).MOTHERBOARD}/${idsOf(b).GPU || 'omit'}`
+  );
+  assert.deepEqual(combos, [
+    'cpu-1/mb-budget/gpu-1',
+    'cpu-1/mb-budget/omit',
+    'cpu-1/mb-tier/gpu-1',
+    'cpu-1/mb-tier/omit',
+    'cpu-2/mb-tier/gpu-1',
+    'cpu-2/mb-tier/omit',
+  ]);
+
+  // The same verdicts under an empty context (every pair UNKNOWN) assemble
+  // all eight combos: the prune comes from the pair data, not the verdicts.
+  const ungated = assembleBuilds(
+    engineInput({
+      results,
+      integrated: { 'cpu-1': true, 'cpu-2': true },
+      maxBuilds: 100,
+    })
+  );
+  assert.equal(ungated.builds.length, 8);
+
+  // Decision 15 semantics are untouched: the build count stays the verdict-
+  // level sum (0 here) - the re-evaluated pairs are never counted.
+  for (const b of out.builds) {
+    assert.equal(b.unknown_pairwise_count, 0);
+  }
+});
+
+test('Decision 16: an UNKNOWN pair stays eligible (no demotion, no prune)', () => {
+  // Sockets match but no support row exists anywhere: the cpu<->mb pair
+  // aggregates to UNKNOWN, and UNKNOWN branches assemble exactly like PASS.
+  const filteringContext = cpuMotherboardContext({
+    specs: {
+      'p:u-cpu': { socket_id: 'am5' },
+      'p:u-mb': { socket_id: 'am5' },
+    },
+  });
+  const results = fullSet('u', { status: 'UNKNOWN' });
+  const out = assembleBuilds(
+    engineInput({ results, integrated: { 'u-cpu': true }, filteringContext })
+  );
+  assert.equal(out.builds.length, 1);
+  assert.equal(idsOf(out.builds[0]).MOTHERBOARD, 'u-mb');
+  assert.equal(idsOf(out.builds[0]).CPU_COOLER, 'u-cooler');
+});
+
+test('Decision 16: a GPU<->PSU FAIL prunes only the paths that pick the pair', () => {
+  // The GPU wants 550 W; the PSU provides 400 W. Every GPU-present path dies
+  // at the PSU pick (the wattage FAIL beats the connector UNKNOWN), while the
+  // omit path - no GPU picked, no pair - survives untouched.
+  const filteringContext = pairSpecContext({
+    'v:gpu-1-var': { recommended_psu_watts: 550, required_power_connectors: null },
+    'p:psu-weak': { rated_wattage: 400, power_connectors: null },
+  });
+  const results = [
+    verdict('CPU', 'a-cpu'),
+    verdict('MOTHERBOARD', 'a-mb'),
+    verdict('RAM', 'a-ram'),
+    verdict('GPU', 'gpu-1'),
+    verdict('PSU', 'psu-weak'),
+    verdict('CASE', 'a-case'),
+    verdict('CPU_COOLER', 'a-cooler'),
+    verdict('SSD_BOOT', 'a-ssd'),
+  ];
+  const out = assembleBuilds(
+    engineInput({ results, integrated: { 'a-cpu': true }, filteringContext })
+  );
+  assert.equal(out.builds.length, 1);
+  assert.ok(!('GPU' in idsOf(out.builds[0])));
+  assert.equal(idsOf(out.builds[0]).PSU, 'psu-weak');
+
+  // REQUIRED: the only path picks the GPU, so the FAIL at the PSU pick
+  // leaves zero builds.
+  const required = assembleBuilds(
+    engineInput({
+      results,
+      useCase: 'gaming',
+      gpuRequired: ['gaming'],
+      integrated: {},
+      filteringContext,
+    })
+  );
+  assert.deepEqual(required, { builds: [] });
+});
+
+test('Decision 16: a GPU<->CASE FAIL prunes at the CASE pick', () => {
+  const filteringContext = pairSpecContext({
+    'v:gpu-1-var': { length_mm: 320, width_slots: 2 },
+    'p:case-small': { max_gpu_length_mm: 300, max_gpu_thickness_slots: 3 },
+  });
+  const results = [
+    verdict('CPU', 'a-cpu'),
+    verdict('MOTHERBOARD', 'a-mb'),
+    verdict('RAM', 'a-ram'),
+    verdict('GPU', 'gpu-1'),
+    verdict('PSU', 'a-psu'),
+    verdict('CASE', 'case-small'),
+    verdict('CPU_COOLER', 'a-cooler'),
+    verdict('SSD_BOOT', 'a-ssd'),
+  ];
+  const out = assembleBuilds(
+    engineInput({ results, integrated: { 'a-cpu': true }, filteringContext })
+  );
+  assert.equal(out.builds.length, 1);
+  assert.ok(!('GPU' in idsOf(out.builds[0])));
+  assert.equal(idsOf(out.builds[0]).CASE, 'case-small');
+});
+
+test('Decision 16: a malformed filtering_context fails fast before expansion', () => {
+  const results = fullSet('a');
+  for (const bad of ['context', 42, [], true]) {
+    assert.throws(
+      () =>
+        assembleBuilds(
+          engineInput({ results, integrated: { 'a-cpu': true }, filteringContext: bad })
+        ),
+      (e) => e instanceof CandidateSelectionError && e.code === ERROR_CODES.INVALID_INPUT,
+      `expected INVALID_INPUT for ${JSON.stringify(bad)}`
+    );
+  }
+});
+
 test('public surface is exactly assembleBuilds with one parameter', () => {
   const api = require('./assemble');
   assert.deepEqual(Object.keys(api).sort(), ['EXPANSION_ORDER', 'assembleBuilds']);
@@ -1135,7 +1349,6 @@ test('assemble.js keeps its source boundary', () => {
     'freshness',
     'penalty',
     'compatibility/',
-    'filtering/',
     'context-loader',
     'COMPONENT_ROLES',
     'Math.random',
@@ -1150,13 +1363,14 @@ test('assemble.js keeps its source boundary', () => {
   assert.equal(/\brank\b/i.test(ASSEMBLE_SOURCE), false, 'must not contain rank');
 });
 
-test('assemble.js uses only the four allowed engine requires', () => {
+test('assemble.js uses only the five allowed engine requires', () => {
   const requires = [...ASSEMBLE_SOURCE.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]);
   assert.deepEqual(requires, [
     '../candidates/roles',
     '../candidates/errors',
     './prices',
     './gpu-policy',
+    '../filtering/filter',
   ]);
   assert.equal(ASSEMBLE_SOURCE.includes('async('), false);
   assert.equal(ASSEMBLE_SOURCE.includes('await('), false);
@@ -1247,6 +1461,7 @@ test('full pipeline immutability: the complete composition never mutates caller-
     integrated_gpu_present: integrated,
     candidate_caps: caps,
     prices: rawCarrier,
+    filtering_context: { candidates: {}, specs: {}, platform_by_socket: {}, compat: {} },
   };
 
   const before = snapshot(rawInput);

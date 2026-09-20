@@ -28,6 +28,19 @@
  * GPU verdict and therefore contributes 0. This per-build count is the
  * Decision 13 producer that Engine 4 consumes downstream.
  *
+ * Pairwise branch validation (Decision 16): when a candidate is tentatively
+ * picked for a role, Engine 2D's own pair evaluators re-check it against
+ * every already-picked partner it has a relationship with - the
+ * relationships whose partner role comes EARLIER in EXPANSION_ORDER. Any
+ * aggregated pair FAIL abandons that branch before descent (the branch is
+ * never walked further), exactly like the budget cutoff or an empty role
+ * bucket. PASS and UNKNOWN pairs stay eligible: no demotion, no weighting.
+ * The GPU-omit path picks no GPU, so no GPU pair exists and none is
+ * evaluated. The check consumes the frozen Engine 2D context carried by the
+ * tenth input field; unknown_pairwise_count keeps its Decision 15 semantics
+ * untouched (the verdict-level sums; the re-evaluated pairs are never
+ * counted).
+ *
  * Pure: no database access, no I/O, no clock reads.
  */
 
@@ -40,6 +53,20 @@ const {
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
 const { lookupPrice } = require('./prices');
 const { resolveGpuRequirement } = require('./gpu-policy');
+// Decision 16: the pairwise gate reuses Engine 2D's own pair evaluators and
+// Engine 1's aggregation - never a second implementation of either.
+const {
+  evaluateCpuMotherboardPair,
+  evaluateCoolerSocketPair,
+  evaluateMotherboardMemoryPair,
+  evaluatePlatformMemoryPair,
+  evaluateCaseFormFactorPair,
+  evaluateCaseRadiatorPair,
+  evaluateGpuCasePair,
+  evaluateGpuPsuPair,
+  aggregateCompatibilityResults,
+  FINAL_STATUSES,
+} = require('../filtering/filter');
 
 /** Authoritative traversal order. Never sorted, never derived. */
 const EXPANSION_ORDER = Object.freeze([
@@ -83,7 +110,8 @@ function fail(code, field, message) {
 /**
  * Light outer-shape gate. Step 1 owns the full contract; assembly rechecks
  * only what traversal depends on: verdict list, running-total limit,
- * currency passthrough, GPU inputs, the build cap, and the price carrier.
+ * currency passthrough, GPU inputs, the build cap, the price carrier, and
+ * the Decision 16 pairwise context.
  */
 function readTraversalInputs(engine3Input) {
   if (
@@ -102,6 +130,7 @@ function readTraversalInputs(engine3Input) {
     integrated_gpu_present,
     candidate_caps,
     prices,
+    filtering_context,
   } = engine3Input;
   if (!Array.isArray(results)) {
     fail(ERROR_CODES.INVALID_FIELD_VALUE, 'results', '"results" must be an array');
@@ -159,6 +188,17 @@ function readTraversalInputs(engine3Input) {
   if (prices === null || typeof prices !== 'object' || Array.isArray(prices)) {
     fail(ERROR_CODES.INVALID_INPUT, 'prices', '"prices" must be an object');
   }
+  if (
+    filtering_context === null ||
+    typeof filtering_context !== 'object' ||
+    Array.isArray(filtering_context)
+  ) {
+    fail(
+      ERROR_CODES.INVALID_INPUT,
+      'filtering_context',
+      '"filtering_context" must be an object'
+    );
+  }
   return {
     results,
     budget_amount,
@@ -168,6 +208,7 @@ function readTraversalInputs(engine3Input) {
     integrated_gpu_present,
     maxBuilds,
     prices,
+    filteringContext: filtering_context,
   };
 }
 
@@ -311,10 +352,112 @@ function deepFreeze(value) {
 }
 
 /**
+ * Decision 16: per role, the relationships whose partner role comes EARLIER
+ * in EXPANSION_ORDER - the only pairs both of whose roles can already be
+ * picked when the role's candidate is tentatively chosen. Roles absent here
+ * have no earlier partner (CPU, GPU) or no relationships at all (SSD_BOOT);
+ * their pairs, if any, are checked when the partner role is picked later.
+ * Each entry names the relationship key (traceability only), the partner
+ * role, Engine 2D's exact evaluator, and whether the NEWLY picked candidate
+ * is the canonical left-role argument (true only for case_radiator, whose
+ * canonical left role is CPU_COOLER - everywhere else the earlier-picked
+ * partner is the canonical left role).
+ */
+const PAIRWISE_CHECKS = Object.freeze({
+  MOTHERBOARD: Object.freeze([
+    Object.freeze({
+      key: 'cpu_motherboard',
+      partnerRole: 'CPU',
+      leftIsNew: false,
+      evaluator: evaluateCpuMotherboardPair,
+    }),
+  ]),
+  RAM: Object.freeze([
+    Object.freeze({
+      key: 'motherboard_memory',
+      partnerRole: 'MOTHERBOARD',
+      leftIsNew: false,
+      evaluator: evaluateMotherboardMemoryPair,
+    }),
+    Object.freeze({
+      key: 'platform_memory',
+      partnerRole: 'CPU',
+      leftIsNew: false,
+      evaluator: evaluatePlatformMemoryPair,
+    }),
+  ]),
+  PSU: Object.freeze([
+    Object.freeze({
+      key: 'gpu_psu',
+      partnerRole: 'GPU',
+      leftIsNew: false,
+      evaluator: evaluateGpuPsuPair,
+    }),
+  ]),
+  CASE: Object.freeze([
+    Object.freeze({
+      key: 'case_form_factor',
+      partnerRole: 'MOTHERBOARD',
+      leftIsNew: false,
+      evaluator: evaluateCaseFormFactorPair,
+    }),
+    Object.freeze({
+      key: 'gpu_case',
+      partnerRole: 'GPU',
+      leftIsNew: false,
+      evaluator: evaluateGpuCasePair,
+    }),
+  ]),
+  CPU_COOLER: Object.freeze([
+    Object.freeze({
+      key: 'cooler_socket',
+      partnerRole: 'CPU',
+      leftIsNew: false,
+      evaluator: evaluateCoolerSocketPair,
+    }),
+    Object.freeze({
+      key: 'case_radiator',
+      partnerRole: 'CASE',
+      leftIsNew: true,
+      evaluator: evaluateCaseRadiatorPair,
+    }),
+  ]),
+});
+
+/**
+ * One pass of the role's pairwise checks against the already-picked
+ * partners. Returns true on the first aggregated pair FAIL. PASS and UNKNOWN
+ * pairs stay eligible (Decision 16); an absent partner - the GPU-omit path,
+ * or a role bucket that was empty - contributes no pair at all, mirroring
+ * Engine 2D's zero-partners-is-never-a-FAIL semantics.
+ */
+function firstPairFailure(filteringContext, role, verdict, picked) {
+  const checks = PAIRWISE_CHECKS[role];
+  if (checks === undefined) {
+    return false;
+  }
+  for (const check of checks) {
+    const partner = picked[check.partnerRole];
+    if (partner === undefined) {
+      continue;
+    }
+    const left = check.leftIsNew ? verdict : partner;
+    const right = check.leftIsNew ? partner : verdict;
+    const pair = aggregateCompatibilityResults(check.evaluator(filteringContext, left, right));
+    if (pair.status === FINAL_STATUSES.FAIL) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Walk EXPANSION_ORDER depth-first and return complete builds in discovery
  * order. Every choice adds its selected_price at once and stops that path
  * past the limit. The build cap halts the walk itself; later paths stay
- * unexplored. Exactly one build-assembly routine exists in this file.
+ * unexplored. Each tentative pick is pair-gated against the already-picked
+ * partners first (Decision 16): a FAIL pair abandons the branch before
+ * descent. Exactly one build-assembly routine exists in this file.
  */
 function assembleBuilds(engine3Input) {
   const traversal = readTraversalInputs(engine3Input);
@@ -384,6 +527,8 @@ function assembleBuilds(engine3Input) {
           continue;
         }
         picked[GPU_ROLE] = verdict;
+        // GPU has no partner role earlier in EXPANSION_ORDER; its pair
+        // checks run when PSU / CASE are picked (see PAIRWISE_CHECKS).
         descend(depth + 1, picked, nextTotal);
         delete picked[GPU_ROLE];
         if (halted) {
@@ -406,6 +551,12 @@ function assembleBuilds(engine3Input) {
         continue;
       }
       picked[role] = verdict;
+      // Decision 16: a pairwise FAIL with an already-picked partner abandons
+      // this branch before descent (same shape as the budget cutoff).
+      if (firstPairFailure(traversal.filteringContext, role, verdict, picked)) {
+        delete picked[role];
+        continue;
+      }
       descend(depth + 1, picked, nextTotal);
       delete picked[role];
       if (halted) {
