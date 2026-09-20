@@ -24,9 +24,11 @@
  *   frozen { builds: [complete v1 build, ...] }
  *
  * Field sourcing (no invention, one owner per field):
- *   results                 Engine 2D filter result, handed over intact
- *                           (PASS + UNKNOWN + REJECT, unmutated - Engine 3
- *                           contract Decision 1); Step 4 excludes REJECT.
+ *   results                 retention's output (retainTopKPerRole,
+ *                           src/recommendation/retention/) - frozen { results }
+ *                           shape, PASS|UNKNOWN only per Rule 2, REJECT already
+ *                           excluded upstream - Engine 3's own shape/validation
+ *                           unchanged per Decision 12 Rule 6.
  *   budget_amount           Engine 2A selection input (Engine 2C / Stage 1).
  *   currency                Engine 2A selection input.
  *   required_roles          Engine 2A selection input.
@@ -34,8 +36,10 @@
  *   gpu_required_use_cases  GPU-input loading (scoring-model configuration).
  *   integrated_gpu_present  GPU-input loading (Engine 2D context, Decision 11).
  *   candidate_caps          scoring-model configuration; validated by Step 1
- *                           ONLY (Decision 11 Rule 7: `top_k_per_role` is never
- *                           applied - Decision 14 stays unimplemented).
+ *                           only; retention/ applies top_k_per_role upstream of
+ *                           this module once an orchestrator calls it - this
+ *                           module's own stance is unchanged (it still receives
+ *                           whatever results its caller provides).
  *   prices                  Engine 2 Stage 1 carrier, validated by Step 2.
  *
  * Explicit NON-responsibilities (deliberately absent from this module)
