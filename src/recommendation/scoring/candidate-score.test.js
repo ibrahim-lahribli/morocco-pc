@@ -6,7 +6,7 @@
 // Scope: the weighted-average arithmetic over the configured type key set
 // (DECISION REQUIRED A4 proposal), the no-evidence inheritance from STEP 1,
 // the weight-sum guard (A5), the missing-role guard (A6), the unsorted frozen
-// batch output (ranking is Decision 12/14 - blocked), and the failure
+// batch output (ranking is Decision 12/14 - owned by ../retention, Decision 12 RESOLVED 2026-09-20), and the failure
 // mapping. STEP 1 arithmetic is NOT re-tested here (see effective-score).
 // ---------------------------------------------------------------------------
 
@@ -165,7 +165,7 @@ test('computeCandidateScores preserves input order, unsorted, and freezes its ou
   assert.ok(Object.isFrozen(out.scores));
   assert.ok(Object.isFrozen(out.scores[0]));
   assert.equal(out.scores.length, 2);
-  // Incoming order preserved: NO sorting, NO ranking (Decision 12/14, blocked).
+  // Incoming order preserved: NO sorting, NO ranking (Decision 12/14 concerns, owned by ../retention, Decision 12 RESOLVED 2026-09-20).
   assert.equal(out.scores[0].product_id, P2);
   assert.equal(out.scores[1].product_id, P1);
   assert.equal(out.scores[0].component_role, 'CPU');

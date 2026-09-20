@@ -1777,6 +1777,12 @@ implementation is a separate task.
 * `top_k_per_role` stays validated-only in code until the separate
   implementation task lands the `retention/` module; until then, the evidence
   above (nothing in `src/` applies the cap) remains true.
+* Addendum 2026-09-20: Decision 12's implementation has since landed
+  (`src/recommendation/retention/`, `retainTopKPerRole`), so the "nothing in
+  `src/` applies the cap" evidence above is stale as a present-tense claim.
+  The stage is not yet wired into the pipeline -- Engine 3 still receives the
+  unfiltered `filterResult` until a separate wiring task lands.
+
 * Engine 3's "candidate_caps validated only, never applied" stance
   (`assembly/input.js`) is superseded going forward by this decision's
   implementation, not by a rule change here.
