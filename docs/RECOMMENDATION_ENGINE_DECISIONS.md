@@ -1927,7 +1927,7 @@ VERDICT: RESOLVED - candidate-ranking score formula adopted (STEP 1-3 above)
 
 Date: 2026-09-18 (corrected from the recorded 2026-09-17 to match its recording commit `0c2225c`, dated 2026-09-18). Contract-freezing product decision pass. Resolves the retention question left open by Decision 12 (ranking/top-K ownership) using the candidate score defined by Decision 13. Documentation/decision only: no implementation of ranking, no top-K application, no `roleCaps`, no Engine 3 change, no scoring change, no migration, no database operation.
 
-### Status: PROVISIONAL — blocked on Decisions 12 and 13
+### Status: RESOLVED
 
 Decision 14 references two decisions that were never recorded; both are now
 entered above as `TBD - not yet decided` (Decision 12: ranking/top-K ownership
@@ -1950,6 +1950,7 @@ below are preserved verbatim; this status block is additive, and Decision 14
 becomes RESOLVED only once Decisions 12 and 13 are decided.
 
 Update 2026-09-19: Decision 13 is now RESOLVED (candidate-ranking score formula, above); this decision remains blocked only on Decision 12 (ranking/top-K ownership + pipeline position).
+Update 2026-09-20: Decision 12 is now RESOLVED (ranking/top-K ownership + pipeline position, above); with Decision 13 (2026-09-19), both blockers are decided -- this decision is fully RESOLVED, and Rules 3, 5 (key 1), and 6, previously blocked, are now unblocked and implementable.
 
 ### Rule 1 — Per-role scope
 
@@ -2100,7 +2101,7 @@ VERDICT: RESOLVED - UNKNOWN pairwise-count producer adopted (integer carry-forwa
 ```text
 Decision 12: RESOLVED (ranking / top-K ownership -> src/recommendation/retention/, pipeline position Engine 2C -> 2D -> retention/ -> Engine 3, adopted 2026-09-20)
 Decision 13: RESOLVED (candidate-ranking score formula, adopted 2026-09-19)
-Decision 14: PROVISIONAL - blocked on Decision 12 only (ranking/top-K ownership, pipeline position)
+Decision 14: RESOLVED (top_k_per_role retention semantics, resolved 2026-09-20)
 Selected semantics: A — Hard upper bound
 Tie-break: existing compareCandidates() authorized — YES
 Decision 15: RESOLVED (UNKNOWN pairwise-count producer, adopted 2026-09-19)
