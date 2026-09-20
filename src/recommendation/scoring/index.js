@@ -26,14 +26,16 @@
  *     (product, assessment_type) (see ./effective-score).
  *   computeCandidateScore()             - STEP 2: candidate score per
  *     (product, role) (see ./candidate-score).
- *   computeCandidateScores()            - STEP 2 batch, unsorted (ranking is
- *     Decision 12/14, blocked; `top_k_per_role` stays validated-only).
+ *   computeCandidateScores()            - STEP 2 batch, unsorted (ranking and
+ *     the `top_k_per_role` application are owned by ../retention, Decision 12
+ *     RESOLVED 2026-09-20).
  *   computeBuildScore()                 - STEP 3: build score per assembled
  *     build (see ./build-score).
  *   computeBuildScores()                - STEP 3 batch, index-aligned.
  *
  * NOT owned here: iGPU sourcing (`integrated_gpu_present`), the
- * `top_k_per_role` application, Engine 3 assembly, ranking, persistence, and
+ * `top_k_per_role` application and ranking (owned by ../retention since the
+ * Decision 12 implementation), Engine 3 assembly, persistence, and
  * any orchestrator.
  */
 

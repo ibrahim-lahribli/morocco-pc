@@ -83,6 +83,11 @@ const IMPLEMENTED_STAGES = Object.freeze([
 
 /**
  * Deterministic comparison of two validated candidates.
+ *
+ * Exported for Decision 12: the retention stage (../retention) composes this
+ * exact comparator as the authorized Decision 14 Rule 5 tie-break instead of
+ * reimplementing the ordering chain.
+ *
  * @returns {number} negative if a sorts before b, positive if after, 0 if tied
  */
 function compareCandidates(a, b) {
@@ -197,4 +202,4 @@ function selectCandidatePool(rawInput, rawCandidates) {
   });
 }
 
-module.exports = { SELECTION_STAGES, IMPLEMENTED_STAGES, selectCandidatePool };
+module.exports = { SELECTION_STAGES, IMPLEMENTED_STAGES, selectCandidatePool, compareCandidates };

@@ -54,7 +54,8 @@
  * positive, fail fast otherwise.
  *
  * Explicit NON-responsibilities: no database access, no I/O, no clock reads,
- * no ranking, no tie-breaking (Decision 12 TBD), no compatibility evaluation,
+ * no ranking, no tie-breaking (owned by ../retention, Decision 12 RESOLVED
+ * 2026-09-20), no compatibility evaluation,
  * no UNKNOWN re-derivation (B1), no persistence (build_candidate.score is
  * Engine 5's write).
  *

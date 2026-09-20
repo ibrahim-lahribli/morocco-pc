@@ -26,6 +26,7 @@ const {
   SELECTION_STAGES,
   IMPLEMENTED_STAGES,
   selectCandidatePool,
+  compareCandidates,
 } = require('./select');
 
 module.exports = {
@@ -45,4 +46,5 @@ module.exports = {
   SELECTION_STAGES,
   IMPLEMENTED_STAGES,
   selectCandidatePool,
+  compareCandidates,
 };

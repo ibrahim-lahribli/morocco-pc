@@ -34,8 +34,9 @@
  * roles. Requires product-owner confirmation.
  *
  * Explicit NON-responsibilities: no sorting, no ranking, no tie-breaking
- * (Decision 12/14 own both; Decision 12 is TBD and `top_k_per_role` stays
- * validated-only - Decision 11 Rule 7), no REJECT filtering (candidates
+ * (Decision 12/14 own both; resolved 2026-09-20 - the ranking/top-K stage is
+ * owned by ../retention, Decision 12, so `top_k_per_role` is applied there,
+ * never here - Decision 11 Rule 7), no REJECT filtering (candidates
  * arrive post-2C/2D), no database access, no I/O, no clock reads, no
  * persistence.
  *
@@ -211,8 +212,8 @@ function computeCandidateScore({ candidate, assessments, configuration, nowMs })
  *
  * The output is a frozen { scores } array of frozen records; it is
  * deliberately UNSORTED: ranking and tie-breaking are Decision 12/14
- * concerns (Decision 12 is TBD; `top_k_per_role` stays validated-only,
- * Decision 11 Rule 7). An empty candidate list yields an empty scores array
+ * concerns (owned by ../retention, Decision 12 RESOLVED 2026-09-20).
+ * An empty candidate list yields an empty scores array
  * (scoring an empty set is not an error).
  *
  * @param {object} args { candidates, assessments, configuration, nowMs }
