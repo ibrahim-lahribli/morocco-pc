@@ -73,6 +73,8 @@ injected. Decision 13's formula is unchanged; the change is additive
 data-plumbing (Engine 2D/3/4 + contract tests), recorded here as the product
 decision.
 
+Update 2026-09-20 (retention ownership decision pass): Decision 12 (below) is RESOLVED -- the ranking/top-K stage is owned by a new dedicated `src/recommendation/retention/` module (neither `candidates/` nor `scoring/` owns it; both disclaim it in their own boundary docs), named "retention" to avoid collision with Engine 5's future post-assembly build ranking, positioned Engine 2C (pool) -> Engine 2D (filter) -> retention/ (this decision) -> Engine 3 (assembly), and shaped as pure composition over already-loaded data (2D verdicts, Decision 13 STEP 2 scores, Decision 11-validated `top_k_per_role`) reusing the existing `compareCandidates()` tie-break. Decision 14 Rule 6 is confirmed exactly as written; Decision 14's remaining blocker is resolved. Documentation only: no code, no migration, no commit -- implementation is a separate task.
+
 The original three items (quoted verbatim from the architecture document):
 
 1. **"Confirmation of the section 3.2 asymmetric UNKNOWN policy (especially:
@@ -1655,19 +1657,17 @@ the original decision text above stays intact:
   follow-up decisions.
 ---
 
-## Decision 12 - Ranking / top-K ownership and pipeline position (recorded retroactively 2026-09-19)
+## Decision 12 - Ranking / top-K ownership and pipeline position (recorded retroactively 2026-09-19; RESOLVED 2026-09-20)
 
 ### Current situation
 
-No Decision 12 was ever recorded. This document numbers Decisions 1-11 and
-then jumps to Decision 14, whose intro text ("the retention question left
-open by Decision 12 (ranking/top-K ownership)") and Rule 6 ("passed to
-Engine 3 ... as established by Decision 12") both reference it. The reference
-is dangling: a repository-wide search of every markdown file found Decision 12
-mentioned ONLY inside Decision 14. Nothing named "Decision 12" exists in this
-document, in `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md`, or anywhere else.
-
-### What Decision 14 assumes Decision 12 establishes
+No Decision 12 existed when Decision 14 was written: this document numbered
+Decisions 1-11 and then jumped to Decision 14, whose intro text ("the
+retention question left open by Decision 12 (ranking/top-K ownership)") and
+Rule 6 ("passed to Engine 3 ... as established by Decision 12") both
+referenced a decision that was never recorded -- a repository-wide search of
+every markdown file found Decision 12 mentioned ONLY inside Decision 14.
+Decision 14 assumed Decision 12 establishes:
 
 1. **Ownership of the ranking / top-K stage** as a distinct pipeline stage,
    and that Decision 12 explicitly left the RETENTION semantics (hard cap vs
@@ -1676,19 +1676,11 @@ document, in `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md`, or anywhere else.
    BEFORE the candidate set reaches Engine 3, and the resulting per-role
    top-K sets are what Engine 3 receives as input.
 
-Decision 14's intro depends on (1); Decision 14 Rule 6 depends on (2).
-
-### Status
-
-```text
-TBD - not yet decided
-```
-
-No product decision is made here. This entry exists only to remove a dangling
-reference and to record, with evidence, that the referenced decision was never
-taken.
-
-### Evidence: no matching implementation exists
+Decision 14's intro depends on (1); Decision 14 Rule 6 depends on (2). The
+entry was therefore recorded retroactively 2026-09-19 as `TBD - not yet
+decided`, with evidence that no matching implementation existed. That
+evidence is preserved below; it remains an accurate description of the
+repository until the separate implementation task lands:
 
 * `src/recommendation/scoring/configuration.js:241-242` -- `candidate_caps` is
   "Validated and preserved only -- never applied here (Decision 11 Rule 7)."
@@ -1707,16 +1699,95 @@ taken.
   "is NOT re-decided; the implemented Engine 3 contract stands ('Validated
   ONLY, never applied')."
 
+Update 2026-09-20: the TBD stub is superseded by the RESOLVED decision below.
+
+### Decision
+
+OWNERSHIP: neither `candidates/` nor `scoring/` owns this stage -- both
+modules explicitly disclaim it in their own boundary docs
+(`candidates/index.js`: "scoring is NOT implemented (Engine 4)";
+`scoring/index.js`: "NOT owned here: ... ranking", cited as evidence in this
+document's own Decision 12 stub above). A new dedicated module owns it:
+`src/recommendation/retention/`.
+
+NAMING: called "retention," not "ranking" -- Decision 14 Rule 4 already uses
+"Retention" in its own name, and this avoids collision with Engine 5's future
+post-assembly build ranking (`build_score`, Decision 13 STEP 3), which is a
+distinct operation on different data (whole builds, not per-role candidates).
+
+SHAPE: pure composition, no SQL, no new validation logic, no new policy --
+follows the `assembly/pipeline.js` composition convention exactly: wires
+together already-built pieces over already-loaded data.
+
+Inputs:
+
+* Engine 2D `filterResult` (PASS/UNKNOWN/REJECT verdicts);
+* Engine 4's `computeCandidateScores` output (Decision 13 STEP 2);
+* `candidate_caps.top_k_per_role` (Decision 11 loader, already validated).
+
+Applies, per role bucket, in order:
+
+1. Rule 2 eligibility (PASS/UNKNOWN only);
+2. Rule 3/5 ranking (candidate score DESC, then `candidates/select.js`'s
+   existing `compareCandidates()` tie-break, reused not reimplemented);
+3. Rule 4 hard-cap retention (`retained_count = min(K, eligible_count)`).
+
+Output: frozen per-role top-K candidate sets, in the shape Engine 3's
+existing candidate-pool input already expects -- no change to Engine 3's
+input contract.
+
+PIPELINE POSITION:
+
+```text
+Engine 2C (pool) -> Engine 2D (filter) -> retention/ (this decision) -> Engine 3 (assembly)
+```
+
+Confirms Decision 14 Rule 6 exactly as written -- no change to that rule's
+text.
+
+OUT OF SCOPE (confirm, don't re-decide): `max_builds_per_query` stays Engine
+3's traversal-halt cap (Decision 14 Rule 7, unchanged). Engine 3's existing
+"`candidate_caps` validated only, never applied" stance is superseded going
+forward by this decision's implementation, not by a rule change here --
+implementation is a separate task.
+
+### Rationale
+
+* The stage must be owned somewhere, and both existing candidate-side modules
+  disclaim it; a dedicated `retention/` module adds the stage without
+  violating any recorded boundary.
+* "Retention" is the name Decision 14 Rule 4 already gives the operation;
+  "ranking" would collide with Engine 5's future post-assembly build ranking
+  (Decision 13 STEP 3 `build_score`), which operates on whole builds, not
+  per-role candidates.
+* Pure composition over already-loaded, already-validated inputs (2D verdicts,
+  Engine 4 scores, Decision 11-validated caps) introduces no new SQL,
+  validation surface, or policy, and reusing `compareCandidates()` keeps
+  Decision 14 Rule 5's authorized tie-break the single ordering
+  implementation.
+* Emitting the frozen per-role top-K sets in Engine 3's existing input shape
+  keeps Rule 6 true verbatim: Engine 3 changes nothing.
+
 ### Impact
 
-Until Decision 12 is taken, no component owns the ranking/top-K stage and
-nothing in `src/recommendation/` may apply `top_k_per_role`. Decision 14
-Rules 4 and 6 cannot be implemented without it.
+* Decision 14's remaining blocker is resolved by this pass; its Rule 6 is
+  confirmed exactly as written and its rules are unchanged. Decision 14's own
+  status block and the remaining Final Status lines are staged for the next
+  step and are not touched here.
+* `top_k_per_role` stays validated-only in code until the separate
+  implementation task lands the `retention/` module; until then, the evidence
+  above (nothing in `src/` applies the cap) remains true.
+* Engine 3's "candidate_caps validated only, never applied" stance
+  (`assembly/input.js`) is superseded going forward by this decision's
+  implementation, not by a rule change here.
+* No code in this pass: no `retention/` module, no tests, no orchestrator, no
+  migration, no database change. Final Status (below) updated: Decision 12 ->
+  RESOLVED; Decisions 13, 14, 15 and the semantic summary lines unchanged.
 
 ### Verdict for this pass
 
 ```text
-VERDICT: TBD - NOT YET DECIDED
+VERDICT: RESOLVED - ranking/top-K ownership adopted (new dedicated src/recommendation/retention/ module; Engine 2C (pool) -> Engine 2D (filter) -> retention/ -> Engine 3 (assembly); pure composition; Decision 14 Rule 6 confirmed as written)
 ```
 
 ---
@@ -2027,7 +2098,7 @@ VERDICT: RESOLVED - UNKNOWN pairwise-count producer adopted (integer carry-forwa
 ## Final Status
 
 ```text
-Decision 12: TBD - not yet decided (ranking / top-K ownership, pipeline position)
+Decision 12: RESOLVED (ranking / top-K ownership -> src/recommendation/retention/, pipeline position Engine 2C -> 2D -> retention/ -> Engine 3, adopted 2026-09-20)
 Decision 13: RESOLVED (candidate-ranking score formula, adopted 2026-09-19)
 Decision 14: PROVISIONAL - blocked on Decision 12 only (ranking/top-K ownership, pipeline position)
 Selected semantics: A — Hard upper bound
