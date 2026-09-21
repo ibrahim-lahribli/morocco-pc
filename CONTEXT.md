@@ -48,7 +48,7 @@ Currently next:
 NOT implemented:
 - End-to-end query → build → score → rank pipeline: no orchestrator wires 2C → Stage 1 → 2D → retention → 3 → 4; Engine 5a ranking then Engine 5b persistence, and Engine 6, are absent.
 - Product data seeding beyond the minimal seed — `database/seeds/001_minimal_builds.sql` exists and is applied to the live DB (15 products, 16 offers, 25 assessments; verified end-to-end through Engine 4 on 2026-09-19), and the 20 test-fixture products (`Test Product%` / `TEST-SKU-%` / `TestCompat%`) were deleted the same day (0 remain); broader real-market catalog coverage remains unseeded.
-- An isolated environment to verify a fresh 001→011 migration (see `DEVELOPMENT_NOTES.md`).
+- A `TEST_DATABASE_URL` guard exists for isolated write tests (`scripts/lib/db-url.js`; see `DEVELOPMENT_NOTES.md`), but a fresh 001→011 migration remains NOT VERIFIED.
 
 ## ARCHITECTURE
 
