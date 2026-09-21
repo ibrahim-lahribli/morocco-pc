@@ -99,7 +99,7 @@
  * Explicit NON-responsibilities: no BEGIN / COMMIT / ROLLBACK (Decision 17.5:
  * runRecommendationSnapshot in ./snapshot owns the transaction), no write of
  * any kind, no DDL/DML, no compatibility evaluation, no scoring arithmetic, no
- * ranking (Engine 5a, Decision 18), no persistence (Engine 5b, Decision 19), no
+ * ranking (Engine 5a, Decision 18), no persistence (Engine 5b, Decision 19), no assembly diversity (Decision 20), no
  * explanation (Engine 6), no db creation/close (injected and validated by the
  * loaders), no retries, no caching, no logging.
  *
