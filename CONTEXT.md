@@ -30,6 +30,7 @@ Implemented:
   - **Engine 1** — compatibility resolver (`compatibility/`).
   - **Engine 2** — 2A contracts, 2B DB loader, 2C pool selector (`candidates/`); **2D hard-compatibility filtering** (`filtering/`); **Stage 1 offer pre-selection** (`offers/`).
   - **Engine 3** — build assembly Steps 1–4 + GPU-input loading + assembly entry point + public barrel (`assembly/`): `validateEngine3Input` (ten-field contract since Decision 16, including `filtering_context`), price carrier (`priceKey` / `validatePrices` / `lookupPrice`), `resolveGpuRequirement`, `assembleBuilds` + `EXPANSION_ORDER` (with Decision 16 pairwise branch validation: Engine 2D's pair evaluators re-check each tentative pick against already-picked partners; a pair FAIL abandons the branch), `buildGpuInputs` (GPU-input loading: `gpu_required_use_cases` from the scoring model, iGPU presence via `buildIntegratedGpuPresentMap`, `use_case` from the Engine 2A input), `assembleBuildsForRecommendation` (Steps 1 → 2 → 4 composed over already-loaded Engine 2 sources, DB-free). Cross-engine query → build → score → rank orchestration and the query data-loading layer remain future.
+  - **Retention stage** (`retention/`, Decision 12, implemented and tested 2026-09-20) — `retainTopKPerRole`: Rule 2 (PASS/UNKNOWN eligible, REJECT excluded pre-score) → Rule 3/5 (candidate score DESC, then the reused `compareCandidates` tie-break) → Rule 4 (`min(K, eligible_count)` hard cap). Implemented and tested, but **NOT YET WIRED** into any pipeline: no orchestrator calls it, so Engine 3 still receives the unfiltered filter result wherever it runs outside test fixtures.
   - **Scoring-model loader** (Decision 11, `scoring/`): `loadScoringModel`, `validateScoringModelConfiguration`; 2D→3 iGPU handoff `buildIntegratedGpuPresentMap` (`filtering/igpu-map.js`).
   - Roadmap contract: `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md`; decision record: `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 
@@ -43,7 +44,7 @@ Currently next:
 - Product/store-offer seeding; Layer 2 benchmark/assessment data.
 
 NOT implemented:
-- End-to-end query → build → score → rank pipeline: no orchestrator wires 2C → Stage 1 → 2D → Engine 3 → scoring → persistence; Engine 4 scoring arithmetic and Engines 5–6 are absent.
+- End-to-end query → build → score → rank pipeline: no orchestrator wires 2C → Stage 1 → 2D → Engine 3 → scoring → persistence; Engines 5–6 are absent.
 - Product data seeding beyond the minimal seed — `database/seeds/001_minimal_builds.sql` exists and is applied to the live DB (15 products, 16 offers, 25 assessments; verified end-to-end through Engine 4 on 2026-09-19), and the 20 test-fixture products (`Test Product%` / `TEST-SKU-%` / `TestCompat%`) were deleted the same day (0 remain); broader real-market catalog coverage remains unseeded.
 - An isolated environment to verify a fresh 001→011 migration (see `DEVELOPMENT_NOTES.md`).
 
