@@ -23,7 +23,7 @@ Canonical project context for `morocco-pc`, optimized for AI coding agents. Oper
 
 Implemented:
 - **Layer 1 — Catalog / Hardware**: complete schema — identity, hardware specs, explicit compatibility, provenance. Migrations 003–007.
-- **Layer 2 — Performance / Assessment**: schema only (`benchmark_source`, `benchmark`, `benchmark_result`, `component_assessment`, `scoring_model`). Migration 008. No data or scoring yet.
+- **Layer 2 — Performance / Assessment**: schema (`benchmark_source`, `benchmark`, `benchmark_result`, `component_assessment`, `scoring_model`). Migration 008. Minimal seed data present (25 assessments + `scoring_model seed-minimal-v1/1.0.0`); Engine 4 scoring implemented (Decision 13 STEP 1-3 + Decision 15). Broad benchmark coverage remains unseeded.
 - **Layer 3 — Market**: canonical schema (`store`, `store_offer`, `price_history`) reconciled to the live database. Migrations 009–010.
 - **Layer 4 — Recommendation**: canonical schema (`recommendation_profile`, `recommendation_query`, `recommendation_result`, `build_candidate`, `build_component` + `component_role` enum) reconciled to the live database. Migration 011 applied and catalog-verified (tables currently empty).
 - **Engine (pure JS, `src/recommendation/`)** — implemented and covered by unit tests (`npm run test:unit`; 619 tests as of 2026-09-21):
@@ -32,19 +32,21 @@ Implemented:
   - **Engine 3** — build assembly Steps 1–4 + GPU-input loading + assembly entry point + public barrel (`assembly/`): `validateEngine3Input` (ten-field contract since Decision 16, including `filtering_context`), price carrier (`priceKey` / `validatePrices` / `lookupPrice`), `resolveGpuRequirement`, `assembleBuilds` + `EXPANSION_ORDER` (with Decision 16 pairwise branch validation: Engine 2D's pair evaluators re-check each tentative pick against already-picked partners; a pair FAIL abandons the branch), `buildGpuInputs` (GPU-input loading: `gpu_required_use_cases` from the scoring model, iGPU presence via `buildIntegratedGpuPresentMap`, `use_case` from the Engine 2A input), `assembleBuildsForRecommendation` (Steps 1 → 2 → 4 composed over already-loaded Engine 2 sources, DB-free). Cross-engine query → build → score → rank orchestration and the query data-loading layer remain future.
   - **Retention stage** (`retention/`, Decision 12, implemented and tested 2026-09-20) — `retainTopKPerRole`: Rule 2 (PASS/UNKNOWN eligible, REJECT excluded pre-score) → Rule 3/5 (candidate score DESC, then the reused `compareCandidates` tie-break) → Rule 4 (`min(K, eligible_count)` hard cap). Implemented and tested, but **NOT YET WIRED** into any pipeline: no orchestrator calls it, so Engine 3 still receives the unfiltered filter result wherever it runs outside test fixtures.
   - **Scoring-model loader** (Decision 11, `scoring/`): `loadScoringModel`, `validateScoringModelConfiguration`; 2D→3 iGPU handoff `buildIntegratedGpuPresentMap` (`filtering/igpu-map.js`).
+  - Decisions 12–16 pointers: Decision 12 — Ranking / top-K ownership and pipeline position (implemented + tested, NOT wired into any orchestrator per Decisions 12, 14); Decision 13 — Candidate-ranking score formula; Decision 14 — `top_k_per_role` retention semantics; Decision 15 — UNKNOWN pairwise-count producer (Decision 13's B1); Decision 16 — Pairwise branch validation inside Engine 3's DFS.
   - Roadmap contract: `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md`; decision record: `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 
 Environment: PostgreSQL on **Neon** (cloud); no local PostgreSQL. Current migration: `011_reconcile_layer4.sql`.
 
 Currently next:
-- **Engine 3 orchestration** — a cross-engine orchestrator wiring the DB-backed loaders (query data-loading → 2C → Stage 1 → 2D → scoring-model loading) into `assembleBuildsForRecommendation`; the Engine 3 GPU-input loading and assembly wiring itself are done.
-- **Query data-loading layer** — `recommendation_query` → Engine 2A input per Decision 10 (required_roles constant, fail-closed `use_case`).
-- **Engine 5** — ranking + result persistence (transactional `recommendation_result` rows).
-- **Engine 6** — explanation generation.
-- Product/store-offer seeding; Layer 2 benchmark/assessment data.
+- (1) Design decisions 17–19: orchestrator contract, ranking, persistence.
+- (2) Query data-loading layer (Decision 10) — `recommendation_query` → Engine 2A input (required_roles constant, fail-closed `use_case`).
+- (3) Orchestrator, no writes — wiring 2C → Stage 1 → 2D → retention → 3 → 4.
+- (4) Engine 5a ranking (pure), then Engine 5b persistence (transactional `recommendation_result` rows).
+- (5) Engine 6 — explanation generation.
+- (6) Product/store-offer seeding; Layer 2 benchmark/assessment data (backlog).
 
 NOT implemented:
-- End-to-end query → build → score → rank pipeline: no orchestrator wires 2C → Stage 1 → 2D → Engine 3 → scoring → persistence; Engines 5–6 are absent.
+- End-to-end query → build → score → rank pipeline: no orchestrator wires 2C → Stage 1 → 2D → retention → 3 → 4; Engine 5a ranking then Engine 5b persistence, and Engine 6, are absent.
 - Product data seeding beyond the minimal seed — `database/seeds/001_minimal_builds.sql` exists and is applied to the live DB (15 products, 16 offers, 25 assessments; verified end-to-end through Engine 4 on 2026-09-19), and the 20 test-fixture products (`Test Product%` / `TEST-SKU-%` / `TestCompat%`) were deleted the same day (0 remain); broader real-market catalog coverage remains unseeded.
 - An isolated environment to verify a fresh 001→011 migration (see `DEVELOPMENT_NOTES.md`).
 
@@ -109,7 +111,7 @@ Four data layers; pure-JS engine modules in `src/recommendation/` mirror the sch
 - **GPU ↔ case compatibility is calculated** from dimensions (`gpu_board_spec` vs `case_spec` max GPU length/thickness).
 - **GPU ↔ PSU compatibility is calculated** from wattage and connectors (`recommended_psu_watts` vs `rated_wattage`; connector comparison).
 - **Variant-specific GPU physical properties belong to `gpu_board_spec`** (length, slot width, height, board TGP, connectors), not to the chipset or `product` row.
-- **`product_variant.overrides` has a controlled allowlist** and must not become a generic JSON dumping ground.
+- **`product_variant` has no `overrides` column** in migrations 001–011 or the live schema (verified 2026-09-21 via `003_core_tables.sql:60-68` + `verify-schema.js`); the prior allowlist note was doc-drift. Do not reference it as existing.
 - **Layer 3 supports multiple legitimate offers** for the same store/product/variant (no offer-level unique key).
 - **`price_history` is append-only**; historical prices are never destroyed when the current offer changes.
 - **Recommendation results must remain traceable to the scoring model used** (`recommendation_query.scoring_model_id` is NOT NULL).

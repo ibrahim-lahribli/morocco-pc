@@ -160,9 +160,9 @@ Rule: migration 009 is the authoritative fresh-DB Layer 3 schema; post-009 chang
 
 ### Minimal seed set (2026-09-19)
 
-Working solution: `database/seeds/001_minimal_builds.sql` (15 products, 16 variants-offers-assessable candidates: 2 CPUs incl. one iGPU for the OPTIONAL path, 1 GPU product x 2 variants, 2 MB/RAM/SSD/PSU/case/cooler) + `scoring_model seed-minimal-v1/1.0.0` with the complete Decision 3(a) JSONB + `scripts/run-seeds.js` (`npm run seed`, `--dry-run`), verified: re-run safe, live `verify-schema.js` shows no `product_variant.overrides` column (CONTEXT.md:111 is doc-drift), one-off E2E (temp script, deleted) ran Engine 1→2→3→4 live: GAMING and OFFICE both yield 25 capped builds with PASS+UNKNOWN verdicts and finite scores.
+Working solution: `database/seeds/001_minimal_builds.sql` (15 products; 2 variants — 1 GPU product x 2 variants; 16 offers; 25 assessments; 1 scoring_model `seed-minimal-v1/1.0.0`: 2 CPUs incl. one iGPU for the OPTIONAL path, 2 MB/RAM/SSD/PSU/case/cooler) + `scoring_model seed-minimal-v1/1.0.0` with the complete Decision 3(a) JSONB + `scripts/run-seeds.js` (`npm run seed`, `--dry-run`), verified: re-run safe, live `verify-schema.js` shows no `product_variant.overrides` column (CONTEXT.md overrides note corrected 2026-09-21), one-off E2E (temp script, deleted) ran Engine 1→2→3→4 live: GAMING and OFFICE both yield 25 capped builds with PASS+UNKNOWN verdicts and finite scores.
 
-Rule: seeds are DML-only, idempotent `INSERT ... WHERE NOT EXISTS` on natural keys, `Seed %`/`SEED-` prefixed, applied via `run-seeds.js` — never through `run-migrations.js`. Layer-4 tables stay empty (Engine 5 future). `product_variant.overrides` doc-drift stays open for a later reconciliation pass.
+Rule: seeds are DML-only, idempotent `INSERT ... WHERE NOT EXISTS` on natural keys, `Seed %`/`SEED-` prefixed, applied via `run-seeds.js` — never through `run-migrations.js`. Layer-4 tables stay empty (Engine 5 future). `product_variant.overrides` doc-drift RESOLVED 2026-09-21 (CONTEXT.md corrected; column does not exist).
 
 ### Layer 4 schema drift (2026-09-12)
 
@@ -217,7 +217,7 @@ Rule: update CONTEXT.md's status sections in the same session/commit that lands 
 - `node scripts/verify-hardware-schema.js` — hardware spec tables and CHECK constraints. BROKEN — not safe to re-run; see 2026-09-19 bullet below.
 - `node scripts/test-layer3.js` — Layer 3 canonical schema (columns, CHECKs, indexes, enums). Requires the three Layer 3 tables to be empty; transactional cleanup. Safe to rerun.
 - `node scripts/test-layer4.js` — Layer 4 canonical schema (migration 011): 9-FK layout, CHECKs, uniqueness (ranks, component roles), `component_role` enum; fixture-based with final rollback. Safe to rerun.
-- `npm run test:unit` — pure unit tests for `src/recommendation/**` (Engine 1–2C); no database required.
+- `npm run test:unit` — pure unit tests for `src/recommendation/**` (Engines 1–4 + retention/Stage 1/2D/assembly; 619 tests as of 2026-09-21); no database required.
 - Engine 2C: `selectCandidatePool()` (`src/recommendation/candidates/select.js`) is the canonical pool selector; `pool.test.js` covers eligibility, variant-identity, dedup, global-only `EMPTY_CANDIDATE_POOL`, ordering, determinism, and non-responsibilities. Existing `candidates.test.js` fixtures updated to valid Engine 2B identities (GPU variants carry ids; non-GPU carry null).
 - Environmental limitations: fresh 001→011 migration cannot be verified (no isolated DB); DB-backed scripts need network access to Neon and a configured `DATABASE_URL`.
 - Fixture cleanup requirement: everything created must be removed/rolled back in reverse-dependency order; row counts return to baseline.
