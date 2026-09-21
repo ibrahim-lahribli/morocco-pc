@@ -8,7 +8,7 @@
  * Public surface (direct re-exports only - no wrappers, no logic):
  *
  *   validateEngine3Input()  - Step 1: structural validation and freezing of the
- *     nine-field Engine 3 input contract (see ./input).
+ *     ten-field Engine 3 input contract (see ./input).
  *   priceKey()              - Step 2: canonical price-carrier key
  *     (product_id | product_variant_id | component_role) (see ./prices).
  *   validatePrices()        - Step 2: price-carrier validation (see ./prices).

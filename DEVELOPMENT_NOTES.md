@@ -28,7 +28,7 @@ Commands verified to work in this repository/environment:
 | `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance constraints (fixture-based) | yes (47/47) |
 | `node scripts/verify-hardware-schema.js` | hardware schema tables/constraints | no — BROKEN, see TESTING LESSONS 2026-09-19 bullet |
 | `node scripts/test-layer3.js` | Layer 3 canonical schema functional tests | yes |
-| `node scripts/test-layer4.js` | Layer 4 canonical schema functional/integration tests (single transaction + SAVEPOINTs) | yes |
+| `node scripts/test-layer4.js` | Layer 4 canonical schema functional/integration tests (single transaction + SAVEPOINTs); single transaction + final ROLLBACK; targets DATABASE_URL, not yet migrated to the TEST_DATABASE_URL guard | yes |
 | `node scripts/verify-schema.js` | columns/types for core tables | yes |
 | `node scripts/verify-constraints.js` | indexes / primary keys | yes |
 | `node scripts/verify-fks.js` | foreign keys | yes |

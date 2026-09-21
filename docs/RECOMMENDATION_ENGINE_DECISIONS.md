@@ -58,7 +58,7 @@ no code change, no migration, no commit.
 Update 2026-09-19 (scoring decision pass): Decision 13 (below) is RESOLVED --
 the candidate-ranking score formula is adopted (candidate/build score split,
 STEP 1-3). Decision 14's score blocker is gone; it remains PROVISIONAL,
-blocked only on Decision 12 (still TBD). Decisions 1-11 and Decision 14's
+blocked only on Decision 12 (since RESOLVED 2026-09-20, see Final Status). Decisions 1-11 and Decision 14's
 rules are unchanged. Documentation only: no code change, no migration, no
 commit.
 
@@ -1918,8 +1918,8 @@ component_assessment.score is nullable (migration 008) — a row with a qualitat
   `build_candidate.score NUMERIC` (0..100 CHECK) plus
   `recommendation_result.rank INTEGER` already carry the values these formulas
   produce.
-* Final Status (below) updated: Decision 13 -> RESOLVED; Decision 12 unchanged
-  (TBD); Decision 14 unchanged (PROVISIONAL).
+* Final Status (below) updated: Decision 13 -> RESOLVED; Decision 12 (TBD at the time,
+  since RESOLVED 2026-09-20, see Final Status); Decision 14 unchanged (PROVISIONAL).
 
 ### Verdict for this pass
 
@@ -2091,7 +2091,7 @@ with the existing error codes.
 ### Impact
 
 * Decision 13's formula text is unchanged; its previously injected input now
-  has a producer. Decision 12/14 remain unchanged (Decision 12 still TBD).
+  has a producer. Decision 12/14 remain unchanged (Decision 12 since RESOLVED 2026-09-20, see Final Status).
 * Implemented in the same pass: `filtering/filter.js` (per-verdict count),
   `assembly/assemble.js` (per-build sum + verdict gate), `scoring/
   build-score.js` (batch fallback + B1 note resolution), with contract tests
@@ -2222,6 +2222,240 @@ VERDICT: RESOLVED - pairwise branch validation adopted (Engine 2D pair evaluator
 
 ---
 
+## Decision 17 — Query loader and orchestrator contract
+
+Date: 2026-09-21. Product decision pass recording the query data-loading layer's
+module split, the no-writes orchestrator contract, and the snapshot-transaction
+policy required before any wiring task lands. Documentation only: no query/
+module, no orchestrator/ module, no code change, no migration, no seed, no test
+change, no commit.
+
+### Status: RESOLVED
+
+### Decision
+
+1. **Two modules.** `query/` turns the `recommendation_query` row into the
+   Engine 2A input per Decision 10 (fail-closed use_case, required_roles
+   constant). `orchestrator/` owns the loaders plus pure composition — NO
+   writes. Persistence is a separate module (Decision 19).
+2. **Signature.** `runRecommendation({ db, queryId })` -> frozen
+   `{ query_id, scoring_model_id, builds }`. `db` is injected, never created
+   or closed. `nowMs` is the transaction timestamp: `runRecommendation`
+   issues `SELECT CURRENT_TIMESTAMP AS now` through the injected db as its
+   FIRST statement inside the D17.5 snapshot transaction (Decision 7 F3:
+   transaction-start time, constant for the transaction), converted with
+   `new Date(value).getTime()` — the same instant Stage 1 and the assessment
+   loader see. Still one DB-side time source; no injected clock, no JS clock.
+   REASON loaded_at was rejected as the source (G4): when the assessment
+   query returns zero rows, `loaded_at` is null and Engine 4 would fail
+   fast, but a pool with no assessment rows is a legitimate no-evidence case
+   (Decision 13's no-evidence penalty path), so the orchestrator must not
+   depend on assessment rows for its clock.
+3. **Wiring order.** query loader -> read transaction timestamp -> nowMs ->
+   2C `selectCandidatePool` -> Stage 1 `selectOfferPrices` ->
+   `loadFilteringContext` ONCE -> `filterCandidates` ->
+   `loadComponentAssessments` ONCE (reused by both scoring steps) ->
+   `computeCandidateScores` -> `retainTopKPerRole` ->
+   `assembleBuildsForRecommendation` (same filtering-context object) ->
+   `computeBuildScores`. `filterCandidatesForRecommendation` is NOT used (it
+   returns only results and hides the context Engine 3 also needs).
+   `retainTopKPerRole` only ever receives `filterCandidates` output from the
+   same run (closes the retention trust-boundary flag in
+   `DEVELOPMENT_NOTES.md`).
+4. **Failures.** `CandidateSelectionError` (existing vocabulary): blank/NULL
+   use_case (per Decision 10), missing query row (INVALID_INPUT), missing
+   scoring model (SCORING_MODEL_UNAVAILABLE). Zero builds is NOT an error:
+   `builds: []`.
+5. **Snapshot transaction.** All loaders run inside ONE transaction opened as
+   `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY`, because Stage 1 and the
+   assessment loader use CURRENT_TIMESTAMP (stable only per transaction,
+   Decision 7 F3) and no loader opens a transaction. A wrapper
+   `runRecommendationSnapshot(client, queryId)` in `orchestrator/` owns the
+   BEGIN and the end of the transaction; `runRecommendation` itself issues no
+   BEGIN. The Decision 19 write is a SEPARATE, later transaction.
+6. **Ignored v1 fields.** `recommendation_query.resolution`, `.priority` and
+   `.recommendation_profile_id` are accepted and IGNORED in v1 (no engine
+   consumer). Recorded so the gap versus the product pitch is explicit, not
+   silent. Priority variation is expected to come later via a different
+   `scoring_model_id`.
+
+### Gate G4 record
+
+* PASS on the arithmetic: `nowMs` must be a finite epoch-millisecond number
+  (`effective-score.js:125-136`, `validateNowMs`) and its only arithmetic use
+  is `ageDays = Math.max(0, (nowMs - assessment.assessed_at) / MS_PER_DAY)`
+  (`effective-score.js:213`). A `CURRENT_TIMESTAMP` value converted with
+  `new Date(value).getTime()` satisfies both.
+* `loadComponentAssessments` returns `loaded_at` as a strict UTC ISO string
+  from `CURRENT_TIMESTAMP AS loaded_at` (`load-assessments.js:80`, returned
+  at `:303`). Edge recorded as the rejection reason: when the request
+  returns ZERO assessment rows, `loaded_at` is `null` and `validateNowMs`
+  would fail fast before the no-evidence branch — a legitimate no-evidence
+  pool must not fail the clock, so `loaded_at` was rejected as the `nowMs`
+  source.
+
+### Rejected alternatives
+
+* One combined module.
+* Using `filterCandidatesForRecommendation`.
+* An orchestrator that persists.
+* Separate autocommit reads without a snapshot transaction.
+* Deriving `nowMs` from the assessment `loaded_at`.
+* An injected or JS-clock `nowMs`.
+
+### Impact
+
+* This decision is the wiring contract for the first orchestrator
+  implementation task; `filtering/pipeline.js` (B2-G) stays the public Engine
+  2D entry point but is bypassed by the orchestrator in favor of the two-stage
+  composition, because Engine 3 needs the context object.
+* Closes (by construction) the retention trust-boundary flag recorded in
+  `DEVELOPMENT_NOTES.md` (2026-09-20): the orchestrator is the only caller and
+  feeds `filterCandidates` output of the same run.
+
+### Verdict for this pass
+
+```text
+VERDICT: RESOLVED - query loader + no-writes orchestrator contract adopted (query/ + orchestrator/ module split; runRecommendation({ db, queryId }); nowMs = the snapshot-transaction CURRENT_TIMESTAMP, loaded_at rejected per G4 zero-row edge; one REPEATABLE READ READ ONLY snapshot transaction owned by runRecommendationSnapshot)
+```
+
+---
+
+
+## Decision 18 — Ranking (Engine 5a)
+
+Date: 2026-09-21. Product decision pass recording Engine 5a's pure ranking
+contract ahead of the wiring task. Documentation only: no ranking/ module, no
+code change, no migration, no commit.
+
+### Status: RESOLVED
+
+### Decision
+
+1. Pure module `ranking/`, in memory, before persistence.
+2. **Sort.** `build_score` DESC, then `total_price` ASC, then content
+   signature ASC (signature = component `product_id` + `product_variant_id`
+   in `EXPANSION_ORDER`). Rank is 1..n, no equal ranks. Build id / DFS order
+   never affect rank.
+3. Score and `total_price` are rounded to 2 decimals BEFORE comparing; the
+   rounded values are what is persisted.
+4. All builds Engine 3 emits are ranked; only the top 10 are persisted.
+   `TOP_N_PERSISTED = 10` is a code constant in `ranking/` (NOT a new
+   `scoring_model` config key; Decision 11 keeps `candidate_caps` a closed
+   two-key object). `max_builds_per_query` stays the assembly cap in
+   `scoring_model.configuration`.
+5. **Build compatibility_status [gated G1].** UNKNOWN if
+   `unknown_pairwise_count > 0` or any component status is UNKNOWN, else
+   PASS. Computed by ranking (assemble.js emits no build-level status). No
+   extra sort key (the score already carries the unknown penalty).
+6. The verdict-level masking flag (`DEVELOPMENT_NOTES.md` 2026-09-19) is
+   CLOSED for ranking: ranking consumes only assembled, pair-validated builds
+   (Decision 16). The residual effect — masked pairs can still affect which
+   candidates take retention slots — is accepted.
+7. **Supersedes** the architecture doc's stage-9 wording ("rank assigned
+   after persistence", `RECOMMENDATION_ENGINE_ARCHITECTURE.md:508-510`) and
+   its stage table placing build scoring before assembly (`:625-627`). The
+   architecture doc is NOT edited here (refresh deferred); the supersession
+   is recorded here only.
+
+### Derived finding (recorded, NOT executed)
+
+With retention wired, the first `max_builds_per_query` builds fix CPU,
+MOTHERBOARD, RAM, GPU, PSU and CASE at each role's top candidate and vary
+only CPU_COOLER and SSD_BOOT; raising `max_builds_per_query` does not fix
+this (each additional varying role needs roughly K times the cap).
+
+Evidence (file:line, derived, not executed): `assemble.js:71-81`
+(`EXPANSION_ORDER`), `:523` and `:547` (per-role option loops in incoming
+order — no sort in assemble.js), `:500-502` (traversal halt at
+`max_builds_per_query`), `retain.js:272` (retention sorts each role bucket
+by candidate score DESC before the K-cap).
+
+### Verdict for this pass
+
+```text
+VERDICT: RESOLVED - Engine 5a ranking contract adopted (pure ranking/; build_score DESC, total_price ASC, signature ASC; 2-decimal rounding before compare; TOP_N_PERSISTED = 10 code constant; G1-gated build compatibility_status; architecture stage-9 wording superseded)
+```
+
+---
+
+
+## Decision 19 — Persistence (Engine 5b)
+
+Date: 2026-09-21. Product decision pass recording the Engine 5b persistence
+contract ahead of implementation. Documentation only: no persistence module,
+no code change, no migration, no commit.
+
+### Status: RESOLVED
+
+### Decision
+
+1. One transaction per recommendation query, all-or-nothing. The writer
+   NEVER issues BEGIN/COMMIT itself; a thin wrapper owns commit, so tests
+   can wrap the writer in BEGIN ... ROLLBACK (`scripts/test-layer4.js`
+   pattern).
+2. A `recommendation_query` is an immutable request; a re-run means a NEW
+   query row. The writer locks the query row (`SELECT ... FOR UPDATE`) and
+   refuses (fail-fast) if `build_candidate` rows already exist for it. No
+   overwrite, no delete, no upsert.
+3. Zero builds: write nothing. Adding `status`/`completed_at` to
+   `recommendation_query` is recorded as FUTURE / non-blocking (no consumer
+   exists; Layer 4 is empty so this is the cheapest moment if a consumer
+   appears). No migration now.
+4. UUIDs for `build_candidate` / `build_component` / `recommendation_result`
+   rows are generated in JS and inserted explicitly (no reliance on
+   RETURNING order).
+5. **Mapping.** `build_candidate` <- total_price, score (build_score),
+   compatibility_status (Decision 18.5); `build_component` <- product_id,
+   product_variant_id, component_role, selected_price, currency, store_id,
+   price_checked_at; `recommendation_result` <- query id, build_candidate id,
+   rank; `explanation` NULL until Engine 6.
+6. NOT persisted in v1 (no destination column): `unknown_pairwise_count`,
+   component category and status, verdict reasons/relationships,
+   `candidate_score`, build currency. `store_offer_id` stays FUTURE (011:33).
+7. Engine 6 must generate explanation text in memory BEFORE the write; the
+   ranked in-memory result must therefore leave room for it. Engine 4 will
+   later need to expose score contributions (additive change).
+8. Write tests must use `scripts/lib/db-url.js` (TEST_DATABASE_URL) and a
+   rollback pattern; SQL shape is also covered by fake-client unit tests.
+
+### Rejected alternatives
+
+* Overwrite/upsert on re-run.
+* Writer-owned commit.
+* DB-generated ids with RETURNING mapping.
+* Persisting all builds.
+
+### Verdict for this pass
+
+```text
+VERDICT: RESOLVED - Engine 5b persistence contract adopted (one all-or-nothing transaction per query; wrapper-owned commit; immutable query rows with FOR UPDATE re-run guard; JS-generated UUIDs; v1 column mapping recorded)
+```
+
+---
+
+## Decision 20 — Assembly diversity
+
+Date: 2026-09-21.
+
+### Status: OPEN — REQUIRED before Engine 5b persistence is built
+
+Problem: see the derived finding in Decision 18.4 — with retention wired,
+the first `max_builds_per_query` builds fix CPU, MOTHERBOARD, RAM, GPU, PSU
+and CASE at each role's top candidate and vary only CPU_COOLER and SSD_BOOT;
+raising `max_builds_per_query` does not fix this (each additional varying
+role needs roughly K times the cap).
+
+Constraints recorded (no options, no recommendation in this pass):
+
+* Decision 11's `candidate_caps` stays a closed two-key object.
+* Raising `max_builds_per_query` alone does not solve it.
+
+The decision is opened after the no-writes orchestrator (Decision 17)
+measures it on the seed. Do NOT decide it here.
+
+---
+
 ## Final Status
 
 ```text
@@ -2232,6 +2466,10 @@ Selected semantics: A — Hard upper bound
 Tie-break: existing compareCandidates() authorized — YES
 Decision 15: RESOLVED (UNKNOWN pairwise-count producer, adopted 2026-09-19)
 Decision 16: RESOLVED (pairwise branch validation inside Engine 3's DFS, adopted 2026-09-21)
+Decision 17: RESOLVED (query loader and orchestrator contract, adopted 2026-09-21)
+Decision 18: RESOLVED (ranking / Engine 5a, adopted 2026-09-21)
+Decision 19: RESOLVED (persistence / Engine 5b, adopted 2026-09-21)
+Decision 20: OPEN (assembly diversity — REQUIRED before Engine 5b persistence; opened 2026-09-21, to be decided after the dry-run orchestrator measures it on the seed)
 ```
 
 Unambiguous one-sentence semantics for the implementation task:
