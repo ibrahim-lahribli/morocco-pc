@@ -2377,6 +2377,65 @@ by candidate score DESC before the K-cap).
 VERDICT: RESOLVED - Engine 5a ranking contract adopted (pure ranking/; build_score DESC, total_price ASC, signature ASC; 2-decimal rounding before compare; TOP_N_PERSISTED = 10 code constant; G1-gated build compatibility_status; architecture stage-9 wording superseded)
 ```
 
+### Decision 18 addendum (2026-09-21) - Engine 5a implementation record
+
+Recorded when Engine 5a was implemented as the pure module
+`src/recommendation/ranking/` (`rank.js` + public barrel `index.js`, unit
+tested with node:test; no DB access, no persistence, no orchestrator wiring).
+Additive only: no earlier decision text is edited.
+
+- **D1 - Signature encoding + comparison.** For each role in
+  `EXPANSION_ORDER` the segment is `ROLE:product_id:variant_or_empty`
+  (null/absent variant -> empty string), segments joined with `|`; an omitted
+  GPU still contributes its empty slot (`GPU::`). Signatures are compared
+  strictly by UTF-16 code unit (`<` / `>`), NEVER `localeCompare`.
+- **D2 - Rounding rule.** `round2` rounds half-up on the shortest decimal
+  representation (string-exponent technique: shift the decimal point of
+  `String(x)` two places right, round the integer, scale back; guard: if
+  `String(x)` contains `e`, fall back to `Math.round(x * 100) / 100`).
+  `build_score` and `total_price` are rounded BEFORE comparing; the rounded
+  values are what the ranked entry carries (Decision 18.3) and what 5b
+  persists.
+- **D3 - Contiguous ranks.** Ranks are 1..k with no equal ranks and no gaps;
+  discovery order and build ids never influence rank.
+- **D4 - Status value set.** `compatibility_status` emits ONLY `PASS` or
+  `UNKNOWN` (Decision 18.5, G1): `UNKNOWN` iff `unknown_pairwise_count > 0`
+  or any component status is `UNKNOWN`, else `PASS`. No other value exists.
+- **D5 - Duplicate-signature fail-fast.** Two input builds carrying the same
+  signature fail fast (`INVALID_FIELD_VALUE` on field `builds`), because rank
+  would otherwise depend on input order.
+- **D6 - Explanation placeholder.** Every ranked entry carries
+  `explanation: null` until Engine 6 (Decision 19.5); the ranked in-memory
+  result leaves the field in place for Engine 6's pre-write generation.
+- **D7 - 5b rule: fail-fast on existing rows.** The persistence writer
+  (Decision 19.2) locks the query row and refuses (fail-fast) when
+  `build_candidate` rows already exist for it; no overwrite, no delete, no
+  upsert.
+- **D8 - 5b rule: zero builds write nothing.** A zero-build pass persists
+  nothing (Decision 19.3); zero builds is a valid outcome, not an error.
+- **D9 - 5b rule: default isolation, no retry.** The write transaction runs
+  at the default isolation level (no explicit escalation) and never retries
+  on failure; commit stays wrapper-owned (Decision 19.1).
+- **total_price rule for 5b.** `build_candidate.total_price` is the `round2`
+  of the Engine 3 build total (the rounded value carried by the ranked
+  entry); 5b asserts its equality with the sum of the persisted component
+  `selected_price` values before writing (all-or-nothing guard).
+- **No migration 012.** No new migration is added for ranking/persistence v1:
+  the lossy v1 mapping (Decision 19.6, unpersisted fields) is accepted, and
+  Engine 6 generates explanation text in memory BEFORE the write (Decision
+  19.7) instead of persisting generation inputs.
+- **Engine 4 contributions API.** The per-component score-contribution API
+  needed for explanation text will be built together with Engine 6 (Decision
+  19.7) as an additive Engine 4 change; Engine 5a touches no scoring code.
+
+Implementation notes (verified 2026-09-22, `npm run test:unit` = 724 pass /
+0 fail, +55 new): `EXPANSION_ORDER` is imported from the assembly public
+barrel (never duplicated); error vocabulary is the existing
+`CandidateSelectionError` / `ERROR_CODES` contract (absent build-level fields
+-> `MISSING_REQUIRED_FIELD`, present-but-invalid -> `INVALID_FIELD_VALUE`);
+outputs are deeply frozen and inputs are never mutated; ranked entries
+reference the original build objects by identity.
+
 ---
 
 
