@@ -2495,23 +2495,77 @@ VERDICT: RESOLVED - Engine 5b persistence contract adopted (one all-or-nothing t
 
 ## Decision 20 — Assembly diversity
 
-Date: 2026-09-21.
+Date: opened 2026-09-21; resolved 2026-09-22 after measurement on the
+15-product minimal seed (assembly-only at cap 25 / 100 / 100000, then
+assembly + scoring + ranking at cap 100). Documentation only: no code
+change, no commit.
 
-### Status: OPEN — REQUIRED before Engine 5b persistence is built
+### Status: RESOLVED — unblocks Engine 5b persistence
 
-Problem: see the derived finding in Decision 18.4 — with retention wired,
-the first `max_builds_per_query` builds fix CPU, MOTHERBOARD, RAM, GPU, PSU
-and CASE at each role's top candidate and vary only CPU_COOLER and SSD_BOOT;
-raising `max_builds_per_query` does not fix this (each additional varying
-role needs roughly K times the cap).
+### Decision
 
-Constraints recorded (no options, no recommendation in this pass):
+1. **Finding.** Raising `max_builds_per_query` alone (O1) does not fix
+   diversity. Confirmed by measurement on the 15-product minimal seed:
+   GAMING at cap=100 enumerated full diversity (2 CPU / 2 MB / 2 GPU /
+   4 CPU-GPU pairs across 113 valid builds) but the ranked top-10 still
+   collapsed to 1 CPU / 2 GPU pairs; OFFICE collapsed to 1 CPU-GPU pairing
+   in 7/10 top slots. Cause: `build_score` spreads widely across builds
+   (GAMING 27.37-point range, OFFICE 20.62-point range), so one CPU/config
+   dominates nearly every combination of trailing roles — ranking sorts
+   correctly by score, but score-correctness and diversity are different
+   objectives. Decision 18's Derived finding (recorded, NOT executed)
+   remains valid as an enumeration-shape observation; measurement showed
+   enumeration can be diverse while the persistable top-10 is not.
 
-* Decision 11's `candidate_caps` stays a closed two-key object.
-* Raising `max_builds_per_query` alone does not solve it.
+2. **Adopted approach: O4**, applied AFTER ranking, not by changing
+   assembly's cap. Pipeline:
 
-The decision is opened after the no-writes orchestrator (Decision 17)
-measures it on the seed. Do NOT decide it here.
+   ```text
+   Engine 3 assembly (cap unchanged)
+     -> Engine 4 scoring
+     -> rankBuilds (Decision 18, unchanged full ranked list)
+     -> NEW: post-ranking pair-diversity selection
+     -> Engine 5b persists the selected set (ranks 1..k contiguous)
+   ```
+
+   `rankBuilds` continues producing the full deterministic ranked list
+   unchanged (Decision 18 text is not edited). A new post-ranking
+   selection step walks the ranked list top-down and skips any build that
+   would exceed a diversity cap on the pair
+   `(CPU product_id, GPU product_variant_id-or-omitted)`, until 10 survive
+   or the ranked list is exhausted. An omitted GPU counts as its own pair
+   value. Skipped builds keep their original rank number gap-free in
+   internal tracking but do not receive a persisted rank; persisted ranks
+   are renumbered 1..k contiguous per the already-adopted Decision 18
+   addendum rule. `k` may be less than 10 if fewer than 10 builds survive.
+
+3. **Diversity cap value.** A code constant (same pattern as
+   `TOP_N_PERSISTED`, per Decision 11's closed `candidate_caps` and the
+   O2/O4 mechanics discussion) — `MAX_PER_PAIR = 3` (at most 3 persisted
+   builds may share the same `(CPU, GPU)` pair, where an omitted GPU
+   counts as its own pair value). This is NOT a new `scoring_model`
+   configuration key. The value is a starting point chosen from the two
+   measured use cases, not derived from a formal target, and may need
+   revisiting once real-market catalog data exists.
+
+4. **What this does NOT change.** Assembly's `max_builds_per_query` stays
+   whatever it is today (do not bundle a cap change into this decision).
+   Decision 16 pairwise validation is unaffected. Decision 18 ranking
+   algorithm and rank formula are unaffected (the new step consumes ranked
+   output, does not alter it). `rankBuilds.top_n` remains "first 10 of
+   ranked"; Engine 5b must persist the post-selection set, not that slice.
+
+5. **Residual open question (future work, not blocking Engine 5b).** This
+   was measured only on the 15-product minimal seed; a real-market catalog
+   with more per-role options may produce different score spread and
+   pairing behavior, and `MAX_PER_PAIR` may need to become use-case- or
+   catalog-size-aware later.
+
+### Verdict for this pass
+
+```text
+VERDICT: RESOLVED - post-ranking (CPU, GPU) pair diversity selection adopted (O4; MAX_PER_PAIR = 3 code constant; rankBuilds unchanged; assembly cap unchanged)
+```
 
 ---
 
@@ -2528,7 +2582,7 @@ Decision 16: RESOLVED (pairwise branch validation inside Engine 3's DFS, adopted
 Decision 17: RESOLVED (query loader and orchestrator contract, adopted 2026-09-21)
 Decision 18: RESOLVED (ranking / Engine 5a, adopted 2026-09-21)
 Decision 19: RESOLVED (persistence / Engine 5b, adopted 2026-09-21)
-Decision 20: OPEN (assembly diversity — REQUIRED before Engine 5b persistence; opened 2026-09-21, to be decided after the dry-run orchestrator measures it on the seed)
+Decision 20: RESOLVED (post-ranking (CPU, GPU) pair diversity selection / O4, MAX_PER_PAIR = 3 code constant, adopted 2026-09-22)
 ```
 
 Unambiguous one-sentence semantics for the implementation task:
