@@ -2501,21 +2501,26 @@ assembly + scoring + ranking at cap 100). Documentation only: no code
 change, no commit.
 
 ### Status: RESOLVED — unblocks Engine 5b persistence
+CONFIRMED BY MEASUREMENT (2026-09-23) — reconciled against both dated DEVELOPMENT_NOTES.md entries: "2026-09-23 — Decision 20 real measurement (measure-orchestrator.js first execution)" and "2026-09-23 (run 2) — Decision 20 top-10 (CPU, GPU) pair concentration (measure-orchestrator.js)".
 
 ### Decision
 
 1. **Finding.** Raising `max_builds_per_query` alone (O1) does not fix
    diversity. Confirmed by measurement on the 15-product minimal seed:
-   GAMING at cap=100 enumerated full diversity (2 CPU / 2 MB / 2 GPU /
-   4 CPU-GPU pairs across 113 valid builds) but the ranked top-10 still
-   collapsed to 1 CPU / 2 GPU pairs; OFFICE collapsed to 1 CPU-GPU pairing
-   in 7/10 top slots. Cause: `build_score` spreads widely across builds
-   (GAMING 27.37-point range, OFFICE 20.62-point range), so one CPU/config
+   GAMING at raised cap enumerated full diversity (2 CPU / 2 MB / 2 GPU /
+   4 CPU-GPU pairs across 113 valid builds) but GAMING's own ranked top-10
+   holds 1 distinct CPU product_id and 2 distinct GPU pair values (largest
+   single pair 6 of 10); OFFICE's ranked top-10 holds 9 of 10 slots on one
+   (CPU, GPU) pair (Seed Ryzen 5 8600G / GPU omitted — a stronger case for
+   the cap than the 7 of 10 originally stated). Cause: `build_score` spreads
+   widely across builds (GAMING 27.13-point range, OFFICE 20.46-point range), so one CPU/config
    dominates nearly every combination of trailing roles — ranking sorts
    correctly by score, but score-correctness and diversity are different
    objectives. Decision 18's Derived finding (recorded, NOT executed)
    remains valid as an enumeration-shape observation; measurement showed
    enumeration can be diverse while the persistable top-10 is not.
+   (Known minor artifact, untouched: the two verification runs drift ~0.01 on
+   means/extremes with gaps unchanged; unexplained, not a correctness issue.)
 
 2. **Adopted approach: O4**, applied AFTER ranking, not by changing
    assembly's cap. Pipeline:
