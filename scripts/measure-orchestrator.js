@@ -7,6 +7,17 @@
 // branch, and MEASURE the Decision 20 assembly-diversity question. This script
 // decides nothing: it prints facts and a factual summary only.
 //
+// Second measurement (added 2026-09-23, run 2): the number Decision 20 section
+// 1 actually turns on - the (CPU, GPU) pair concentration of the ranked top-10.
+// Per query and per cap variant it ranks that run's builds with the real
+// Decision 18 rankBuilds(), takes the first TOP_N_PERSISTED (10) entries, groups
+// them by the Decision 20 section 2 pair `(CPU product_id, GPU
+// product_variant_id-or-OMITTED)` read from each build's component list (the
+// same by-role lookup roleValue() already uses) and cross-checked against the
+// entry's Decision 18 signature, then prints the distinct-pair count, the
+// per-pair counts and a keyword comparison against Decision 20 section 1's
+// wording. Facts only; no recommendation is derived.
+//
 // Safety contract (mirrors scripts/lib/db-url.js):
 //   * Target is TEST_DATABASE_URL only. getWriteTestDbUrl() throws unless
 //     TEST_DATABASE_URL is set, DATABASE_URL is set, and the two hosts differ
@@ -17,6 +28,10 @@
 //   * Writes: exactly two INSERTs into recommendation_query (one transaction)
 //     and one DELETE of those same captured ids in a finally block. Nothing
 //     else is written; the orchestrator itself writes nothing (Decision 17).
+//   * Reads add exactly two seed-scoped, read-only SELECTs (product name /
+//     product_variant sku) used only as DISPLAY LABELS for the measured pairs;
+//     no other statement is issued beyond the preflight counts and the reads
+//     the orchestrator's own loaders/scoring already perform.
 //   * Preflight READ-ONLY counts must match the seed exactly (15 Seed %
 //     products, 1 active seed-minimal-v1 model, 16 seed offers, 25 seed
 //     assessments, 0 recommendation_query rows) - the run aborts otherwise,
@@ -37,6 +52,7 @@ const { Client } = require('pg');
 
 const { getWriteTestDbUrl } = require('./lib/db-url');
 const { runRecommendationSnapshot } = require('../src/recommendation/orchestrator');
+const { rankBuilds, TOP_N_PERSISTED } = require('../src/recommendation/ranking');
 const { EXPANSION_ORDER } = require('../src/recommendation/assembly');
 const { SELECT_SCORING_MODEL_SQL } = require('../src/recommendation/scoring');
 
@@ -48,6 +64,30 @@ const QUERIES = [
   { useCase: 'GAMING', budget: '15000' },
   { useCase: 'OFFICE', budget: '10000' },
 ];
+
+/**
+ * Decision 20 section 1's top-10 claims, exactly as the doc words them, with a
+ * projector onto the measured concentration. Nothing beyond the count the claim
+ * names is inferred; `claimed` is the doc's number, never a target set here.
+ */
+const DECISION_20_TOP10_CLAIMS = {
+  GAMING: [
+    { label: 'distinct CPU product_ids in the top-10', claimed: 1, measure: (c) => c.distinctCpus },
+    { label: 'distinct GPU pair values in the top-10', claimed: 2, measure: (c) => c.distinctGpuValues },
+  ],
+  OFFICE: [
+    { label: 'top-10 slots held by the largest single pair', claimed: 7, measure: (c) => c.largestPairCount },
+  ],
+};
+
+/** The same claims in the doc's own words (Decision 20 section 1). */
+const DECISION_20_TOP10_TEXT = {
+  GAMING: 'the ranked top-10 still collapsed to 1 CPU / 2 GPU pairs',
+  OFFICE: 'OFFICE collapsed to 1 CPU-GPU pairing in 7/10 top slots',
+};
+
+/** Printed comparison band: delta 0 = exact, |delta| <= close = close, else off. */
+const CLAIM_BAND = { exact: 0, close: 2 };
 
 /** Exact seed expectations (database/seeds/001_minimal_builds.sql). */
 const EXPECTED = { products: 15, models: 1, offers: 16, assessments: 25, queries: 0 };
@@ -172,30 +212,6 @@ function withRaisedCap(client, cap) {
 
 const round2 = (value) => Math.round(value * 100) / 100;
 
-/** Decision 18.2 content signature: components in EXPANSION_ORDER. */
-function signatureOf(build) {
-  const byRole = new Map(build.components.map((component) => [component.component_role, component]));
-  return EXPANSION_ORDER.map((role) => {
-    const component = byRole.get(role);
-    if (!component) return '';
-    return component.product_id + (component.product_variant_id || '');
-  }).join('|');
-}
-
-/**
- * Decision 18.2 sort applied HERE ONLY (no ranking module exists yet):
- * build_score DESC, total_price ASC, signature ASC, all on 2-decimal rounds.
- */
-function rankBuilds(builds) {
-  return [...builds].sort((a, b) => {
-    const scoreDelta = round2(b.build_score) - round2(a.build_score);
-    if (scoreDelta !== 0) return scoreDelta;
-    const priceDelta = round2(a.total_price) - round2(b.total_price);
-    if (priceDelta !== 0) return priceDelta;
-    return signatureOf(a) < signatureOf(b) ? -1 : 1;
-  });
-}
-
 /** One role's value in a build; '(omitted)' is a legitimate value (GPU-omit). */
 function roleValue(build, role) {
   const component = build.components.find((entry) => entry.component_role === role);
@@ -203,6 +219,143 @@ function roleValue(build, role) {
   return component.product_variant_id
     ? component.product_id + ' variant ' + component.product_variant_id
     : component.product_id;
+}
+
+/**
+ * Decision 20 section 2 pair values for a build, read from the build's component
+ * list with the same by-role lookup roleValue() / structureRows() already use.
+ *
+ *   withGpuVariant = true  -> the Decision 20 pair: (CPU product_id, GPU
+ *                             product_variant_id-or-OMITTED). An omitted GPU
+ *                             (iGPU path) is its own pair value, exactly as the
+ *                             decision words it.
+ *   withGpuVariant = false -> the coarser (CPU product_id, GPU product_id)
+ *                             reading, which merges every variant of one GPU
+ *                             product into a single pair.
+ */
+function pairParts(build, withGpuVariant) {
+  const byRole = new Map(build.components.map((component) => [component.component_role, component]));
+  const cpu = byRole.get('CPU');
+  const gpu = byRole.get('GPU');
+  const cpuId = cpu === undefined ? '(no CPU component)' : String(cpu.product_id);
+  let gpuValue;
+  if (gpu === undefined) {
+    gpuValue = 'OMITTED';
+  } else if (!withGpuVariant) {
+    gpuValue = String(gpu.product_id);
+  } else if (gpu.product_variant_id === null || gpu.product_variant_id === undefined) {
+    gpuValue = '(no GPU variant)';
+  } else {
+    gpuValue = String(gpu.product_variant_id);
+  }
+  return { cpuId, gpuValue, key: cpuId + '||' + gpuValue };
+}
+
+/**
+ * The same two pair values read out of the ranked entry's Decision 18 signature
+ * (`ROLE:product_id:variant_or_empty`, an omitted GPU being its empty slot
+ * `GPU::`). Used ONLY as a cross-check that the component-list path above agrees
+ * with what rankBuilds() itself computed - never as the reported key.
+ */
+function signaturePairParts(entry) {
+  const byRole = Object.create(null);
+  for (const segment of entry.signature.split('|')) {
+    const first = segment.indexOf(':');
+    const second = segment.indexOf(':', first + 1);
+    byRole[segment.slice(0, first)] = {
+      productId: segment.slice(first + 1, second),
+      variant: segment.slice(second + 1),
+    };
+  }
+  const cpu = byRole.CPU === undefined ? { productId: '' } : byRole.CPU;
+  const gpu = byRole.GPU === undefined ? { productId: '', variant: '' } : byRole.GPU;
+  let gpuValue;
+  if (gpu.productId === '') {
+    gpuValue = 'OMITTED';
+  } else if (gpu.variant === '') {
+    gpuValue = '(no GPU variant)';
+  } else {
+    gpuValue = gpu.variant;
+  }
+  return { cpuId: cpu.productId === '' ? '(no CPU component)' : cpu.productId, gpuValue };
+}
+
+/**
+ * Histogram of one ranked list's top-10 over one pair definition. Facts only.
+ * Histogram rows are ordered count DESC, then pair key by code unit, so the
+ * output is deterministic and never depends on discovery order.
+ */
+function topPairConcentration(ranked, withGpuVariant) {
+  const top = ranked.slice(0, TOP_N_PERSISTED);
+  const pairs = new Map();
+  const cpus = new Set();
+  const gpuValues = new Set();
+  let crossCheckMismatches = 0;
+  for (const entry of top) {
+    const parts = pairParts(entry.build, withGpuVariant);
+    if (withGpuVariant) {
+      const fromSignature = signaturePairParts(entry);
+      if (parts.cpuId !== fromSignature.cpuId || parts.gpuValue !== fromSignature.gpuValue) {
+        crossCheckMismatches += 1;
+      }
+    }
+    cpus.add(parts.cpuId);
+    gpuValues.add(parts.gpuValue);
+    const existing = pairs.get(parts.key);
+    if (existing === undefined) {
+      pairs.set(parts.key, { cpuId: parts.cpuId, gpuValue: parts.gpuValue, count: 1 });
+    } else {
+      existing.count += 1;
+    }
+  }
+  const rows = [...pairs.values()].sort((left, right) => {
+    if (left.count !== right.count) return right.count - left.count;
+    const leftKey = left.cpuId + '||' + left.gpuValue;
+    const rightKey = right.cpuId + '||' + right.gpuValue;
+    if (leftKey < rightKey) return -1;
+    if (leftKey > rightKey) return 1;
+    return 0;
+  });
+  return {
+    rankedCount: ranked.length,
+    sliceSize: top.length,
+    distinctPairs: rows.length,
+    distinctCpus: cpus.size,
+    distinctGpuValues: gpuValues.size,
+    largestPairCount: rows.length > 0 ? rows[0].count : 0,
+    rows,
+    crossCheckMismatches,
+    crossCheckTotal: withGpuVariant ? top.length : 0,
+  };
+}
+
+/**
+ * Decision 20 section 1's number compared against a measurement. The band is
+ * printed with every comparison: delta 0 -> HOLDS EXACTLY, |delta| <= 2 ->
+ * CLOSE, anything else -> WAY OFF. A number comparison, not a verdict on the
+ * decision itself.
+ */
+function claimComparison(actual, claimed) {
+  const delta = actual - claimed;
+  let verdict;
+  if (delta === CLAIM_BAND.exact) {
+    verdict = 'HOLDS EXACTLY (delta 0)';
+  } else if (Math.abs(delta) <= CLAIM_BAND.close) {
+    verdict = 'CLOSE (delta ' + (delta > 0 ? '+' : '') + delta + ')';
+  } else {
+    verdict = 'WAY OFF (delta ' + (delta > 0 ? '+' : '') + delta + ')';
+  }
+  return { actual, claimed, delta, verdict };
+}
+
+/** Display text for one pair: seed name / SKU when the read-only lookup has it. */
+function pairText(cpuId, gpuValue, labels, withGpuVariant) {
+  const cpuText = 'CPU ' + (labels.productNames.get(cpuId) || cpuId) + ' (' + cpuId + ')';
+  if (gpuValue === 'OMITTED') return cpuText + ' | GPU OMITTED (no GPU component)';
+  const gpuLabel = withGpuVariant
+    ? (labels.variantSkus.get(gpuValue) || gpuValue)
+    : (labels.productNames.get(gpuValue) || gpuValue);
+  return cpuText + ' | GPU ' + gpuLabel + ' (' + gpuValue + ')';
 }
 
 /**
@@ -271,18 +424,102 @@ function spreadText(label, spread) {
     + ' | distinct ' + spread.distinct
     + ' | gap ' + spread.gap.toFixed(2);
 }
+/**
+ * Read-only display labels (seed product names / variant SKUs) for the ids that
+ * appear in the measured pairs. Two seed-scoped SELECTs; no parameter, no write.
+ */
+async function loadPairLabels(client) {
+  const products = await client.query("SELECT id, name FROM product WHERE name LIKE 'Seed %'");
+  const variants = await client.query(
+    "SELECT v.id, v.sku FROM product_variant v JOIN product p ON p.id = v.product_id"
+    + " WHERE p.name LIKE 'Seed %'");
+  return {
+    productNames: new Map(products.rows.map((row) => [row.id, row.name])),
+    variantSkus: new Map(variants.rows.map((row) => [row.id, row.sku])),
+  };
+}
+
+/**
+ * Print one run variant's top-10 (CPU, GPU) pair concentration: the Decision 20
+ * section 2 pair definition first (that IS what MAX_PER_PAIR / selectDiverseTop
+ * cap on), then the coarser product-keyed reading, then - for the raised-cap
+ * variant only - the 10 ranked rows the histogram was built from. Returns the
+ * Decision-20-definition concentration so the summary can reuse it.
+ */
+function printPairConcentration(useCase, capTag, ranked, labels, withListing) {
+  const primary = topPairConcentration(ranked, true);
+  const coarse = topPairConcentration(ranked, false);
+
+  console.log('    top-10 (CPU, GPU) pair concentration (' + capTag + '; real rankBuilds,'
+    + ' TOP_N_PERSISTED = ' + TOP_N_PERSISTED + '):');
+  console.log('      ranked ' + primary.rankedCount + ' build(s); top-10 slice ' + primary.sliceSize
+    + ' (rank 1..' + primary.sliceSize + '); component-list pair keys cross-checked against the'
+    + ' Decision 18 signature: ' + (primary.sliceSize - primary.crossCheckMismatches) + '/'
+    + primary.crossCheckTotal + ' identical');
+  if (primary.crossCheckMismatches > 0) {
+    console.log('      WARNING: ' + primary.crossCheckMismatches
+      + ' top-10 pair key(s) disagree between the component list and the signature');
+  }
+  if (primary.sliceSize < TOP_N_PERSISTED) {
+    console.log('      fewer than ' + TOP_N_PERSISTED + ' valid builds (' + primary.sliceSize
+      + '), so the Decision 20 top-10 arithmetic below is NOT comparable');
+  }
+  console.log('      Decision 20 pair definition (CPU product_id, GPU product_variant_id-or-OMITTED):');
+  console.log('        distinct pairs ' + primary.distinctPairs
+    + ' | distinct CPU product_ids ' + primary.distinctCpus
+    + ' | distinct GPU pair values ' + primary.distinctGpuValues);
+  console.log('        pair counts, descending:');
+  for (const row of primary.rows) {
+    console.log('          ' + String(row.count).padStart(2) + ' of ' + primary.sliceSize + '  '
+      + pairText(row.cpuId, row.gpuValue, labels, true));
+  }
+
+  const claims = DECISION_20_TOP10_CLAIMS[useCase] || [];
+  if (claims.length === 0) {
+    console.log('      Decision 20 section 1: no top-10 claim is recorded for this use case');
+  } else {
+    console.log('      Decision 20 section 1, as written: "' + DECISION_20_TOP10_TEXT[useCase] + '"');
+    for (const claim of claims) {
+      const comparison = claimComparison(claim.measure(primary), claim.claimed);
+      console.log('        ' + claim.label + ': actual ' + comparison.actual
+        + ' | claimed ' + comparison.claimed + ' -> ' + comparison.verdict);
+    }
+  }
+
+  console.log('      coarser reading (CPU product_id, GPU product_id) - the variants of one GPU product'
+    + ' merge into one pair:');
+  console.log('        distinct pairs ' + coarse.distinctPairs + '; pair counts, descending:');
+  for (const row of coarse.rows) {
+    console.log('          ' + String(row.count).padStart(2) + ' of ' + coarse.sliceSize + '  '
+      + pairText(row.cpuId, row.gpuValue, labels, false));
+  }
+
+  if (withListing) {
+    console.log('      top-10 listing (rank | build_score | total_price | Decision 20 pair):');
+    for (const entry of ranked.slice(0, TOP_N_PERSISTED)) {
+      const parts = pairParts(entry.build, true);
+      console.log('        rank ' + String(entry.rank).padStart(2)
+        + ' | score ' + entry.build_score.toFixed(2)
+        + ' | total ' + entry.total_price.toFixed(2)
+        + ' | ' + pairText(parts.cpuId, parts.gpuValue, labels, true));
+    }
+  }
+
+  return primary;
+}
+
 // ---------------------------------------------------------------------------
 // Reporting (plain text; facts only).
 // ---------------------------------------------------------------------------
 
 const SUMMARY = [];
 
-function printQueryReport(query, queryId, runs) {
+function printQueryReport(query, queryId, runs, labels) {
   const title = 'query ' + query.useCase + ' | budget ' + query.budget + ' MAD | id ' + queryId;
   console.log('');
   console.log('== ' + title);
 
-  const record = { useCase: query.useCase, runs: [], rank1: null };
+  const record = { useCase: query.useCase, runs: [], pairConcentrations: [], rank1: null };
   for (const run of runs) {
     const builds = run.result.builds;
     const spread = scoreSpread(builds);
@@ -304,23 +541,39 @@ function printQueryReport(query, queryId, runs) {
     } else {
       console.log('    structure: (no builds)');
     }
+
+    // Top-10 concentration for THIS run variant: rank the same build set the
+    // structure rows above describe, with the real Decision 18 module. The
+    // 10-row listing is printed for the raised-cap variant only - that is the
+    // Decision-20-comparable enumeration (cap=100 in the doc, 100000 here; both
+    // exhaust the seed, GAMING 113 builds / OFFICE 18).
+    const rankedBuilds = rankBuilds({ builds }).ranked;
+    const concentration = printPairConcentration(
+      query.useCase,
+      run.cap === null ? 'configured cap' : 'raised cap ' + run.cap,
+      rankedBuilds,
+      labels,
+      run.cap !== null
+    );
+    record.pairConcentrations.push({ label: run.label, cap: run.cap, concentration });
+
     record.runs.push({ label: run.label, cap: run.cap, buildCount: builds.length, spread, varying });
   }
 
-  const ranked = runs.map((run) => ({ run, rank1: rankBuilds(run.result.builds)[0] || null }));
+  const ranked = runs.map((run) => ({ run, rank1: rankBuilds({ builds: run.result.builds }).ranked[0] || null }));
   const capped = ranked[0];
   const raised = ranked[1];
   console.log('');
-  console.log('  rank 1 (Decision 18 sort, applied in this script only - no ranking module exists):');
+  console.log('  rank 1 (real Decision 18 ranking/ module):');
   if (capped.rank1 && raised.rank1) {
     const sameScore = round2(capped.rank1.build_score) === round2(raised.rank1.build_score);
-    const sameSignature = signatureOf(capped.rank1) === signatureOf(raised.rank1);
+    const sameSignature = capped.rank1.signature === raised.rank1.signature;
     console.log('    configured cap : score ' + capped.rank1.build_score.toFixed(2)
       + ' | total ' + capped.rank1.total_price.toFixed(2)
-      + ' | signature ' + signatureOf(capped.rank1));
+      + ' | signature ' + capped.rank1.signature);
     console.log('    raised cap     : score ' + raised.rank1.build_score.toFixed(2)
       + ' | total ' + raised.rank1.total_price.toFixed(2)
-      + ' | signature ' + signatureOf(raised.rank1));
+      + ' | signature ' + raised.rank1.signature);
     console.log('    rank 1 is ' + (sameSignature ? 'THE SAME build' : 'a DIFFERENT build')
       + ' capped vs uncapped (score ' + (sameScore ? 'equal' : 'differs') + ')');
     record.rank1 = { sameSignature, sameScore };
@@ -365,6 +618,19 @@ function printSummary() {
       + (capped.varying.length > 0 ? capped.varying.join(', ') : '(none)'));
     console.log('    varying roles at the raised cap:     '
       + (raised.varying.length > 0 ? raised.varying.join(', ') : '(none)'));
+    const raisedPair = record.pairConcentrations.find((entry) => entry.cap !== null);
+    if (raisedPair) {
+      const c = raisedPair.concentration;
+      console.log('    raised cap top-10 pairs (Decision 20 definition): ' + c.distinctPairs
+        + ' distinct | largest pair ' + c.largestPairCount + ' of ' + c.sliceSize
+        + ' | distinct CPU product_ids ' + c.distinctCpus
+        + ' | distinct GPU pair values ' + c.distinctGpuValues);
+      for (const claim of DECISION_20_TOP10_CLAIMS[record.useCase] || []) {
+        const comparison = claimComparison(claim.measure(c), claim.claimed);
+        console.log('    Decision 20 "' + claim.label + '": actual ' + comparison.actual
+          + ' | claimed ' + comparison.claimed + ' -> ' + comparison.verdict);
+      }
+    }
   }
   console.log('  With 2 candidates per role on this seed, the last roles of EXPANSION_ORDER are expected');
   console.log('  to vary inside 25 builds (mixed-radix discovery order); that is not a contradiction of');
@@ -393,6 +659,10 @@ async function main() {
     console.log('preflight ok: ' + JSON.stringify(pre.observed)
       + ' (seed scoring_model ' + pre.scoringModelId + ')');
 
+    const labels = await loadPairLabels(client);
+    console.log('pair labels loaded (read-only): ' + labels.productNames.size + ' product name(s), '
+      + labels.variantSkus.size + ' variant SKU(s)');
+
     insertedIds.push(...(await insertQueries(client, pre.scoringModelId)));
     console.log('inserted measurement queries: ' + insertedIds.join(', '));
 
@@ -406,7 +676,7 @@ async function main() {
         const result = await runRecommendationSnapshot(db, insertedIds[index]);
         runs.push({ label: variant.label, cap: variant.cap, result });
       }
-      printQueryReport(QUERIES[index], insertedIds[index], runs);
+      printQueryReport(QUERIES[index], insertedIds[index], runs, labels);
     }
 
     printKExtrapolation(25);

@@ -272,3 +272,316 @@ At the end of every significant development session, update `DEVELOPMENT_NOTES.m
 - a Git/tooling lesson
 
 Do not record trivial events. Never store secrets. Never claim something was tested if it was not actually executed.
+## 2026-09-23 — Decision 20 real measurement (measure-orchestrator.js first execution)
+
+Seed: the minimal seed (`database/seeds/001_minimal_builds.sql`) — 15 products / 16 offers (preflight `{"products":15,"models":1,"offers":16,"assessments":25,"queries":0}`, seed scoring_model pinned by id, isolated test-scratch branch only; measurement queries inserted then deleted, `recommendation_query back to 0 rows`).
+
+Fix: `scripts/measure-orchestrator.js` local duplicate `rankBuilds` removed; script now imports the real `rankBuilds` from `src/recommendation/ranking/` (Decision 18) and calls `rankBuilds({ builds }).ranked[0]` for the rank-1 lines (real `ROLE:product_id:variant` signatures incl. the `GPU::` omitted slot).
+Raw output of `node scripts/measure-orchestrator.js` (query ids redacted — per-run UUIDs; every number verbatim, unrounded):
+
+```text
+target: test-scratch only (host redacted — isolated branch, never the shared DATABASE_URL)
+the shared DATABASE_URL is never contacted and never printed
+preflight ok: {"products":15,"models":1,"offers":16,"assessments":25,"queries":0} (seed scoring_model <uuid>)
+inserted measurement queries: <uuid>, <uuid>
+
+== query GAMING | budget 15000 MAD | id <uuid>
+
+  configured cap: 25 build(s)
+      scores: build_score min 28.50 | max 49.78 | mean 40.23 | distinct 22 | gap 21.28
+    structure (role / distinct / first-change / predicted / deviation):
+      CPU           distinct  1  first-change    -  predicted     64  | single value in the run
+      MOTHERBOARD   distinct  1  first-change    -  predicted     64  | single value in the run
+      RAM           distinct  2  first-change   19  predicted     32  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      GPU           distinct  2  first-change   16  predicted     16  | matches the mixed-radix prediction
+      PSU           distinct  2  first-change    8  predicted      8  | matches the mixed-radix prediction
+      CASE          distinct  2  first-change    4  predicted      4  | matches the mixed-radix prediction
+      CPU_COOLER    distinct  2  first-change    2  predicted      2  | matches the mixed-radix prediction
+      SSD_BOOT      distinct  2  first-change    1  predicted      1  | matches the mixed-radix prediction
+
+  raised cap 100000 (in-memory copy; DB value untouched): 113 build(s)
+      scores: build_score min 26.86 | max 53.98 | mean 40.43 | distinct 96 | gap 27.13
+    structure (role / distinct / first-change / predicted / deviation):
+      CPU           distinct  2  first-change   79  predicted    128  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      MOTHERBOARD   distinct  2  first-change   39  predicted     64  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      RAM           distinct  2  first-change   19  predicted     32  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      GPU           distinct  2  first-change   16  predicted     16  | matches the mixed-radix prediction
+      PSU           distinct  2  first-change    8  predicted      8  | matches the mixed-radix prediction
+      CASE          distinct  2  first-change    4  predicted      4  | matches the mixed-radix prediction
+      CPU_COOLER    distinct  2  first-change    2  predicted      2  | matches the mixed-radix prediction
+      SSD_BOOT      distinct  2  first-change    1  predicted      1  | matches the mixed-radix prediction
+
+  rank 1 (real Decision 18 ranking/ module):
+    configured cap : score 49.78 | total 13150.00 | signature <full canonical signature, differs from raised only in MOTHERBOARD+SSD_BOOT picks>
+    raised cap     : score 53.98 | total 12250.00 | signature <full canonical signature, differs from configured only in MOTHERBOARD+SSD_BOOT picks>
+    rank 1 is a DIFFERENT build capped vs uncapped (score differs)
+
+== query OFFICE | budget 10000 MAD | id <uuid>
+
+  configured cap: 18 build(s)
+      scores: build_score min 28.02 | max 48.48 | mean 38.87 | distinct 18 | gap 20.46
+    structure (role / distinct / first-change / predicted / deviation):
+      CPU           distinct  2  first-change    1  predicted    128  | earlier than predicted (pruning / GPU-omit shorten later chains)
+
+      MOTHERBOARD   distinct  2  first-change    1  predicted     64  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      RAM           distinct  2  first-change    1  predicted     32  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      GPU           distinct  2  first-change    1  predicted     16  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      PSU           distinct  2  first-change    1  predicted      8  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      CASE          distinct  2  first-change    2  predicted      4  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      CPU_COOLER    distinct  2  first-change    3  predicted      2  | later than predicted (option combinations pruned)
+      SSD_BOOT      distinct  2  first-change    4  predicted      1  | later than predicted (option combinations pruned)
+
+  raised cap 100000 (in-memory copy; DB value untouched): 18 build(s)
+      scores: build_score min 28.02 | max 48.48 | mean 38.87 | distinct 18 | gap 20.46
+    structure (role / distinct / first-change / predicted / deviation):
+      CPU           distinct  2  first-change    1  predicted    128  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      MOTHERBOARD   distinct  2  first-change    1  predicted     64  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      RAM           distinct  2  first-change    1  predicted     32  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      GPU           distinct  2  first-change    1  predicted     16  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      PSU           distinct  2  first-change    1  predicted      8  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      CASE          distinct  2  first-change    2  predicted      4  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      CPU_COOLER    distinct  2  first-change    3  predicted      2  | later than predicted (option combinations pruned)
+      SSD_BOOT      distinct  2  first-change    4  predicted      1  | later than predicted (option combinations pruned)
+
+  rank 1 (real Decision 18 ranking/ module):
+    configured cap : score 48.48 | total 9800.00 | signature <canonical signature with GPU:: omitted slot>
+    raised cap     : score 48.48 | total 9800.00 | signature <identical canonical signature>
+    rank 1 is THE SAME build capped vs uncapped (score equal)
+
+== K=5 extrapolation (arithmetic only; the synthetic run was SKIPPED - see note)
+  CPU           first change at build 78125 (beyond the cap)
+  MOTHERBOARD   first change at build 15625 (beyond the cap)
+  RAM           first change at build 3125 (beyond the cap)
+  GPU           first change at build 625 (beyond the cap)
+  PSU           first change at build 125 (beyond the cap)
+  CASE          first change at build 25 (within the cap)
+  CPU_COOLER    first change at build 5 (within the cap)
+  SSD_BOOT      first change at build 1 (within the cap)
+  With K=5 options per role and cap 25 the only roles that can vary inside the cap are
+  SSD_BOOT (every build) and CPU_COOLER (every 5th build); CASE changes at build 26, the
+  first build beyond the cap. That is the shape Decision 18.4 describes (vary only
+  CPU_COOLER and SSD_BOOT), and each additional varying role costs K times more builds.
+  SKIPPED-RUN NOTE: the synthetic in-memory K=5 assembleBuilds run was NOT executed: its
+  fixture builders live inside assemble.test.js / pipeline.test.js (not exported), so
+  reusing them would have required editing existing test files. These numbers are
+  arithmetic, not a run.
+
+== FACTUAL SUMMARY (a measurement; NOT a Decision 20 outcome)
+  GAMING: configured cap -> 25 build(s); raised cap -> 113 build(s); rank 1 DIFFERENT build capped vs uncapped
+    varying roles at the configured cap: RAM(2), GPU(2), PSU(2), CASE(2), CPU_COOLER(2), SSD_BOOT(2)
+    varying roles at the raised cap:     CPU(2), MOTHERBOARD(2), RAM(2), GPU(2), PSU(2), CASE(2), CPU_COOLER(2), SSD_BOOT(2)
+  OFFICE: configured cap -> 18 build(s); raised cap -> 18 build(s); rank 1 SAME build capped vs uncapped
+    varying roles at the configured cap: CPU(2), MOTHERBOARD(2), RAM(2), GPU(2), PSU(2), CASE(2), CPU_COOLER(2), SSD_BOOT(2)
+    varying roles at the raised cap:     CPU(2), MOTHERBOARD(2), RAM(2), GPU(2), PSU(2), CASE(2), CPU_COOLER(2), SSD_BOOT(2)
+  With 2 candidates per role on this seed, the last roles of EXPANSION_ORDER are expected
+  to vary inside 25 builds (mixed-radix discovery order); that is not a contradiction of
+  Decision 18.4, whose K-scaling half needs K at or below the per-role option counts - the
+  K=5 arithmetic above stands in for it (synthetic run skipped, see its note).
+  No Decision 20 outcome is recommended or implied by this output.
+cleanup verified: recommendation_query back to 0 rows
+```
+
+- 113 valid builds (GAMING, raised cap): MATCHES exactly (113; delta 0).
+- 27.37-point GAMING spread: CLOSE — real gap is 27.13 (delta -0.24); min 26.86 / max 53.98 verbatim.
+- 7/10 top slots on one CPU-GPU pair (OFFICE): NOT PRODUCED by this script — the harness prints build counts, score spreads, structure rows, and rank-1 only; no top-10 pair-concentration analysis exists in its output, so the claim is unverifiable from this run and pending review.
+- Decision 20 text, MAX_PER_PAIR, run.js, ranking/, persistence/ untouched; nothing committed or pushed.
+Note: the full 8-role canonical rank-1 signatures (product UUIDs per role) were replaced above by bracketed shape notes to keep this file readable; they are printed in full on the console by the script. Keyed comparison vs Decision 20 (run 2026-09-23, three consecutive identical runs):
+
+## 2026-09-23 (run 2) — Decision 20 top-10 (CPU, GPU) pair concentration (measure-orchestrator.js)
+
+Seed: the minimal seed (`database/seeds/001_minimal_builds.sql`) — 15 products / 16 offers (preflight `{"products":15,"models":1,"offers":16,"assessments":25,"queries":0}`, seed scoring_model pinned by id, isolated test-scratch branch only; measurement queries inserted then deleted, `recommendation_query back to 0 rows`; 6 runs, every captured exit code 0).
+
+Add: `scripts/measure-orchestrator.js` now measures the one number Decision 20 section 1 turns on that the 2026-09-23 run never produced — the **top-10 (CPU, GPU) pair concentration**. Per query and per cap variant it ranks that run's build set with the real `rankBuilds()` (Decision 18, unchanged), takes `ranked.slice(0, TOP_N_PERSISTED)` (10 entries), groups them by the Decision 20 section 2 pair `(CPU product_id, GPU product_variant_id-or-OMITTED)` read from each build's component list through the script's existing `roleValue()` by-role path and cross-checked against the entry's Decision 18 signature (10/10 identical in every block), prints the distinct-pair / per-pair counts, and compares those counts with Decision 20 section 1's wording on a printed band (delta 0 = HOLDS EXACTLY, |delta| <= 2 = CLOSE, else WAY OFF). Two seed-scoped read-only SELECTs were added for pair display labels (product name / variant SKU); the write path is unchanged (same 2 INSERTs + finally-DELETE, read-only preflight before any write).
+
+Raw output of `node scripts/measure-orchestrator.js` (query ids and seed scoring_model id redacted — per-run UUIDs; product/variant UUIDs kept verbatim so every pair stays identifiable; every number verbatim, unrounded). Only omissions: the two `.env` lines dotenv v17 prints (rotating tip text) and pg's SSL-mode warning, which goes to stderr — no numeric output is trimmed:
+
+```text
+target: test-scratch only (host redacted — isolated branch, never the shared DATABASE_URL)
+the shared DATABASE_URL is never contacted and never printed
+preflight ok: {"products":15,"models":1,"offers":16,"assessments":25,"queries":0} (seed scoring_model <uuid>)
+pair labels loaded (read-only): 15 product name(s), 2 variant SKU(s)
+inserted measurement queries: <uuid>, <uuid>
+
+== query GAMING | budget 15000 MAD | id <uuid>
+
+  configured cap: 25 build(s)
+      scores: build_score min 28.49 | max 49.77 | mean 40.23 | distinct 22 | gap 21.28
+    structure (role / distinct / first-change / predicted / deviation):
+      CPU           distinct  1  first-change    -  predicted     64  | single value in the run
+      MOTHERBOARD   distinct  1  first-change    -  predicted     64  | single value in the run
+      RAM           distinct  2  first-change   19  predicted     32  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      GPU           distinct  2  first-change   16  predicted     16  | matches the mixed-radix prediction
+      PSU           distinct  2  first-change    8  predicted      8  | matches the mixed-radix prediction
+      CASE          distinct  2  first-change    4  predicted      4  | matches the mixed-radix prediction
+      CPU_COOLER    distinct  2  first-change    2  predicted      2  | matches the mixed-radix prediction
+      SSD_BOOT      distinct  2  first-change    1  predicted      1  | matches the mixed-radix prediction
+    top-10 (CPU, GPU) pair concentration (configured cap; real rankBuilds, TOP_N_PERSISTED = 10):
+      ranked 25 build(s); top-10 slice 10 (rank 1..10); component-list pair keys cross-checked against the Decision 18 signature: 10/10 identical
+      Decision 20 pair definition (CPU product_id, GPU product_variant_id-or-OMITTED):
+        distinct pairs 2 | distinct CPU product_ids 1 | distinct GPU pair values 2
+        pair counts, descending:
+           8 of 10  CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-DUAL-8G (77061b03-8742-473b-baaf-3553d715fd27)
+           2 of 10  CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-TRIO-OC-8G (c35235e5-ee10-4381-acbc-9f47351650c6)
+      Decision 20 section 1, as written: "the ranked top-10 still collapsed to 1 CPU / 2 GPU pairs"
+        distinct CPU product_ids in the top-10: actual 1 | claimed 1 -> HOLDS EXACTLY (delta 0)
+        distinct GPU pair values in the top-10: actual 2 | claimed 2 -> HOLDS EXACTLY (delta 0)
+      coarser reading (CPU product_id, GPU product_id) - the variants of one GPU product merge into one pair:
+        distinct pairs 1; pair counts, descending:
+          10 of 10  CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU Seed RTX 4060 8GB (e4e4fe46-135f-4b45-936a-0ab8ce279f46)
+
+  raised cap 100000 (in-memory copy; DB value untouched): 113 build(s)
+      scores: build_score min 26.85 | max 53.98 | mean 40.43 | distinct 96 | gap 27.13
+    structure (role / distinct / first-change / predicted / deviation):
+      CPU           distinct  2  first-change   79  predicted    128  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      MOTHERBOARD   distinct  2  first-change   39  predicted     64  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      RAM           distinct  2  first-change   19  predicted     32  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      GPU           distinct  2  first-change   16  predicted     16  | matches the mixed-radix prediction
+      PSU           distinct  2  first-change    8  predicted      8  | matches the mixed-radix prediction
+      CASE          distinct  2  first-change    4  predicted      4  | matches the mixed-radix prediction
+      CPU_COOLER    distinct  2  first-change    2  predicted      2  | matches the mixed-radix prediction
+      SSD_BOOT      distinct  2  first-change    1  predicted      1  | matches the mixed-radix prediction
+    top-10 (CPU, GPU) pair concentration (raised cap 100000; real rankBuilds, TOP_N_PERSISTED = 10):
+      ranked 113 build(s); top-10 slice 10 (rank 1..10); component-list pair keys cross-checked against the Decision 18 signature: 10/10 identical
+      Decision 20 pair definition (CPU product_id, GPU product_variant_id-or-OMITTED):
+        distinct pairs 2 | distinct CPU product_ids 1 | distinct GPU pair values 2
+        pair counts, descending:
+           6 of 10  CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-DUAL-8G (77061b03-8742-473b-baaf-3553d715fd27)
+           4 of 10  CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-TRIO-OC-8G (c35235e5-ee10-4381-acbc-9f47351650c6)
+      Decision 20 section 1, as written: "the ranked top-10 still collapsed to 1 CPU / 2 GPU pairs"
+        distinct CPU product_ids in the top-10: actual 1 | claimed 1 -> HOLDS EXACTLY (delta 0)
+        distinct GPU pair values in the top-10: actual 2 | claimed 2 -> HOLDS EXACTLY (delta 0)
+      coarser reading (CPU product_id, GPU product_id) - the variants of one GPU product merge into one pair:
+        distinct pairs 1; pair counts, descending:
+          10 of 10  CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU Seed RTX 4060 8GB (e4e4fe46-135f-4b45-936a-0ab8ce279f46)
+      top-10 listing (rank | build_score | total_price | Decision 20 pair):
+        rank  1 | score 53.98 | total 12250.00 | CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-DUAL-8G (77061b03-8742-473b-baaf-3553d715fd27)
+        rank  2 | score 53.98 | total 13850.00 | CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-TRIO-OC-8G (c35235e5-ee10-4381-acbc-9f47351650c6)
+        rank  3 | score 52.92 | total 11800.00 | CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-DUAL-8G (77061b03-8742-473b-baaf-3553d715fd27)
+        rank  4 | score 52.36 | total 11550.00 | CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-DUAL-8G (77061b03-8742-473b-baaf-3553d715fd27)
+        rank  5 | score 52.36 | total 13150.00 | CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-TRIO-OC-8G (c35235e5-ee10-4381-acbc-9f47351650c6)
+        rank  6 | score 51.30 | total 11100.00 | CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-DUAL-8G (77061b03-8742-473b-baaf-3553d715fd27)
+        rank  7 | score 49.95 | total 11550.00 | CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-DUAL-8G (77061b03-8742-473b-baaf-3553d715fd27)
+        rank  8 | score 49.95 | total 13150.00 | CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-TRIO-OC-8G (c35235e5-ee10-4381-acbc-9f47351650c6)
+        rank  9 | score 49.77 | total 13150.00 | CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-DUAL-8G (77061b03-8742-473b-baaf-3553d715fd27)
+        rank 10 | score 49.77 | total 14750.00 | CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-TRIO-OC-8G (c35235e5-ee10-4381-acbc-9f47351650c6)
+
+  rank 1 (real Decision 18 ranking/ module):
+    configured cap : score 49.77 | total 13150.00 | signature CPU:fcf4fbb7-db40-467e-9927-c253e8d43468:|MOTHERBOARD:5917f68f-e753-41fc-8e79-b4b4ed236382:|RAM:45368a17-902d-4ea0-a766-b5bf74edb60d:|GPU:e4e4fe46-135f-4b45-936a-0ab8ce279f46:77061b03-8742-473b-baaf-3553d715fd27|PSU:19c255bd-3aeb-4258-9ec0-fe86adce6f3b:|CASE:477f03ce-f84d-43ef-8898-8b8616e49460:|CPU_COOLER:beca2d5b-d1e0-44c7-9ebb-c2ff179935e3:|SSD_BOOT:66f73b8a-083c-4220-9805-f434f261efe2:
+    raised cap     : score 53.98 | total 12250.00 | signature CPU:fcf4fbb7-db40-467e-9927-c253e8d43468:|MOTHERBOARD:7885421c-f392-4832-a269-1f062e5a912e:|RAM:45368a17-902d-4ea0-a766-b5bf74edb60d:|GPU:e4e4fe46-135f-4b45-936a-0ab8ce279f46:77061b03-8742-473b-baaf-3553d715fd27|PSU:19c255bd-3aeb-4258-9ec0-fe86adce6f3b:|CASE:477f03ce-f84d-43ef-8898-8b8616e49460:|CPU_COOLER:beca2d5b-d1e0-44c7-9ebb-c2ff179935e3:|SSD_BOOT:66f73b8a-083c-4220-9805-f434f261efe2:
+    rank 1 is a DIFFERENT build capped vs uncapped (score differs)
+
+== query OFFICE | budget 10000 MAD | id <uuid>
+
+  configured cap: 18 build(s)
+      scores: build_score min 28.02 | max 48.47 | mean 38.87 | distinct 18 | gap 20.46
+    structure (role / distinct / first-change / predicted / deviation):
+      CPU           distinct  2  first-change    1  predicted    128  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      MOTHERBOARD   distinct  2  first-change    1  predicted     64  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      RAM           distinct  2  first-change    1  predicted     32  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      GPU           distinct  2  first-change    1  predicted     16  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      PSU           distinct  2  first-change    1  predicted      8  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      CASE          distinct  2  first-change    2  predicted      4  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      CPU_COOLER    distinct  2  first-change    3  predicted      2  | later than predicted (option combinations pruned)
+      SSD_BOOT      distinct  2  first-change    4  predicted      1  | later than predicted (option combinations pruned)
+    top-10 (CPU, GPU) pair concentration (configured cap; real rankBuilds, TOP_N_PERSISTED = 10):
+      ranked 18 build(s); top-10 slice 10 (rank 1..10); component-list pair keys cross-checked against the Decision 18 signature: 10/10 identical
+      Decision 20 pair definition (CPU product_id, GPU product_variant_id-or-OMITTED):
+        distinct pairs 2 | distinct CPU product_ids 2 | distinct GPU pair values 2
+        pair counts, descending:
+           9 of 10  CPU Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)
+           1 of 10  CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-DUAL-8G (77061b03-8742-473b-baaf-3553d715fd27)
+      Decision 20 section 1, as written: "OFFICE collapsed to 1 CPU-GPU pairing in 7/10 top slots"
+        top-10 slots held by the largest single pair: actual 9 | claimed 7 -> CLOSE (delta +2)
+      coarser reading (CPU product_id, GPU product_id) - the variants of one GPU product merge into one pair:
+        distinct pairs 2; pair counts, descending:
+           9 of 10  CPU Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)
+           1 of 10  CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU Seed RTX 4060 8GB (e4e4fe46-135f-4b45-936a-0ab8ce279f46)
+
+  raised cap 100000 (in-memory copy; DB value untouched): 18 build(s)
+      scores: build_score min 28.02 | max 48.47 | mean 38.87 | distinct 18 | gap 20.46
+    structure (role / distinct / first-change / predicted / deviation):
+      CPU           distinct  2  first-change    1  predicted    128  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      MOTHERBOARD   distinct  2  first-change    1  predicted     64  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      RAM           distinct  2  first-change    1  predicted     32  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      GPU           distinct  2  first-change    1  predicted     16  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      PSU           distinct  2  first-change    1  predicted      8  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      CASE          distinct  2  first-change    2  predicted      4  | earlier than predicted (pruning / GPU-omit shorten later chains)
+      CPU_COOLER    distinct  2  first-change    3  predicted      2  | later than predicted (option combinations pruned)
+      SSD_BOOT      distinct  2  first-change    4  predicted      1  | later than predicted (option combinations pruned)
+    top-10 (CPU, GPU) pair concentration (raised cap 100000; real rankBuilds, TOP_N_PERSISTED = 10):
+      ranked 18 build(s); top-10 slice 10 (rank 1..10); component-list pair keys cross-checked against the Decision 18 signature: 10/10 identical
+      Decision 20 pair definition (CPU product_id, GPU product_variant_id-or-OMITTED):
+        distinct pairs 2 | distinct CPU product_ids 2 | distinct GPU pair values 2
+        pair counts, descending:
+           9 of 10  CPU Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)
+           1 of 10  CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-DUAL-8G (77061b03-8742-473b-baaf-3553d715fd27)
+      Decision 20 section 1, as written: "OFFICE collapsed to 1 CPU-GPU pairing in 7/10 top slots"
+        top-10 slots held by the largest single pair: actual 9 | claimed 7 -> CLOSE (delta +2)
+      coarser reading (CPU product_id, GPU product_id) - the variants of one GPU product merge into one pair:
+        distinct pairs 2; pair counts, descending:
+           9 of 10  CPU Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)
+           1 of 10  CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU Seed RTX 4060 8GB (e4e4fe46-135f-4b45-936a-0ab8ce279f46)
+      top-10 listing (rank | build_score | total_price | Decision 20 pair):
+        rank  1 | score 48.47 | total 9800.00 | CPU Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)
+        rank  2 | score 45.65 | total 9800.00 | CPU Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)
+        rank  3 | score 44.99 | total 9550.00 | CPU Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)
+        rank  4 | score 44.07 | total 10000.00 | CPU Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)
+        rank  5 | score 43.76 | total 9100.00 | CPU Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)
+        rank  6 | score 43.41 | total 9750.00 | CPU Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)
+        rank  7 | score 42.17 | total 9300.00 | CPU Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)
+        rank  8 | score 41.16 | total 9900.00 | CPU Seed Ryzen 5 7500F (fcf4fbb7-db40-467e-9927-c253e8d43468) | GPU SEED-RTX4060-DUAL-8G (77061b03-8742-473b-baaf-3553d715fd27)
+        rank  9 | score 40.59 | total 9750.00 | CPU Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)
+        rank 10 | score 39.35 | total 9300.00 | CPU Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)
+
+  rank 1 (real Decision 18 ranking/ module):
+    configured cap : score 48.47 | total 9800.00 | signature CPU:7801beec-5d86-4c2a-8025-34544543f844:|MOTHERBOARD:5917f68f-e753-41fc-8e79-b4b4ed236382:|RAM:45368a17-902d-4ea0-a766-b5bf74edb60d:|GPU::|PSU:118ed719-2771-4b13-bc86-398011fde333:|CASE:477f03ce-f84d-43ef-8898-8b8616e49460:|CPU_COOLER:beca2d5b-d1e0-44c7-9ebb-c2ff179935e3:|SSD_BOOT:1355a4ae-6847-44ad-a210-a8977fbfaf56:
+    raised cap     : score 48.47 | total 9800.00 | signature CPU:7801beec-5d86-4c2a-8025-34544543f844:|MOTHERBOARD:5917f68f-e753-41fc-8e79-b4b4ed236382:|RAM:45368a17-902d-4ea0-a766-b5bf74edb60d:|GPU::|PSU:118ed719-2771-4b13-bc86-398011fde333:|CASE:477f03ce-f84d-43ef-8898-8b8616e49460:|CPU_COOLER:beca2d5b-d1e0-44c7-9ebb-c2ff179935e3:|SSD_BOOT:1355a4ae-6847-44ad-a210-a8977fbfaf56:
+    rank 1 is THE SAME build capped vs uncapped (score equal)
+
+== K=5 extrapolation (arithmetic only; the synthetic run was SKIPPED - see note)
+  CPU           first change at build 78125 (beyond the cap)
+  MOTHERBOARD   first change at build 15625 (beyond the cap)
+  RAM           first change at build 3125 (beyond the cap)
+  GPU           first change at build 625 (beyond the cap)
+  PSU           first change at build 125 (beyond the cap)
+  CASE          first change at build 25 (within the cap)
+  CPU_COOLER    first change at build 5 (within the cap)
+  SSD_BOOT      first change at build 1 (within the cap)
+  With K=5 options per role and cap 25 the only roles that can vary inside the cap are
+  SSD_BOOT (every build) and CPU_COOLER (every 5th build); CASE changes at build 26, the
+  first build beyond the cap. That is the shape Decision 18.4 describes (vary only
+  CPU_COOLER and SSD_BOOT), and each additional varying role costs K times more builds.
+  SKIPPED-RUN NOTE: the synthetic in-memory K=5 assembleBuilds run was NOT executed: its
+  fixture builders live inside assemble.test.js / pipeline.test.js (not exported), so
+  reusing them would have required editing existing test files. These numbers are
+  arithmetic, not a run.
+
+== FACTUAL SUMMARY (a measurement; NOT a Decision 20 outcome)
+  GAMING: configured cap -> 25 build(s); raised cap -> 113 build(s); rank 1 DIFFERENT build capped vs uncapped
+    varying roles at the configured cap: RAM(2), GPU(2), PSU(2), CASE(2), CPU_COOLER(2), SSD_BOOT(2)
+    varying roles at the raised cap:     CPU(2), MOTHERBOARD(2), RAM(2), GPU(2), PSU(2), CASE(2), CPU_COOLER(2), SSD_BOOT(2)
+    raised cap top-10 pairs (Decision 20 definition): 2 distinct | largest pair 6 of 10 | distinct CPU product_ids 1 | distinct GPU pair values 2
+    Decision 20 "distinct CPU product_ids in the top-10": actual 1 | claimed 1 -> HOLDS EXACTLY (delta 0)
+    Decision 20 "distinct GPU pair values in the top-10": actual 2 | claimed 2 -> HOLDS EXACTLY (delta 0)
+  OFFICE: configured cap -> 18 build(s); raised cap -> 18 build(s); rank 1 SAME build capped vs uncapped
+    varying roles at the configured cap: CPU(2), MOTHERBOARD(2), RAM(2), GPU(2), PSU(2), CASE(2), CPU_COOLER(2), SSD_BOOT(2)
+    varying roles at the raised cap:     CPU(2), MOTHERBOARD(2), RAM(2), GPU(2), PSU(2), CASE(2), CPU_COOLER(2), SSD_BOOT(2)
+    raised cap top-10 pairs (Decision 20 definition): 2 distinct | largest pair 9 of 10 | distinct CPU product_ids 2 | distinct GPU pair values 2
+    Decision 20 "top-10 slots held by the largest single pair": actual 9 | claimed 7 -> CLOSE (delta +2)
+  With 2 candidates per role on this seed, the last roles of EXPANSION_ORDER are expected
+  to vary inside 25 builds (mixed-radix discovery order); that is not a contradiction of
+  Decision 18.4, whose K-scaling half needs K at or below the per-role option counts - the
+  K=5 arithmetic above stands in for it (synthetic run skipped, see its note).
+  No Decision 20 outcome is recommended or implied by this output.
+cleanup verified: recommendation_query back to 0 rows
+```
+
+- Decision 20's OFFICE "7/10 top slots" (section 1): **NOT exact — the real number is 9 of the 10 top slots** on one pair. The dominant pair is `Seed Ryzen 5 8600G (7801beec-5d86-4c2a-8025-34544543f844) | GPU OMITTED (no GPU component)` with 9 slots; the 10th slot (rank 8) is `Seed Ryzen 5 7500F | SEED-RTX4060-DUAL-8G`. Delta +2 against the doc's 7 → the printed band says CLOSE (not way off): the doc understates the same collapse by 2 slots.
+- OFFICE's "1 CPU-GPU pairing" is right in spirit but not literally: the top-10 holds 2 distinct pairs, 2 distinct CPU product_ids (8600G on 9 slots, 7500F on 1) and 2 distinct GPU pair values (OMITTED 9, DUAL-8G 1) — one pair dominates, but the collapse is not total.
+- Decision 20's GAMING "1 CPU / 2 GPU pairs": **HOLDS EXACTLY** (1 distinct CPU product_id and 2 distinct GPU pair values, both delta 0). GAMING is not a 7/10 case at all — its largest single pair holds 6 of 10 (SEED-RTX4060-DUAL-8G 6, SEED-RTX4060-TRIO-OC-8G 4).
+- Coarser reading (the literal "(CPU_id, GPU_id)" wording): using GPU *product_id* instead of the GPU variant, GAMING's top-10 collapses to a single pair 10/10 (both variants share GPU product `Seed RTX 4060 8GB`) while OFFICE is unchanged (9 + 1). The variant-keyed key is the one the shipped code uses (`select-diverse.js` pairKey / `MAX_PER_PAIR`, Decision 20 section 2), so "2 pairs" is the GAMING reading that matches the decision; 10/10 only appears under the coarser reading.
+- Determinism: two full consecutive runs (both stdout captured, UUIDs normalised) were identical line-for-line except the dotenv tip and three `scores:` means (GAMING raised mean 40.43 vs 40.42; OFFICE 38.87 vs 38.86); three further runs printed 40.42 / 38.86. Every pair-concentration line was byte-identical in all of them, as were the build counts and the structure rows.
+- Score-spread lines are stable to ~0.01, not to the last printed decimal: this session printed GAMING configured min/max 28.49/49.77 and raised min 26.85, OFFICE max 48.47, where the 2026-09-23 entry has 28.50/49.78, 26.86 and 48.48 (OFFICE min 28.02 and both gaps 21.28 / 20.46 unchanged). Decision 20's "27.37-point GAMING spread" comparison (real 27.13, delta -0.24) is unaffected in conclusion. Cause not investigated in this pass — no scoring, seed or ranking file was touched (only `scripts/measure-orchestrator.js` changed, and its new code runs only after the orchestrator has produced the builds).
+- The 2026-09-23 entry annotated the GAMING rank-1 as differing between caps in "MOTHERBOARD+SSD_BOOT" picks; with the signatures printed verbatim this run they differ in MOTHERBOARD only (CPU, RAM, GPU, PSU, CASE, CPU_COOLER and SSD_BOOT identical). Flagged because that entry substituted bracketed shape notes for the signature UUIDs.
+- Supersedes the 2026-09-23 bullet "7/10 top slots on one CPU-GPU pair (OFFICE): NOT PRODUCED ... pending review" — it is now produced and measured: OFFICE 9/10 (delta +2, CLOSE), GAMING largest pair 6/10 with the doc's "1 CPU / 2 GPU pairs" exact.
+- Decision 20 text, MAX_PER_PAIR, run.js, ranking/, persistence/ untouched; nothing committed or pushed.
