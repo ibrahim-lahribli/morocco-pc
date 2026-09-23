@@ -2574,6 +2574,114 @@ VERDICT: RESOLVED - post-ranking (CPU, GPU) pair diversity selection adopted (O4
 
 ---
 
+## Decision 21 — Full-run composition contract
+
+Date: 2026-09-23. Product decision pass recording the composition contract for
+wiring runRecommendation → rankBuilds → selectDiverseTop →
+runRecommendationCommit. Documentation only: no code, no migration, no test
+change, no commit.
+
+### Status: RESOLVED
+
+### Decision
+
+1. **Composition location.** A NEW top-level entry point,
+   `runRecommendationFullRun(client, queryId)` in `orchestrator/full-run.js`
+   (file/function naming mirrors `snapshot.js` / `commit.js` ->
+   `runRecommendationSnapshot` / `runRecommendationCommit`), composes the full
+   chain in order:
+   ```text
+   runRecommendationSnapshot(client, queryId)   - read tx, always ROLLBACKs
+     -> rankBuilds({ builds })                  - Engine 5a, pure, full ranked list
+     -> selectDiverseTop({ ranked })            - Decision 20, full ranked list, NOT top_n
+     -> runRecommendationCommit(client, queryId, selected) - write tx
+     -> frozen combined result (item 3)
+   ```
+   The commit cannot be appended inside `runRecommendation`: it executes
+   inside `runRecommendationSnapshot`'s `READ ONLY` transaction and writes
+   are rejected there. It is not put inside `run.js` either: the `run.js`
+   header and Decision 17.3 explicitly forbid ranking, diversity selection
+   and persistence inside `run.js`, and that boundary is pinned by tests
+   (`requiresOf('run.js')`, the banned-token scan, the no-BEGIN assertion).
+   A new module leaves every existing pin intact; only the barrel pins change
+   (item 4).
+2. **Connection ownership for the write transaction.** The SAME single
+   dedicated connection is reused sequentially: the caller checks out ONE
+   connection and hands it first to the snapshot transaction (which ends with
+   ROLLBACK, leaving the session idle) and then to the commit transaction
+   (BEGIN ... COMMIT). One checkout/release, no second pool slot, consistent
+   with both wrappers' contract (caller owns one connection; neither wrapper
+   creates or closes it). The two-transaction separation of Decisions
+   17.5/19.1 is preserved — sequential reuse on one session, never nested,
+   never concurrent.
+3. **Return shape of the new composed entry.** The full traceable chain,
+   frozen: `query_id`, `scoring_model_id`, `builds` (from the snapshot/run
+   result), `ranked` / `top_n` (from `rankBuilds`, entries by reference per
+   its contract), `selected` / `dropped_count` (from `selectDiverseTop`), and
+   the commit result's `persisted_ranks`, `build_candidate_ids`,
+   `recommendation_result_ids`. Intermediate stages (`builds`, `ranked`) ARE
+   carried in the return, not dropped once consumed: Engine 6 must generate
+   explanation text in memory BEFORE the write (Decision 19.7), so the
+   selection-to-commit seam must stay observable — a shape that drops the
+   intermediates now would force a reshape when Engine 6 lands.
+4. **Barrel export change.** `Object.keys` deepEqual gains the new entry:
+   `['runRecommendation', 'runRecommendationSnapshot',
+   'runRecommendationFullRun']`; `requiresOf('index.js')` gains the new
+   module (`'./full-run'`, sorted position). `commit.js` stays INTERNAL-only:
+   no `requiresOf('commit.js')` barrel entry and no direct barrel export of
+   `runRecommendationCommit` — the commit path is reachable only through the
+   new composed entry. The new module itself issues no SQL and no transaction
+   control (it delegates to the two wrappers), so the banned-token scan
+   (COMMIT/INSERT/UPDATE/DELETE/...) extends to `full-run.js` exactly as it
+   covers `run.js` / `snapshot.js`; `commit.js` stays deliberately outside
+   that scan, as today. The wiring task pins `requiresOf('full-run.js')`
+   (expected: the snapshot wrapper, the commit wrapper, and the ranking
+   barrel).
+5. **Zero-build / zero-selected propagation.** No short-circuit: a zero-build
+   run (`builds: []`) flows through `rankBuilds` (frozen empties, valid per
+   Decision 18) and `selectDiverseTop` (`selected: []`, `dropped_count: 0`),
+   and `runRecommendationCommit(client, queryId, [])` is STILL called — the
+   full write transaction (BEGIN, both guards, an empty `persistRanked` call,
+   COMMIT), exactly per `commit.js`'s existing zero-write-but-full-transaction
+   behavior. Same for a zero-selected outcome (full ranked list, cap drops
+   everything). The guards are query-level rules, so an unknown or
+   already-persisted query id still fails fast instead of silently
+   `succeeding`.
+6. **What this does NOT change.** Data shapes between consecutive functions
+   already match field-for-field (verified against `validate-selected.js`) —
+   this decision is composition only. Decision 20 item 4 stands (selection
+   walks the full `ranked` list so capping can refill below rank 10;
+   `rankBuilds.top_n` stays `first 10 of ranked` and is NOT what gets
+   persisted). No Engine 6 work here — only the seam it will need. `run.js`,
+   `snapshot.js`, `commit.js` and their tests are untouched by this pass.
+
+### Rejected alternatives
+
+* Ranking / selection / commit logic inside `run.js` (violates its documented
+  non-responsibilities and Decision 17.3; breaks the existing boundary pins).
+* Appending the commit inside the snapshot transaction (writes are rejected
+  in a READ ONLY transaction; collapses the Decisions 17.5/19.1
+  two-transaction separation).
+* Two checked-out connections, one per transaction (unnecessary complexity;
+  no contract requires it; doubles pool pressure for no gain).
+* Dropping `builds` / `ranked` from the composed return (closes the
+  pre-commit seam Engine 6 needs per Decision 19.7).
+* Persisting `rankBuilds.top_n` instead of the post-selection set (already
+  rejected by Decision 20 item 4; restated, not reopened).
+* Exporting `runRecommendationCommit` directly from the barrel (kept
+  internal-only; exactly one composed write path).
+* Short-circuiting (skipping the commit call) on zero builds or zero
+  selected (breaks guard consistency: unknown/already-persisted ids must
+  still fail fast).
+
+### Verdict for this pass
+
+```text
+VERDICT: RESOLVED - full-run composition contract adopted (new orchestrator/full-run.js runRecommendationFullRun: snapshot -> rankBuilds(ranked) -> selectDiverseTop -> commit on one sequentially reused connection; full traceable frozen return; commit stays internal-only; zero runs the full chain per commit.js)
+```
+
+---
+
 ## Final Status
 
 ```text
@@ -2588,6 +2696,7 @@ Decision 17: RESOLVED (query loader and orchestrator contract, adopted 2026-09-2
 Decision 18: RESOLVED (ranking / Engine 5a, adopted 2026-09-21)
 Decision 19: RESOLVED (persistence / Engine 5b, adopted 2026-09-21)
 Decision 20: RESOLVED (post-ranking (CPU, GPU) pair diversity selection / O4, MAX_PER_PAIR = 3 code constant, adopted 2026-09-22)
+Decision 21: RESOLVED (full-run composition contract -> orchestrator/full-run.js runRecommendationFullRun, adopted 2026-09-23)
 ```
 
 Unambiguous one-sentence semantics for the implementation task:
