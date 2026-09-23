@@ -25,5 +25,6 @@
 
 const { runRecommendation } = require('./run');
 const { runRecommendationSnapshot } = require('./snapshot');
+const { runRecommendationFullRun } = require('./full-run');
 
-module.exports = { runRecommendation, runRecommendationSnapshot };
+module.exports = { runRecommendation, runRecommendationSnapshot, runRecommendationFullRun };

@@ -17,6 +17,7 @@ const path = require('node:path');
 const orchestrator = require('./index');
 const run = require('./run');
 const snapshot = require('./snapshot');
+const fullRun = require('./full-run');
 
 /** Strip block and line comments so a source assertion cannot self-match docs. */
 function stripComments(source) {
@@ -30,17 +31,20 @@ const requiresOf = (file) => [...stripComments(readSource(file)).matchAll(/requi
   .map((match) => match[1])
   .sort();
 
-test('orchestrator barrel exposes exactly the two Decision 17 entry points', () => {
-  assert.deepEqual(Object.keys(orchestrator), ['runRecommendation', 'runRecommendationSnapshot']);
+test('orchestrator barrel exposes exactly the Decision 17 + 21 entry points', () => {
+  assert.deepEqual(Object.keys(orchestrator), ['runRecommendation', 'runRecommendationSnapshot', 'runRecommendationFullRun']);
   assert.equal(typeof orchestrator.runRecommendation, 'function');
   assert.equal(typeof orchestrator.runRecommendationSnapshot, 'function');
+  assert.equal(typeof orchestrator.runRecommendationFullRun, 'function');
   assert.equal(orchestrator.runRecommendation.length, 1);
   assert.equal(orchestrator.runRecommendationSnapshot.length, 2);
+  assert.equal(orchestrator.runRecommendationFullRun.length, 2);
 });
 
 test('orchestrator barrel re-exports by identity - no wrapper, no copy', () => {
   assert.equal(orchestrator.runRecommendation, run.runRecommendation);
   assert.equal(orchestrator.runRecommendationSnapshot, snapshot.runRecommendationSnapshot);
+  assert.equal(orchestrator.runRecommendationFullRun, fullRun.runRecommendationFullRun);
 });
 
 test('no orchestrator source writes, commits, or reaches for a driver', () => {
@@ -49,7 +53,7 @@ test('no orchestrator source writes, commits, or reaches for a driver', () => {
     'INSERT', 'UPDATE', 'DELETE', 'COMMIT', 'TRUNCATE', 'CREATE TABLE', 'ALTER TABLE',
     'DROP ',
   ];
-  for (const file of ['index.js', 'run.js', 'snapshot.js']) {
+  for (const file of ['index.js', 'run.js', 'snapshot.js', 'full-run.js']) {
     const source = stripComments(readSource(file));
     for (const token of banned) {
       assert.ok(!source.includes(token), file + ' must not contain ' + token);
@@ -60,6 +64,7 @@ test('no orchestrator source writes, commits, or reaches for a driver', () => {
   // transaction control at all (Decision 17.5).
   assert.equal(stripComments(readSource('run.js')).includes('BEGIN'), false);
   assert.equal(stripComments(readSource('index.js')).includes('BEGIN'), false);
+  assert.equal(stripComments(readSource('full-run.js')).includes('BEGIN'), false);
   assert.ok(stripComments(readSource('snapshot.js')).includes('BEGIN'));
 });
 
@@ -75,7 +80,8 @@ test('orchestrator modules import exactly their collaborators', () => {
     '../scoring',
   ]);
   assert.deepEqual(requiresOf('snapshot.js'), ['../candidates/errors', './run']);
-  assert.deepEqual(requiresOf('index.js'), ['./run', './snapshot']);
+  assert.deepEqual(requiresOf('index.js'), ['./full-run', './run', './snapshot']);
+  assert.deepEqual(requiresOf('full-run.js'), ['../ranking', './commit', './snapshot']);
 });
 
 test('run.js composes the two Engine 2D stages itself (the B2-G helper is never imported)', () => {
