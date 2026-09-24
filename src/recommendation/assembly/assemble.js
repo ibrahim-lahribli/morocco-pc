@@ -41,6 +41,15 @@
  * untouched (the verdict-level sums; the re-evaluated pairs are never
  * counted).
  *
+ * Component compatibility notes (Decision 22 item 8b): every emitted
+ * component carries compatibility_notes - the picked verdict's Engine 2D
+ * CONDITIONAL notes (item 8a) narrowed by identity to the partner
+ * verdicts actually picked in this build (the note's
+ * (partner_role, partner_product_id, partner_product_variant_id) equals
+ * the picked partner's identity). Frozen [] when nothing applies; note
+ * objects travel by reference, the array is never mutated, and the
+ * filter re-calls no resolver and re-derives no support-table row.
+ *
  * Pure: no database access, no I/O, no clock reads.
  */
 
@@ -452,6 +461,39 @@ function firstPairFailure(filteringContext, role, verdict, picked) {
 }
 
 /**
+ * Decision 22 item 8b: narrow one picked verdict's Engine 2D
+ * compatibility_notes (item 8a) to the notes about the partner verdicts
+ * actually picked in THIS build - a note survives only when its
+ * (partner_role, partner_product_id, partner_product_variant_id)
+ * exactly equals the picked partner's identity. A pure identity filter
+ * over already-computed notes: no resolver is re-called and no
+ * support-table row is re-derived. Note objects travel by reference
+ * (never cloned), the returned array is freshly frozen, and [] (never
+ * null) applies when nothing matches - including a verdict that predates
+ * item 8a.
+ */
+function narrowCompatibilityNotes(picked, verdict) {
+  const notes = Array.isArray(verdict.compatibility_notes)
+    ? verdict.compatibility_notes
+    : [];
+  return Object.freeze(
+    notes.filter((note) => {
+      if (note === null || typeof note !== 'object') {
+        return false;
+      }
+      if (!Object.prototype.hasOwnProperty.call(picked, note.partner_role)) {
+        return false;
+      }
+      const partner = picked[note.partner_role];
+      return (
+        partner.product_id === note.partner_product_id &&
+        partner.product_variant_id === note.partner_product_variant_id
+      );
+    })
+  );
+}
+
+/**
  * Walk EXPANSION_ORDER depth-first and return complete builds in discovery
  * order. Every choice adds its selected_price at once and stops that path
  * past the limit. The build cap halts the walk itself; later paths stay
@@ -485,6 +527,8 @@ function assembleBuilds(engine3Input) {
           category: verdict.category,
           status: verdict.status,
           price,
+          // Decision 22 item 8b: narrowed to this build's picked partners.
+          compatibility_notes: narrowCompatibilityNotes(picked, verdict),
         })
       );
     }

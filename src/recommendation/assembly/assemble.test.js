@@ -869,6 +869,7 @@ test('builds and components carry exactly the documented keys', () => {
   for (const c of withGpu.components) {
     assert.deepEqual(Object.keys(c).sort(), [
       'category',
+      'compatibility_notes',
       'component_role',
       'price',
       'product_id',
@@ -882,11 +883,114 @@ test('builds and components carry exactly the documented keys', () => {
       'category',
       'status',
       'price',
+      'compatibility_notes',
     ]);
   }
   assert.ok(!('reason' in withGpu.components[0]));
   assert.ok(!('relationships' in withGpu.components[0]));
   assert.ok(!('SSD_SECONDARY' in idsOf(withGpu)));
+});
+
+test('Decision 22 8b: a CONDITIONAL verdict note carries onto the matching component', () => {
+  // Engine 2D (item 8a) hangs each CONDITIONAL note on the verdict that
+  // owns the pair: the CPU-side note (partner MOTHERBOARD) rides on the
+  // CPU verdict, the MOTHERBOARD-side note (partner CPU) on the MB verdict.
+  const cpuSideNote = Object.freeze({
+    relationship: 'cpu_motherboard',
+    rule: 'cpu_motherboard_support_exact',
+    source_table: 'cpu_motherboard_support',
+    source_id: 'cm-1',
+    source_status: 'CONDITIONAL',
+    min_bios_version: '1.2.3',
+    partner_role: 'MOTHERBOARD',
+    partner_product_id: 'a-mb',
+    partner_product_variant_id: null,
+  });
+  const mbSideNote = Object.freeze({
+    relationship: 'cpu_motherboard',
+    rule: 'cpu_motherboard_support_family',
+    source_table: 'cpu_motherboard_support',
+    source_id: 'cm-2',
+    source_status: 'CONDITIONAL',
+    min_bios_version: '2.0.0',
+    partner_role: 'CPU',
+    partner_product_id: 'a-cpu',
+    partner_product_variant_id: null,
+  });
+  const results = fullSet('a').map((v) => {
+    if (v.component_role === 'CPU') {
+      return { ...v, compatibility_notes: [cpuSideNote] };
+    }
+    if (v.component_role === 'MOTHERBOARD') {
+      return { ...v, compatibility_notes: [mbSideNote] };
+    }
+    return v;
+  });
+  const out = assembleBuilds(
+    engineInput({ results, integrated: { 'a-cpu': true } })
+  );
+  assert.equal(out.builds.length, 1);
+  const build = out.builds[0];
+  const cpu = build.components.find((c) => c.component_role === 'CPU');
+  const mb = build.components.find((c) => c.component_role === 'MOTHERBOARD');
+
+  // The picked partner identity matches the note: the note carries, by
+  // reference - the exact note object, never a clone - inside a frozen array.
+  assert.deepEqual(cpu.compatibility_notes, [cpuSideNote]);
+  assert.equal(cpu.compatibility_notes[0], cpuSideNote);
+  assert.ok(Object.isFrozen(cpu.compatibility_notes));
+  assert.deepEqual(mb.compatibility_notes, [mbSideNote]);
+  assert.equal(mb.compatibility_notes[0], mbSideNote);
+  assert.ok(Object.isFrozen(mb.compatibility_notes));
+
+  // Every other component gets a frozen [] - the key is always present.
+  for (const c of build.components) {
+    if (c.component_role === 'CPU' || c.component_role === 'MOTHERBOARD') continue;
+    assert.deepEqual(c.compatibility_notes, []);
+    assert.ok(Object.isFrozen(c.compatibility_notes));
+  }
+});
+
+test('Decision 22 8b: notes narrow to the partner picked in this build (never leak)', () => {
+  // One note, written against motherboard b-mb: the build that picks a-mb
+  // must NOT inherit it; the build that picks b-mb must.
+  const note = Object.freeze({
+    relationship: 'cpu_motherboard',
+    rule: 'cpu_motherboard_support_exact',
+    source_table: 'cpu_motherboard_support',
+    source_id: 'cm-3',
+    source_status: 'CONDITIONAL',
+    min_bios_version: '1.4.0',
+    partner_role: 'MOTHERBOARD',
+    partner_product_id: 'b-mb',
+    partner_product_variant_id: null,
+  });
+  const results = [
+    { ...verdict('CPU', 'a-cpu'), compatibility_notes: [note] },
+    verdict('MOTHERBOARD', 'a-mb'),
+    verdict('MOTHERBOARD', 'b-mb'),
+    verdict('RAM', 'a-ram'),
+    verdict('PSU', 'a-psu'),
+    verdict('CASE', 'a-case'),
+    verdict('CPU_COOLER', 'a-cooler'),
+    verdict('SSD_BOOT', 'a-ssd'),
+  ];
+  const out = assembleBuilds(
+    engineInput({ results, integrated: { 'a-cpu': true } })
+  );
+  assert.equal(out.builds.length, 2);
+  const notesFor = (build) =>
+    build.components.find((c) => c.component_role === 'CPU').compatibility_notes;
+  const withOtherMb = out.builds.find((b) => idsOf(b).MOTHERBOARD === 'a-mb');
+  const withNotedMb = out.builds.find((b) => idsOf(b).MOTHERBOARD === 'b-mb');
+
+  // The note's partner is not the one picked here: it must not leak.
+  assert.deepEqual(notesFor(withOtherMb), []);
+  assert.ok(Object.isFrozen(notesFor(withOtherMb)));
+
+  // Same verdict, partner b-mb picked: the note applies.
+  assert.deepEqual(notesFor(withNotedMb), [note]);
+  assert.equal(notesFor(withNotedMb)[0], note);
 });
 
 test('builds carry unknown_pairwise_count summed from their picked verdicts', () => {
