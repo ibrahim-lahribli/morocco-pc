@@ -15,7 +15,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { computeBuildScore, computeBuildScores } = require('./build-score');
+const {
+  computeBuildScore,
+  computeBuildScores,
+  computeBuildScoreContributions,
+} = require('./build-score');
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
 
 const NOW_MS = Date.parse('2026-09-19T00:00:00.000Z');
@@ -357,5 +361,151 @@ test('Decision 15: a build without a valid unknown_pairwise_count fails fast in 
     ERROR_CODES.INVALID_FIELD_VALUE,
     'unknownPairwiseCount',
     'non-integer build count'
+  );
+});
+
+// Decision 22 item 1: additive contributions exposure -------------------------
+
+function contributionsOf(builds, configOverrides = {}, assessments = makeAssessments()) {
+  return computeBuildScoreContributions({
+    builds,
+    assessments,
+    configuration: makeConfiguration(configOverrides),
+    nowMs: NOW_MS,
+  });
+}
+
+function reconstructBuildScore(entries, configuration, unknownPairwiseCount) {
+  // Sort by weight * effective_score descending (the Decision 22 item 1
+  // dominance order); the sum is order-independent, which doubles as proof the
+  // ordering rule does not change the score.
+  const ordered = [...entries].sort(
+    (a, b) => b.weight * b.effective_score - a.weight * a.effective_score
+  );
+  let numerator = 0;
+  let denominator = 0;
+  for (const item of ordered) {
+    numerator += item.weight * item.effective_score;
+    denominator += item.weight;
+  }
+  const raw = numerator / denominator;
+  const penalized = raw - configuration.unknown_compat_penalty * unknownPairwiseCount;
+  return Math.min(100, Math.max(0, penalized));
+}
+
+test('Decision 22 item 1: contributions are frozen, index-aligned, and use the {role,type,effective_score,weight} shape', () => {
+  const builds = [fullBuild(), makeBuild([component('CPU', P1)])];
+  const out = contributionsOf(builds);
+  assert.deepEqual(Object.keys(out), ['contributions']);
+  assert.ok(Object.isFrozen(out));
+  assert.ok(Object.isFrozen(out.contributions));
+  assert.equal(out.contributions.length, builds.length);
+  assert.ok(Object.isFrozen(out.contributions[0]));
+  assert.ok(Object.isFrozen(out.contributions[0][0]));
+  assert.deepEqual(
+    Object.keys(out.contributions[0][0]).sort(),
+    ['effective_score', 'role', 'type', 'weight']
+  );
+  // Inputs are never frozen or mutated by the additive function. The
+  // makeBuild() fixtures arrive pre-frozen, so prove it on an unfrozen build.
+  assert.ok(!Object.isFrozen(builds));
+  const unfrozen = {
+    components: Object.freeze([component('CPU', P1)]),
+    total_price: 100,
+    currency: 'MAD',
+    unknown_pairwise_count: 0,
+  };
+  contributionsOf([unfrozen]);
+  assert.ok(!Object.isFrozen(unfrozen));
+});
+
+test('Decision 22 item 1: contributions follow EXPANSION_ORDER then the configuration type-key order', () => {
+  // Component order is deliberately reversed; iteration must not follow it.
+  const reversed = makeBuild([component('MOTHERBOARD', P2), component('CPU', P1)]);
+  const out = contributionsOf([reversed]);
+  assert.deepEqual(
+    out.contributions[0].map((item) => `${item.role}/${item.type}`),
+    ['CPU/PERFORMANCE', 'CPU/VALUE', 'MOTHERBOARD/QUALITY']
+  );
+});
+
+test('Decision 22 item 1: contribution weight and effective_score values are hand-checkable', () => {
+  const out = contributionsOf([fullBuild()]);
+  const list = out.contributions[0];
+  assert.equal(list.length, 3);
+  const byKey = Object.fromEntries(list.map((item) => [`${item.role}/${item.type}`, item]));
+  // CPU/PERFORMANCE: 0.4 * 0.5 = 0.2; effective 80 (score 80, decay 1, CONFIRMED 1).
+  assert.ok(Math.abs(byKey['CPU/PERFORMANCE'].weight - 0.2) < 1e-12);
+  assert.ok(Math.abs(byKey['CPU/PERFORMANCE'].effective_score - 80) < 1e-12);
+  // CPU/VALUE: 0.3 * 0.25 = 0.075; effective 40 (no row -> 50 - 10).
+  assert.ok(Math.abs(byKey['CPU/VALUE'].weight - 0.075) < 1e-12);
+  assert.ok(Math.abs(byKey['CPU/VALUE'].effective_score - 40) < 1e-12);
+  // MOTHERBOARD/QUALITY: 1 * 0.25 = 0.25; effective 60.
+  assert.ok(Math.abs(byKey['MOTHERBOARD/QUALITY'].weight - 0.25) < 1e-12);
+  assert.ok(Math.abs(byKey['MOTHERBOARD/QUALITY'].effective_score - 60) < 1e-12);
+});
+
+test('Decision 22 item 1: contributions reproduce computeBuildScores build_score (cross-check)', () => {
+  const config = makeConfiguration();
+  const assessments = makeAssessments();
+  const cpuOnly = makeBuild([component('CPU', P1)]);
+  const penalized = makeBuild([component('CPU', P1), component('MOTHERBOARD', P2)], 2);
+  const builds = [fullBuild(), cpuOnly, penalized];
+  const scores = computeBuildScores({
+    builds,
+    assessments,
+    configuration: config,
+    nowMs: NOW_MS,
+    unknownPairwiseCounts: [0, 0, 2],
+  });
+  const out = computeBuildScoreContributions({ builds, assessments, configuration: config, nowMs: NOW_MS });
+  assert.equal(out.contributions.length, builds.length);
+  for (let index = 0; index < builds.length; index += 1) {
+    assert.equal(scores.scores[index].build_index, index);
+    const reconstructed = reconstructBuildScore(
+      out.contributions[index],
+      config,
+      builds[index].unknown_pairwise_count
+    );
+    assert.ok(
+      Math.abs(reconstructed - scores.scores[index].build_score) < 1e-9,
+      `build ${index}: contributions -> ${reconstructed}, computeBuildScores -> ${scores.scores[index].build_score}`
+    );
+  }
+});
+
+test('Decision 22 item 1: an empty build list yields frozen empty contributions', () => {
+  const out = computeBuildScoreContributions({
+    builds: [],
+    assessments: {},
+    configuration: makeConfiguration(),
+    nowMs: NOW_MS,
+  });
+  assert.deepEqual(out.contributions, []);
+  assert.ok(Object.isFrozen(out.contributions));
+});
+
+test('Decision 22 item 1: invalid builds fail fast with the existing vocabulary', async () => {
+  assertError(
+    await rejectionOf(() => contributionsOf('not-an-array')),
+    ERROR_CODES.INVALID_FIELD_VALUE,
+    'builds',
+    'non-array builds'
+  );
+  assertError(
+    await rejectionOf(() => contributionsOf([makeBuild([])])),
+    ERROR_CODES.INVALID_FIELD_VALUE,
+    'build.components',
+    'empty components'
+  );
+  assertError(
+    await rejectionOf(() =>
+      contributionsOf([makeBuild([component('CASE', P1)])], {
+        role_weights: { CPU: { PERFORMANCE: 0.4, VALUE: 0.3 } },
+      })
+    ),
+    ERROR_CODES.INVALID_FIELD_VALUE,
+    'role_weights.CASE',
+    'missing build role'
   );
 });
