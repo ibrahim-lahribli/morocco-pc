@@ -339,6 +339,8 @@ async function runRecommendation(args) {
     query_id: queryInput.query_id,
     scoring_model_id: queryInput.scoring_model_id,
     builds: Object.freeze(builds),
+    budget_amount: queryInput.input.budget_amount,
+    currency: queryInput.input.currency,
   });
 }
 

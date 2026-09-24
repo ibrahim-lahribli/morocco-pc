@@ -359,9 +359,11 @@ test('runRecommendation: one pass returns the frozen Decision 17.2 shape', async
   const db = createDb();
   const result = await runRecommendation({ db, queryId: QUERY_ID });
 
-  assert.deepEqual(Object.keys(result), ['query_id', 'scoring_model_id', 'builds']);
+  assert.deepEqual(Object.keys(result), ['query_id', 'scoring_model_id', 'builds', 'budget_amount', 'currency']);
   assert.equal(result.query_id, QUERY_ID);
   assert.equal(result.scoring_model_id, MODEL_ID);
+  assert.equal(result.budget_amount, 12000);
+  assert.equal(result.currency, 'MAD');
   assert.ok(Object.isFrozen(result));
   assert.ok(Object.isFrozen(result.builds));
   assert.equal(result.builds.length, 1);
