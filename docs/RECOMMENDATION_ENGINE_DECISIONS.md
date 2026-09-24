@@ -2682,6 +2682,174 @@ VERDICT: RESOLVED - full-run composition contract adopted (new orchestrator/full
 
 ---
 
+## Decision 22 — Explanation generation (Engine 6) contract (RESOLVED 2026-09-24)
+
+Status: RESOLVED 2026-09-24. Documentation only: no code, no migration, no commit. Records the Engine 6 (explanation generation) contract; implementation is future work against this contract.
+
+Grounding (investigation-confirmed, not re-derived): Engine 4 (`scoring/build-score.js`) returns only the final clamped `build_score` per build — no per-component, per-role, or per-type contribution breakdown is exposed anywhere, so Decision 19.7 ("Engine 4 will later need to expose score contributions") is still true and unaddressed. The pre-write seam is deliberately kept open in `full-run.js` (Decision 21): `builds` / `ranked` / `selected` are all carried in the composed return, not dropped. `recommendation_result.explanation TEXT` already exists (migration 011) — no migration needed; what is missing is code-contract only (`persist-ranked.js` hard-codes `explanation` to `null`, ignoring `entry.explanation`; `validate-selected.js` never reads or validates the field). Data available at generation time per build / component (confirmed exact shape): `rank` / `persisted_rank`, `build_score`, `total_price`, `compatibility_status` (PASS | UNKNOWN only), `signature`, and `components[]` each with `component_role`, `product_id`, `product_variant_id`, `category`, `status`, `price`. NOT available without re-derivation: per-(role, type) weights / effective scores, assessment rows, verdict reasons, `budget_amount`, `use_case` (budget / use_case exist only in the DB row, not on ranked / selected entries). The only content guidance is architecture §13 (deterministic from stored inputs: top contributing assessment types per role, `compatibility_status`, price / budget relationship; example "Ranked 1: best weighted score 87.5; PASS compatibility; 3120 MAD of 3500 MAD budget; GPU PERFORMANCE dominant."; same inputs -> same text; no template / fixture / format test beyond this). Decision 2(b): a not-verifiable CONDITIONAL pair maps to UNKNOWN and its condition text (e.g. "requires BIOS >= X") must be carried into the explanation.
+
+### 1. Engine 4 additive contributions exposure
+
+#### Decision: expose contributions via a sibling function; keep `computeBuildScores` output unchanged.
+
+`computeBuildScores` (and `computeBuildScore`) keep their existing return shape byte-for-byte: frozen `{ scores: [{ build_index, build_score }] }` with the final clamped score only. The "top contributing assessment types per role" input is exposed by a NEW additive sibling pure function (e.g. `computeBuildScoreContributions({ builds, assessments, configuration, nowMs })`) returning an index-aligned frozen `{ contributions: [...] }`: one entry per build, each a per-role list of `{ role, type, effective_score, weight }` where `weight = role_weights[role][type] * type_weights[type]` and `effective_score = effective(component_in_role, type)` — the exact STEP 1 / STEP 3 inputs that produced `build_score`, iterated in `EXPANSION_ORDER` then configuration type-key order. Dominance is then derivable by sorting `weight * effective_score` (tie order in item 4) with no re-derivation of scoring. Explicitly ADDITIVE-ONLY: no change to `computeBuildScore` / `computeBuildScores` outputs; `rankBuilds` and everything downstream keep working unmodified against the existing fields.
+
+Rationale: the minimal additive shape from which §13 "top contributing assessment types per role" is computable; reuses already-validated weight / effective-score inputs instead of a second scoring path.
+
+Evidence: `src/recommendation/scoring/build-score.js` `computeBuildScores` returns only `{ build_index, build_score }`; no contribution field exists on any Engine 4 return.
+
+Rejected alternatives (for this item): changing the `computeBuildScores` return shape in place; persisting assessment / weight inputs to new columns for Engine 6 to re-read; re-deriving weights / effective scores inside Engine 6 from config + assessments (duplicates Engine 4 ownership).
+
+### 2. Where Engine 6 lives
+
+#### Decision: new pure module (e.g. `src/recommendation/explanation/`), no DB, no SQL.
+
+Engine 6 is a new engine module consistent with every other engine module in this project: pure functions only (no DB client, no SQL, no I/O, no clock, no randomness, no mutation of inputs). It consumes frozen in-memory inputs (`selected` entries + item 1 contributions + item 4 budget / notes) and returns new entry objects (or a new array) carrying real `explanation` strings.
+
+Rationale: keeps engine ownership boundaries clean and the pre-write step unit-testable with fixtures, like Engines 3-5.
+
+Evidence: every engine module (`filtering/`, `assembly/`, `scoring/`, `ranking/`, `persistence/validate-selected.js`) is pure except the DML-only writer; `full-run.js` / `index.js` are boundary-only composition.
+
+Rejected alternatives (for this item): embedding explanation string-building directly in `full-run.js` (violates the boundary-only composition pattern of `index.js` / `full-run.js`); embedding it in `ranking/` (disturbs `rankBuilds`, which hard-codes `explanation: null` by contract per Decision 18 D6 — not to be disturbed).
+
+### 3. Slot-in point in full-run.js
+
+#### Decision: after `selectDiverseTop`, before `runRecommendationCommit`.
+
+`runRecommendationFullRun` calls Engine 6 on each entry of `selection.selected`, producing a new explained array (same shape, `explanation` filled with real strings; copies, never mutating the frozen selection in place), then passes THAT array to `runRecommendationCommit` instead of the raw `selectDiverseTop` output. `commit.js` and `persist-ranked.js` interfaces are untouched at the call-shape level: they already accept a `selected`-shaped array; only the field content changes from `null` to string. The Decision 21 composed return keeps carrying `builds` / `ranked` / `selected`; once Engine 6 lands, the returned `selected` is the explained array.
+
+Rationale: uses the deliberately-kept-open pre-write seam (Decision 21) for exactly the purpose Decision 19.7 named (generate text in memory BEFORE the write); no orchestrator reshape needed.
+
+Evidence: `src/recommendation/orchestrator/full-run.js` (`selectDiverseTop` -> `runRecommendationCommit(client, queryId, selection.selected)`; return carries `builds`, `ranked`, `top_n`, `selected`).
+
+Rejected alternatives (for this item): generating inside `runRecommendationCommit` / `persist-ranked.js` (mixes pure text generation into the transactional DML owner); generating inside `rankBuilds` (breaks Decision 18 D6); dropping `builds` / `ranked` from the composed return (closes the seam Engine 6 needs).
+
+### 4. Format / content contract
+
+#### Decision: fixed template-string composition by a pure function (not free-text / LLM).
+
+Per-build `explanation` is a FIXED template-string composition, consistent with the one architecture-doc example — a deterministic pure function per the architecture doc's explicit requirement, not free-text or LLM generation:
+
+```text
+Ranked {rank}: best weighted score {build_score}; {PASS|UNKNOWN} compatibility; {total_price} {currency} of {budget_amount} {currency} budget; {ROLE} {TYPE} dominant[{; requires BIOS >= X}][{; UNKNOWN: {role-list}}]
+```
+
+Concrete rules: (a) `rank` / `build_score` / `total_price` / `compatibility_status` are the already-rounded entry values, never re-rounded or re-derived; `currency` is the build / price currency already on the entry. (b) `budget_amount` does NOT come from the selected entries (confirmed absent — only in the DB row); it is threaded explicitly from the already-loaded snapshot query input (`runRecommendationSnapshot` loads the query row) as an extra Engine 6 argument (e.g. `budget: { amount, currency }`) — Engine 6 never queries the DB itself and no new field is stuffed onto ranked entries; `use_case` is likewise NOT an explanation input. (c) Dominant `{ROLE} {TYPE}` is the top entry of the item-1 contribution list for that build, ordered by `weight * effective_score` descending; ties broken deterministically by `EXPANSION_ORDER`, then configuration type-key order, then code-unit comparison (never `localeCompare`, never input-order dependent). (d) Decision 2(b): a not-verifiable CONDITIONAL pair maps to UNKNOWN and its condition text MUST appear as a `requires BIOS >= X` clause (verbatim `min_bios_version` text); verdict reasons are confirmed absent from ranked / selected entries, so the text is threaded as an explicit per-entry `compatibilityNotes` input carried forward from the Engine 2D / 3 verdict layer (additive carry, same mechanism as item 1) — Engine 6 never re-derives support-table rows; when notes are absent / empty no BIOS clause is emitted. (e) UNKNOWN is NEVER silent: `compatibility_status === 'UNKNOWN'` always emits the `UNKNOWN compatibility` token, and any component with `status === 'UNKNOWN'` appends `; UNKNOWN: {comma-separated roles in EXPANSION_ORDER}` (roles only; no invented reasons).
+
+Rationale: satisfies arch §13 (deterministic from stored inputs; same inputs -> same text) and Decision 2(b) with the smallest template covering the example plus the two mandatory uncertainty signals.
+
+Evidence: arch §13 example quoted in Grounding; Decision 2(b) condition-carry rule; ranked / selected entries carry only PASS | UNKNOWN status with no reason text.
+
+Rejected alternatives (for this item): free-text / LLM generation (violates §13 determinism + §14 re-run rule); locale-aware number formatting; silent UNKNOWN (violates UNKNOWN-never-silent); resolving CONDITIONAL to PASS by default or dropping the BIOS condition (violates Decision 2(b)); re-querying budget / assessments / compat tables inside Engine 6.
+
+### 5. validate-selected.js and persist-ranked.js changes
+
+#### Decision: require non-empty explanation at validation; bind it at persistence (intentional breaking change to "always null").
+
+Once Engine 6 exists: `validate-selected.js` gains one rule — `entry.explanation` is REQUIRED non-empty string (`typeof === 'string' && explanation.trim().length > 0`; validation only, no trim-and-store), failing fast otherwise so silent-null passthrough is rejected at the commit boundary. `persist-ranked.js` binds `entry.explanation` as `$5` of `INSERT_RECOMMENDATION_RESULT` instead of the current hard-coded `null`. This is an INTENTIONAL BREAKING CHANGE to the current "explanation always null" contract: the existing tests asserting `null` (`rank.test.js` "explanation is null", `persist-ranked.test.js` "explanation hardcoded null", `validate-selected.test.js` null fixtures) MUST BE UPDATED to the new required-string rule, not merely added to. `rankBuilds` itself is untouched — it keeps emitting `explanation: null` per Decision 18 D6; the string is filled only at the item-3 pre-write seam.
+
+Rationale: the validator is the last pure gate before the write; enforcing non-empty string there makes a missing Engine 6 call fail fast instead of persisting silent nulls into the non-nullable-meaning column.
+
+Evidence: `persist-ranked.js` line 87 binds `null`; `validate-selected.js` never reads `explanation`; `recommendation_result.explanation TEXT` exists (migration 011) so no migration is needed.
+
+Rejected alternatives (for this item): keeping `null` acceptance alongside strings (preserves silent-null passthrough); validating inside `persist-ranked.js` DML instead of the pure validator; changing `rankBuilds` to generate text (breaks Decision 18 D6).
+
+### 6. Determinism / versioning
+
+#### Decision: confirm arch §13 — same inputs -> same text; implicitly versioned with the scoring model, no separate version field.
+
+Same inputs -> same explanation text, byte-for-byte (fixed template, fixed ordering rules in item 4, no clock / random / DB / locale-dependent formatting). Explanation text is IMPLICITLY VERSIONED with the scoring model by virtue of being deterministically derived from `scoring_model_id`-scoped data (weights, assessments via STEP 1, `unknown_compat_penalty`) plus the pinned query / budget snapshot — NO separate explanation version field or column. Any behavior change = new `scoring_model` row (arch §8 / §14 rule: never mutate a used configuration) and/or a versioned template change in the Engine 6 module, never an in-place reinterpretation of stored text.
+
+Rationale: restates the architecture doc's explicit requirement; avoids schema churn for a derived-text field.
+
+Evidence: arch §13 ("Same inputs -> same explanation text. Generation order and templates are part of Engine 6 and are versioned with the scoring model."); arch §14 re-run rule; arch §8 (every behavior change = new scoring_model row).
+
+Rejected alternatives (for this item): separate `explanation_version` column / field; recording engine binary version per row (arch §14 ACCEPTABLE gap — release notes suffice); allowing in-place template reinterpretation of stored rows.
+
+### 7. Budget exposure on the `runRecommendation` / snapshot return (item 4(b) reachability)
+
+#### Decision: add `budget_amount` + `currency` as two additive fields on `runRecommendation`'s existing frozen return, sourced from the query input already in scope at step 1; no second loader call.
+
+Item 4(b) threads the budget into Engine 6 "from the already-loaded snapshot query input". That is not reachable through today's return shapes: `runRecommendation` returns exactly `{ query_id, scoring_model_id, builds }` (`orchestrator/run.js` lines 338-342), `runRecommendationSnapshot` hands that object back verbatim (`orchestrator/snapshot.js` line 91), and the Decision 21 composed return is the pinned ten-field object with no budget field (`orchestrator/full-run.js` lines 62-73). The data is nonetheless ALREADY in scope inside `run.js`: step 1 holds `const queryInput = await query.loadQueryInput(queryId, db)` (`run.js` line 252), whose frozen `input` is the Engine 2A selection input built by `createCandidateSelectionInput` — `Object.freeze({ budget_amount, currency, use_case, required_roles })` (`query/load-query-input.js` lines 213-226 → `candidates/input.js` lines 113-118). `queryInput.input.budget_amount` is the strictly converted NUMBER (plain-decimal NUMERIC strings only; `convertBudgetAmount`, `load-query-input.js` lines 156-176 — the same value Engine 3's budget cutoff consumes) and `queryInput.input.currency` is the query row's verbatim `[A-Z]{3}` string.
+
+#### Decision (exact shape): at the EXISTING frozen-return statement (`run.js` lines 338-342) the object literal gains exactly two fields, appended after `builds` in this order — `budget_amount: queryInput.input.budget_amount`, `currency: queryInput.input.currency` — producing frozen `{ query_id, scoring_model_id, builds, budget_amount, currency }`.
+
+This is a field ADDITION on an existing object, not a second loader call: `loadQueryInput` is still called exactly ONCE (line 252), no extra SELECT is issued, no ENGINE module changes, and no build gains a field (`build` keeps its exact five keys: `components`, `total_price`, `currency`, `unknown_pairwise_count`, `build_score`). `snapshot.js` needs no change (verbatim pass-through, line 91). `full-run.js` needs no change for reachability: item 3 calls Engine 6 inside `runRecommendationFullRun`, where `snap.budget_amount` / `snap.currency` are in scope; the Decision 21 ten-field composed return is deliberately left at ten fields — exposing the budget there would be a separate Decision 21 amendment, out of scope for this item. `use_case` is deliberately NOT added (item 4(b): not an explanation input). The new top-level `currency` is the same value already carried on every build (`assembly/pipeline.js` line 170 sources build `currency` from the same Engine 2A input; single-currency-per-query, arch §7), so it is a top-level convenience for the Engine 6 budget argument, never a second source of truth.
+
+Additive discipline / the one pin that must be UPDATED: the existing three keys keep their names, order and values byte-for-byte and `builds` stays the same array (same elements, by reference); `orchestrator/run.test.js` line 362 pins the return keys exactly — `assert.deepEqual(Object.keys(result), ['query_id', 'scoring_model_id', 'builds'])` — and MUST be updated to `['query_id', 'scoring_model_id', 'builds', 'budget_amount', 'currency']` (item-5 discipline: update, not merely add). Stubs of the pass result (`snapshot.test.js` line 81; `full-run.test.js` lines 89 and 166) need no change until Engine 6's slot-in (item 3) actually reads the two fields.
+
+Rationale: item 4(b)'s budget argument has to exist somewhere; exposing it once at the boundary that already loaded it keeps one loader call per pass (Decision 17.2), one caller-owned snapshot transaction (Decision 17.5) and zero query-level fields on build / ranked / selected records.
+
+Evidence: `orchestrator/run.js` line 252 (the single loader call) and lines 338-342 (frozen three-key return); `query/load-query-input.js` lines 213-226 and `candidates/input.js` lines 113-118 (frozen input carrying `budget_amount` / `currency`); `orchestrator/snapshot.js` line 91 (verbatim pass-through); `orchestrator/full-run.js` lines 62-73 (pinned ten-field composed return); `assembly/pipeline.js` line 170; `orchestrator/run.test.js` line 362 (exact-keys pin); `orchestrator/full-run.test.js` lines 117-128 (composed-return keys pin).
+
+Rejected alternatives (for this item): a second `loadQueryInput` call or any extra SELECT inside `full-run.js` / Engine 6 (duplicates a read the same pass already made; breaks the one-loader-per-pass rule); adding `budget_amount` to each build or to ranked / selected entries (contradicts item 4(b) and puts one query-level value on 1..N records); extending the Decision 21 composed return inside this item; re-deriving the budget from `total_price` / the price carrier; exposing `use_case`.
+
+### 8. CONDITIONAL / BIOS condition-text carry — source, additive shape, exact drop point (item 4(d) specification)
+
+#### Decision: project the CONDITIONAL evidence Engine 2D already computes into an additive per-verdict `compatibility_notes` field, and carry it onto the emitted build components in Engine 3; a change to `filtering/` + `assembly/`, never `scoring/`; no ranked / selected shape change, no validation change, no migration.
+
+Item 4(d) asserts a per-entry `compatibilityNotes` "carried forward from the Engine 2D / 3 verdict layer (additive carry, same mechanism as item 1)" and cites "Decision 2(b)". Two things are pinned here.
+
+(a) Citation: the CONDITIONAL rule is Decision 3(b), not Decision 2(b) — "Resolver output for a CONDITIONAL pair is the verdict CONDITIONAL plus the machine-readable condition (e.g. `min_bios_version`) ... the condition text is carried into the `recommendation_result` explanation ("requires BIOS >= X")" (this document, lines 243-260). Decision 2 is the dual-memory motherboard gap (line 150) and the Engine 3-input "Decision 2 — REJECT handling" (line 421); neither contains the rule. Every "Decision 2(b)" cite inside Decision 22 should therefore be read as Decision 3(b) at implementation time; the existing item texts are left untouched here.
+
+(b) Mechanism: "the same mechanism as item 1" is not self-executing, because the text is not exposed where the original investigation looked for it.
+
+Where the text exists today (confirmed): Engine 1 creates it — `supportRecordToResult`'s CONDITIONAL branch (`compatibility/cpu-motherboard.js` lines 55-60) resolves to UNKNOWN + `REASON_CODES.CPU_MOTHERBOARD_CONDITIONAL_UNVERIFIABLE`, and its evidence item is built by `buildEvidence(rule, record, extraFields)` (lines 12-25) with the extra fields `['cpu_product_id', 'min_bios_version']` / `['cpu_product_family_id', 'min_bios_version']` (lines 143-155), i.e. `evidence[0] = { rule: 'cpu_motherboard_support_exact' | 'cpu_motherboard_support_family', source_table: 'cpu_motherboard_support', source_id, source_status: 'CONDITIONAL', min_bios_version }`. The raw column is already loaded into the Engine 2D context: `CPU_MOTHERBOARD_SUPPORT_SQL` selects `support_status, min_bios_version` (`filtering/context-loader.js` line 261) and `groupCompatRows(..., ['cpu_product_id', 'min_bios_version'])` / `['cpu_product_family_id', 'min_bios_version']` inject it into the compat buckets (lines 585-594).
+
+Where it is lost today (confirmed): inside Engine 2D the text survives only to the PAIR level — `evaluateCandidate` does `pairs.push(aggregateCompatibilityResults(checks))` (`filtering/filter.js` line 571) and `aggregateCompatibilityResults` flattens the evidence (`compatibility/aggregate.js` lines 37-42), so `pairs[i].evidence` still holds the `min_bios_version` item — but the relationship projection discards it one statement later: `evaluatedRelationships.push({ key, status, reason: firstReasonWithStatus(pairs, status) })` (lines 581-585) keeps only the reason CODE, and the frozen candidate verdict (lines 609-618) carries `{ product_id, product_variant_id, category, component_role, status, reason, relationships, unknown_pairwise_count }` with no evidence. Engine 3 then emits components with exactly `{ component_role, product_id, product_variant_id, category, status, price }` (`assembly/assemble.js` `finishPath`, lines 480-489), and ranking / selection carry that build object by reference (`ranking/rank.js` lines 410-418; `ranking/select-diverse.js` lines 121-129). `filtering/filter.test.js` lines 546-560 pin today's behavior exactly (UNKNOWN + reason code, nothing else). So the grounding claim "verdict reasons are confirmed absent from ranked / selected entries" is correct but incomplete: the text exists one projection earlier than the investigation looked. Item 4(d) was right that a carry is needed; only its mechanism was unspecified.
+
+#### Decision (exact additive shape), in implementation order:
+
+(a) `filtering/` — Engine 2D (`filtering/filter.js`, `evaluateCandidate`): derive per verdict an additive frozen `compatibility_notes` array from the pair results already computed at line 571, selecting exactly the pair-evidence items whose `source_status === 'CONDITIONAL'` (Engine 1's own `SOURCE_STATUSES.CONDITIONAL` vocabulary, not a reason-code special case, so a future CONDITIONAL row in `cooler_socket_support` / `case_motherboard_form_factor` flows without new code; today only `cpu_motherboard_support` can be CONDITIONAL in reachable data — docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md line 584: "CONDITIONAL semantics only exist in `cpu_motherboard_support`"). Verbatim note shape:
+
+```text
+compatibility_notes: [
+  {
+    relationship: 'cpu_motherboard',            // ROLE_RELATIONSHIPS[role] key, verbatim
+    rule: 'cpu_motherboard_support_exact',      // evidence rule, verbatim
+    source_table: 'cpu_motherboard_support',    // evidence field, verbatim
+    source_id: '<uuid> | null',
+    source_status: 'CONDITIONAL',               // SOURCE_STATUSES.CONDITIONAL, verbatim
+    min_bios_version: '1.2.3' | null,           // verbatim text; never parsed, never formatted
+    partner_role: 'MOTHERBOARD',                // RELATIONSHIP_PARTNER_ROLE[relationship][role] (line 565)
+    partner_product_id: '<uuid>',
+    partner_product_variant_id: '<uuid> | null'
+  }
+]
+```
+
+Ordering is deterministic: canonical relationship order (`ROLE_RELATIONSHIPS[role]`), then partner bucket order (the Engine 2C pool order already used), then the pair's evidence-array order; the array is frozen and is `[]` for a verdict with no CONDITIONAL pair. `status` / `reason` / `relationships` / `unknown_pairwise_count` keep their exact current values; this field is the ONLY Engine 2D result-shape change.
+
+(b) `assembly/` — Engine 3 (`assembly/assemble.js`, `finishPath` lines 468-503): each emitted component gains the same field, narrowed to the partners actually picked — the verdict's notes whose `(partner_role, partner_product_id, partner_product_variant_id)` equal the picked component's identity in that role (the `picked` map is already in hand; only Engine 2D-computed notes are selected by identity, no resolver is re-called and no support-table row is re-derived). `[]` when nothing applies, so the key is present on every component and `status`-only consumers are unaffected; the array travels by reference, never mutated.
+
+Chain completion (verified — no other module changes): `retention/retain.js` hands verdicts over intact by reference (header lines 27-31, output lines 294-297) → Engine 3 components → `rankBuilds` keeps `build` by reference (`ranking/rank.js` lines 410-418) → `selectDiverseTop` keeps `build` by reference (`ranking/select-diverse.js` lines 121-129), so Engine 6 reads `entry.build.components[i].compatibility_notes` as its `compatibilityNotes` argument (item 4(d)'s name is the Engine 6 PARAMETER; the record field stays snake_case like `unknown_pairwise_count` / `compatibility_status`). Explicitly NOT `scoring/`: `scoring/build-score.js` never enumerates component keys (it reads `component_role` / `product_id` plus role / type weights, lines 185-267) and `deriveStatus` reads only `status` / `unknown_pairwise_count` (`ranking/rank.js` lines 160-163), so the added field is inert for scoring and ranking. `persistence/validate-selected.js` needs no change for this field (`validateComponent`, lines 82-105, checks named fields only and tolerates extra keys) and `persistence/persist-ranked.js` persists no such column (lines 56-79) — the notes are explanation-only inputs, so no migration (item 6's no-schema-churn stance).
+
+Test touch-points that MUST be UPDATED (item-5 discipline: update, not merely add): `filtering/filter.test.js` lines 840-843 — the exact sorted verdict-keys assertion gains `compatibility_notes`; `assembly/assemble.test.js` lines 870-885 — BOTH exact component-key assertions (the sorted one and the insertion-order one) gain `compatibility_notes`; plus new fixtures covering the CONDITIONAL carry end-to-end (Engine 2D verdict → component) and its per-partner narrowing. The current CONDITIONAL test (`filtering/filter.test.js` lines 546-560) stays valid and is extended with the note assertions.
+
+Does this need its own investigation pass before Decision 22 is fully specified? No. The source (`compatibility/cpu-motherboard.js` lines 55-60, 143-155), the last point where the text is still live (`filtering/filter.js` line 571 + `compatibility/aggregate.js` lines 37-42), the exact drop point (`filtering/filter.js` lines 581-585 → 609-618) and the Engine 3 component literal (`assembly/assemble.js` lines 480-489) are all code-confirmed here, and both remaining design forks are settled in this item (verbatim single-string `min_bios_version`, per item 4(d); the ordering tie-breaks above). The implementation task must do item 7 first (budget reachability) and 8(a) before 8(b).
+
+Rationale: the BIOS condition text must be reachable at the Engine 6 slot-in for item 4(d) to be implementable at all; the pair-level evidence Engine 2D already computes is the cheapest faithful source, and projecting it additively (verdict → component) neither re-derives support-table rows nor perturbs scoring, ranking, selection, validation or persistence.
+
+Evidence: this document lines 243-260 (Decision 3(b) condition-carry rule); `compatibility/cpu-motherboard.js` lines 12-25, 55-60, 143-155; `compatibility/aggregate.js` lines 37-42; `filtering/context-loader.js` lines 261, 585-594; `filtering/filter.js` lines 565, 571, 581-585, 609-618; `assembly/assemble.js` lines 468-503; `ranking/rank.js` lines 160-163, 410-418; `ranking/select-diverse.js` lines 121-129; `scoring/build-score.js` lines 185-267; `filtering/filter.test.js` lines 546-560, 840-843; `assembly/assemble.test.js` lines 851-889; docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md line 584 (CONDITIONAL exists only in `cpu_motherboard_support`).
+
+Rejected alternatives (for this item): re-deriving support-table rows or re-calling a resolver inside Engine 3 / Engine 6 (duplicates Engine 1's ownership; the pair aggregation is already in hand); carrying the notes on the ranked / selected ENTRY instead of the component (changes the shape the persistence validator governs, and leaves the pair scope ambiguous); a separate build-level `bios_notes` field (duplicates the component-level truth and needs its own aggregation rule); changing `filterCandidates`' existing fields or its evidence handling non-additively; persisting the notes to a new column (migration out of scope; item 6's rule); rendering human-readable prose in Engine 2D (item 4's template owns all prose).
+
+### Rejected alternatives (global, restated not reopened)
+
+* Persisting generation inputs via new columns / migration instead of in-memory pre-write generation (already rejected by Decision 19.7; migration 011 `explanation TEXT` suffices).
+* Re-deriving scores / assessments / verdicts / budget inside Engine 6 (breaks pure-module discipline; duplicates Engine 4 / 2D ownership).
+* Free-text / LLM / locale-dependent generation (violates §13 + §14 re-run rule).
+* Silently dropping UNKNOWN or CONDITIONAL / BIOS conditions (violates Decision 2(b) and UNKNOWN-never-silent).
+* Breaking `computeBuildScores` / `rankBuilds` / selection call-shapes instead of the additive sibling + explicit Engine 6 arguments + pre-commit slot-in adopted above.
+
+### Verdict for this pass
+
+```text
+VERDICT: RESOLVED - Engine 6 is a new pure explanation/ module slotted between selectDiverseTop and runRecommendationCommit, fed by an additive Engine 4 contributions sibling plus explicitly threaded budget/condition inputs, emitting a fixed deterministic template (rank/score/status/price-vs-budget/dominant role-type + mandatory BIOS/UNKNOWN clauses), enforced by a required-non-empty explanation rule in validate-selected.js and bound (not nulled) by persist-ranked.js, implicitly versioned with the scoring model
+```
+
+---
+
 ## Final Status
 
 ```text
@@ -2697,6 +2865,7 @@ Decision 18: RESOLVED (ranking / Engine 5a, adopted 2026-09-21)
 Decision 19: RESOLVED (persistence / Engine 5b, adopted 2026-09-21)
 Decision 20: RESOLVED (post-ranking (CPU, GPU) pair diversity selection / O4, MAX_PER_PAIR = 3 code constant, adopted 2026-09-22)
 Decision 21: RESOLVED (full-run composition contract -> orchestrator/full-run.js runRecommendationFullRun, adopted 2026-09-23)
+Decision 22: RESOLVED (explanation generation / Engine 6 contract, adopted 2026-09-24)
 ```
 
 Unambiguous one-sentence semantics for the implementation task:
