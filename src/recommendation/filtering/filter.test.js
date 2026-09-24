@@ -558,6 +558,74 @@ test('B2-D: pair FAIL dominates UNKNOWN and PASS within one pair (cpu_motherboar
   assert.equal(unknownCpu.status, CANDIDATE_STATUSES.UNKNOWN);
   assert.equal(unknownCpu.relationships.cpu_motherboard, FINAL_STATUSES.UNKNOWN);
   assert.equal(unknownCpu.reason, REASON_CODES.CPU_MOTHERBOARD_CONDITIONAL_UNVERIFIABLE);
+  assert.deepEqual(unknownCpu.compatibility_notes, [
+    {
+      relationship: 'cpu_motherboard',
+      rule: 'cpu_motherboard_support_exact',
+      source_table: 'cpu_motherboard_support',
+      source_id: 'cm-exact',
+      source_status: 'CONDITIONAL',
+      min_bios_version: '1.2.3',
+      partner_role: 'MOTHERBOARD',
+      partner_product_id: MB_ID,
+      partner_product_variant_id: null,
+    },
+  ]);
+  assert.deepEqual(Object.keys(unknownCpu.compatibility_notes[0]).sort(), [
+    'min_bios_version',
+    'partner_product_id',
+    'partner_product_variant_id',
+    'partner_role',
+    'relationship',
+    'rule',
+    'source_id',
+    'source_status',
+    'source_table',
+  ]);
+  assert.ok(Object.isFrozen(unknownCpu.compatibility_notes));
+  assert.ok(Object.isFrozen(unknownCpu.compatibility_notes[0]));
+
+  const unknownMotherboard = findResult(conditional, 'MOTHERBOARD', MB_ID);
+  assert.deepEqual(unknownMotherboard.compatibility_notes, [
+    {
+      relationship: 'cpu_motherboard',
+      rule: 'cpu_motherboard_support_exact',
+      source_table: 'cpu_motherboard_support',
+      source_id: 'cm-exact',
+      source_status: 'CONDITIONAL',
+      min_bios_version: '1.2.3',
+      partner_role: 'CPU',
+      partner_product_id: CPU_ID,
+      partner_product_variant_id: null,
+    },
+  ]);
+});
+
+test('B2-D: non-CONDITIONAL verdicts get compatibility_notes [] (not null/undefined)', () => {
+  // Golden PASS context: exact support PASS carries source_status PASS -> no notes.
+  const golden = filterCandidates(goldenContext());
+  const goldenCpu = findResult(golden, 'CPU', CPU_ID);
+  assert.equal(goldenCpu.status, CANDIDATE_STATUSES.PASS);
+  assert.deepEqual(goldenCpu.compatibility_notes, []);
+  assert.ok(Array.isArray(goldenCpu.compatibility_notes));
+  assert.ok(Object.isFrozen(goldenCpu.compatibility_notes));
+
+  // FAIL verdict from a FAIL support row likewise carries [] (not null/undefined).
+  const failingCompat = goldenCompat();
+  failingCompat.cpu_motherboard_exact = {
+    [MB_ID]: [cpuMotherboardExactRow({ support_status: 'FAIL' })],
+  };
+  const failing = filterCandidates(buildContext({
+    pool: [makeCandidate('CPU', CPU_ID), makeCandidate('MOTHERBOARD', MB_ID)],
+    specs: goldenSpecs(),
+    platform_by_socket: goldenPlatformBySocket(),
+    compat: failingCompat,
+  }));
+  const rejectedCpu = findResult(failing, 'CPU', CPU_ID);
+  assert.equal(rejectedCpu.status, CANDIDATE_STATUSES.REJECT);
+  assert.deepEqual(rejectedCpu.compatibility_notes, []);
+  assert.ok(Array.isArray(rejectedCpu.compatibility_notes));
+  assert.ok(Object.isFrozen(rejectedCpu.compatibility_notes));
 });
 test('B2-D: GPU<->CASE aggregates length and thickness into one pair verdict', () => {
   // (a) length FAIL + thickness PASS -> FAIL (GPU_TOO_LONG).
@@ -838,11 +906,12 @@ test('B2-D: result records preserve the Engine 2C candidate identity exactly', (
         }
       );
       assert.deepEqual(Object.keys(entry).sort(), [
-        'category', 'component_role', 'product_id', 'product_variant_id',
+        'category', 'compatibility_notes', 'component_role', 'product_id', 'product_variant_id',
         'reason', 'relationships', 'status', 'unknown_pairwise_count',
       ]);
       assert.ok(Object.isFrozen(entry));
       assert.ok(Object.isFrozen(entry.relationships));
+      assert.ok(Object.isFrozen(entry.compatibility_notes));
     }
   }
 });

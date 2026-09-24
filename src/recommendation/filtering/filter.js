@@ -94,6 +94,16 @@
  *     relationships { [relationship key]: PASS | FAIL | UNKNOWN }
  *     unknown_pairwise_count  integer >= 0 (pairs that resolved UNKNOWN,
  *                             Decision 15; the Decision 13 count producer)
+ *     compatibility_notes     frozen array of CONDITIONAL pair-evidence notes
+ *                             (Decision 22 item 8a; [] when none) - each note
+ *                             carries relationship, rule, source_table,
+ *                             source_id (or null), source_status
+ *                             (SOURCE_STATUSES.CONDITIONAL), min_bios_version
+ *                             verbatim (or null), partner_role,
+ *                             partner_product_id and
+ *                             partner_product_variant_id (or null), in
+ *                             canonical relationship order, then partner
+ *                             bucket order, then pair evidence order
  *   }
  *
  * Determinism: candidates are evaluated in canonical COMPONENT_ROLES order
@@ -121,6 +131,7 @@ const { createCandidate } = require('../candidates/candidate');
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
 const {
   FINAL_STATUSES,
+  SOURCE_STATUSES,
   aggregateCompatibilityResults,
   resolveCpuMotherboardSocket,
   resolveCpuMotherboardSupport,
@@ -559,6 +570,7 @@ function firstReasonWithStatus(pairs, status) {
  */
 function evaluateCandidate(context, role, candidate) {
   const evaluatedRelationships = [];
+  const compatibilityNotes = [];
   let unknownPairwiseCount = 0;
 
   for (const relationshipKey of ROLE_RELATIONSHIPS[role]) {
@@ -571,9 +583,33 @@ function evaluateCandidate(context, role, candidate) {
       pairs.push(aggregateCompatibilityResults(checks));
     }
 
-    for (const pair of pairs) {
+    for (let pairIndex = 0; pairIndex < pairs.length; pairIndex += 1) {
+      const pair = pairs[pairIndex];
       if (pair.status === FINAL_STATUSES.UNKNOWN) {
         unknownPairwiseCount += 1;
+      }
+      const partner = partners[pairIndex];
+      const evidenceItems = Array.isArray(pair.evidence) ? pair.evidence : [];
+      for (const evidence of evidenceItems) {
+        if (
+          evidence !== null &&
+          typeof evidence === 'object' &&
+          evidence.source_status === SOURCE_STATUSES.CONDITIONAL
+        ) {
+          compatibilityNotes.push(
+            Object.freeze({
+              relationship: relationshipKey,
+              rule: evidence.rule,
+              source_table: evidence.source_table,
+              source_id: evidence.source_id ?? null,
+              source_status: SOURCE_STATUSES.CONDITIONAL,
+              min_bios_version: evidence.min_bios_version ?? null,
+              partner_role: partnerRole,
+              partner_product_id: partner.product_id,
+              partner_product_variant_id: partner.product_variant_id ?? null,
+            })
+          );
+        }
       }
     }
 
@@ -615,6 +651,7 @@ function evaluateCandidate(context, role, candidate) {
     reason,
     relationships: Object.freeze(relationships),
     unknown_pairwise_count: unknownPairwiseCount,
+    compatibility_notes: Object.freeze(compatibilityNotes),
   });
 }
 
