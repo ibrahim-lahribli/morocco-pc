@@ -21,7 +21,7 @@ const effective = require('./effective-score');
 const candidate = require('./candidate-score');
 const build = require('./build-score');
 
-test('scoring barrel exposes exactly the twelve-export public API', () => {
+test('scoring barrel exposes exactly the thirteen-export public API', () => {
   assert.deepEqual(Object.keys(scoring), [
     'loadScoringModel',
     'SELECT_SCORING_MODEL_SQL',
@@ -35,6 +35,7 @@ test('scoring barrel exposes exactly the twelve-export public API', () => {
     'computeCandidateScores',
     'computeBuildScore',
     'computeBuildScores',
+    'computeBuildScoreContributions',
   ]);
 });
 
@@ -58,6 +59,10 @@ test('scoring barrel re-exports every export by identity - no wrapper, no copy',
   assert.strictEqual(scoring.computeCandidateScores, candidate.computeCandidateScores);
   assert.strictEqual(scoring.computeBuildScore, build.computeBuildScore);
   assert.strictEqual(scoring.computeBuildScores, build.computeBuildScores);
+  assert.strictEqual(
+    scoring.computeBuildScoreContributions,
+    build.computeBuildScoreContributions
+  );
 });
 
 test('scoring barrel adds no logic of its own', () => {

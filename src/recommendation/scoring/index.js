@@ -55,7 +55,11 @@ const {
 } = require('./load-assessments');
 const { selectAssessmentRow, computeEffectiveScore } = require('./effective-score');
 const { computeCandidateScore, computeCandidateScores } = require('./candidate-score');
-const { computeBuildScore, computeBuildScores } = require('./build-score');
+const {
+  computeBuildScore,
+  computeBuildScores,
+  computeBuildScoreContributions,
+} = require('./build-score');
 
 module.exports = {
   loadScoringModel,
@@ -70,4 +74,5 @@ module.exports = {
   computeCandidateScores,
   computeBuildScore,
   computeBuildScores,
+  computeBuildScoreContributions,
 };
