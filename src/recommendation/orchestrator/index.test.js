@@ -81,7 +81,7 @@ test('orchestrator modules import exactly their collaborators', () => {
   ]);
   assert.deepEqual(requiresOf('snapshot.js'), ['../candidates/errors', './run']);
   assert.deepEqual(requiresOf('index.js'), ['./full-run', './run', './snapshot']);
-  assert.deepEqual(requiresOf('full-run.js'), ['../ranking', './commit', './snapshot']);
+  assert.deepEqual(requiresOf('full-run.js'), ['../explanation', '../ranking', './commit', './snapshot']);
 });
 
 test('run.js composes the two Engine 2D stages itself (the B2-G helper is never imported)', () => {

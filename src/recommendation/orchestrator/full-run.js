@@ -13,7 +13,9 @@
  *     -> selectDiverseTop({ ranked })            - Decision 20, walks the
  *        FULL ranked list (never the top_n slice), capped by the ranking
  *        barrel constants
- *     -> runRecommendationCommit(client, queryId, selected) - separate
+ *     -> explainSelection({ selected, builds, contributions, budget }) - Engine
+ *        6, Decision 22 item 3, pure/DB-free; produces the EXPLAINED array
+ *     -> runRecommendationCommit(client, queryId, explained) - separate
  *        later write pass on the same client, after the read pass has ended
  *        (the session is idle by then); still called with an empty array
  *        when there is nothing to persist
@@ -33,12 +35,15 @@
  * query_id, scoring_model_id, builds, ranked, top_n, selected,
  * dropped_count, persisted_ranks, build_candidate_ids,
  * recommendation_result_ids. Intermediates stay observable by reference per
- * their own contracts; the pre-write seam stays open for Engine 6.
+ * their own contracts; the pre-write seam is now FILLED by Engine 6
+ * (../explanation, Decision 22 item 3), so the returned `selected` is the
+ * explained array.
  */
 
 const ranking = require('../ranking');
 const commit = require('./commit');
 const snapshot = require('./snapshot');
+const explanation = require('../explanation');
 
 /**
  * Run one full recommendation pass: score, rank, diversity-select, persist.
@@ -58,14 +63,23 @@ async function runRecommendationFullRun(client, queryId) {
     limit: ranking.TOP_N_PERSISTED,
     maxPerPair: ranking.MAX_PER_PAIR,
   });
-  const persisted = await commit.runRecommendationCommit(client, queryId, selection.selected);
+  // Decision 22 item 3: Engine 6 fills the pre-write seam - pure, DB-free, and
+  // copies only (the frozen selection is never mutated). The committed and
+  // returned `selected` is the EXPLAINED array.
+  const explained = explanation.explainSelection({
+    selected: selection.selected,
+    builds: snap.builds,
+    contributions: snap.build_contributions,
+    budget: { amount: snap.budget_amount, currency: snap.currency },
+  });
+  const persisted = await commit.runRecommendationCommit(client, queryId, explained);
   return Object.freeze({
     query_id: snap.query_id,
     scoring_model_id: snap.scoring_model_id,
     builds: snap.builds,
     ranked: rankedResult.ranked,
     top_n: rankedResult.top_n,
-    selected: selection.selected,
+    selected: explained,
     dropped_count: selection.dropped_count,
     persisted_ranks: persisted.persisted_ranks,
     build_candidate_ids: persisted.build_candidate_ids,

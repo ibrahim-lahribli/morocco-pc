@@ -234,9 +234,11 @@ function withBuildScore(build, buildScore) {
  * @param {object} args.db pg-compatible client exposing db.query(sql, params);
  *        injected and validated by the loaders, never created or closed here.
  * @param {string} args.queryId pinned recommendation_query.id.
- * @returns {Promise<object>} frozen { query_id, scoring_model_id, builds } -
- *        builds in Engine 3 discovery order, each an Engine 3 build plus
- *        build_score; empty when no complete build fits the budget.
+ * @returns {Promise<object>} frozen { query_id, scoring_model_id, builds,
+ *        budget_amount, currency, build_contributions } - builds in Engine 3
+ *        discovery order, each an Engine 3 build plus build_score, empty when
+ *        no complete build fits the budget; build_contributions is the
+ *        Decision 22 item-1 contribution list, index-aligned with builds.
  * @throws {CandidateSelectionError} the existing Engine 2 vocabulary, raised by
  *        the composed stages (blank/NULL use_case, missing query row, missing
  *        scoring model, empty candidate pool, ...) or by this boundary's own
@@ -327,6 +329,24 @@ async function runRecommendation(args) {
     );
   }
 
+  // 13b. Decision 22 item 1/3 enabling step: the per-(role,type) inputs that
+  //      produced each build_score, same arguments, same discovery order, ONE
+  //      extra pure call. Additive only - the builds above are untouched and
+  //      nothing else in this pass consumes the result (Engine 6 does).
+  const buildContributions = scoring.computeBuildScoreContributions({
+    builds: assemblyResult.builds,
+    assessments,
+    configuration,
+    nowMs,
+  });
+  if (buildContributions.contributions.length !== assemblyResult.builds.length) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'buildContributions',
+      'build score contributions must stay index-aligned with the assembled builds'
+    );
+  }
+
   // 14. Frozen Decision 17.2 result: zero builds is a valid outcome.
   const builds = [];
   for (let index = 0; index < assemblyResult.builds.length; index += 1) {
@@ -341,6 +361,7 @@ async function runRecommendation(args) {
     builds: Object.freeze(builds),
     budget_amount: queryInput.input.budget_amount,
     currency: queryInput.input.currency,
+    build_contributions: buildContributions.contributions,
   });
 }
 

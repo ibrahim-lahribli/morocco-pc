@@ -359,7 +359,14 @@ test('runRecommendation: one pass returns the frozen Decision 17.2 shape', async
   const db = createDb();
   const result = await runRecommendation({ db, queryId: QUERY_ID });
 
-  assert.deepEqual(Object.keys(result), ['query_id', 'scoring_model_id', 'builds', 'budget_amount', 'currency']);
+  assert.deepEqual(Object.keys(result), [
+    'query_id',
+    'scoring_model_id',
+    'builds',
+    'budget_amount',
+    'currency',
+    'build_contributions',
+  ]);
   assert.equal(result.query_id, QUERY_ID);
   assert.equal(result.scoring_model_id, MODEL_ID);
   assert.equal(result.budget_amount, 12000);
@@ -367,6 +374,9 @@ test('runRecommendation: one pass returns the frozen Decision 17.2 shape', async
   assert.ok(Object.isFrozen(result));
   assert.ok(Object.isFrozen(result.builds));
   assert.equal(result.builds.length, 1);
+  assert.ok(Object.isFrozen(result.build_contributions));
+  assert.equal(result.build_contributions.length, result.builds.length);
+  assert.ok(Array.isArray(result.build_contributions[0]));
 });
 
 test('each build is the Engine 3 build plus exactly one build_score field', async () => {
@@ -420,6 +430,34 @@ test('build_score is the index-aligned computeBuildScores value for the same mod
     assert.deepEqual(scored.scores.map((entry) => entry.build_index), [0]);
     for (let index = 0; index < out.builds.length; index += 1) {
       assert.equal(out.builds[index].build_score, independent.scores[index].build_score);
+    }
+  });
+});
+
+test('build_contributions is the index-aligned computeBuildScoreContributions value (Decision 22 item 1)', async () => {
+  const db = createDb();
+  await withSpies([
+    { key: 'model', namespace: scoringModule, name: 'loadScoringModel' },
+    { key: 'assessment', namespace: scoringModule, name: 'loadComponentAssessments' },
+    { key: 'assembly', namespace: assemblyModule, name: 'assembleBuildsForRecommendation' },
+    { key: 'contributions', namespace: scoringModule, name: 'computeBuildScoreContributions' },
+  ], async (spies) => {
+    const out = await runRecommendation({ db, queryId: QUERY_ID });
+    const model = await spies.model.calls[0].result;
+    const assessmentResult = await spies.assessment.calls[0].result;
+    const engine3 = spies.assembly.calls[0].result;
+    const recorded = await spies.contributions.calls[0].result;
+
+    const independent = scoringModule.computeBuildScoreContributions({
+      builds: engine3.builds,
+      assessments: assessmentResult.assessments,
+      configuration: model.configuration,
+      nowMs: NOW_MS,
+    });
+    assert.deepEqual(recorded, independent);
+    assert.equal(out.build_contributions.length, out.builds.length);
+    for (let index = 0; index < out.builds.length; index += 1) {
+      assert.deepEqual(out.build_contributions[index], independent.contributions[index]);
     }
   });
 });
@@ -805,6 +843,7 @@ test('run.js calls its collaborators in the Decision 17.3 order, each exactly on
     'retention.retainTopKPerRole(',
     'assembly.assembleBuildsForRecommendation(',
     'scoring.computeBuildScores(',
+    'scoring.computeBuildScoreContributions(',
   ];
   let cursor = -1;
   for (const needle of sequence) {

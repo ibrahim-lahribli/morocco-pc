@@ -16,20 +16,23 @@ const { runRecommendationFullRun } = require('./full-run');
 const snapshot = require('./snapshot');
 const commit = require('./commit');
 const ranking = require('../ranking');
+const explanation = require('../explanation');
 
 const QUERY_ID = '00000000-0000-4000-8000-000000000921';
 
 /** Replace the four composed entries with scripted stubs; record call order. */
-function stubStages({ snapshotResult, rankResult, selectResult, commitResult }) {
+function stubStages({ snapshotResult, rankResult, selectResult, explainResult, commitResult }) {
   const order = [];
   const snapshotCalls = [];
   const rankCalls = [];
   const selectCalls = [];
+  const explainCalls = [];
   const commitCalls = [];
   const originals = {
     snapshot: snapshot.runRecommendationSnapshot,
     rank: ranking.rankBuilds,
     select: ranking.selectDiverseTop,
+    explain: explanation.explainSelection,
     commit: commit.runRecommendationCommit,
   };
   snapshot.runRecommendationSnapshot = async function stub(client, queryId) {
@@ -47,6 +50,11 @@ function stubStages({ snapshotResult, rankResult, selectResult, commitResult }) 
     selectCalls.push(args);
     return selectResult;
   };
+  explanation.explainSelection = function stub(args) {
+    order.push('explain');
+    explainCalls.push(args);
+    return explainResult;
+  };
   commit.runRecommendationCommit = async function stub(client, queryId, selected) {
     order.push('commit');
     commitCalls.push({ client, queryId, selected });
@@ -57,11 +65,13 @@ function stubStages({ snapshotResult, rankResult, selectResult, commitResult }) 
     snapshotCalls,
     rankCalls,
     selectCalls,
+    explainCalls,
     commitCalls,
     restore() {
       snapshot.runRecommendationSnapshot = originals.snapshot;
       ranking.rankBuilds = originals.rank;
       ranking.selectDiverseTop = originals.select;
+      explanation.explainSelection = originals.explain;
       commit.runRecommendationCommit = originals.commit;
     },
   };
@@ -81,14 +91,26 @@ function happyStubs() {
   const ranked = Object.freeze([{ marker: 'ranked-1' }, { marker: 'ranked-2' }]);
   const topN = Object.freeze([{ marker: 'ranked-1' }]);
   const selected = Object.freeze([{ persisted_rank: 1 }]);
+  const buildContributions = Object.freeze([Object.freeze([])]);
+  const explained = Object.freeze([Object.freeze({ persisted_rank: 1, explanation: 'stub-explanation' })]);
   return {
     builds,
     ranked,
     topN,
     selected,
-    snapshotResult: Object.freeze({ query_id: QUERY_ID, scoring_model_id: 'model-1', builds }),
+    buildContributions,
+    explained,
+    snapshotResult: Object.freeze({
+      query_id: QUERY_ID,
+      scoring_model_id: 'model-1',
+      builds,
+      budget_amount: 12000,
+      currency: 'MAD',
+      build_contributions: buildContributions,
+    }),
     rankResult: Object.freeze({ ranked, top_n: topN }),
     selectResult: Object.freeze({ selected, dropped_count: 1 }),
+    explainResult: explained,
     commitResult: Object.freeze({
       query_id: QUERY_ID,
       persisted_ranks: Object.freeze([1]),
@@ -104,7 +126,7 @@ test('full-run: snapshot -> rank -> select -> commit in order on one client', as
   const fx = happyStubs();
   const out = await withStubbedStages(fx, async (stub) => {
     const result = await runRecommendationFullRun(client, QUERY_ID);
-    assert.deepEqual(stub.order, ['snapshot', 'rank', 'select', 'commit']);
+    assert.deepEqual(stub.order, ['snapshot', 'rank', 'select', 'explain', 'commit']);
     assert.equal(stub.snapshotCalls.length, 1);
     assert.equal(stub.snapshotCalls[0].client, client);
     assert.equal(stub.snapshotCalls[0].queryId, QUERY_ID);
@@ -131,7 +153,7 @@ test('full-run: snapshot -> rank -> select -> commit in order on one client', as
   assert.equal(out.builds, fx.builds);
   assert.equal(out.ranked, fx.ranked);
   assert.equal(out.top_n, fx.topN);
-  assert.equal(out.selected, fx.selected);
+  assert.equal(out.selected, fx.explained);
   assert.equal(out.dropped_count, 1);
   assert.deepEqual(out.persisted_ranks, [1]);
   assert.deepEqual(out.build_candidate_ids, ['bc-1']);
@@ -152,7 +174,12 @@ test('full-run: rank takes snapshot builds; select takes FULL ranked with barrel
     assert.ok(stub.selectCalls[0].ranked !== fx.topN, 'selection must not receive top_n');
     assert.equal(stub.selectCalls[0].limit, ranking.TOP_N_PERSISTED);
     assert.equal(stub.selectCalls[0].maxPerPair, ranking.MAX_PER_PAIR);
-    assert.equal(stub.commitCalls[0].selected, fx.selected);
+    assert.equal(stub.explainCalls.length, 1);
+    assert.equal(stub.explainCalls[0].selected, fx.selected);
+    assert.equal(stub.explainCalls[0].builds, fx.builds);
+    assert.equal(stub.explainCalls[0].contributions, fx.buildContributions);
+    assert.deepEqual(stub.explainCalls[0].budget, { amount: 12000, currency: 'MAD' });
+    assert.equal(stub.commitCalls[0].selected, fx.explained);
   });
 });
 
@@ -163,9 +190,17 @@ test('full-run: zero builds still flow through rank, select, and commit with emp
   const topN = Object.freeze([]);
   const selected = Object.freeze([]);
   const fx = {
-    snapshotResult: Object.freeze({ query_id: QUERY_ID, scoring_model_id: 'model-1', builds }),
+    snapshotResult: Object.freeze({
+      query_id: QUERY_ID,
+      scoring_model_id: 'model-1',
+      builds,
+      budget_amount: 12000,
+      currency: 'MAD',
+      build_contributions: Object.freeze([]),
+    }),
     rankResult: Object.freeze({ ranked, top_n: topN }),
     selectResult: Object.freeze({ selected, dropped_count: 0 }),
+    explainResult: Object.freeze([]),
     commitResult: Object.freeze({
       query_id: QUERY_ID,
       persisted_ranks: Object.freeze([]),
@@ -175,7 +210,7 @@ test('full-run: zero builds still flow through rank, select, and commit with emp
   };
   const out = await withStubbedStages(fx, async (stub) => {
     const result = await runRecommendationFullRun(client, QUERY_ID);
-    assert.deepEqual(stub.order, ['snapshot', 'rank', 'select', 'commit']);
+    assert.deepEqual(stub.order, ['snapshot', 'rank', 'select', 'explain', 'commit']);
     assert.equal(stub.rankCalls[0].builds, builds);
     assert.equal(stub.selectCalls[0].ranked, ranked);
     assert.deepEqual(stub.commitCalls[0].selected, []);
@@ -190,6 +225,7 @@ test('full-run: zero selected still calls the write wrapper with empty array', a
   const client = { query() {} };
   const fx = happyStubs();
   fx.selectResult = Object.freeze({ selected: Object.freeze([]), dropped_count: fx.ranked.length });
+  fx.explainResult = Object.freeze([]);
   fx.commitResult = Object.freeze({
     query_id: QUERY_ID,
     persisted_ranks: Object.freeze([]),
@@ -198,7 +234,7 @@ test('full-run: zero selected still calls the write wrapper with empty array', a
   });
   await withStubbedStages(fx, async (stub) => {
     const out = await runRecommendationFullRun(client, QUERY_ID);
-    assert.deepEqual(stub.order, ['snapshot', 'rank', 'select', 'commit']);
+    assert.deepEqual(stub.order, ['snapshot', 'rank', 'select', 'explain', 'commit']);
     assert.equal(stub.selectCalls[0].ranked, fx.ranked);
     assert.deepEqual(stub.commitCalls[0].selected, []);
     assert.deepEqual(out.selected, []);
@@ -213,9 +249,10 @@ test('full-run: a stage error propagates unchanged and later stages never run', 
     snapshot: [],
     rank: ['snapshot'],
     select: ['snapshot', 'rank'],
-    commit: ['snapshot', 'rank', 'select'],
+    explain: ['snapshot', 'rank', 'select'],
+    commit: ['snapshot', 'rank', 'select', 'explain'],
   };
-  for (const stage of ['snapshot', 'rank', 'select', 'commit']) {
+  for (const stage of ['snapshot', 'rank', 'select', 'explain', 'commit']) {
     const sentinel = new Error('fail-at-' + stage);
     const stub = stubStages(fx);
     try {
@@ -225,6 +262,8 @@ test('full-run: a stage error propagates unchanged and later stages never run', 
         ranking.rankBuilds = () => { stub.order.push('rank'); throw sentinel; };
       } else if (stage === 'select') {
         ranking.selectDiverseTop = () => { stub.order.push('select'); throw sentinel; };
+      } else if (stage === 'explain') {
+        explanation.explainSelection = () => { stub.order.push('explain'); throw sentinel; };
       } else {
         commit.runRecommendationCommit = async () => { stub.order.push('commit'); throw sentinel; };
       }
@@ -258,15 +297,16 @@ test('full-run.js keeps its source boundary (no SQL, no tx control, no driver)',
   assert.ok(source.includes('ranked: rankedResult.ranked'));
   assert.ok(source.includes('ranking.TOP_N_PERSISTED'));
   assert.ok(source.includes('ranking.MAX_PER_PAIR'));
-  assert.ok(source.includes('commit.runRecommendationCommit(client, queryId, selection.selected)'));
+  assert.ok(source.includes('explanation.explainSelection('));
+  assert.ok(source.includes('commit.runRecommendationCommit(client, queryId, explained)'));
   assert.ok(!source.includes('limit: 10'));
   assert.ok(!source.includes('maxPerPair: 3'));
 });
 
-test('full-run.js imports exactly the snapshot wrapper, the commit wrapper, and the ranking barrel', () => {
+test('full-run.js imports exactly the snapshot wrapper, the commit wrapper, the ranking barrel, and Engine 6', () => {
   const source = stripComments(fs.readFileSync(path.join(__dirname, 'full-run.js'), 'utf8'));
   const requires = [...source.matchAll(/require\('([^']+)'\)/g)].map((match) => match[1]).sort();
-  assert.deepEqual(requires, ['../ranking', './commit', './snapshot']);
+  assert.deepEqual(requires, ['../explanation', '../ranking', './commit', './snapshot']);
 });
 
 });
