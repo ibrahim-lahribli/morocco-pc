@@ -5,8 +5,8 @@
  * plus its build_component rows plus one recommendation_result row per entry.
  * Fake-client tested: this module only calls client.query(sql, params) with
  * parameterized queries; it never issues BEGIN/COMMIT/ROLLBACK (Decision 19.1),
- * never builds SQL by concatenation, and never writes a non-NULL explanation
- * (Decision 19.5). UUIDs are generated in JS via crypto.randomUUID()
+ * never builds SQL by concatenation, and writes entry.explanation as $5
+ * (Decision 22 item 5). UUIDs are generated in JS via crypto.randomUUID()
  * (Decision 19.4). Build_component price columns come from component.price.*
  * (selected_price, currency, store_id, price_checked_at); component.category,
  * component.status, and build.currency are ignored (Decision 19.6).
@@ -84,7 +84,7 @@ async function persistRanked({ client, queryId, selected }) {
       queryId,
       buildCandidateId,
       entry.persisted_rank,
-      null,
+      entry.explanation,
     ]);
 
     persistedRanks.push(entry.persisted_rank);

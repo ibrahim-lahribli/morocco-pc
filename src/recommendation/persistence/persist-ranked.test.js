@@ -51,7 +51,7 @@ function makeEntry(rank, build, overrides) {
     total_price: rank === 1 ? 12000 : 9000,
     compatibility_status: rank === 1 ? 'PASS' : 'UNKNOWN',
     signature: 'sig-' + rank,
-    explanation: o.explanation !== undefined ? o.explanation : null, build };
+    explanation: o.explanation !== undefined ? o.explanation : ('Explanation for rank ' + rank), build };
 }
 function snap(v) { return JSON.parse(JSON.stringify(v)); }
 test('happy path exact SQL and params', async () => {
@@ -76,7 +76,7 @@ test('happy path exact SQL and params', async () => {
     k += 1;
   }
   assert.equal(client.calls[k].sql, SQL_RES);
-  assert.deepEqual(client.calls[k].params, [rr0, QUERY_ID, bc0, 1, null]);
+  assert.deepEqual(client.calls[k].params, [rr0, QUERY_ID, bc0, 1, 'Explanation for rank 1']);
   k += 1;
   assert.equal(client.calls[k].sql, SQL_CAND);
   assert.deepEqual(client.calls[k].params, [bc1, QUERY_ID, 9000, 80, 'UNKNOWN']);
@@ -89,7 +89,7 @@ test('happy path exact SQL and params', async () => {
     k += 1;
   }
   assert.equal(client.calls[k].sql, SQL_RES);
-  assert.deepEqual(client.calls[k].params, [rr1, QUERY_ID, bc1, 2, null]);
+  assert.deepEqual(client.calls[k].params, [rr1, QUERY_ID, bc1, 2, 'Explanation for rank 2']);
   assert.deepEqual(result.persisted_ranks, [1, 2]);
   assert.equal(result.query_id, QUERY_ID);
 });
@@ -112,13 +112,13 @@ test('price from component price', async () => {
     assert.ok(call.params.indexOf('YYY-NOT-PERSISTED') === -1);
   }
 });
-test('explanation hardcoded null', async () => {
+test('explanation persisted from entry', async () => {
   const client = makeClient();
-  const selected = [makeEntry(1, makeBuild8(), { explanation: 'SHOULD-NOT-PERSIST' })];
+  const selected = [makeEntry(1, makeBuild8(), { explanation: 'Ranked 1: Dominant GPU' })];
   const result = await persistRanked({ client, queryId: QUERY_ID, selected });
   const rc = client.calls.filter((c) => c.sql === SQL_RES);
   assert.equal(rc.length, 1);
-  assert.strictEqual(rc[0].params[4], null);
+  assert.strictEqual(rc[0].params[4], 'Ranked 1: Dominant GPU');
   assert.equal(result.recommendation_result_ids.length, 1);
 });
 test('zero selected', async () => {

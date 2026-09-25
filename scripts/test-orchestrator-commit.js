@@ -138,7 +138,7 @@ function makeEntry(rank, components) {
     total_price: total,
     compatibility_status: rank === 1 ? 'PASS' : 'UNKNOWN',
     signature: 'test-orchestrator-commit-' + rank,
-    explanation: null,
+    explanation: 'Ranked ' + rank + ': commit test explanation',
     build: { currency: 'MAD', components },
   };
 }

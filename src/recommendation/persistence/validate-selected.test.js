@@ -73,7 +73,7 @@ function entry(rank, build, opts) {
     total_price: o.total !== undefined ? o.total : 5000,
     compatibility_status: o.status !== undefined ? o.status : 'PASS',
     signature: 'sig-' + rank,
-    explanation: null,
+    explanation: o.explanation !== undefined ? o.explanation : ('Ranked ' + rank + ': valid test explanation'),
     build: o.buildMissing === true ? undefined : build,
   };
   return rec;
@@ -215,6 +215,31 @@ test('defensive component status REJECT fails', () => {
   const err = rejectionOf(() => validateSelected([singleEntry({}, bad)]));
   assert.ok(err instanceof CandidateSelectionError);
   assert.equal(err.code, ERROR_CODES.INVALID_FIELD_VALUE);
+});
+
+test('explanation required non-empty string (Decision 22 item 5)', () => {
+  // Valid explanation passes
+  assert.equal(validateSelected([singleEntry({ explanation: 'Ranked 1: valid explanation' })]), undefined);
+
+  // Missing or null fails with MISSING_REQUIRED_FIELD
+  const errMissing = rejectionOf(() => validateSelected([singleEntry({ explanation: undefined })]));
+  assert.ok(errMissing instanceof CandidateSelectionError);
+  assert.equal(errMissing.code, ERROR_CODES.MISSING_REQUIRED_FIELD);
+  assert.match(errMissing.message, /selected\[0\]\.explanation is required/);
+
+  const errNull = rejectionOf(() => validateSelected([singleEntry({ explanation: null })]));
+  assert.ok(errNull instanceof CandidateSelectionError);
+  assert.equal(errNull.code, ERROR_CODES.MISSING_REQUIRED_FIELD);
+  assert.match(errNull.message, /selected\[0\]\.explanation is required/);
+
+  // Empty, whitespace-only, or non-string fails with INVALID_FIELD_VALUE
+  for (const bad of ['', '   ', '\t\n ', 123, true, {}, []]) {
+    const errBad = rejectionOf(() => validateSelected([singleEntry({ explanation: bad })]));
+    assert.ok(errBad instanceof CandidateSelectionError, 'explanation ' + JSON.stringify(bad) + ' must fail');
+    assert.equal(errBad.code, ERROR_CODES.INVALID_FIELD_VALUE);
+    assert.match(errBad.message, /selected\[0\]\.explanation must be a non-empty string/);
+  }
+});
 
 test('missing component.price entirely fails clearly, not a raw TypeError', () => {
   const b = build8();
@@ -267,8 +292,6 @@ test('validate-selected.js reuses ranking error vocabulary, has no SQL or DB', (
   for (const token of banned) {
     assert.ok(!stripped.includes(token), 'must not contain ' + token);
   }
-});
-
 });
 
 

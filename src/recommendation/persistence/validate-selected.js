@@ -3,6 +3,7 @@
  * Validates the `selected` array from selectDiverseTop before persistence.
  * Pure: no DB, no I/O, no clock, no randomness, no mutation.
  * Category and build.currency are never read (Decision 19).
+ * Decision 22 item 5: entry.explanation is REQUIRED non-empty string.
  */
 'use strict';
 
@@ -126,6 +127,12 @@ function validateEntry(entry, index) {
   }
   if (entry.compatibility_status !== 'PASS' && entry.compatibility_status !== 'UNKNOWN') {
     fail(ERROR_CODES.INVALID_FIELD_VALUE, 'selected', where + '.compatibility_status must be exactly "PASS" or "UNKNOWN"');
+  }
+  if (entry.explanation === undefined || entry.explanation === null) {
+    fail(ERROR_CODES.MISSING_REQUIRED_FIELD, 'selected', where + '.explanation is required');
+  }
+  if (typeof entry.explanation !== 'string' || entry.explanation.trim().length === 0) {
+    fail(ERROR_CODES.INVALID_FIELD_VALUE, 'selected', where + '.explanation must be a non-empty string');
   }
   if (entry.build === undefined || entry.build === null) {
     fail(ERROR_CODES.MISSING_REQUIRED_FIELD, 'selected', where + '.build is required');

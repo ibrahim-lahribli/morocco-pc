@@ -164,7 +164,7 @@ async function testFullPass(client, other, ctx, createdIds) {
   assert(counted.components > 0, 'build_component rows landed too: ' + JSON.stringify(counted));
 
   const rows = (await other.query(
-    'SELECT b.id, r.rank FROM build_candidate b JOIN recommendation_result r ON r.build_candidate_id = b.id'
+    'SELECT b.id, r.rank, r.explanation FROM build_candidate b JOIN recommendation_result r ON r.build_candidate_id = b.id'
       + ' WHERE b.recommendation_query_id = $1 ORDER BY r.rank',
     [queryId]
   )).rows;
@@ -174,6 +174,16 @@ async function testFullPass(client, other, ctx, createdIds) {
     'the stored build_candidate ids are exactly the ids the full run returned');
   assert(JSON.stringify(rows.map((row) => row.rank)) === JSON.stringify(result.persisted_ranks),
     'stored recommendation_result ranks match persisted_ranks');
+
+  // Decision 22 item 5 verification: explanation is non-null, non-empty string reaching the DB
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const expectedExplanation = result.selected[i].explanation;
+    assert(typeof row.explanation === 'string' && row.explanation.trim().length > 0,
+      'persisted explanation is non-empty string for rank ' + row.rank);
+    assert(row.explanation === expectedExplanation,
+      'persisted explanation matches Engine 6 generated text for rank ' + row.rank + ': ' + row.explanation);
+  }
   return queryId;
 }
 
