@@ -35,13 +35,14 @@
  *            builds in discovery order.
  *
  * BLOCKING QUESTION B1 (2026-09-19 plan, item 2/7): RESOLVED (2026-09-19,
- * Decision 15 in docs/RECOMMENDATION_ENGINE_DECISIONS.md). Engine 2D now
+ * Decision 15 in docs/RECOMMENDATION_ENGINE_DECISIONS.md). Engine 2D
  * counts, per verdict, the pairwise checks whose aggregated status resolved
- * UNKNOWN (filter.js `unknown_pairwise_count`), and Engine 3 sums those
- * counts per assembled build (assemble.js `unknown_pairwise_count`). The
- * count is a plain integer carry-forward: pair-identity lists and per-build
- * pair recomputation were rejected (Decision 15). Nothing in this module
- * re-derives compatibility; it consumes the producer's number.
+ * UNKNOWN (filter.js `unknown_pairwise_count`), and Decision 23 revises the
+ * producer: Engine 3 recomputes the count per build over the picked
+ * components (assemble.js `countBuildLocalUnknownPairs`). The count stays a
+ * plain integer carry-forward: pair-identity lists remain rejected; only
+ * the per-build recomputation rejection is superseded. Nothing in this
+ * module re-derives compatibility; it consumes the producer's number.
  *
  * Role domain (Engine 3 v1 contract): builds carry at most one component per
  * EXPANSION_ORDER role (assemble.js traversal; one verdict per role, GPU

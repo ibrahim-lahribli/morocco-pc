@@ -22,11 +22,13 @@
  * The price held on each emitted component is the exact carrier object
  * returned by lookupPrice: kept by reference, never cloned, never edited.
  *
- * Each emitted build also carries unknown_pairwise_count (Decision 15): the
- * integer sum of the picked verdicts' unknown_pairwise_count, folded in the
- * same EXPANSION_ORDER pass as the running total. The GPU-omit path picks no
- * GPU verdict and therefore contributes 0. This per-build count is the
- * Decision 13 producer that Engine 4 consumes downstream.
+ * Each emitted build also carries unknown_pairwise_count (Decision 23 O2):
+ * build-local recomputation over the picked components via
+ * countBuildLocalUnknownPairs - each co-occurring pair evaluated once
+ * through Decision 16's PAIRWISE_CHECKS, an absent partner (GPU-omit path
+ * picks no GPU verdict) contributing 0, and the verdict-level field never
+ * read (Decision 23 point 4). This per-build count is the Decision 13
+ * producer that Engine 4 consumes downstream.
  *
  * Pairwise branch validation (Decision 16): when a candidate is tentatively
  * picked for a role, Engine 2D's own pair evaluators re-check it against
@@ -37,9 +39,10 @@
  * bucket. PASS and UNKNOWN pairs stay eligible: no demotion, no weighting.
  * The GPU-omit path picks no GPU, so no GPU pair exists and none is
  * evaluated. The check consumes the frozen Engine 2D context carried by the
- * tenth input field; unknown_pairwise_count keeps its Decision 15 semantics
- * untouched (the verdict-level sums; the re-evaluated pairs are never
- * counted).
+ * tenth input field; Decision 23 supersedes the Decision 15 counting rule:
+ * the re-evaluated pairs ARE counted for UNKNOWN (no early return, each
+ * pair once). The FAIL gate itself is unchanged; the verdict-level field
+ * is kept and validated but no longer consumed.
  *
  * Component compatibility notes (Decision 22 item 8b): every emitted
  * component carries compatibility_notes - the picked verdict's Engine 2D
@@ -461,6 +464,44 @@ function firstPairFailure(filteringContext, role, verdict, picked) {
 }
 
 /**
+ * Decision 23 (O2): count the UNKNOWN pairs among THIS build's picked
+ * components. Same table and same canonical left/right construction as
+ * firstPairFailure, but with no early return: every entry whose partner is
+ * also picked is evaluated and aggregated, and each pair whose status is
+ * UNKNOWN increments the count. Later-picked roles key every pair exactly
+ * once (roles with no PAIRWISE_CHECKS entry are covered via their partner's
+ * entry); an absent partner (GPU-omit path, empty bucket) contributes no
+ * pair. Only UNKNOWN is counted (never "not PASS"); the verdict-level
+ * unknown_pairwise_count field is never read here.
+ */
+function countBuildLocalUnknownPairs(filteringContext, picked) {
+  let count = 0;
+  for (const role of EXPANSION_ORDER) {
+    const verdict = picked[role];
+    if (verdict === undefined) {
+      continue;
+    }
+    const checks = PAIRWISE_CHECKS[role];
+    if (checks === undefined) {
+      continue;
+    }
+    for (const check of checks) {
+      const partner = picked[check.partnerRole];
+      if (partner === undefined) {
+        continue;
+      }
+      const left = check.leftIsNew ? verdict : partner;
+      const right = check.leftIsNew ? partner : verdict;
+      const pair = aggregateCompatibilityResults(check.evaluator(filteringContext, left, right));
+      if (pair.status === FINAL_STATUSES.UNKNOWN) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+/**
  * Decision 22 item 8b: narrow one picked verdict's Engine 2D
  * compatibility_notes (item 8a) to the notes about the partner verdicts
  * actually picked in THIS build - a note survives only when its
@@ -510,7 +551,6 @@ function assembleBuilds(engine3Input) {
   function finishPath(picked, runningTotal) {
     const components = [];
     let total = 0;
-    let unknownPairwiseCount = 0;
     for (const role of EXPANSION_ORDER) {
       if (!Object.prototype.hasOwnProperty.call(picked, role)) {
         continue;
@@ -518,7 +558,6 @@ function assembleBuilds(engine3Input) {
       const verdict = picked[role];
       const price = lookupPrice(traversal.prices, verdict);
       total += price.selected_price;
-      unknownPairwiseCount += verdict.unknown_pairwise_count;
       components.push(
         Object.freeze({
           component_role: verdict.component_role,
@@ -533,6 +572,13 @@ function assembleBuilds(engine3Input) {
       );
     }
     void runningTotal;
+    // Decision 23 (O2): build-local re-evaluation over THIS path's picked
+    // components replaces the Decision 15 verdict-sum - the loop above no
+    // longer reads verdict.unknown_pairwise_count.
+    const unknownPairwiseCount = countBuildLocalUnknownPairs(
+      traversal.filteringContext,
+      picked
+    );
     const build = {
       components: Object.freeze(components),
       total_price: total,

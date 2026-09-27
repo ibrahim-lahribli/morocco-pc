@@ -24,7 +24,8 @@ const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors')
  *   build_score      Engine 4 STEP 3 computeBuildScores, rounded to 2 dp
  *   total_price      Engine 3 price sum, rounded to 2 dp
  *   currency         Engine 2A / Stage 1 currency, carried through verbatim
- *   unknown_pairwise_count  Engine 3 sum (Decision 15 producer chain)
+ *   unknown_pairwise_count  Engine 3 build-local re-evaluation (Decision 23;
+ *                      supersedes the Decision 15 verdict sum)
  *   compatibility_status   G1-gated (Decision 18.5): UNKNOWN when the build
  *                      carries any UNKNOWN verdict or unknown_pairwise_count>0,
  *                      else PASS. Computed here; assemble.js emits no build-level

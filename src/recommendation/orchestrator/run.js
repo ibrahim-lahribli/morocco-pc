@@ -53,7 +53,8 @@
  *     v
  *   frozen { query_id, scoring_model_id, builds } - each build is the frozen
  *   Engine 3 build (components / total_price / currency /
- *   unknown_pairwise_count, unchanged and by reference) plus its own
+ *   unknown_pairwise_count - Decision 23's build-local re-evaluation -
+ *   unchanged and by reference) plus its own
  *   build_score. Zero builds is a valid outcome (builds: []).
  *
  * Wiring rules this module enforces (each one is load-bearing):
@@ -314,7 +315,7 @@ async function runRecommendation(args) {
   });
 
   // 13. Engine 4 STEP 3 (index-aligned with the builds in discovery order; the
-  //     Decision 15 UNKNOWN count is read per build).
+  //     Decision 23 build-local UNKNOWN count is read per build).
   const buildScores = scoring.computeBuildScores({
     builds: assemblyResult.builds,
     assessments,

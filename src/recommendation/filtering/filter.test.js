@@ -311,6 +311,8 @@ test('B2-D: unknown_pairwise_count is 0 when every evaluated pair passes', () =>
 });
 
 test('B2-D: unknown_pairwise_count counts the UNKNOWN pairs, per direction, ignoring PASS/FAIL', () => {
+  // Decision 23: this pool-wide verdict-level count is no longer what Engine
+  // 4's scoring consumes - the build's count is build-local (assemble.js O2).
   // A second motherboard on the same socket with no matching exact/family
   // support record: the CPU's cpu_motherboard pairs are PASS (MB_ID) and
   // UNKNOWN (the unsupported board) -> count 1, relationship PASS (best-of).

@@ -993,21 +993,80 @@ test('Decision 22 8b: notes narrow to the partner picked in this build (never le
   assert.equal(notesFor(withNotedMb)[0], note);
 });
 
-test('builds carry unknown_pairwise_count summed from their picked verdicts', () => {
+// ---------------------------------------------------------------------------
+// Decision 23 O2: build-local unknown_pairwise_count fixtures
+// ---------------------------------------------------------------------------
+
+/**
+ * Mixed verdicts fixture: cpu-1/mb-1 sockets match with an exact PASS row;
+ * mb-1/ram-1 share ddr5; no platform mapping exists; case-1 carries an ATX
+ * presence row; no cooler_socket rows exist; cooler-1 is air; no v:gpu-1-var
+ * entry exists.
+ */
+function o2MixedContext() {
+  return Object.freeze({
+    candidates: Object.freeze({}),
+    specs: Object.freeze({
+      'p:cpu-1': { socket_id: 'am5' },
+      'p:mb-1': { socket_id: 'am5', memory_type_id: 'ddr5', form_factor: 'ATX' },
+      'p:ram-1': { memory_type_id: 'ddr5' },
+      'p:psu-1': { rated_wattage: 650 },
+      'p:case-1': { max_gpu_length_mm: 350, max_gpu_thickness_slots: 4 },
+      'p:cooler-1': { cooler_requires_radiator: false },
+    }),
+    platform_by_socket: Object.freeze({}),
+    compat: Object.freeze({
+      cpu_motherboard_exact: Object.freeze({
+        'mb-1': Object.freeze([
+          {
+            cpu_product_id: 'cpu-1',
+            support_status: 'PASS',
+            source_table: 'cpu_motherboard_support',
+            source_id: 'cm-o2',
+          },
+        ]),
+      }),
+      case_form_factor: Object.freeze({
+        'case-1': Object.freeze([{ form_factor: 'ATX' }]),
+      }),
+    }),
+  });
+}
+
+function o2MixedResults({ gpuCount = 0 } = {}) {
   const results = [
-    verdict('CPU', 'cpu-1', { unknown_pairwise_count: 3 }),
-    verdict('MOTHERBOARD', 'mb-1', { unknown_pairwise_count: 2 }),
-    verdict('RAM', 'ram-1'),
-    verdict('PSU', 'psu-1'),
-    verdict('CASE', 'case-1'),
-    verdict('CPU_COOLER', 'cooler-1'),
-    verdict('SSD_BOOT', 'ssd-1'),
+    verdict('CPU', 'cpu-1', { unknown_pairwise_count: 97 }),
+    verdict('MOTHERBOARD', 'mb-1', { unknown_pairwise_count: 5 }),
+    verdict('RAM', 'ram-1', { unknown_pairwise_count: 11 }),
+    verdict('PSU', 'psu-1', { unknown_pairwise_count: 9 }),
+    verdict('CASE', 'case-1', { unknown_pairwise_count: 8 }),
+    verdict('CPU_COOLER', 'cooler-1', { unknown_pairwise_count: 7 }),
+    verdict('SSD_BOOT', 'ssd-1', { unknown_pairwise_count: 7 }),
   ];
+  if (gpuCount !== 0) {
+    results.push(verdict('GPU', 'gpu-1', { unknown_pairwise_count: gpuCount }));
+  }
+  return results;
+}
+
+test('Decision 23 O2: builds carry count from build-local pairwise re-evaluation', () => {
+  // 7 picked components (no GPU) -> 6 pair slots: cpu_motherboard PASS
+  // (am5 == am5 plus the exact PASS row); motherboard_memory PASS
+  // (ddr5 == ddr5); platform_memory UNKNOWN (no platform mapping, so the
+  // check has no evidence); case_form_factor PASS (ATX presence row);
+  // cooler_socket UNKNOWN (no cooler_socket row for am5); case_radiator
+  // PASS (air cooler, so the rule does not apply). Expected count: 2.
   const out = assembleBuilds(
-    engineInput({ results, integrated: { 'cpu-1': true } })
+    engineInput({
+      results: o2MixedResults(),
+      integrated: { 'cpu-1': true },
+      filteringContext: o2MixedContext(),
+    })
   );
   assert.equal(out.builds.length, 1);
-  assert.equal(out.builds[0].unknown_pairwise_count, 5);
+  // The verdict counts are deliberately absurd (sum 144): the old
+  // verdict-sum would report 144, independent of the implementation.
+  assert.equal(out.builds[0].unknown_pairwise_count, 2);
   // The count is per-build data only: components never carry it.
   for (const c of out.builds[0].components) {
     assert.ok(!('unknown_pairwise_count' in c));
@@ -1015,19 +1074,101 @@ test('builds carry unknown_pairwise_count summed from their picked verdicts', ()
   assert.ok(Object.isFrozen(out.builds[0]));
 });
 
-test('the GPU-omit path contributes 0 to unknown_pairwise_count', () => {
-  const results = [
-    ...fullSet('a'),
-    verdict('GPU', 'gpu-a', { unknown_pairwise_count: 4 }),
-  ];
+test('Decision 23 O2: the GPU-omit path counts only the remaining picked pairs', () => {
+  // Same fixture plus gpu-1: 8 pair slots with a GPU (the 6 above plus
+  // gpu_psu and gpu_case, both UNKNOWN because no v:gpu-1-var entry
+  // exists), so 2 + 2 = 4; the omit path has no GPU partner, so those 2
+  // slots do not exist, so 2. (7 vs 8 picked components; 6 vs 8 pair
+  // slots per PAIRWISE_CHECKS: 1+2+1+2+2.)
   const out = assembleBuilds(
-    engineInput({ results, integrated: { 'a-cpu': true } })
+    engineInput({
+      results: o2MixedResults({ gpuCount: 999 }),
+      integrated: { 'cpu-1': true },
+      filteringContext: o2MixedContext(),
+    })
   );
   assert.equal(out.builds.length, 2);
   for (const build of out.builds) {
-    const expected = idsOf(build).GPU === 'gpu-a' ? 4 : 0;
+    const expected = idsOf(build).GPU === 'gpu-1' ? 4 : 2;
     assert.equal(build.unknown_pairwise_count, expected);
   }
+});
+
+test('Decision 23 O2: verdict-level counts never reach the build count', () => {
+  const counted = (count) =>
+    o2MixedResults().map((v) => ({ ...v, unknown_pairwise_count: count }));
+  const first = assembleBuilds(
+    engineInput({
+      results: counted(0),
+      integrated: { 'cpu-1': true },
+      filteringContext: o2MixedContext(),
+    })
+  );
+  const second = assembleBuilds(
+    engineInput({
+      results: [...counted(145), verdict('CPU', 'cpu-x', { status: 'REJECT' })],
+      integrated: { 'cpu-1': true },
+      filteringContext: o2MixedContext(),
+    })
+  );
+  assert.equal(first.builds.length, 1);
+  assert.equal(second.builds.length, 1);
+  assert.equal(first.builds[0].unknown_pairwise_count, 2);
+  assert.equal(second.builds[0].unknown_pairwise_count, 2);
+});
+
+test('Decision 23 O2: each co-occurring pair is counted once', () => {
+  const filteringContext = Object.freeze({
+    candidates: Object.freeze({}),
+    specs: Object.freeze({
+      'p:cpu-1': { socket_id: 'am5' },
+      'p:mb-1': { socket_id: 'am5', memory_type_id: 'ddr5', form_factor: 'ATX' },
+      'p:ram-1': { memory_type_id: 'ddr5' },
+      'p:psu-1': { rated_wattage: 650 },
+      'p:case-1': { max_gpu_length_mm: 350, max_gpu_thickness_slots: 4 },
+      'p:cooler-1': { cooler_requires_radiator: false },
+    }),
+    platform_by_socket: Object.freeze({ am5: 'plat-am5' }),
+    compat: Object.freeze({
+      platform_memory: Object.freeze({
+        'plat-am5': Object.freeze([
+          {
+            memory_type_id: 'ddr5',
+            support_status: 'PASS',
+            source_table: 'platform_memory_support',
+            source_id: 'pm-o2',
+          },
+        ]),
+      }),
+      cooler_socket: Object.freeze({
+        'cooler-1': Object.freeze([
+          {
+            socket_id: 'am5',
+            support_status: 'PASS',
+            source_table: 'cooler_socket_support',
+            source_id: 'cs-o2',
+          },
+        ]),
+      }),
+      case_form_factor: Object.freeze({
+        'case-1': Object.freeze([{ form_factor: 'ATX' }]),
+      }),
+    }),
+  });
+  const results = [
+    verdict('CPU', 'cpu-1', { unknown_pairwise_count: 1 }),
+    verdict('MOTHERBOARD', 'mb-1', { unknown_pairwise_count: 1 }),
+    verdict('RAM', 'ram-1'),
+    verdict('PSU', 'psu-1'),
+    verdict('CASE', 'case-1'),
+    verdict('CPU_COOLER', 'cooler-1'),
+    verdict('SSD_BOOT', 'ssd-1'),
+  ];
+  const out = assembleBuilds(
+    engineInput({ results, integrated: { 'cpu-1': true }, filteringContext })
+  );
+  assert.equal(out.builds.length, 1);
+  assert.equal(out.builds[0].unknown_pairwise_count, 1);
 });
 
 test('verdict unknown_pairwise_count gate fails fast', () => {
@@ -1313,10 +1454,15 @@ test('Decision 16: a pairwise FAIL with an already-picked partner abandons the b
   );
   assert.equal(ungated.builds.length, 8);
 
-  // Decision 15 semantics are untouched: the build count stays the verdict-
-  // level sum (0 here) - the re-evaluated pairs are never counted.
+  // Decision 23 O2: the count is the build-local re-evaluation (8 slots with
+  // a GPU, 6 on the omit path). Derivation: cpu-1/mb-budget and both
+  // cpus x mb-tier match sockets with no support row (cpu specs carry no
+  // product_family_id, so the family lookup cannot match) -> UNKNOWN; the
+  // context carries no memory/platform/form-factor/cooler/GPU/radiator
+  // data, so the other slots are UNKNOWN too; none is FAIL (a FAIL pair
+  // would have abandoned the branch before descent).
   for (const b of out.builds) {
-    assert.equal(b.unknown_pairwise_count, 0);
+    assert.equal(b.unknown_pairwise_count, idsOf(b).GPU ? 8 : 6);
   }
 });
 
