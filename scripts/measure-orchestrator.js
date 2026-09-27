@@ -89,8 +89,8 @@ const DECISION_20_TOP10_TEXT = {
 /** Printed comparison band: delta 0 = exact, |delta| <= close = close, else off. */
 const CLAIM_BAND = { exact: 0, close: 2 };
 
-/** Exact seed expectations (database/seeds/001_minimal_builds.sql). */
-const EXPECTED = { products: 15, models: 1, offers: 16, assessments: 25, queries: 0 };
+/** Exact seed expectations (database/seeds/001_minimal_builds.sql + 002_catalog_expansion.sql). */
+const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 25, queries: 0 };
 
 function fail(message) {
   throw new Error(message);

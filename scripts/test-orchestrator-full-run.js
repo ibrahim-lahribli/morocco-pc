@@ -77,7 +77,10 @@ async function countsForQuery(client, queryId) {
   );
 }
 
-const EXPECTED = { products: 15, models: 1, offers: 16, assessments: 25, queries: 0 };
+// Canonical seeded state of the test branch: seeds 001 (15 products) + 002
+// (85 products, catalog expansion) = 100 Seed products / 101 Seed offers.
+// Update this when a seed file changes the canonical catalog.
+const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 25, queries: 0 };
 
 async function preflight(client) {
   const products = await count(client, "SELECT count(*)::int AS count FROM product WHERE name LIKE 'Seed %'");

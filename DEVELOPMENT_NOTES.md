@@ -585,3 +585,13 @@ cleanup verified: recommendation_query back to 0 rows
 - The 2026-09-23 entry annotated the GAMING rank-1 as differing between caps in "MOTHERBOARD+SSD_BOOT" picks; with the signatures printed verbatim this run they differ in MOTHERBOARD only (CPU, RAM, GPU, PSU, CASE, CPU_COOLER and SSD_BOOT identical). Flagged because that entry substituted bracketed shape notes for the signature UUIDs.
 - Supersedes the 2026-09-23 bullet "7/10 top slots on one CPU-GPU pair (OFFICE): NOT PRODUCED ... pending review" — it is now produced and measured: OFFICE 9/10 (delta +2, CLOSE), GAMING largest pair 6/10 with the doc's "1 CPU / 2 GPU pairs" exact.
 - Decision 20 text, MAX_PER_PAIR, run.js, ranking/, persistence/ untouched; nothing committed or pushed.
+
+### 2026-09-25: Catalog expansion to 100 products (002_catalog_expansion.sql) & score degeneracy
+
+- Applied `database/seeds/002_catalog_expansion.sql` (85 new products, 85 offers, 85 variants, specs and compat mappings across all 8 roles) bringing baseline counts to 100 products, 101 offers, 25 assessments.
+- Preflight counts updated in `scripts/test-orchestrator-full-run.js` and `scripts/measure-orchestrator.js` (`products: 100`, `offers: 101`).
+- `test-orchestrator-full-run.js`: 28 pass / 0 fail on the isolated branch (`TEST_DATABASE_URL`).
+- **Score degeneracy finding**: Under the expanded catalog, `measure-orchestrator.js` reports `build_score min 0.00 | max 0.00 | mean 0.00 | distinct 1` for all 25 builds (and all 35,982 builds under raised cap 100,000). Every build score clamps to 0.00.
+  - *Root cause*: `build-score.js` applies `unknown_compat_penalty` (5.0 per occurrence) to the raw score. Engine 2D counts UNKNOWN pairwise checks per candidate across ALL candidate pool partners (pool-wide, not build-wide). With 9 new PSUs lacking connector matrices (`connector_pcie_8pin IS NULL`) and 20 new GPU variants lacking connector requirements (`required_power_connectors IS NULL`), every chosen GPU and PSU candidate accumulates dozens of UNKNOWN pairs across both evaluation directions. The resulting compound penalty (~145+ points) exceeds the raw score (~40) and clamps `build_score` to 0.
+  - *Impact*: Rankings become entirely tie-break-driven; persisted explanation texts read `best weighted score 0`.
+  - *Resolution needed*: Populate PSU connector matrices (9 rows) and GPU connector specs (20 rows) in Layer 1, or revise the candidate-level UNKNOWN penalty semantics to be build-local rather than pool-wide.
