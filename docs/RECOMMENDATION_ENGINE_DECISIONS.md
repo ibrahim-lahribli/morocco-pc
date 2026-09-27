@@ -2850,6 +2850,283 @@ VERDICT: RESOLVED - Engine 6 is a new pure explanation/ module slotted between s
 
 ---
 
+## Decision 23 — Score degeneracy: build-local UNKNOWN pairwise count (O2) + GPU/PSU connector & dimension data (O1)
+
+Date: 2026-09-27. Product decision pass resolving the score-degeneracy finding
+recorded in `DEVELOPMENT_NOTES.md` (2026-09-25 entry, "score degeneracy
+finding"): under the 100-product catalog, `measure-orchestrator.js` reports
+`build_score min 0.00 | max 0.00 | mean 0.00 | distinct 1` for all configured
+and raised-cap builds in both measured use cases — every score clamps to 0,
+rankings become purely tie-break-driven, and persisted explanations read
+"best weighted score 0". Root cause (as recorded): `unknown_compat_penalty`
+(5.0/occurrence) is applied to a count that Decision 15 defined as
+pool-wide (per candidate, across ALL pool partners, both evaluation
+directions), so 20 GPU variants with NULL `required_power_connectors` and 9
+PSUs with NULL connector matrices accumulate ~145+ UNKNOWN pairs per picked
+component against a raw score of ~40. Documentation only at this stage: no
+code, no migration, no seed applied by this entry.
+
+### Status: RESOLVED
+
+### Decision
+
+1. **O2 adopted — `unknown_pairwise_count` becomes build-local.** The count
+   Decision 13's STEP 3 penalty consumes is redefined from "pool-wide
+   per-verdict counts summed over the build" to **the number of pairwise
+   compatibility checks whose aggregated status resolves UNKNOWN among the
+   components actually co-occurring in the finished build** — each co-occurring
+   pair counted once (not once per evaluation direction), zero-partner
+   relationships contributing no pair (unchanged), FAIL pairs never counted
+   (unchanged; in practice unreachable in a finished build, see point 3).
+
+2. **Precise scope of supersession — what is superseded, what is preserved.**
+
+   *Superseded (only these):*
+   - Decision 15's **Decision** bullet describing the Engine 3 build count as
+     "the integer sum of the picked verdicts' `unknown_pairwise_count`"
+     (this file, Decision 15, first bullet pair) — that sum is replaced by the
+     build-local recomputation (point 3).
+   - Decision 15's **Counting semantics** bullets "Every relationship is
+     evaluated from both participating roles, so a symmetric UNKNOWN product
+     pair is counted once per direction. This compounds under Decision 13's
+     per-occurrence penalty…" — the both-directions counting unit is withdrawn.
+     The other two Counting-semantics bullets (empty partner bucket contributes
+     0; REJECT verdicts carry the verdict-level count but never enter assembly)
+     remain in force at their own level.
+   - Decision 16's **"Explicitly NOT changed"** paragraph ("`unknown_pairwise_count`
+     keeps its Decision 15 semantics — the per-verdict, per-pool counts summed
+     per build. The DFS's re-evaluated pairs are used for the FAIL gate only
+     and are never counted") — the DFS's re-evaluated pairs now *are* counted;
+     the FAIL gate itself is untouched.
+   - The remaining force of Decision 15's **Rejected alternatives** bullet
+     rejecting "per-build pair recomputation among the chosen components" —
+     its inline note already recorded Decision 16's partial supersession
+     (validation-only); this decision completes the supersession by adopting
+     the same recomputation for the count producer. The pair-identity-list
+     rejection stands (Decision 13 consumes only a count).
+
+   *Explicitly preserved (byte-identical or untouched):*
+   - **Decision 13's STEP 1–3 formula text is not edited.** Its STEP 3 already
+     reads "count of UNKNOWN pairwise compatibility checks **in the build**" —
+     O2 makes the producer match that wording; the formula, clamp, penalty key
+     and per-occurrence rationale are unchanged.
+   - **The field name `unknown_pairwise_count` stays** on both frozen objects
+     (Engine 2D verdict and Engine 3 build). Only the build-level computation
+     changes. No rename, no new field, no new error codes.
+   - **Decision 16's FAIL-gating mechanism is unchanged**: same
+     `PAIRWISE_CHECKS`, same evaluators, same worst-of aggregation, same
+     abandon-the-branch semantics, same `filtering_context` tenth input field,
+     same silent pruning. This decision reuses that machinery for counting
+     UNKNOWN outcomes; it does not duplicate or weaken the gate.
+   - Engine 2D verdict-level semantics (pool-wide, per-direction counting on
+     the verdict object) are unchanged at the verdict layer — see point 4.
+
+3. **Adopted approach — where the recomputation happens.**
+   `assembly/assemble.js`, `finishPath` (the closure that emits a build once
+   `descend` reaches `depth >= EXPANSION_ORDER.length`): the current
+   EXPANSION_ORDER sum `unknownPairwiseCount += verdict.unknown_pairwise_count`
+   is replaced by a build-local recomputation over the `picked` map — for every
+   picked role, walk its `PAIRWISE_CHECKS` entries whose partner role is also
+   picked, run the same canonical left/right construction as
+   `firstPairFailure`, aggregate with `aggregateCompatibilityResults`, and
+   increment the count for each pair whose status is UNKNOWN.
+
+   Properties, all inherited from Decision 16's boundary:
+   - **Every co-occurring pair is covered exactly once.** `PAIRWISE_CHECKS`
+     keys each relationship by the later-picked role; roles with no entry
+     (CPU, GPU, SSD_BOOT) are covered via their partner's entry. Absent
+     partner (GPU-omit, empty bucket) → no pair → 0, preserving Decision 15's
+     zero-partners rule.
+   - **No FAIL pair can exist in a finished build** — the Decision 16 gate
+     pruned such branches during descent — so the count sees only PASS/UNKNOWN.
+   - **No Engine 1 evaluation logic moves.** The evaluators and aggregation
+     already live in `compatibility/`, are re-exported by
+     `filtering/filter.js`, and are already imported into `assemble.js`
+     (`:67–78`) for the FAIL gate; `finishPath` reaches
+     `traversal.filteringContext` in the same scope it already reads
+     `traversal.prices`. This is the exact boundary Decision 16 established —
+     one module, one import set, pure (no DB, no clock, no randomness),
+     deterministic under identical DB state + query + scoring-model version.
+   - Cost: at most 8 relationship-pairs per emitted build, once per build —
+     negligible against the existing gate (which runs per pick).
+
+4. **Fate of `filtering/filter.js`'s pool-wide verdict-level
+   `unknown_pairwise_count`: KEPT, but no longer consumed by scoring.**
+   The verdict field stays on the frozen Engine 2D verdict exactly as
+   Decision 15 defined it (pool-wide, per-direction). Rationale and audit of
+   dependents:
+   - The only production reader was the build-sum now being replaced
+     (`assemble.js:521`); verified by codebase search — no other module reads
+     `verdict.unknown_pairwise_count`. `retention/retain.js` passes verdicts
+     by reference (header comment only); `rank.js` / `build-score.js` read the
+     **build-level** field; `persistence/` and `explanation/` do not read it at
+     all.
+   - It is still required structurally: `VERDICT_FIELDS` validation
+     (`assemble.js:102–111, 317–321`) requires the key's presence and
+     non-negative-integer shape on every verdict. Removing the field would
+     break that frozen contract, Decision 15's verdict bullet, and
+     `filter.test.js:305–392` — for no consumer benefit.
+   - It is NOT repurposed: Engine 2D's own status derivation uses
+     `relationships`, never the count, so the field has no Engine 2D semantic
+     need; inventing a new meaning for it is rejected (silent-contract-drift).
+   - Explicit flag: `filter.test.js:313` ("counts the UNKNOWN pairs, per
+     direction") continues to pin the pool-wide *verdict-level* behavior and
+     must keep passing — it tests `filterCandidates` alone, which is unchanged.
+     Its test name/comment should gain a note that this count is no longer
+     what Engine 4 consumes, to prevent the next reader re-linking the two.
+   - Header comments that state the old producer chain must be corrected in
+     the same implementation pass: `assemble.js:25–29, 40–42`,
+     `build-score.js:37–44` (the B1 note claiming per-build recomputation was
+     "rejected (Decision 15)"), `rank.js:27`, `run.js:54–57`, plus the
+     `DEVELOPMENT_NOTES.md` 2026-09-19 Decision-15 bullet and `CONTEXT.md`
+     status pointers (AGENTS.md: update status in the same session).
+
+5. **O1 — GPU/PSU connector & dimension data population (separate, sequenced
+   item; seed `003`, never touching `001`/`002`).** After O2's code change
+   lands, a new idempotent DML-only seed file
+   `database/seeds/003_gpu_psu_connector_data.sql` supplies:
+   - `gpu_board_spec.required_power_connectors`, `width_slots`, `height_mm`
+     for the 20 GPU variants added by `002_catalog_expansion.sql` (recorded
+     NULL there under its header decision **D6**);
+   - `psu_spec.connector_eps_count`, `connector_pcie_8pin`,
+     `connector_12vhpwr`, `connector_sata` for the 9 PSUs added by `002`
+     (`connector_24pin_atx` is already `true` for all 9; the four NULL columns
+     are the "connector MATRICES never captured" comment at
+     `002_catalog_expansion.sql:624–627`).
+
+   Scope and source-authority rules (same treatment as the 002 header
+   decisions, recorded as numbered decisions in 003's header so they stay
+   auditable):
+   - **Source**: the original research artifacts already gathered (the
+     catalog report + companion file named in 002's header).
+   - **D6 applies directly**: D6 recorded these GPU fields as "never
+     captured". The O1 premise is that the research (or a documented
+     re-capture) now supplies them. Where a value is genuinely absent, it
+     **stays NULL** — never guessed, never backfilled with a plausible value
+     (002 header rule: "NULL means UNKNOWN"). Each such absence is documented
+     in 003's header, as-is, exactly like D1 documented its unverified prices.
+   - **D7 applies to conflicts**: where catalog and research disagree,
+     catalog wins with the conflict flagged inline, mirroring D7's
+     ZOTAC/Nautilus/240R treatment.
+   - **D6's vocabulary mapping applies verbatim**: engine vocabulary is the
+     fixed set `{24pin_atx, eps, pcie_8pin, 12vhpwr, sata}`
+     (`compatibility/gpu.js` header); research `8-pin` → `pcie_8pin`,
+     `12V-2x6` → `12vhpwr`. Any research connector outside that vocabulary
+     is documented, not mapped by guess.
+   - Sequencing: O2 code first (the correctness property must hold
+     independent of data), then 003, then acceptance verification (point 6).
+     `001`/`002` are never edited; 003 is a standalone `npm run seed` file.
+
+6. **Acceptance verification (threshold fixed in advance; measured only on a
+   `TEST_DATABASE_URL` branch, never the shared `DATABASE_URL`).** After O2 +
+   O1, re-running the GAMING (15,000 MAD) / OFFICE (10,000 MAD) measurement
+   (`scripts/measure-orchestrator.js`) must show all three:
+   1. **Positive rank-1 net score, both use cases.** Rank 1's
+      raw-minus-penalty score (`build_score_raw − unknown_compat_penalty ×
+      count`) is > 0 for GAMING and for OFFICE. Measurable directly as
+      rank-1 `build_score > 0` (strictly equivalent after the 0..100 clamp,
+      and slightly stricter after 2-dp rounding); printing raw and penalty
+      alongside is recommended so the margin is visible, not just the sign.
+   2. **Score spread restored.** More than 1 distinct `build_score` value in
+      the ranked set (currently exactly 1 — all zeros).
+   3. **Pool independence — PI-1 (named, repeatable procedure).** Adding an
+      unrelated new product carrying a NULL data field to the catalog must not
+      change any existing build's score. Procedure, re-runnable after ANY
+      future catalog addition:
+      a. On a `TEST_DATABASE_URL` branch, run the GAMING and OFFICE queries
+         and capture the score vector keyed by build signature.
+      b. Insert one unrelated product outside every finished build's
+         component set (e.g. a deliberately over-budget PSU with NULL
+         connector columns) so it enters the candidate pool but no build.
+      c. Re-run the identical queries; assert every pre-existing signature's
+         `build_score` is unchanged. (New builds may appear; existing builds'
+         scores may not move — with build-local counting, a pool-only change
+         cannot reach the penalty.)
+      d. Delete the added product, verify cleanup; branch only.
+      Implementation note to resolve when PI-1 is built: the measurement
+      scripts' preflight asserts exact catalog counts (100 products / 101
+      offers) and will abort while the added product exists — PI-1 needs a
+      dedicated script or parameterized expectations, not a hand-edit of the
+      shared preflight.
+
+   Conditions 1–2 are one measurement pass; condition 3 is a standing
+   regression, not a one-off check.
+
+### Rationale
+
+* The penalty's correctness property is build-local by definition: Decision
+  13's own STEP 3 says "in the build". O2 fixes the producer to match the
+  formula the codebase already ships; O1 removes the largest *legitimate*
+  UNKNOWN source at the data layer. Together they restore score spread
+  without touching the formula, the penalty key, or the clamp.
+* Reuse over duplication: the recomputation runs on Decision 16's existing
+  `PAIRWISE_CHECKS` / evaluator / aggregation handoff — the exact boundary the
+  decision log already blessed — so no new import, no second compatibility
+  implementation, no purity regression.
+* Keeping the verdict-level field avoids breaking three frozen contracts
+  (verdict shape, `VERDICT_FIELDS` validation, Decision 15's verdict bullet)
+  while removing its only consumer from the scoring path; the field's meaning
+  at its own layer stays true.
+* Data-first honesty: NULL stays UNKNOWN; O1 documents absences and conflicts
+  as-is (D1/D6/D7 treatment) instead of guessing, preserving the seed files'
+  auditable "deliberate decisions" pattern.
+
+### Rejected alternatives
+
+* **O3** (enumerated in the 2026-09-27 degeneracy recon) — rejected per the
+  confirmed direction; recorded here as rejected, not re-argued.
+* **Keeping pool-wide scope** (fix data only, retain Decision 15's
+  pool-wide/both-directions counting) — rejected: pool-independence would
+  remain violated by any future NULL field, so the correctness property in
+  point 6(3) could never hold; a catalog addition would again be able to
+  zero an unrelated build's score.
+* **Removing the verdict-level field outright** — rejected: breaks
+  `VERDICT_FIELDS` validation, Decision 15's frozen verdict contract, and
+  passing `filter.test.js` pins, with no consumer requiring removal.
+* **Repurposing the verdict-level field for a new meaning** — rejected:
+  silent contract drift; nothing in Engine 2D needs it.
+* **Gating instead of counting in `finishPath`** (extending
+  `firstPairFailure`'s early-return loop to count) — rejected as written:
+  its first-FAIL return makes it structurally unable to observe all pairs; a
+  dedicated non-short-circuiting counting pass over the same table is the
+  correct shape (reported as a feasibility caveat before this decision was
+  drafted).
+
+### Impact
+
+* Code (future implementation pass, not this entry): `assembly/assemble.js`
+  (`finishPath` count + header lines 25–29/40–42), comment corrections in
+  `build-score.js` / `rank.js` / `run.js`, a scoping note on
+  `filter.test.js:313`, and unit-test expectation changes wherever
+  `build.unknown_pairwise_count` was pinned as "sum of verdict counts".
+  `filtering/filter.js` itself is unchanged. No migration, no enum change,
+  no schema change.
+* Behavior: build counts drop to build-local magnitudes; `build_score`
+  spreads (target: conditions 6(1)–(2)); Decision 16 FAIL gating, Decision 18
+  ranking/G1, Decision 20 diversity and Decision 19/20 persistence are
+  untouched. **What O2 does NOT change:** verdict/component statuses keep
+  their pool-wide best-of-partner semantics (Decision 1 untouched), so G1 may
+  still report UNKNOWN for builds whose *components* carry UNKNOWN verdicts
+  until O1's data makes those relationships PASS — accepted and expected;
+  scoring is affected only by the count, not by component status.
+* Data: seed `003` (new file) changes GPU↔PSU connector and GPU↔case
+  thickness checks from UNKNOWN to live PASS/FAIL for the 002 additions;
+  `height_mm` is forward-looking only (no engine consumer today, same as D5's
+  cooler dims).
+* Doc sync in the implementation session: `DEVELOPMENT_NOTES.md` 2026-09-25
+  entry (finding) gains its resolution note; `CONTEXT.md` status sections;
+  Decision 15/16 supersession pointers read against this entry.
+* Verification: `npm run test:unit`; acceptance via points 6(1)–(3) on
+  `TEST_DATABASE_URL` only.
+
+### Verdict for this pass
+
+```text
+VERDICT: RESOLVED - score-degeneracy resolution: O2 build-local unknown_pairwise_count (recomputed in assemble.js finishPath by reusing Decision 16's PAIRWISE_CHECKS/evaluators; Decision 13 formula, field name, and FAIL gate byte-identical; Decision 15 pool-wide/both-directions counting rationale and Decision 16's "Explicitly NOT changed" paragraph superseded; verdict-level field kept but dropped from the scoring chain) ADOPTED TOGETHER WITH O1 (seed 003: GPU required_power_connectors/width_slots/height_mm for 20 GPUs + PSU connector matrices for 9 PSUs, D1/D6/D7 source-authority rules applied as-is) - acceptance gated on GAMING/OFFICE re-measurement: rank-1 raw-minus-penalty > 0, >1 distinct build_score, and PI-1 pool-independence (repeatable)
+```
+
+---
+
 ## Final Status
 
 ```text
@@ -2866,6 +3143,7 @@ Decision 19: RESOLVED (persistence / Engine 5b, adopted 2026-09-21)
 Decision 20: RESOLVED (post-ranking (CPU, GPU) pair diversity selection / O4, MAX_PER_PAIR = 3 code constant, adopted 2026-09-22)
 Decision 21: RESOLVED (full-run composition contract -> orchestrator/full-run.js runRecommendationFullRun, adopted 2026-09-23)
 Decision 22: RESOLVED (explanation generation / Engine 6 contract, adopted 2026-09-24)
+Decision 23: RESOLVED (score-degeneracy: build-local unknown_pairwise_count (O2) + GPU/PSU connector & dimension data seed 003 (O1), adopted 2026-09-27)
 ```
 
 Unambiguous one-sentence semantics for the implementation task:
