@@ -3231,6 +3231,108 @@ VERDICT: RESOLVED - O4 / MAX_PER_PAIR = 3 retained unchanged; measured on the 10
 
 ---
 
+## Decision 25 — Assembly cap starvation of the O4 diversity objective
+
+Date: 2026-09-28. Measurement pass tracing WHY the ranked set at the shipped
+`max_builds_per_query = 25` holds a single (CPU, GPU) pair (Decision 24,
+item 2). Documentation only: no code change, no seed change.
+
+### Status: RESOLVED — root cause identified; the cap is the immediate structural blocker
+
+### Decision
+
+1. **Finding. The cap truncates a depth-first walk whose LAST roles vary
+   first, so the two roles O4 keys on never move.** `assembleBuilds` walks
+   `EXPANSION_ORDER = [CPU, MOTHERBOARD, RAM, GPU, PSU, CASE, CPU_COOLER,
+   SSD_BOOT]` depth-first and halts the WHOLE walk the moment
+   `builds.length >= candidate_caps.max_builds_per_query` (assemble.js
+   `descend`/`finishPath`, `halted`). Depth-first makes SSD_BOOT the
+   least-significant digit, so a role's first change lands after the product
+   of every later role's option count - with 5 options per trailing role,
+   `5^k`: SSD_BOOT 1, CPU_COOLER 5, CASE 25, PSU 125, GPU 625, RAM 3125,
+   MOTHERBOARD 15625, CPU 78125. The cap of 25 stops the counter before the
+   GPU change, and GPU and CPU are the TWO MOST-significant roles, so the
+   pool's (CPU, GPU) pair is fixed by construction.
+
+2. **Measured cap sweep** (read-only, `TEST_DATABASE_URL`, real pipeline;
+   `O4 k` = `selectDiverseTop({ ranked, limit: 10, maxPerPair: 3 })`.
+   `selected.length`):
+
+   GAMING (budget 15000):
+
+   | cap | builds | distinct CPU | distinct GPU | distinct pairs | O4 k |
+   |---|---|---|---|---|---|
+   | 25 | 25 | 1 | 1 | **1** | **3** |
+   | 50-400 | 50-400 | 1 | 1 | **1** | **3** |
+   | 800 | 800 | 1 | 2 | 2 | 6 |
+   | 1600 | 1600 | 1 | 4 | 4 | **10** |
+   | 3200 | 3200 | 1 | 4 | 4 | 10 |
+
+   OFFICE (budget 10000):
+
+   | cap | builds | distinct CPU | distinct GPU | distinct pairs | O4 k |
+   |---|---|---|---|---|---|
+   | 25-50 | 25-50 | 1 | 0 (GPU omitted) | **1** | **3** |
+   | 100-400 | 100-400 | 2 | 1 | 2 | 6 |
+   | 800+ | 793 (exhaustive) | 3 | 1 | 3 | **9** |
+
+   Budget pruning moves the real thresholds below the naive `5^k` positions -
+   GAMING's first GPU change is measured at build 525 (predicted 625) - but
+   nowhere near 25.
+
+3. **Decision taken. Yes, the shipped cap starves the objective, and no
+   MAX_PER_PAIR value compensates.** At cap 25 the pool holds exactly one
+   (CPU, GPU) pair for both use cases, so O4's per-pair cap has nothing to
+   distribute: NO value of MAX_PER_PAIR can yield more than one distinct pair,
+   and any value `> 1` only reduces the persisted count (10 -> 3). Diversity
+   is unachievable at the shipped cap BY CONSTRUCTION, not by constant choice.
+   This is the upstream cause Decision 24 item 2 recorded; the constant stays
+   as adopted (Decisions 20 and 24 are not re-opened).
+
+4. **Raising the cap is necessary but NOT sufficient, and the deeper ceiling
+   is the retention-starved pool.** GAMING needs >= ~1600 builds before 4
+   distinct pairs exist and O4 can fill 10 (`ceil(10 / 3)` pairs). OFFICE
+   never reaches 10 at ANY cap: its exhaustive 793-build ranked list holds
+   only 3 distinct pairs, so `MAX_PER_PAIR = 3` ceilings the persisted set at
+   `3 x 3 = 9`. The pair space is bounded by (distinct CPUs x distinct GPU
+   values), and both are starved upstream by Decision 23's D2
+   (`top_k_per_role = 5` plus flat-40 scores cut 17 of 20 new GPUs at
+   retention; 18 never reach a build). The three findings compose: assessments
+   (a future seed 004) -> more GPUs survive retention -> more pairs; the cap
+   must ALSO rise above the first GPU change (~600-1600) before either use
+   case can fill 10.
+
+5. **Recommended follow-up (not done here).** Treat these as one item, not
+   three: (a) supply the seed-002 assessments; (b) choose a
+   `max_builds_per_query` above the first GPU change (measured: GAMING >=
+   ~1600 for k = 10; OFFICE's bound is pair-space, not cap); (c) decide
+   whether the persisted set must always hold `TOP_N_PERSISTED` rows (the
+   fill-back question raised in Decision 24 item 5) or whether `k < 10` is
+   acceptable. Re-measure with the same sweep after (a).
+
+### Rejected alternatives
+
+* **Keeping cap 25 and tuning `MAX_PER_PAIR`:** the cap is the blocker, the
+  constant is not (already recorded in Decision 24).
+* **Reordering `EXPANSION_ORDER` to put CPU/GPU last:** would vary them inside
+  a small cap, but it reorders the authoritative traversal (assemble.js) and
+  changes every build's discovery order and every index-aligned downstream
+  output - a far larger decision than this finding warrants.
+* **Shipping the exhaustive cap (100000):** ~1439x the assembly work of cap 25
+  for GAMING (35982 builds) and still only 3 pairs for OFFICE; it is a
+  measurement setting, not a shippable default.
+* **Treating this as a Decision 20 / 24 defect:** no - both entries' mechanisms
+  behave exactly as specified; this entry supplies the missing input-side
+  cause.
+
+### Verdict for this pass
+
+```text
+VERDICT: RESOLVED - the shipped max_builds_per_query = 25 truncates the depth-first EXPANSION_ORDER walk before its two most-significant roles (CPU, GPU) can vary, so the pool always holds one (CPU, GPU) pair, O4 is structurally starved at every MAX_PER_PAIR value (persisted set 10 -> 3), and diversity is unachievable at the shipped cap by construction; raising the cap is necessary (GAMING ~1600 for 4 pairs / k=10) but insufficient (OFFICE is pair-space-bounded at k=9 by the retention-starved catalog)
+```
+
+---
+
 ## Final Status
 
 ```text
@@ -3249,6 +3351,7 @@ Decision 21: RESOLVED (full-run composition contract -> orchestrator/full-run.js
 Decision 22: RESOLVED (explanation generation / Engine 6 contract, adopted 2026-09-24)
 Decision 23: RESOLVED (score-degeneracy: build-local unknown_pairwise_count (O2) + GPU/PSU connector & dimension data seed 003 (O1), adopted 2026-09-27)
 Decision 24: RESOLVED (Decision 20 O4 / MAX_PER_PAIR = 3 re-evaluated on the 100-product catalog; retained unchanged, scope limitation recorded - diversity only at the raised cap, no-op-plus-under-fill at the shipped configured cap, adopted 2026-09-28)
+Decision 25: RESOLVED (assembly cap starvation: max_builds_per_query = 25 truncates the depth-first EXPANSION_ORDER walk before CPU/GPU can vary, so O4 is structurally starved at every MAX_PER_PAIR value and OFFICE is pair-space-bounded at k=9; raising the cap is necessary but insufficient, adopted 2026-09-28)
 ```
 
 Unambiguous one-sentence semantics for the implementation task:
