@@ -29,6 +29,9 @@ points are the engine's public barrels (`src/recommendation/*/index.js`) and the
    for 25 decisions — Decisions 4–5 are nested sub-headings under "Engine 3 contract decisions").
 6. `database/migrations/*.sql` — THE authoritative schema. Column-level truth is in the SQL, not prose.
 
+For a current map of what is stale and why: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` (per-finding doc drift) and
+`docs/PROJECT_STATUS_REVIEW_2026-09-28.md` (whole-project weaknesses W1–W12, options A–I, known/unverified registers K/U).
+
 ## 3. Technology stack
 
 | Area | Actual |
@@ -124,8 +127,9 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
    Neon branch). Never run a write test against the shared `DATABASE_URL`.
 4. Report results as **PASS / FAIL / BLOCKED**. Never claim a test passed unless it ran, and say so
    explicitly when an environment limitation prevents a run.
-5. Note: a fresh `001→011` migration is NOT VERIFIED (no isolated empty database exists). Do not
-   fake that result against the shared DB.
+5. Note: a fresh `001→011` migration is NOT VERIFIED. A `TEST_DATABASE_URL` Neon branch exists
+   (since 2026-09-21) — only the run itself is outstanding, not the environment. Do not fake that
+   result against the shared DB.
 
 ## 8. Hard rules
 
