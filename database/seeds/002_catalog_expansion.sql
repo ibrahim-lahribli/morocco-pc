@@ -34,7 +34,41 @@
 --       was not supplied). By Decision 13 STEP 1 every new product therefore
 --       scores the no-evidence branch (50 - 10 = 40) for every weighted type,
 --       so this expansion adds candidates/offers but will NOT displace 001's
---       assessed products in ranking. A later seed file must supply real
+--       assessed products in ranking.
+--
+--       AMENDED 2026-09-28 (measured read-only on a TEST_DATABASE_URL branch by
+--       running filterCandidates -> computeCandidateScores ->
+--       retainTopKPerRole under seed-minimal-v1: neutral_baseline 50,
+--       no_evidence_penalty 10, candidate_caps.top_k_per_role 5): the effect is
+--       STRONGER than "will not displace". All 20 new GPUs and all 9 new PSUs
+--       score EXACTLY 40.000 (a flat tie), while 001's assessed products hold
+--       the top slots (GPU: two RTX 4060 variants at 45.421, PSU: MAG A750GL
+--       70.533, CX550M 61.062). With top_k_per_role = 5, retention keeps 5 per
+--       role, so only 3 of the 20 new GPUs and 3 of the 9 new PSUs survive the
+--       pool cut (17 and 6 never leave it), and assembly drops one more GPU,
+--       so just 2 GPUs and 3 PSUs reach a build. The new catalog is not merely
+--       ranked lower - it is mostly unreachable.
+--
+--       REPRODUCIBILITY HAZARD: the flat-40 tie falls to retainTopKPerRole's
+--       Rule 5 chain, whose first differing key is product_id, and product.id
+--       is `UUID ... DEFAULT gen_random_uuid()` (migration 003). WHICH tied
+--       product survives the K cut is therefore the lexicographic order of
+--       random UUIDs (verified: the 3 surviving new PSUs are exactly the 3
+--       smallest UUIDs of the 9). The reachable subset of this expansion is
+--       NOT stable across a database reset, so any measurement that depends on
+--       WHICH new products reach a build (e.g. the Decision 23 O1 acceptance
+--       reach figures) is valid only for the instance it was taken on.
+--
+--       Seed 003 (GPU/PSU connector + dimension data) canNOT close this gap:
+--       candidate_score comes only from component_assessment, and 003 only
+--       moves a pair verdict UNKNOWN -> PASS|FAIL (never FAIL -> PASS), so it
+--       adds no reach - it only makes the already-retained pairs decisive.
+--
+--       BLOCKING ITEM: the assessment research named above was never supplied
+--       and is the ONLY change that lets this expansion influence scores. It
+--       must be OBTAINED, never invented (D1/D6/D7 forbid guessing), before the
+--       20 GPUs and 9 PSUs can become scoring-relevant. A later seed file must
+--       supply real
 --       assessments covering EVERY type in role_weights[role] (CPU/GPU/RAM/
 --       SSD: PERFORMANCE+VALUE+QUALITY; MOTHERBOARD: QUALITY+VALUE+
 --       UPGRADEABILITY; PSU: QUALITY+EFFICIENCY+VALUE; CASE: QUALITY+VALUE+
