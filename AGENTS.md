@@ -23,8 +23,10 @@ points are the engine's public barrels (`src/recommendation/*/index.js`) and the
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–25) with resolution
-   status. Check here before changing engine behavior.
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–25). Check here
+   before changing engine behavior. It has NO index and almost no `Status:` lines: locate entries
+   with `grep -n "^## Decision" docs/RECOMMENDATION_ENGINE_DECISIONS.md` (that grep returns 23 hits
+   for 25 decisions — Decisions 4–5 are nested sub-headings under "Engine 3 contract decisions").
 6. `database/migrations/*.sql` — THE authoritative schema. Column-level truth is in the SQL, not prose.
 
 ## 3. Technology stack
@@ -48,7 +50,7 @@ points are the engine's public barrels (`src/recommendation/*/index.js`) and the
 |---|---|
 | `CONTEXT.md` | Canonical project context and current status |
 | `DEVELOPMENT_NOTES.md` | Operational lessons and verified commands |
-| `docs/` | Engine architecture and decision log |
+| `docs/` | Engine architecture, decision log, and dated audit/status reports |
 | `database/migrations/` | Authoritative schema (`001`–`011`, apply in filename order) |
 | `database/seeds/` | DML-only, idempotent seed data |
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |
@@ -81,7 +83,8 @@ deliberately not duplicated here.
   UNKNOWN, and UNKNOWN must never be treated as PASS or FAIL.
 - **Determinism is a requirement**, not a nicety: identical DB state + query + scoring-model
   version must yield identical candidates, scores, ranks, and text. Tie-breaks are fixed and
-  code-unit based (never `localeCompare`).
+  code-unit based (never `localeCompare`). One known gap: retention ties fall through to random
+  `product.id`, so which products reach builds is NOT stable across a database reset.
 
 ## 6. Commands that exist
 
@@ -100,6 +103,15 @@ deliberately not duplicated here.
 | `node scripts/test-orchestrator-commit.js` / `test-orchestrator-full-run.js` | Write-path tests (TEST_DATABASE_URL only) |
 | `node scripts/measure-orchestrator.js` | Decision 20 measurement harness (test-scratch only) |
 | `git --no-pager log --oneline` / `diff` / `status --porcelain` | Repo inspection (use `--no-pager` in agent shells) |
+
+Command gotchas (verified 2026-09-28):
+
+- `node scripts/test-layer3.js` needs BOTH `--verify --functional` AND empty Layer 3 tables, so it
+  cannot pass against `DATABASE_URL` now that the shared DB holds offers/price_history rows.
+- Only `measure-orchestrator.js` and the two `test-orchestrator-*.js` scripts use the
+  `TEST_DATABASE_URL` guard; `test-layer3.js` / `test-layer4.js` / `verify-*.js` still read `DATABASE_URL`.
+- `node scripts/run-seeds.js --dry-run` counts statements with a naive `split(';')`, so a semicolon
+  inside a SQL comment inflates the count (Postgres ignores it; the number is just misleading).
 
 No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent or add them.
 
@@ -133,6 +145,9 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
 - When engine code lands, update `CONTEXT.md`'s status sections in the same session — stale status
   has caused re-implementation attempts before.
 - Stage only intended files; check `git status` first (shared checkout).
+- Preserve the repo's line endings: root `AGENTS.md` is LF; `CONTEXT.md`, `DEVELOPMENT_NOTES.md`,
+  `docs/*.md` and `database/**` are CRLF. Match the file you edit — a stray-LF file reads as a
+  whole-file diff.
 
 ## 9. Source of truth
 
@@ -165,3 +180,19 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
 - **`scripts/verify-hardware-schema.js` is BROKEN and not safe to re-run** (FK violation in its
   startup cleanup; its fixtures accumulate). Use the read-only `verify-schema.js` /
   `verify-constraints.js` / `verify-fks.js` instead. Details: `DEVELOPMENT_NOTES.md`, 2026-09-19 entry.
+- **`database/LAYER4_RECONCILIATION_PLAN.md`'s status header is FALSE.** It still says
+  "PROPOSAL — NOT IMPLEMENTED / Migration 011 has NOT been created or applied", but 011 is applied
+  and every blocking item in its §2 list is live. Read it as a historical ledger, not as status.
+- **`ARCHITECTURE.md` is dated 2026-09-12 and cites no decision after 9.** Decision 18 item 7
+  records that its stage table and stage-9 ranking wording are superseded with the doc refresh
+  "deferred", so its §2/§13 rank ordering and its "templates versioned with the scoring model"
+  claim contradict shipped code. It is a design baseline, not current behaviour.
+- **Four HARD rules in `ARCHITECTURE.md` §5.3/§6 are implemented NOWHERE**: cooler
+  `max_tdp_watts` vs CPU TDP, air-cooler `height_mm` vs `case_spec.max_cpu_cooler_height_mm`,
+  RAM `module_count` vs `dimm_slots`, and total RAM capacity vs `max_memory_capacity_gb`. Those
+  columns exist and no non-test code reads them — do not assume these constraints are enforced.
+- **Decision 22's `Status:` line is inverted** (the file's only `Status:` line). It says
+  "implementation is future work" and that `persist-ranked.js` hard-codes `explanation` to null;
+  in reality it writes `entry.explanation` and `validate-selected.js` requires it non-empty.
+  Decision 22 is implemented — do not re-implement it from that line.
+- Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md`.
