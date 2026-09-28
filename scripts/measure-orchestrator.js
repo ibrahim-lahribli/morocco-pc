@@ -18,6 +18,16 @@
 // per-pair counts and a keyword comparison against Decision 20 section 1's
 // wording. Facts only; no recommendation is derived.
 //
+// Third measurement (Decision 23 O1 acceptance, criteria 1-2 of 3): per query and
+// per cap variant the script also prints rank 1's net score - build_score IS
+// `build_score_raw - unknown_compat_penalty x unknown_pairwise_count` after the
+// 0..100 clamp (scoring/build-score.js) - together with the count, the penalty
+// and the inferred raw score, plus the number of distinct build_score values in
+// the ranked set. Each measured number is then compared against the threshold
+// the decision fixed in advance, and printed MET / NOT MET. Criterion 3 (PI-1
+// pool independence) is a standing regression with its own procedure and is NOT
+// measured here; the acceptance section says so explicitly.
+//
 // Safety contract (mirrors scripts/lib/db-url.js):
 //   * Target is TEST_DATABASE_URL only. getWriteTestDbUrl() throws unless
 //     TEST_DATABASE_URL is set, DATABASE_URL is set, and the two hosts differ
@@ -32,8 +42,8 @@
 //     product_variant sku) used only as DISPLAY LABELS for the measured pairs;
 //     no other statement is issued beyond the preflight counts and the reads
 //     the orchestrator's own loaders/scoring already perform.
-//   * Preflight READ-ONLY counts must match the seed exactly (15 Seed %
-//     products, 1 active seed-minimal-v1 model, 16 seed offers, 25 seed
+//   * Preflight READ-ONLY counts must match the seed exactly (100 Seed %
+//     products, 1 active seed-minimal-v1 model, 101 seed offers, 25 seed
 //     assessments, 0 recommendation_query rows) - the run aborts otherwise,
 //     before any insert.
 //   * Cleanup is idempotent by id: only rows this run inserted are deleted,
@@ -137,8 +147,19 @@ async function preflight(client) {
   }
 
   const model = await client.query(
-    "SELECT id FROM scoring_model WHERE name = 'seed-minimal-v1' AND version = '1.0.0' AND is_active = true");
-  return { observed, scoringModelId: model.rows[0].id };
+    "SELECT id, configuration FROM scoring_model WHERE name = 'seed-minimal-v1' AND version = '1.0.0' AND is_active = true");
+  // The Decision 23 O1 criteria need the per-occurrence penalty; it is read
+  // from the same pinned row (read-only) so the acceptance margin is printed
+  // rather than only the sign of the net score.
+  const configuration = model.rows[0].configuration;
+  const unknownCompatPenalty = configuration === null || configuration === undefined
+    ? undefined
+    : configuration.unknown_compat_penalty;
+  if (!Number.isFinite(unknownCompatPenalty) || unknownCompatPenalty < 0) {
+    fail('PREFLIGHT FAILED: scoring_model.configuration.unknown_compat_penalty must be a finite number'
+      + ' >= 0 to measure the Decision 23 O1 criteria (found: ' + JSON.stringify(unknownCompatPenalty) + ')');
+  }
+  return { observed, scoringModelId: model.rows[0].id, unknownCompatPenalty };
 }
 
 /** The two measurement queries, inserted in ONE transaction; ids captured. */
@@ -512,9 +533,240 @@ function printPairConcentration(useCase, capTag, ranked, labels, withListing) {
 // Reporting (plain text; facts only).
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Decision 23 O1 acceptance (criteria 1-2 of 3). Thresholds are the ones the
+// decision fixed in advance; the comparisons below are threshold comparisons
+// against measured facts, in the same style as claimComparison() - the script
+// still decides nothing and recommends no outcome.
+// ---------------------------------------------------------------------------
+
+/** Criterion 1: rank 1's net score must be STRICTLY above this. */
+const O1_RANK1_MIN_NET_SCORE = 0;
+/** Criterion 2: the ranked set must hold MORE than this many distinct build_score values. */
+const O1_MIN_DISTINCT_SCORES = 1;
+
+/**
+ * Criterion 1 facts for one ranked list: rank 1's raw-minus-penalty score.
+ *
+ * The build carries `unknown_pairwise_count` (Decision 23 O2, build-local), so
+ * penalty = unknown_compat_penalty x count and build_score_raw = build_score +
+ * penalty EXACTLY whenever build_score > 0: raw <= 100 and penalty >= 0, so only
+ * the LOWER clamp can bind. When build_score === 0 the clamp may hide a negative
+ * net score, so the raw value is reported as not recoverable instead of guessed.
+ */
+function o1Rank1Facts(entry, penaltyPerOccurrence) {
+  if (entry === null || entry === undefined) {
+    return { present: false, net: null, count: null, penalty: null, signature: null, met: false,
+      text: 'no ranked build -> NOT MET (threshold > ' + O1_RANK1_MIN_NET_SCORE + ')' };
+  }
+  const count = entry.build.unknown_pairwise_count;
+  const countKnown = Number.isInteger(count) && count >= 0;
+  const penalty = countKnown ? penaltyPerOccurrence * count : null;
+  const net = entry.build_score;
+  const met = net > O1_RANK1_MIN_NET_SCORE;
+  let rawText;
+  if (!countKnown) {
+    rawText = 'unknown_pairwise_count absent from the build (raw not inferred)';
+  } else if (net > 0) {
+    rawText = 'inferred build_score_raw ' + (net + penalty).toFixed(2)
+      + ' (exact: the lower clamp did not bind)';
+  } else {
+    rawText = 'build_score_raw - penalty <= 0 (lower clamp bound; raw not recoverable)';
+  }
+  return {
+    present: true,
+    net,
+    count: countKnown ? count : null,
+    penalty,
+    signature: entry.signature,
+    met,
+    text: 'build_score ' + net.toFixed(2)
+      + ' | unknown_pairwise_count ' + (countKnown ? count : '(absent)')
+      + ' | penalty ' + (penalty === null
+        ? '(not computable)'
+        : penaltyPerOccurrence + ' x ' + count + ' = ' + penalty.toFixed(2))
+      + ' | ' + rawText
+      + ' -> ' + (met ? 'MET' : 'NOT MET') + ' (threshold > ' + O1_RANK1_MIN_NET_SCORE + ')',
+  };
+}
+
+/** Criterion 2 facts for one ranked list: distinct build_score values. */
+function o1SpreadFacts(ranked) {
+  const distinct = new Set(ranked.map((entry) => round2(entry.build_score))).size;
+  const top = ranked.slice(0, TOP_N_PERSISTED).map((entry) => round2(entry.build_score));
+  return {
+    rankedCount: ranked.length,
+    distinct,
+    distinctTop10: new Set(top).size,
+    met: distinct > O1_MIN_DISTINCT_SCORES,
+  };
+}
+
+/**
+ * SUPPLEMENTARY (NOT one of the two criteria): how much UNKNOWN-penalty exposure
+ * the ranked set still carries. The criteria only look at rank 1, which can sit
+ * at count 0 while lower-ranked builds are still penalized; this line makes the
+ * margin and the before/after effect of new catalog data visible.
+ */
+function o1ExposureFacts(ranked, penaltyPerOccurrence) {
+  let buildsWithPenalty = 0;
+  let countSum = 0;
+  let penaltySum = 0;
+  let counted = 0;
+  for (const entry of ranked) {
+    const count = entry.build.unknown_pairwise_count;
+    if (!Number.isInteger(count) || count < 0) continue;
+    counted += 1;
+    countSum += count;
+    if (count > 0) {
+      buildsWithPenalty += 1;
+      penaltySum += penaltyPerOccurrence * count;
+    }
+  }
+  return {
+    rankedCount: ranked.length,
+    counted,
+    buildsWithPenalty,
+    meanCount: counted === 0 ? 0 : countSum / counted,
+    meanPenalty: counted === 0 ? 0 : penaltySum / counted,
+    totalPenalty: penaltySum,
+  };
+}
+
+/**
+ * Print criteria 1 and 2 for one query. The gate is judged on the CONFIGURED cap
+ * variant: that is the shipped behaviour (scoring_model candidate_caps.
+ * max_builds_per_query); the raised-cap variant is printed beside it as context
+ * and is never the judged variant.
+ */
+function printO1Acceptance(query, runs, penaltyPerOccurrence) {
+  const measured = runs.map((run) => {
+    const ranked = rankBuilds({ builds: run.result.builds }).ranked;
+    return {
+      label: run.label,
+      cap: run.cap,
+      rank1: o1Rank1Facts(ranked[0] || null, penaltyPerOccurrence),
+      spread: o1SpreadFacts(ranked),
+      exposure: o1ExposureFacts(ranked, penaltyPerOccurrence),
+    };
+  });
+  // Judged on the CONFIGURED cap variant (cap === null = the shipped behaviour).
+  // Selected by that property rather than by array position so a future reorder
+  // of the run variants cannot silently move the judgement to the raised cap;
+  // the judged variant's own label is printed with the verdict either way.
+  const judged = measured.find((row) => row.cap === null) || measured[0];
+
+  console.log('');
+  console.log('  Decision 23 O1 acceptance - criteria 1-2 of 3, judged on the CONFIGURED cap variant');
+  console.log('  (thresholds fixed in advance by the decision; criterion 3 / PI-1 is a separate standing');
+  console.log('  procedure and is NOT measured by this script):');
+  console.log('    criterion 1 - rank 1 net score (build_score_raw - unknown_compat_penalty x count) > 0:');
+  for (const row of measured) {
+    console.log('      [' + row.label + '] ' + row.rank1.text
+      + (row === judged ? '' : '   (context only)'));
+    if (row.rank1.present) {
+      console.log('        rank-1 signature: ' + row.rank1.signature);
+    }
+  }
+  console.log('    criterion 2 - more than ' + O1_MIN_DISTINCT_SCORES
+    + ' distinct build_score value(s) in the ranked set:');
+  for (const row of measured) {
+    console.log('      [' + row.label + '] ' + row.spread.rankedCount + ' ranked build(s) | distinct build_score '
+      + row.spread.distinct + ' (top-' + TOP_N_PERSISTED + ' slice: ' + row.spread.distinctTop10 + ') -> '
+      + (row.spread.met ? 'MET' : 'NOT MET') + ' (threshold > ' + O1_MIN_DISTINCT_SCORES + ')'
+      + (row === judged ? '' : '   (context only)'));
+  }
+  console.log('    supplementary (not a criterion) - remaining UNKNOWN-penalty exposure in the ranked set:');
+  for (const row of measured) {
+    console.log('      [' + row.label + '] ' + row.exposure.buildsWithPenalty + ' of ' + row.exposure.counted
+      + ' build(s) carry unknown_pairwise_count > 0 | mean count ' + row.exposure.meanCount.toFixed(3)
+      + ' | mean penalty ' + row.exposure.meanPenalty.toFixed(3)
+      + ' | total penalty ' + row.exposure.totalPenalty.toFixed(2));
+  }
+  console.log('    ' + query.useCase + ' [' + judged.label + ']: criterion 1 '
+    + (judged.rank1.met ? 'MET' : 'NOT MET') + ' | criterion 2 '
+    + (judged.spread.met ? 'MET' : 'NOT MET'));
+
+  return {
+    judgedLabel: judged.label,
+    rank1Net: judged.rank1.net,
+    rank1Count: judged.rank1.count,
+    rank1Met: judged.rank1.met,
+    distinctScores: judged.spread.distinct,
+    meanPenalty: judged.exposure.meanPenalty,
+    distinctMet: judged.spread.met,
+  };
+}
+
+/** Both measurable criteria, per query, in the factual summary. */
+function printO1Summary() {
+  console.log('');
+  console.log('== DECISION 23 O1 ACCEPTANCE SUMMARY (criteria 1-2 of 3; threshold comparisons only)');
+  let everyCriterionHolds = true;
+  for (const record of SUMMARY) {
+    const o1 = record.o1;
+    if (o1 === undefined) continue;
+    if (!(o1.rank1Met && o1.distinctMet)) everyCriterionHolds = false;
+    console.log('  ' + record.useCase + ' (judged variant: ' + o1.judgedLabel + ')');
+    console.log('    criterion 1: ' + (o1.rank1Met ? 'MET' : 'NOT MET') + ' - rank-1 build_score '
+      + (o1.rank1Net === null ? '(no ranked build)' : o1.rank1Net.toFixed(2))
+      + ' > ' + O1_RANK1_MIN_NET_SCORE
+      + (o1.rank1Count === null ? '' : ' (unknown_pairwise_count ' + o1.rank1Count + ')'));
+    console.log('    criterion 2: ' + (o1.distinctMet ? 'MET' : 'NOT MET') + ' - '
+      + o1.distinctScores + ' distinct build_score value(s) > ' + O1_MIN_DISTINCT_SCORES);
+    console.log('    supplementary: mean penalty per ranked build '
+      + (o1.meanPenalty === undefined ? '(n/a)' : o1.meanPenalty.toFixed(3)));
+  }
+  console.log('  criteria 1-2 ' + (everyCriterionHolds ? 'HOLD' : 'DO NOT ALL HOLD')
+    + ' on this measurement pass; criterion 3 (PI-1) is not measured here.');
+  console.log('  A threshold comparison is reported, not a decision: no outcome is recommended or implied.');
+}
+
 const SUMMARY = [];
 
-function printQueryReport(query, queryId, runs, labels) {
+/**
+ * Catalog reach: which distinct component products/variants actually appear in
+ * a run's builds. Printed for the raised-cap variant (the enumeration that
+ * exhausts the pool) so the acceptance report can tell WHICH catalog layer the
+ * measured builds come from: a catalog row that never reaches a build cannot
+ * move any score, whatever its spec columns say. Facts only - no verdict about
+ * which products "should" be in the pool.
+ */
+function printCatalogReach(builds, labels) {
+  const perRole = new Map();
+  for (const build of builds) {
+    for (const component of build.components) {
+      const role = component.component_role;
+      if (!perRole.has(role)) perRole.set(role, new Map());
+      const variantId = component.product_variant_id;
+      const key = variantId ? 'v:' + variantId : 'p:' + component.product_id;
+      const label = variantId
+        ? (labels.variantSkus.get(variantId) || String(variantId))
+        : (labels.productNames.get(component.product_id) || String(component.product_id));
+      const counts = perRole.get(role);
+      const existing = counts.get(key);
+      if (existing === undefined) {
+        counts.set(key, { label, count: 1 });
+      } else {
+        existing.count += 1;
+      }
+    }
+  }
+  console.log('    catalog reach across ALL ' + builds.length
+    + ' build(s) of this variant (distinct component values, seed labels):');
+  for (const role of EXPANSION_ORDER) {
+    const counts = perRole.get(role);
+    const entries = counts === undefined
+      ? []
+      : [...counts.values()].sort((left, right) => (left.label < right.label ? -1 : left.label > right.label ? 1 : 0));
+    const shown = entries.slice(0, 12).map((entry) => entry.label + ' x' + entry.count);
+    console.log('      ' + role.padEnd(13) + String(entries.length).padStart(3) + ' distinct | '
+      + (shown.length === 0 ? '(none)' : shown.join(', '))
+      + (entries.length > shown.length ? ', +' + (entries.length - shown.length) + ' more' : ''));
+  }
+}
+
+function printQueryReport(query, queryId, runs, labels, penaltyPerOccurrence) {
   const title = 'query ' + query.useCase + ' | budget ' + query.budget + ' MAD | id ' + queryId;
   console.log('');
   console.log('== ' + title);
@@ -547,6 +799,9 @@ function printQueryReport(query, queryId, runs, labels) {
     // 10-row listing is printed for the raised-cap variant only - that is the
     // Decision-20-comparable enumeration (cap=100 in the doc, 100000 here; both
     // exhaust the seed, GAMING 113 builds / OFFICE 18).
+    if (run.cap !== null) {
+      printCatalogReach(builds, labels);
+    }
     const rankedBuilds = rankBuilds({ builds }).ranked;
     const concentration = printPairConcentration(
       query.useCase,
@@ -580,6 +835,7 @@ function printQueryReport(query, queryId, runs, labels) {
   } else {
     console.log('    not comparable (a run produced no builds)');
   }
+  record.o1 = printO1Acceptance(query, runs, penaltyPerOccurrence);
   SUMMARY.push(record);
 }
 
@@ -676,11 +932,12 @@ async function main() {
         const result = await runRecommendationSnapshot(db, insertedIds[index]);
         runs.push({ label: variant.label, cap: variant.cap, result });
       }
-      printQueryReport(QUERIES[index], insertedIds[index], runs, labels);
+      printQueryReport(QUERIES[index], insertedIds[index], runs, labels, pre.unknownCompatPenalty);
     }
 
     printKExtrapolation(25);
     printSummary();
+    printO1Summary();
   } finally {
     try {
       await deleteQueries(client, insertedIds);
