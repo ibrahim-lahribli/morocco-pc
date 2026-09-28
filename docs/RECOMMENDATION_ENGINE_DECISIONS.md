@@ -1,5 +1,26 @@
 ﻿# Recommendation Engine Decisions
 
+> **Navigation (added 2026-09-28; audit finding D5).**
+>
+> - Every decision entry below starts with a normalized status line as its first content
+>   line: `Status: <STATE> <YYYY-MM-DD>[; <secondary fact>] — <qualifier>`.
+>   `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` therefore enumerates every
+>   decision entry with its current state; all 26 global decisions are RESOLVED as of
+>   2026-09-28. The one remaining `### Status:` heading style is gone.
+> - The generated lookup table — number, title, status, date and line anchor for every
+>   decision — is `docs/DECISION_INDEX.md`. Regenerate it after editing this file:
+>   `npm run gen:decisions` (`node scripts/gen-decision-index.js --check` fails when the
+>   committed index is stale). The index is a lookup aid, never a source of truth (see
+>   `AGENTS.md` §9).
+> - Numbering quirk: there are no `## Decision 4` / `## Decision 5` headings. Global
+>   Decisions 4 and 5 exist only as the nested `### Decision 4` / `### Decision 5` under
+>   "Engine 3 contract decisions" (corroborated by `RECOMMENDATION_ENGINE_ARCHITECTURE.md`
+>   §11, which cites that section's Decision 5 for the budget rule); that section's
+>   `### Decision 1-3` are Engine-3-local numbers, NOT global 1-3.
+> - The dated `Update ...` paragraphs below are historical narrative (newest: 2026-09-20)
+>   and never announce Decisions 16-26 — use the index instead. `TBD - not yet decided`
+>   appears only inside those historical paragraphs; no decision is open on it.
+
 Date: 2026-09-14 (updated). Resolves the three items originally listed under
 "Needs clarification before coding" in
 `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` (section 18, Decisions 1-3),
@@ -97,6 +118,8 @@ The original three items (quoted verbatim from the architecture document):
 
 ## Decision 1 - Asymmetric UNKNOWN policy (section 3.2)
 
+Status: RESOLVED 2026-09-14 — asymmetric UNKNOWN policy adopted; binding for Engine 1 (see the Engine 1 readiness section).
+
 ### Current situation
 
 Three compatibility tables are presence-only (no status column):
@@ -149,6 +172,8 @@ presence-only tables (already listed as FUTURE).
 
 ## Decision 2 - Dual-memory motherboard gap (section 6)
 
+Status: RESOLVED 2026-09-14 — strict motherboard memory-type match REJECT adopted; binding for Engine 1.
+
 ### Current situation
 
 `motherboard_spec.memory_type_id` is a single NOT NULL FK to `memory_type`.
@@ -199,6 +224,8 @@ listed under FUTURE / non-blocking in the architecture document.
 ---
 
 ## Decision 3 - scoring_model.configuration contract (and CONDITIONAL / UNKNOWN resolution)
+
+Status: RESOLVED 2026-09-14 — `scoring_model.configuration` contract and the CONDITIONAL / UNKNOWN resolution adopted.
 
 ### Current situation
 
@@ -393,6 +420,8 @@ budget contract). Supplements (does not replace) the
 
 ### Decision 1 -- Engine 3 input universe (adopted)
 
+Status: RESOLVED 2026-09-14 — input universe adopted (Engine-3-local #1).
+
 Engine 3 receives the complete Engine 2D `{ results }` output, including
 PASS, UNKNOWN, and REJECT entries.
 
@@ -424,6 +453,8 @@ Engine3Input
 
 ### Decision 2 -- REJECT handling (adopted)
 
+Status: RESOLVED 2026-09-14 — REJECT handling adopted (Engine-3-local #2).
+
 REJECT entries remain present in the Engine 3 input for traceability, but
 Engine 3 excludes them from build expansion.
 
@@ -443,6 +474,8 @@ UNKNOWN -> governed by Decision 3
   and the Option B boundary (REJECT must not participate in expansion).
 
 ### Decision 3 -- UNKNOWN handling (adopted)
+
+Status: RESOLVED 2026-09-14 — UNKNOWN handling adopted (Engine-3-local #3).
 
 UNKNOWN candidates remain eligible for build expansion.
 
@@ -469,6 +502,8 @@ REJECT  -> known incompatible, ineligible
   therefore consistent, not contradictory.
 
 ### Decision 4 -- Build assembly contract (from existing contracts)
+
+Status: RESOLVED 2026-09-14 — build assembly contract adopted from existing contracts (Engine-3-local #4 = global Decision 4).
 
 Minimum immutable in-memory representation needed by Engine 3. No database
 persistence in Engine 3. No ranking/scoring fields unless already required
@@ -539,6 +574,8 @@ Output: Engine 3 produces an in-memory collection of build candidates
 `build_component` writes, no ranking/scoring fields, no persistence.
 
 ### Decision 5 -- Budget contract (adopted for incremental pruning)
+
+Status: RESOLVED 2026-09-14 — budget contract adopted for incremental pruning (Engine-3-local #5 = global Decision 5).
 
 Boundary (from architecture section 3 hard-constraint 11 +
 section 11 incremental rule):
@@ -633,6 +670,8 @@ remaining decision rather than inventing behavior. See Verdict below.
     (both explicitly rejected, consistent with prior Option B decision).
 
 ## Decision 6 - Stage 1 offer pre-selection contract
+
+Status: RESOLVED 2026-09-14; IMPLEMENTED 2026-09-16 — Stage 1 offer pre-selection contract.
 
 Date: 2026-09-14. Architecture/contract decision pass only. No offer
 selection implementation, no price-carrier module, no Engine 3 module,
@@ -943,6 +982,8 @@ IMPLEMENTED (no source files created or modified by this pass).
 
 ## Decision 7 - Stage 1 freshness policy (2026-09-16)
 
+Status: RESOLVED 2026-09-16 — Stage 1 freshness policy (30-day inclusive maximum age).
+
 Date: 2026-09-16. Product-owner decision pass. Resolves ONLY gap 1 of
 Decision 6, section 3 (the exact freshness predicate). Documentation only:
 no offer-selection implementation, no SQL, no migration, no seed, no test
@@ -1026,6 +1067,8 @@ and reproducible for a fixed database state + query (architecture §14).
 
 ## Decision 8 - Stage 1 equal-price tie-break (2026-09-16)
 
+Status: RESOLVED 2026-09-16 — Stage 1 equal-price tie-break (product_id ASC).
+
 Date: 2026-09-16. Product-owner decision pass. Resolves Decision 6,
 section 5 and architecture section 18 item 5 (the deterministic
 equal-price tie-break). Documentation only: no offer-selection
@@ -1106,6 +1149,8 @@ take:  the first offer
 ---
 
 ## Decision 9 - Stage 1 product-level vs variant-level offer applicability (2026-09-16)
+
+Status: RESOLVED 2026-09-16 — product-level vs variant-level offer applicability (STRICT exact matching).
 
 Date: 2026-09-16. Product-owner decision pass. Resolves Decision 6,
 section 3 (the "`(+ product_variant_id where applicable)`" ambiguity) and
@@ -1205,6 +1250,8 @@ NULL, UNKNOWN, or REJECT (Decision 6, section 6).
 ---
 
 ## Decision 10 - Query-contract derivation: required_roles, use_case NULL policy, GPU-required vocabulary (2026-09-16)
+
+Status: RESOLVED 2026-09-16 — query-contract derivation: required_roles, use_case NULL policy, GPU-required vocabulary.
 
 Date: 2026-09-16. Product-owner decision pass binding the future
 data-loading layer's query-side contract. Resolves the three items the
@@ -1359,6 +1406,8 @@ RESOLVED -- see the resolution block under Decision 11 below.
 ---
 
 ## Decision 11 - Scoring-model loader contract (2026-09-16)
+
+Status: RESOLVED 2026-09-16; iGPU sourcing RESOLVED 2026-09-17 (implemented) — scoring-model loader contract.
 
 Date: 2026-09-16. Product decision pass binding the future scoring-model
 loader contract. Resolves the scoring-model loading item Decision 10 left
@@ -1663,6 +1712,8 @@ the original decision text above stays intact:
 
 ## Decision 12 - Ranking / top-K ownership and pipeline position (recorded retroactively 2026-09-19; RESOLVED 2026-09-20)
 
+Status: RESOLVED 2026-09-20 (recorded retroactively 2026-09-19) — ranking / top-K ownership and pipeline position (`retention/` module).
+
 ### Current situation
 
 No Decision 12 existed when Decision 14 was written: this document numbered
@@ -1804,6 +1855,8 @@ VERDICT: RESOLVED - ranking/top-K ownership adopted (new dedicated src/recommend
 
 ## Decision 13 - Candidate-ranking score formula (2026-09-19)
 
+Status: RESOLVED 2026-09-19 — candidate-ranking score formula (STEP 1-3).
+
 Date: 2026-09-19. Product decision pass resolving the candidate-ranking score
 formula Decision 14 references (intro, Rule 3, Rule 5's first key, Rule 6) and
 that the 2026-09-19 reconciliation entry recorded as a `TBD - not yet decided`
@@ -1935,9 +1988,9 @@ VERDICT: RESOLVED - candidate-ranking score formula adopted (STEP 1-3 above)
 
 ## Decision 14 — `top_k_per_role` retention semantics
 
-Date: 2026-09-18 (corrected from the recorded 2026-09-17 to match its recording commit `0c2225c`, dated 2026-09-18). Contract-freezing product decision pass. Resolves the retention question left open by Decision 12 (ranking/top-K ownership) using the candidate score defined by Decision 13. Documentation/decision only: no implementation of ranking, no top-K application, no `roleCaps`, no Engine 3 change, no scoring change, no migration, no database operation.
+Status: RESOLVED 2026-09-20 (recorded 2026-09-18; PROVISIONAL until Decisions 12 and 13 landed) — `top_k_per_role` retention semantics.
 
-### Status: RESOLVED
+Date: 2026-09-18 (corrected from the recorded 2026-09-17 to match its recording commit `0c2225c`, dated 2026-09-18). Contract-freezing product decision pass. Resolves the retention question left open by Decision 12 (ranking/top-K ownership) using the candidate score defined by Decision 13. Documentation/decision only: no implementation of ranking, no top-K application, no `roleCaps`, no Engine 3 change, no scoring change, no migration, no database operation.
 
 Decision 14 references two decisions that were never recorded; both are now
 entered above as `TBD - not yet decided` (Decision 12: ranking/top-K ownership
@@ -2022,14 +2075,14 @@ The resulting per-role top-K candidate sets are passed to Engine 3 after scoring
 
 ## Decision 15 — UNKNOWN pairwise-count producer (Decision 13's B1)
 
+Status: RESOLVED 2026-09-19 — UNKNOWN pairwise-count producer (Decision 13's B1); implemented.
+
 Date: 2026-09-19 (product decision + implementation pass). Resolves BLOCKING
 QUESTION B1 raised by the 2026-09-19 Engine 4 build-score plan
 (`scoring/build-score.js`, item 2/7): nothing in the pipeline retained which
 pairwise compatibility checks resolved UNKNOWN, so Decision 13's
 `unknown_compat_penalty * count of UNKNOWN pairwise compatibility checks` term
 had no producer and the count was an injected input.
-
-### Status: RESOLVED
 
 ### Decision
 
@@ -2111,6 +2164,8 @@ VERDICT: RESOLVED - UNKNOWN pairwise-count producer adopted (integer carry-forwa
 
 ## Decision 16 — Pairwise branch validation inside Engine 3's DFS
 
+Status: RESOLVED 2026-09-21 — pairwise branch validation inside Engine 3's DFS; implemented.
+
 Date: 2026-09-21. Resolves the recurring engine-behavior flag recorded in
 `DEVELOPMENT_NOTES.md` (2026-09-19): Engine 2D's best-of-partner aggregation
 masks pair-level FAILs at the relationship/verdict level — observed twice
@@ -2118,8 +2173,6 @@ masks pair-level FAILs at the relationship/verdict level — observed twice
 PASS/UNKNOWN verdict can still form a definite FAIL pair. Engine 2D's verdict
 is per candidate (does this candidate have at least one compatible partner?),
 not per combination; only Engine 3's DFS sees concrete combinations.
-
-### Status: RESOLVED
 
 ### Decision
 
@@ -2228,13 +2281,13 @@ VERDICT: RESOLVED - pairwise branch validation adopted (Engine 2D pair evaluator
 
 ## Decision 17 — Query loader and orchestrator contract
 
+Status: RESOLVED 2026-09-21 — query loader and orchestrator contract; implemented.
+
 Date: 2026-09-21. Product decision pass recording the query data-loading layer's
 module split, the no-writes orchestrator contract, and the snapshot-transaction
 policy required before any wiring task lands. Documentation only: no query/
 module, no orchestrator/ module, no code change, no migration, no seed, no test
 change, no commit.
-
-### Status: RESOLVED
 
 ### Decision
 
@@ -2328,11 +2381,11 @@ VERDICT: RESOLVED - query loader + no-writes orchestrator contract adopted (quer
 
 ## Decision 18 — Ranking (Engine 5a)
 
+Status: RESOLVED 2026-09-21; IMPLEMENTED 2026-09-22 — ranking (Engine 5a).
+
 Date: 2026-09-21. Product decision pass recording Engine 5a's pure ranking
 contract ahead of the wiring task. Documentation only: no ranking/ module, no
 code change, no migration, no commit.
-
-### Status: RESOLVED
 
 ### Decision
 
@@ -2382,6 +2435,8 @@ VERDICT: RESOLVED - Engine 5a ranking contract adopted (pure ranking/; build_sco
 ```
 
 ### Decision 18 addendum (2026-09-21) - Engine 5a implementation record
+
+Status: RESOLVED 2026-09-22 — implementation record for Decision 18 (not a new decision).
 
 Recorded when Engine 5a was implemented as the pure module
 `src/recommendation/ranking/` (`rank.js` + public barrel `index.js`, unit
@@ -2445,11 +2500,11 @@ reference the original build objects by identity.
 
 ## Decision 19 — Persistence (Engine 5b)
 
+Status: RESOLVED 2026-09-21; IMPLEMENTED 2026-09-23 — persistence (Engine 5b).
+
 Date: 2026-09-21. Product decision pass recording the Engine 5b persistence
 contract ahead of implementation. Documentation only: no persistence module,
 no code change, no migration, no commit.
-
-### Status: RESOLVED
 
 ### Decision
 
@@ -2499,6 +2554,8 @@ VERDICT: RESOLVED - Engine 5b persistence contract adopted (one all-or-nothing t
 
 ## Decision 20 — Assembly diversity
 
+Status: RESOLVED 2026-09-22 — assembly diversity: post-ranking (CPU, GPU) pair selection (O4, `MAX_PER_PAIR = 3`); implemented.
+
 Date: opened 2026-09-21; resolved 2026-09-22 after measurement on the
 15-product minimal seed (assembly-only at cap 25 / 100 / 100000, then
 assembly + scoring + ranking at cap 100). Documentation only: no code
@@ -2520,7 +2577,6 @@ GAMING 2 distinct CPU product_ids (claim 1) and 2 distinct GPU pair values
 records a measurement difference only - it does not re-open Decision 20's
 adopted O4 / `MAX_PER_PAIR = 3`.
 
-### Status: RESOLVED — unblocks Engine 5b persistence
 CONFIRMED BY MEASUREMENT (2026-09-23) — reconciled against both dated DEVELOPMENT_NOTES.md entries: "2026-09-23 — Decision 20 real measurement (measure-orchestrator.js first execution)" and "2026-09-23 (run 2) — Decision 20 top-10 (CPU, GPU) pair concentration (measure-orchestrator.js)".
 
 ### Decision
@@ -2597,12 +2653,12 @@ VERDICT: RESOLVED - post-ranking (CPU, GPU) pair diversity selection adopted (O4
 
 ## Decision 21 — Full-run composition contract
 
+Status: RESOLVED 2026-09-23; IMPLEMENTED — full-run composition contract (`orchestrator/full-run.js`).
+
 Date: 2026-09-23. Product decision pass recording the composition contract for
 wiring runRecommendation → rankBuilds → selectDiverseTop →
 runRecommendationCommit. Documentation only: no code, no migration, no test
 change, no commit.
-
-### Status: RESOLVED
 
 ### Decision
 
@@ -2705,7 +2761,7 @@ VERDICT: RESOLVED - full-run composition contract adopted (new orchestrator/full
 
 ## Decision 22 — Explanation generation (Engine 6) contract (RESOLVED 2026-09-24)
 
-Status: RESOLVED 2026-09-24; IMPLEMENTED 2026-09-24 (items 1–5 landed — see UPDATE block before §7). Records the Engine 6 (explanation generation) contract; the implementation update appended 2026-09-28 supersedes the two inverted sentences in the grounding paragraph.
+Status: RESOLVED 2026-09-24; IMPLEMENTED 2026-09-24 — explanation generation (Engine 6) contract; items 1–5 landed (see the UPDATE block below).
 
 Grounding (investigation-confirmed, not re-derived): Engine 4 (`scoring/build-score.js`) returns only the final clamped `build_score` per build — no per-component, per-role, or per-type contribution breakdown is exposed anywhere, Decision 19.7 ("Engine 4 will later need to expose score contributions") was resolved by Decision 22 item 1 (implemented). The pre-write seam is deliberately kept open in `full-run.js` (Decision 21): `builds` / `ranked` / `selected` are all carried in the composed return, not dropped. `recommendation_result.explanation TEXT` already exists (migration 011) — no migration needed; what is missing is code-contract only (this clause recorded the pre-implementation state and is superseded — since the item-5 landing, `persist-ranked.js` binds `entry.explanation` as $5 and `validate-selected.js` requires it non-empty). Data available at generation time per build / component (confirmed exact shape): `rank` / `persisted_rank`, `build_score`, `total_price`, `compatibility_status` (PASS | UNKNOWN only), `signature`, and `components[]` each with `component_role`, `product_id`, `product_variant_id`, `category`, `status`, `price`. NOT available without re-derivation: per-(role, type) weights / effective scores, assessment rows, verdict reasons, `budget_amount`, `use_case` (budget / use_case exist only in the DB row, not on ranked / selected entries). The only content guidance is architecture §13 (deterministic from stored inputs: top contributing assessment types per role, `compatibility_status`, price / budget relationship; example "Ranked 1: best weighted score 87.5; PASS compatibility; 3120 MAD of 3500 MAD budget; GPU PERFORMANCE dominant."; same inputs -> same text; no template / fixture / format test beyond this). Decision 2(b): a not-verifiable CONDITIONAL pair maps to UNKNOWN and its condition text (e.g. "requires BIOS >= X") must be carried into the explanation.
 
@@ -2894,6 +2950,8 @@ VERDICT: RESOLVED - Engine 6 is a new pure explanation/ module slotted between s
 
 ## Decision 23 — Score degeneracy: build-local UNKNOWN pairwise count (O2) + GPU/PSU connector & dimension data (O1)
 
+Status: RESOLVED 2026-09-27 (O1 seed 003 applied 2026-09-28; acceptance criterion 3 / PI-1 NOT built) — score degeneracy: build-local `unknown_pairwise_count` (O2) + GPU/PSU connector & dimension data (O1).
+
 Date: 2026-09-27. Product decision pass resolving the score-degeneracy finding
 recorded in `DEVELOPMENT_NOTES.md` (2026-09-25 entry, "score degeneracy
 finding"): under the 100-product catalog, `measure-orchestrator.js` reports
@@ -2907,8 +2965,6 @@ directions), so 20 GPU variants with NULL `required_power_connectors` and 9
 PSUs with NULL connector matrices accumulate ~145+ UNKNOWN pairs per picked
 component against a raw score of ~40. Documentation only at this stage: no
 code, no migration, no seed applied by this entry.
-
-### Status: RESOLVED
 
 ### Decision
 
@@ -3171,14 +3227,14 @@ VERDICT: RESOLVED - score-degeneracy resolution: O2 build-local unknown_pairwise
 
 ## Decision 24 — Decision 20 O4 re-evaluation on the 100-product catalog
 
+Status: RESOLVED 2026-09-28 — Decision 20's O4 re-evaluated on the 100-product catalog; O4 and `MAX_PER_PAIR = 3` retained unchanged.
+
 Date: 2026-09-28. Measurement pass re-checking Decision 20's post-ranking
 (CPU, GPU) pair-diversity selection (O4, `MAX_PER_PAIR = 3`,
 `ranking/select-diverse.js`) against the current catalog (001 + 002 + 003,
 100 products). Decision 20 could not do this: its figures were taken on the
 15-product minimal seed (see its SEED-SIZE NOTE). Documentation only: no
 code change, no seed change.
-
-### Status: RESOLVED — O4 and `MAX_PER_PAIR = 3` retained; scope limitation recorded
 
 ### Decision
 
@@ -3258,11 +3314,11 @@ VERDICT: RESOLVED - O4 / MAX_PER_PAIR = 3 retained unchanged; measured on the 10
 
 ## Decision 25 — Assembly cap starvation of the O4 diversity objective
 
+Status: RESOLVED 2026-09-28 — assembly cap starvation of the O4 diversity objective (`max_builds_per_query = 25` is the immediate structural blocker).
+
 Date: 2026-09-28. Measurement pass tracing WHY the ranked set at the shipped
 `max_builds_per_query = 25` holds a single (CPU, GPU) pair (Decision 24,
 item 2). Documentation only: no code change, no seed change.
-
-### Status: RESOLVED — root cause identified; the cap is the immediate structural blocker
 
 ### Decision
 
@@ -3360,12 +3416,12 @@ VERDICT: RESOLVED - the shipped max_builds_per_query = 25 truncates the depth-fi
 
 ## Decision 26 — S5.2 HIGH-TGP connector escalation implemented; the four S5.3/S6 HARD rules explicitly deferred
 
+Status: RESOLVED 2026-09-28 — hybrid (audit D2): item A IMPLEMENTED (`GPU_PSU_CONNECTOR_NULL_HIGH_TGP`); item B (four S5.3/S6 HARD rules) EXPLICITLY DEFERRED and unenforced.
+
 Date: 2026-09-28. Closes audit finding D2 in the hybrid form its own Fix line
 allowed ("implement ..., or record a decision that explicitly defers them"):
 item A ships code, item B records a deferral. Documentation plus one rule change;
 no migration, no seed, no schema change.
-
-### Status: RESOLVED — item A IMPLEMENTED (code + tests), item B DEFERRED (docs)
 
 ### Decision
 
