@@ -650,3 +650,39 @@ Lessons:
 - Two mutating shell commands issued in the same tool-batch ran concurrently and raced on the same file. Run dependent/mutating tests sequentially, one command per batch.
 - The editor tool matches `old_text` with LF while writing CRLF back correctly on CRLF files; still re-check CRLF/BOM counts after any doc-editing session (AGENTS.md §8).
 
+## 2026-09-28 — D7 backlog: seed 003, O1 acceptance, seed-size note, Decisions 24–25, CONTEXT audit
+
+Scope: audit finding D7 only (the `DEVELOPMENT_NOTES.md` entry backlog; D6 was closed in `35b0618`, D2/D5 have their own 2026-09-28 entries above). One consolidated history entry for five commits/sessions that landed 2026-09-28 without a notes entry. History only: no code, no migration, no seed, no DB access in this pass.
+
+### 1. Seed 003 applied — Decision 23 O1 (`4e70f9e`)
+
+- File: `database/seeds/003_gpu_psu_connector_data.sql` (new, 324 lines, DML-only, single BEGIN/COMMIT). Scope exactly the 20 GPU variants + 9 PSUs added by `002_catalog_expansion.sql`; `001_minimal_builds.sql` rows neither read nor written.
+- Idempotency: every column written through `COALESCE(<existing>, <researched>)` — NULLs filled, existing non-NULL never overwritten, second run changes zero rows. A later correction must be a new seed file.
+- Auditable decisions D1–D9 in the header (not copied here): D1 connector vocabulary (`24pin_atx, eps, pcie_8pin, 12vhpwr, sata`; unknown names never written); D2 `width_slots` = published mm / 20.32 rounded to 0.5; D3 conflict policy (stored length never rewritten; 1 conflict `SEED-MSI-RTX5080-VENTUS3X` 304 vs 303 mm = noise).
+- D4 identity rule (dims seeded only on exact single-model match within 2 mm; 7 rows stay NULL with reasons); D5 NULL vs 0 (0 = verifiable FAIL, NULL = UNKNOWN; Decision 26 amendment noted inline 2026-09-28, comment-only, no re-apply); D6 no adapter modelling (`{"12vhpwr": 1}` regardless of box adapter).
+- D7 three PSUs stay NULL (`Seed HYBROK PSU 650`, `Seed Connect PSU 850`, `Seed Antec G850` ambiguity Atom G850 vs GSK ATX 850); D8 29 cited source URLs (vendor spec pages, retailer listings, cybenetics); D9 forward effect (13x 12vhpwr GPUs FAIL vs `MAG A650BN` 12vhpwr=0; two 3.50-slot cards FAIL every 3-slot case).
+- `002_catalog_expansion.sql` header gained the measured `top_k_per_role = 5` truncation + random-UUID tie-break hazard + blocking assessment-research item (same commit).
+- Prior pointer: the 2026-09-25 entry already records `applied (commit 4e70f9e); criteria 1–2 MET, criterion 3 / PI-1 unbuilt` — this section supplies the session history it points to.
+
+### 2. O1 acceptance harness — criteria 1–2 (`1693de3`)
+
+- File: `scripts/measure-orchestrator.js` (+263/-6). Adds the rank-1 net-score gate (`build_score` = `raw − penalty × count` after 0..100 clamp) + distinct-score-spread gate on the configured-cap variant; thresholds fixed in advance in Decision 23, printed MET / NOT MET. Criterion 3 (PI-1 pool independence) explicitly out of scope with its own procedure.
+- Preflight moved 15 → 100 (`EXPECTED = { products: 100, models: 1, offers: 101, assessments: 25, queries: 0 }`) covering 001+002+003; reads the penalty for the margin. Safety contract unchanged (TEST_DATABASE_URL only, 2 INSERTs + finally-DELETE, in-memory high-cap copy).
+- Measured result (recorded in Decision 23 / `PROJECT_STATUS_REVIEW_2026-09-28.md`, not re-measured here): criteria 1–2 MET — GAMING rank-1 58.83 / count 0 / 12 distinct; OFFICE 57.60 / 10 distinct.
+
+### 3. Decision 20 seed-size reconciliation (`752e884`)
+
+- File: `docs/RECOMMENDATION_ENGINE_DECISIONS.md` (+19/-2, docs-only). Decision 20's 15-product figures (113 GAMING builds, 27.13/20.46-point ranges, OFFICE 9-of-10 pair) predate seeds 002/003; the SEED-SIZE NOTE scopes them to seed 001 and records what the harness reports on the 100-product catalog. Difference recorded only; adopted O4 / `MAX_PER_PAIR = 3` not re-opened.
+
+### 4. Decisions 24–25 (`bc2d737`, `bfdc5b8`)
+
+- Both docs-only, measured read-only on a TEST_DATABASE_URL branch through the real chain `loadCandidates → selectCandidatePool → selectOfferPrices → filterCandidates → computeCandidateScores → retainTopKPerRole → assembleBuildsForRecommendation → computeBuildScores → rankBuilds → selectDiverseTop` (`limit = TOP_N_PERSISTED (10)`, `maxPerPair = 3`).
+- Decision 24 (`bc2d737`, +88): O4 re-evaluated on 001+002+003. GAMING configured (25) 25 ranked → naive top-10 1 pair → O4 k=3; OFFICE configured (25) same k=3; GAMING raised (100000) 35982 ranked → 3 pairs → k=10 (4 pairs); OFFICE raised 793 ranked → 1 pair → k=9 (3 pairs, pair-cap under-fill). Constant retained; O4 recorded as post-ranking filter that cannot manufacture diversity.
+- Decision 25 (`bfdc5b8`, +103): upstream cause — shipped `max_builds_per_query = 25` truncates the depth-first `EXPANSION_ORDER` walk before CPU/GPU vary, so the 25-build pool holds exactly one (CPU, GPU) pair and no `MAX_PER_PAIR` value can yield more (any value > 1 only cuts 10 → 3). Raising the cap is necessary but insufficient: GAMING needs ≥ ~1600 builds for 4 pairs / k=10; OFFICE is pair-space-bounded at k=9 by the retention-starved catalog (Decision 23 D2: flat-40 scores + `top_k_per_role = 5` cut 17–18 of 20 new GPUs). Joint follow-up recorded: (a) seed-004 assessments, (b) cap above first GPU change, (c) fill-back question (`k < 10` acceptable?).
+
+### 5. CONTEXT audit (`e8d5bc7`, plus `9b0f014` drift fixes)
+
+- `e8d5bc7` (CONTEXT.md +8/-7, no code): benchmark rows corrected to live rows (`Seed TechPowerUp`, `Seed Cinebench R23 Multi`); Layer 4 empty-table claim replaced with real status; Engine 4 entry added; Decisions 24–25 pointers added; seeding/data-gap list reconciled post-003 (GPU + PSU-connector gaps closed; 7 NULL GPU dimensions + 3 NULL PSUs + radiator matrices + unverified prices remain).
+- `9b0f014` (AGENTS.md/CONTEXT.md/ARCHITECTURE.md docs-only drift: decision range, Engine 6 status, price-carrier item) folded here as minor; see its commit message for the item list.
+
+Verification (this D7 pass): read-only. `git status --porcelain` clean before edit; anchors re-checked against `4e70f9e` / `1693de3` / `752e884` / `bc2d737` / `bfdc5b8` / `e8d5bc7` stats, Decision 23/24/25 verdict blocks, `003` D1–D9 + D8 list, `measure-orchestrator.js:21-56`, `PROJECT_STATUS_REVIEW_2026-09-28.md:104`. No harness re-run (TEST_DATABASE_URL + operator approval required; must not be part of a docs-only fix), no `npm run test:unit` needed (docs-only; last run 829 pass / 0 fail per D5 entry).
