@@ -27,7 +27,7 @@ Commands verified to work in this repository/environment:
 | `node scripts/run-migrations.js` | applies all migrations + verification | only on a fresh DB — see failure modes |
 | `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance constraints (fixture-based) | yes (47/47) |
 | `node scripts/verify-hardware-schema.js` | hardware schema tables/constraints | no — BROKEN, see TESTING LESSONS 2026-09-19 bullet |
-| `node scripts/test-layer3.js` | Layer 3 canonical schema functional tests | yes |
+| `node scripts/test-layer3.js --verify --functional` | Layer 3 canonical schema functional tests (requires empty Layer 3 tables; bare run = preflight only) | yes (with flags + empty tables) |
 | `node scripts/test-layer4.js` | Layer 4 canonical schema functional/integration tests (single transaction + SAVEPOINTs); single transaction + final ROLLBACK; targets DATABASE_URL, not yet migrated to the TEST_DATABASE_URL guard | yes |
 | `node scripts/verify-schema.js` | columns/types for core tables | yes |
 | `node scripts/verify-constraints.js` | indexes / primary keys | yes |
@@ -37,7 +37,7 @@ Commands verified to work in this repository/environment:
 | `node scripts/run-seeds.js --dry-run` | reports seed statement counts without executing | yes |
 | `git status`, `git diff`, `git log --oneline`, `git remote -v`, `git mv` | repo inspection / rename | — |
 
-Note: commit and push commands were NOT executed in this session (the documentation task explicitly forbade them), so they are not listed as verified.
+Note: commit and push commands were NOT executed in this session (the documentation task explicitly forbade them), so they are not listed as verified. UPDATE 2026-09-28: superseded — commits have since been exercised repeatedly on `master` (`59dc0a3`, `fe2a816` pushed to `origin`; `864905a`, `8127ea0` committed locally, ahead of `origin/master` as of 2026-09-28); see GIT LESSONS.
 
 ## KNOWN WORKING TOOLS
 
@@ -90,7 +90,7 @@ Never assume the live DB contains only the objects in Git migrations. Inspect ta
 
 #### Common failures
 
-- None recorded this session. Known working-tree noise: untracked `.kilo/kilo.jsonc` (tool config — keep out of commits).
+- None recorded this session. Historical (2026-09-18): untracked `.kilo/kilo.jsonc` observed (tool config — keep out of commits). UPDATE 2026-09-28: not present; `git status` is clean.
 
 #### Rule for future agents
 
@@ -225,7 +225,7 @@ Rule: update CONTEXT.md's status sections in the same session/commit that lands 
 - `node scripts/verify-hardware-schema.js` — hardware spec tables and CHECK constraints. BROKEN — not safe to re-run; see 2026-09-19 bullet below.
 - `node scripts/test-layer3.js` — Layer 3 canonical schema (columns, CHECKs, indexes, enums). Requires the three Layer 3 tables to be empty; transactional cleanup. Safe to rerun.
 - `node scripts/test-layer4.js` — Layer 4 canonical schema (migration 011): 9-FK layout, CHECKs, uniqueness (ranks, component roles), `component_role` enum; fixture-based with final rollback. Safe to rerun.
-- `npm run test:unit` — pure unit tests for `src/recommendation/**` (Engines 1–4 + retention/Stage 1/2D/assembly + ranking; 724 tests as of 2026-09-22); no database required.
+- `npm run test:unit` — pure unit tests for `src/recommendation/**` (Engines 1–4 + retention/Stage 1/2D/assembly + ranking; 829 tests as of 2026-09-28); no database required.
 - Engine 2C: `selectCandidatePool()` (`src/recommendation/candidates/select.js`) is the canonical pool selector; `pool.test.js` covers eligibility, variant-identity, dedup, global-only `EMPTY_CANDIDATE_POOL`, ordering, determinism, and non-responsibilities. Existing `candidates.test.js` fixtures updated to valid Engine 2B identities (GPU variants carry ids; non-GPU carry null).
 - Environmental limitations: fresh 001→011 migration cannot be verified (no isolated DB); DB-backed scripts need network access to Neon and a configured `DATABASE_URL`.
 - Fixture cleanup requirement: everything created must be removed/rolled back in reverse-dependency order; row counts return to baseline.
@@ -254,8 +254,8 @@ Rule: update CONTEXT.md's status sections in the same session/commit that lands 
 - Change checking: `git status --porcelain`, `git diff`, `git log --oneline`.
 - Renames preserve history: `git mv <old> <new>` (verified this session: `PROJECT_CONTEXT.md` → `CONTEXT.md`).
 - Commit history uses conventional prefixes (feat, fix, docs, test) — keep that style.
-- Commit/push: history shows commits on `master` pushed to `origin`, but the exact commit/push commands were NOT re-verified in this session (the task forbade committing). Re-verify a commit/push workflow before relying on it.
-- Common failures: none recorded this session. Working-tree noise: untracked `.kilo/kilo.jsonc` (tool config — keep out of commits).
+- Commit/push: history shows commits on `master` pushed to `origin`. Historical (2026-09-18): the exact commit/push commands were NOT re-verified in that session (the task forbade committing). UPDATE 2026-09-28: superseded — commits have since been exercised repeatedly on `master` (`59dc0a3`, `fe2a816` pushed to `origin`; `864905a`, `8127ea0` committed locally, ahead of `origin/master` as of 2026-09-28).
+- Common failures: none recorded this session. Historical (2026-09-18): working-tree noise untracked `.kilo/kilo.jsonc` (tool config — keep out of commits). UPDATE 2026-09-28: not present; `git status` is clean.
 - `.env`, `node_modules`, logs are gitignored; never force-add or expose them.
 - Non-interactive/agent shells: plain `git log` / `git diff` open an interactive pager and can hang the session; use `git --no-pager log ...` / `git --no-pager diff ...` (verified 2026-09-18).
 
@@ -594,7 +594,7 @@ cleanup verified: recommendation_query back to 0 rows
 - **Score degeneracy finding**: Under the expanded catalog, `measure-orchestrator.js` reports `build_score min 0.00 | max 0.00 | mean 0.00 | distinct 1` for all 25 builds (and all 35,982 builds under raised cap 100,000). Every build score clamps to 0.00.
   - *Root cause*: `build-score.js` applies `unknown_compat_penalty` (5.0 per occurrence) to the raw score. Engine 2D counts UNKNOWN pairwise checks per candidate across ALL candidate pool partners (pool-wide, not build-wide). With 9 new PSUs lacking connector matrices (`connector_pcie_8pin IS NULL`) and 20 new GPU variants lacking connector requirements (`required_power_connectors IS NULL`), every chosen GPU and PSU candidate accumulates dozens of UNKNOWN pairs across both evaluation directions. The resulting compound penalty (~145+ points) exceeds the raw score (~40) and clamps `build_score` to 0.
   - *Impact*: Rankings become entirely tie-break-driven; persisted explanation texts read `best weighted score 0`.
-  - *Resolution needed*: Populate PSU connector matrices (9 rows) and GPU connector specs (20 rows) in Layer 1, or revise the candidate-level UNKNOWN penalty semantics to be build-local rather than pool-wide. *Resolved (2026-09-27, Decision 23)*: O2 build-local `unknown_pairwise_count` implemented (per DECISIONS.md:3116 doc-sync); O1 seed 003 pending.
+  - *Resolution needed*: Populate PSU connector matrices (9 rows) and GPU connector specs (20 rows) in Layer 1, or revise the candidate-level UNKNOWN penalty semantics to be build-local rather than pool-wide. *Resolved (2026-09-27, Decision 23)*: O2 build-local `unknown_pairwise_count` implemented (per DECISIONS.md:3116 doc-sync); O1 seed 003 pending. UPDATE 2026-09-28 (Decision 23 O1): `database/seeds/003_gpu_psu_connector_data.sql` applied (commit `4e70f9e`); acceptance criteria 1–2 measured MET, criterion 3 / PI-1 still unbuilt.
 
 ### 2026-09-27: Decision 23 O2 build-local unknown_pairwise_count
 
