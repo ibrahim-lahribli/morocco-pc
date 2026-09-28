@@ -2701,9 +2701,9 @@ VERDICT: RESOLVED - full-run composition contract adopted (new orchestrator/full
 
 ## Decision 22 — Explanation generation (Engine 6) contract (RESOLVED 2026-09-24)
 
-Status: RESOLVED 2026-09-24. Documentation only: no code, no migration, no commit. Records the Engine 6 (explanation generation) contract; implementation is future work against this contract.
+Status: RESOLVED 2026-09-24; IMPLEMENTED 2026-09-24 (items 1–5 landed — see UPDATE block before §7). Records the Engine 6 (explanation generation) contract; the implementation update appended 2026-09-28 supersedes the two inverted sentences in the grounding paragraph.
 
-Grounding (investigation-confirmed, not re-derived): Engine 4 (`scoring/build-score.js`) returns only the final clamped `build_score` per build — no per-component, per-role, or per-type contribution breakdown is exposed anywhere, so Decision 19.7 ("Engine 4 will later need to expose score contributions") is still true and unaddressed. The pre-write seam is deliberately kept open in `full-run.js` (Decision 21): `builds` / `ranked` / `selected` are all carried in the composed return, not dropped. `recommendation_result.explanation TEXT` already exists (migration 011) — no migration needed; what is missing is code-contract only (`persist-ranked.js` hard-codes `explanation` to `null`, ignoring `entry.explanation`; `validate-selected.js` never reads or validates the field). Data available at generation time per build / component (confirmed exact shape): `rank` / `persisted_rank`, `build_score`, `total_price`, `compatibility_status` (PASS | UNKNOWN only), `signature`, and `components[]` each with `component_role`, `product_id`, `product_variant_id`, `category`, `status`, `price`. NOT available without re-derivation: per-(role, type) weights / effective scores, assessment rows, verdict reasons, `budget_amount`, `use_case` (budget / use_case exist only in the DB row, not on ranked / selected entries). The only content guidance is architecture §13 (deterministic from stored inputs: top contributing assessment types per role, `compatibility_status`, price / budget relationship; example "Ranked 1: best weighted score 87.5; PASS compatibility; 3120 MAD of 3500 MAD budget; GPU PERFORMANCE dominant."; same inputs -> same text; no template / fixture / format test beyond this). Decision 2(b): a not-verifiable CONDITIONAL pair maps to UNKNOWN and its condition text (e.g. "requires BIOS >= X") must be carried into the explanation.
+Grounding (investigation-confirmed, not re-derived): Engine 4 (`scoring/build-score.js`) returns only the final clamped `build_score` per build — no per-component, per-role, or per-type contribution breakdown is exposed anywhere, Decision 19.7 ("Engine 4 will later need to expose score contributions") was resolved by Decision 22 item 1 (implemented). The pre-write seam is deliberately kept open in `full-run.js` (Decision 21): `builds` / `ranked` / `selected` are all carried in the composed return, not dropped. `recommendation_result.explanation TEXT` already exists (migration 011) — no migration needed; what is missing is code-contract only (this clause recorded the pre-implementation state and is superseded — since the item-5 landing, `persist-ranked.js` binds `entry.explanation` as $5 and `validate-selected.js` requires it non-empty). Data available at generation time per build / component (confirmed exact shape): `rank` / `persisted_rank`, `build_score`, `total_price`, `compatibility_status` (PASS | UNKNOWN only), `signature`, and `components[]` each with `component_role`, `product_id`, `product_variant_id`, `category`, `status`, `price`. NOT available without re-derivation: per-(role, type) weights / effective scores, assessment rows, verdict reasons, `budget_amount`, `use_case` (budget / use_case exist only in the DB row, not on ranked / selected entries). The only content guidance is architecture §13 (deterministic from stored inputs: top contributing assessment types per role, `compatibility_status`, price / budget relationship; example "Ranked 1: best weighted score 87.5; PASS compatibility; 3120 MAD of 3500 MAD budget; GPU PERFORMANCE dominant."; same inputs -> same text; no template / fixture / format test beyond this). Decision 2(b): a not-verifiable CONDITIONAL pair maps to UNKNOWN and its condition text (e.g. "requires BIOS >= X") must be carried into the explanation.
 
 ### 1. Engine 4 additive contributions exposure
 
@@ -2782,6 +2782,27 @@ Rationale: restates the architecture doc's explicit requirement; avoids schema c
 Evidence: arch §13 ("Same inputs -> same explanation text. Generation order and templates are part of Engine 6 and are versioned with the scoring model."); arch §14 re-run rule; arch §8 (every behavior change = new scoring_model row).
 
 Rejected alternatives (for this item): separate `explanation_version` column / field; recording engine binary version per row (arch §14 ACCEPTABLE gap — release notes suffice); allowing in-place template reinterpretation of stored rows.
+
+### UPDATE 2026-09-28 — implementation record (D3)
+
+Items 1–5 of this decision are implemented and wired; the grounding sentences above that said
+otherwise have been struck. Shipped state, verified 2026-09-28:
+
+* **Item 1 (contributions):** `scoring/build-score.js` exposes `computeBuildScoreContributions`
+  (additive sibling; `computeBuildScores` output unchanged, per the additive-only rule).
+* **Item 2 (module):** `src/recommendation/explanation/` exists as a pure engine module.
+* **Item 3 (slot-in):** `orchestrator/full-run.js` calls `explainSelection` between
+  `selectDiverseTop` and `runRecommendationCommit`; the composed return carries the explained
+  array as `selected`.
+* **Items 4–5 (format / validation / write):** `explain.js` composes the fixed template string;
+  `validate-selected.js` REQUIRES `entry.explanation` non-empty (fail-fast at the commit
+  boundary); `persist-ranked.js` binds `entry.explanation` as $5 of
+  `INSERT_RECOMMENDATION_RESULT`. The old `explanation: null` tests were updated, not merely
+  extended, exactly as this decision required.
+
+Items 6–8 above are decision text and are unaffected by this update; item 7 shipped as a
+budget/currency field addition on the `runRecommendation` return. Any follow-ups they name
+remain open as written.
 
 ### 7. Budget exposure on the `runRecommendation` / snapshot return (item 4(b) reachability)
 

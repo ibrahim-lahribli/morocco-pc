@@ -1,6 +1,22 @@
 ﻿# Recommendation Engine Architecture
 
-Status: ARCHITECTURE REVIEW ONLY. No engine code, no schema changes, no seeds.
+Status: ARCHITECTURE REVIEW ONLY at writing (2026-09-12). No engine code, no schema changes, no seeds then.
+
+**SUPERSESSION NOTICE (added 2026-09-28, audit D4).** All six engines (sections 2 and 17) are now
+IMPLEMENTED. This document is the original design baseline - read it for intent, NOT for current
+behaviour. Known superseded passages, each marked inline below:
+
+| Where | Superseded claim | By |
+|---|---|---|
+| S2 stage table rows 7-9, S13 | rank assigned after persistence; scoring before assembly | **Decision 18** (rank runs before the single write txn; scoring stays at stage 5) |
+| S11 hard cap example | quoted 500 builds per query | shipped max_builds_per_query = **25** (scoring_model.configuration) |
+| S13 third sort key | candidate created order / candidate id ASC | **Decision 18.3**: build_score DESC -> total_price ASC -> signature ASC (code-unit compare) |
+| S13 templates | versioned with the scoring model | templates are code constants in explanation/explain.js; NOT model-versioned |
+| S5.2 connector rule | high-TGP GPU + NULL connector count -> REJECT | **Decision 23**: returns UNKNOWN by design |
+| S5.3/S6 four HARD rules | cooler TDP, cooler height, RAM slots, RAM capacity | NOT implemented anywhere - see audit D2 / AGENTS.md S10 |
+
+Authoritative for engine behaviour: RECOMMENDATION_ENGINE_DECISIONS.md (Decisions 1-25) and the code.
+
 Date: 2026-09-12. Baseline: migrations 001-011 applied and catalog-verified.
 
 This document defines how the future recommendation engine transforms a
@@ -101,6 +117,8 @@ recommendation_result
 | 6 | Build validation | assembled builds | validated builds + build-level compatibility_status | all compatibility tables re-checked as a whole (wattage budget, connector subset, cooler TDP) | YES | No | Yes |
 | 7 | Candidate persistence | validated builds | build_candidate + build_component rows | build_candidate, build_component, store_offer (price snapshot) | No | No | Yes |
 | 8 | Ranking | persisted candidates | ranked candidates | build_candidate (score) | No (presentation) | No | Yes (deterministic tie-break) |
+
+> **SUPERSEDED BY DECISION 18** for stages 5-9: as shipped, build scoring runs at stage 5 and rankBuilds runs BEFORE the single write transaction (snapshot -> rank -> select -> explain -> commit in orchestrator/full-run.js). The stage table above is the original design; see the supersession notice at the top of this file.
 | 9 | Result record | ranked candidates | recommendation_result rows | recommendation_result | No | No | Yes |
 
 Rules:
@@ -463,7 +481,7 @@ Key rules:
 
 * Combos are only materialized as complete builds for the TOP partial combos
   (cheapest per-role bases, then variants). A hard cap (configuration) limits
-  assembled builds per query (e.g. 500); exceeding it prunes by partial price
+  assembled builds per query (e.g. 500 - SUPERSEDED: shipped max_builds_per_query is 25); exceeding it prunes by partial price
   before assembly.
 * Budget pruning is applied INCREMENTALLY: once a partial combo's minimum
   possible total exceeds budget, that branch is abandoned. Boundary
@@ -505,6 +523,8 @@ GPU policy - mandatory or optional is decided per candidate CPU, NOT globally:
 
 * `build_candidate.score` is computed at stage 5, BEFORE persistence, and
   stored with the candidate. It never changes after persistence.
+> **SUPERSEDED BY DECISION 18**: rank is assigned BEFORE persistence (Decision 18 item 7; rankBuilds runs pre-write in full-run.js), and the third sort key is signature ASC, not candidate id. Text below is the superseded original.
+
 * `recommendation_result.rank` is assigned at stage 9, after persistence, by
   ordering candidates: score DESC, then total_price ASC (cheaper wins ties),
   then a deterministic final tie-break (candidate created order / candidate id
@@ -520,7 +540,7 @@ GPU policy - mandatory or optional is decided per candidate CPU, NOT globally:
   contributing assessment types per role, the compatibility_status, and the
   price/budget relationship (e.g. "Ranked 1: best weighted score 87.5;
   PASS compatibility; 3120 MAD of 3500 MAD budget; GPU PERFORMANCE dominant"). Same inputs -> same explanation text. Generation order and templates are
-  part of Engine 6 and are versioned with the scoring model.
+  part of Engine 6 and are versioned with the scoring model. **SUPERSEDED**: templates are code constants in explanation/explain.js and are NOT versioned with the scoring model.
 * `rank` may be NULL in the schema for provisional results; the engine always
   assigns a concrete rank when finalizing, so persisted finalized results have
   non-NULL ranks.

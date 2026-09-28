@@ -77,6 +77,8 @@ So **19 of the plan's 30 difference-table rows are implemented**, 2 are intentio
 
 ### D3 — Decision 22's status line is now inverted · **HIGH**
 
+> **RESOLVED 2026-09-28. Decision 22 now carries a truthful Status line plus an implementation-record UPDATE block; the two inverted grounding sentences are struck.**
+
 **The doc says** (`DECISIONS.md:2704`): `Status: RESOLVED 2026-09-24. Documentation only: no code, no migration, no commit. Records the Engine 6 (explanation generation) contract; implementation is future work against this contract.` Its grounding paragraph adds that "`persist-ranked.js` hard-codes `explanation` to `null`, ignoring `entry.explanation`; `validate-selected.js` never reads or validates the field".
 
 **Reality** — both statements are now the reverse of the shipped code:
@@ -92,6 +94,8 @@ Engine 6 is implemented and wired (`explanation/explain.js`, called from `orches
 ---
 
 ### D4 — Architecture's status header and superseded sections are unmarked · **HIGH**
+
+> **RESOLVED 2026-09-28. ARCHITECTURE.md now opens with a supersession notice table and carries inline SUPERSEDED BY DECISION 18 markers at its stage table, S11 cap and S13 rank wording; the templates-versioning claim is struck inline.**
 
 **The doc says** (line 4): `Status: ARCHITECTURE REVIEW ONLY. No engine code, no schema changes, no seeds. Date: 2026-09-12 … It is the contract that Engines 1-6 (section 17) must implement against.`
 

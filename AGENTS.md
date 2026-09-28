@@ -195,8 +195,7 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
   `max_tdp_watts` vs CPU TDP, air-cooler `height_mm` vs `case_spec.max_cpu_cooler_height_mm`,
   RAM `module_count` vs `dimm_slots`, and total RAM capacity vs `max_memory_capacity_gb`. Those
   columns exist and no non-test code reads them — do not assume these constraints are enforced.
-- **Decision 22's `Status:` line is inverted** (the file's only `Status:` line). It says
-  "implementation is future work" and that `persist-ranked.js` hard-codes `explanation` to null;
-  in reality it writes `entry.explanation` and `validate-selected.js` requires it non-empty.
-  Decision 22 is implemented — do not re-implement it from that line.
+- **Decision 22 status - FIXED 2026-09-28 (audit D3).** Its `Status:` line said implementation was
+  future work; it now records items 1-5 as IMPLEMENTED with a dated UPDATE block in the decision
+  itself. Engine 6 is shipped - do not re-implement it.
 - Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md`.
