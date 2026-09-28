@@ -14,6 +14,7 @@ behaviour. Known superseded passages, each marked inline below:
 | S13 templates | versioned with the scoring model | templates are code constants in explanation/explain.js; NOT model-versioned |
 | S5.2 connector rule | high-TGP GPU + NULL connector count -> REJECT | **Decision 23**: returns UNKNOWN by design |
 | S5.3/S6 four HARD rules | cooler TDP, cooler height, RAM slots, RAM capacity | NOT implemented anywhere - see audit D2 / AGENTS.md S10 |
+| S3 definitive hard list (11 items) | omits all four rules above even though S5.3/S6 call them HARD (internal inconsistency; found by the D2 verification) | audit D2: the list is incomplete as written - item 9 is the only connector rule, and no cooler-TDP / cooler-height / RAM-slot / RAM-capacity item exists |
 
 Authoritative for engine behaviour: RECOMMENDATION_ENGINE_DECISIONS.md (Decisions 1-25) and the code.
 
@@ -140,6 +141,8 @@ Rules:
 A build candidate must NEVER survive when a hard constraint is definitively
 incompatible. Hard constraints are evaluated in stage 2 (per-pair) and stage 7
 (build-level). The definitive hard list:
+
+> **INCOMPLETE LIST (audit D2, verified 2026-09-28):** this list omits the four HARD rules that S5.3 and S6 prescribe elsewhere (cooler max_tdp_watts vs CPU TDP; air-cooler height_mm vs case max_cpu_cooler_height_mm; RAM module_count vs dimm_slots; total RAM capacity vs max_memory_capacity_gb). None of the four is implemented in code either - so today the list and the code happen to agree, but only because the rules from S5.3/S6 were never built. See the supersession notice above.
 
 1. CPU socket vs motherboard socket (`cpu_spec.socket_id` !=
    `motherboard_spec.socket_id` -> structural FAIL; do not even consult rules).
