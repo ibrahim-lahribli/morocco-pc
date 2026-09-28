@@ -2500,6 +2500,22 @@ Date: opened 2026-09-21; resolved 2026-09-22 after measurement on the
 assembly + scoring + ranking at cap 100). Documentation only: no code
 change, no commit.
 
+SEED-SIZE NOTE (added 2026-09-28). "The 15-product minimal seed" is the
+catalog as it stood at this decision's measurement time: `001_minimal_builds.sql`
+only. The catalog is now **100 products** after `002_catalog_expansion.sql`
+(85 products) and `003_gpu_psu_connector_data.sql` (data-only, no new
+products), and `scripts/measure-orchestrator.js` now preflights that full
+catalog (products = 100 / offers = 101 / assessments = 25). Every
+"15-product minimal seed" figure below - the 113 valid GAMING builds at the
+raised cap, the 27.13 / 20.46-point score ranges, the OFFICE 9-of-10 pair -
+is therefore scoped to seed 001 and is NOT what the harness reports today.
+Its Decision 20 claim comparisons are re-measured on the larger catalog every
+run; recorded on the first such run (2026-09-28, TEST_DATABASE_URL branch):
+GAMING 2 distinct CPU product_ids (claim 1) and 2 distinct GPU pair values
+(claim 2, exact), OFFICE largest single pair 10 of 10 (claim 7). This note
+records a measurement difference only - it does not re-open Decision 20's
+adopted O4 / `MAX_PER_PAIR = 3`.
+
 ### Status: RESOLVED — unblocks Engine 5b persistence
 CONFIRMED BY MEASUREMENT (2026-09-23) — reconciled against both dated DEVELOPMENT_NOTES.md entries: "2026-09-23 — Decision 20 real measurement (measure-orchestrator.js first execution)" and "2026-09-23 (run 2) — Decision 20 top-10 (CPU, GPU) pair concentration (measure-orchestrator.js)".
 
@@ -2561,8 +2577,9 @@ CONFIRMED BY MEASUREMENT (2026-09-23) — reconciled against both dated DEVELOPM
    ranked"; Engine 5b must persist the post-selection set, not that slice.
 
 5. **Residual open question (future work, not blocking Engine 5b).** This
-   was measured only on the 15-product minimal seed; a real-market catalog
-   with more per-role options may produce different score spread and
+   was measured only on the 15-product minimal seed (seed 001 only; see the
+   SEED-SIZE NOTE above - the catalog is now 100 products); a real-market
+   catalog with more per-role options may produce different score spread and
    pairing behavior, and `MAX_PER_PAIR` may need to become use-case- or
    catalog-size-aware later.
 
