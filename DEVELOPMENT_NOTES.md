@@ -37,7 +37,7 @@ Commands verified to work in this repository/environment:
 | `node scripts/run-seeds.js --dry-run` | reports seed statement counts without executing | yes |
 | `git status`, `git diff`, `git log --oneline`, `git remote -v`, `git mv` | repo inspection / rename | — |
 
-Note: commit and push commands were NOT executed in this session (the documentation task explicitly forbade them), so they are not listed as verified. UPDATE 2026-09-28: superseded — commits have since been exercised repeatedly on `master` (`59dc0a3`, `fe2a816` pushed to `origin`; `864905a`, `8127ea0` committed locally, ahead of `origin/master` as of 2026-09-28); see GIT LESSONS.
+Note: commit and push commands were NOT executed in this session (the documentation task explicitly forbade them), so they are not listed as verified. UPDATE 2026-09-28: superseded — commits and pushes have since been exercised repeatedly on `master`. Deliberately no hash list here: an enumerated set of pushed/unpushed commits goes stale on the next push (the first such list was already wrong the same day it was written), so read the live state from `git status` / `git --no-pager log origin/master..HEAD`; see GIT LESSONS.
 
 ## KNOWN WORKING TOOLS
 
@@ -254,7 +254,7 @@ Rule: update CONTEXT.md's status sections in the same session/commit that lands 
 - Change checking: `git status --porcelain`, `git diff`, `git log --oneline`.
 - Renames preserve history: `git mv <old> <new>` (verified this session: `PROJECT_CONTEXT.md` → `CONTEXT.md`).
 - Commit history uses conventional prefixes (feat, fix, docs, test) — keep that style.
-- Commit/push: history shows commits on `master` pushed to `origin`. Historical (2026-09-18): the exact commit/push commands were NOT re-verified in that session (the task forbade committing). UPDATE 2026-09-28: superseded — commits have since been exercised repeatedly on `master` (`59dc0a3`, `fe2a816` pushed to `origin`; `864905a`, `8127ea0` committed locally, ahead of `origin/master` as of 2026-09-28).
+- Commit/push: history shows commits on `master` pushed to `origin`. Historical (2026-09-18): the exact commit/push commands were NOT re-verified in that session (the task forbade committing). UPDATE 2026-09-28: superseded — commits and pushes have since been exercised repeatedly on `master`. No hash list is kept here (the first one went stale the same day it was written); check `git status` / `git --no-pager log origin/master..HEAD` for what is unpushed.
 - Common failures: none recorded this session. Historical (2026-09-18): working-tree noise untracked `.kilo/kilo.jsonc` (tool config — keep out of commits). UPDATE 2026-09-28: not present; `git status` is clean.
 - `.env`, `node_modules`, logs are gitignored; never force-add or expose them.
 - Non-interactive/agent shells: plain `git log` / `git diff` open an interactive pager and can hang the session; use `git --no-pager log ...` / `git --no-pager diff ...` (verified 2026-09-18).
