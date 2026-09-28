@@ -631,3 +631,22 @@ Docs updated: `docs/RECOMMENDATION_ENGINE_DECISIONS.md` (Decision 26 + Final Sta
 
 Verification: `npm run test:unit` 829 pass / 0 fail; `board_tgp_watts` now read by 4 `src/` files by design; the deferred columns still appear only in test-fixture scripts; all marker sites and attributions grep-verified. Nothing committed or pushed.
 
+## 2026-09-28 — D5 closure: generated decision index + normalized `Status:` lines
+
+Scope: audit finding D5 only (audit items 1–4 were committed earlier the same day; D6/D7/D8/D12 remain open under audit items 6–7).
+
+What landed:
+- `docs/RECOMMENDATION_ENGINE_DECISIONS.md` (3,542 → 3,598 lines): a normalized `Status:` line is now the first content line of every decision entry — 30 `^Status:` lines total (24 `## Decision` + 5 Engine-3-local `### Decision` + the Decision 18 addendum). The 12 old `### Status:` headings were moved up and removed; Decision 22's long status line was shortened (detail kept in its UPDATE block). A navigation block was added under the title (index pointer, the global-4/5 numbering quirk with its `ARCHITECTURE.md` §11 evidence, and the "`TBD` only appears in historical paragraphs" note). `TBD - not yet decided` now appears 4×, all historical.
+- `scripts/gen-decision-index.js` (rewritten): **requires** the `Status:` line and hard-fails without it — no heuristics, no `UNKNOWN` (the previous version reported global Decision 4 as `UNKNOWN`); adds the Date column D5/A1 asked for; replaces the hard-coded `EXPECTED_GLOBAL_DECISIONS = 26` with contiguity + the documented 4/5-alias rule + an exact `[1..5]` Engine-3 set check; and adds `--check` (exit 1 on a stale index, ignoring only the volatile `Generated <date>` line so the gate is date-stable).
+- `docs/DECISION_INDEX.md` regenerated: 24 global rows + 5 Engine-3-local rows (number, title, status, date, line anchor), an "Open decisions" section (currently *none*), and a reconciliation block that states the alias mapping instead of leaving it implied.
+- `package.json`: added `gen:decisions` (it was referenced by the WIP script and absent — the lesson recorded in the D2 entry above).
+- Pointers/trackers: `AGENTS.md` §2 (the "It has NO index and almost no `Status:` lines" claim was now false), §4 map, §6 command table, §9 source-of-truth row; `CONTEXT.md` decision-record line; audit `D5` RESOLVED banner + fix-order row 5 + end-of-day status (items 1–5 done); `PROJECT_STATUS_REVIEW_2026-09-28.md` `:17` (25 → 26 decisions) and register item **U13** (now VERIFIED).
+
+Verification: `npm run gen:decisions` writes; two consecutive runs are byte-identical (sha256 equal); `--check` exits 0 on the committed index; deliberately removing one `Status:` line makes the generator exit 1 with the exact entry line number and the file was hash-restored; deliberately editing the index makes `--check` exit 1 (`STALE`); anchor check 29/29 rows point at their own headings (0 mismatches); `npm run test:unit` 829 pass / 0 fail; encodings preserved (`DECISIONS.md` CRLF + BOM, `AGENTS.md` LF, script + index CRLF).
+
+Lessons:
+- The WIP generator's `inEngine3` never reset after the Engine 3 section, so its nested `### Decision` matcher leaked to `### Decision 18 addendum`; it only passed because `if (!m) continue` silently skipped unparseable headings. When a heading fails to parse, fail loudly — silent `continue` is how wrong indexes get committed.
+- A generated artifact that is committed needs a staleness gate; putting the volatile date on its own line is what keeps `--check` usable across days.
+- Two mutating shell commands issued in the same tool-batch ran concurrently and raced on the same file. Run dependent/mutating tests sequentially, one command per batch.
+- The editor tool matches `old_text` with LF while writing CRLF back correctly on CRLF files; still re-check CRLF/BOM counts after any doc-editing session (AGENTS.md §8).
+

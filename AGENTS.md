@@ -24,9 +24,13 @@ points are the engine's public barrels (`src/recommendation/*/index.js`) and the
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
 5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–26). Check here
-   before changing engine behavior. It has NO index and almost no `Status:` lines: locate entries
-   with `grep -n "^## Decision" docs/RECOMMENDATION_ENGINE_DECISIONS.md` (that grep returns 24 hits
-   for 26 decisions — Decisions 4–5 are nested sub-headings under "Engine 3 contract decisions").
+   before changing engine behavior. Every entry opens with a normalized `Status:` line, so
+   `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
+   For one table with number / title / status / date / line anchor, use the generated
+   `docs/DECISION_INDEX.md` (regenerate: `npm run gen:decisions`; staleness gate:
+   `node scripts/gen-decision-index.js --check`). Numbering note: there are no `## Decision 4` /
+   `## Decision 5` headings — Decisions 4–5 are nested sub-headings under "Engine 3 contract
+   decisions" (the index reconciles this explicitly).
 6. `database/migrations/*.sql` — THE authoritative schema. Column-level truth is in the SQL, not prose.
 
 For a current map of what is stale and why: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` (per-finding doc drift) and
@@ -54,6 +58,7 @@ For a current map of what is stale and why: `docs/DOCUMENTATION_AUDIT_2026-09-28
 | `CONTEXT.md` | Canonical project context and current status |
 | `DEVELOPMENT_NOTES.md` | Operational lessons and verified commands |
 | `docs/` | Engine architecture, decision log, and dated audit/status reports |
+| `docs/DECISION_INDEX.md` | GENERATED decision lookup table (number/title/status/date/line) — never edit by hand |
 | `database/migrations/` | Authoritative schema (`001`–`011`, apply in filename order) |
 | `database/seeds/` | DML-only, idempotent seed data |
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |
@@ -96,6 +101,7 @@ deliberately not duplicated here.
 | `npm run test:unit` | Engine unit tests (`src/**/*.test.js`, no DB) |
 | `npm run test:db` | DB connection + table listing |
 | `npm run seed` | Apply `database/seeds/*.sql` (idempotent) |
+| `npm run gen:decisions` | Regenerate `docs/DECISION_INDEX.md` from the decision log (`node scripts/gen-decision-index.js --check` fails when it is stale) |
 | `node scripts/run-seeds.js --dry-run` | Report seed statements without executing |
 | `node scripts/run-migrations.js` | Apply migrations — FRESH DB ONLY (not re-runnable) |
 | `node --test scripts/lib/db-url.test.js` | Guard unit tests (not in `test:unit`) |
@@ -162,6 +168,7 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
 | Exact table/column definitions | `database/migrations/*.sql` |
 | Engine pipeline, compatibility, scoring, budget | `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` |
 | Why engine behavior is the way it is (the contract) | `docs/RECOMMENDATION_ENGINE_DECISIONS.md` |
+| Which decisions exist, and their current status | each entry's `Status:` line + the generated `docs/DECISION_INDEX.md` (lookup aid, never a source of truth) |
 | Vocabulary/inputs/outputs of one module | that module's `index.js` header comment |
 | Layer 4 reconciliation history | `database/LAYER4_RECONCILIATION_PLAN.md` |
 

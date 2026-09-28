@@ -14,7 +14,7 @@ A **PC-build recommendation engine for the Moroccan market**. It recommends comp
 
 Today it is a **Node.js library plus a PostgreSQL schema** — no HTTP server, no API layer, no UI, no auth, no job runner. Runtime dependencies are only `pg` and `dotenv`. Tests use Node's built-in runner; there is no TypeScript, no linter, no CI.
 
-The project is driven by an unusually disciplined decision log: 25 numbered decisions, every one marked RESOLVED, each recording alternatives that were rejected and why.
+The project is driven by an unusually disciplined decision log: 26 numbered decisions, every one marked RESOLVED, each recording alternatives that were rejected and why.
 
 ---
 
@@ -253,7 +253,7 @@ Honest separation: things **not checked**, as opposed to things found wrong.
 | U10 | Performance budgets | No timing assertions anywhere; the raised-cap run took an unknown amount of wall time | Add a timing harness to `measure-orchestrator.js` |
 | U11 | Backup / restore and Neon branch lifecycle | The shared database is described as non-disposable with no documented recovery path | Document and rehearse a restore on a branch |
 | U12 | Provenance coverage for seed data | `spec_provenance` is empty even though seed 003 cites source URLs in its header comments | Decide whether seed provenance belongs in the table rather than comments |
-| U13 | Whether the decision log's heading count matches its numbering | 25 decisions span 23 `## Decision` headings — grouped entries are suspected but unverified | Walk the headings and reconcile |
+| U13 | Whether the decision log's heading count matches its numbering | **VERIFIED 2026-09-28 (audit D5):** 26 decisions = 24 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5; Engine-3-local 1–3 are a separate numbering space — reconciled mechanically by `npm run gen:decisions` | ~~Walk the headings and reconcile~~ — closed; see `docs/DECISION_INDEX.md` |
 
 ---
 
