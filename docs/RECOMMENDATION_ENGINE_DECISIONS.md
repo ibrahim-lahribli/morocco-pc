@@ -295,6 +295,10 @@ using only Layer 1 tables, with the following decisions binding:
   (section 4.1); CONDITIONAL resolves per Decision 3(b).
 * Derived checks: GPU<->case, GPU<->PSU (wattage + connector subset), cooler
   TDP/height - NULL on either side = UNKNOWN, never "unlimited".
+  (UPDATE 2026-09-28, Decision 26: the GPU<->PSU half is implemented, including
+  the architecture section 5.2 HIGH-TGP NULL-connector escalation; the cooler
+  TDP/height half was never implemented and is now explicitly deferred and
+  unenforced - see Decision 26 item B.)
 * RAM: platform rule (Decision 1 evidence test) + strict motherboard
   memory-type match with reason `MOTHERBOARD_MEMORY_TYPE_MISMATCH`
   (Decision 2).
@@ -3354,6 +3358,162 @@ VERDICT: RESOLVED - the shipped max_builds_per_query = 25 truncates the depth-fi
 
 ---
 
+## Decision 26 — S5.2 HIGH-TGP connector escalation implemented; the four S5.3/S6 HARD rules explicitly deferred
+
+Date: 2026-09-28. Closes audit finding D2 in the hybrid form its own Fix line
+allowed ("implement ..., or record a decision that explicitly defers them"):
+item A ships code, item B records a deferral. Documentation plus one rule change;
+no migration, no seed, no schema change.
+
+### Status: RESOLVED — item A IMPLEMENTED (code + tests), item B DEFERRED (docs)
+
+### Decision
+
+**A. Architecture section 5.2's HIGH-TGP connector escalation is ADOPTED as the
+shipped contract and implemented 2026-09-28.**
+
+1. **Shipped semantics (exact).** `compatibility/gpu.js` Rule 11
+   (`resolveGpuPsuConnectors`) returns FAIL with the new reason code
+   `GPU_PSU_CONNECTOR_NULL_HIGH_TGP` when ALL of these hold:
+   * the GPU's `required_power_connectors` normalized successfully;
+   * a required connector whose NAME is in the known vocabulary
+     (`24pin_atx`, `eps`, `pcie_8pin`, `12vhpwr`, `sata`) has NULL / absent PSU
+     availability (normalized `psu_spec` connector counts);
+   * `gpu_board_spec.board_tgp_watts >= 200`, boundary INCLUSIVE (exactly 200 W
+     escalates, 199 W does not) and required to be a finite number.
+   The threshold is the code constant `HIGH_TGP_WATTS = 200` in `gpu.js`.
+
+2. **Precedence, stated because it is observable.** The escalation is decided
+   BEFORE the unknown-connector-NAME branch, so a pair holding both a
+   NULL-availability known connector and an unverifiable name returns FAIL.
+   Rationale: `aggregateCompatibilityResults` is worst-of (FAIL > UNKNOWN) and
+   Engine 3's Decision 16 gate abandons a branch only on FAIL — an UNKNOWN would
+   let the unsafe (GPU, PSU) combination reach a build. Only NULL / absent
+   availability escalates; an availability value that is neither NULL nor a
+   finite number (unreachable through the shipped B2-C loader, which normalizes
+   `psu_spec` to number-or-NULL) keeps today's UNKNOWN.
+
+3. **Explicitly UNCHANGED by this entry** (each pinned by a Rule 11 unit test):
+   GPU `required_power_connectors` NULL -> UNKNOWN; unknown connector NAME ->
+   UNKNOWN; `board_tgp_watts` NULL / absent / non-finite -> UNKNOWN (NULL TGP is
+   never read as FAIL and never as "low TGP"); a verifiable deficit, including an
+   INTEGER 0 count -> FAIL `GPU_PSU_CONNECTOR_UNAVAILABLE`; empty requirements ->
+   PASS.
+
+4. **Data path.** `board_tgp_watts` is loaded by `filtering/context-loader.js`
+   (`GPU_VARIANT_SPEC_SQL` + `normalizeGpuSpec`, NULL preserved) and handed to the
+   rule by `filtering/filter.js` `evaluateGpuPsuPair`. Engine 3 inherits the
+   behaviour with NO assembly change: `assembly/assemble.js` declares the
+   `gpu_psu` pair with the same `evaluateGpuPsuPair` evaluator, so the FAIL
+   prunes the branch in the Decision 16 gate and the pair stops counting as
+   UNKNOWN in the Decision 23 O2 build-local count.
+
+5. **Attribution correction.** The audit's D2 table cell and the
+   `ARCHITECTURE.md` supersession notice previously credited "Decision 23:
+   returns UNKNOWN by design". Decision 23 never addressed the >= 200 W
+   escalation: Rule 11's unconditional UNKNOWN for ANY null connector
+   availability was `gpu.js`'s own design, and no decision had ruled on section
+   5.2's REJECT policy before this entry. The attribution was corrected the same
+   day (commits `676973b`/`6c69baa`); this entry supplies the missing policy.
+
+6. **Measured impact on the live catalog (read-only `DATABASE_URL` queries,
+   2026-09-28).** 13 of 22 `gpu_board_spec` rows have `board_tgp_watts >= 200`
+   (max 575 W) and all 13 require exactly `{"12vhpwr": 1}`; 3 of 11 `psu_spec`
+   rows have `connector_12vhpwr IS NULL` (`Seed Antec G850`, `Seed Connect PSU
+   850`, `Seed HYBROK PSU 650`). Exactly **39 (GPU, PSU) pairs** therefore flip
+   UNKNOWN -> FAIL. Engine 2D aggregates a relationship best-of across partners,
+   so such a GPU stays eligible while any other PSU partner PASSes; the concrete
+   effects are that the unsafe pair can no longer be assembled (Decision 16 gate)
+   and no longer contributes an UNKNOWN penalty. Because branch abandonment
+   changes which builds reach `max_builds_per_query`, the Decisions 23/24/25
+   measurement figures predate this change and may shift — re-measurement on an
+   isolated `TEST_DATABASE_URL` branch is a follow-up, not part of this entry.
+
+**B. The four HARD rules of architecture sections 5.3 and 6 are EXPLICITLY
+DEFERRED and recorded as UNENFORCED.**
+
+7. **The four rules.** (i) `cooler_spec.max_tdp_watts < cpu_spec.tdp_watts` ->
+   REJECT; (ii) air-cooler `cooler_spec.height_mm >
+   case_spec.max_cpu_cooler_height_mm` -> REJECT;
+   (iii) `ram_spec.module_count > motherboard_spec.dimm_slots` -> REJECT;
+   (iv) `ram_spec.module_count * ram_spec.capacity_per_module_gb >
+   motherboard_spec.max_memory_capacity_gb` -> REJECT. None is implemented in
+   `src/`: no non-test module reads `max_tdp_watts`, `height_mm`,
+   `max_cpu_cooler_height_mm`, `module_count` or `max_memory_capacity_gb`. They
+   remain desirable but are NOT part of the contract this engine enforces
+   today. Section 5.3's NULL-fallback clause ("either NULL -> UNKNOWN
+   (penalty)") is unimplemented for the same reason.
+
+8. **Architecture document downgrade.** `ARCHITECTURE.md` carries inline markers
+   in section 3 (list item 9 and the section 3 definitive list), 3.3, 5.2, 5.3,
+   6, 11 step 7, 16, 17 and 18; section 16 gains four IMPORTANT (latent) rows;
+   the supersession notice rows for section 5.2 and for the four rules record
+   this decision. The section 3 "definitive hard list" (11 items) contains none
+   of the four rules — an internal inconsistency found by the D2 verification —
+   and stays incomplete BY DESIGN until item B is implemented.
+
+9. **This deferral is a known contract violation, not a free choice.**
+   * The Engine 1 readiness contract (this file, "Engine 1 readiness") requires
+     "Derived checks: GPU<->case, GPU<->PSU (wattage + connector subset), cooler
+     TDP/height — NULL on either side = UNKNOWN, never 'unlimited'". The cooler
+     half of that sentence was never implemented.
+   * `database/seeds/002_catalog_expansion.sql` D5 documents the cooler half as
+     intentional forward-looking data ("seeded but NOT consumed by any engine
+     code today ... forward-looking data, not enforcement").
+   * The RAM half was silent drift: no decision, no seed note and no code
+     comment recorded it as deferred until this entry.
+
+10. **Live-data evidence (read-only, 2026-09-28).** Coverage among the 100
+    seeded products: coolers 9 (TDP known 9, height known 5), CPUs 18 (TDP known
+    18), cases 10 (height known 10), motherboards 7 (both columns known 7), RAM
+    kits 7 (both columns known 7). Violations today: **0** for all four rules,
+    measured both over every catalog combination and over the
+    compatibility-reachable subsets (cooler<->CPU via non-FAIL
+    `cooler_socket_support`; RAM<->motherboard with matching `memory_type_id`).
+    The four rules are therefore LATENT, not currently harmful — which is why
+    they can be deferred, and why the deferral is time-bounded.
+
+11. **Revisit trigger (binding).** Any future seed that adds or edits a CPU,
+    cooler, case, motherboard or RAM row MUST re-run the four violation queries
+    before merge. Any implementation of the four rules must land with a new
+    sequential decision (or an UPDATE block on this one) plus Engine 1 fixture
+    tests. A cooler or RAM seed that introduces the first violation while these
+    rules are unenforced would persist an unsafe build.
+
+### Rejected alternatives
+
+* **Implement all four rules in this pass:** each is a small pure function plus a
+  `PAIRWISE_CHECKS` entry, but the two cooler rules need pair inputs Engine 2D
+  does not carry (CPU TDP, case cooler height) and the RAM rules need new
+  motherboard-slot / kit-capacity inputs — context-loader, filter, assembly and
+  Engine 1 surface changes larger than this docs-and-Rule-11 pass can validate.
+* **Leave sections 5.3 and 6 as written:** rejected by the audit's own Fix line —
+  a document must not assert safety the engine does not provide.
+* **Narrow reading of section 5.2 (escalate only when the whole PSU connector map
+  is NULL):** rejected. Section 5.2 says "PSU count for it is NULL", i.e.
+  per-connector, and the seed-003 rows leave exactly such per-column NULLs. The
+  narrow reading would have flipped 0 of the 39 live pairs and left the policy
+  unimplemented in practice.
+* **UNKNOWN precedence (escalate only when every unverifiable connector is a NULL
+  availability):** rejected — it preserves seed 003's historical sentence but
+  lets a mixed unverifiable pair reach an assembly on a 200 W+ board, the exact
+  outcome section 5.2 exists to prevent.
+* **Treat a non-finite availability value as NULL for escalation:** rejected as
+  an invention beyond section 5.2's wording, and unreachable through the shipped
+  loader contract.
+* **Defer item A too (document-only entry):** rejected — the change is four small
+  edits in modules that already carry the pair, and leaving the policy
+  unimplemented while the catalog holds 13 high-TGP boards is the latent risk the
+  audit called CRITICAL.
+
+### Verdict for this pass
+
+```text
+VERDICT: RESOLVED - hybrid (audit D2). ITEM A IMPLEMENTED as shipped contract: Rule 11 resolveGpuPsuConnectors escalates a required, KNOWN connector's NULL PSU availability to FAIL GPU_PSU_CONNECTOR_NULL_HIGH_TGP at gpu_board_spec.board_tgp_watts >= 200 (inclusive, finite), decided BEFORE the unknown-name branch so FAIL outranks UNKNOWN; a NULL GPU requirement / unknown connector NAME / NULL TGP stay UNKNOWN and a verifiable deficit (incl. 0) keeps GPU_PSU_CONNECTOR_UNAVAILABLE; board_tgp_watts is loaded by context-loader and handed over by filter.js, and Engine 3 inherits the FAIL with no assembly change; 39 live (GPU, PSU) pairs flip UNKNOWN -> FAIL; the Decision 23 attribution is corrected on the record. ITEM B DEFERRED: cooler max_tdp_watts vs CPU TDP, cooler height_mm vs case max_cpu_cooler_height_mm, RAM module_count vs dimm_slots and RAM capacity vs max_memory_capacity_gb are UNENFORCED, marked inline in ARCHITECTURE.md sections 3/3.3/5.2/5.3/6/11/16/17/18, recorded as a known Engine 1 readiness contract violation with 0 live violations as of 2026-09-28 and a binding seed-time re-check trigger. Unit tests 817 -> 829, 0 failures.
+```
+
+---
+
 ## Final Status
 
 ```text
@@ -3373,6 +3533,7 @@ Decision 22: RESOLVED (explanation generation / Engine 6 contract, adopted 2026-
 Decision 23: RESOLVED (score-degeneracy: build-local unknown_pairwise_count (O2) + GPU/PSU connector & dimension data seed 003 (O1), adopted 2026-09-27)
 Decision 24: RESOLVED (Decision 20 O4 / MAX_PER_PAIR = 3 re-evaluated on the 100-product catalog; retained unchanged, scope limitation recorded - diversity only at the raised cap, no-op-plus-under-fill at the shipped configured cap, adopted 2026-09-28)
 Decision 25: RESOLVED (assembly cap starvation: max_builds_per_query = 25 truncates the depth-first EXPANSION_ORDER walk before CPU/GPU can vary, so O4 is structurally starved at every MAX_PER_PAIR value and OFFICE is pair-space-bounded at k=9; raising the cap is necessary but insufficient, adopted 2026-09-28)
+Decision 26: RESOLVED (hybrid, audit D2: architecture S5.2 HIGH-TGP connector escalation IMPLEMENTED - Rule 11 returns FAIL GPU_PSU_CONNECTOR_NULL_HIGH_TGP when a required KNOWN connector's PSU availability is NULL and gpu_board_spec.board_tgp_watts >= 200, with the TGP loaded via context-loader/filter.js; the four S5.3/S6 HARD rules - cooler TDP, cooler height, RAM slots, RAM capacity - EXPLICITLY DEFERRED and recorded as UNENFORCED, adopted 2026-09-28)
 ```
 
 Unambiguous one-sentence semantics for the implementation task:

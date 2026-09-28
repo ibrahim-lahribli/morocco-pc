@@ -283,6 +283,117 @@ test('array-form requirements (each name counts once) supported', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Rule 11 HIGH-TGP escalation (Decision 26, architecture section 5.2)
+// ---------------------------------------------------------------------------
+
+/** A PSU whose 12VHPWR column is NULL, i.e. unverified (real seed-003 shape). */
+const PSU_NO_HPWR_DATA = { '24pin_atx': 1, eps: 2, pcie_8pin: 3, sata: 4 };
+
+test('TGP 200 + required connector availability NULL -> FAIL NULL_HIGH_TGP (inclusive boundary)', () => {
+  const result = resolveGpuPsuConnectors({
+    gpu_product_variant_id: 'gpu-v-1',
+    psu_product_id: 'psu-1',
+    gpu_required_power_connectors: { '12vhpwr': 1 },
+    gpu_board_tgp_watts: 200,
+    psu_power_connectors: PSU_NO_HPWR_DATA,
+  });
+  assert.equal(result.status, FAIL);
+  assert.equal(result.reason, REASON_CODES.GPU_PSU_CONNECTOR_NULL_HIGH_TGP);
+  assert.deepEqual(result.evidence[0].unverifiable_connectors, ['12vhpwr']);
+  assert.equal(result.evidence[0].board_tgp_watts, 200);
+  assert.equal(result.evidence[0].rule, 'gpu_psu_connectors');
+});
+
+test('TGP 199 + required connector availability NULL -> UNKNOWN (below threshold)', () => {
+  const result = resolveGpuPsuConnectors({
+    gpu_required_power_connectors: { '12vhpwr': 1 },
+    gpu_board_tgp_watts: 199,
+    psu_power_connectors: PSU_NO_HPWR_DATA,
+  });
+  assert.equal(result.status, UNKNOWN);
+  assert.equal(result.reason, REASON_CODES.GPU_PSU_CONNECTOR_UNKNOWN);
+  assert.deepEqual(result.evidence[0].unverifiable_connectors, ['12vhpwr']);
+});
+
+test('TGP 575 + entire PSU connector map NULL -> FAIL NULL_HIGH_TGP', () => {
+  const result = resolveGpuPsuConnectors({
+    gpu_required_power_connectors: { '12vhpwr': 1 },
+    gpu_board_tgp_watts: 575,
+    psu_power_connectors: null,
+  });
+  assert.equal(result.status, FAIL);
+  assert.equal(result.reason, REASON_CODES.GPU_PSU_CONNECTOR_NULL_HIGH_TGP);
+  assert.equal(result.evidence[0].available_connectors, null);
+  assert.equal(result.evidence[0].board_tgp_watts, 575);
+});
+
+test('TGP NULL + required connector availability NULL -> UNKNOWN (NULL TGP never escalates)', () => {
+  const result = resolveGpuPsuConnectors({
+    gpu_required_power_connectors: { '12vhpwr': 1 },
+    gpu_board_tgp_watts: null,
+    psu_power_connectors: PSU_NO_HPWR_DATA,
+  });
+  assert.equal(result.status, UNKNOWN);
+  assert.equal(result.reason, REASON_CODES.GPU_PSU_CONNECTOR_UNKNOWN);
+});
+
+test('TGP 300 + GPU requirements missing -> UNKNOWN (early return unchanged)', () => {
+  const result = resolveGpuPsuConnectors({
+    gpu_required_power_connectors: null,
+    gpu_board_tgp_watts: 300,
+    psu_power_connectors: PSU_NO_HPWR_DATA,
+  });
+  assert.equal(result.status, UNKNOWN);
+  assert.equal(result.reason, REASON_CODES.GPU_PSU_CONNECTOR_UNKNOWN);
+});
+
+test('TGP 300 + unknown connector NAME on a populated PSU -> UNKNOWN', () => {
+  const result = resolveGpuPsuConnectors({
+    gpu_required_power_connectors: { '12v2x6': 1 },
+    gpu_board_tgp_watts: 300,
+    psu_power_connectors: PSU_CONNECTORS,
+  });
+  assert.equal(result.status, UNKNOWN);
+  assert.equal(result.reason, REASON_CODES.GPU_PSU_CONNECTOR_UNKNOWN);
+  assert.deepEqual(result.evidence[0].unverifiable_connectors, ['12v2x6']);
+});
+
+test('TGP 300 + unknown NAME and NULL availability -> FAIL NULL_HIGH_TGP (FAIL outranks UNKNOWN)', () => {
+  const result = resolveGpuPsuConnectors({
+    gpu_required_power_connectors: { '12v2x6': 1, '12vhpwr': 1 },
+    gpu_board_tgp_watts: 300,
+    psu_power_connectors: PSU_NO_HPWR_DATA,
+  });
+  assert.equal(result.status, FAIL);
+  assert.equal(result.reason, REASON_CODES.GPU_PSU_CONNECTOR_NULL_HIGH_TGP);
+  // Only the decisive (NULL-availability) connector is listed.
+  assert.deepEqual(result.evidence[0].unverifiable_connectors, ['12vhpwr']);
+});
+
+test('TGP 300 + verifiable deficit -> FAIL GPU_PSU_CONNECTOR_UNAVAILABLE (unchanged path)', () => {
+  const result = resolveGpuPsuConnectors({
+    gpu_required_power_connectors: { '12vhpwr': 2 },
+    gpu_board_tgp_watts: 300,
+    psu_power_connectors: PSU_CONNECTORS,
+  });
+  assert.equal(result.status, FAIL);
+  assert.equal(result.reason, REASON_CODES.GPU_PSU_CONNECTOR_UNAVAILABLE);
+  assert.deepEqual(result.evidence[0].connector_deficits, {
+    '12vhpwr': { required: 2, available: 1 },
+  });
+});
+
+test('TGP 300 + availability 0 -> FAIL GPU_PSU_CONNECTOR_UNAVAILABLE (0 is verifiable, never NULL)', () => {
+  const result = resolveGpuPsuConnectors({
+    gpu_required_power_connectors: { '12vhpwr': 1 },
+    gpu_board_tgp_watts: 300,
+    psu_power_connectors: { ...PSU_CONNECTORS, '12vhpwr': 0 },
+  });
+  assert.equal(result.status, FAIL);
+  assert.equal(result.reason, REASON_CODES.GPU_PSU_CONNECTOR_UNAVAILABLE);
+});
+
+// ---------------------------------------------------------------------------
 // Aggregation integration
 // ---------------------------------------------------------------------------
 

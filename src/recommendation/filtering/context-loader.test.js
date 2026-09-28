@@ -129,7 +129,7 @@ function singleOfEachRoutes() {
   routes.MOTHERBOARD = [{ product_id: U(2), socket_id: P(1), form_factor: 'ATX', memory_type_id: P(20) }];
   routes.RAM = [{ product_id: U(3), memory_type_id: P(20) }];
   routes.GPU = [{
-    product_variant_id: V(1), length_mm: 300, width_slots: '2.50',
+    product_variant_id: V(1), board_tgp_watts: 250, length_mm: 300, width_slots: '2.50',
     required_power_connectors: { pcie_8pin: 2 }, recommended_psu_watts: 750,
   }];
   routes.PSU = [{
@@ -193,11 +193,31 @@ test('specs keys use p:/v: prefixes and SQL rows are normalized', async () => {
   });
   // NUMERIC width_slots arrives as string, must be a number in the context.
   assert.deepEqual(context.specs['v:' + V(1)], {
-    length_mm: 300, width_slots: 2.5,
+    board_tgp_watts: 250, length_mm: 300, width_slots: 2.5,
     required_power_connectors: { pcie_8pin: 2 }, recommended_psu_watts: 750,
   });
   // JSONB blob stays structured (never stringified).
   assert.equal(typeof context.specs['v:' + V(1)].required_power_connectors, 'object');
+});
+
+test('gpu specs: board_tgp_watts is projected and a missing value stays null', async () => {
+  // The fake DB returns canned rows, so the projection is verified on the
+  // recorded statement (Decision 26 feeds Rule 11's HIGH-TGP escalation).
+  const calls = [];
+  const recordingDb = createDb(singleOfEachRoutes(), { record: calls });
+  await loadFilteringContext(poolResult(fullPool()), recordingDb);
+  const gpuCall = calls.find((c) => c.sql.includes(SQL.GPU));
+  assert.ok(gpuCall, 'expected a gpu_board_spec query');
+  assert.ok(gpuCall.sql.includes('board_tgp_watts'));
+
+  // NULL / absent TGP must stay null - never 0, never a default (a null TGP
+  // must not read as "low TGP" for the Rule 11 escalation).
+  const routes = singleOfEachRoutes();
+  routes.GPU = [{
+    product_variant_id: V(1), required_power_connectors: { '12vhpwr': 1 },
+  }];
+  const { context } = await fullContext(routes);
+  assert.equal(context.specs['v:' + V(1)].board_tgp_watts, null);
 });
 
 test('cpu specs: integrated_gpu_present tri-state is preserved exactly', async () => {

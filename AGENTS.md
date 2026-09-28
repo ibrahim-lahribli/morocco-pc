@@ -23,10 +23,10 @@ points are the engine's public barrels (`src/recommendation/*/index.js`) and the
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–25). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–26). Check here
    before changing engine behavior. It has NO index and almost no `Status:` lines: locate entries
-   with `grep -n "^## Decision" docs/RECOMMENDATION_ENGINE_DECISIONS.md` (that grep returns 23 hits
-   for 25 decisions — Decisions 4–5 are nested sub-headings under "Engine 3 contract decisions").
+   with `grep -n "^## Decision" docs/RECOMMENDATION_ENGINE_DECISIONS.md` (that grep returns 24 hits
+   for 26 decisions — Decisions 4–5 are nested sub-headings under "Engine 3 contract decisions").
 6. `database/migrations/*.sql` — THE authoritative schema. Column-level truth is in the SQL, not prose.
 
 For a current map of what is stale and why: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` (per-finding doc drift) and
@@ -194,7 +194,16 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
 - **Four HARD rules in `ARCHITECTURE.md` §5.3/§6 are implemented NOWHERE**: cooler
   `max_tdp_watts` vs CPU TDP, air-cooler `height_mm` vs `case_spec.max_cpu_cooler_height_mm`,
   RAM `module_count` vs `dimm_slots`, and total RAM capacity vs `max_memory_capacity_gb`. Those
-  columns exist and no non-test code reads them — do not assume these constraints are enforced.
+  columns exist and no non-test code reads them — do not assume these constraints are enforced. **Decision 26 (2026-09-28) records all four as EXPLICITLY DEFERRED and UNENFORCED** - 0 live violations on the shared catalog as of that date, and a binding trigger: re-run the four violation queries before merging any cooler/RAM/case/motherboard seed.
+- **GPU/PSU high-TGP connector escalation IS implemented (Decision 26, 2026-09-28).** `gpu.js`
+  Rule 11 returns FAIL `GPU_PSU_CONNECTOR_NULL_HIGH_TGP` when a required, KNOWN connector's PSU
+  availability is NULL and `gpu_board_spec.board_tgp_watts >= 200` (inclusive, finite); the
+  escalation is decided BEFORE the unknown-name branch, so FAIL outranks UNKNOWN. NULL GPU
+  requirements, unknown connector NAMES, and a NULL/non-finite TGP stay UNKNOWN; a verifiable
+  deficit (including a 0 count) keeps `GPU_PSU_CONNECTOR_UNAVAILABLE`. `board_tgp_watts` is
+  carried by `filtering/context-loader.js` + `filtering/filter.js`; Engine 3 inherits the FAIL
+  through the shared `evaluateGpuPsuPair` evaluator with no assembly change.
+
 - **Decision 22 status - FIXED 2026-09-28 (audit D3).** Its `Status:` line said implementation was
   future work; it now records items 1-5 as IMPLEMENTED with a dated UPDATE block in the decision
   itself. Engine 6 is shipped - do not re-implement it.

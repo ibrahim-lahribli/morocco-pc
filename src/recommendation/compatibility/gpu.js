@@ -19,6 +19,14 @@ const KNOWN_CONNECTORS = new Set([
 ]);
 
 /**
+ * Board TGP at or above which a required -- and KNOWN -- connector whose PSU
+ * availability is NULL resolves FAIL instead of UNKNOWN (architecture
+ * section 5.2, adopted as shipped contract by Decision 26). Boundary is
+ * inclusive: exactly 200 W escalates, 199 W does not.
+ */
+const HIGH_TGP_WATTS = 200;
+
+/**
  * Shared pure numeric-comparison helper.
  *
  *   both values finite numbers: required <= limit -> PASS, else FAIL
@@ -196,15 +204,33 @@ function normalizeRequiredConnectors(value) {
  *   any requirement unavailable     -> FAIL (GPU_PSU_CONNECTOR_UNAVAILABLE)
  *   GPU requirements missing        -> UNKNOWN (GPU_PSU_CONNECTOR_UNKNOWN)
  *   PSU availability for a needed
- *   connector null                  -> UNKNOWN (GPU_PSU_CONNECTOR_UNKNOWN)
+ *   connector null                  -> FAIL for HIGH-TGP boards
+ *                                      (board_tgp_watts >= 200 W):
+ *                                      GPU_PSU_CONNECTOR_NULL_HIGH_TGP;
+ *                                      UNKNOWN (GPU_PSU_CONNECTOR_UNKNOWN)
+ *                                      for every other board
  *   unknown connector name required -> UNKNOWN (GPU_PSU_CONNECTOR_UNKNOWN;
  *                                      compatibility is never invented)
  *   empty requirements              -> PASS (vacuously satisfied)
+ *
+ * HIGH-TGP escalation (Decision 26, architecture section 5.2): a NULL PSU
+ * count is not evidence that the connector is absent, but on a board drawing
+ * 200 W or more the risk of an unsafe build outweighs the false negative, so
+ * the pair resolves FAIL. The escalation fires only for a required connector
+ * whose NAME is known (a name outside KNOWN_CONNECTORS stays UNKNOWN) and
+ * whose availability is NULL or absent (an INTEGER 0 is a verifiable deficit
+ * and keeps failing as GPU_PSU_CONNECTOR_UNAVAILABLE). Precedence: this FAIL
+ * is decided BEFORE the unknown-name branch, so a pair holding both a
+ * NULL-availability known connector and an unverifiable connector name
+ * returns FAIL - worst-of aggregation is FAIL > UNKNOWN. A NULL / non-finite
+ * board_tgp_watts never escalates: NULL TGP is UNKNOWN, never FAIL and never
+ * "low TGP".
  *
  * @param {object} input
  * @param {string|null} input.gpu_product_variant_id
  * @param {string|null} input.psu_product_id
  * @param {object|Array|null} input.gpu_required_power_connectors
+ * @param {number|null} input.gpu_board_tgp_watts  gpu_board_spec.board_tgp_watts
  * @param {object|null} input.psu_power_connectors  Normalized counts map
  *        (e.g. { 24pin_atx: 1, eps: 1, pcie_8pin: 2, 12vhpwr: 1, sata: 4 }).
  */
@@ -235,8 +261,14 @@ function resolveGpuPsuConnectors(input) {
   }
 
   const available = input.psu_power_connectors ?? null;
+  const tgp = input.gpu_board_tgp_watts;
+  const highTgp =
+    typeof tgp === 'number' && Number.isFinite(tgp) && tgp >= HIGH_TGP_WATTS;
   const deficits = {};
   const unknowns = [];
+  // Decision 26: known connectors whose NULL availability escalates to FAIL
+  // on a HIGH-TGP board - kept apart from the unknown-NAME bucket below.
+  const nullAvailability = [];
 
   for (const [name, needed] of Object.entries(required)) {
     if (!KNOWN_CONNECTORS.has(name)) {
@@ -244,7 +276,11 @@ function resolveGpuPsuConnectors(input) {
       continue;
     }
     if (available === null || available[name] == null) {
-      unknowns.push(name);
+      if (highTgp) {
+        nullAvailability.push(name);
+      } else {
+        unknowns.push(name);
+      }
       continue;
     }
     if (!Number.isFinite(available[name])) {
@@ -254,6 +290,23 @@ function resolveGpuPsuConnectors(input) {
     if (available[name] < needed) {
       deficits[name] = { required: needed, available: available[name] };
     }
+  }
+
+  // Decision 26 (architecture section 5.2): on a HIGH-TGP board an
+  // unverifiable required connector is unsafe, not merely unknown. This is
+  // decided BEFORE the unknown-name branch: FAIL outranks UNKNOWN.
+  if (nullAvailability.length > 0) {
+    return createCompatibilityResult({
+      status: FINAL_STATUSES.FAIL,
+      reason: REASON_CODES.GPU_PSU_CONNECTOR_NULL_HIGH_TGP,
+      evidence: [{
+        ...baseEvidence,
+        required_connectors: input.gpu_required_power_connectors,
+        available_connectors: available,
+        board_tgp_watts: tgp,
+        unverifiable_connectors: nullAvailability,
+      }],
+    });
   }
 
   if (unknowns.length > 0) {

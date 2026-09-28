@@ -12,11 +12,11 @@ behaviour. Known superseded passages, each marked inline below:
 | S11 hard cap example | quoted 500 builds per query | shipped max_builds_per_query = **25** (scoring_model.configuration) |
 | S13 third sort key | candidate created order / candidate id ASC | **Decision 18.3**: build_score DESC -> total_price ASC -> signature ASC (code-unit compare) |
 | S13 templates | versioned with the scoring model | templates are code constants in explanation/explain.js; NOT model-versioned |
-| S5.2 connector rule | high-TGP GPU (>=200W) + NULL connector count -> REJECT | NOT implemented: gpu.js Rule 11 returns UNKNOWN for ANY null connector availability by its own design; no decision ever addressed the >=200W escalation - see audit D2 |
-| S5.3/S6 four HARD rules | cooler TDP, cooler height, RAM slots, RAM capacity | NOT implemented anywhere - see audit D2 / AGENTS.md S10 |
-| S3 definitive hard list (11 items) | omits all four rules above even though S5.3/S6 call them HARD (internal inconsistency; found by the D2 verification) | audit D2: the list is incomplete as written - item 9 is the only connector rule, and no cooler-TDP / cooler-height / RAM-slot / RAM-capacity item exists |
+| S5.2 connector rule | high-TGP GPU (>=200W) + NULL connector count -> REJECT | **IMPLEMENTED BY DECISION 26** (2026-09-28): Rule 11 returns FAIL `GPU_PSU_CONNECTOR_NULL_HIGH_TGP` when a required, KNOWN connector's PSU availability is NULL and `gpu_board_spec.board_tgp_watts >= 200`; the escalation is decided BEFORE the unknown-name branch, so FAIL outranks UNKNOWN. Before that Rule 11 returned UNKNOWN unconditionally - its own design, never a decision |
+| S5.3/S6 four HARD rules | cooler TDP, cooler height, RAM slots, RAM capacity | **EXPLICITLY DEFERRED BY DECISION 26** (2026-09-28): recorded as UNENFORCED, 0 live violations as of 2026-09-28, binding seed-time re-check trigger - see audit D2 / AGENTS.md S10 |
+| S3 definitive hard list (11 items) | omits all four rules above even though S5.3/S6 call them HARD (internal inconsistency; found by the D2 verification) | audit D2: the list is incomplete as written - item 9 is the only connector rule, and no cooler-TDP / cooler-height / RAM-slot / RAM-capacity item exists. Incomplete BY DESIGN until Decision 26 item B is implemented |
 
-Authoritative for engine behaviour: RECOMMENDATION_ENGINE_DECISIONS.md (Decisions 1-25) and the code.
+Authoritative for engine behaviour: RECOMMENDATION_ENGINE_DECISIONS.md (Decisions 1-26) and the code.
 
 Date: 2026-09-12. Baseline: migrations 001-011 applied and catalog-verified.
 
@@ -115,7 +115,7 @@ recommendation_result
 | 3 | Assessment lookup | surviving pool | per-product assessment vectors | component_assessment | No | No (feeds scoring) | Yes |
 | 4 | Scoring | assessed pool | component + build scores | component_assessment + scoring_model.configuration | No (soft stage) | YES | Yes (model pinned by query.scoring_model_id) |
 | 5 | Build assembly + budget pruning | top-scoring combos | in-memory builds (budget pruned incrementally during staged expansion) | store_offer, store | YES (budget + hard-incompatible during expansion) | No | Yes (tie-break rules required) |
-| 6 | Build validation | assembled builds | validated builds + build-level compatibility_status | all compatibility tables re-checked as a whole (wattage budget, connector subset, cooler TDP) | YES | No | Yes |
+| 6 | Build validation | assembled builds | validated builds + build-level compatibility_status | all compatibility tables re-checked as a whole (wattage budget, connector subset, cooler TDP [cooler-TDP half NOT IMPLEMENTED - DEFERRED BY DECISION 26]) | YES | No | Yes |
 | 7 | Candidate persistence | validated builds | build_candidate + build_component rows | build_candidate, build_component, store_offer (price snapshot) | No | No | Yes |
 | 8 | Ranking | persisted candidates | ranked candidates | build_candidate (score) | No (presentation) | No | Yes (deterministic tie-break) |
 
@@ -142,7 +142,7 @@ A build candidate must NEVER survive when a hard constraint is definitively
 incompatible. Hard constraints are evaluated in stage 2 (per-pair) and stage 7
 (build-level). The definitive hard list:
 
-> **INCOMPLETE LIST (audit D2, verified 2026-09-28):** this list omits the four HARD rules that S5.3 and S6 prescribe elsewhere (cooler max_tdp_watts vs CPU TDP; air-cooler height_mm vs case max_cpu_cooler_height_mm; RAM module_count vs dimm_slots; total RAM capacity vs max_memory_capacity_gb). None of the four is implemented in code either - so today the list and the code happen to agree, but only because the rules from S5.3/S6 were never built. See the supersession notice above.
+> **INCOMPLETE LIST (audit D2, verified 2026-09-28):** this list omits the four HARD rules that S5.3 and S6 prescribe elsewhere (cooler max_tdp_watts vs CPU TDP; air-cooler height_mm vs case max_cpu_cooler_height_mm; RAM module_count vs dimm_slots; total RAM capacity vs max_memory_capacity_gb). None of the four is implemented in code either - so today the list and the code happen to agree, but only because the rules from S5.3/S6 were never built. **EXPLICITLY DEFERRED by Decision 26 (2026-09-28)** as unenforced, with 0 live violations on the shared catalog and a binding re-check trigger for any future cooler/RAM/case/motherboard seed. See the supersession notice above.
 
 1. CPU socket vs motherboard socket (`cpu_spec.socket_id` !=
    `motherboard_spec.socket_id` -> structural FAIL; do not even consult rules).
@@ -159,6 +159,10 @@ incompatible. Hard constraints are evaluated in stage 2 (per-pair) and stage 7
 8. GPU power: `gpu_board_spec.recommended_psu_watts > psu_spec.rated_wattage` -> FAIL.
 9. Required GPU power connectors unavailable on PSU (`required_power_connectors`
    JSONB not a subset of PSU connector counts) -> FAIL.
+   [DECISION 26, 2026-09-28: the section 5.2 HIGH-TGP escalation of this item is
+   IMPLEMENTED. A required, KNOWN connector whose PSU availability is NULL on a
+   board with `gpu_board_spec.board_tgp_watts >= 200` is a FAIL
+   (`GPU_PSU_CONNECTOR_NULL_HIGH_TGP`), decided BEFORE the unknown-name branch.]
 10. RAM memory type incompatible with platform (`platform_memory_support`
     lacks the platform/memory_type pair -> FAIL; motherboard RAM path per
     section 6).
@@ -199,7 +203,12 @@ Everything not on the hard list is soft: performance, value, quality,
 upgradeability, thermals, efficiency, price-efficiency, brand tier, PSU
 headroom above minimum wattage, cooler TDP headroom (>= required TDP is soft
 adequacy; insufficient `cooler_spec.max_tdp_watts` vs `cpu_spec.tdp_watts` is
-HARD-REJECT, see section 5). Soft factors never remove a candidate; they only
+HARD-REJECT, see section 5).
+[DECISION 26, 2026-09-28: that HARD-REJECT clause is NOT implemented - no code
+reads `max_tdp_watts`. It is DEFERRED and unenforced; see section 5.3 and the
+Decision 26 deferral ledger.]
+
+Soft factors never remove a candidate; they only
 reorder it via the scoring model (section 8).
 
 ---
@@ -303,6 +312,15 @@ available in at least the required count
   for HIGH-TGP GPUs (board_tgp_watts >= 200 W) and UNKNOWN otherwise. Rationale:
   a power connector that physically does not exist cannot power the card;
   for high-TGP GPUs the risk of an unsafe build outweighs the false negative.
+  [IMPLEMENTED BY DECISION 26 (2026-09-28). As shipped in `compatibility/gpu.js`
+  Rule 11: FAIL `GPU_PSU_CONNECTOR_NULL_HIGH_TGP` when a required, KNOWN
+  connector's PSU availability is NULL/absent and `board_tgp_watts >= 200`
+  (inclusive, finite); UNKNOWN otherwise. The message above says "physically
+  does not exist", but the data only ever expresses *unverified* (NULL) versus
+  *verifiably zero* (0) - a verifiable 0 remains FAIL
+  `GPU_PSU_CONNECTOR_UNAVAILABLE`, and NULL availability below 200 W remains
+  UNKNOWN. The escalation is decided BEFORE the unknown-name branch (FAIL
+  outranks UNKNOWN) and prunes the pair in Engine 3's Decision 16 gate.]
 * Build-level wattage: sum of component power draw is NOT fully derivable
   today (no idle/load draw on most specs), so Engine 1 validation uses ONLY
   `gpu.recommended_psu_watts` as the PSU-sizing rule; per-component wattage
@@ -314,6 +332,15 @@ available in at least the required count
 capacity is treated as hard). Equal-or-greater -> PASS. Either NULL -> UNKNOWN
 (penalty). Additionally, air-cooler height vs `case_spec.max_cpu_cooler_height_mm`:
 `height_mm > max` -> REJECT; either NULL -> UNKNOWN.
+
+[DECISION 26, 2026-09-28 - **NOT IMPLEMENTED, EXPLICITLY DEFERRED.** Neither
+rule and neither NULL-fallback is implemented: `cooler_spec.max_tdp_watts`,
+`cooler_spec.height_mm` and `case_spec.max_cpu_cooler_height_mm` are read by
+NOTHING in `src/` (test-fixture scripts only). This is a known, recorded
+contract violation of the Engine 1 readiness bullet in
+RECOMMENDATION_ENGINE_DECISIONS.md, not an oversight: 0 live violations on the
+shared catalog as of 2026-09-28 (coolers 9, TDP known 9 / height known 5; cases
+10, height known 10), with a binding re-check trigger for any future seed.]
 
 ## 6. RAM compatibility: source of truth
 
@@ -346,6 +373,16 @@ Secondary RAM checks (all soft except capacity):
 * total capacity > `max_memory_capacity_gb` -> REJECT (when both known).
 * rated speed above/below motherboard official range -> SOFT (adjust score;
   modern platforms down-clock, it is not a hard incompatibility).
+
+[DECISION 26, 2026-09-28 - the two RAM REJECT bullets above are **NOT
+IMPLEMENTED, EXPLICITLY DEFERRED**. `ram_spec.module_count`,
+`ram_spec.capacity_per_module_gb` and `motherboard_spec.dimm_slots` /
+`max_memory_capacity_gb` are read by NOTHING in `src/`. Unlike the cooler half
+(seed 002 D5), this RAM half was SILENT drift until Decision 26. 0 live
+violations on the shared catalog as of 2026-09-28 (RAM kits 7, motherboards 7,
+all four columns fully populated); binding re-check trigger for any future seed.
+The rated-speed soft check is likewise unimplemented - it is a scoring input,
+not a compatibility rule.]
 
 ## 7. Budget handling
 
@@ -468,6 +505,8 @@ staged seeded-expansion strategy with early elimination:
                            cpu_motherboard_support boards
 3. RAM                   : per (CPU platform, MB memory_type), keep matching
                            memory_type kits within module-count limits
+                           [NOT IMPLEMENTED - DEFERRED BY DECISION 26: no
+                           module-count / capacity pruning exists]
 4. GPU                   : global shortlist by use_case/resolution band
 5. PSU                   : keep only rated_wattage >= max(gpu.recommended_psu_watts)
                            across the shortlisted GPUs + known CPU draw margin
@@ -475,6 +514,9 @@ staged seeded-expansion strategy with early elimination:
                            form factor and max_gpu_length >= min(shortlisted GPU lengths)
 7. Cooler                : per CPU socket, compatible coolers with
                            max_tdp_watts >= cpu.tdp_watts
+                           [NOT IMPLEMENTED - DEFERRED BY DECISION 26: no
+                           cooler TDP/height shortlist or check exists; the
+                           cooler stage filters on socket support only]
 8. Storage               : shortlist SSD_BOOT by capacity tier for the use case
 9. Validate complete builds (section 5 checks) on assembled top combos only
 10. Score                : only validated builds reach scoring
@@ -496,7 +538,9 @@ Key rules:
   conversion.
 * Elimination ordering matters: CPU->MB filtering removes the largest branch
   factor first (socket is highly selective), then RAM (memory_type), then PSU
-  (wattage), then case (form factor), then cooler (socket + TDP).
+  (wattage), then case (form factor), then cooler (socket + TDP [TDP half NOT
+  IMPLEMENTED - DEFERRED BY DECISION 26: the cooler relationship is
+  socket-support only]).
 * Determinism: ordering within each stage uses fixed tie-breaks (product name
   ASC, then product id ASC) so the same DB state + query + scoring_model
   version always yields the same candidates.
@@ -611,6 +655,10 @@ write). After persistence, nothing in the recommendation path joins back to
 | Assessment coverage likely sparse at seed time | ACCEPTABLE | Handled by section 9 policy |
 | No engine-version column on results | ACCEPTABLE | scoring_model version covers configuration; binary version recorded in explanation/release notes |
 | Fresh 001->011 migration unverified on scratch DB | ACCEPTABLE (environmental) | Standing test limitation, unrelated to the engine |
+| Cooler `max_tdp_watts` vs CPU TDP REJECT (section 5.3) UNENFORCED | **IMPORTANT** (latent) | Decision 26 item B deferral. No code reads `cooler_spec.max_tdp_watts`. 0 live violations as of 2026-09-28; an under-spec cooler can be persisted as "compatible" if a future seed introduces one - re-check the violation query before any cooler/CPU seed. |
+| Air-cooler `height_mm` vs `case_spec.max_cpu_cooler_height_mm` REJECT (section 5.3) UNENFORCED | **IMPORTANT** (latent) | Decision 26 item B deferral. No code reads either column. 0 live violations as of 2026-09-28 (cooler height known for 5 of 9 coolers - the 4 NULLs would be UNKNOWN, never FAIL); re-check before any cooler/case seed. |
+| RAM `module_count` vs `motherboard_spec.dimm_slots` REJECT (section 6) UNENFORCED | **IMPORTANT** (latent) | Decision 26 item B deferral; this half was SILENT drift (no decision, no seed note) until 2026-09-28. 0 live violations; an over-slot kit can be persisted as "compatible" if a future seed introduces one. |
+| Total RAM capacity vs `motherboard_spec.max_memory_capacity_gb` REJECT (section 6) UNENFORCED | **IMPORTANT** (latent) | Decision 26 item B deferral. 0 live violations; an over-capacity kit can be persisted as "compatible" if a future seed introduces one. |
 
 No BLOCKING gaps were found: the engine can be fully implemented on the
 current schema with the documented policies.
@@ -624,6 +672,13 @@ Engine 1 - Compatibility resolver
     Pure functions: all checks of sections 3-6, 10. Inputs: spec/compat rows.
     Output: PASS/FAIL/UNKNOWN/CONDITIONAL + reason per pair. Fully unit-testable
     against fixture data without offers or scoring.
+    [DECISION 26 (2026-09-28): "all checks of sections 3-6" overstates the
+    shipped surface. Implemented: the eight pairwise relationships
+    (cpu_motherboard, cooler_socket, motherboard_memory, platform_memory,
+    case_form_factor, case_radiator, gpu_case, gpu_psu - the last including the
+    section 5.2 HIGH-TGP connector escalation). NOT implemented and explicitly
+    deferred: section 5.3 cooler TDP/height and the section 6 RAM
+    slot/capacity hard checks. See the section 16 gap rows.]
 
 Engine 2 - Candidate component selector
     Stage 1 shortlists + offer pre-selection (cheapest in-currency in-stock
@@ -667,6 +722,10 @@ existing `scripts/test-*.js` transaction/rollback style.
   conflicts) using the existing `cpu_motherboard_support` model.
 * Derived GPU<->case, GPU<->PSU, cooler adequacy checks from numeric specs -
   no new join tables.
+  [DECISION 26 (2026-09-28): the GPU<->case and GPU<->PSU halves (including the
+  section 5.2 HIGH-TGP escalation) are implemented; the "cooler adequacy" half
+  is NOT - it is deferred and unenforced. See section 5.3 and the section 16
+  gap rows.]
 * Platform chain as RAM source of truth + single motherboard memory_type
   exact-match rule.
 * Single-currency budget policy; offer selection before scoring; snapshot
@@ -765,6 +824,9 @@ existing `scripts/test-*.js` transaction/rollback style.
 `scripts/test-compatibility.js` fixture pattern). It touches no Layer 3/4
 tables, creates no migrations, and is verifiable before any candidate
 selection or persistence exists. Do NOT start it in this task.
+[DECISION 26 (2026-09-28): implemented as the eight pairwise relationships
+(see section 17); the section 5.3 cooler TDP/height and section 6 RAM
+slot/capacity hard checks of "sections 3-6" are UNENFORCED deferrals.]
 
 ---
 

@@ -1523,6 +1523,50 @@ test('Decision 16: a GPU<->PSU FAIL prunes only the paths that pick the pair', (
   assert.deepEqual(required, { builds: [] });
 });
 
+test('Decision 26: a HIGH-TGP NULL connector FAIL prunes the (GPU, PSU) paths', () => {
+  // Decision 26 / architecture 5.2: the board draws 300 W and requires
+  // 12VHPWR; the PSU's 12VHPWR count is NULL (unverified). Before Decision 26
+  // that pair read UNKNOWN and survived into a build; it is now a FAIL, so the
+  // Decision 16 gate abandons every GPU-present path. The omit path - no GPU
+  // picked, no pair - survives untouched.
+  const makeContext = (tgp) => pairSpecContext({
+    'v:gpu-1-var': {
+      recommended_psu_watts: 650,
+      required_power_connectors: { '12vhpwr': 1 },
+      board_tgp_watts: tgp,
+    },
+    'p:psu-hpwr-null': {
+      rated_wattage: 850,
+      power_connectors: { '24pin_atx': 1, eps: 2, pcie_8pin: 4, '12vhpwr': null, sata: 6 },
+    },
+  });
+  const results = [
+    verdict('CPU', 'a-cpu'),
+    verdict('MOTHERBOARD', 'a-mb'),
+    verdict('RAM', 'a-ram'),
+    verdict('GPU', 'gpu-1'),
+    verdict('PSU', 'psu-hpwr-null'),
+    verdict('CASE', 'a-case'),
+    verdict('CPU_COOLER', 'a-cooler'),
+    verdict('SSD_BOOT', 'a-ssd'),
+  ];
+
+  const out = assembleBuilds(
+    engineInput({ results, integrated: { 'a-cpu': true }, filteringContext: makeContext(300) })
+  );
+  assert.equal(out.builds.length, 1);
+  assert.ok(!('GPU' in idsOf(out.builds[0])));
+  assert.equal(idsOf(out.builds[0]).PSU, 'psu-hpwr-null');
+
+  // Below the 200 W threshold the same pair stays UNKNOWN: the GPU path is
+  // kept (GPU-present build first, omit path after it).
+  const kept = assembleBuilds(
+    engineInput({ results, integrated: { 'a-cpu': true }, filteringContext: makeContext(150) })
+  );
+  assert.equal(kept.builds.length, 2);
+  assert.equal(idsOf(kept.builds[0]).GPU, 'gpu-1');
+});
+
 test('Decision 16: a GPU<->CASE FAIL prunes at the CASE pick', () => {
   const filteringContext = pairSpecContext({
     'v:gpu-1-var': { length_mm: 320, width_slots: 2 },

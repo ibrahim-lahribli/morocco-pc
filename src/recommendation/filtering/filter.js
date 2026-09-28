@@ -487,7 +487,9 @@ function evaluateGpuCasePair(context, gpu, caseCandidate) {
 /**
  * GPU <-> PSU: wattage and connectors (rules 10-11). The GPU connector
  * requirements stay structured JSON and the PSU connector counts keep
- * their null-vs-0 distinction.
+ * their null-vs-0 distinction. `board_tgp_watts` feeds Rule 11's Decision 26
+ * HIGH-TGP escalation (a NULL connector availability is a FAIL, not an
+ * UNKNOWN, at or above 200 W).
  */
 function evaluateGpuPsuPair(context, gpu, psu) {
   const gpuSpec = variantSpecOf(context, gpu);
@@ -503,6 +505,7 @@ function evaluateGpuPsuPair(context, gpu, psu) {
       gpu_product_variant_id: gpu.product_variant_id,
       psu_product_id: psu.product_id,
       gpu_required_power_connectors: gpuSpec ? gpuSpec.required_power_connectors : null,
+      gpu_board_tgp_watts: gpuSpec ? gpuSpec.board_tgp_watts : null,
       psu_power_connectors: psuSpec ? psuSpec.power_connectors : null,
     }),
   ];

@@ -250,7 +250,7 @@ SELECT product_id, rated_wattage,
  ORDER BY product_id ASC`;
 
 const GPU_VARIANT_SPEC_SQL = `
-SELECT product_variant_id, length_mm, width_slots,
+SELECT product_variant_id, board_tgp_watts, length_mm, width_slots,
        required_power_connectors, recommended_psu_watts
   FROM gpu_board_spec
  WHERE product_variant_id = ANY($1::uuid[])
@@ -382,6 +382,8 @@ function normalizeSpecForRole(role, row) {
 /** Normalize gpu_board_spec (NUMERIC/JSONB) into the 'v:<id>' spec entry. */
 function normalizeGpuSpec(row) {
   return {
+    // Decision 26: the HIGH-TGP escalation input (Rule 11). INTEGER column.
+    board_tgp_watts: row.board_tgp_watts ?? null,
     length_mm: row.length_mm ?? null,
     // NUMERIC(4,2) arrives as a string via pg; it must be a JS number.
     width_slots: row.width_slots === null || row.width_slots === undefined

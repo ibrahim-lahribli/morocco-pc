@@ -44,6 +44,12 @@ const REASON_CODES = Object.freeze({
   GPU_PSU_WATTAGE_UNKNOWN: 'GPU_PSU_WATTAGE_UNKNOWN',
   GPU_PSU_CONNECTOR_UNAVAILABLE: 'GPU_PSU_CONNECTOR_UNAVAILABLE',
   GPU_PSU_CONNECTOR_UNKNOWN: 'GPU_PSU_CONNECTOR_UNKNOWN',
+  // Decision 26 / architecture section 5.2: on a HIGH-TGP board
+  // (gpu_board_spec.board_tgp_watts >= 200 W) a required, known connector
+  // whose PSU availability is NULL is treated as FAIL, not UNKNOWN - the risk
+  // of an unsafe build outweighs the false negative. NULL availability on a
+  // lower-TGP board stays UNKNOWN (see gpu.js Rule 11).
+  GPU_PSU_CONNECTOR_NULL_HIGH_TGP: 'GPU_PSU_CONNECTOR_NULL_HIGH_TGP',
 });
 
 module.exports = { REASON_CODES };

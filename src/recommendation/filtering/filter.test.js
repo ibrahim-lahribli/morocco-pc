@@ -776,6 +776,44 @@ test('B2-D: PSU connector count null stays UNKNOWN while 0 fails (null is never 
   assert.equal(zeroGpu.reason, REASON_CODES.GPU_PSU_CONNECTOR_UNAVAILABLE);
 });
 
+test('B2-D: board_tgp_watts reaches Rule 11 (Decision 26 escalation end to end)', () => {
+  // Same NULL 12VHPWR availability on both runs; only the board TGP differs,
+  // so the pair verdict flip is caused by the escalation alone.
+  const specsFor = (tgp) => {
+    const specs = goldenSpecs();
+    specs['v:' + GPU_VARIANT_ID] = gpuSpec({
+      required_power_connectors: { '12vhpwr': 1 },
+      board_tgp_watts: tgp,
+    });
+    specs['p:' + PSU_ID] = psuSpec({
+      power_connectors: { '24pin_atx': 1, eps: 1, pcie_8pin: 3, '12vhpwr': null, sata: 4 },
+    });
+    return specs;
+  };
+  const run = (tgp) => findResult(filterCandidates(buildContext({
+    pool: [
+      makeCandidate('GPU', GPU_ID, GPU_VARIANT_ID),
+      makeCandidate('PSU', PSU_ID),
+      makeCandidate('CASE', CASE_ID), // compatible case: gpu_case PASSes first
+    ],
+    specs: specsFor(tgp),
+    platform_by_socket: {},
+    compat: goldenCompat(),
+  })), 'GPU', GPU_ID);
+
+  // 250 W: unverifiable 12VHPWR -> pair FAIL -> candidate REJECT.
+  const high = run(250);
+  assert.equal(high.relationships.gpu_psu, FINAL_STATUSES.FAIL);
+  assert.equal(high.status, CANDIDATE_STATUSES.REJECT);
+  assert.equal(high.reason, REASON_CODES.GPU_PSU_CONNECTOR_NULL_HIGH_TGP);
+
+  // 150 W: identical NULL availability stays UNKNOWN (pair + candidate).
+  const low = run(150);
+  assert.equal(low.relationships.gpu_psu, FINAL_STATUSES.UNKNOWN);
+  assert.equal(low.status, CANDIDATE_STATUSES.UNKNOWN);
+  assert.equal(low.reason, REASON_CODES.GPU_PSU_CONNECTOR_UNKNOWN);
+});
+
 test('B2-D: HYBRID/null cooler radiator requirement stays tri-state UNKNOWN', () => {
   const basePool = () => [
     makeCandidate('CPU', CPU_ID),

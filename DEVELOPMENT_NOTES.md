@@ -602,3 +602,32 @@ cleanup verified: recommendation_query back to 0 rows
 - Tests: `assembly/assemble.test.js` gains a hand-derived `o2MixedContext` fixture (expected 2 / 4-vs-2), a verdict-independence check, and a once-per-pair check; the Decision 16 gate test's trailing pin is now 8-vs-6 with its derivation; branch-abandonment assertions unchanged.
 - Docs: `CONTEXT.md` status pointers; `DEVELOPMENT_NOTES.md` Decision 15 bullet supersession note plus the 2026-09-25 resolution pointer.
 - Verification: `npm run test:unit` 815 to 817, 0 failures; nothing committed or pushed.
+
+## 2026-09-28 — D2 hybrid (Decision 26): S5.2 HIGH-TGP connector escalation implemented, the four S5.3/S6 HARD rules deferred
+
+Scope: audit finding D2 only (D1/D3/D4 were committed earlier the same day; the D5 generator exists as untracked WIP).
+
+Code (4 files; unit tests 817 -> 829, 0 failures):
+- `compatibility/reason-codes.js`: new FAIL code `GPU_PSU_CONNECTOR_NULL_HIGH_TGP`.
+- `compatibility/gpu.js` Rule 11: constant `HIGH_TGP_WATTS = 200`; a required, KNOWN connector whose PSU availability is NULL/absent now FAILs when `board_tgp_watts >= 200` (inclusive, finite TGP required). Decided BEFORE the unknown-name branch, so FAIL outranks UNKNOWN. Explicitly unchanged: GPU requirement NULL / unknown connector NAME / NULL-non-finite TGP -> UNKNOWN; verifiable deficit incl. an INTEGER 0 -> `GPU_PSU_CONNECTOR_UNAVAILABLE`. A non-finite availability value stays UNKNOWN (unreachable through the B2-C loader, which normalizes `psu_spec` to number-or-NULL).
+- `filtering/context-loader.js`: `GPU_VARIANT_SPEC_SQL` + `normalizeGpuSpec` carry `board_tgp_watts` (NULL preserved, never 0).
+- `filtering/filter.js`: `evaluateGpuPsuPair` passes `gpu_board_tgp_watts`. NO assembly change was needed: `assembly/assemble.js` reuses the same `evaluateGpuPsuPair`, so Engine 3's Decision 16 gate prunes the pair and the Decision 23 O2 build-local count stops seeing it as UNKNOWN.
+
+Live measurements (read-only `DATABASE_URL` SELECTs; no writes, `TEST_DATABASE_URL` not needed):
+- 22 `gpu_board_spec` rows, 13 with TGP >= 200 (max 575 W), all 22 carry `required_power_connectors`; all 13 high-TGP rows require exactly `{"12vhpwr": 1}`.
+- 11 `psu_spec` rows; 3 with `connector_12vhpwr IS NULL` (`Seed Antec G850`, `Seed Connect PSU 850`, `Seed HYBROK PSU 650`) - the same 3 are NULL on PCIe 8-pin; 4 are NULL on EPS.
+- Exactly 39 (GPU, PSU) pairs flip UNKNOWN -> FAIL.
+- The four deferred rules: 0 violations, counted both over every catalog combination and over the compat-reachable subsets (cooler<->CPU via non-FAIL `cooler_socket_support`; RAM<->motherboard with matching `memory_type_id`).
+
+Lessons (each changed this session's plan):
+- The plan's baseline (`fe2a816`) was already 2 commits behind HEAD (`6c69baa`), which had partly fixed the same audit items. Always `git status` + `git log` before an audit-fix session; a plan's stated baseline is a guess.
+- `filtering/context-loader.test.js` asserts the GPU variant spec with a WHOLE-OBJECT `deepEqual` - adding one normalized field breaks it. New loader fields need the fixture row AND that expectation updated.
+- `filtering/filter.test.js`'s `gpuSpec()` helper is SHARED with the NULL-vs-0 pin (which asserts UNKNOWN). Never add a TGP default to a shared fixture: it would flip an unrelated pin to FAIL. New coverage goes in self-contained tests.
+- `scripts/gen-decision-index.js` (untracked, another session) hard-codes `EXPECTED_GLOBAL_DECISIONS = 25` and exits non-zero on drift, so Decision 26 required bumping it to 26; its heading regex requires `## Decision N — title`. It also references `npm run gen:decisions`, which is not in `package.json`.
+- Line endings: `core.autocrlf=true`, no `.gitattributes`, so the working copy genuinely mixes conventions (`AGENTS.md` is LF-dominant, everything else CRLF). The editor tool rewrote `AGENTS.md` to CRLF; it was restored to LF (dropping the two pre-existing stray CRLF lines) and every CRLF file was re-normalized. Re-check CRLF/LF counts after any doc-editing session.
+- `DEVELOPMENT_NOTES.md` lives at the REPO ROOT (not `docs/`); the newest entries were `###` headings nested under the 2026-09-23 run-2 section - this entry is a new `##` heading at EOF instead.
+
+Docs updated: `docs/RECOMMENDATION_ENGINE_DECISIONS.md` (Decision 26 + Final Status + Engine 1 readiness note), `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` (supersession rows 15-19; inline markers at §2 stage 6, §3 item 9, §3 list, §3.3, §5.2, §5.3, §6, §11 steps 3/7, §16 (4 new IMPORTANT/latent rows), §17, §18, §"First implementation task"), `docs/DOCUMENTATION_AUDIT_2026-09-28.md` (D2 resolution block, rule table, evidence, impact split, deferral reframe, Fix outcome, fix-order rows + status note), `AGENTS.md` §2/§10, `CONTEXT.md` (Engine 1 bullet, test count, decision pointers, NOT-implemented bullet), `database/seeds/003_gpu_psu_connector_data.sql` (header comment pointer only - no data change, no re-apply).
+
+Verification: `npm run test:unit` 829 pass / 0 fail; `board_tgp_watts` now read by 4 `src/` files by design; the deferred columns still appear only in test-fixture scripts; all marker sites and attributions grep-verified. Nothing committed or pushed.
+

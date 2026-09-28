@@ -97,6 +97,13 @@
 --                  (GPU_PSU_CONNECTOR_UNKNOWN), and one UNKNOWN required
 --                  connector makes the whole rule UNKNOWN even when another
 --                  connector is provably deficient.
+--                  DECISION 26 amendment (2026-09-28): on a HIGH-TGP board
+--                  (`gpu_board_spec.board_tgp_watts >= 200`) the NULL case is
+--                  now FAIL `GPU_PSU_CONNECTOR_NULL_HIGH_TGP`, decided BEFORE
+--                  the unknown-name branch - 39 live (GPU, PSU) pairs flip
+--                  UNKNOWN -> FAIL. The 0-vs-NULL semantics above are
+--                  unchanged. Comment only: no data change, do NOT re-apply
+--                  this seed for it.
 --       Therefore a 0 is written ONLY where a manufacturer's own connector
 --       list omits that connector (today: Seed MSI MAG A650BN 650W, whose
 --       published list stops at PCI-E 6+2 pin x2), and NULL is kept

@@ -55,23 +55,38 @@ So **19 of the plan's 30 difference-table rows are implemented**, 2 are intentio
 
 ### D2 — Architecture mandates four HARD rules that no engine code implements · **CRITICAL**
 
-`RECOMMENDATION_ENGINE_ARCHITECTURE.md` states these as **HARD** (never-persist) constraints, in three places (§3 HARD list, §3.3, §5.3, §6, §11 step 7):
+> **RESOLVED 2026-09-28 in the hybrid form this finding's own Fix line allowed (Decision 26).**
+> The §5.2 HIGH-TGP connector escalation (row 5 below) is **IMPLEMENTED** — new reason code
+> `GPU_PSU_CONNECTOR_NULL_HIGH_TGP`, `gpu.js` Rule 11, `board_tgp_watts` carried by
+> `context-loader.js` + `filter.js`, inherited by Engine 3 with no assembly change. The other
+> four rules are **EXPLICITLY DEFERRED** as unenforced, with inline markers at every architecture
+> site, four new §16 gap rows, live-data evidence (0 violations today) and a binding seed-time
+> re-check trigger. `AGENTS.md` §10 carries the same warning; see Decision 26 for the full ledger.
+
+`RECOMMENDATION_ENGINE_ARCHITECTURE.md` states these as **HARD** (never-persist) constraints at §3.3, §5.3, §6 and §11 step 7. §3's definitive 11-item hard list omits all four of them — a separate doc-internal inconsistency surfaced by this verification and now flagged at `:17` and `:145` of that file:
 
 | Rule | Architecture § | Implemented? |
 |---|---|---|
-| `cooler_spec.max_tdp_watts < cpu_spec.tdp_watts` → REJECT | §5.3, §3.3, §11.7 | **NO** |
-| `cooler_spec.height_mm > case_spec.max_cpu_cooler_height_mm` → REJECT | §5.3 | **NO** |
-| `ram_spec.module_count > motherboard_spec.dimm_slots` → REJECT | §6 | **NO** |
-| total RAM capacity > `motherboard_spec.max_memory_capacity_gb` → REJECT | §6 | **NO** |
-| high-TGP GPU (`board_tgp_watts >= 200`) + PSU connector count NULL → REJECT | §5.2 | **NO** (gpu.js Rule 11 returns UNKNOWN for any NULL connector availability by its own design; no decision addressed the >=200W escalation - attribution corrected 2026-09-28) |
+| `cooler_spec.max_tdp_watts < cpu_spec.tdp_watts` → REJECT | §5.3, §3.3, §11.7 | **NO — DEFERRED** (Decision 26 item B; 0 live violations) |
+| `cooler_spec.height_mm > case_spec.max_cpu_cooler_height_mm` → REJECT | §5.3 | **NO — DEFERRED** (Decision 26 item B; 0 live violations; cooler height known for only 5 of 9 coolers) |
+| `ram_spec.module_count > motherboard_spec.dimm_slots` → REJECT | §6 | **NO — DEFERRED** (Decision 26 item B; was silent drift; 0 live violations) |
+| total RAM capacity > `motherboard_spec.max_memory_capacity_gb` → REJECT | §6 | **NO — DEFERRED** (Decision 26 item B; was silent drift; 0 live violations) |
+| high-TGP GPU (`board_tgp_watts >= 200`) + PSU connector count NULL → REJECT | §5.2 | **YES — IMPLEMENTED 2026-09-28** (Decision 26 item A: FAIL `GPU_PSU_CONNECTOR_NULL_HIGH_TGP`, decided before the unknown-name branch. The pre-2026-09-28 claim in this cell was misattributed — Rule 11's unconditional UNKNOWN was `gpu.js`'s own design, and Decision 23 never addressed the >=200W escalation) |
 
-**Evidence:** a repo-wide search for `tdp` (case-insensitive) across all non-test JavaScript returns **zero matches**. `max_cpu_cooler_height_mm`, `dimm_slots`, `max_memory_capacity_gb` and `module_count` appear **only** in test-fixture scripts (`scripts/test-compatibility.js`, `scripts/verify-hardware-schema.js`) — never in `src/`. The columns all exist in the live schema (`cooler_spec: max_tdp_watts, height_mm`; `case_spec: max_cpu_cooler_height_mm`; `ram_spec: module_count, capacity_per_module_gb`; `motherboard_spec: dimm_slots, max_memory_capacity_gb`), and `gpu_board_spec.board_tgp_watts` exists and is unread by the connector rule.
+**Evidence:** a repo-wide search for `tdp` (case-insensitive) across all non-test JavaScript returns **zero matches**. `max_cpu_cooler_height_mm`, `dimm_slots`, `max_memory_capacity_gb` and `module_count` appear **only** in test-fixture scripts (`scripts/test-compatibility.js`, `scripts/verify-hardware-schema.js`) — never in `src/`. The columns all exist in the live schema (`cooler_spec: max_tdp_watts, height_mm`; `case_spec: max_cpu_cooler_height_mm`; `ram_spec: module_count, capacity_per_module_gb`; `motherboard_spec: dimm_slots, max_memory_capacity_gb`), and `gpu_board_spec.board_tgp_watts` **is now read by the connector rule** (Decision 26 item A, 2026-09-28: `board_tgp_watts` flows `context-loader.js` → `filter.js` → `gpu.js` Rule 11).
 
 **Impact:** the engine's implemented pairwise set is 8 relationships (`cpu_motherboard`, `cooler_socket`, `motherboard_memory`, `platform_memory`, `case_form_factor`, `case_radiator`, `gpu_case`, `gpu_psu`). An under-spec CPU cooler, an over-height air cooler, an over-slot RAM kit, and an over-capacity RAM kit can all survive assembly and be persisted as a "compatible" build, contradicting the architecture's promise that "a build candidate must NEVER survive when a hard constraint is definitively incompatible".
 
-**Not a documented deferral:** no decision entry in `RECOMMENDATION_ENGINE_DECISIONS.md` defers, supersedes or even mentions these four rules. This is silent drift, and it is the finding most worth acting on.
+**Measured impact on the live database (read-only `DATABASE_URL` queries, 2026-09-28) — the finding splits in two:**
+
+* **Rows 1–4 (the deferred rules) are LATENT: 0 violating combinations today.** Coverage is complete for four of the five inputs — CPUs 18 (TDP known 18), cases 10 (cooler-height limit known 10), motherboards 7 (`dimm_slots` and `max_memory_capacity_gb` known 7), RAM kits 7 (`module_count` and `capacity_per_module_gb` known 7) — except cooler heights (known for only 5 of 9). Violations were counted BOTH over every catalog combination AND over the compatibility-reachable subsets (cooler↔CPU via non-FAIL `cooler_socket_support`; RAM↔motherboard with matching `memory_type_id`): **0** for all four rules, both ways. Nothing unsafe is persisted today; the risk is forward-looking, which is why Decision 26 accepts the deferral **with** a binding seed-time re-check trigger.
+* **Row 5 is REACHABLE: 39 real (GPU, PSU) pairs.** 13 of 22 `gpu_board_spec` rows have `board_tgp_watts >= 200` (max 575 W) and all 13 require exactly `{"12vhpwr": 1}`; 3 of 11 `psu_spec` rows have `connector_12vhpwr IS NULL`. Before Decision 26 those pairs resolved UNKNOWN — which is **not** invisible: an UNKNOWN pair is allowed into an assembly (only FAIL is pruned, by Engine 3's Decision 16 gate) and, since Decision 23 O2, it counts toward the build-local `unknown_pairwise_count` penalty. The unsafe combination was therefore reachable-and-penalized, not merely unverified. Note also that "no PSU connector row exists at all" is not the failure mode here: the NULLs are **per-column**, which is exactly why Decision 26 escalates per-connector NULL availability rather than requiring the whole map to be NULL.
+
+**Documented deferral — in two halves, only one of them honest (corrected 2026-09-28):** the cooler half was NOT silent. The Engine 1 readiness contract in `RECOMMENDATION_ENGINE_DECISIONS.md` ("Derived checks: GPU↔case, GPU↔PSU (wattage + connector subset), cooler TDP/height — NULL on either side = UNKNOWN, never 'unlimited'") names it, and `database/seeds/002_catalog_expansion.sql` D5 records it as deliberate forward-looking data ("seeded but NOT consumed by any engine code today … forward-looking data, not enforcement"). Because the readiness contract promised the check, the cooler half is **contract-violating drift**, not a permitted omission. The RAM half (rows 3–4) **was** silent: no decision, no seed note and no code comment mentioned it anywhere until Decision 26 item B. Both halves are now recorded in Decision 26 as unenforced, with `AGENTS.md` §10 carrying the agent-facing warning.
 
 **Fix:** either implement the four rules (each is a small pure function plus one `PAIRWISE_CHECKS` entry — note the two cooler rules need a `CPU_COOLER ↔ CASE` height check and a `CPU_COOLER ↔ CPU` TDP check, and the RAM rules need `RAM ↔ MOTHERBOARD` slot/capacity inputs), or record a decision that explicitly defers them and downgrade them from HARD to unenforced in the architecture doc. Do not leave the doc asserting safety the engine does not provide.
+
+> **Outcome 2026-09-28 — Decision 26 (hybrid; the finding's second option for the four rules, the first option for row 5).** Row 5 (the §5.2 HIGH-TGP escalation) was IMPLEMENTED as a small rule change in `gpu.js` Rule 11 plus the `board_tgp_watts` pass-through from `context-loader.js`/`filter.js`. The other four rules are EXPLICITLY DEFERRED and downgraded to unenforced with inline markers at every architecture site (§2 stage 6, §3 item 9, §3.3, §5.2, §5.3, §6, §11 steps 3/7, §16, §17, §18) and four new §16 IMPORTANT/latent gap rows. Unit tests 817 → 829, 0 failures. What remains open is deliberately time-bounded: the four rules are a recorded deferral with a seed-time re-check trigger, not a code-defect backlog item.
 
 ---
 
@@ -171,6 +186,8 @@ The file's own **DOCUMENTATION UPDATE RULE** requires an entry per significant s
 
 ## 2. Claims verified as correct (so they need no action)
 
+> **Note added 2026-09-28 (post-audit):** the two bullets below that cite the "decision pointers through 25" and the "Decision 1–25 range" were correct when this audit ran. Decision 26 was adopted the same day, so those ranges are now **1–26** in `CONTEXT.md` and `AGENTS.md`.
+
 - **`CONTEXT.md`** — all counts (100 products / 22 variants / 101 offers / 76 families / 25 assessments), the benchmark names (`Seed TechPowerUp`, `Seed Cinebench R23 Multi`), the Layer 4 empty-table status, GPU connector coverage (22/22), and the decision pointers through 25. Zero new drift.
 - **`AGENTS.md`** — the source-of-truth precedence table, the read-in-this-order list, the guard rules, and the Decision 1–25 range all hold.
 - **`ARCHITECTURE.md` §1** — every schema statement (one-to-one spec tables, the five compatibility tables, presence-only tables, Layer 4 columns, index and CHECK names) matches the live database exactly.
@@ -240,7 +257,7 @@ Two short entries: (a) the CRLF convention (root `AGENTS.md` and `database/` + `
 | Order | Action | Retires |
 |---|---|---|
 | 1 | Correct or archive `LAYER4_RECONCILIATION_PLAN.md`'s status header | D1, D9 |
-| 2 | Decide and record the four unimplemented HARD rules — implement or explicitly defer them in `ARCHITECTURE.md` and a decision entry | D2 |
+| 2 | Decide and record the four unimplemented HARD rules — implement or explicitly defer them in `ARCHITECTURE.md` and a decision entry | D2 — **DONE 2026-09-28**: Decision 26 (row 5 implemented; the four cooler/RAM rules explicitly deferred and marked unenforced at every site) |
 | 3 | Append the implementation update to Decision 22 and strike its two inverted sentences | D3 |
 | 4 | Add the status/supersession header to `ARCHITECTURE.md` with inline markers at §2/§11/§13 | D4, D11 |
 | 5 | Add `docs/DECISION_INDEX.md` + normalized `Status:` lines | D5 |
@@ -250,3 +267,5 @@ Two short entries: (a) the CRLF convention (root `AGENTS.md` and `database/` + `
 | 9 | Add `docs/OPEN_GAPS.md`, `docs/SCHEMA_REFERENCE.md`, `docs/GLOSSARY.md`, `docs/TEST_MAP.md`, `docs/RECIPES/` | ongoing drift |
 
 Items 1–4 are documentation edits measured in minutes and remove all three CRITICAL/HIGH correctness hazards. Items 8–9 are the structural fix that makes the next audit trivial instead of manual.
+
+**Status 2026-09-28 (end of day):** items **1–4 are DONE** — D1 (`LAYER4_RECONCILIATION_PLAN.md` header + §5.4/§6.20/§7, commit `59dc0a3`), D2 (this finding; Decision 26 hybrid — row 5 implemented, the other four rules recorded as explicit unenforced deferrals), D3 (Decision 22 UPDATE block, `fe2a816`) and D4 (ARCHITECTURE supersession notice + inline markers, `fe2a816`, extended by `676973b`/`6c69baa`). Items 5–9 remain open: item 5's generator exists as untracked WIP (`scripts/gen-decision-index.js`, which still asserts 25 global decisions and references a `gen:decisions` npm script that is not in `package.json`), and item 6 is partially served by the 2026-09-28 `DEVELOPMENT_NOTES.md` entry while the D6 stale lines remain.
