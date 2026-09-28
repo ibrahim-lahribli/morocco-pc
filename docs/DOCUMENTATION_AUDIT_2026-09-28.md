@@ -63,7 +63,7 @@ So **19 of the plan's 30 difference-table rows are implemented**, 2 are intentio
 | `cooler_spec.height_mm > case_spec.max_cpu_cooler_height_mm` → REJECT | §5.3 | **NO** |
 | `ram_spec.module_count > motherboard_spec.dimm_slots` → REJECT | §6 | **NO** |
 | total RAM capacity > `motherboard_spec.max_memory_capacity_gb` → REJECT | §6 | **NO** |
-| high-TGP GPU (`board_tgp_watts >= 200`) + PSU connector count NULL → REJECT | §5.2 | **NO** (code returns UNKNOWN by design, Decision 23) |
+| high-TGP GPU (`board_tgp_watts >= 200`) + PSU connector count NULL → REJECT | §5.2 | **NO** (gpu.js Rule 11 returns UNKNOWN for any NULL connector availability by its own design; no decision addressed the >=200W escalation - attribution corrected 2026-09-28) |
 
 **Evidence:** a repo-wide search for `tdp` (case-insensitive) across all non-test JavaScript returns **zero matches**. `max_cpu_cooler_height_mm`, `dimm_slots`, `max_memory_capacity_gb` and `module_count` appear **only** in test-fixture scripts (`scripts/test-compatibility.js`, `scripts/verify-hardware-schema.js`) — never in `src/`. The columns all exist in the live schema (`cooler_spec: max_tdp_watts, height_mm`; `case_spec: max_cpu_cooler_height_mm`; `ram_spec: module_count, capacity_per_module_gb`; `motherboard_spec: dimm_slots, max_memory_capacity_gb`), and `gpu_board_spec.board_tgp_watts` exists and is unread by the connector rule.
 

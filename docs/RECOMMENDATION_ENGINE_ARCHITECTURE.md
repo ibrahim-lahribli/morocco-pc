@@ -12,7 +12,7 @@ behaviour. Known superseded passages, each marked inline below:
 | S11 hard cap example | quoted 500 builds per query | shipped max_builds_per_query = **25** (scoring_model.configuration) |
 | S13 third sort key | candidate created order / candidate id ASC | **Decision 18.3**: build_score DESC -> total_price ASC -> signature ASC (code-unit compare) |
 | S13 templates | versioned with the scoring model | templates are code constants in explanation/explain.js; NOT model-versioned |
-| S5.2 connector rule | high-TGP GPU + NULL connector count -> REJECT | **Decision 23**: returns UNKNOWN by design |
+| S5.2 connector rule | high-TGP GPU (>=200W) + NULL connector count -> REJECT | NOT implemented: gpu.js Rule 11 returns UNKNOWN for ANY null connector availability by its own design; no decision ever addressed the >=200W escalation - see audit D2 |
 | S5.3/S6 four HARD rules | cooler TDP, cooler height, RAM slots, RAM capacity | NOT implemented anywhere - see audit D2 / AGENTS.md S10 |
 | S3 definitive hard list (11 items) | omits all four rules above even though S5.3/S6 call them HARD (internal inconsistency; found by the D2 verification) | audit D2: the list is incomplete as written - item 9 is the only connector rule, and no cooler-TDP / cooler-height / RAM-slot / RAM-capacity item exists |
 
