@@ -180,9 +180,9 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
 - **`scripts/verify-hardware-schema.js` is BROKEN and not safe to re-run** (FK violation in its
   startup cleanup; its fixtures accumulate). Use the read-only `verify-schema.js` /
   `verify-constraints.js` / `verify-fks.js` instead. Details: `DEVELOPMENT_NOTES.md`, 2026-09-19 entry.
-- **`database/LAYER4_RECONCILIATION_PLAN.md`'s status header is FALSE.** It still says
-  "PROPOSAL — NOT IMPLEMENTED / Migration 011 has NOT been created or applied", but 011 is applied
-  and every blocking item in its §2 list is live. Read it as a historical ledger, not as status.
+- **`database/LAYER4_RECONCILIATION_PLAN.md` — status header FIXED 2026-09-28 (audit D1).** It now says IMPLEMENTED
+  with a per-item applied/deferred ledger. Its §5.4 caveat is still true: a fresh `001→011` migration on an empty
+  database remains NOT VERIFIED.
 - **`ARCHITECTURE.md` is dated 2026-09-12 and cites no decision after 9.** Decision 18 item 7
   records that its stage table and stage-9 ranking wording are superseded with the doc refresh
   "deferred", so its §2/§13 rank ordering and its "templates versioned with the scoring model"

@@ -23,6 +23,8 @@ Headline: **12 findings**, of which **3 are serious** — a plan document that c
 
 ### D1 — `LAYER4_RECONCILIATION_PLAN.md` says its own work was never done · **CRITICAL**
 
+> **RESOLVED 2026-09-28.** The status header now reads IMPLEMENTED with a per-item applied/deferred ledger; §5.4, §6.20 and §7 were corrected the same way. The §5.4 caveat itself (fresh `001→011` on an empty DB still unverified) remains open and is tracked as U1/F13 in the status review.
+
 **The doc says:** `Status: **PROPOSAL — NOT IMPLEMENTED.** No database changes have been made. Migration 011 has NOT been created or applied.` (§5.4 repeats: "**NOT AVAILABLE.** No isolated scratch database (Docker, Neon branch, `TEST_DATABASE_URL`) exists.")
 
 **Reality:** migration `011_reconcile_layer4.sql` exists, is committed, and **is applied to the live database**. Every blocking item the plan proposed is implemented — verified live:

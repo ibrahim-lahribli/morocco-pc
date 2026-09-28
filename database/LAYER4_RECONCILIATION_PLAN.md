@@ -1,6 +1,23 @@
 # Layer 4 Reconciliation Plan
 
-Status: **PROPOSAL — NOT IMPLEMENTED.** No database changes have been made. Migration 011 has NOT been created or applied.
+Status: **IMPLEMENTED 2026-09-12 — migration `011_reconcile_layer4.sql` created, committed, and applied to the live database.**
+This file was originally written as a proposal; it is now a historical ledger of what was done. Verified live 2026-09-28:
+
+| Plan item | Outcome |
+|---|---|
+| §2.1 `price_checked_at` → TIMESTAMPTZ, §2.1b all Layer 4 timestamps → TIMESTAMPTZ | applied — all 8 Layer 4 timestamp columns are `timestamp with time zone` |
+| §2.2 drop `build_component.category` | applied — 0 `category` columns remain |
+| §2.3 `compatibility_status` NOT NULL DEFAULT 'UNKNOWN' | applied |
+| §2.4 `scoring_model_id` NOT NULL | applied |
+| §2.5 price CHECKs `> 0` (both) | applied — `chk_build_component_selected_price_positive`, `chk_build_candidate_total_price_positive` |
+| §2.6 store ⇒ `price_checked_at` CHECK | applied — `chk_build_component_store_requires_checked_at` |
+| §2.7 unique rank per query | applied — `uq_recommendation_result_query_rank` |
+| §2.8 singular role uniqueness | applied — `uq_build_component_role_singular` |
+| §2.9 `idx_build_component_product_variant_id`, `idx_build_component_store_id` | applied |
+| §2.10 `idx_recommendation_profile_name` | applied |
+| §2.11 `store_offer_id` FK · §3 `priority` redesign | deliberately deferred (FUTURE / NON-BLOCKING), still deferred |
+
+Remaining caveat: the §5.4 fresh `001 → 011` run on an empty database is still **NOT VERIFIED** (see §5.4).
 
 Prepared: 2026-09-12
 Based on: read-only catalog inspection of the live Neon database plus review of migrations 001–010, `CONTEXT.md`, and `DEVELOPMENT_NOTES.md`.
@@ -331,7 +348,7 @@ Existing Neon: existing (undocumented) Layer 4 objects → 011 → canonical Lay
 
 ### 5.4 Fresh 001→011 verification
 
-**NOT AVAILABLE.** No isolated scratch database (Docker, Neon branch, `TEST_DATABASE_URL`) exists. Per standing project policy, fresh-migration correctness must NOT be claimed. Options for later: Neon branch, Docker Compose Postgres, or a scratch `TEST_DATABASE_URL`.
+**STILL NOT VERIFIED — but for a corrected reason.** A Neon branch reachable via `TEST_DATABASE_URL` has existed since 2026-09-21 and is used by `measure-orchestrator.js` and the two `test-orchestrator-*.js` scripts. What has never been done is running migrations `001 → 011` in order against an empty database and diffing the result against the live schema. The original reason stated here ("no isolated database exists at all") was wrong from 2026-09-21 onward; the verification itself remains outstanding. Per standing project policy, fresh-migration correctness must NOT be claimed until that run happens.
 
 ---
 
@@ -358,15 +375,14 @@ Follows the `test-layer3.js` / `test-compatibility.js` patterns: preflight → s
 17. **Store/price snapshot consistency** — component with `store_id` set but `price_checked_at` NULL rejected; both NULL accepted; both set accepted.
 18. **Cleanup order** — delete in FK-reverse order: `recommendation_result` → `build_component` → `build_candidate` → `recommendation_query` → `recommendation_profile` → Layer 3 rows (`price_history`, `store_offer`, `store`) → Layer 2 rows (`benchmark_result`, `component_assessment`, `scoring_model`) → spec tables → `product_variant`/`gpu_board_spec` → `product` → seeded reference rows — preserving the established `TestCompat%` cleanup-ordering lesson, extended with the five Layer 4 tables.
 19. **Regression** — after Layer 4 tests pass, `npm run test:db` and the existing verify scripts still pass. `test-compatibility.js` inserts/deletes only its own `TestCompat%` data and does not touch Layer 4 tables.
-20. **Fresh 001→011 migration test** — **NOT AVAILABLE.** Must be reported as such and never claimed as passed until an isolated scratch database exists.
+20. **Fresh 001→011 migration test** — **NOT YET RUN.** An isolated scratch database (`TEST_DATABASE_URL` Neon branch) does exist; the run simply has not been performed. Never claim it passed until it has.
 
 ---
 
 ## 7. Safety summary
 
 * Files modified this session: `DEVELOPMENT_NOTES.md` (Layer 4 drift entry + live-inspection lesson only).
-* Files created this session: `database/LAYER4_RECONCILIATION_PLAN.md` (this file).
-* Database modified: **NO** (read-only catalog SELECTs only).
-* Migration 011 created: **NO**.
-* Migration 011 applied: **NO**.
-* Commit created: **NO**. Push performed: **NO**.
+* Files created that session (2026-09-12): `database/LAYER4_RECONCILIATION_PLAN.md` (this file).
+* Database modified then: **NO** (read-only catalog SELECTs only).
+* Later sessions: migration `011_reconcile_layer4.sql` was created, committed, and **applied** to the live database (2026-09-12, see `DEVELOPMENT_NOTES.md` — "applied and re-applied to confirm idempotency"). Every §2 item marked above as applied was verified against the live catalog on 2026-09-28.
+* §2.11 (store_offer_id) and §3 (priority redesign) were deliberately NOT implemented — classified FUTURE / NON-BLOCKING and still deferred.
