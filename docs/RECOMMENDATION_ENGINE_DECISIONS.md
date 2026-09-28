@@ -6,7 +6,7 @@
 >   line: `Status: <STATE> <YYYY-MM-DD>[; <secondary fact>] — <qualifier>`.
 >   `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` therefore enumerates every
 >   decision entry with its current state; all 26 global decisions are RESOLVED as of
->   2026-09-28. The one remaining `### Status:` heading style is gone.
+>   2026-09-28. The `### Status:` heading style (12 entries before 2026-09-28) is gone — 0 remain.
 > - The generated lookup table — number, title, status, date and line anchor for every
 >   decision — is `docs/DECISION_INDEX.md`. Regenerate it after editing this file:
 >   `npm run gen:decisions` (`node scripts/gen-decision-index.js --check` fails when the
