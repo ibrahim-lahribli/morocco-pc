@@ -705,7 +705,14 @@ existing `scripts/test-*.js` transaction/rollback style.
   fields are determined (`selected_price`, `currency`, `store_id`,
   `price_checked_at` -- architecture §7, migration 011), but the in-memory
   structural representation between Stage 1 output and Engine 3 consumption
-  is not specified. **DECISION REQUIRED (Decision 6, gap 3).**
+  is not specified. **RESOLVED (implementation, Decision 6):** Stage 1
+  (`offers/select.js`) emits a `prices` carrier keyed by
+  `priceKey(product_id, product_variant_id, component_role)`
+  (`assembly/prices.js`), each value
+  `{ selected_price, currency, store_id, price_checked_at }`; Engine 3
+  consumes it through `validatePrices` / `lookupPrice` with no
+  reimplementation. Supersedes the former "DECISION REQUIRED (Decision 6,
+  gap 3)" status; see `docs/RECOMMENDATION_ENGINE_DECISIONS.md`, Decision 6.
 7. **Stage 1 offer pre-selection: product-level vs variant-level offer
   applicability.** `store_offer.product_variant_id` is nullable, and the
   implemented candidate-identity rules make `GPU` candidates variant-keyed
