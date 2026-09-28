@@ -3144,6 +3144,93 @@ VERDICT: RESOLVED - score-degeneracy resolution: O2 build-local unknown_pairwise
 
 ---
 
+## Decision 24 — Decision 20 O4 re-evaluation on the 100-product catalog
+
+Date: 2026-09-28. Measurement pass re-checking Decision 20's post-ranking
+(CPU, GPU) pair-diversity selection (O4, `MAX_PER_PAIR = 3`,
+`ranking/select-diverse.js`) against the current catalog (001 + 002 + 003,
+100 products). Decision 20 could not do this: its figures were taken on the
+15-product minimal seed (see its SEED-SIZE NOTE). Documentation only: no
+code change, no seed change.
+
+### Status: RESOLVED — O4 and `MAX_PER_PAIR = 3` retained; scope limitation recorded
+
+### Decision
+
+1. **Finding. O4 delivers diversity only where the ranked list holds more
+   than `ceil(limit / maxPerPair)` distinct (CPU, GPU) pairs; at the SHIPPED
+   configured cap it delivers none and under-fills.** Measured read-only on a
+   `TEST_DATABASE_URL` branch through the real pipeline
+   (`loadCandidates -> selectCandidatePool -> selectOfferPrices ->
+   filterCandidates -> computeCandidateScores -> retainTopKPerRole ->
+   assembleBuildsForRecommendation -> computeBuildScores -> rankBuilds ->
+   selectDiverseTop`), `limit = TOP_N_PERSISTED (10)`, `maxPerPair = 3`:
+
+   | use case | cap variant | ranked | naive top-10 (no O4) | O4 selected |
+   |---|---|---|---|---|
+   | GAMING | configured (25) | 25 | 1 distinct pair, largest 10 of 10 | **k = 3**, 1 pair, largest 3 of 3, dropped 22 |
+   | OFFICE | configured (25) | 25 | 1 distinct pair, largest 10 of 10 | **k = 3**, 1 pair, largest 3 of 3, dropped 22 |
+   | GAMING | raised (100000) | 35982 | 3 distinct pairs, largest 7 of 10 | k = 10, 4 pairs, largest 3 of 10, dropped 113 |
+   | OFFICE | raised (100000) | 793 | 1 distinct pair, largest 10 of 10 | **k = 9**, 3 pairs, largest 3 of 9, dropped 784 |
+
+2. **At the shipped configured cap O4 cannot produce diversity at all.** With
+   `max_builds_per_query = 25` CPU and GPU are fixed across every build in the
+   pool — only the trailing roles vary (GAMING: CPU_COOLER, SSD_BOOT; OFFICE:
+   PSU, CASE, CPU_COOLER, SSD_BOOT) — so the whole 25-build ranked list is ONE
+   (CPU, GPU) pair. O4 takes the first 3 builds, skips the other 22, and the
+   selected set still holds a single pair. No `MAX_PER_PAIR` value can extract
+   diversity from a one-pair list; any value `> 1` only reduces the persisted
+   count (10 -> 3). Decision 20's rationale assumed the ranked list offered
+   several pairs to choose between.
+
+3. **OFFICE under-fills even at the raised cap.** Its 793-build ranked list
+   holds only 3 distinct pairs (3 CPUs x {the single GPU variant, GPU
+   omitted}), so `MAX_PER_PAIR = 3` caps the persisted set at `3 x 3 = 9 < 10`.
+   Decision 20 allowed "k may be less than 10 if fewer than 10 builds survive";
+   here the shortfall is caused by the pair cap, not by builds dying. The
+   OFFICE top-10 is also `10 of 10` on one pair — the diversity objective is
+   not met on the current catalog, in either cap variant.
+
+4. **Decision taken.** Keep O4 and `MAX_PER_PAIR = 3` exactly as adopted in
+   Decision 20 — the constant is not the defect and the mechanism is correct.
+   Record explicitly that O4 is a POST-ranking filter: it can only re-select
+   from pairs the ranking already produced, so it cannot manufacture diversity
+   the ranked list lacks. Its objective is therefore unmet at the shipped
+   configured cap, where the top of the ranking is a single (CPU, GPU) pair.
+
+5. **Recommended follow-up (not done here).** The upstream cause is that at
+   `max_builds_per_query = 25` the assembled/ranked pool is dominated by one
+   (CPU, GPU) pair; retuning `MAX_PER_PAIR` in isolation cannot fix that.
+   Re-evaluate O4 after the Decision 23 O1/O2 score-degeneracy work is
+   measured end-to-end on the same catalog, or alongside any change to the
+   configured cap. If a full `TOP_N_PERSISTED`-row persisted set is a hard
+   requirement, the candidate mechanism is a documented fill-back pass (after
+   the diversity walk, backfill skipped builds toward `limit`), which trades
+   pair concentration for fill — a Decision 19/20 question, not a change made
+   by this entry.
+
+### Rejected alternatives
+
+* **Raising `MAX_PER_PAIR` to fill 10 rows** (e.g. 10 at the configured cap):
+  restores the fill only by disabling the very cap Decision 20 exists to
+  impose — it makes O4 a no-op rather than fixing its input.
+* **Lowering `MAX_PER_PAIR`** (e.g. 1): still yields k <= 1 at the configured
+  cap (one pair) and worsens the under-fill; it does not add pairs.
+* **Making `MAX_PER_PAIR` catalog- or use-case-aware now:** premature — the
+  dominant term is the one-pair ranked list, which no per-pair constant
+  changes, and Decision 20 already flags revisiting the constant once
+  real-market catalog data exists.
+* **Re-opening Decision 20's verdict:** unnecessary — the mechanism behaves as
+  specified; what changed is the catalog the assumption was made against.
+
+### Verdict for this pass
+
+```text
+VERDICT: RESOLVED - O4 / MAX_PER_PAIR = 3 retained unchanged; measured on the 100-product catalog O4 delivers diversity only at the raised cap (GAMING k=10 / 4 pairs) and is a no-op-plus-under-fill at the shipped configured cap (k=3, one pair) and OFFICE raised cap (k=9, three pairs); the gap is upstream (a one-pair ranked top-10), not the constant
+```
+
+---
+
 ## Final Status
 
 ```text
@@ -3161,6 +3248,7 @@ Decision 20: RESOLVED (post-ranking (CPU, GPU) pair diversity selection / O4, MA
 Decision 21: RESOLVED (full-run composition contract -> orchestrator/full-run.js runRecommendationFullRun, adopted 2026-09-23)
 Decision 22: RESOLVED (explanation generation / Engine 6 contract, adopted 2026-09-24)
 Decision 23: RESOLVED (score-degeneracy: build-local unknown_pairwise_count (O2) + GPU/PSU connector & dimension data seed 003 (O1), adopted 2026-09-27)
+Decision 24: RESOLVED (Decision 20 O4 / MAX_PER_PAIR = 3 re-evaluated on the 100-product catalog; retained unchanged, scope limitation recorded - diversity only at the raised cap, no-op-plus-under-fill at the shipped configured cap, adopted 2026-09-28)
 ```
 
 Unambiguous one-sentence semantics for the implementation task:
