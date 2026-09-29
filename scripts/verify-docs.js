@@ -159,7 +159,45 @@ const decisions = (function checkDecisions() {
   else pass('npm-scripts', want.join(', ') + ' present');
 })();
 
-// 7. Live read-only structural checks (--live only).
+// 7. Generated docs exist, carry the GENERATED banner, and their generator
+// script is wired into package.json (freshness itself is asserted by
+// gen-schema-reference.js --check, which needs a DB and therefore stays out
+// of the offline gate; see docs/OPEN_GAPS.md maintenance rules).
+(function checkGeneratedDocs() {
+  const generated = ['docs/SCHEMA_REFERENCE.md', 'docs/DATA_STATE.md'];
+  const problems = [];
+  for (const rel of generated) {
+    let text = null;
+    try {
+      text = readRepo(rel);
+    } catch (_err) {
+      problems.push(rel + ' missing (run `npm run gen:schema`)');
+      continue;
+    }
+    if (!text.includes('GENERATED FILE')) {
+      problems.push(rel + ' lacks the GENERATED banner (hand-edited?)');
+    }
+  }
+  const recipes = path.join(ROOT, 'docs', 'RECIPES');
+  if (!fs.existsSync(recipes) || fs.readdirSync(recipes).length === 0) {
+    problems.push('docs/RECIPES/ missing or empty (audit A8)');
+  }
+  for (const rel of ['docs/GLOSSARY.md', 'docs/TEST_MAP.md']) {
+    try {
+      readRepo(rel);
+    } catch (_err) {
+      problems.push(rel + ' missing (audit A6/A7)');
+    }
+  }
+  const pkg = JSON.parse(readRepo('package.json'));
+  if (!pkg.scripts || !pkg.scripts['gen:schema']) {
+    problems.push('package.json is missing the gen:schema script');
+  }
+  if (problems.length > 0) fail('generated-docs', problems.join('; '));
+  else pass('generated-docs', generated.join(', ') + ' + GLOSSARY/TEST_MAP/RECIPES + gen:schema present');
+})();
+
+// 8. Live read-only structural checks (--live only).
 async function checkLive() {
   require('dotenv').config();
   const connectionString = process.env.DATABASE_URL;

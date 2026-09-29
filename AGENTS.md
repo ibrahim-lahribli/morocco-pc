@@ -62,6 +62,11 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `docs/` | Engine architecture, decision log, and dated audit/status reports |
 | `docs/DECISION_INDEX.md` | GENERATED decision lookup table (number/title/status/date/line) — never edit by hand |
 | `docs/OPEN_GAPS.md` | Consolidated open-gap register (architecture §16 + seed 002 D1–D8 + §18 futures + audit D1–D12) with class/status/owner — hand-maintained |
+| `docs/SCHEMA_REFERENCE.md` | GENERATED column-level schema lookup (information_schema) — never edit by hand; `npm run gen:schema` |
+| `docs/DATA_STATE.md` | GENERATED live row-count/coverage snapshot — instance-specific, never cite as a permanent claim |
+| `docs/GLOSSARY.md` | Load-bearing vocabulary (status vocabulary, decision ids, the `D2` vs `Decision 2` collision) |
+| `docs/TEST_MAP.md` | Which test pins which contract — check before changing pinned behavior |
+| `docs/RECIPES/` | Task checklists: add a migration/seed/scoring-model/pair-evaluator/stage/status-claim |
 | `database/migrations/` | Authoritative schema (`001`–`011`, apply in filename order) |
 | `database/seeds/` | DML-only, idempotent seed data |
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |
@@ -105,7 +110,9 @@ deliberately not duplicated here.
 | `npm run test:db` | DB connection + table listing |
 | `npm run seed` | Apply `database/seeds/*.sql` (idempotent) |
 | `npm run gen:decisions` | Regenerate `docs/DECISION_INDEX.md` from the decision log (`node scripts/gen-decision-index.js --check` fails when it is stale) |
+| `npm run gen:schema` | Regenerate `docs/SCHEMA_REFERENCE.md` + `docs/DATA_STATE.md` from the live DB (`node scripts/gen-schema-reference.js --check` fails when stale; needs `DATABASE_URL`) |
 | `npm run verify:docs` | Verify fact-shaped doc claims vs tree (offline) or + read-only DB (`--live`) |
+| `node scripts/verify-docs.js --live` | Adds read-only live-DB INFO checks (15 core tables + counts; never asserted against instance-specific figures) |
 | `node scripts/run-seeds.js --dry-run` | Report seed statements without executing |
 | `node scripts/run-migrations.js` | Apply migrations — FRESH DB ONLY (not re-runnable) |
 | `node --test scripts/lib/db-url.test.js` | Guard unit tests (not in `test:unit`) |
@@ -175,7 +182,7 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
 |---|---|
 | Will this command/test run, how do I operate this? | `DEVELOPMENT_NOTES.md` |
 | What exists / current status | `CONTEXT.md` |
-| Exact table/column definitions | `database/migrations/*.sql` |
+| Exact table/column definitions | `database/migrations/*.sql` (generated lookup: `docs/SCHEMA_REFERENCE.md`) |
 | Engine pipeline, compatibility, scoring, budget | `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` |
 | Why engine behavior is the way it is (the contract) | `docs/RECOMMENDATION_ENGINE_DECISIONS.md` |
 | Which decisions exist, and their current status | each entry's `Status:` line + the generated `docs/DECISION_INDEX.md` (lookup aid, never a source of truth) |
@@ -225,4 +232,5 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
 - **Decision 22 status - FIXED 2026-09-28 (audit D3).** Its `Status:` line said implementation was
   future work; it now records items 1-5 as IMPLEMENTED with a dated UPDATE block in the decision
   itself. Engine 6 is shipped - do not re-implement it.
-- Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md`.
+Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every finding (D1–D12) plus items 8/9-part-1 was independently re-verified 2026-09-29 (all green: 829 unit tests, verify:docs offline + live, decision-index `--check`); treat its RESOLVED banners as trustworthy and do not re-open the findings without new evidence.
+- When a session's job is to verify prior work, verify against the working tree and re-run the mechanical gates (not just the banners), then append a dated VERIFIED note to the audit doc itself so the next session does not repeat the pass.

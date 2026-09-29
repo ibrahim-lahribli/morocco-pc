@@ -1,0 +1,43 @@
+# Test Map
+
+Which test pins which contract, in both directions — "is it safe to change this?"
+is a lookup, not an archaeology project. Each row cites the file that enforces
+the contract. Run everything with `npm run test:unit` (no DB needed; the test
+count grows over time — check the current number, never cite a stale one).
+
+## Data-semantics contracts
+
+| Contract | Pinned by | What breaks if violated |
+|---|---|---|
+| NULL is never 0 (missing spec = UNKNOWN; explicit 0 = verified deficit) | `filtering/filter.test.js:737` "null is never 0" (and sibling PSU/GPU-connector cases in `compatibility/gpu-psu.test.js`) | Missing data becomes permissive; unsafe pairs silently PASS |
+| `round2` half-up with shortest-decimal path (never `Math.round(x*100)` naively — `1.005` float trap) | `ranking/rank.test.js` (see `ranking/rank.js:66` for the documented pitfall) | Scores/rounding drift by a cent or a decimal between instances |
+| deepFreeze ordering — seal children BEFORE the container | `scoring/build-score.test.js` (pitfall documented at `build-score.js:445`) | Frozen container exposes frozen-then-mutated internals; determinism violated |
+| Determinism: tie-breaks are fixed code-unit compares (never `localeCompare`) | `ranking/rank.test.js` signature/tie-break assertions | Non-reproducible ranks across machines |
+| Decision 16 gate: only FAIL prunes an assembly branch; UNKNOWN continues | `assembly/assemble.test.js` branch-gating cases | UNKNOWN pairs disappear instead of reaching scoring's penalty |
+| Rule 11 high-TGP escalation: `board_tgp_watts >= 200` + NULL availability → FAIL `GPU_PSU_CONNECTOR_NULL_HIGH_TGP`, decided BEFORE the unknown-name branch; NULL requirements / unknown names / non-finite TGP stay UNKNOWN | `compatibility/gpu-psu.test.js:297–368`, `filtering/filter.test.js:808`, `assembly/assemble.test.js:1536` | The Decision 26 safety rule degrades back to UNKNOWN (or over-fires on UNKNOWN inputs) |
+| `unknown_pairwise_count` is build-local, counted once per pair (Decision 23 O2) | `scoring/build-score.test.js`, `assembly/assemble.test.js` unknown-count cases | Double-counting silently over-penalizes builds (the W4 trap) |
+| Candidate-level `unknown_pairwise_count` is computed but never read | documented in `retention/retain.js`; not pinned by a test — the W4 cleanup (status review Option D) is the real fix | Accidental revival would change every score |
+
+## Boundary contracts (structural, not behavioral)
+
+| Contract | Pinned by | What breaks if violated |
+|---|---|---|
+| `persistence/persist-ranked.js` stays write-only: no `require('pg')`, no `new Pool`, no `BEGIN/COMMIT/ROLLBACK`, no `SELECT`, no imports from other stages | `persistence/persist-ranked.test.js:162` banned-token list | Transaction control leaks into the writer; the single-write-transaction guarantee (Decision 19) erodes |
+| Engine stage layout: one directory per stage, barrel `index.js` (persistence/ excepted, imported via `persist-ranked`) | `scripts/verify-docs.js` check 5 (`engine-layout`) + per-stage `index.test.js` | Barrels rot; boundary-only imports become unenforceable |
+| Engine modules stay pure: no DB access, no clock, no randomness (DB lives only in loaders + orchestrator) | enforced by construction + `orchestrator/run.test.js` / `commit.test.js` transaction-boundary cases; the purity rule itself is `AGENTS.md` §5 | Unit suite can no longer run DB-free |
+
+## Schema contracts
+
+| Contract | Pinned by | What breaks if violated |
+|---|---|---|
+| At most one CPU / MOTHERBOARD / PSU / CASE / CPU_COOLER / SSD_BOOT per build candidate | `uq_build_component_role_singular` partial unique index (`database/migrations/011_reconcile_layer4.sql`), exercised by `scripts/test-layer4.js` | Multi-slot roles leak into builds the schema cannot represent (W10/K13) |
+| Commit re-run guard: a query is committed exactly once; guards run after `SELECT … FOR UPDATE` on the query row | `orchestrator/commit.test.js` | Duplicate persistence; races between concurrent commits (reasoned, not concurrency-tested — U4) |
+| Migrations form a contiguous 001→NNN range; decision log parses (26 global / 30 `Status:`); AGENTS cites the current range | `scripts/verify-docs.js` checks 1–3 | Doc drift on schema/status facts (the audit's root cause) |
+| Generated docs stay fresh: `docs/DECISION_INDEX.md` and the `gen:schema` outputs | `gen-decision-index --check` (wired into verify-docs check 4) and `gen-schema-reference.js --check` | Hand-edited generated files mask drift |
+
+## Where to add a pin
+
+New engine behavior lands **with** a test in the owning stage's `*.test.js`
+plus, when it changes a documented contract, a line here. The convention that
+made the Decision 23 O2 work safe: find the pin first, change behavior, watch
+the exact pin fail, update pin + decision together.
