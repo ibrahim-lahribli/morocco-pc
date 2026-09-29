@@ -35,6 +35,8 @@ points are the engine's public barrels (`src/recommendation/*/index.js`) and the
 
 For a current map of what is stale and why: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` (per-finding doc drift) and
 `docs/PROJECT_STATUS_REVIEW_2026-09-28.md` (whole-project weaknesses W1–W12, options A–I, known/unverified registers K/U).
+For what is still open — gaps, deferrals, unverified items, closed-findings residue — `docs/OPEN_GAPS.md` is the
+consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + audit D1–D12, each with class/status/owner).
 
 ## 3. Technology stack
 
@@ -59,6 +61,7 @@ For a current map of what is stale and why: `docs/DOCUMENTATION_AUDIT_2026-09-28
 | `DEVELOPMENT_NOTES.md` | Operational lessons and verified commands |
 | `docs/` | Engine architecture, decision log, and dated audit/status reports |
 | `docs/DECISION_INDEX.md` | GENERATED decision lookup table (number/title/status/date/line) — never edit by hand |
+| `docs/OPEN_GAPS.md` | Consolidated open-gap register (architecture §16 + seed 002 D1–D8 + §18 futures + audit D1–D12) with class/status/owner — hand-maintained |
 | `database/migrations/` | Authoritative schema (`001`–`011`, apply in filename order) |
 | `database/seeds/` | DML-only, idempotent seed data |
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |
@@ -176,6 +179,7 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
 | Engine pipeline, compatibility, scoring, budget | `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` |
 | Why engine behavior is the way it is (the contract) | `docs/RECOMMENDATION_ENGINE_DECISIONS.md` |
 | Which decisions exist, and their current status | each entry's `Status:` line + the generated `docs/DECISION_INDEX.md` (lookup aid, never a source of truth) |
+| What is still open (gaps, deferrals, unverified items) | `docs/OPEN_GAPS.md` (consolidated register; the underlying sources stay authoritative individually) |
 | Vocabulary/inputs/outputs of one module | that module's `index.js` header comment |
 | Layer 4 reconciliation history | `database/LAYER4_RECONCILIATION_PLAN.md` |
 
