@@ -106,8 +106,8 @@ deliberately not duplicated here.
 | `node scripts/run-migrations.js` | Apply migrations — FRESH DB ONLY (not re-runnable) |
 | `node --test scripts/lib/db-url.test.js` | Guard unit tests (not in `test:unit`) |
 | `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance fixtures |
-| `node scripts/test-layer3.js --verify --functional` | Layer 3 schema (flags required) |
-| `node scripts/test-layer4.js` | Layer 4 canonical schema |
+| `node scripts/test-layer3.js --verify --functional` | Layer 3 schema (flags required; needs ALL THREE Layer 3 tables empty — `store` too; non-empty on shared DB AND on the test branch as of 2026-09-28, so it cannot pass in either environment today) |
+| `node scripts/test-layer4.js` | Layer 4 canonical schema (unguarded: reads `DATABASE_URL`; writes `TestL4%` fixtures inside one transaction with final ROLLBACK; does NOT require empty Layer 4 tables) |
 | `node scripts/verify-schema.js` / `verify-constraints.js` / `verify-fks.js` | Read-only catalog checks |
 | `node scripts/test-orchestrator-commit.js` / `test-orchestrator-full-run.js` | Write-path tests (TEST_DATABASE_URL only) |
 | `node scripts/measure-orchestrator.js` | Decision 20 measurement harness (test-scratch only) |
@@ -115,8 +115,11 @@ deliberately not duplicated here.
 
 Command gotchas (verified 2026-09-28):
 
-- `node scripts/test-layer3.js` needs BOTH `--verify --functional` AND empty Layer 3 tables, so it
-  cannot pass against `DATABASE_URL` now that the shared DB holds offers/price_history rows.
+- `node scripts/test-layer3.js` needs BOTH `--verify --functional` AND empty Layer 3 tables (all
+  three, `store` included), so it cannot pass against `DATABASE_URL` now that the shared DB holds
+  rows — and not against `TEST_DATABASE_URL` either: the TEST branch holds the same 2/101/101 rows
+  (measured 2026-09-28; a branch is a parent snapshot/reset, never an empty database).
+  The failure is clean: preflight throws before any write.
 - Only `measure-orchestrator.js` and the two `test-orchestrator-*.js` scripts use the
   `TEST_DATABASE_URL` guard; `test-layer3.js` / `test-layer4.js` / `verify-*.js` still read `DATABASE_URL`.
 - `node scripts/run-seeds.js --dry-run` counts statements with a naive `split(';')`, so a semicolon
@@ -128,7 +131,10 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
 
 1. Run `npm run test:unit` after any engine change; it needs no database.
 2. For schema/DB work, use the read-only `verify-*.js` scripts and the targeted `test-*.js` scripts.
-   Some require empty Layer 3 / Layer 4 tables and clean up transactionally.
+   Only `test-layer3.js` requires empty tables (all three Layer 3 tables); `test-layer4.js` does not —
+   it only writes `TestL4%` fixtures inside one transaction with a final ROLLBACK. Both still read
+   `DATABASE_URL` (unguarded — the known gap recorded in `DEVELOPMENT_NOTES.md`, not a pattern to
+   copy for new tests).
 3. Write-capable tests MUST go through `scripts/lib/db-url.js` and `TEST_DATABASE_URL` (an isolated
    Neon branch). Never run a write test against the shared `DATABASE_URL`.
 4. Report results as **PASS / FAIL / BLOCKED**. Never claim a test passed unless it ran, and say so

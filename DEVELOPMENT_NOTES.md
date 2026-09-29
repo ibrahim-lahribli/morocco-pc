@@ -27,8 +27,8 @@ Commands verified to work in this repository/environment:
 | `node scripts/run-migrations.js` | applies all migrations + verification | only on a fresh DB — see failure modes |
 | `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance constraints (fixture-based) | yes (47/47) |
 | `node scripts/verify-hardware-schema.js` | hardware schema tables/constraints | no — BROKEN, see TESTING LESSONS 2026-09-19 bullet |
-| `node scripts/test-layer3.js --verify --functional` | Layer 3 canonical schema functional tests (requires empty Layer 3 tables; bare run = preflight only) | yes (with flags + empty tables) |
-| `node scripts/test-layer4.js` | Layer 4 canonical schema functional/integration tests (single transaction + SAVEPOINTs); single transaction + final ROLLBACK; targets DATABASE_URL, not yet migrated to the TEST_DATABASE_URL guard | yes |
+| `node scripts/test-layer3.js --verify --functional` | Layer 3 canonical schema functional tests (requires ALL THREE Layer 3 tables empty; bare run = preflight only) | only with flags + empty Layer 3 tables — **BLOCKED 2026-09-28** (store=2 / store_offer=101 / price_history=101 on shared DB *and* on the TEST branch; preflight fails before any write) |
+| `node scripts/test-layer4.js` | Layer 4 canonical schema functional/integration tests (single transaction + SAVEPOINTs + final ROLLBACK); does NOT require empty Layer 4 tables; targets DATABASE_URL, not yet migrated to the TEST_DATABASE_URL guard | yes (transactional rollback; unguarded, runs on DATABASE_URL) |
 | `node scripts/verify-schema.js` | columns/types for core tables | yes |
 | `node scripts/verify-constraints.js` | indexes / primary keys | yes |
 | `node scripts/verify-fks.js` | foreign keys | yes |
@@ -130,15 +130,15 @@ Working solution: dependency-safe cleanup order — junction/compat rows → one
 
 Rule: when adding fixtures, add matching cleanup in dependency-safe order. Never delete `product` before its FK dependents.
 
-### No isolated fresh-migration environment (standing limitation)
+### No fresh-migration verification (standing limitation)
 
-Problem: a fresh 001→011 migration test requires an empty, isolated PostgreSQL database; none exists (shared Neon only, no local `psql`, no Docker).
+Problem: a fresh 001→011 migration test requires an empty, isolated PostgreSQL database. A `TEST_DATABASE_URL` Neon branch has existed since 2026-09-21, but it snapshots parent data, so it is NOT an empty-DB migration test (no local `psql`, no Docker, no empty scratch DB).
 
 Failure: `run-migrations.js` full re-run on the already-migrated DB aborts at `002_enums.sql` (bare `CREATE TYPE`, not idempotent).
 
 Working solution: none yet. Layer 3 and Layer 4 reconciliations (010/011) were applied in place after confirming the target tables had 0 rows.
 
-Rule: report fresh-migration as NOT VERIFIED / BLOCKED until an isolated database exists (Docker Postgres, a Neon branch, or a `TEST_DATABASE_URL` pointing at a scratch DB). Do not fake a fresh-migration result against the shared Neon DB.
+Rule: report fresh-migration as NOT VERIFIED / BLOCKED until run on an empty database (a Neon branch copy does not qualify — see the 2026-09-21 entry). Do not fake a fresh-migration result against the shared Neon DB or the branch. (Corrected 2026-09-28, audit D9: the pre-2026-09-21 reason "no isolated database exists at all" was wrong from 2026-09-21 onward; only the run itself is outstanding.)
 
 ### Isolated test DB via Neon branch (2026-09-21)
 
@@ -223,11 +223,12 @@ Rule: update CONTEXT.md's status sections in the same session/commit that lands 
 - `npm run test:db` — connection + table listing. No fixtures. Safe to rerun.
 - `node scripts/test-compatibility.js` — Layer 1 compatibility tables, partial unique indexes, provenance/data-quality rules. Uses and cleans `TestCompat%` fixtures. Safe to rerun (47/47). Do **not** use the `TestCompat%` prefix for real data.
 - `node scripts/verify-hardware-schema.js` — hardware spec tables and CHECK constraints. BROKEN — not safe to re-run; see 2026-09-19 bullet below.
-- `node scripts/test-layer3.js` — Layer 3 canonical schema (columns, CHECKs, indexes, enums). Requires the three Layer 3 tables to be empty; transactional cleanup. Safe to rerun.
-- `node scripts/test-layer4.js` — Layer 4 canonical schema (migration 011): 9-FK layout, CHECKs, uniqueness (ranks, component roles), `component_role` enum; fixture-based with final rollback. Safe to rerun.
+- `node scripts/test-layer3.js` — Layer 3 canonical schema (columns, CHECKs, indexes, enums). Requires all three Layer 3 tables to be empty (`store`, `store_offer`, `price_history`); transactional cleanup. Safe to rerun ONLY when they are empty — **cannot pass in either environment as of 2026-09-28** (2/101/101 rows on the shared DB and on the TEST branch); preflight fails cleanly before any write.
+- `node scripts/test-layer4.js` — Layer 4 canonical schema (migration 011): 9-FK layout, CHECKs, uniqueness (ranks, component roles), `component_role` enum; fixture-based with final rollback; does NOT require empty Layer 4 tables. Safe to rerun. Unguarded — reads `DATABASE_URL`.
+- **2026-09-28 — audit D8 (guard coverage + operational consequence):** only 3 scripts use the `TEST_DATABASE_URL` guard (`measure-orchestrator.js`, `test-orchestrator-commit.js`, `test-orchestrator-full-run.js`); 10 read `DATABASE_URL` unchanged (`run-migrations.js`, `run-seeds.js`, `test-compatibility.js`, `test-db.js`, `test-layer3.js`, `test-layer4.js`, and the 4 `verify-*.js`). Consequence: the documented `AGENTS.md` §6 command `node scripts/test-layer3.js --verify --functional` **cannot pass today** — its preflight asserts all three Layer 3 tables are empty and throws `STOP: Layer 3 tables contain rows` before any write (live counts 2026-09-28: store=2, store_offer=101, price_history=101). Pointing the script at `TEST_DATABASE_URL` does NOT help either: the branch was measured on 2026-09-28 to hold the same 2/101/101 rows (a Neon branch is a snapshot/reset of the parent, never an empty database). To actually run it, clear Layer 3 tables on the branch or use a fresh isolated DB. Also verified: `test-layer4.js` never asserts empty tables (it only logs counts and checks `TestL4%` leftovers).
 - `npm run test:unit` — pure unit tests for `src/recommendation/**` (Engines 1–4 + retention/Stage 1/2D/assembly + ranking; 829 tests as of 2026-09-28); no database required.
 - Engine 2C: `selectCandidatePool()` (`src/recommendation/candidates/select.js`) is the canonical pool selector; `pool.test.js` covers eligibility, variant-identity, dedup, global-only `EMPTY_CANDIDATE_POOL`, ordering, determinism, and non-responsibilities. Existing `candidates.test.js` fixtures updated to valid Engine 2B identities (GPU variants carry ids; non-GPU carry null).
-- Environmental limitations: fresh 001→011 migration cannot be verified (no isolated DB); DB-backed scripts need network access to Neon and a configured `DATABASE_URL`.
+- Environmental limitations: fresh 001→011 migration cannot be verified (branch exists via `TEST_DATABASE_URL` since 2026-09-21, but it snapshots parent data — only an empty-DB run qualifies; corrected 2026-09-28, audit D9); DB-backed scripts need network access to Neon and a configured `DATABASE_URL`.
 - Fixture cleanup requirement: everything created must be removed/rolled back in reverse-dependency order; row counts return to baseline.
 - 2026-09-19 session — Engine 4 (Decision 13 STEP 1-3) + Decision 15: `npm run test:unit` = 584 pass / 0 fail. Engine 4 scoring arithmetic now fully implemented: `load-assessments.js` (component_assessment loader), `effective-score.js` (STEP 1), `candidate-score.js` (STEP 2), `build-score.js` (STEP 3). Decision 15 resolved: UNKNOWN pairwise-count producer (Engine 2D verdict → Engine 3 build → Engine 4 batch fallback). Two items worth recording:
 
