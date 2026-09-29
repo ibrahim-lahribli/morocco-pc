@@ -209,7 +209,7 @@ out.push('Precedence when sources conflict: `AGENTS.md` §9. This file is a **lo
 out.push('');
 
 const content = out.join('\r\n') + '\r\n';
-const stripDate = (s) => s.replace(/^Generated \d{4}-\d{2}-\d{2} /m, 'Generated <DATE> ');
+const stripDate = (s) => s.replace(/^Generated \d{4}-\d{2}-\d{2} /m, 'Generated <DATE> ').replace(/as of \d{4}-\d{2}-\d{2}/g, 'as of <DATE>');
 
 if (CHECK) {
   if (!fs.existsSync(OUT)) fail('--check: docs/DECISION_INDEX.md does not exist; run `npm run gen:decisions`');

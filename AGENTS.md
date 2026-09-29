@@ -49,7 +49,7 @@ For a current map of what is stale and why: `docs/DOCUMENTATION_AUDIT_2026-09-28
 | Package manager | npm (`package-lock.json` committed) |
 | Frontend / mobile | none |
 | Isolated write tests | Neon branch via `TEST_DATABASE_URL` + `scripts/lib/db-url.js` guard |
-| Lint / format / typecheck / CI | none configured |
+| Lint / format / typecheck / CI | GitHub Actions CI (`.github/workflows/ci.yml`: `test:unit` + `gen-decision-index --check` + `verify-docs --offline`); no lint/format/typecheck |
 
 ## 4. Repository map
 
@@ -102,6 +102,7 @@ deliberately not duplicated here.
 | `npm run test:db` | DB connection + table listing |
 | `npm run seed` | Apply `database/seeds/*.sql` (idempotent) |
 | `npm run gen:decisions` | Regenerate `docs/DECISION_INDEX.md` from the decision log (`node scripts/gen-decision-index.js --check` fails when it is stale) |
+| `npm run verify:docs` | Verify fact-shaped doc claims vs tree (offline) or + read-only DB (`--live`) |
 | `node scripts/run-seeds.js --dry-run` | Report seed statements without executing |
 | `node scripts/run-migrations.js` | Apply migrations — FRESH DB ONLY (not re-runnable) |
 | `node --test scripts/lib/db-url.test.js` | Guard unit tests (not in `test:unit`) |
