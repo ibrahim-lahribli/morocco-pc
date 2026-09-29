@@ -462,7 +462,10 @@ assessment_types present with scores), partial, or none.
 * No assessments: component receives the neutral baseline for every type AND a
   no-evidence penalty, so an unevidenced product can NEVER tie a well-tested
   one. Its effective contribution is strictly below any complete-evidence
-  product with a >= baseline score.
+  product with a >= baseline score. Unevidenced products tie *each other* at
+  `neutral_baseline - no_evidence_penalty` (40.000 on the current seeds) — the
+  Decision 23 score-degeneracy root cause and the UUID-dependent retention
+  reach (see Decision 23; audit D11, 2026-09-28).
 * Confidence reduction (`component_assessment.confidence`: CONFIRMED..UNVERIFIED)
   multiplies the component's contribution weight; UNVERIFIED data may be
   configured to be ignored entirely (config decision, not engine constant).
@@ -655,6 +658,7 @@ write). After persistence, nothing in the recommendation path joins back to
 | Assessment coverage likely sparse at seed time | ACCEPTABLE | Handled by section 9 policy |
 | No engine-version column on results | ACCEPTABLE | scoring_model version covers configuration; binary version recorded in explanation/release notes |
 | Fresh 001->011 migration unverified on scratch DB | ACCEPTABLE (environmental) | Standing test limitation, unrelated to the engine |
+| No applied-migration tracking (`run-migrations.js` replays all files; `002_enums.sql` bare `CREATE TYPE` makes the runner single-use) | ACCEPTABLE (tool defect) | Workaround: apply new migration files individually via a throwaway script (see `AGENTS.md` S8 / `DEVELOPMENT_NOTES.md`); fix = future `schema_migrations`-style tracking table and/or idempotent runner guard — audit D10 (2026-09-28). No such table exists live (verified via `information_schema`, 2026-09-28) |
 | Cooler `max_tdp_watts` vs CPU TDP REJECT (section 5.3) UNENFORCED | **IMPORTANT** (latent) | Decision 26 item B deferral. No code reads `cooler_spec.max_tdp_watts`. 0 live violations as of 2026-09-28; an under-spec cooler can be persisted as "compatible" if a future seed introduces one - re-check the violation query before any cooler/CPU seed. |
 | Air-cooler `height_mm` vs `case_spec.max_cpu_cooler_height_mm` REJECT (section 5.3) UNENFORCED | **IMPORTANT** (latent) | Decision 26 item B deferral. No code reads either column. 0 live violations as of 2026-09-28 (cooler height known for 5 of 9 coolers - the 4 NULLs would be UNKNOWN, never FAIL); re-check before any cooler/case seed. |
 | RAM `module_count` vs `motherboard_spec.dimm_slots` REJECT (section 6) UNENFORCED | **IMPORTANT** (latent) | Decision 26 item B deferral; this half was SILENT drift (no decision, no seed note) until 2026-09-28. 0 live violations; an over-slot kit can be persisted as "compatible" if a future seed introduces one. |
