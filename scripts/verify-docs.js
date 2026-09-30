@@ -210,9 +210,9 @@ const decisions = (function checkDecisions() {
 // coverage) describe the instance and legitimately drift between generations.
 // It is covered by the offline banner check above.
 //
-// The digest function MUST stay in sync with gen-schema-reference.js
-// (schemaDigestQuery + schemaDigest below mirror it). If you change what the
-// generator renders from the schema, change both.
+// The digest query + hash MUST stay in sync with gen-schema-reference.js
+// (buildSchemaReference's digestRows block mirrors this one). If you change
+// what the generator renders from the schema, change both.
 function computeSchemaDigest(rows) {
   const crypto = require('crypto');
   const hash = crypto.createHash('sha256');
