@@ -112,7 +112,7 @@ deliberately not duplicated here.
 | `npm run gen:decisions` | Regenerate `docs/DECISION_INDEX.md` from the decision log (`node scripts/gen-decision-index.js --check` fails when it is stale) |
 | `npm run gen:schema` | Regenerate `docs/SCHEMA_REFERENCE.md` + `docs/DATA_STATE.md` from the live DB (`node scripts/gen-schema-reference.js --check` fails when stale; needs `DATABASE_URL` — even `--check`, which regenerates in memory and diffs; no-arg run rewrites both files) |
 | `npm run verify:docs` | Verify fact-shaped doc claims vs tree (offline) or + read-only DB (`--live`) |
-| `node scripts/verify-docs.js --live` | Adds read-only live-DB INFO checks (15 core tables + counts; never asserted against instance-specific figures) |
+| `node scripts/verify-docs.js --live` | Adds read-only live-DB checks: 15 core tables + counts (INFO), and the schema-digest gate — FAILs when `docs/SCHEMA_REFERENCE.md`'s `schema-digest:` line no longer matches the live tables/columns/enums (fix: `npm run gen:schema`) |
 | `node scripts/run-seeds.js --dry-run` | Report seed statements without executing |
 | `node scripts/run-migrations.js` | Apply migrations — FRESH DB ONLY (not re-runnable) |
 | `node --test scripts/lib/db-url.test.js` | Guard unit tests (not in `test:unit`) |
