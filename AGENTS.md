@@ -152,9 +152,9 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
    Neon branch). Never run a write test against the shared `DATABASE_URL`.
 4. Report results as **PASS / FAIL / BLOCKED**. Never claim a test passed unless it ran, and say so
    explicitly when an environment limitation prevents a run.
-5. Note: a fresh `001→011` migration is NOT VERIFIED. A `TEST_DATABASE_URL` Neon branch exists
-   (since 2026-09-21) — only the run itself is outstanding, not the environment. Do not fake that
-   result against the shared DB.
+5. Note: the fresh `001→011` migration was VERIFIED 2026-09-30 (OG-13: empty-DB replay on a
+   throwaway Neon DB; 39/39 tables, 336/336 columns, 14/14 enums — see `docs/OPEN_GAPS.md` C-15).
+   Do not re-run it against the shared DB; the surfaced live-only drift is tracked as OG-25.
 
 ## 8. Hard rules
 
@@ -234,6 +234,6 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
 - **Decision 22 status - FIXED 2026-09-28 (audit D3).** Its `Status:` line said implementation was
   future work; it now records items 1-5 as IMPLEMENTED with a dated UPDATE block in the decision
   itself. Engine 6 is shipped - do not re-implement it.
-Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every finding (D1–D12) plus items 8/9-part-1 was independently re-verified 2026-09-29 (all green: 829 unit tests, verify:docs offline + live, decision-index `--check`); treat its RESOLVED banners as trustworthy and do not re-open the findings without new evidence. **The audit is CLOSED (2026-09-29/30)**: all recommendations A1–A12 landed; the only residue is OG-13 (fresh 001→011 empty-DB run — needs operator DB access, UNVERIFIED by choice).
+Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every finding (D1–D12) plus items 8/9-part-1 was independently re-verified 2026-09-29 (all green: 829 unit tests, verify:docs offline + live, decision-index `--check`); treat its RESOLVED banners as trustworthy and do not re-open the findings without new evidence. **The audit is CLOSED (2026-09-29/30)**: all recommendations A1–A12 landed and the last residue, OG-13 (fresh 001→011 empty-DB run), was RAN AND VERIFIED 2026-09-30 — see `docs/OPEN_GAPS.md` OG-13 / C-15. The drift that run surfaced is tracked forward as OG-25 (schema-migration).
 - When a session's job is to verify prior work, verify against the working tree and re-run the mechanical gates (not just the banners), then append a dated VERIFIED note to the audit doc itself so the next session does not repeat the pass.
 - Generated-docs freshness: `gen-decision-index --check` is DB-free (runs in CI); `SCHEMA_REFERENCE.md` is gated by a schema digest — `verify-docs --live` hashes the DB's tables/columns/enums and fails when the digest line in the doc no longer matches (run `npm run gen:schema` after any seed or migration). The digest query is duplicated in `gen-schema-reference.js` and `verify-docs.js` — change both together. `DATA_STATE.md` is deliberately NOT digest-gated: its figures describe the instance and drift legitimately.

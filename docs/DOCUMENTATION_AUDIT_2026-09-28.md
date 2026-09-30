@@ -23,7 +23,7 @@ Headline: **12 findings**, of which **3 are serious** — a plan document that c
 
 ### D1 — `LAYER4_RECONCILIATION_PLAN.md` says its own work was never done · **CRITICAL**
 
-> **RESOLVED 2026-09-28.** The status header now reads IMPLEMENTED with a per-item applied/deferred ledger; §5.4, §6.20 and §7 were corrected the same way. The §5.4 caveat itself (fresh `001→011` on an empty DB still unverified) remains open and is tracked as U1/F13 in the status review.
+> **RESOLVED 2026-09-28.** The status header now reads IMPLEMENTED with a per-item applied/deferred ledger; §5.4, §6.20 and §7 were corrected the same way. The §5.4 caveat itself (fresh `001→011` on an empty DB) was tracked as U1/F13 in the status review and was **VERIFIED 2026-09-30** (OG-13 closed; surfaced drift tracked as OG-25).
 
 **The doc says:** `Status: **PROPOSAL — NOT IMPLEMENTED.** No database changes have been made. Migration 011 has NOT been created or applied.` (§5.4 repeats: "**NOT AVAILABLE.** No isolated scratch database (Docker, Neon branch, `TEST_DATABASE_URL`) exists.")
 
@@ -292,7 +292,7 @@ Items 1–4 are documentation edits measured in minutes and remove all three CRI
 
 **AUDIT FULLY CLOSED 2026-09-30 (OG-13 run + verdict).** The last residue — the fresh `001→011` empty-DB run (OG-13, the D1/D9 caveat) — was executed 2026-09-30 on a throwaway Neon database (emptied to 0 tables / 0 enums; all 11 migrations applied in order, zero errors). Structural diff vs live: tables 39/39, columns 336/336, enums 14/14 identical; the only differences are **live-has-more** drift (3 stricter benchmark CHECKs, 1 extra CHECK, 5 undocumented indexes) — the migrations are the incomplete side, so a fresh replay never produces anything the live DB lacks. Drift tracked forward as OG-25. **A1–A12 all DONE; D1–D12 all RESOLVED and verified; audit closed with no open items of its own.**
 
-**AUDIT CLOSED 2026-09-29 (closure batch A5–A9 + A11); A10 CLOSED 2026-09-30.** With these batches, **every §4 recommendation is closed** (A1–A12 all DONE), and every fix-order row is DONE except OG-13 (the fresh 001→011 empty-DB run, which needs operator DB access and remains UNVERIFIED by choice, not omission). All 12 findings D1–D12 remain RESOLVED and were re-verified the same day. The audit's purpose — make drift mechanically visible instead of hand-found — is now structural: CI runs test:unit + decision-index `--check` + verify-docs (7 offline checks incl. `generated-docs`), and schema/data truth is generated, not maintained.
+**AUDIT CLOSED 2026-09-29 (closure batch A5–A9 + A11); A10 CLOSED 2026-09-30.** With these batches, **every §4 recommendation is closed** (A1–A12 all DONE), and every fix-order row is DONE — OG-13 (the fresh 001→011 empty-DB run) was RAN AND VERIFIED 2026-09-30, surfacing live-only drift now tracked as OG-25. All 12 findings D1–D12 remain RESOLVED and were re-verified the same day. The audit's purpose — make drift mechanically visible instead of hand-found — is now structural: CI runs test:unit + decision-index `--check` + verify-docs (7 offline checks incl. `generated-docs`), and schema/data truth is generated, not maintained.
 
 **VERIFIED 2026-09-29 (fresh-eyes review + test pass of every committed closure).** All 12 findings (D1–D12), fix-order item 8 (A2) and item 9 part 1 (A3) were re-checked against the working tree, not just their RESOLVED banners:
 

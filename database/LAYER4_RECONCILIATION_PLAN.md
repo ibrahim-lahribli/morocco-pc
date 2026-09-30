@@ -17,7 +17,7 @@ This file was originally written as a proposal; it is now a historical ledger of
 | §2.10 `idx_recommendation_profile_name` | applied |
 | §2.11 `store_offer_id` FK · §3 `priority` redesign | deliberately deferred (FUTURE / NON-BLOCKING), still deferred |
 
-Remaining caveat: the §5.4 fresh `001 → 011` run on an empty database is still **NOT VERIFIED** (see §5.4).
+Remaining caveat resolved: the §5.4 fresh `001 → 011` empty-database run was **VERIFIED 2026-09-30** (see §5.4 and `docs/OPEN_GAPS.md` OG-13 / C-15); the drift it surfaced is tracked as OG-25.
 
 Prepared: 2026-09-12
 Based on: read-only catalog inspection of the live Neon database plus review of migrations 001–010, `CONTEXT.md`, and `DEVELOPMENT_NOTES.md`.
@@ -348,7 +348,7 @@ Existing Neon: existing (undocumented) Layer 4 objects → 011 → canonical Lay
 
 ### 5.4 Fresh 001→011 verification
 
-**STILL NOT VERIFIED — but for a corrected reason.** A Neon branch reachable via `TEST_DATABASE_URL` has existed since 2026-09-21 and is used by `measure-orchestrator.js` and the two `test-orchestrator-*.js` scripts. What has never been done is running migrations `001 → 011` in order against an empty database and diffing the result against the live schema. The original reason stated here ("no isolated database exists at all") was wrong from 2026-09-21 onward; the verification itself remains outstanding. Per standing project policy, fresh-migration correctness must NOT be claimed until that run happens.
+**VERIFIED 2026-09-30 (OG-13 / audit D1 residue).** The full `run-migrations.js` `001 → 011` replay was executed on a throwaway Neon database (emptied to 0 tables / 0 enums first); all 11 migrations applied in order with zero errors. Structural diff vs live: 39/39 tables, 336/336 columns, 14/14 enums identical — fresh replay is faithful for every engine-relevant structure. The only differences are live-has-more drift (3 stricter benchmark CHECKs, `chk_benchmark_result_metric_value_finite` live-only, 5 undocumented live-only performance indexes), tracked forward as **OG-25** in `docs/OPEN_GAPS.md` (reconcile via migration 012 or record live-only provenance). History: the original reason stated here ("no isolated database exists at all") was wrong from 2026-09-21 onward, when a `TEST_DATABASE_URL` branch first existed; the empty-DB run itself remained outstanding until 2026-09-30. Full evidence: `docs/OPEN_GAPS.md` OG-13 + C-15.
 
 ---
 

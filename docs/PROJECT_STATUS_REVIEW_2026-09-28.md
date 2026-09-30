@@ -207,7 +207,7 @@ Precompute a catalog-level matrix (per product pair: verdict + effective score) 
 | F10 | Deterministic tie-break in retention | not built | W2 |
 | F11 | HTTP/API surface, auth, scheduling, observability | not built | by design — no service yet |
 | F12 | CI + lint + typecheck | not built | W11 |
-| F13 | Fresh 001→011 migration proven on an empty database | **NOT VERIFIED** | see U1 |
+| F13 | Fresh 001→011 migration proven on an empty database | **VERIFIED 2026-09-30** | ran on a throwaway Neon DB — see U1 / OG-13 in `docs/OPEN_GAPS.md` |
 | F14 | Doc-drift guard | not built | W5 |
 
 ---
@@ -241,7 +241,7 @@ Honest separation: things **not checked**, as opposed to things found wrong.
 
 | ID | Unverified area | Why it matters | How to settle it |
 |---|---|---|---|
-| U1 | Fresh `001 → 011` migration on an empty database | The live schema may have drifted from the migrations; the project has never proven a from-scratch build | Run the migrations against a throwaway Neon branch and diff against the live schema |
+| U1 | Fresh `001 → 011` migration on an empty database | ~~The live schema may have drifted from the migrations; the project has never proven a from-scratch build~~ settled 2026-09-30: replay is faithful (39/39 tables, 336/336 columns, 14/14 enums); only live-has-more benchmark drift remains | **DONE 2026-09-30** — run on a throwaway Neon DB and diffed vs live; drift tracked as OG-25 in `docs/OPEN_GAPS.md` |
 | U2 | Whether `TEST_DATABASE_URL`'s branch is still parent-identical to the shared database | Write tests and acceptance measurements are only meaningful if the branch matches the catalog they claim to describe | Compare row counts and a content digest between the branch and its parent |
 | U3 | Behaviour at real catalog scale (only ever 100 products; 35,982 builds at raised cap) | Nothing is known about runtime, memory or ranking quality at thousands of products | Synthesize a large catalog on a branch and measure |
 | U4 | Concurrency of the commit guards | Race-freedom is reasoned from `FOR UPDATE` + READ COMMITTED, never demonstrated with two live connections | Two concurrent `runRecommendationCommit` calls for one query on a branch |

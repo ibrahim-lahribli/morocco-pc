@@ -138,7 +138,7 @@ Failure: `run-migrations.js` full re-run on the already-migrated DB aborts at `0
 
 Working solution: none yet. Layer 3 and Layer 4 reconciliations (010/011) were applied in place after confirming the target tables had 0 rows.
 
-Rule: report fresh-migration as NOT VERIFIED / BLOCKED until run on an empty database (a Neon branch copy does not qualify — see the 2026-09-21 entry). Do not fake a fresh-migration result against the shared Neon DB or the branch. (Corrected 2026-09-28, audit D9: the pre-2026-09-21 reason "no isolated database exists at all" was wrong from 2026-09-21 onward; only the run itself is outstanding.)
+Rule: report fresh-migration as NOT VERIFIED / BLOCKED until run on an empty database (a Neon branch copy does not qualify — see the 2026-09-21 entry). Do not fake a fresh-migration result against the shared Neon DB or the branch. (Corrected 2026-09-28, audit D9: the pre-2026-09-21 reason "no isolated database exists at all" was wrong from 2026-09-21 onward; only the run itself is outstanding.) **Satisfied 2026-09-30 (OG-13):** the run happened on a throwaway Neon DB emptied to 0/0 — see the OG-13 CLOSED entry below and `docs/OPEN_GAPS.md` C-15.
 
 ### Isolated test DB via Neon branch (2026-09-21)
 
@@ -146,7 +146,7 @@ Purpose: the shared Neon DB is not disposable, and Engine 5 will be the first co
 
 Working solution: `TEST_DATABASE_URL` (key only in `.env.example`, never a value) + `scripts/lib/db-url.js` guard (`resolveTestDbUrl(env)` pure + `getWriteTestDbUrl()` dotenv wrapper; `connectionTimeoutMillis: 15000` convention kept). The guard THROWS when `TEST_DATABASE_URL` is unset, empty, or unparseable, when `DATABASE_URL` is unset, or when the normalized hosts match (lowercased host, `-pooler` suffix stripped from the first label, so pooled-vs-direct same endpoint is rejected); error messages are fixed strings that never include any URL, credential, or host value. Existing scripts keep reading `DATABASE_URL` unchanged. Guard tests: `node --test scripts/lib/db-url.test.js` (not part of `npm run test:unit`).
 
-Rule: all Engine 5 write tests must use the guard helper. A Neon branch copies current state (snapshots the parent at creation), so it is NOT a fresh-migration test — if seeds or migrations change on the parent later, test-scratch drifts and must be reset from the parent before write tests. Fresh 001→011 migration stays reported as NOT VERIFIED unless run on an empty database.
+Rule: all Engine 5 write tests must use the guard helper. A Neon branch copies current state (snapshots the parent at creation), so it is NOT a fresh-migration test — if seeds or migrations change on the parent later, test-scratch drifts and must be reset from the parent before write tests. Fresh 001→011 migration stays reported as NOT VERIFIED unless run on an empty database. (Satisfied 2026-09-30, OG-13 — see C-15 in `docs/OPEN_GAPS.md`.)
 
 ### Neon connection intermittency
 
