@@ -26,6 +26,8 @@ points are the engine's public barrels (`src/recommendation/*/index.js`) and the
 5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–26). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
+   To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
+   checklist covers the gates that will fail if steps are skipped.
    For one table with number / title / status / date / line anchor, use the generated
    `docs/DECISION_INDEX.md` (regenerate: `npm run gen:decisions`; staleness gate:
    `node scripts/gen-decision-index.js --check`). Numbering note: there are no `## Decision 4` /
@@ -232,6 +234,6 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
 - **Decision 22 status - FIXED 2026-09-28 (audit D3).** Its `Status:` line said implementation was
   future work; it now records items 1-5 as IMPLEMENTED with a dated UPDATE block in the decision
   itself. Engine 6 is shipped - do not re-implement it.
-Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every finding (D1–D12) plus items 8/9-part-1 was independently re-verified 2026-09-29 (all green: 829 unit tests, verify:docs offline + live, decision-index `--check`); treat its RESOLVED banners as trustworthy and do not re-open the findings without new evidence. **The audit is CLOSED 2026-09-29**: every recommendation landed except A10 (decision-entry template) and OG-13 (fresh 001→011 empty-DB run — needs operator DB access, UNVERIFIED by choice).
+Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every finding (D1–D12) plus items 8/9-part-1 was independently re-verified 2026-09-29 (all green: 829 unit tests, verify:docs offline + live, decision-index `--check`); treat its RESOLVED banners as trustworthy and do not re-open the findings without new evidence. **The audit is CLOSED (2026-09-29/30)**: all recommendations A1–A12 landed; the only residue is OG-13 (fresh 001→011 empty-DB run — needs operator DB access, UNVERIFIED by choice).
 - When a session's job is to verify prior work, verify against the working tree and re-run the mechanical gates (not just the banners), then append a dated VERIFIED note to the audit doc itself so the next session does not repeat the pass.
 - Generated-docs freshness: `gen-decision-index --check` is DB-free (runs in CI); `SCHEMA_REFERENCE.md` is gated by a schema digest — `verify-docs --live` hashes the DB's tables/columns/enums and fails when the digest line in the doc no longer matches (run `npm run gen:schema` after any seed or migration). The digest query is duplicated in `gen-schema-reference.js` and `verify-docs.js` — change both together. `DATA_STATE.md` is deliberately NOT digest-gated: its figures describe the instance and drift legitimately.
