@@ -113,4 +113,4 @@ No BLOCKING gaps other than OG-01 were found (ARCH §16: the engine can be fully
 
 - Hand-maintained (no generator — audit A3 does not require one). When a source gap closes or opens, update this file **in the same session** (same rule as `CONTEXT.md` status updates, `AGENTS.md` §8).
 - Never duplicate live figures (row counts, test totals) here — they go stale; cite `CONTEXT.md` / status review instead.
-- `scripts/verify-docs.js` (audit A2) does **not** check this file yet; adding a freshness assertion for it is a natural follow-up for the tooling owner.
+- `scripts/verify-docs.js` (audit A2) does **not** check this file yet; adding a freshness assertion for it is a natural follow-up for the tooling owner. (Since 2026-09-29 it DOES gate `docs/SCHEMA_REFERENCE.md`: `--live` mode hashes the DB's tables/columns/enums into a schema digest and fails when the doc's `schema-digest:` line no longer matches — run `npm run gen:schema` to refresh. `DATA_STATE.md` stays count-based and deliberately undigested.)

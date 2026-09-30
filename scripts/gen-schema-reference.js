@@ -33,6 +33,8 @@ if (ARGS.some((a) => a !== '--check')) {
 const SCHEMA_REF = path.join(ROOT, 'docs', 'SCHEMA_REFERENCE.md');
 const DATA_STATE = path.join(ROOT, 'docs', 'DATA_STATE.md');
 
+const DIGEST_MARKER = 'schema-digest:';
+
 const GENERATED_BANNER =
   '<!-- GENERATED FILE — do not edit by hand. Regenerate with `npm run gen:schema` ' +
   '(node scripts/gen-schema-reference.js). `--check` exits non-zero when this file is stale. -->';
@@ -94,6 +96,15 @@ function esc(s) {
 
 // ---------------------------------------------------------------- schema ref
 
+// MUST stay in sync with the digest query in scripts/verify-docs.js
+// (checkLive, 'schema-digest' check): same rows, same hash, same truncation.
+function computeSchemaDigest(rows) {
+  const crypto = require('crypto');
+  const hash = crypto.createHash('sha256');
+  for (const r of rows) hash.update(r.kind + '|' + r.a + '|' + r.b + '\n');
+  return hash.digest('hex').slice(0, 16);
+}
+
 async function buildSchemaReference(client) {
   const out = [];
   out.push('# Schema Reference (generated)');
@@ -105,6 +116,22 @@ async function buildSchemaReference(client) {
   out.push('`database/migrations/*.sql` remains the authoritative source; this file is a');
   out.push('generated lookup so "does this column exist?" never requires reading 11 SQL files');
   out.push('(the question that produced audit finding D2).');
+  out.push('');
+
+  // Digest of the schema structure this file renders. verify-docs --live
+  // recomputes it from the live DB and fails when it no longer matches, which
+  // gates this file in CI the same way gen-decision-index --check gates the
+  // decision index. Must mirror the query in verify-docs.js exactly.
+  const digestRows = await client.query(
+    "SELECT 'col' AS kind, table_name AS a, column_name || ':' || data_type || ':' || is_nullable AS b" +
+    " FROM information_schema.columns WHERE table_schema = 'public'" +
+    ' UNION ALL ' +
+    "SELECT 'enum' AS kind, t.typname AS a, e.enumlabel AS b" +
+    ' FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid' +
+    " JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public'" +
+    ' ORDER BY kind, a, b'
+  );
+  out.push('<!-- ' + DIGEST_MARKER + ' ' + computeSchemaDigest(digestRows.rows) + ' -->');
   out.push('');
 
   // Tables (base tables only; skip views) in dependency-free name order.

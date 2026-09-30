@@ -8,6 +8,8 @@ live database (`information_schema` / `pg_catalog`). Per `AGENTS.md` section 9,
 generated lookup so "does this column exist?" never requires reading 11 SQL files
 (the question that produced audit finding D2).
 
+<!-- schema-digest: de031a6559fa56c9 -->
+
 ## Enum vocabularies (14)
 
 | Enum | Values |

@@ -198,6 +198,30 @@ const decisions = (function checkDecisions() {
 })();
 
 // 8. Live read-only structural checks (--live only).
+//
+// Includes the schema-digest freshness gate for the generated docs: the DB's
+// structure (tables, columns, enums) is hashed and compared against a digest
+// line embedded in docs/SCHEMA_REFERENCE.md. This is the CI-equivalent of
+// `gen-schema-reference.js --check` for offline machines — the decision index
+// gets this for free (its --check is DB-free); the schema reference cannot,
+// so the digest is computed here read-only instead.
+//
+// DATA_STATE.md is deliberately NOT digest-gated: its figures (row counts,
+// coverage) describe the instance and legitimately drift between generations.
+// It is covered by the offline banner check above.
+//
+// The digest function MUST stay in sync with gen-schema-reference.js
+// (schemaDigestQuery + schemaDigest below mirror it). If you change what the
+// generator renders from the schema, change both.
+function computeSchemaDigest(rows) {
+  const crypto = require('crypto');
+  const hash = crypto.createHash('sha256');
+  for (const r of rows) hash.update(r.kind + '|' + r.a + '|' + r.b + '\n');
+  return hash.digest('hex').slice(0, 16);
+}
+
+const DIGEST_MARKER = 'schema-digest:';
+
 async function checkLive() {
   require('dotenv').config();
   const connectionString = process.env.DATABASE_URL;
@@ -243,6 +267,40 @@ async function checkLive() {
     info('live-counts', 'products=' + c.products + ' variants=' + c.variants +
       ' offers=' + c.offers + ' assessments=' + c.assessments +
       ' build_candidates=' + c.candidates + ' (instance-specific, not asserted)');
+
+    // Schema-digest freshness gate for docs/SCHEMA_REFERENCE.md.
+    const digestRows = await client.query(
+      // Tables + columns.
+      "SELECT 'col' AS kind, table_name AS a, column_name || ':' || data_type || ':' || is_nullable AS b" +
+      " FROM information_schema.columns WHERE table_schema = 'public'" +
+      ' UNION ALL ' +
+      // Enum vocabularies (typname + full ordered label list).
+      "SELECT 'enum' AS kind, t.typname AS a, e.enumlabel AS b" +
+      ' FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid' +
+      " JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public'" +
+      ' ORDER BY kind, a, b'
+    );
+    const liveDigest = computeSchemaDigest(digestRows.rows);
+    let schemaRefText = null;
+    try {
+      schemaRefText = readRepo('docs/SCHEMA_REFERENCE.md');
+    } catch (_err) {
+      fail('schema-digest', 'docs/SCHEMA_REFERENCE.md missing (run `npm run gen:schema`)');
+    }
+    if (schemaRefText !== null) {
+      const markerAt = schemaRefText.indexOf(DIGEST_MARKER);
+      if (markerAt === -1) {
+        fail('schema-digest', 'docs/SCHEMA_REFERENCE.md has no "' + DIGEST_MARKER + '" line; regenerate with `npm run gen:schema`');
+      } else {
+        const afterMarker = schemaRefText.slice(markerAt + DIGEST_MARKER.length, markerAt + DIGEST_MARKER.length + 40).trim();
+        const docDigest = (afterMarker.match(/^[0-9a-f]+/) || [''])[0];
+        if (docDigest !== liveDigest) {
+          fail('schema-digest', 'docs/SCHEMA_REFERENCE.md is STALE: DB digest ' + liveDigest + ' != doc digest ' + docDigest + ' (run `npm run gen:schema`)');
+        } else {
+          pass('schema-digest', 'docs/SCHEMA_REFERENCE.md matches the live schema (' + liveDigest + ')');
+        }
+      }
+    }
   } catch (err) {
     fail('live-queries', err.message);
   } finally {
