@@ -212,8 +212,7 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
   startup cleanup; its fixtures accumulate). Use the read-only `verify-schema.js` /
   `verify-constraints.js` / `verify-fks.js` instead. Details: `DEVELOPMENT_NOTES.md`, 2026-09-19 entry.
 - **`database/LAYER4_RECONCILIATION_PLAN.md` — status header FIXED 2026-09-28 (audit D1).** It now says IMPLEMENTED
-  with a per-item applied/deferred ledger. Its §5.4 caveat is still true: a fresh `001→011` migration on an empty
-  database remains NOT VERIFIED.
+  with a per-item applied/deferred ledger; §5.4 VERIFIED 2026-09-30 (OG-13).
 - **`ARCHITECTURE.md` is dated 2026-09-12 and cites no decision after 9.** Decision 18 item 7
   records that its stage table and stage-9 ranking wording are superseded with the doc refresh
   "deferred", so its §2/§13 rank ordering and its "templates versioned with the scoring model"
@@ -236,4 +235,6 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
   itself. Engine 6 is shipped - do not re-implement it.
 Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every finding (D1–D12) plus items 8/9-part-1 was independently re-verified 2026-09-29 (all green: 829 unit tests, verify:docs offline + live, decision-index `--check`); treat its RESOLVED banners as trustworthy and do not re-open the findings without new evidence. **The audit is CLOSED (2026-09-29/30)**: all recommendations A1–A12 landed and the last residue, OG-13 (fresh 001→011 empty-DB run), was RAN AND VERIFIED 2026-09-30 — see `docs/OPEN_GAPS.md` OG-13 / C-15. The drift that run surfaced is tracked forward as OG-25 (schema-migration).
 - When a session's job is to verify prior work, verify against the working tree and re-run the mechanical gates (not just the banners), then append a dated VERIFIED note to the audit doc itself so the next session does not repeat the pass.
+- Gap-closure propagation: when a gap closes in `docs/OPEN_GAPS.md`, grep the tree for its ID + key phrases in the SAME commit — closures have landed twice now without the same-session propagation the register §6 rule requires (OG-13 needed a follow-up 6-file sync, commit 7d336cd). Shape: `grep -rn "<OG-id>|<key phrase>" --include="*.md" .`
+- Dated RESOLVED/CLOSED banners in audit/status docs are historical records — update only current status sections (`CONTEXT.md`, AGENTS §10, register rows); never retro-edit an old banner, mark supersession in the newer one instead.
 - Generated-docs freshness: `gen-decision-index --check` is DB-free (runs in CI); `SCHEMA_REFERENCE.md` is gated by a schema digest — `verify-docs --live` hashes the DB's tables/columns/enums and fails when the digest line in the doc no longer matches (run `npm run gen:schema` after any seed or migration). The digest query is duplicated in `gen-schema-reference.js` and `verify-docs.js` — change both together. `DATA_STATE.md` is deliberately NOT digest-gated: its figures describe the instance and drift legitimately.
