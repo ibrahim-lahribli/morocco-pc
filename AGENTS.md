@@ -110,7 +110,7 @@ deliberately not duplicated here.
 | `npm run test:db` | DB connection + table listing |
 | `npm run seed` | Apply `database/seeds/*.sql` (idempotent) |
 | `npm run gen:decisions` | Regenerate `docs/DECISION_INDEX.md` from the decision log (`node scripts/gen-decision-index.js --check` fails when it is stale) |
-| `npm run gen:schema` | Regenerate `docs/SCHEMA_REFERENCE.md` + `docs/DATA_STATE.md` from the live DB (`node scripts/gen-schema-reference.js --check` fails when stale; needs `DATABASE_URL`) |
+| `npm run gen:schema` | Regenerate `docs/SCHEMA_REFERENCE.md` + `docs/DATA_STATE.md` from the live DB (`node scripts/gen-schema-reference.js --check` fails when stale; needs `DATABASE_URL` — even `--check`, which regenerates in memory and diffs; no-arg run rewrites both files) |
 | `npm run verify:docs` | Verify fact-shaped doc claims vs tree (offline) or + read-only DB (`--live`) |
 | `node scripts/verify-docs.js --live` | Adds read-only live-DB INFO checks (15 core tables + counts; never asserted against instance-specific figures) |
 | `node scripts/run-seeds.js --dry-run` | Report seed statements without executing |
@@ -232,5 +232,6 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
 - **Decision 22 status - FIXED 2026-09-28 (audit D3).** Its `Status:` line said implementation was
   future work; it now records items 1-5 as IMPLEMENTED with a dated UPDATE block in the decision
   itself. Engine 6 is shipped - do not re-implement it.
-Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every finding (D1–D12) plus items 8/9-part-1 was independently re-verified 2026-09-29 (all green: 829 unit tests, verify:docs offline + live, decision-index `--check`); treat its RESOLVED banners as trustworthy and do not re-open the findings without new evidence.
+Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every finding (D1–D12) plus items 8/9-part-1 was independently re-verified 2026-09-29 (all green: 829 unit tests, verify:docs offline + live, decision-index `--check`); treat its RESOLVED banners as trustworthy and do not re-open the findings without new evidence. **The audit is CLOSED 2026-09-29**: every recommendation landed except A10 (decision-entry template) and OG-13 (fresh 001→011 empty-DB run — needs operator DB access, UNVERIFIED by choice).
 - When a session's job is to verify prior work, verify against the working tree and re-run the mechanical gates (not just the banners), then append a dated VERIFIED note to the audit doc itself so the next session does not repeat the pass.
+- Generated-docs freshness is split across two gates: `gen-decision-index --check` is DB-free (runs in CI); `gen-schema-reference.js --check` needs `DATABASE_URL` (it regenerates in memory and diffs), so verify-docs only asserts the files exist and carry the GENERATED banner — schema truth can drift from the DB between manual `npm run gen:schema` runs. Regenerate after any seed or migration.
