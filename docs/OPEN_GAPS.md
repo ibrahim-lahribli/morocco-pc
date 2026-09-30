@@ -94,7 +94,7 @@ No BLOCKING gaps other than OG-01 were found (ARCH §16: the engine can be fully
 | A7 | `docs/TEST_MAP.md` | CLOSED 2026-09-29 |
 | A8 | `docs/RECIPES/*.md` | CLOSED 2026-09-29 (6 checklists) |
 | A9 | `docs/DATA_STATE.md` (generated) | CLOSED 2026-09-29 (same generator, `--check` gate) |
-| A10 | `docs/decisions/TEMPLATE.md` | OPEN |
+| A10 | `docs/decisions/TEMPLATE.md` | CLOSED 2026-09-30 (hard requirements: Status: as first line + machine-parse rules; placement/amendment notes; status vocabulary) |
 | A11 | `CLAUDE.md` / `.cursorrules` → `AGENTS.md` pointers | CLOSED 2026-09-29 (one-line pointers) |
 | A12 | AGENTS additions (CRLF convention; instance-specific figures; naive `split(';')`) | CLOSED 2026-09-28 (AGENTS §6/§8) |
 
