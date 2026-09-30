@@ -1,6 +1,6 @@
 # OPEN_GAPS — consolidated open-gap register
 
-**Date:** 2026-09-29 · **Audit ref:** A3 / fix-order item 9 · **Owner:** docs
+**Date:** 2026-09-29 (last revised 2026-09-30) · **Audit ref:** A3 / fix-order item 9 · **Owner:** docs
 
 **Purpose:** one place that answers "what is still open?" — today that question
 requires reading four documents that disagree with each other.
@@ -27,7 +27,7 @@ Abbreviations in Source: `ARCH §n` = architecture doc section; `002 Dn` = seed 
 
 | ID | Gap | Class | Status | Owner | Source(s) |
 |---|---|---|---|---|---|
-| OG-01 | Real `component_assessment` research for the 85 seed-002 products was never supplied. 85/100 products score the flat no-evidence 40.000 and are mostly unreachable (`top_k_per_role = 5`; only 2 GPUs / 3 PSUs from the expansion reach a build; which ones survive is UUID-random). Must be OBTAINED, never invented; a later seed must cover every `role_weights[role]` type with fresh `assessed_at` and non-NULL confidence. | **BLOCKING** | OPEN | data-research | 002 D2 (amended 2026-09-28); CONTEXT.md; status review K1 / Option A; **research plan: `docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md` (2026-09-30)** |
+| OG-01 | Real `component_assessment` research for the 85 seed-002 products was never supplied. 85/100 products score the flat no-evidence 40.000 and are mostly unreachable (`top_k_per_role = 5`; only 2 GPUs / 3 PSUs from the expansion reach a build; which ones survive is UUID-random). Must be OBTAINED, never invented; a later seed must cover every `role_weights[role]` type with fresh `assessed_at` and non-NULL confidence. **PROGRESS 2026-09-30:** the research plan exists and batch 1 (20 GPU + 9 PSU × 3 types = 87 rows) is AUTHORED as `database/seeds/004a_component_assessments_gpu_psu.sql`, but it is **NOT applied** to the shared DB and NOT measured on the branch, so the live behaviour above is unchanged. Remaining: batch 2 = 56 products / 168 rows (CPU 16, MB 5, RAM 5, SSD 15, CASE 8, COOLER 7) as `004b`, then branch-measure → apply → re-measure. | **BLOCKING** | OPEN | data-research | 002 D2 (amended 2026-09-28, + partial-fix note 2026-09-30); CONTEXT.md; status review K1 / Option A; **plan: `docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md`**; batch 1 seed `database/seeds/004a_component_assessments_gpu_psu.sql`; gate: `scripts/check-og01-coverage.js` (reports 85 products / 255 rows, exit 1, as of 2026-09-30) |
 | OG-02 | Single `motherboard_spec.memory_type_id` cannot represent boards supporting DDR4 AND DDR5 → possible false rejections | **IMPORTANT** | OPEN | schema-migration | ARCH §6/§16/§18 |
 | OG-03 | Presence-only tables (`case_motherboard_form_factor`, `case_radiator_support`, `platform_memory_support`) cannot store FAIL/UNKNOWN/CONDITIONAL explicitly; asymmetric UNKNOWN policy mitigates | **IMPORTANT** | OPEN | schema-migration | ARCH §3.2/§16/§18 |
 | OG-04 | No rejection-reason persistence — rejected combos are invisible; limits "why was nothing recommended?" debugging | **IMPORTANT** | OPEN | schema-migration | ARCH §16/§18 |
@@ -55,6 +55,8 @@ Abbreviations in Source: `ARCH §n` = architecture doc section; `002 Dn` = seed 
 | OG-25 | Live-vs-migrations drift found by the OG-13 empty-DB replay: 3 benchmark CHECKs stricter live (NULL escape removed), `chk_benchmark_result_metric_value_finite` live-only, 5 undocumented live-only indexes. Decision needed: migration 012 to reconcile, or document live-only provenance. Engine-irrelevant today (engine reads none of these structures) | **IMPORTANT** (latent) | OPEN | schema-migration | OG-13 diff 2026-09-30; ARCH §16 |
 
 No BLOCKING gaps other than OG-01 were found (ARCH §16: the engine can be fully implemented on the current schema with the documented policies).
+
+Closed-row policy: a closed row stays in this table for one release cycle with its dated resolution inline and a `→ C-xx` pointer into the closed tables (§2/§3), so a reader scanning §1 sees that it *was* open; the closed tables remain the canonical record. Today that applies to OG-13 (→ C-15) and OG-24 (→ C-14). A row that closes leaves §1 once its ID is cited only from the closed tables.
 
 ---
 
@@ -106,7 +108,7 @@ No BLOCKING gaps other than OG-01 were found (ARCH §16: the engine can be fully
 
 1. **GPU connectors** — open per `002 D6` / older `CONTEXT.md` prose, closed per seed 003 / Decision 23 O1 → **CLOSED (C-10)**; the genuinely open residue is dimensions (OG-07) and the 3 NULL PSUs (OG-08).
 2. **Four HARD safety rules** — audit D2 found "no code implements" them; Decision 26 (2026-09-28) recorded them as **explicit DEFERRED unenforced** with binding seed-time re-check triggers (OG-09…OG-12), while implementing the §5.2 high-TGP escalation. They are deferred, not missing.
-3. **Fresh `001→011` migration** — older docs blamed "no isolated database" (false since 2026-09-21); the honest status is **UNVERIFIED for the empty-DB run only** (OG-13 / U1/F13).
+3. **Fresh `001→011` migration** — older docs blamed "no isolated database" (false since 2026-09-21); it was **RAN AND VERIFIED 2026-09-30** on a throwaway Neon DB (OG-13 / C-15; status review U1 marked DONE by `7d336cd`). The live-has-more benchmark drift it surfaced is tracked as **OG-25**. (This item said "UNVERIFIED for the empty-DB run only" until 2026-09-30 — it was missed when OG-13 closed, the exact self-contradiction the register exists to prevent; §1's own rows are authoritative.)
 4. **Engine 6** — prose said "planned" while code shipped it; CLOSED via Decision 22 update (C-13). Not a gap.
 
 ---
@@ -115,4 +117,6 @@ No BLOCKING gaps other than OG-01 were found (ARCH §16: the engine can be fully
 
 - Hand-maintained (no generator — audit A3 does not require one). When a source gap closes or opens, update this file **in the same session** (same rule as `CONTEXT.md` status updates, `AGENTS.md` §8).
 - Never duplicate live figures (row counts, test totals) here — they go stale; cite `CONTEXT.md` / status review instead.
-- `scripts/verify-docs.js` (audit A2) does **not** check this file yet; adding a freshness assertion for it is a natural follow-up for the tooling owner. (Since 2026-09-29 it DOES gate `docs/SCHEMA_REFERENCE.md`: `--live` mode hashes the DB's tables/columns/enums into a schema digest and fails when the doc's `schema-digest:` line no longer matches — run `npm run gen:schema` to refresh. `DATA_STATE.md` stays count-based and deliberately undigested.)
+- `scripts/verify-docs.js` (audit A2) does **not** check this file yet; adding a freshness assertion for it is a natural follow-up for the tooling owner. Until then keep this file in sync by hand **in the same session** — it has already drifted twice: OG-13's §5 line stayed "UNVERIFIED" for two commits after the closure (`afc1a03` → fixed 2026-09-30) and seed 004a landed without a register/plan/CONTEXT note (`a9d1514` → fixed 2026-09-30). Two mechanical aids now exist: `scripts/check-og01-coverage.js` for OG-01's live state, and the AGENTS §10 grep (`grep -rn "<OG-id>|<key phrase>" --include="*.md" .`) for closure propagation.
+- Partial progress on a gap is recorded as a dated `**PROGRESS ...**` sentence inside the row; the class/status columns change only when the *live* state changes (OG-01 therefore stays `BLOCKING / OPEN` while seed 004a is unapplied).
+- Since 2026-09-29 `verify-docs --live` DOES gate `docs/SCHEMA_REFERENCE.md`: `--live` mode hashes the DB's tables/columns/enums into a schema digest and fails when the doc's `schema-digest:` line no longer matches — run `npm run gen:schema` to refresh. `DATA_STATE.md` stays count-based and deliberately undigested.

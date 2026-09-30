@@ -1,7 +1,7 @@
 # OG-01 Research Plan — real `component_assessment` data for the 85 unassessed products
 
-**Date:** 2026-09-30 · **Owner:** data-research · **Status:** OPEN (this plan unexecuted)
-**Closes:** `docs/OPEN_GAPS.md` OG-01 (the only BLOCKING gap) · **Contract:** `database/seeds/002_catalog_expansion.sql` header D2 (amended 2026-09-28)
+**Date:** 2026-09-30 · **Owner:** data-research · **Status:** IN PROGRESS — batch 1 authored (seed 004a, 87 rows) but UNAPPLIED/UNMEASURED; batch 2 (56 products / 168 rows) outstanding
+**Closes:** `docs/OPEN_GAPS.md` OG-01 (the only BLOCKING gap) · **Contract:** `database/seeds/002_catalog_expansion.sql` header D2 (amended 2026-09-28) · **Gate:** `scripts/check-og01-coverage.js` (read-only; exit 1 while fully-unassessed products remain)
 
 ---
 
@@ -21,7 +21,7 @@
 
 ## 2. Exact deliverable (what "done" means)
 
-One idempotent seed — `database/seeds/004_component_assessments.sql` — inserting real assessments
+One idempotent seed — named `database/seeds/004_component_assessments.sql` in this draft and SHIPPED SPLIT as `database/seeds/004a_component_assessments_gpu_psu.sql` (batch 1: 20 GPU + 9 PSU = 87 rows, authored 2026-09-30) plus `004b_...` (batch 2: the remaining 56 products / 168 rows) — inserting real assessments
 for all 85 products. Counts are fixed by the scoring model's `role_weights` and are not negotiable:
 
 Counts use the engine's canonical `component_role` values (`component_role` enum, migration 011);
@@ -123,13 +123,15 @@ Intenso, Netac, Hiksemi): community teardown/review evidence or honest NULLs. Th
    assessment rows (expect none). This is the research checklist; no row may be skipped silently.
 2. **Batch 1 research** (GPU + PSU) → review pass → Batch 2 → Batch 3. Review = a second person (or a
    fresh session) re-derives 10% of scores from the cited URLs and diffs.
-3. **Author `database/seeds/004_component_assessments.sql`** per [docs/RECIPES/add-a-seed.md](RECIPES/add-a-seed.md):
+3. **Author the seed file(s)** — `004a_component_assessments_gpu_psu.sql` (batch 1, DONE 2026-09-30) and `004b_...sql` (batch 2); the single-file name `004_component_assessments.sql` used earlier in this plan is superseded by that split — per [docs/RECIPES/add-a-seed.md](RECIPES/add-a-seed.md):
    CRLF, idempotent (`INSERT ... SELECT ... WHERE NOT EXISTS` on `(product_id, assessment_type)` with
    `ON CONFLICT`-style guard; re-run is a no-op), all source URLs in the header, single row per pair,
    `assessed_at = NOW()` at apply time (freshness rule §2.2).
 4. **Apply on the `TEST_DATABASE_URL` branch first**, measure, then shared DB.
 
 ## 6. Acceptance criteria (all machine-checkable)
+
+**Status 2026-09-30 — nothing below is met for the combined 85.** Batch 1 (87 of the 255 rows) is authored as `004a` but unapplied and unmeasured; batch 2 (168 rows) is unwritten. The checklist describes the completed deliverable, and `scripts/check-og01-coverage.js` is its live gate.
 
 There is **no product→category FK**: `product_category` is an enum used only in
 `product_candidate.source_category`, and the loader derives category from spec-table presence
@@ -163,8 +165,7 @@ WHERE c.name LIKE 'Seed %' AND a.id IS NULL
 ;
 ```
 
-Best executed as a small read-only script committed next to the seed (e.g.
-`scripts/check-og01-coverage.js`) so the acceptance gate is re-runnable, not a one-off paste.
+The acceptance gate is a small read-only script committed next to the seed — `scripts/check-og01-coverage.js` — so it is re-runnable, not a one-off paste. **DONE 2026-09-30:** `scripts/check-og01-coverage.js` is committed (read-only, reads `DATABASE_URL`, no guard needed). It derives each product's category from spec-table presence and the required types from the active scoring model's `role_weights`, FAILs (exit 1) while any active product has zero assessment rows, reports seed 001's deliberate no-evidence fixture separately, and has `--strict` for partially-covered products (only meaningful after batch 2). Live result: **85 products / 255 implied rows**. [The SQL sketch below is retained as the derivation reference — the script is the gate.]
 
 - [ ] 255 new rows; coverage script returns 0; every `confidence` non-NULL; every `assessed_at`
       within 7 days.
