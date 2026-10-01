@@ -28,6 +28,19 @@
 --     0.5%/day; research is only valid applied fresh).
 --   * ASCII only. CRLF.
 --
+-- APPLIED + MEASURED 2026-10-01 (OG-01 batch-1 acceptance, read-only pipeline
+-- replication on the shared DB; TEST_DATABASE_URL branch unreachable that day):
+--   * component_assessment 25 -> 112 rows (exactly these 87 inserted).
+--   * Reach is now score-driven, not UUID-random: ALL 5 retained GPU slots are
+--     004a-scored new GPUs (ASUS 5070 Ti PRIME, MSI 5080 VENTUS 3X, MSI 5080
+--     SHADOW 3X, MSI 5070 GAMING TRIO, PNY 5080); retained PSUs = RM850e /
+--     RM1000e / A750GL PCIE5 / A750GL / RM750e. Previously 2/20 GPUs and 3/9
+--     PSUs reached a build, chosen by smallest UUID.
+--   * 57 of 101 pool candidates still score the flat 40.000 = exactly the
+--     batch-2 roles (CASE/COOLER/CPU/MB/RAM/SSD; seed 004b, unwritten).
+--   * Coverage gate after apply: scripts/check-og01-coverage.js -> 56 products
+--     / 168 implied rows (was 85/255 pre-apply).
+--
 -- RUBRIC ANCHORS (set before scoring; see plan section 4):
 --
 -- PERFORMANCE (GPU), normalized on TechPowerUp's GPU-database relative

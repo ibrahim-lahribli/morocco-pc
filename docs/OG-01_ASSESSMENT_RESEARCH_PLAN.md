@@ -1,6 +1,6 @@
 # OG-01 Research Plan — real `component_assessment` data for the 85 unassessed products
 
-**Date:** 2026-09-30 · **Owner:** data-research · **Status:** IN PROGRESS — batch 1 authored (seed 004a, 87 rows) but UNAPPLIED/UNMEASURED; batch 2 (56 products / 168 rows) outstanding
+**Date:** 2026-09-30 · **Owner:** data-research · **Status:** IN PROGRESS — batch 1 (seed 004a, 87 rows) AUTHORED 2026-09-30 and **APPLIED to shared DB 2026-10-01 + MEASURED** (reach now score-driven; TEST_DATABASE_URL branch unreachable, measured via read-only pipeline replication against shared DB — see DEVELOPMENT_NOTES 2026-10-01); batch 2 (56 products / 168 rows) outstanding
 **Closes:** `docs/OPEN_GAPS.md` OG-01 (the only BLOCKING gap) · **Contract:** `database/seeds/002_catalog_expansion.sql` header D2 (amended 2026-09-28) · **Gate:** `scripts/check-og01-coverage.js` (read-only; exit 1 while fully-unassessed products remain)
 
 ---
@@ -127,11 +127,11 @@ Intenso, Netac, Hiksemi): community teardown/review evidence or honest NULLs. Th
    CRLF, idempotent (`INSERT ... SELECT ... WHERE NOT EXISTS` on `(product_id, assessment_type)` with
    `ON CONFLICT`-style guard; re-run is a no-op), all source URLs in the header, single row per pair,
    `assessed_at = NOW()` at apply time (freshness rule §2.2).
-4. **Apply on the `TEST_DATABASE_URL` branch first**, measure, then shared DB.
+4. ~~**Apply on the `TEST_DATABASE_URL` branch first**, measure, then shared DB.~~ **DONE 2026-10-01, with deviation:** the branch was unreachable (`password authentication failed` on both pooled and direct hosts); applied directly to the shared DB per operator decision (seed is transactional + idempotent; all 29 product names pre-verified against live DB before apply). Measured via a one-shot read-only pipeline replication (stages 4–11) against the shared DB — recorded in DEVELOPMENT_NOTES 2026-10-01. Result: reach is score-driven, not UUID-random (5/5 retained GPUs + 5/5 retained PSUs are 004a-scored; 57/101 pool candidates still at flat 40.000 = batch-2 roles).
 
 ## 6. Acceptance criteria (all machine-checkable)
 
-**Status 2026-09-30 — nothing below is met for the combined 85.** Batch 1 (87 of the 255 rows) is authored as `004a` but unapplied and unmeasured; batch 2 (168 rows) is unwritten. The checklist describes the completed deliverable, and `scripts/check-og01-coverage.js` is its live gate.
+**Status 2026-10-01 — batch 1 (87 of 255 rows) is APPLIED + MEASURED; the reach-blocking half is closed. Batch 2 (168 rows) is unwritten.** The checklist describes the completed deliverable, and `scripts/check-og01-coverage.js` is its live gate (now reporting 56 products / 168 rows implied).
 
 There is **no product→category FK**: `product_category` is an enum used only in
 `product_candidate.source_category`, and the loader derives category from spec-table presence
@@ -165,7 +165,7 @@ WHERE c.name LIKE 'Seed %' AND a.id IS NULL
 ;
 ```
 
-The acceptance gate is a small read-only script committed next to the seed — `scripts/check-og01-coverage.js` — so it is re-runnable, not a one-off paste. **DONE 2026-09-30:** `scripts/check-og01-coverage.js` is committed (read-only, reads `DATABASE_URL`, no guard needed). It derives each product's category from spec-table presence and the required types from the active scoring model's `role_weights`, FAILs (exit 1) while any active product has zero assessment rows, reports seed 001's deliberate no-evidence fixture separately, and has `--strict` for partially-covered products (only meaningful after batch 2). Live result: **85 products / 255 implied rows**. [The SQL sketch below is retained as the derivation reference — the script is the gate.]
+The acceptance gate is a small read-only script committed next to the seed — `scripts/check-og01-coverage.js` — so it is re-runnable, not a one-off paste. **DONE 2026-09-30:** `scripts/check-og01-coverage.js` is committed (read-only, reads `DATABASE_URL`, no guard needed). It derives each product's category from spec-table presence and the required types from the active scoring model's `role_weights`, FAILs (exit 1) while any active product has zero assessment rows, reports seed 001's deliberate no-evidence fixture separately, and has `--strict` for partially-covered products (only meaningful after batch 2). Live result: **56 products / 168 implied rows** (was 85/255 before the 004a apply on 2026-10-01). [The SQL sketch below is retained as the derivation reference — the script is the gate.]
 
 - [ ] 255 new rows; coverage script returns 0; every `confidence` non-NULL; every `assessed_at`
       within 7 days.

@@ -79,15 +79,16 @@
 --       Intenso/Netac/Hiksemi) QUALITY is the ONLY quality gate the engine
 --       has - do not seed it optimistically.
 --
---       PARTIAL FIX 2026-09-30: batch 1 of the assessments demanded above (the
---       20 GPUs + 9 PSUs of this file, 3 types each = 87 rows) is authored in
---       `004a_component_assessments_gpu_psu.sql`. It is NOT applied to the
---       shared DB yet (pending the branch measurement), so the flat-40 /
---       UUID-order reach behaviour described above still holds live. The
---       remaining 56 products / 168 rows are batch 2 (`004b`); the read-only
---       gate is `node scripts/check-og01-coverage.js` (85 products / 255 rows
---       as of 2026-09-30). See `docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md` and
---       `docs/OPEN_GAPS.md` OG-01.
+--       PARTIAL FIX 2026-09-30, UPDATED 2026-10-01: batch 1 of the assessments
+--       demanded above (the 20 GPUs + 9 PSUs of this file, 3 types each = 87
+--       rows) is authored in `004a_component_assessments_gpu_psu.sql` and is
+--       now APPLIED to the shared DB (25 -> 112 assessment rows) and MEASURED:
+--       reach is score-driven, not UUID-random (5/5 retained GPUs and 5/5
+--       retained PSUs are 004a-scored). The flat-40 / UUID-order behaviour now
+--       holds only for the remaining 56 products / 168 rows of batch 2
+--       (`004b`); the read-only gate is `node scripts/check-og01-coverage.js`
+--       (56 products / 168 rows as of 2026-10-01; was 85/255 pre-004a). See
+--       `docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md` and `docs/OPEN_GAPS.md` OG-01.
 --
 --   D3. CPU `product_family` granularity = SUPPORT-RULE granularity. The
 --       engine matches cpu_motherboard_support rows by product_family_id

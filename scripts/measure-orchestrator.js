@@ -99,8 +99,11 @@ const DECISION_20_TOP10_TEXT = {
 /** Printed comparison band: delta 0 = exact, |delta| <= close = close, else off. */
 const CLAIM_BAND = { exact: 0, close: 2 };
 
-/** Exact seed expectations (database/seeds/001_minimal_builds.sql + 002_catalog_expansion.sql). */
-const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 25, queries: 0 };
+/** Exact seed expectations (seeds 001 + 002 + 003 + 004a: 004a adds 87
+ * GPU/PSU assessment rows for OG-01 batch 1, 25 + 87 = 112; see
+ * docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md). Update in the same session as any
+ * seed that changes the canonical catalog (AGENTS.md section 8). */
+const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 112, queries: 0 };
 
 function fail(message) {
   throw new Error(message);

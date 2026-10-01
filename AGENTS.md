@@ -136,6 +136,12 @@ Command gotchas (verified 2026-09-28):
   The failure is clean: preflight throws before any write.
 - Only `measure-orchestrator.js` and the two `test-orchestrator-*.js` scripts use the
   `TEST_DATABASE_URL` guard; `test-layer3.js` / `test-layer4.js` / `verify-*.js` still read `DATABASE_URL`.
+- `TEST_DATABASE_URL` has been UNREACHABLE since 2026-10-01 (`password authentication failed` on both
+  the pooled and direct hosts of `ep-old-cherry-...`): all three guarded scripts are BLOCKED until
+  the branch is re-created/credentials refreshed. `verify-docs --live` and the read-only `verify-*.js`
+  gates are unaffected. Seed-004a measurement was done instead by read-only pipeline replication on
+  the shared DB (stages 4-11 of `orchestrator/run.js` need only SELECTs until stage 12 persistence) —
+  see `DEVELOPMENT_NOTES.md` 2026-10-01. Re-check reachability before relying on any guarded script.
 - `node scripts/run-seeds.js --dry-run` counts statements with a naive `split(';')`, so a semicolon
   inside a SQL comment inflates the count (Postgres ignores it; the number is just misleading).
 
