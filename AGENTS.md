@@ -148,6 +148,13 @@ Command gotchas (verified 2026-09-28):
   `DEVELOPMENT_NOTES.md` 2026-10-01.
 - `node scripts/run-seeds.js --dry-run` counts statements with a naive `split(';')`, so a semicolon
   inside a SQL comment inflates the count (Postgres ignores it; the number is just misleading).
+- Re-verify every "X PSUs / Y cases"-style register count against a live NULL-scan before
+  repeating it: OG-08 said "3 PSUs" for two revisions but a 2026-10-01 scan found **4** —
+  seed 003 had added a partially-NULL row (`A750GL PCIE5`, EPS-only, because msi.com returns
+  HTTP 403) that the register never picked up. The DB moves; prose counters don't.
+- `pg` client: passing a JS array to `= ANY($1)` fails with "bind message supplies N parameters,
+  but prepared statement requires 1" — cast the param (`= ANY($1::text[])`) and pass the array
+  (pg serializes it); don't build an `IN (...)` list by hand.
 
 No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent or add them.
 
