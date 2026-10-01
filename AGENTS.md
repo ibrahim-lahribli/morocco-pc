@@ -136,12 +136,16 @@ Command gotchas (verified 2026-09-28):
   The failure is clean: preflight throws before any write.
 - Only `measure-orchestrator.js` and the two `test-orchestrator-*.js` scripts use the
   `TEST_DATABASE_URL` guard; `test-layer3.js` / `test-layer4.js` / `verify-*.js` still read `DATABASE_URL`.
-- `TEST_DATABASE_URL` has been UNREACHABLE since 2026-10-01 (`password authentication failed` on both
-  the pooled and direct hosts of `ep-old-cherry-...`): all three guarded scripts are BLOCKED until
-  the branch is re-created/credentials refreshed. `verify-docs --live` and the read-only `verify-*.js`
-  gates are unaffected. Seed-004a measurement was done instead by read-only pipeline replication on
-  the shared DB (stages 4-11 of `orchestrator/run.js` need only SELECTs until stage 12 persistence) —
-  see `DEVELOPMENT_NOTES.md` 2026-10-01. Re-check reachability before relying on any guarded script.
+- `TEST_DATABASE_URL` went UNREACHABLE on 2026-10-01 (`password authentication failed`, old host
+  `ep-old-cherry-...`) and was RE-CREATED the same day as `ep-weathered-art-...` (verify with a
+  1-row SELECT before relying on any guarded script — hosts are recorded only in `.env`, never in
+  docs). All three guarded scripts RE-VERIFIED GREEN 2026-10-01 on the restored branch
+  (`preflight {products:100, models:1, offers:101, assessments:112, queries:0}`):
+  `test-orchestrator-full-run.js` 28 pass / 0 fail; `measure-orchestrator.js` Decision-20
+  criteria 1+2 MET for GAMING and OFFICE. Historical note: while the branch was dead, seed-004a
+  reach was measured by read-only pipeline replication on the shared DB (stages 4-11 of
+  `orchestrator/run.js` need only SELECTs until stage 12 persistence) — see
+  `DEVELOPMENT_NOTES.md` 2026-10-01.
 - `node scripts/run-seeds.js --dry-run` counts statements with a naive `split(';')`, so a semicolon
   inside a SQL comment inflates the count (Postgres ignores it; the number is just misleading).
 
