@@ -12,25 +12,14 @@
  * research for every type the scoring model weights?" - the deliverable
  * boundary of docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md (section 6).
  *
- * Contract (mirrors candidates/loader.js, the engine's category authority):
- *   - category is DERIVED from canonical spec-table presence, never from a
- *     product column (`product` has no category column). GPU is the one
- *     variant-keyed category (product -> product_variant -> gpu_board_spec);
- *   - the required assessment types per role come from the ACTIVE scoring
- *     model's configuration.role_weights (never hardcoded here);
- *   - role -> category comes from the engine's ROLE_CATEGORIES constant, so a
- *     STORAGE product inherits SSD_BOOT's required types, etc.
- *
- * Sections:
- *   FAIL  fully-unassessed products (zero `component_assessment` rows) = the
- *         remaining research targets, excluding the documented
- *         DELIBERATE_NO_EVIDENCE fixtures below. Non-empty means OG-01 is
- *         still open.
- *   INFO  partially-assessed products (some required types missing). NOT a
- *         failure by default: seed 001's fixtures are deliberately partial
- *         (STEP-1 branch coverage). --strict turns it into a failure and is
- *         only meaningful after the full OG-01 deliverable has landed
- *         (batch 1 = seeds/004a GPU+PSU, batch 2 = seeds/004b the rest).
+ * The derivation policy (category from spec-table presence, required types
+ * from the active scoring model, deliberate fixtures) lives in
+ * scripts/lib/og01-catalog.js - shared with og01-research-checklist.js and
+ * measure-og01-reach.js. This file owns only the gate presentation: FAIL for
+ * fully-unassessed products (= the remaining research targets, excluding
+ * fixtures), INFO for partials (seed 001's fixtures are deliberately partial;
+ * --strict turns them into a failure, meaningful only after the full OG-01
+ * deliverable has landed: batch 1 = seeds/004a, batch 2 = seeds/004b).
  *
  * Read-only: SELECT-only, reads DATABASE_URL, performs no writes. It is safe
  * to run against the shared database and does not need the TEST_DATABASE_URL
@@ -45,13 +34,10 @@ require('dotenv').config();
 const { Client } = require('pg');
 const path = require('path');
 
-const { ROLE_CATEGORIES } = require(path.join(
+const { loadOg01Catalog, loadCoveredTypes } = require(path.join(
   __dirname,
-  '..',
-  'src',
-  'recommendation',
-  'candidates',
-  'roles'
+  'lib',
+  'og01-catalog'
 ));
 
 const ARGS = process.argv.slice(2);
@@ -60,77 +46,6 @@ if (ARGS.some((a) => a !== '--strict')) {
   process.exit(2);
 }
 const STRICT = ARGS.includes('--strict');
-
-/**
- * Products DELIBERATELY left without any `component_assessment` row as
- * STEP-1 no-evidence fixtures (`database/seeds/001_minimal_builds.sql`
- * lines 452-455: "CASE1 (compact) has NO rows -> no-evidence"). Their lack of
- * research is an engine fixture, not an OG-01 research target, so they are
- * reported separately and never counted as open coverage. If seed 001 ever
- * changes, the gate surfaces the difference instead of hiding it.
- */
-const DELIBERATE_NO_EVIDENCE = Object.freeze(['Seed NZXT H5 Flow Compact']);
-
-/**
- * Canonical product-keyed category -> spec table mapping. Trusted static
- * identifiers, deliberately duplicated from candidates/loader.js (that module
- * does not export the map; the KEYS must stay identical to its
- * PRODUCT_KEYED_SPEC_BY_CATEGORY).
- */
-const PRODUCT_KEYED_SPEC_BY_CATEGORY = Object.freeze({
-  CPU: 'cpu_spec',
-  MOTHERBOARD: 'motherboard_spec',
-  MEMORY: 'ram_spec',
-  STORAGE: 'ssd_spec',
-  PSU: 'psu_spec',
-  CASE: 'case_spec',
-  COOLER: 'cooler_spec',
-});
-
-/** ACTIVE-only, mirroring the candidate loader's lifecycle policy. */
-const PRODUCTS_SQL =
-  Object.entries(PRODUCT_KEYED_SPEC_BY_CATEGORY)
-    .map(
-      ([category, table]) => `SELECT p.id::text AS product_id, p.name, '${category}' AS category
-  FROM product p
-  JOIN ${table} s ON s.product_id = p.id
- WHERE p.lifecycle_status = 'ACTIVE'`
-    )
-    .concat([
-      `SELECT p.id::text AS product_id, p.name, 'GPU' AS category
-  FROM product p
-  JOIN product_variant pv ON pv.product_id = p.id
-  JOIN gpu_board_spec s ON s.product_variant_id = pv.id
- WHERE p.lifecycle_status = 'ACTIVE'`,
-    ])
-    .join('\nUNION\n') + '\n ORDER BY category ASC, name ASC;';
-
-const SCORING_MODELS_SQL = `SELECT id::text AS id, name, version,
-       configuration->'role_weights' AS role_weights
-  FROM scoring_model
- WHERE is_active = true
- ORDER BY id ASC;`;
-
-const ASSESSMENTS_SQL = `SELECT product_id::text AS product_id,
-       assessment_type::text AS assessment_type
-  FROM component_assessment;`;
-
-/** category -> Set(required types), from role_weights x ROLE_CATEGORIES. */
-function requiredTypesByCategory(roleWeights) {
-  const byCategory = new Map();
-  for (const [role, weights] of Object.entries(roleWeights)) {
-    const category = ROLE_CATEGORIES[role];
-    if (!category || weights === null || typeof weights !== 'object') continue;
-    const types = byCategory.get(category) || new Set();
-    for (const [type, weight] of Object.entries(weights)) {
-      if (typeof weight === 'number' && Number.isFinite(weight) && weight > 0) {
-        types.add(type);
-      }
-    }
-    byCategory.set(category, types);
-  }
-  return byCategory;
-}
 
 async function main() {
   const connectionString = process.env.DATABASE_URL;
@@ -145,56 +60,26 @@ async function main() {
   try {
     await client.connect();
 
-    const models = await client.query(SCORING_MODELS_SQL);
-    if (models.rows.length !== 1) {
-      console.error(
-        'ERROR: expected exactly ONE active scoring_model row, found ' +
-          models.rows.length +
-          ' (coverage cannot be derived unambiguously)'
-      );
-      process.exit(1);
-    }
-    const model = models.rows[0];
-    if (model.role_weights === null || typeof model.role_weights !== 'object') {
-      console.error(
-        'ERROR: active scoring_model "' + model.name + '" has no configuration.role_weights'
-      );
-      process.exit(1);
-    }
-
-    const byCategory = requiredTypesByCategory(model.role_weights);
-    if (byCategory.size === 0) {
-      console.error('ERROR: role_weights yielded no roles - nothing to verify');
-      process.exit(1);
-    }
-
-    const products = await client.query(PRODUCTS_SQL);
-    const assessments = await client.query(ASSESSMENTS_SQL);
-
-    const coveredByProduct = new Map();
-    for (const row of assessments.rows) {
-      const types = coveredByProduct.get(row.product_id) || new Set();
-      types.add(row.assessment_type);
-      coveredByProduct.set(row.product_id, types);
-    }
+    const catalog = await loadOg01Catalog(client);
+    const assessmentRows = await loadCoveredTypes(client, catalog.products);
 
     const noEvidence = [];
     const partial = [];
     const fixtures = [];
     let unmapped = 0;
 
-    for (const product of products.rows) {
-      const required = byCategory.get(product.category);
+    for (const product of catalog.products) {
+      const required = catalog.requiredByCategory.get(product.category);
       if (!required || required.size === 0) {
         unmapped += 1;
         continue;
       }
-      const covered = coveredByProduct.get(product.product_id) || new Set();
+      const covered = product.coveredTypes;
       const missing = [...required].filter((type) => !covered.has(type)).sort();
       if (missing.length === 0) continue;
       const entry = { name: product.name, category: product.category, missing };
       if (covered.size === 0) {
-        if (DELIBERATE_NO_EVIDENCE.includes(product.name)) fixtures.push(entry);
+        if (catalog.fixtures.has(product.name)) fixtures.push(entry);
         else noEvidence.push(entry);
       } else {
         partial.push(entry);
@@ -203,16 +88,22 @@ async function main() {
 
     const missingRows = noEvidence.reduce((sum, e) => sum + e.missing.length, 0);
 
+    // Total physical rows (the old gate's "assessment rows" figure; the
+    // seed-001 shadow fixture means this exceeds the distinct-pair count).
+    const totalAssessmentRows = await client.query(
+      'SELECT count(*)::int AS n FROM component_assessment'
+    );
+
     console.log('OG-01 coverage gate (read-only, DATABASE_URL)');
     console.log(
       'Active products: ' +
-        products.rows.length +
+        catalog.products.length +
         ' | assessment rows: ' +
-        assessments.rows.length +
+        totalAssessmentRows.rows[0].n +
         ' | active scoring model: ' +
-        model.name +
+        catalog.model.name +
         ' ' +
-        model.version
+        catalog.model.version
     );
     console.log(
       'Required types per role derived from configuration.role_weights + ROLE_CATEGORIES'

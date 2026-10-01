@@ -124,6 +124,9 @@ deliberately not duplicated here.
 | `node scripts/verify-schema.js` / `verify-constraints.js` / `verify-fks.js` | Read-only catalog checks |
 | `node scripts/test-orchestrator-commit.js` / `test-orchestrator-full-run.js` | Write-path tests (TEST_DATABASE_URL only) |
 | `node scripts/check-og01-coverage.js` | OG-01 assessment-coverage gate (read-only; needs `DATABASE_URL`; exits 1 while any active product has no assessment rows; `--strict` also fails partial coverage) |
+| `node scripts/og01-research-checklist.js [--csv] [--out <file>]` | OG-01 batch-2 research worksheet from live DB (read-only; 70 target rows incl. seed 001 partials; `docs/OG01_BATCH2_RESEARCH_CHECKLIST.md` is its committed output — regenerate, never hand-edit) |
+| `node scripts/measure-og01-reach.js [--budget N] [--use-case U]` | OG-01 reach measurement, read-only pipeline replication of orchestrator stages 4-11 against `DATABASE_URL` (Decision 17-safe: no writes; use `measure-orchestrator.js` instead when the full Decision-20 write-path acceptance is needed) |
+| `scripts/lib/og01-catalog.js` | Shared OG-01 derivation (category from spec-table presence, required types from `role_weights`, fixtures). The single script-side owner — the gate, checklist, and reach scripts all consume it; do not re-copy the SQL maps |
 | `node scripts/measure-orchestrator.js` | Decision 20 measurement harness (test-scratch only) |
 | `git --no-pager log --oneline` / `diff` / `status --porcelain` | Repo inspection (use `--no-pager` in agent shells) |
 
