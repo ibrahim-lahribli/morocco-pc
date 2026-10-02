@@ -101,8 +101,11 @@ deliberately not duplicated here.
   UNKNOWN, and UNKNOWN must never be treated as PASS or FAIL.
 - **Determinism is a requirement**, not a nicety: identical DB state + query + scoring-model
   version must yield identical candidates, scores, ranks, and text. Tie-breaks are fixed and
-  code-unit based (never `localeCompare`). One known gap: retention ties fall through to random
-  `product.id`, so which products reach builds is NOT stable across a database reset.
+  code-unit based (never `localeCompare`). Retention ordering is fully deterministic:
+  `compareCandidates()` breaks ties on `product_id` ASC (then `product_variant_id`
+  NULL-first then ASC), and since Decision 27 the cheapest-per-role reservation breaks its own
+  `selected_price` ties by that same Rule 3/5 position — pinned by
+  `retention/retain.test.js`. There is no random tie-break anywhere in the engine.
 
 ## 6. Commands that exist
 
@@ -155,29 +158,23 @@ Command gotchas (verified 2026-09-28):
   `DEVELOPMENT_NOTES.md` 2026-10-01.
 - `node scripts/run-seeds.js --dry-run` counts statements with a naive `split(';')`, so a semicolon
   inside a SQL comment inflates the count (Postgres ignores it; the number is just misleading).
-- **Seed 004b changed the canonical catalog and two harness budgets.** The guarded harnesses pin live row counts (`assessments: 280` after 004a 87 + the three applied 004b files 63 + 60 + 45) and their query budgets are now **GAMING 20000 MAD and OFFICE 12000 MAD**, because retention is score-driven and budget-blind: after real CPU/MOTHERBOARD assessments the retained CPU set is 2699 MAD and up, so GAMING@15000 MAD assembles **0 builds** (recorded as OG-26). Never lower either budget without re-measuring, and expect a seed that changes scores to move the cheapest serviceable budget — it moved the retained CPU floor to 2699 MAD in the pilot and moved the cheapest OFFICE build to a 10445 MAD floor once the cases were scored on QUALITY, i.e. in the opposite direction.
-- Re-verify every "X PSUs / Y cases"-style register count against a live NULL-scan before
-  repeating it: OG-08 said "3 PSUs" for two revisions but a 2026-10-01 scan found **4** —
-  seed 003 had added a partially-NULL row (`A750GL PCIE5`, EPS-only, because msi.com returns
-  HTTP 403) that the register never picked up. The DB moves; prose counters don't.
-- **A gate enumerates the rules it CHECKS, not the rules the engine HAS.** Registering a gap because a rule is absent from `check-deferred-rules.js` is wrong: that gate covers only the four DEFERRED rules OG-09…OG-12. Grep `src/recommendation/compatibility/` before ever claiming a compatibility rule does not exist.
-- `resolveCaseRadiator` (compatibility/case-radiator.js, rule 5) IS enforced, but `filtering/context-loader.js` hardcodes `radiator_size_mm: null` for every cooler, so a liquid cooler is `UNKNOWN` and never `PASS` on it. Verify with a direct call (`liquid + rows, size null` → UNKNOWN, `size 360` → PASS) rather than by reading the branch order.
-- `component_assessment.rating` is `TEXT` and read by NOTHING in `src/` — the engine scores from `score` only. Rating labels are provenance metadata, so band drift is a documentation bug, never a behaviour bug.
-- **"An assessment row exists" ≠ "the engine scores it."** Decision 13 gives a NULL `score` the same no-evidence value as a missing row (40.000), and `selectAssessmentRow` takes the NEWEST `assessed_at` (id ASC tie-break), so a newer NULL row **shadows** an older scored one. There is no unique constraint on `(product_id, assessment_type)`. Any coverage check written as "row exists" is therefore wrong: 20 live pairs pass `check-og01-coverage.js --strict` while scoring flat 40.000, and `Seed RTX 4060 8GB` PERFORMANCE is one — a newer NULL shadows a CONFIRMED 85.
-- **Passing a flag to a `require`d script:** set argv yourself or it is silently dropped — `node -e 'require("dotenv").config();process.argv=[process.argv[0],"x","--strict"];require("./scripts/check-og01-coverage.js")'`. A bare `require()` gives the script no args and it just runs the default path.
-- **Measuring a budget floor** for `measure-orchestrator.js`: insert a throwaway `recommendation_query`, call `runRecommendationSnapshot(client, queryId)`. Do NOT wrap it in your own `BEGIN` (it issues its own `SET TRANSACTION ISOLATION LEVEL` → "must be called before any query"). It rolls back its own build writes but PERSISTS the query row — delete `recommendation_query` yourself or the harness preflight (`queries: 0`) breaks.
-- `measure-orchestrator.js`'s "raised cap 100000" raises `max_builds_per_query`, NOT the budget. "0 builds at the raised cap" therefore says nothing about budget; check the cheapest assembled `total_price` before concluding a budget problem.
-- `gpu_board_spec` keys on `product_variant_id`, not `product_id`; every other spec table keys on `product_id`. Joining it wrongly gives "missing FROM-clause entry".
-- **Editing a CRLF file from `node -e`:** convert BOTH the find and replace strings' `\n` to `\r\n`, or no match. Note the docs disagree on arrows: `docs/OG-01_*PLAN.md` use ASCII `->`, `CONTEXT.md`/`AGENTS.md` use U+2192.
-- For multi-line edits to a committed file, write a throwaway node script with a `split(find).length - 1 !== 1` match-count assertion rather than trusting an inline shell heredoc or a single-replace tool call.
-- **Recovering a long markdown table row: take it from git, never retype it.** `git show <rev>:<file> | grep '^| OG-26' > x.txt`, edit with that text, then `cmp` the result against the recovered line. A replace whose `oldString` is only a PREFIX of the target line deletes the prefix and orphans the remainder as its own line.
-- **`grep -c $'\r' <file>` misreports CRLF under this Git Bash** — it returned 0 for a file node showed to be 140/140 CRLF, which sent me to "repair" line endings that were fine. Count with node instead: `(t.match(/\r\n/g)||[]).length` vs `(t.match(/(?<!\r)\n/g)||[]).length`. Likewise **`/tmp` is not writable here** (`Permission denied`) and node resolves `/tmp` to `C:\tmp`, which does not exist — stage temp files inside the repo and delete them.
-- **Prove a new gate is not vacuous by running it against the real defect it was written for.** A gate that has never been shown to fail is not evidence of anything: `git show <bad-rev>:<file>` into place, run it, confirm the expected FAILs, then restore from git.
-- Assert structural markers BEFORE parsing between them. A spliced seed kept a duplicated `FROM (VALUES` and lost its `) AS v(...)` alias line; the validator still reported "52 rows parsed" because it sliced from the wrong side of the missing marker. Fail loudly when an alias marker is absent or the `FROM (VALUES` count is not what you expect.
-- Any "ready to push" claim ages fast — check `git log --oneline origin/master..master` (a 2026-10-02 report said "ready for push" while `origin/master` was already at HEAD).
-- `pg` client: passing a JS array to `= ANY($1)` fails with "bind message supplies N parameters,
-  but prepared statement requires 1" — cast the param (`= ANY($1::text[])`) and pass the array
-  (pg serializes it); don't build an `IN (...)` list by hand.
+- **Seed 004b changed the canonical catalog; Decision 27 then made the harness budgets
+  re-derivable again.** The guarded harnesses pin live row counts (`assessments: 280`
+  after 004a 87 + the three applied 004b files 63 + 60 + 45). Their query budgets are now
+  **GAMING 10000 MAD and OFFICE 10000 MAD**, measured 2026-10-02.
+  Until then they were **raised** (GAMING 15000 -> 20000, OFFICE 10000 -> 12000) purely to
+  keep the harnesses finding builds, because retention was score-driven and budget-blind
+  (OG-26): after real assessments the retained CPU set was 2699 MAD and up, so GAMING@15000
+  assembled **0 builds**. Decision 27 reserves 1 of K slots per role for the cheapest eligible
+  candidate, which dropped the cheapest-per-role sum from **7426 to 4477 MAD** and the
+  retained per-role minima from CPU 2699 -> 899, GPU 9000 -> 3200, SSD_BOOT 899 -> 599,
+  PSU 999 -> 599, CASE 949 -> 849, CPU_COOLER 699 -> 350. **Never raise a budget to make a
+  harness pass — a raised budget is what hid OG-26 in the first place.** Re-measure instead;
+  `node scripts/measure-og01-reach.js --budget N --use-case U` prints the floor on every run.
+  Two facts worth keeping: the floor is a **lower bound, not a build** — the cheapest build
+  that actually assembles is 7677 MAD, so 4500-7000 MAD legitimately returns 0 builds while
+  `budget_floor.within_budget` is `true` (the emptiness is compatibility, not budget); and
+  `budget_floor` is a data field only, deliberately not wired into Engine 6 explanation text.
 
 No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent or add them.
 

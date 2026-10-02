@@ -3570,7 +3570,7 @@ VERDICT: RESOLVED - hybrid (audit D2). ITEM A IMPLEMENTED as shipped contract: R
 
 ## Decision 27 — Budget-blind retention replaced by a cheapest-per-role reservation, plus a budget_floor diagnostic
 
-Status: RESOLVED 2026-10-02 — budget-aware retention ADOPTED but NOT YET IMPLEMENTED (tracked by docs/superpowers/plans/2026-10-02-og26-budget-aware-retention.md); cheapest-per-role reservation of 1 of K slots, plus a budget_floor diagnostic on the pass result.
+Status: RESOLVED 2026-10-02; IMPLEMENTED 2026-10-02 — budget-aware retention, cheapest-per-role reservation of 1 of K slots plus a budget_floor diagnostic on the pass result; closes OG-26 (see docs/OPEN_GAPS.md C-17), unit tests 829 -> 859 with 0 failures.
 
 Date: 2026-10-02. Closes the engine-code half of `docs/OPEN_GAPS.md` row OG-26, the
 one gap the register itself names as "the next BLOCKING-shaped work" after OG-01 closed.
@@ -3734,10 +3734,52 @@ Two semantics are load-bearing and pinned by `retention/budget-floor.test.js`:
 
 ### Verdict for this pass
 
-Adopted. Implementation is tracked task-by-task in
-`docs/superpowers/plans/2026-10-02-og26-budget-aware-retention.md`; the `Status:` line
-above gains `; IMPLEMENTED <date>` when the code lands. No test, gate or measurement
-result is claimed by this entry — none has been run for it yet.
+IMPLEMENTED 2026-10-02 — all five tasks of
+`docs/superpowers/plans/2026-10-02-og26-budget-aware-retention.md`, measured on the
+TEST branch (preflight {products:100, models:1, offers:101, assessments:280,
+queries:0}).
+
+* **Item 1** (the reservation): `retention/retain.js`, pinned by
+  `retention/retain.test.js` — including the K=1, single-candidate,
+  REJECTed-cheap and equal-price-tie cases, and the case where the reserved set
+  must be topped back up to K so `retained_count` stays
+  `min(K, eligible_count)`. Unit tests 829 -> 859, 0 failures.
+* **Item 2** (required `prices`): every call site supplies it; the
+  missing-entry and non-finite-`selected_price` paths are pinned as
+  `MISSING_REQUIRED_FIELD` on field `prices`, never as 0.
+* **Item 3** (the boundary): `retention/index.test.js` bans each forbidden
+  specifier BY NAME and pins the exact require list. The scan strips comments
+  first, because this entry's own comment has to name what it forbids; a
+  companion assertion keeps that prose honest, so the relaxation cannot hide a
+  real import.
+* **Item 4** (`budget_floor`): `retention/budget-floor.js`, wired at
+  `run.js` step 11b and passed through by `full-run.js`; the result-key
+  order and the always-present contract are pinned in
+  `orchestrator/run.test.js` and `full-run.test.js`.
+
+Gates, all run: `npm run test:unit` 859/0 · `scripts/lib/gap-register.test.js`
+9/0 · `scripts/lib/db-url.test.js` 7/0 · `gen-decision-index --check` clean ·
+`verify:docs` OK · `check-og01-coverage.js --strict` PASS ·
+`check-deferred-rules.js` 0 violations in every scope ·
+`test-orchestrator-full-run.js` 28 pass / 0 fail · `measure-orchestrator.js`
+Decision-23-O1 criteria 1+2 MET for both use cases.
+
+Measured: the cheapest-per-role sum fell **7426 -> 4477 MAD**, with the retained
+per-role minima moving CPU 2699 -> 899, GPU 9000 -> 3200, SSD_BOOT 899 -> 599,
+PSU 999 -> 599, CASE 949 -> 849, CPU_COOLER 699 -> 350. Builds appear at 8000
+MAD (cheapest build 7677) and fill the cap at 10000 MAD (cheapest 8847 GAMING /
+9396 OFFICE), so both harness budgets were **lowered** — 20000 -> 10000 and
+12000 -> 10000 — and re-verified at the lower value.
+
+**The one thing this entry does not claim:** the floor is a LOWER BOUND, not a
+guarantee that a build exists. The cheapest build that actually assembles is
+7677 MAD, so 4500-7000 MAD still returns zero builds *while `within_budget` is
+true* — the cheapest-per-role combination is not the cheapest pairwise-compatible
+one, and Engine 3's Decision 16 gate abandons the branch that would reach 4477.
+That is the correct and intended reading of the field ("the emptiness is
+compatibility, not budget"), it is pinned by a test, and it is precisely why
+item 1 alone does not close **OG-04** (rejection-reason persistence), which
+stays open.
 
 ### Supersedes / superseded by
 

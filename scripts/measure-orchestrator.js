@@ -70,29 +70,47 @@ const { SELECT_SCORING_MODEL_SQL } = require('../src/recommendation/scoring');
 const HIGH_CAP = 100000;
 
 /** Budgets proposed from the seed prices (see the seed plan); MAD throughout. */
-// Budgets are the lowest this catalog can serve AFTER seed 004b. Retention is
-// score-driven and keeps the 5 highest-scoring candidates per role, so a GAMING
-// query at 15000 MAD now retains only CPUs at 2699 MAD and up and assembly prunes
-// every combination -> 0 builds (measured 2026-10-02: 15000 -> 0, 20000 -> 25).
-// Do not lower these without re-measuring; see OG-26 for the root cause.
+// RE-MEASURED 2026-10-02 after Decision 27 (OG-26 closed). Both budgets were
+// previously load-bearing RAISES that papered over budget-blind retention:
+//   GAMING 15000 -> 20000 and OFFICE 10000 -> 12000, raised on 2026-10-02 after
+//   seed 004b so the harnesses would keep finding builds at all.
+// Decision 27 reserves 1 of K slots per role for the cheapest eligible
+// candidate, so the retained set carries the catalog's cheap end again. Measured
+// on the TEST branch by inserting a throwaway recommendation_query per budget and
+// snapshotting (every probe row deleted afterwards; the snapshot rolls back its
+// own build writes), both use cases, same catalog:
 //
-// OFFICE was re-measured on 2026-10-02 after seed 004b file 3 (CASE + CPU_COOLER)
-// and moved 10000 -> 12000 on the same evidence. That seed scored the 8 cases on
-// QUALITY (a 0.5 role weight), which evicted the cheapest cases - Fractal Pop XL
-// and the MAG FORGE 320R AIRFLOW at 849 MAD - from the retained top-5, leaving a
-// retained CASE set of 949..1699 MAD. Measured floor by inserting a throwaway
-// recommendation_query at each budget and snapshotting (every probe row deleted
-// afterwards; the snapshot rolls back its own build writes):
-//   10000 -> 0 builds | 11000 -> 25 builds, cheapest total 10445 MAD
-//   12000 -> 25 builds, cheapest total 11195 MAD
-// 12000 is the smallest round budget above the 10445 MAD floor. This is the SAME
-// defect as the GAMING 15000 case above, hitting the opposite end of the
-// catalog: retention ignores the budget entirely, so a quality scoring change
-// moves the cheapest serviceable build in EITHER direction. Raising the
-// measurement budget acknowledges the symptom; it does not fix OG-26.
+//   budget   4500..7000  ->  0 builds   (budget_floor 4477, within_budget TRUE)
+//   budget   8000        ->  3 builds   (cheapest 7677)
+//   budget  10000        -> 25 builds   (cheapest 8847 GAMING / 9396 OFFICE)
+//   budget  12000..20000 -> 25 builds
+//
+// 10000 is the smallest round budget that fills max_builds_per_query, which is
+// what a diversity measurement needs - at 8000 only 3 builds are reachable and
+// the Decision-20 concentration claims would be measured on a starved set. So
+// both queries are 10000 MAD, DOWN from 20000 / 12000. The floor did not cause
+// the 0-build results on its own, and that is worth stating precisely:
+//
+//   - The reservation moved the retained per-role minima sharply:
+//     CPU 2699 -> 899, GPU 9000 -> 3200, SSD_BOOT 899 -> 599, PSU 999 -> 599,
+//     CASE 949 -> 849, CPU_COOLER 699 -> 350 (MOTHERBOARD 582 and RAM 599 were
+//     already retained). Excluding the GPU, the cheapest-per-role sum fell from
+//     7426 MAD to 4477 MAD.
+//   - But budget_floor is a LOWER BOUND, not a build. The cheapest build that
+//     actually assembles is 7677 MAD, which is the 4477 floor plus the 3200 MAD
+//     cheapest retained GPU: the cheapest-per-role combination is NOT the
+//     cheapest PAIRWISE-COMPATIBLE one, and Engine 3's Decision 16 FAIL gate
+//     abandons the branch that would reach 4477. So 4500-7000 MAD legitimately
+//     returns 0 builds while within_budget is true - and that combination is
+//     precisely the signal the diagnostic exists to give: the emptiness is NOT a
+//     budget problem, it is a compatibility one. Before Decision 27 those same
+//     budgets could not be told apart from a budget shortfall at all.
+//
+// Do not lower these without re-measuring, and do not raise them to make a
+// failure go away: a raised budget is what hid this defect in the first place.
 const QUERIES = [
-  { useCase: 'GAMING', budget: '20000' },
-  { useCase: 'OFFICE', budget: '12000' },
+  { useCase: 'GAMING', budget: '10000' },
+  { useCase: 'OFFICE', budget: '10000' },
 ];
 
 /**

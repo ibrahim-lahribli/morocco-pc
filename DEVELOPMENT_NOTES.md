@@ -797,3 +797,41 @@ Verification (this D7 pass): read-only. `git status --porcelain` clean before ed
 - **Verification:** `check-og01-coverage.js --strict` PASS · `measure-og01-reach.js` 1 of 101 · `test:unit` **829/0** · `node --test scripts/lib/gap-register.test.js` **9/0** · `node --test scripts/lib/db-url.test.js` 7/0 · `verify-docs --offline` OK **and** `--live` OK (schema digest unchanged) · `docs/OPEN_GAPS.md` 29 rows x 6 cells, CRLF 140/140; `CONTEXT.md` 160/160 CRLF.
 - **Still open, found but deliberately not fixed here (reported, not silently absorbed):** (1) **the coverage gate's notion of "covered" is not the engine's.** Decision 13 scores a NULL-score newest row at exactly the flat 40.000, so **20 (product, type) pairs pass `--strict` while the engine ignores them** — 19 documented honest NULLs, plus `Seed RTX 4060 8GB` PERFORMANCE, where a newer NULL (2026-09-17) shadows a **CONFIRMED 85** (2026-08-20). `component_assessment` has no unique constraint on `(product_id, assessment_type)`, and `effective-score.js` documents the shadowing rule. (2) The seeds `JOIN product ON p.name = v.pname` **inner**, so a renamed product would silently drop rows with no error and no count assertion. (3) `rating` is unconstrained `text`, read by nothing in `src/`, so OG-29's 27 off-band labels are provenance drift with no enforcement. (4) Register tail order is `OG-27, OG-28, OG-29, OG-26, OG-25` — cosmetic; `OG-25` was already last before this session and moving 1,400-character rows by hand risks silent content drift.
 
+## 2026-10-02 — Decision 27 implemented: budget-aware retention closes OG-26
+
+- **The environment was fine, and the preflight is still the first thing to run.**
+  `TEST_DATABASE_URL` was reachable with preflight `{products:100, models:1,
+  offers:101, assessments:280, queries:0}`. Keep the 1-row SELECT habit: a stale
+  credential and a dead branch both raise `28P01`, and this branch has been re-minted
+  repeatedly — any host named in a doc, including these notes, is historical.
+- **All three guarded harnesses green after the change.**
+  `test-orchestrator-full-run.js` 28 pass / 0 fail (the 28 is a live pin — report a new
+  number, do not edit the assertion to match). `measure-orchestrator.js` Decision-23-O1
+  criteria 1+2 MET for GAMING and OFFICE, re-verified at the LOWERED budgets.
+- **The measured effect, and the caveat that is easy to skip.** Cheapest-per-role sum
+  **7426 -> 4477 MAD**; retained per-role minima CPU 2699 -> 899, GPU 9000 -> 3200,
+  SSD_BOOT 899 -> 599, PSU 999 -> 599, CASE 949 -> 849, CPU_COOLER 699 -> 350. Harness
+  budgets **lowered** GAMING 20000 -> 10000 and OFFICE 12000 -> 10000 MAD. BUT the floor
+  is a lower bound, not a build: the cheapest build that actually assembles is **7677 MAD**,
+  so 4500-7000 MAD still returns 0 builds *while `within_budget` is `true`*. That is the
+  diagnostic working — the emptiness there is pairwise incompatibility, not budget — but it
+  means the floor alone can never promise a build, and it is why **OG-04 is still open**.
+- **Non-vacuity was proven, not asserted.** Recomputing the PRE-Decision-27 floor (plain
+  score top-K, no reservation) on the same catalog and the same Stage 1 carrier gave 7426
+  MAD against the new 4477 MAD. A gate never shown to fail is not evidence; here the
+  "before" is measured by the same code path that measures the "after".
+- **A budget probe must not wrap its own transaction.** Insert the throwaway
+  `recommendation_query`, call `runRecommendationSnapshot`, delete the row — and take
+  `getWriteTestDbUrl()` as a config OBJECT (`{ connectionString,
+  connectionTimeoutMillis }`), not as a bare string; passing the object straight to
+  `new Client({ connectionString })` fails deep inside pg-connection-string with the
+  unhelpful `str.charAt is not a function`. Mirror `measure-orchestrator.js` exactly:
+  budget as a STRING, `'MAD'` inline in the SQL, `RETURNING id`.
+- **The harness budgets are re-derivable now, which is the actual deliverable.** They were
+  RAISED (not lowered) on 2026-10-02 to hide OG-26, and that is the pattern to avoid: a
+  raised budget converts a data defect into a silent one. Re-measure instead.
+- **`spyOn` records the raw return value, so an async collaborator must be awaited** in the
+  assertion — `spy.calls[0].result` on an async loader is the Promise, and reading a field
+  off it yields `undefined` with no warning. Also: the `budget_floor` is the cheapest-
+  per-role sum, deliberately NOT the price of an assembled build; asserting the build price
+  against it conflates the two.
