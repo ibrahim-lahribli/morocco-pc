@@ -159,6 +159,17 @@ Command gotchas (verified 2026-09-28):
   repeating it: OG-08 said "3 PSUs" for two revisions but a 2026-10-01 scan found **4** —
   seed 003 had added a partially-NULL row (`A750GL PCIE5`, EPS-only, because msi.com returns
   HTTP 403) that the register never picked up. The DB moves; prose counters don't.
+- **A gate enumerates the rules it CHECKS, not the rules the engine HAS.** Registering a gap because a rule is absent from `check-deferred-rules.js` is wrong: that gate covers only the four DEFERRED rules OG-09…OG-12. Grep `src/recommendation/compatibility/` before ever claiming a compatibility rule does not exist.
+- `resolveCaseRadiator` (compatibility/case-radiator.js, rule 5) IS enforced, but `filtering/context-loader.js` hardcodes `radiator_size_mm: null` for every cooler, so a liquid cooler is `UNKNOWN` and never `PASS` on it. Verify with a direct call (`liquid + rows, size null` → UNKNOWN, `size 360` → PASS) rather than by reading the branch order.
+- `component_assessment.rating` is `TEXT` and read by NOTHING in `src/` — the engine scores from `score` only. Rating labels are provenance metadata, so band drift is a documentation bug, never a behaviour bug.
+- **Passing a flag to a `require`d script:** set argv yourself or it is silently dropped — `node -e 'require("dotenv").config();process.argv=[process.argv[0],"x","--strict"];require("./scripts/check-og01-coverage.js")'`. A bare `require()` gives the script no args and it just runs the default path.
+- **Measuring a budget floor** for `measure-orchestrator.js`: insert a throwaway `recommendation_query`, call `runRecommendationSnapshot(client, queryId)`. Do NOT wrap it in your own `BEGIN` (it issues its own `SET TRANSACTION ISOLATION LEVEL` → "must be called before any query"). It rolls back its own build writes but PERSISTS the query row — delete `recommendation_query` yourself or the harness preflight (`queries: 0`) breaks.
+- `measure-orchestrator.js`'s "raised cap 100000" raises `max_builds_per_query`, NOT the budget. "0 builds at the raised cap" therefore says nothing about budget; check the cheapest assembled `total_price` before concluding a budget problem.
+- `gpu_board_spec` keys on `product_variant_id`, not `product_id`; every other spec table keys on `product_id`. Joining it wrongly gives "missing FROM-clause entry".
+- **Editing a CRLF file from `node -e`:** convert BOTH the find and replace strings' `\n` to `\r\n`, or no match. Note the docs disagree on arrows: `docs/OG-01_*PLAN.md` use ASCII `->`, `CONTEXT.md`/`AGENTS.md` use U+2192.
+- For multi-line edits to a committed file, write a throwaway node script with a `split(find).length - 1 !== 1` match-count assertion rather than trusting an inline shell heredoc or a single-replace tool call.
+- Assert structural markers BEFORE parsing between them. A spliced seed kept a duplicated `FROM (VALUES` and lost its `) AS v(...)` alias line; the validator still reported "52 rows parsed" because it sliced from the wrong side of the missing marker. Fail loudly when an alias marker is absent or the `FROM (VALUES` count is not what you expect.
+- Any "ready to push" claim ages fast — check `git log --oneline origin/master..master` (a 2026-10-02 report said "ready for push" while `origin/master` was already at HEAD).
 - `pg` client: passing a JS array to `= ANY($1)` fails with "bind message supplies N parameters,
   but prepared statement requires 1" — cast the param (`= ANY($1::text[])`) and pass the array
   (pg serializes it); don't build an `IN (...)` list by hand.
