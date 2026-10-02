@@ -23,7 +23,7 @@ count grows over time — check the current number, never cite a stale one).
 | Contract | Pinned by | What breaks if violated |
 |---|---|---|
 | `persistence/persist-ranked.js` stays write-only: no `require('pg')`, no `new Pool`, no `BEGIN/COMMIT/ROLLBACK`, no `SELECT`, no imports from other stages | `persistence/persist-ranked.test.js:162` banned-token list | Transaction control leaks into the writer; the single-write-transaction guarantee (Decision 19) erodes |
-| Engine stage layout: one directory per stage, barrel `index.js` (persistence/ excepted, imported via `persist-ranked`) | `scripts/verify-docs.js` check 5 (`engine-layout`) + per-stage `index.test.js` | Barrels rot; boundary-only imports become unenforceable |
+| Engine stage layout: one directory per stage, barrel `index.js` (persistence/ excepted, imported via `persist-ranked`) | `scripts/verify-docs.js` check 6 (`engine-layout`) + per-stage `index.test.js` | Barrels rot; boundary-only imports become unenforceable |
 | Engine modules stay pure: no DB access, no clock, no randomness (DB lives only in loaders + orchestrator) | enforced by construction + `orchestrator/run.test.js` / `commit.test.js` transaction-boundary cases; the purity rule itself is `AGENTS.md` §5 | Unit suite can no longer run DB-free |
 
 ## Schema contracts
@@ -33,7 +33,8 @@ count grows over time — check the current number, never cite a stale one).
 | At most one CPU / MOTHERBOARD / PSU / CASE / CPU_COOLER / SSD_BOOT per build candidate | `uq_build_component_role_singular` partial unique index (`database/migrations/011_reconcile_layer4.sql`), exercised by `scripts/test-layer4.js` | Multi-slot roles leak into builds the schema cannot represent (W10/K13) |
 | Commit re-run guard: a query is committed exactly once; guards run after `SELECT … FOR UPDATE` on the query row | `orchestrator/commit.test.js` | Duplicate persistence; races between concurrent commits (reasoned, not concurrency-tested — U4) |
 | Migrations form a contiguous 001→NNN range; decision log parses (26 global / 30 `Status:`); AGENTS cites the current range | `scripts/verify-docs.js` checks 1–3 | Doc drift on schema/status facts (the audit's root cause) |
-| Generated docs stay fresh: `docs/DECISION_INDEX.md` and the `gen:schema` outputs | `gen-decision-index --check` (wired into verify-docs check 4) and `gen-schema-reference.js --check` | Hand-edited generated files mask drift |
+| Generated docs stay fresh: `docs/DECISION_INDEX.md` and the `gen:schema` outputs | `gen-decision-index --check` (wired into verify-docs check 5) and `gen-schema-reference.js --check` | Hand-edited generated files mask drift |
+| The gap register keeps its shape: every §1 row has exactly 6 cells, no id is duplicated, and every `OG-nn` cited anywhere in the document has a row (or is the *subject* of a closed-table row) | `scripts/verify-docs.js` check 4 (`gap-register-shape`) via `scripts/lib/gap-register.js`; unit tests `node --test scripts/lib/gap-register.test.js` | Two gaps merged into one line silently deletes a gap from the register — exactly how OG-26 disappeared in commit `10a8e87`, undetected by every other gate |
 
 ## Where to add a pin
 
