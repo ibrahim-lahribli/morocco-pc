@@ -89,9 +89,9 @@ const decisions = (function checkDecisions() {
     if (inEngine3 && /^### Decision \d+/.test(line)) nested += 1;
     if (/^Status:/.test(line)) status += 1;
   }
-  const ok = global === 24 && nested === 5 && status === 30;
+  const ok = global === 25 && nested === 5 && status === 31;
   if (!ok) {
-    fail('decisions-parse', 'global=' + global + ' (want 24), nested=' + nested + ' (want 5), Status:=' + status + ' (want 30)');
+    fail('decisions-parse', 'global=' + global + ' (want 25), nested=' + nested + ' (want 5), Status:=' + status + ' (want 31)');
     return null;
   }
   pass('decisions-parse', global + ' headings + ' + nested + ' nested = 26 global, ' + status + ' Status: lines');

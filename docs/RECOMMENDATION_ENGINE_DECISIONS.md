@@ -3568,6 +3568,187 @@ DEFERRED and recorded as UNENFORCED.**
 VERDICT: RESOLVED - hybrid (audit D2). ITEM A IMPLEMENTED as shipped contract: Rule 11 resolveGpuPsuConnectors escalates a required, KNOWN connector's NULL PSU availability to FAIL GPU_PSU_CONNECTOR_NULL_HIGH_TGP at gpu_board_spec.board_tgp_watts >= 200 (inclusive, finite), decided BEFORE the unknown-name branch so FAIL outranks UNKNOWN; a NULL GPU requirement / unknown connector NAME / NULL TGP stay UNKNOWN and a verifiable deficit (incl. 0) keeps GPU_PSU_CONNECTOR_UNAVAILABLE; board_tgp_watts is loaded by context-loader and handed over by filter.js, and Engine 3 inherits the FAIL with no assembly change; 39 live (GPU, PSU) pairs flip UNKNOWN -> FAIL; the Decision 23 attribution is corrected on the record. ITEM B DEFERRED: cooler max_tdp_watts vs CPU TDP, cooler height_mm vs case max_cpu_cooler_height_mm, RAM module_count vs dimm_slots and RAM capacity vs max_memory_capacity_gb are UNENFORCED, marked inline in ARCHITECTURE.md sections 3/3.3/5.2/5.3/6/11/16/17/18, recorded as a known Engine 1 readiness contract violation with 0 live violations as of 2026-09-28 and a binding seed-time re-check trigger. Unit tests 817 -> 829, 0 failures.
 ```
 
+## Decision 27 — Budget-blind retention replaced by a cheapest-per-role reservation, plus a budget_floor diagnostic
+
+Status: RESOLVED 2026-10-02 — budget-aware retention ADOPTED but NOT YET IMPLEMENTED (tracked by docs/superpowers/plans/2026-10-02-og26-budget-aware-retention.md); cheapest-per-role reservation of 1 of K slots, plus a budget_floor diagnostic on the pass result.
+
+Date: 2026-10-02. Closes the engine-code half of `docs/OPEN_GAPS.md` row OG-26, the
+one gap the register itself names as "the next BLOCKING-shaped work" after OG-01 closed.
+It amends Decision 12 (retention ownership) and Decision 14 Rule 4 (top_k_per_role
+retention semantics) rather than replacing them: eligibility (Rule 2), ordering (Rule 3),
+the `compareCandidates()` tie-break (Rule 5) and the hard cap (Rule 4) all stay; only the
+SELECTION inside the cap changes. Engine 3 is untouched. Documentation plus one pure
+module and one changed pure function; no migration, no seed, no schema change, no new
+loader, no new error code.
+
+### Current situation
+
+`retainTopKPerRole` (`src/recommendation/retention/retain.js`) buckets Engine 2D verdicts
+by `component_role`, drops `REJECT` (Decision 14 Rule 2), sorts each bucket by
+`candidate_score` DESC with `compareCandidates()` as the tie-break (Rules 3/5), and keeps
+`bucket.slice(0, topKPerRole)`. It receives exactly three inputs — `filterResult`,
+`candidateScores`, `topKPerRole` — and **no price information at all**. The price carrier
+produced by Stage 1 (`offers.selectOfferPrices`, `src/recommendation/orchestrator/run.js`)
+is first read inside Engine 3, where `assemble.js:616` and `assemble.js:640` prune a path
+whose running total exceeds `budget_amount`.
+
+So the retained set is whatever scores highest, and the build is whatever survives budget
+pruning. The two are unrelated, and the gap between them is invisible. Measured twice on
+2026-10-02 after seed `004b`, in opposite directions:
+
+* `004b_cpu_motherboard.sql` moved the retained CPU set from including an 899 MAD part to
+  2699 MAD and up, so GAMING at 15000 MAD went from 25 builds to **0** (20000 -> 25).
+* `004b_case_cooler.sql` scored the 8 cases on QUALITY (a 0.5 role weight), evicting the
+  two cheapest cases (Fractal Pop XL and the MAG FORGE 320R AIRFLOW, both 849 MAD) from
+  the retained top-5, so the cheapest serviceable OFFICE build moved to 10445 MAD and
+  OFFICE at 10000 MAD assembled **0**.
+
+The catalog itself is not the constraint: the cheapest-per-role combination totals
+7677 MAD. A build-free budget is a legitimate outcome (Decision 17.2 — "zero builds is a
+valid outcome"), but a SILENT one is a product defect, and the two harness measurement
+budgets in `scripts/measure-orchestrator.js` had to be raised (GAMING 15000 -> 20000,
+OFFICE 10000 -> 12000) purely to keep the measurement harnesses green.
+
+### Problem
+
+Two independent defects, both invisible from the result surface.
+
+1. **Selection ignores price entirely.** Any scoring change can move the cheapest
+   serviceable build in either direction, with no relationship between a candidate's score
+   and its reachability. The register's own rule — "expect a seed that changes scores to
+   move the cheapest serviceable budget" — is a description of a design that gives the
+   engine no say.
+2. **A zero-build result carries no reason.** `builds: []` is returned for at least three
+   materially different causes: nothing retained fits the budget; pairwise incompatibility
+   (the OG-05 -> OG-28 class); a required role with no surviving candidate. The caller
+   cannot distinguish them, and `full-run.js` deliberately has no short-circuit, so an
+   empty recommendation flows all the way through ranking, diversity selection, Engine 6
+   explanation and the write pass with nothing to say. `OG-04` (no rejection-reason
+   persistence) is the structural version of this and stays open; this entry closes only
+   the part a single pass can answer for itself.
+
+### Decision
+
+**1. Rule 4 selection is replaced by a cheapest-per-role reservation.** Per role bucket,
+ordered by the unchanged Rule 3/5 comparator, `retainTopKPerRole` retains the first `K-1`
+entries **plus the single cheapest eligible candidate by `selected_price`**, where ties on
+`selected_price` are broken by position in that same Rule 3/5 order. The selected set is
+then re-emitted in Rule 3/5 order, so the output ORDERING contract is unchanged — only
+membership changes. `retained_count` is still `min(K, eligible_count)`. Lives in
+`retention/retain.js`; pinned by `retention/retain.test.js`.
+
+Consequences that are intended, not incidental:
+
+* A bucket of `n <= K` eligible candidates is unaffected (nothing is being cut).
+* `top_k_per_role = 1` is a total handoff to price: `slice(0, 0)` is empty and the
+  reservation alone fills the slot. Score contributes nothing at K=1. This is correct —
+  at K=1 there is no score competition to arbitrate — and it is pinned rather than left
+  to be discovered.
+* The reservation is a FLOOR guarantee, not a completeness guarantee. It makes the
+  cheapest-per-role combination reachable; it cannot guarantee that combination survives
+  assembly's pairwise FAIL gate. `within_budget: true` alongside `builds: []` is therefore
+  a legitimate, expected state and must stay representable.
+* The equal-price tie-break is not hypothetical: `004b_ssd_ram.sql` ships two RAM kits at
+  the identical 1349 MAD, and the register records them as mutually contradictory.
+
+**2. `prices` becomes a REQUIRED input to `retainTopKPerRole`** — the Stage 1 carrier from
+`offers.selectOfferPrices`, the same frozen null-prototype object already handed to Engine 3
+at the assembly call. It is already in memory at the retention call site, so this adds no
+query and no loader. An eligible verdict with no carrier entry fails fast with
+`MISSING_REQUIRED_FIELD` on field `prices`, matching the existing missing-score gate, and a
+present-but-non-finite `selected_price` fails the same way. **A missing price is never read
+as `0` and never read as free** — a `0` would let an unpriced part win the reservation and
+then fail every budget check downstream, converting a data gap into a silent quality loss.
+`validatePrices` is deliberately NOT re-run: the carrier is already validated by Stage 1,
+and re-validating would duplicate Engine 3's contract inside retention.
+
+**3. The boundary is amended, not widened.** `retention/retain.js` may import exactly one
+Engine 3 symbol: `priceKey` from `../assembly/prices` — a pure key constructor with no
+logic, imported so the carrier key format keeps exactly one owner (`offers/select.js`
+already imports it for the same reason). It may NOT import `../assembly/assemble`,
+`../assembly/pipeline`, `../assembly/gpu-policy`, `../assembly/input`, or the assembly
+barrel, nor anything from `../orchestrator` or `../persistence`. `retention/index.test.js`'s
+banned-token list changes from the single token `'../assembly'` to those five specific
+specifiers, so the ban is still total and is merely aimed at the one permitted edge.
+Retention stays pure: no DB, no clock, no randomness, no I/O.
+
+**4. `budget_floor` is a new field on the pass result.** `runRecommendation` returns a
+seventh field `budget_floor`, appended after `build_contributions`;
+`runRecommendationFullRun` returns an eleventh, appended last. It is produced by the new
+pure `retention/budget-floor.js` `computeBudgetFloor({ retained, prices, budgetAmount,
+currency })` and is ALWAYS present, on every query, whether or not builds exist — a
+diagnostic that appears only on failure is a diagnostic nobody reads. Fields:
+`cheapest_total`, `currency`, `budget_amount`, `within_budget`, `cheapest_by_role`,
+`missing_roles`.
+
+Two semantics are load-bearing and pinned by `retention/budget-floor.test.js`:
+
+* `cheapest_total` sums `cheapest_by_role` over `BUDGET_FLOOR_ROLES` = `EXPANSION_ORDER`
+  minus `GPU`. GPU is excluded because the Step 3 GPU policy makes it omissible under
+  OPTIONAL, so including it would overstate the floor and report "unaffordable" for a
+  build that is in fact serviceable without a discrete GPU. `cheapest_by_role` still
+  REPORTS the GPU price when one is retained, so a caller can total it back in.
+* `cheapest_total` and `within_budget` are `null` — never `0` — when a required role has
+  no retained candidate, and `missing_roles` names it. This is the project's standing
+  `NULL != 0` rule applied to a new field: a `0` total would read as "everything is free",
+  and `within_budget: 0 <= budget` would read as "comfortably affordable".
+
+### Rejected alternatives
+
+* **Budget prefilter (drop candidates whose own price exceeds `budget_amount`) before
+  retention.** Correct on its own and nearly free, but it does not touch the defect: every
+  part in both measured failures was individually affordable — 2699 MAD CPUs and 949 MAD
+  cases under a 15000 MAD / 10000 MAD budget. The failures are sums, not individual prices.
+  It is also strictly weaker than the reservation, which handles the same candidates.
+* **Adaptive K widening in the orchestrator** (on 0 builds, re-run retention with K, 2K, 4K
+  and reassemble). Leaves `retention/` untouched, but discards and re-does the entire
+  assembly pass, makes cost depend on the data, and still leaves the cheap end broken —
+  widening K adds expensive candidates, so it moves the retained set UP in price at exactly
+  the moment the budget is already too small. It fixes the symptom that the reservation
+  fixes at the cause.
+* **Second-pass cheapest-first fallback** (primary pass byte-identical, re-retain only on
+  0 builds). Preserves today's output exactly, at the cost of a second divergent code path
+  that is exercised only by the failure case — i.e. the least-tested branch carries the
+  most product weight.
+* **Lower `top_k_per_role`.** The cheapest parts are already below the cut, so a larger K
+  would admit them; this inverts the diagnosis and costs assembly time.
+* **Persist rejection reasons** (the OG-04 route). Correct as a long-term answer and out of
+  scope here: it needs a migration, a write path, and a retention-lifecycle decision that
+  has not been taken. `budget_floor` answers the budget question only, and is additive to
+  OG-04 rather than a substitute for it.
+
+### Consequences
+
+* The retained floor becomes the catalog's cheapest-per-role combination whenever a bucket
+  exceeds K, so the two harness measurement budgets in `scripts/measure-orchestrator.js`
+  (GAMING 20000, OFFICE 12000) are EXPECTED TO FALL and must be re-measured, not assumed.
+  Lowering them on prediction is exactly the error this decision is correcting.
+* `measure-og01-reach.js` becomes the cheapest standing witness: it prints the floor on
+  every run, so a future scoring seed that moves the floor is visible without a harness.
+* `retention/`'s documented boundary and its boundary test both change. The module's
+  header comment, `retention/index.js`'s header, and `docs/TEST_MAP.md` are updated in the
+  same session; stale status has caused re-implementation attempts here before.
+* Every call site of `retainTopKPerRole` must now pass `prices`. That is an intentional
+  break, not an oversight: a budget-blind retention that can still be constructed silently
+  is the defect.
+
+### Verdict for this pass
+
+Adopted. Implementation is tracked task-by-task in
+`docs/superpowers/plans/2026-10-02-og26-budget-aware-retention.md`; the `Status:` line
+above gains `; IMPLEMENTED <date>` when the code lands. No test, gate or measurement
+result is claimed by this entry — none has been run for it yet.
+
+### Supersedes / superseded by
+
+Amends **Decision 14 Rule 4** (the selection performed inside the `top_k_per_role` cap) and
+**Decision 12** (retention's input contract), both recorded 2026-09-20. Rule 2 eligibility,
+Rule 3 ordering, the Rule 5 `compareCandidates()` tie-break and the Rule 4 hard cap are
+UNCHANGED. The `## Final Status` footer one-sentence summary below still describes the
+ordering and the cap accurately and is updated only to note the reservation; the Decision
+22 / 26 pattern of an `UPDATE` block in place rather than a silent rewrite is the
+precedent. The superseded wording was NOT edited in place — the reservation is recorded
+here and in the code, and the gap-register row OG-26 is bannered with the same pointer.
 ---
 
 ## Final Status
@@ -3590,8 +3771,11 @@ Decision 23: RESOLVED (score-degeneracy: build-local unknown_pairwise_count (O2)
 Decision 24: RESOLVED (Decision 20 O4 / MAX_PER_PAIR = 3 re-evaluated on the 100-product catalog; retained unchanged, scope limitation recorded - diversity only at the raised cap, no-op-plus-under-fill at the shipped configured cap, adopted 2026-09-28)
 Decision 25: RESOLVED (assembly cap starvation: max_builds_per_query = 25 truncates the depth-first EXPANSION_ORDER walk before CPU/GPU can vary, so O4 is structurally starved at every MAX_PER_PAIR value and OFFICE is pair-space-bounded at k=9; raising the cap is necessary but insufficient, adopted 2026-09-28)
 Decision 26: RESOLVED (hybrid, audit D2: architecture S5.2 HIGH-TGP connector escalation IMPLEMENTED - Rule 11 returns FAIL GPU_PSU_CONNECTOR_NULL_HIGH_TGP when a required KNOWN connector's PSU availability is NULL and gpu_board_spec.board_tgp_watts >= 200, with the TGP loaded via context-loader/filter.js; the four S5.3/S6 HARD rules - cooler TDP, cooler height, RAM slots, RAM capacity - EXPLICITLY DEFERRED and recorded as UNENFORCED, adopted 2026-09-28)
+Decision 27: RESOLVED (budget-blind retention replaced by a cheapest-per-role reservation of 1 of K slots, ties by Rule 3/5 order, plus a budget_floor diagnostic that is always present; Rule 2/3/5 and the hard cap unchanged, adopted 2026-10-02)
 ```
 
 Unambiguous one-sentence semantics for the implementation task:
 
 > For each `component_role`, after excluding `REJECT` candidates, eligible (`PASS`/`UNKNOWN`) candidates are ordered by candidate score descending with the existing `compareCandidates()` chain (role enum order, `product_id` ASC, `product_variant_id` NULL-first then ASC) as the deterministic tie-break, and exactly the first `candidate_caps.top_k_per_role` (K) candidates are retained — `retained_count <= K` always, exactly K whenever at least K eligible candidates exist — and that set is then passed to Engine 3, with `max_builds_per_query` remaining an independent Engine 3 build-count cap.
+
+Decision 27 amendment (2026-10-02): the first K are the first K-1 by that order PLUS the single cheapest eligible candidate by `selected_price` (ties by the same order), re-emitted in that order — so the cap and the ordering are unchanged and only membership differs.
