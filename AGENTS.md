@@ -163,12 +163,16 @@ Command gotchas (verified 2026-09-28):
 - **A gate enumerates the rules it CHECKS, not the rules the engine HAS.** Registering a gap because a rule is absent from `check-deferred-rules.js` is wrong: that gate covers only the four DEFERRED rules OG-09…OG-12. Grep `src/recommendation/compatibility/` before ever claiming a compatibility rule does not exist.
 - `resolveCaseRadiator` (compatibility/case-radiator.js, rule 5) IS enforced, but `filtering/context-loader.js` hardcodes `radiator_size_mm: null` for every cooler, so a liquid cooler is `UNKNOWN` and never `PASS` on it. Verify with a direct call (`liquid + rows, size null` → UNKNOWN, `size 360` → PASS) rather than by reading the branch order.
 - `component_assessment.rating` is `TEXT` and read by NOTHING in `src/` — the engine scores from `score` only. Rating labels are provenance metadata, so band drift is a documentation bug, never a behaviour bug.
+- **"An assessment row exists" ≠ "the engine scores it."** Decision 13 gives a NULL `score` the same no-evidence value as a missing row (40.000), and `selectAssessmentRow` takes the NEWEST `assessed_at` (id ASC tie-break), so a newer NULL row **shadows** an older scored one. There is no unique constraint on `(product_id, assessment_type)`. Any coverage check written as "row exists" is therefore wrong: 20 live pairs pass `check-og01-coverage.js --strict` while scoring flat 40.000, and `Seed RTX 4060 8GB` PERFORMANCE is one — a newer NULL shadows a CONFIRMED 85.
 - **Passing a flag to a `require`d script:** set argv yourself or it is silently dropped — `node -e 'require("dotenv").config();process.argv=[process.argv[0],"x","--strict"];require("./scripts/check-og01-coverage.js")'`. A bare `require()` gives the script no args and it just runs the default path.
 - **Measuring a budget floor** for `measure-orchestrator.js`: insert a throwaway `recommendation_query`, call `runRecommendationSnapshot(client, queryId)`. Do NOT wrap it in your own `BEGIN` (it issues its own `SET TRANSACTION ISOLATION LEVEL` → "must be called before any query"). It rolls back its own build writes but PERSISTS the query row — delete `recommendation_query` yourself or the harness preflight (`queries: 0`) breaks.
 - `measure-orchestrator.js`'s "raised cap 100000" raises `max_builds_per_query`, NOT the budget. "0 builds at the raised cap" therefore says nothing about budget; check the cheapest assembled `total_price` before concluding a budget problem.
 - `gpu_board_spec` keys on `product_variant_id`, not `product_id`; every other spec table keys on `product_id`. Joining it wrongly gives "missing FROM-clause entry".
 - **Editing a CRLF file from `node -e`:** convert BOTH the find and replace strings' `\n` to `\r\n`, or no match. Note the docs disagree on arrows: `docs/OG-01_*PLAN.md` use ASCII `->`, `CONTEXT.md`/`AGENTS.md` use U+2192.
 - For multi-line edits to a committed file, write a throwaway node script with a `split(find).length - 1 !== 1` match-count assertion rather than trusting an inline shell heredoc or a single-replace tool call.
+- **Recovering a long markdown table row: take it from git, never retype it.** `git show <rev>:<file> | grep '^| OG-26' > x.txt`, edit with that text, then `cmp` the result against the recovered line. A replace whose `oldString` is only a PREFIX of the target line deletes the prefix and orphans the remainder as its own line.
+- **`grep -c $'\r' <file>` misreports CRLF under this Git Bash** — it returned 0 for a file node showed to be 140/140 CRLF, which sent me to "repair" line endings that were fine. Count with node instead: `(t.match(/\r\n/g)||[]).length` vs `(t.match(/(?<!\r)\n/g)||[]).length`. Likewise **`/tmp` is not writable here** (`Permission denied`) and node resolves `/tmp` to `C:\tmp`, which does not exist — stage temp files inside the repo and delete them.
+- **Prove a new gate is not vacuous by running it against the real defect it was written for.** A gate that has never been shown to fail is not evidence of anything: `git show <bad-rev>:<file>` into place, run it, confirm the expected FAILs, then restore from git.
 - Assert structural markers BEFORE parsing between them. A spliced seed kept a duplicated `FROM (VALUES` and lost its `) AS v(...)` alias line; the validator still reported "52 rows parsed" because it sliced from the wrong side of the missing marker. Fail loudly when an alias marker is absent or the `FROM (VALUES` count is not what you expect.
 - Any "ready to push" claim ages fast — check `git log --oneline origin/master..master` (a 2026-10-02 report said "ready for push" while `origin/master` was already at HEAD).
 - `pg` client: passing a JS array to `= ANY($1)` fails with "bind message supplies N parameters,
@@ -210,6 +214,14 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
   (GPU↔case, GPU↔PSU).
 - When engine code lands, update `CONTEXT.md`'s status sections in the same session — stale status
   has caused re-implementation attempts before.
+- **Scope a policy exemption to the SUBJECT of the record, never to free prose elsewhere in it.**
+  The gap-register's closed-row exemption must read a closed row's ID/Item cells only: harvesting
+  every `OG-nn` in the row excused OG-26 (C-16 name-drops it in its resolution) and made the check
+  pass on the exact damage it was added for.
+- **Fixing a register row is not done until the grep sweep is clean.** A corrected claim that was
+  copied into `CONTEXT.md` and a plan doc stays false everywhere it was copied —
+  `grep -rn "<key phrase>" --include="*.md" .` in the same commit. Leave dated `DEVELOPMENT_NOTES.md`
+  entries alone; they record what was believed then.
 - Stage only intended files; check `git status` first (shared checkout).
 - Preserve the repo's line endings: root `AGENTS.md` is LF; `CONTEXT.md`, `DEVELOPMENT_NOTES.md`,
   `docs/*.md` and `database/**` are CRLF. Match the file you edit — a stray-LF file reads as a
