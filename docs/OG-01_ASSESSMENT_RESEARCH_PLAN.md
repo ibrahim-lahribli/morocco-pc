@@ -1,7 +1,7 @@
 # OG-01 Research Plan — real `component_assessment` data for the 85 unassessed products
 
-**Date:** 2026-09-30 · **Owner:** data-research · **Status:** IN PROGRESS — batch 1 (seed 004a, 87 rows) AUTHORED 2026-09-30 and **APPLIED to shared DB 2026-10-01 + MEASURED** (reach now score-driven; TEST_DATABASE_URL branch unreachable, measured via read-only pipeline replication against shared DB — see DEVELOPMENT_NOTES 2026-10-01); batch 2 (56 products / 168 rows) outstanding
-**Closes:** `docs/OPEN_GAPS.md` OG-01 (the only BLOCKING gap) · **Contract:** `database/seeds/002_catalog_expansion.sql` header D2 (amended 2026-09-28) · **Gate:** `scripts/check-og01-coverage.js` (read-only; exit 1 while fully-unassessed products remain)
+**Date:** 2026-09-30 · **Owner:** data-research · **Status:** IN PROGRESS — batch 1 (seed 004a, 87 rows) AUTHORED 2026-09-30 and **APPLIED to shared DB 2026-10-01 + MEASURED** (reach now score-driven; TEST_DATABASE_URL branch unreachable, measured via read-only pipeline replication against shared DB — see DEVELOPMENT_NOTES 2026-10-01); batch 2 IN PROGRESS: the pilot `004b_cpu_motherboard.sql` (21 products / 63 rows) AUTHORED, BRANCH-APPLIED, MEASURED and APPLIED 2026-10-02; `004b_ssd_ram.sql` and `004b_case_cooler.sql` (35 products / 105 rows) outstanding
+**Closes:** `docs/OPEN_GAPS.md` OG-01 (the only BLOCKING gap) · **Executable companion:** `docs/OG-01_BATCH2_EXECUTION_PLAN.md` · **Contract:** `database/seeds/002_catalog_expansion.sql` header D2 (amended 2026-09-28) · **Gate:** `scripts/check-og01-coverage.js` (read-only; exit 1 while fully-unassessed products remain)
 
 ---
 
@@ -131,7 +131,7 @@ Intenso, Netac, Hiksemi): community teardown/review evidence or honest NULLs. Th
 
 ## 6. Acceptance criteria (all machine-checkable)
 
-**Status 2026-10-01 — batch 1 (87 of 255 rows) is APPLIED + MEASURED; the reach-blocking half is closed. Batch 2 (168 rows) is unwritten.** The checklist describes the completed deliverable, and `scripts/check-og01-coverage.js` is its live gate (now reporting 56 products / 168 rows implied).
+**Status 2026-10-02 — batch 1 (87 rows) plus the batch-2 pilot (63 rows) are APPLIED + MEASURED: assessments 112 -> 175, coverage gate 56 -> 35 products / 105 rows implied, flat-40 pool candidates 57 -> 36 of 101, and CPU/MOTHERBOARD reach is score-driven. Remaining: `004b_ssd_ram.sql` (60 rows) + `004b_case_cooler.sql` (45 rows). Applying real data also surfaced OG-26 (retention is budget-blind -> GAMING@15000 MAD now assembles 0 builds).** The checklist describes the completed deliverable, and `scripts/check-og01-coverage.js` is its live gate (now reporting 56 products / 168 rows implied).
 
 There is **no product→category FK**: `product_category` is an enum used only in
 `product_candidate.source_category`, and the loader derives category from spec-table presence

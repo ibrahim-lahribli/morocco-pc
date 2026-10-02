@@ -1,7 +1,8 @@
 # OG-01 Batch-2 Execution Plan — seed `004b` (56 products / 168 rows)
 
-**Date:** 2026-10-02 · **Owner:** data-research · **Status:** step 0 DONE (gates + scoping);
-steps 1-2 (anchor freeze + research) and the pilot file in progress
+**Date:** 2026-10-02 · **Owner:** data-research · **Status:** steps 0-6 DONE for the PILOT (`004b_cpu_motherboard.sql`, 63 rows:
+anchors frozen, researched, branch-applied, measured, shared-applied, verified);
+steps 1-6 still to run for `004b_ssd_ram.sql` and `004b_case_cooler.sql`
 **Parent plan:** `docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md` (this file is its executable
 companion: same hard rules, concrete anchors, per-file workflow) · **Closes:** OG-01
 **Gates:** `scripts/check-og01-coverage.js` · `scripts/check-deferred-rules.js` ·

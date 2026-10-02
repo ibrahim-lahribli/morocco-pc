@@ -70,8 +70,13 @@ const { SELECT_SCORING_MODEL_SQL } = require('../src/recommendation/scoring');
 const HIGH_CAP = 100000;
 
 /** Budgets proposed from the seed prices (see the seed plan); MAD throughout. */
+// Budgets are the lowest this catalog can serve AFTER seed 004b. Retention is
+// score-driven and keeps the 5 highest-scoring candidates per role, so a GAMING
+// query at 15000 MAD now retains only CPUs at 2699 MAD and up and assembly prunes
+// every combination -> 0 builds (measured 2026-10-02: 15000 -> 0, 20000 -> 25).
+// Do not lower these without re-measuring; see OG-26 for the root cause.
 const QUERIES = [
-  { useCase: 'GAMING', budget: '15000' },
+  { useCase: 'GAMING', budget: '20000' },
   { useCase: 'OFFICE', budget: '10000' },
 ];
 
@@ -99,11 +104,12 @@ const DECISION_20_TOP10_TEXT = {
 /** Printed comparison band: delta 0 = exact, |delta| <= close = close, else off. */
 const CLAIM_BAND = { exact: 0, close: 2 };
 
-/** Exact seed expectations (seeds 001 + 002 + 003 + 004a: 004a adds 87
- * GPU/PSU assessment rows for OG-01 batch 1, 25 + 87 = 112; see
- * docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md). Update in the same session as any
- * seed that changes the canonical catalog (AGENTS.md section 8). */
-const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 112, queries: 0 };
+/** Exact seed expectations (seeds 001 + 002 + 003 + 004a + 004b: 004a adds 87
+ * GPU/PSU rows for OG-01 batch 1 and 004b adds 63 CPU/MOTHERBOARD rows for
+ * batch 2, 25 + 87 + 63 = 175; see docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md).
+ * Update in the same session as any seed that changes the canonical catalog
+ * (AGENTS.md section 8). */
+const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 175, queries: 0 };
 
 function fail(message) {
   throw new Error(message);

@@ -154,6 +154,7 @@ Command gotchas (verified 2026-09-28):
   `DEVELOPMENT_NOTES.md` 2026-10-01.
 - `node scripts/run-seeds.js --dry-run` counts statements with a naive `split(';')`, so a semicolon
   inside a SQL comment inflates the count (Postgres ignores it; the number is just misleading).
+- **Seed 004b changed the canonical catalog and two harness budgets.** The guarded harnesses pin live row counts (`assessments: 175` after 004a 87 + 004b 63) and their GAMING query is now **20000 MAD**, because retention is score-driven and budget-blind: after real CPU/MOTHERBOARD assessments the retained CPU set is 2699 MAD and up, so GAMING@15000 MAD assembles **0 builds** (recorded as OG-26). Never lower that budget without re-measuring, and expect a seed that changes scores to move the cheapest serviceable budget.
 - Re-verify every "X PSUs / Y cases"-style register count against a live NULL-scan before
   repeating it: OG-08 said "3 PSUs" for two revisions but a 2026-10-01 scan found **4** —
   seed 003 had added a partially-NULL row (`A750GL PCIE5`, EPS-only, because msi.com returns

@@ -80,9 +80,10 @@ async function countsForQuery(client, queryId) {
 // Canonical seeded state of the test branch: seeds 001 (15 products) + 002
 // (85 products, catalog expansion) = 100 Seed products / 101 Seed offers;
 // seed 003 (connector data, no new rows) + 004a (87 GPU/PSU assessment rows,
-// OG-01 batch 1) = 112 assessments. Update this when a seed file changes the
-// canonical catalog (AGENTS.md section 8 same-session rule).
-const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 112, queries: 0 };
+// OG-01 batch 1) + 004b (63 CPU/MOTHERBOARD assessment rows, OG-01 batch 2
+// pilot) = 175 assessments. Update this when a seed file changes the canonical
+// catalog (AGENTS.md section 8 same-session rule).
+const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 175, queries: 0 };
 
 async function preflight(client) {
   const products = await count(client, "SELECT count(*)::int AS count FROM product WHERE name LIKE 'Seed %'");
@@ -116,7 +117,7 @@ async function preflight(client) {
 async function insertQuery(client, scoringModelId) {
   const inserted = await client.query(
     'INSERT INTO recommendation_query (scoring_model_id, budget_amount, currency, use_case)'
-      + " VALUES ($1, '15000', 'MAD', 'GAMING') RETURNING id",
+      + " VALUES ($1, '20000', 'MAD', 'GAMING') RETURNING id",
     [scoringModelId]
   );
   return inserted.rows[0].id;
