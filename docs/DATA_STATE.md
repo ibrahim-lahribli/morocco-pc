@@ -22,10 +22,10 @@ the catalog.
 | `build_candidate` | 0 |
 | `build_component` | 0 |
 | `case_motherboard_form_factor` | 27 |
-| `case_radiator_support` | 7 |
+| `case_radiator_support` | 59 |
 | `case_spec` | 10 |
 | `chipset` | 5 |
-| `component_assessment` | 235 |
+| `component_assessment` | 280 |
 | `cooler_socket_support` | 21 |
 | `cooler_spec` | 9 |
 | `cpu_motherboard_support` | 21 |
@@ -61,14 +61,14 @@ the catalog.
 | Layer | Tables | Rows |
 |---|---|---|
 | 1 — Catalog/Hardware | 7 | 237 |
-| 2 — Performance/Assessment | 5 | 240 |
+| 2 — Performance/Assessment | 5 | 285 |
 | 3 — Market | 3 | 204 |
 | 4 — Recommendation | 5 | 0 |
 
 ## Coverage
 
 - Products: 100 (22 variants)
-- Assessed products: 84 of 100 (235 assessment rows) — the rest score the flat no-evidence baseline (OG-01)
+- Assessed products: 99 of 100 (280 assessment rows) — the rest score the flat no-evidence baseline (OG-01)
 - Offers: 101 (checked 2026-09-19 22:33:23.358251+00 … 2026-09-25 15:29:19.121345+00)
 - GPU variants with NULL width_slots/height_mm: 7 (OG-07)
 - PSUs with NULL connector_12vhpwr: 3 (OG-08)

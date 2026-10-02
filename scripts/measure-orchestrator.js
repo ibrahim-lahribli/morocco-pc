@@ -75,9 +75,24 @@ const HIGH_CAP = 100000;
 // query at 15000 MAD now retains only CPUs at 2699 MAD and up and assembly prunes
 // every combination -> 0 builds (measured 2026-10-02: 15000 -> 0, 20000 -> 25).
 // Do not lower these without re-measuring; see OG-26 for the root cause.
+//
+// OFFICE was re-measured on 2026-10-02 after seed 004b file 3 (CASE + CPU_COOLER)
+// and moved 10000 -> 12000 on the same evidence. That seed scored the 8 cases on
+// QUALITY (a 0.5 role weight), which evicted the cheapest cases - Fractal Pop XL
+// and the MAG FORGE 320R AIRFLOW at 849 MAD - from the retained top-5, leaving a
+// retained CASE set of 949..1699 MAD. Measured floor by inserting a throwaway
+// recommendation_query at each budget and snapshotting (every probe row deleted
+// afterwards; the snapshot rolls back its own build writes):
+//   10000 -> 0 builds | 11000 -> 25 builds, cheapest total 10445 MAD
+//   12000 -> 25 builds, cheapest total 11195 MAD
+// 12000 is the smallest round budget above the 10445 MAD floor. This is the SAME
+// defect as the GAMING 15000 case above, hitting the opposite end of the
+// catalog: retention ignores the budget entirely, so a quality scoring change
+// moves the cheapest serviceable build in EITHER direction. Raising the
+// measurement budget acknowledges the symptom; it does not fix OG-26.
 const QUERIES = [
   { useCase: 'GAMING', budget: '20000' },
-  { useCase: 'OFFICE', budget: '10000' },
+  { useCase: 'OFFICE', budget: '12000' },
 ];
 
 /**
@@ -109,7 +124,7 @@ const CLAIM_BAND = { exact: 0, close: 2 };
  * batch 2, 25 + 87 + 63 = 175; see docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md).
  * Update in the same session as any seed that changes the canonical catalog
  * (AGENTS.md section 8). */
-const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 235, queries: 0 };
+const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 280, queries: 0 };
 
 function fail(message) {
   throw new Error(message);

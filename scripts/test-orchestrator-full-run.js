@@ -83,7 +83,7 @@ async function countsForQuery(client, queryId) {
 // OG-01 batch 1) + 004b (63 CPU/MOTHERBOARD rows + 60 SSD/RAM rows, OG-01
 // batch 2) = 235 assessments. Update this when a seed file changes the canonical
 // catalog (AGENTS.md section 8 same-session rule).
-const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 235, queries: 0 };
+const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 280, queries: 0 };
 
 async function preflight(client) {
   const products = await count(client, "SELECT count(*)::int AS count FROM product WHERE name LIKE 'Seed %'");
