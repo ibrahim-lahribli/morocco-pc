@@ -1,11 +1,11 @@
-# OG-01 batch-2 research checklist (generated 2026-10-01)
+# OG-01 batch-2 research checklist (generated 2026-10-02)
 
 Source: live DB (scoring model seed-minimal-v1 1.0.0).
 Derived by scripts/og01-research-checklist.js from scripts/lib/og01-catalog.js - regenerate, never hand-edit.
 Rules: docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md sections 2 (hard rules), 3 (sourcing), 4 (rubric).
 No URL, no row (plan section 2.6). Honest NULL beats a guessed number (section 2.7).
 
-Targets: 70 products, 186 rows implied.
+Targets: 56 products, 168 rows implied.
 
 | Product | Category | Missing types | Live offer (MAD) | Source URL(s) | Scores (P/Q/V/U/T/E) | Notes |
 |---|---|---|---|---|---|---|
@@ -14,19 +14,16 @@ Targets: 70 products, 186 rows implied.
 | Seed Corsair 3500X Black | CASE | QUALITY, THERMALS, VALUE | 949 MAD | | | |
 | Seed Corsair 3500X White | CASE | QUALITY, THERMALS, VALUE | 949 MAD | | | |
 | Seed Corsair iCUE LINK 3500X ARGB White | CASE | QUALITY, THERMALS, VALUE | 1599 MAD | | | |
-| Seed Fractal Pop XL | CASE | THERMALS, VALUE | 1400 MAD | | | |
 | Seed MSI MAG FORGE 320R AIRFLOW White | CASE | QUALITY, THERMALS, VALUE | 849 MAD | | | |
 | Seed MSI MAG PANO 100R PZ Blanc | CASE | QUALITY, THERMALS, VALUE | 1699 MAD | | | |
 | Seed MSI MPG VELOX 100R WHITE | CASE | QUALITY, THERMALS, VALUE | 1619 MAD | | | |
 | Seed Cooler Master MasterLiquid ML280 Mirror | COOLER | QUALITY, THERMALS, VALUE | 1499 MAD | | | |
 | Seed Corsair Nautilus 240 RS ARGB Black AIO | COOLER | QUALITY, THERMALS, VALUE | 1099 MAD | | | |
-| Seed DeepCool AG400 | COOLER | QUALITY, VALUE | 350 MAD | | | |
 | Seed DeepCool MYSTIQUE 360 Black AIO | COOLER | QUALITY, THERMALS, VALUE | 1699 MAD | | | |
 | Seed MSI MAG COREFROZR AA13 BLACK | COOLER | QUALITY, THERMALS, VALUE | 699 MAD | | | |
 | Seed MSI MAG COREFROZR AA13 WHITE | COOLER | QUALITY, THERMALS, VALUE | 699 MAD | | | |
 | Seed MSI MAG CORELIQUID 240R | COOLER | QUALITY, THERMALS, VALUE | 799 MAD | | | |
 | Seed MSI MAG CoreLiquid A13 360 White AIO | COOLER | QUALITY, THERMALS, VALUE | 1299 MAD | | | |
-| Seed Noctua NH-U12S SE-AM5 | COOLER | QUALITY, VALUE | 750 MAD | | | |
 | Seed AMD Ryzen 5 3400G | CPU | PERFORMANCE, QUALITY, VALUE | 1599 MAD | | | |
 | Seed AMD Ryzen 5 3500X | CPU | PERFORMANCE, QUALITY, VALUE | 1299 MAD | | | |
 | Seed AMD Ryzen 5 5500 | CPU | PERFORMANCE, QUALITY, VALUE | 899 MAD | | | |
@@ -43,25 +40,16 @@ Targets: 70 products, 186 rows implied.
 | Seed AMD Ryzen 9 5950X | CPU | PERFORMANCE, QUALITY, VALUE | 2999 MAD | | | |
 | Seed Intel Core i5-12400F | CPU | PERFORMANCE, QUALITY, VALUE | 1549 MAD | | | |
 | Seed Intel Core i7-12700KF | CPU | PERFORMANCE, QUALITY, VALUE | 2699 MAD | | | |
-| Seed Ryzen 5 7500F | CPU | QUALITY | 1800 MAD | | | |
-| Seed Ryzen 5 8600G | CPU | QUALITY | 2800 MAD | | | |
-| Seed RTX 4060 8GB | GPU | QUALITY | 3200-4800 MAD | | | |
 | Seed CORSAIR VENGEANCE LPX DDR4 3200MHz 16GB 1x16 CL16 | MEMORY | PERFORMANCE, QUALITY, VALUE | 1349 MAD | | | |
 | Seed CORSAIR VENGEANCE RGB PRO DDR4 3200MHz 16GB 2x8 CL16 | MEMORY | PERFORMANCE, QUALITY, VALUE | 1349 MAD | | | |
-| Seed Corsair Vengeance 16GB DDR5-5200 | MEMORY | QUALITY, VALUE | 700 MAD | | | |
-| Seed G.Skill Flare X5 32GB DDR5-6000 | MEMORY | QUALITY | 1400 MAD | | | |
 | Seed INNOVATION IT DDR4 3200MHz 8GB 1x8 CL22 | MEMORY | PERFORMANCE, QUALITY, VALUE | 599 MAD | | | |
 | Seed LEXAR DDR4 3200MHz 16GB 1x16 CL22 | MEMORY | PERFORMANCE, QUALITY, VALUE | 1299 MAD | | | |
 | Seed TWINMOS DDR4 3200MHz 16GB 1x16 CL16 | MEMORY | PERFORMANCE, QUALITY, VALUE | 1299 MAD | | | |
-| Seed Gigabyte B650 AORUS ELITE AX | MOTHERBOARD | UPGRADEABILITY | 2400 MAD | | | |
 | Seed LPC Gaming B650 DDR5 | MOTHERBOARD | QUALITY, UPGRADEABILITY, VALUE | 2190 MAD | | | |
 | Seed MSI A520M A-PRO | MOTHERBOARD | QUALITY, UPGRADEABILITY, VALUE | 582 MAD | | | |
 | Seed MSI B550M PRO-VDH | MOTHERBOARD | QUALITY, UPGRADEABILITY, VALUE | 952 MAD | | | |
 | Seed MSI B550M PRO-VDH WIFI | MOTHERBOARD | QUALITY, UPGRADEABILITY, VALUE | 1267 MAD | | | |
-| Seed MSI PRO B650M-P | MOTHERBOARD | VALUE | 1500 MAD | | | |
 | Seed MSI Z790 GAMING PLUS WIFI | MOTHERBOARD | QUALITY, UPGRADEABILITY, VALUE | 2649 MAD | | | |
-| Seed Corsair CX550M 550W | PSU | VALUE | 650 MAD | | | |
-| Seed MSI MAG A750GL 750W | PSU | VALUE | 1100 MAD | | | |
 | Seed CRUCIAL E100 1TB NVMe | STORAGE | PERFORMANCE, QUALITY, VALUE | 1099 MAD | | | |
 | Seed CRUCIAL P310 2TB NVMe | STORAGE | PERFORMANCE, QUALITY, VALUE | 1499 MAD | | | |
 | Seed HIKSEMI WAVE 512GB NVMe | STORAGE | PERFORMANCE, QUALITY, VALUE | 599 MAD | | | |
@@ -73,9 +61,7 @@ Targets: 70 products, 186 rows implied.
 | Seed MSI SPATIUM M450 1TB | STORAGE | PERFORMANCE, QUALITY, VALUE | 899 MAD | | | |
 | Seed Netac N930E Pro 1TB | STORAGE | PERFORMANCE, QUALITY, VALUE | 599 MAD | | | |
 | Seed SAMSUNG 9100 PRO 4TB NVMe | STORAGE | PERFORMANCE, QUALITY, VALUE | 5999 MAD | | | |
-| Seed Samsung 990 Pro 2TB | STORAGE | QUALITY | 1500 MAD | | | |
 | Seed Samsung SSD 980 1TB | STORAGE | PERFORMANCE, QUALITY, VALUE | 1099 MAD | | | |
 | Seed TeamGroup MP33 1TB | STORAGE | PERFORMANCE, QUALITY, VALUE | 699 MAD | | | |
 | Seed TeamGroup T-FORCE CARDEA Z44L 1TB | STORAGE | PERFORMANCE, QUALITY, VALUE | 799 MAD | | | |
-| Seed WD Blue SN580 1TB | STORAGE | QUALITY | 800 MAD | | | |
 | Seed WD_BLACK SN770 1TB | STORAGE | PERFORMANCE, QUALITY, VALUE | 999 MAD | | | |

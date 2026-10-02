@@ -14,13 +14,16 @@
  * human-facing counterpart of the gate: the gate says WHAT remains, the
  * checklist is WHERE the researcher writes.
  *
- * Deliberate no-evidence fixtures (seed 001) are excluded - they are not
- * research targets (see og01-catalog.js DELIBERATE_NO_EVIDENCE). Seed 001's
- * PARTIAL fixtures (some types deliberately missing for STEP-1 branch
- * coverage) ARE listed - completing them is real batch-2 work; the gate
- * reports the same set as INFO-partials. This is why the checklist can list
- * more products than the gate's FAIL line (56 fully-unassessed + 14 partials
- * = 70 worksheet rows as of 2026-10-01).
+ * Deliberate fixtures are excluded - they are not research targets. Two
+ * classes come from og01-catalog.js: DELIBERATE_NO_EVIDENCE (seed 001
+ * products with NO assessment rows, exercising the whole-product no-evidence
+ * branch) and DELIBERATE_PARTIAL (seed 001 products with SOME of their
+ * required types, exercising the missing-type branch of Decision 13 STEP 1).
+ * OG-01 batch 2 was scoped 2026-10-02 to the fully-unassessed products only,
+ * so BOTH fixture classes are skipped and the worksheet is exactly the gate's
+ * FAIL set (56 products / 168 implied rows as of 2026-10-02; the worksheet's
+ * row total counts one row per missing type, including the deliberate-NULL
+ * rows plan section 2.7 allows).
  *
  * Read-only: SELECT-only, reads DATABASE_URL. Safe against the shared DB.
  *
@@ -114,8 +117,16 @@ async function main() {
     await loadCoveredTypes(client, catalog.products);
 
     const targets = [];
+    let skippedFixtures = 0;
     for (const product of catalog.products) {
-      if (catalog.fixtures.has(product.name)) continue;
+      if (catalog.fixtures.has(product.name)) {
+        skippedFixtures += 1;
+        continue;
+      }
+      if (catalog.partialFixtures.has(product.name)) {
+        skippedFixtures += 1;
+        continue;
+      }
       const missing = missingTypes(product, catalog.requiredByCategory);
       if (missing.length === 0) continue;
       targets.push({
@@ -127,6 +138,13 @@ async function main() {
     }
 
     const body = (CSV ? csv(targets) : markdown(catalog, targets)).replace(/\n/g, '\r\n');
+    if (!CSV) {
+      console.error(
+        'NOTE: ' +
+          skippedFixtures +
+          ' deliberate seed-001 fixture product(s) excluded (no-evidence + partial; not research targets)'
+      );
+    }
     if (OUT_FILE) {
       // Repo CRLF convention for docs/** (AGENTS section 8).
       fs.writeFileSync(OUT_FILE, body);

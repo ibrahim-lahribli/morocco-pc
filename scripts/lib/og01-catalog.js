@@ -51,6 +51,41 @@ const { ROLE_CATEGORIES } = require(path.join(
 const DELIBERATE_NO_EVIDENCE = Object.freeze(['Seed NZXT H5 Flow Compact']);
 
 /**
+ * Products deliberately left with only SOME of their required assessment
+ * types, so the missing-type branch of Decision 13 STEP 1 (a type with no
+ * row takes the same no-evidence branch as a NULL-score row) stays covered
+ * in a LIVE database run.
+ *
+ * Seed 001 wrote a curated subset per product rather than all three required
+ * types; the per-type gaps are an artifact of that fixture set, not OG-01
+ * research debt. OG-01 batch 2 was scoped 2026-10-02 to the 56 fully
+ * unassessed products (168 rows) and EXCLUDES these on purpose: filling them
+ * would remove live branch coverage without closing any gap.
+ *
+ * Consequence for consumers: these are reported separately from real
+ * partials and are never research targets. `--strict` fails only on partials
+ * outside this set. If seed 001 ever changes, a name that stops being a
+ * partial simply stops appearing; a partial that appears that is NOT listed
+ * here is surfaced as a real one.
+ */
+const DELIBERATE_PARTIAL = Object.freeze([
+  'Seed Fractal Pop XL',
+  'Seed DeepCool AG400',
+  'Seed Noctua NH-U12S SE-AM5',
+  'Seed Ryzen 5 7500F',
+  'Seed Ryzen 5 8600G',
+  'Seed RTX 4060 8GB',
+  'Seed Corsair Vengeance 16GB DDR5-5200',
+  'Seed G.Skill Flare X5 32GB DDR5-6000',
+  'Seed Gigabyte B650 AORUS ELITE AX',
+  'Seed MSI PRO B650M-P',
+  'Seed Corsair CX550M 550W',
+  'Seed MSI MAG A750GL 750W',
+  'Seed Samsung 990 Pro 2TB',
+  'Seed WD Blue SN580 1TB',
+]);
+
+/**
  * Canonical product-keyed category -> spec table mapping. Trusted static
  * identifiers, deliberately duplicated from candidates/loader.js (that module
  * does not export the map; the KEYS must stay identical to its
@@ -123,7 +158,7 @@ function requiredTypesByCategory(roleWeights) {
  * @param {object} db pg-compatible client exposing query(sql)
  * @returns {Promise<{model: {id,name,version}, requiredByCategory: Map,
  *   products: Array<{id,name,category,coveredTypes:Set,minPrice,maxPrice,offerCount}>,
- *   fixtures: Set<string>}>}
+ *   fixtures: Set<string>, partialFixtures: Set<string>}>}
  *   products are sorted category ASC, name ASC; coveredTypes is the set of
  *   assessment types the product already has rows for; min/maxPrice are
  *   numbers in offer currency (MAD today) or null when the product has no
@@ -194,6 +229,7 @@ async function loadOg01Catalog(db) {
     requiredByCategory,
     products,
     fixtures: new Set(DELIBERATE_NO_EVIDENCE),
+    partialFixtures: new Set(DELIBERATE_PARTIAL),
   };
 }
 
@@ -219,6 +255,7 @@ async function loadCoveredTypes(db, products) {
 
 module.exports = {
   DELIBERATE_NO_EVIDENCE,
+  DELIBERATE_PARTIAL,
   PRODUCT_KEYED_SPEC_BY_CATEGORY,
   requiredTypesByCategory,
   loadOg01Catalog,

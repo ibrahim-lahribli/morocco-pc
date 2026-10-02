@@ -17,9 +17,17 @@
  * scripts/lib/og01-catalog.js - shared with og01-research-checklist.js and
  * measure-og01-reach.js. This file owns only the gate presentation: FAIL for
  * fully-unassessed products (= the remaining research targets, excluding
- * fixtures), INFO for partials (seed 001's fixtures are deliberately partial;
- * --strict turns them into a failure, meaningful only after the full OG-01
- * deliverable has landed: batch 1 = seeds/004a, batch 2 = seeds/004b).
+ * fixtures), INFO for partials (--strict turns REAL partials into a failure,
+ * meaningful only after the full OG-01 deliverable has landed: batch 1 =
+ * seeds/004a, batch 2 = seeds/004b).
+ *
+ * Two fixture classes come from scripts/lib/og01-catalog.js and are reported
+ * separately from real research targets: DELIBERATE_NO_EVIDENCE (products with
+ * NO assessment rows, exercising the whole-product no-evidence branch) and
+ * DELIBERATE_PARTIAL (products with SOME of their required types, exercising
+ * the missing-type branch of Decision 13 STEP 1). Neither counts as a gap and
+ * neither fails --strict; OG-01 batch 2 was scoped to the 56 fully-unassessed
+ * products and deliberately leaves the partial fixtures alone.
  *
  * Read-only: SELECT-only, reads DATABASE_URL, performs no writes. It is safe
  * to run against the shared database and does not need the TEST_DATABASE_URL
@@ -65,6 +73,7 @@ async function main() {
 
     const noEvidence = [];
     const partial = [];
+    const partialFixtures = [];
     const fixtures = [];
     let unmapped = 0;
 
@@ -81,6 +90,11 @@ async function main() {
       if (covered.size === 0) {
         if (catalog.fixtures.has(product.name)) fixtures.push(entry);
         else noEvidence.push(entry);
+      } else if (catalog.partialFixtures.has(product.name)) {
+        // Deliberate seed-001 fixture (DELIBERATE_PARTIAL): a type with no row
+        // at all is the missing-type branch of Decision 13 STEP 1. Reported,
+        // never a research target, never a --strict failure.
+        partialFixtures.push(entry);
       } else {
         partial.push(entry);
       }
@@ -138,9 +152,9 @@ async function main() {
     if (partial.length > 0) {
       console.log(
         (STRICT ? 'FAIL' : 'INFO') +
-          ' partially-assessed products: ' +
+          ' partially-assessed products (research targets): ' +
           partial.length +
-          (STRICT ? '' : ' (seed 001 fixtures are deliberately partial; --strict fails on these)')
+          (STRICT ? '' : ' (--strict fails on these)')
       );
       for (const entry of partial) {
         console.log(
@@ -148,11 +162,23 @@ async function main() {
         );
       }
     } else {
-      console.log('PASS every assessed product covers all its required types');
+      console.log(
+        'PASS every non-fixture assessed product covers all its required types'
+      );
     }
 
     if (unmapped > 0) {
       console.log('INFO products with no role_weights category (not gated here): ' + unmapped);
+    }
+
+    if (partialFixtures.length > 0) {
+      console.log(
+        'INFO deliberate partial fixtures (missing-type branch kept live, not research targets): ' +
+          partialFixtures.length
+      );
+      for (const entry of partialFixtures) {
+        console.log('  ' + entry.name + '  [' + entry.category + ']  missing=' + entry.missing.join(','));
+      }
     }
 
     const failed = noEvidence.length > 0 || (STRICT && partial.length > 0);
