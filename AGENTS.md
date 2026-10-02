@@ -118,6 +118,7 @@ deliberately not duplicated here.
 | `node scripts/run-seeds.js --dry-run` | Report seed statements without executing |
 | `node scripts/run-migrations.js` | Apply migrations — FRESH DB ONLY (not re-runnable) |
 | `node --test scripts/lib/db-url.test.js` | Guard unit tests (not in `test:unit`) |
+| `node --test scripts/lib/gap-register.test.js` | Gap-register table-shape tests (not in `test:unit`; the check itself runs in `verify:docs` as `gap-register-shape`) |
 | `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance fixtures |
 | `node scripts/test-layer3.js --verify --functional` | Layer 3 schema (flags required; needs ALL THREE Layer 3 tables empty — `store` too; non-empty on shared DB AND on the test branch as of 2026-09-28, so it cannot pass in either environment today) |
 | `node scripts/test-layer4.js` | Layer 4 canonical schema (unguarded: reads `DATABASE_URL`; writes `TestL4%` fixtures inside one transaction with final ROLLBACK; does NOT require empty Layer 4 tables) |

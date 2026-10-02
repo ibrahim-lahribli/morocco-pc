@@ -114,7 +114,36 @@ const decisions = (function checkDecisions() {
   }
 })();
 
-// 4. Decision index freshness (same semantics as gen-decision-index --check,
+// 4. The gap register's own table shape: every section 1 row has the declared
+// six cells, no id is duplicated, and every OG id cited anywhere in
+// docs/OPEN_GAPS.md is accounted for by a section 1 row or a closed-table row.
+// Added 2026-10-02 after commit 10a8e87 registered OG-29 by editing the OG-26
+// row in place and lost its ID cell, leaving OG-26 with no row at all — an
+// IMPORTANT engine-code gap, invisible in the rendered table, caught by
+// nothing. Offline: a file read plus scripts/lib/gap-register.js.
+(function checkGapRegister() {
+  let parsed;
+  try {
+    const { parseGapRegister } = require(path.join(ROOT, 'scripts', 'lib', 'gap-register'));
+    parsed = parseGapRegister(readRepo('docs/OPEN_GAPS.md'));
+  } catch (err) {
+    fail('gap-register-shape', 'could not parse docs/OPEN_GAPS.md: ' + err.message);
+    return;
+  }
+  if (parsed.problems.length === 0) {
+    pass(
+      'gap-register-shape',
+      parsed.ids.length + ' rows, 6 cells each, every cited OG id has a row'
+    );
+    return;
+  }
+  for (const problem of parsed.problems) {
+    const where = problem.line === 0 ? 'whole document' : 'line ' + problem.line;
+    fail('gap-register-shape', problem.id + ' [' + problem.code + '] (' + where + '): ' + problem.detail);
+  }
+})();
+
+// 5. Decision index freshness (same semantics as gen-decision-index --check,
 // in-process so CI needs only this one script).
 (function checkIndexFresh() {
   const { execFileSync } = require('child_process');
@@ -126,7 +155,7 @@ const decisions = (function checkDecisions() {
   }
 })();
 
-// 5. Engine stage entry points match the documented layout.
+// 6. Engine stage entry points match the documented layout.
 (function checkEngineLayout() {
   const base = path.join(ROOT, 'src', 'recommendation');
   const expected = ['assembly', 'candidates', 'compatibility', 'explanation', 'filtering',
@@ -150,7 +179,7 @@ const decisions = (function checkDecisions() {
   else pass('engine-layout', expected.length + ' stages, barrels OK (persistence/ exception holds)');
 })();
 
-// 6. Documented npm scripts exist.
+// 7. Documented npm scripts exist.
 (function checkScripts() {
   const pkg = JSON.parse(readRepo('package.json'));
   const want = ['test:unit', 'gen:decisions', 'verify:docs'];
@@ -159,7 +188,7 @@ const decisions = (function checkDecisions() {
   else pass('npm-scripts', want.join(', ') + ' present');
 })();
 
-// 7. Generated docs exist, carry the GENERATED banner, and their generator
+// 8. Generated docs exist, carry the GENERATED banner, and their generator
 // script is wired into package.json (freshness itself is asserted by
 // gen-schema-reference.js --check, which needs a DB and therefore stays out
 // of the offline gate; see docs/OPEN_GAPS.md maintenance rules).
@@ -197,7 +226,7 @@ const decisions = (function checkDecisions() {
   else pass('generated-docs', generated.join(', ') + ' + GLOSSARY/TEST_MAP/RECIPES + gen:schema present');
 })();
 
-// 8. Live read-only structural checks (--live only).
+// 9. Live read-only structural checks (--live only).
 //
 // Includes the schema-digest freshness gate for the generated docs: the DB's
 // structure (tables, columns, enums) is hashed and compared against a digest
