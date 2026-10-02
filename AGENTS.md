@@ -139,11 +139,13 @@ Command gotchas (verified 2026-09-28):
   The failure is clean: preflight throws before any write.
 - Only `measure-orchestrator.js` and the two `test-orchestrator-*.js` scripts use the
   `TEST_DATABASE_URL` guard; `test-layer3.js` / `test-layer4.js` / `verify-*.js` still read `DATABASE_URL`.
-- `TEST_DATABASE_URL` went UNREACHABLE on 2026-10-01 (`password authentication failed`, old host
-  `ep-old-cherry-...`) and was RE-CREATED the same day as `ep-weathered-art-...` (verify with a
-  1-row SELECT before relying on any guarded script — hosts are recorded only in `.env`, never in
-  docs). All three guarded scripts RE-VERIFIED GREEN 2026-10-01 on the restored branch
-  (`preflight {products:100, models:1, offers:101, assessments:112, queries:0}`):
+- `TEST_DATABASE_URL` went UNREACHABLE on 2026-10-01 (`password authentication failed`) and the
+  branch was RE-CREATED — twice, on 2026-10-01 and again on 2026-10-02, each re-creation minting a
+  NEW endpoint. So: verify with a 1-row SELECT before relying on any guarded script, and treat any
+  host named in a doc (including this one) as historical — hosts and credentials live only in `.env`.
+  Credential staleness and a dead branch look identical from the client (`28P01`), so the SELECT is
+  what tells them apart. All three guarded scripts RE-VERIFIED GREEN 2026-10-01 and again 2026-10-02
+  on the restored branch (`preflight {products:100, models:1, offers:101, assessments:112, queries:0}`):
   `test-orchestrator-full-run.js` 28 pass / 0 fail; `measure-orchestrator.js` Decision-20
   criteria 1+2 MET for GAMING and OFFICE. Historical note: while the branch was dead, seed-004a
   reach was measured by read-only pipeline replication on the shared DB (stages 4-11 of
