@@ -100,6 +100,17 @@ function happyStubs() {
     selected,
     buildContributions,
     explained,
+    budgetFloor: Object.freeze({
+      cheapest_total: 7693,
+      currency: 'MAD',
+      budget_amount: 12000,
+      within_budget: true,
+      cheapest_by_role: Object.freeze(Object.assign(Object.create(null), {
+        CPU: 2699, MOTHERBOARD: 1199, RAM: 649, SSD_BOOT: 799,
+        PSU: 899, CASE: 949, CPU_COOLER: 499,
+      })),
+      missing_roles: Object.freeze([]),
+    }),
     snapshotResult: Object.freeze({
       query_id: QUERY_ID,
       scoring_model_id: 'model-1',
@@ -107,6 +118,17 @@ function happyStubs() {
       budget_amount: 12000,
       currency: 'MAD',
       build_contributions: buildContributions,
+      budget_floor: Object.freeze({
+        cheapest_total: 7693,
+        currency: 'MAD',
+        budget_amount: 12000,
+        within_budget: true,
+        cheapest_by_role: Object.freeze(Object.assign(Object.create(null), {
+          CPU: 2699, MOTHERBOARD: 1199, RAM: 649, SSD_BOOT: 799,
+          PSU: 899, CASE: 949, CPU_COOLER: 499,
+        })),
+        missing_roles: Object.freeze([]),
+      }),
     }),
     rankResult: Object.freeze({ ranked, top_n: topN }),
     selectResult: Object.freeze({ selected, dropped_count: 1 }),
@@ -147,6 +169,8 @@ test('full-run: snapshot -> rank -> select -> commit in order on one client', as
     'persisted_ranks',
     'build_candidate_ids',
     'recommendation_result_ids',
+    // Decision 27: last.
+    'budget_floor',
   ]);
   assert.equal(out.query_id, QUERY_ID);
   assert.equal(out.scoring_model_id, 'model-1');
@@ -180,7 +204,26 @@ test('full-run: rank takes snapshot builds; select takes FULL ranked with barrel
     assert.equal(stub.explainCalls[0].contributions, fx.buildContributions);
     assert.deepEqual(stub.explainCalls[0].budget, { amount: 12000, currency: 'MAD' });
     assert.equal(stub.commitCalls[0].selected, fx.explained);
+    // Decision 27: budget_floor is passed through to the RESULT but is
+    // deliberately NOT an Engine 6 input - the explain call's keys are
+    // unchanged, which is what "Out of scope" in Decision 27 means.
+    assert.deepEqual(
+      Object.keys(stub.explainCalls[0]).sort(),
+      ['budget', 'builds', 'contributions', 'selected']
+    );
   });
+});
+
+test('full-run: budget_floor is passed through by reference, unrendered', async () => {
+  const client = { query() {} };
+  const fx = happyStubs();
+  const out = await withStubbedStages(fx, async () =>
+    runRecommendationFullRun(client, QUERY_ID)
+  );
+  // Same object, not a copy: the pass already froze it and nothing here edits it.
+  assert.strictEqual(out.budget_floor, fx.snapshotResult.budget_floor);
+  assert.equal(out.budget_floor.cheapest_total, 7693);
+  assert.equal(out.budget_floor.within_budget, true);
 });
 
 test('full-run: zero builds still flow through rank, select, and commit with empty array', async () => {
@@ -197,6 +240,18 @@ test('full-run: zero builds still flow through rank, select, and commit with emp
       budget_amount: 12000,
       currency: 'MAD',
       build_contributions: Object.freeze([]),
+      // Decision 27: a zero-build pass still reports a floor. This is the case
+      // the diagnostic exists for, so the fixture must carry one.
+      budget_floor: Object.freeze({
+        cheapest_total: null,
+        currency: 'MAD',
+        budget_amount: 12000,
+        within_budget: null,
+        cheapest_by_role: Object.freeze(Object.create(null)),
+        missing_roles: Object.freeze([
+          'CPU', 'MOTHERBOARD', 'RAM', 'PSU', 'CASE', 'CPU_COOLER', 'SSD_BOOT',
+        ]),
+      }),
     }),
     rankResult: Object.freeze({ ranked, top_n: topN }),
     selectResult: Object.freeze({ selected, dropped_count: 0 }),
@@ -220,6 +275,10 @@ test('full-run: zero builds still flow through rank, select, and commit with emp
   assert.deepEqual(out.selected, []);
   assert.equal(out.dropped_count, 0);
   assert.deepEqual(out.persisted_ranks, []);
+  // Decision 27: zero builds is still an EXPLAINED outcome, and the floor is
+  // null (not 0) because nothing was retained, not because everything is free.
+  assert.equal(out.budget_floor.cheapest_total, null);
+  assert.equal(out.budget_floor.within_budget, null);
 
 test('full-run: zero selected still calls the write wrapper with empty array', async () => {
   const client = { query() {} };

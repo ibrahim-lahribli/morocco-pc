@@ -366,6 +366,8 @@ test('runRecommendation: one pass returns the frozen Decision 17.2 shape', async
     'budget_amount',
     'currency',
     'build_contributions',
+    // Decision 27: last, so the two index-aligned fields stay adjacent.
+    'budget_floor',
   ]);
   assert.equal(result.query_id, QUERY_ID);
   assert.equal(result.scoring_model_id, MODEL_ID);
@@ -377,6 +379,27 @@ test('runRecommendation: one pass returns the frozen Decision 17.2 shape', async
   assert.ok(Object.isFrozen(result.build_contributions));
   assert.equal(result.build_contributions.length, result.builds.length);
   assert.ok(Array.isArray(result.build_contributions[0]));
+
+  // Decision 27: the diagnostic is present on a pass that DID build, not only
+  // on failure - a diagnostic that only appears when it is too late is useless.
+  assert.ok(Object.isFrozen(result.budget_floor));
+  assert.equal(result.budget_floor.currency, 'MAD');
+  assert.equal(result.budget_floor.budget_amount, 12000);
+  assert.equal(typeof result.budget_floor.cheapest_total, 'number');
+  assert.equal(typeof result.budget_floor.within_budget, 'boolean');
+  assert.deepEqual(Object.keys(result.budget_floor), [
+    'cheapest_total',
+    'currency',
+    'budget_amount',
+    'within_budget',
+    'cheapest_by_role',
+    'missing_roles',
+  ]);
+  // The fixture's one assembled build fits the budget, and the floor cannot
+  // exceed the budget of a build that exists.
+  assert.equal(result.budget_floor.within_budget, true);
+  assert.deepEqual(result.budget_floor.missing_roles, []);
+  assert.ok(result.budget_floor.cheapest_total <= 12000);
 });
 
 test('each build is the Engine 3 build plus exactly one build_score field', async () => {
@@ -669,6 +692,7 @@ test("retention receives this run's filterCandidates output and its result repla
     { key: 'model', namespace: scoringModule, name: 'loadScoringModel' },
     { key: 'filter', namespace: filteringModule, name: 'filterCandidates' },
     { key: 'candidateScores', namespace: scoringModule, name: 'computeCandidateScores' },
+    { key: 'offerPrices', namespace: offersModule, name: 'selectOfferPrices' },
     { key: 'retention', namespace: retentionModule, name: 'retainTopKPerRole' },
     { key: 'assembly', namespace: assemblyModule, name: 'assembleBuildsForRecommendation' },
   ], async (spies) => {
@@ -684,6 +708,19 @@ test("retention receives this run's filterCandidates output and its result repla
     assert.equal(retentionArgs.candidateScores, candidateScores);
     assert.equal(retentionArgs.topKPerRole, model.configuration.candidate_caps.top_k_per_role);
     assert.equal(retentionArgs.topKPerRole, 5);
+
+    // Decision 27: the Stage 1 carrier travels BY REFERENCE - the same object
+    // Engine 3 receives two steps later, not a copy and not a second query.
+    // Identity is the assertion; a deepEqual would pass on a copy and would not
+    // catch retention and Engine 3 reading two different carriers.
+    // selectOfferPrices is async and spyOn records the raw return, so the
+    // recorded value is the promise - it has to be awaited here.
+    const stage1Prices = (await spies.offerPrices.calls[0].result).prices;
+    assert.strictEqual(retentionArgs.prices, stage1Prices);
+    assert.strictEqual(spies.assembly.calls[0].args[0].prices, stage1Prices);
+    // All three readers hold ONE carrier, so a price can never be read from a
+    // different carrier by retention than by Engine 3.
+    assert.strictEqual(retentionArgs.prices, spies.assembly.calls[0].args[0].prices);
 
     const retentionResult = spies.retention.calls[0].result;
     const assemblyArgs = spies.assembly.calls[0].args[0];
@@ -785,7 +822,60 @@ test('zero builds is not an error: the pass runs to the end and returns frozen b
     assert.equal(spies.assembly.calls.length, 1);
     assert.equal(spies.assembly.calls[0].args[0].filterResult.results.length > 0, true);
     assert.deepEqual(spies.buildScores.calls[0].args[0].builds, []);
+
+    // Decision 27: the same zero-build result is now EXPLAINED. Retention kept
+    // candidates (the assembly input is non-empty) and every required role is
+    // represented, so the floor is a real number that simply sits above the
+    // 500 MAD budget - which is exactly the distinction this field exists to
+    // draw between "too expensive" and "incompatible".
+    assert.equal(out.budget_floor.budget_amount, 500);
+    assert.equal(out.budget_floor.within_budget, false);
+    assert.deepEqual(out.budget_floor.missing_roles, []);
+    // The floor is the cheapest-per-role sum over the RETAINED set, and it is
+    // deliberately NOT the price of the build a bigger budget would have
+    // produced (CHEAPEST_BUILD_TOTAL): it is a lower bound on any build the
+    // retained pool could form, so it must be <= the real assembled total.
+    // Asserting the build price here would have conflated the two.
+    assert.equal(out.budget_floor.cheapest_total, 6700);
+    assert.ok(out.budget_floor.cheapest_total < CHEAPEST_BUILD_TOTAL);
+    // Every required role contributed, and the per-role map sums to the total.
+    const byRole = out.budget_floor.cheapest_by_role;
+    const summed = Object.keys(byRole).reduce((total, role) => total + byRole[role], 0);
+    assert.equal(summed, 6700 + 3200); // + the GPU, which BUDGET_FLOOR_ROLES excludes
+    // The shortfall is derivable from the two fields, with no re-derivation.
+    assert.equal(out.budget_floor.cheapest_total - out.budget_floor.budget_amount, 6200);
   });
+});
+
+test('a zero-build pass still returns a complete budget_floor (never a partial one)', async () => {
+  const db = createDb({
+    routes: {
+      queryRow: {
+        id: QUERY_ID,
+        budget_amount: '500.00',
+        currency: 'MAD',
+        use_case: 'GAMING',
+        scoring_model_id: MODEL_ID,
+      },
+    },
+  });
+  const out = await runRecommendation({ db, queryId: QUERY_ID });
+
+  assert.deepEqual(out.builds, []);
+  // All six fields present, so a consumer never has to guard for undefined -
+  // the diagnostic is always complete, including when it says "too expensive".
+  assert.deepEqual(Object.keys(out.budget_floor), [
+    'cheapest_total',
+    'currency',
+    'budget_amount',
+    'within_budget',
+    'cheapest_by_role',
+    'missing_roles',
+  ]);
+  assert.equal(typeof out.budget_floor.cheapest_total, 'number');
+  assert.equal(out.budget_floor.cheapest_total > 500, true);
+  assert.equal(out.budget_floor.within_budget, false);
+  assert.equal(out.budget_floor.within_budget, out.budget_floor.cheapest_total <= 500);
 });
 
 // ---------------------------------------------------------------------------

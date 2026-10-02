@@ -52,7 +52,7 @@ const explanation = require('../explanation');
  *        created, never closed, never released here - handed first to the
  *        read wrapper and then to the write wrapper, sequentially.
  * @param {string} queryId pinned recommendation_query.id.
- * @returns {Promise<object>} the frozen combined result (ten fields, see
+ * @returns {Promise<object>} the frozen combined result (eleven fields, see
  *          above).
  */
 async function runRecommendationFullRun(client, queryId) {
@@ -84,6 +84,11 @@ async function runRecommendationFullRun(client, queryId) {
     persisted_ranks: persisted.persisted_ranks,
     build_candidate_ids: persisted.build_candidate_ids,
     recommendation_result_ids: persisted.recommendation_result_ids,
+    // Decision 27: the pass diagnostic, passed through untouched. It is NOT
+    // handed to explainSelection - Decision 27's Out-of-scope section forbids
+    // changing Engine 6 output, and there is no UI or API surface to render
+    // it into yet.
+    budget_floor: snap.budget_floor,
   });
 }
 

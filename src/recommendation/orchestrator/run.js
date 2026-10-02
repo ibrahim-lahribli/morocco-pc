@@ -42,16 +42,21 @@
  *     |  computeCandidateScores({ candidates: offerResult.pool, ... })
  *     v
  *   candidateScores { scores }
- *     |  retainTopKPerRole({ filterResult, candidateScores, topKPerRole })
+ *     |  retainTopKPerRole({ filterResult, candidateScores, topKPerRole,
+ *     |                        prices: offerResult.prices })   Decision 27
  *     v
  *   retentionResult { results }                  Decision 12/14 retention
+ *     |  computeBudgetFloor({ retained, prices, budgetAmount, currency })
+ *     v
+ *   budgetFloor { cheapest_total, within_budget, ... }   Decision 27
  *     |  assembleBuildsForRecommendation({ ..., filterResult: retentionResult,
  *     |                                     filteringContext, ... })  Engine 3
  *     v
  *   { builds } (discovery order; never ranked here)
  *     |  computeBuildScores({ builds, assessments, ... })   Engine 4 STEP 3
  *     v
- *   frozen { query_id, scoring_model_id, builds } - each build is the frozen
+ *   frozen { query_id, scoring_model_id, builds, budget_amount, currency,
+ *   build_contributions, budget_floor } - each build is the frozen
  *   Engine 3 build (components / total_price / currency /
  *   unknown_pairwise_count - Decision 23's build-local re-evaluation -
  *   unchanged and by reference) plus its own
@@ -85,10 +90,18 @@
  *     so the SAME { [product_id]: rows } map feeds STEP 2 and STEP 3. A
  *     missing product key is a legal no-evidence case, never an error.
  *   - retainTopKPerRole receives only THIS run's filterCandidates output, the
- *     STEP 2 scores and configuration.candidate_caps.top_k_per_role (closes
- *     the retention trust-boundary flag in DEVELOPMENT_NOTES.md). Its frozen
- *     { results } replaces filterResult for Engine 3, whose input contract is
- *     unchanged (Decision 12 Rule 6 / Decision 14 Rule 6).
+ *     STEP 2 scores, configuration.candidate_caps.top_k_per_role, and - since
+ *     Decision 27 - offerResult.prices BY REFERENCE: the same frozen carrier
+ *     Engine 3 receives two steps later, already in memory since step 6, so the
+ *     cheapest-per-role reservation costs no query and no loader. It is passed
+ *     by reference on purpose; retention validates nothing and copies nothing.
+ *     Its frozen { results } replaces filterResult for Engine 3, whose input
+ *     contract is unchanged (Decision 12 Rule 6 / Decision 14 Rule 6).
+ *   - computeBudgetFloor runs UNCONDITIONALLY, on every pass, before assembly:
+ *     a diagnostic that only appears on failure is a diagnostic nobody reads.
+ *     Zero builds remains a valid outcome (Decision 17.2) and is now an
+ *     EXPLAINED one. It is a pure call, not a stage, so it stays out of the
+ *     Decision 17.3 call-order pin.
  *
  * Testability seam (deliberate, documented): collaborators are required as
  * namespace objects and CALLED THROUGH THE NAMESPACE
@@ -102,7 +115,10 @@
  * any kind, no DDL/DML, no compatibility evaluation, no scoring arithmetic, no
  * ranking (Engine 5a, Decision 18), no persistence (Engine 5b, Decision 19), no assembly diversity (Decision 20), no
  * explanation (Engine 6), no db creation/close (injected and validated by the
- * loaders), no retries, no caching, no logging.
+ * loaders), no retries, no caching, no logging. It also renders nothing:
+ * budget_floor is returned as data and deliberately NOT handed to Engine 6,
+ * because this project has no UI or API surface to render it into yet
+ * (Decision 27, Out of scope).
  *
  * Errors: the existing Engine 2 CandidateSelectionError / ERROR_CODES are
  * reused end to end; nothing is swallowed or translated. The only failures this
@@ -236,10 +252,13 @@ function withBuildScore(build, buildScore) {
  *        injected and validated by the loaders, never created or closed here.
  * @param {string} args.queryId pinned recommendation_query.id.
  * @returns {Promise<object>} frozen { query_id, scoring_model_id, builds,
- *        budget_amount, currency, build_contributions } - builds in Engine 3
- *        discovery order, each an Engine 3 build plus build_score, empty when
- *        no complete build fits the budget; build_contributions is the
- *        Decision 22 item-1 contribution list, index-aligned with builds.
+ *        budget_amount, currency, build_contributions, budget_floor } - builds
+ *        in Engine 3 discovery order, each an Engine 3 build plus build_score,
+ *        empty when no complete build fits the budget; build_contributions is
+ *        the Decision 22 item-1 contribution list, index-aligned with builds;
+ *        budget_floor is the Decision 27 diagnostic (cheapest_total,
+ *        currency, budget_amount, within_budget, cheapest_by_role,
+ *        missing_roles) and is present on every result, empty builds or not.
  * @throws {CandidateSelectionError} the existing Engine 2 vocabulary, raised by
  *        the composed stages (blank/NULL use_case, missing query row, missing
  *        scoring model, empty candidate pool, ...) or by this boundary's own
@@ -296,11 +315,26 @@ async function runRecommendation(args) {
   });
 
   // 11. Retention (Decision 12/14): only THIS run's filterCandidates output, its
-  //     STEP 2 scores, and the Decision 11 cap.
+  //     STEP 2 scores, and the Decision 11 cap. Decision 27 adds Stage 1's own
+  //     carrier BY REFERENCE - the same frozen object Engine 3 gets at step 13 -
+  //     so the cheapest-per-role reservation needs no query and no new loader.
   const retentionResult = retention.retainTopKPerRole({
     filterResult,
     candidateScores,
     topKPerRole: configuration.candidate_caps.top_k_per_role,
+    prices: offerResult.prices,
+  });
+
+  // 11b. Decision 27: the zero-build diagnostic. Pure, and computed
+  //     UNCONDITIONALLY - never gated on the build count. A build-free budget is
+  //     a valid outcome (Decision 17.2); this is what makes it an explained one
+  //     rather than a silent one. It is a pure call, not a stage, so it is not
+  //     part of the Decision 17.3 call-order contract.
+  const budgetFloor = retention.computeBudgetFloor({
+    retained: retentionResult.results,
+    prices: offerResult.prices,
+    budgetAmount: queryInput.input.budget_amount,
+    currency: queryInput.input.currency,
   });
 
   // 12. Engine 3: the retention output replaces filterResult.results
@@ -363,6 +397,8 @@ async function runRecommendation(args) {
     budget_amount: queryInput.input.budget_amount,
     currency: queryInput.input.currency,
     build_contributions: buildContributions.contributions,
+    // Decision 27: last, so the two index-aligned fields stay adjacent.
+    budget_floor: budgetFloor,
   });
 }
 

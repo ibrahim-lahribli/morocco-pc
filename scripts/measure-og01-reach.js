@@ -142,6 +142,19 @@ async function main() {
       filterResult,
       candidateScores,
       topKPerRole: topK,
+      // Decision 27: Stage 1's carrier, by reference.
+      prices: offerResult.prices,
+    });
+
+    // Decision 27: the same diagnostic the orchestrator attaches, printed on
+    // every run. This is the cheapest standing witness that the retained floor
+    // moved - a future scoring seed that pushes the floor up shows up here
+    // without re-running a full harness.
+    const budgetFloor = retention.computeBudgetFloor({
+      retained: retentionResult.results,
+      prices: offerResult.prices,
+      budgetAmount: BUDGET,
+      currency: INPUT.currency,
     });
 
     const byRole = new Map();
@@ -172,6 +185,26 @@ async function main() {
     );
     console.log('');
     console.log('=== reach per role (retained = top-K of PASS pool) ===');
+    // Decision 27: the retained floor, against the budget this run measured.
+    // A null within_budget means a required role retained NOTHING at all, which
+    // is a different defect from a floor that sits above the budget.
+    console.log(
+      'budget floor: ' +
+        (budgetFloor.cheapest_total === null
+          ? 'n/a (no retained candidate for ' + budgetFloor.missing_roles.join(', ') + ')'
+          : budgetFloor.cheapest_total + ' ' + budgetFloor.currency) +
+        ' vs budget ' +
+        BUDGET +
+        ' ' +
+        INPUT.currency +
+        ' (' +
+        (budgetFloor.within_budget === null
+          ? 'unknown'
+          : budgetFloor.within_budget
+            ? 'WITHIN - a budget at or above this assembles'
+            : 'ABOVE - retention cannot reach this budget') +
+        ')'
+    );
     for (const role of [...byRole.keys()].sort()) {
       const list = byRole.get(role);
       const retainedScores = candidateScores.scores.filter((s) =>
