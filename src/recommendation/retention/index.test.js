@@ -38,24 +38,55 @@ test('retention keeps its source boundary (pure composition, no DB, no SQL)', ()
     'UPDATE ',
     'DELETE ',
     '../compatibility',
-    '../assembly',
     '../scoring',
     '../offers',
+    // Decision 27 item 3 permits exactly one Engine 3 import, priceKey from
+    // ../assembly/prices, so the price-carrier key format keeps a single owner.
+    // The ban is not lifted - it is AIMED: the assembler and everything else
+    // behind that barrel stay forbidden by name, as does reaching upward.
+    '../assembly/assemble',
+    '../assembly/pipeline',
+    '../assembly/gpu-policy',
+    '../assembly/input',
+    '../assembly/index',
+    '../orchestrator',
+    '../persistence',
   ];
+  // Scanned with comments stripped, because Decision 27's boundary comment
+  // has to NAME the forbidden specifiers in order to explain the ban, and a raw
+  // substring scan would fail the documentation for documenting itself. The
+  // complementary check below pins the real direction - the exact require list -
+  // so stripping comments cannot hide an actual import.
   for (const file of ['index.js', 'retain.js']) {
-    const source = fs.readFileSync(path.join(__dirname, file), 'utf8');
+    const source = stripComments(fs.readFileSync(path.join(__dirname, file), 'utf8'));
     for (const token of banned) {
       assert.ok(!source.includes(token), `${file} must not contain ${token}`);
     }
   }
+  // ...and the prose really does carry the ban, so the comment cannot silently
+  // stop naming what it forbids.
+  const retainHeader = fs.readFileSync(path.join(__dirname, 'retain.js'), 'utf8');
+  for (const token of ['../assembly/assemble', '../orchestrator', '../persistence']) {
+    assert.ok(retainHeader.includes(token), `retain.js must document the ban on ${token}`);
+  }
 });
+
+/** Comments removed, code kept - the same helper orchestrator/run.test.js uses. */
+function stripComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
 
 test('retain.js imports exactly the composed sources and nothing else', () => {
   const source = fs.readFileSync(path.join(__dirname, 'retain.js'), 'utf8');
   const requires = [...source.matchAll(/require\('([^']+)'\)/g)]
     .map((match) => match[1])
     .sort();
+  // Sorted: '../assembly/prices' is the single permitted Engine 3 import
+  // (Decision 27 item 3) and is the only addition to the pre-Decision-27 set.
   assert.deepEqual(requires, [
+    '../assembly/prices',
     '../candidates/errors',
     '../candidates/roles',
     '../candidates/select',

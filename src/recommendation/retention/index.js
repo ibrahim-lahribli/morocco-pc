@@ -10,13 +10,16 @@
  *
  *   Engine 2D filter result { results: [verdict, ...] }  (PASS/UNKNOWN/REJECT)
  *   Engine 4 STEP 2 candidate scores { scores: [...] }
+ *   Engine 2 Stage 1 price carrier (Decision 27)
  *   candidate_caps.top_k_per_role (Decision 11-validated K)
  *         |  retainTopKPerRole(...)      - per-role top-K retention
  *         |                                (./retain): Rule 2 eligibility
  *         |                                (PASS | UNKNOWN), Rule 3/5 ordering
  *         |                                (score DESC, then the existing
  *         |                                compareCandidates() tie-break),
- *         |                                Rule 4 hard cap
+ *         |                                Rule 4 hard cap, and the
+ *         |                                Decision 27 cheapest-per-role
+ *         |                                reservation inside it
  *         v
  *   frozen { results: [retained verdict, ...] } - Engine 3's existing
  *   candidate-pool input shape; drop-in for filterResult (Decision 14
@@ -34,6 +37,10 @@
  *                     orders the retention only, never written onto a verdict
  *   topKPerRole       candidate_caps.top_k_per_role (Decision 11 Rule 8),
  *                     the same K for every role
+ *   prices            the Engine 2 Stage 1 price carrier; owned by Engine 2,
+ *                     required since Decision 27 because the reservation
+ *                     cannot select without it. Never validated, copied or
+ *                     edited here - retention only reads selected_price
  *
  * Explicit NON-responsibilities (deliberately absent from this module)
  *   - no database access, no connection, no SQL: the loaders

@@ -7,8 +7,14 @@
  * validation beyond the light gates, no policy, no SQL (the
  * assembly/pipeline.js composition convention).
  *
+ * Decision 27 (2026-10-02) amends Rule 4's selection: retention is no longer
+ * budget-blind. One slot of K is reserved for the cheapest eligible candidate
+ * per role, so a budget below the score-driven top-K can still assemble. See
+ * the "Rule 4 replacement" block below for the exact rule.
+ *
  *   Engine 2D filter result { results: [verdict, ...] }  (PASS/UNKNOWN/REJECT)
  *   Engine 4 STEP 2 candidate scores { scores: [...] }
+ *   Engine 2 Stage 1 price carrier { priceKey: { selected_price, ... } }
  *   candidate_caps.top_k_per_role (Decision 11-validated K)
  *         |  bucket by component_role; keep PASS | UNKNOWN  (Rule 2; REJECT
  *         |                                                   is excluded before
@@ -16,9 +22,14 @@
  *         |  order per bucket: candidate_score DESC, then the existing
  *         |  candidates/select.js compareCandidates() tie-break (Rules 3/5;
  *         |  reused, never reimplemented)
- *         |  retain the first K per role                    (Rule 4:
- *         |                                                   retained_count =
- *         |                                                   min(K, eligible_count))
+ *         |  retain the first K per role                    (Rule 4, as
+ *         |                                                   replaced by
+ *         |                                                   Decision 27: the
+ *         |                                                   first K-1 PLUS the
+ *         |                                                   cheapest eligible
+ *         |                                                   candidate; the cap
+ *         |                                                   is unchanged, only
+ *         |                                                   selection inside it)
  *         v
  *   frozen { results: [retained verdict, ...] } - the shape Engine 3's
  *   existing candidate-pool input already expects ({ results } of Engine 2D
@@ -37,6 +48,42 @@
  *                     is never written onto a verdict
  *   topKPerRole       candidate_caps.top_k_per_role (Decision 11 Rule 8),
  *                     the same K for every role
+ *   prices            the Engine 2 Stage 1 carrier (offers.selectOfferPrices),
+ *                     the SAME frozen null-prototype object Engine 3 receives.
+ *                     Owned by Engine 2; retention only reads selected_price
+ *                     through it and never validates, copies or edits it.
+ *                     Required: an eligible verdict with no carrier entry (or a
+ *                     non-finite selected_price) fails fast rather than being
+ *                     read as 0, because an unpriced candidate that won the
+ *                     reservation would then fail every downstream budget
+ *                     check - turning a data gap into a silent quality loss
+ *
+ * Rule 4 replacement (Decision 27) - the cheapest-per-role reservation:
+ *   - a bucket holding n <= K eligible candidates is returned WHOLE and
+ *     untouched: nothing is being cut, so no price is consulted and nothing is
+ *     reordered or dropped;
+ *   - otherwise the bucket keeps the first K-1 entries of the Rule 3/5 order
+ *     PLUS the single cheapest eligible candidate by selected_price, topped up
+ *     from the remaining entries in that same order until the set holds K. The
+ *     top-up is what keeps retained_count at min(K, eligible_count) when the
+ *     reservation duplicates a candidate the K-1 slice already held; the cap
+ *     itself is unchanged either way;
+ *   - ties on selected_price are broken by position in the Rule 3/5 order, i.e.
+ *     by the earliest candidate in an already-deterministic order. This is not
+ *     hypothetical: 004b_ssd_ram.sql ships two RAM kits at an identical 1349
+ *     MAD. With equal prices the reservation head IS the Rule 3/5 head, which
+ *     is already inside the K-1 slice, so the reservation is a no-op;
+ *   - the selected set is re-emitted in Rule 3/5 order, so the OUTPUT ORDERING
+ *     contract is unchanged and only membership differs;
+ *   - at K = 1 the K-1 slice is empty and the reservation alone fills the
+ *     slot. Score contributes nothing at K=1, which is correct - there is no
+ *     score competition to arbitrate - and is pinned by a test;
+ *   - a REJECT is excluded by Rule 2 before any price is read, so a cheap
+ *     REJECTed candidate can never take the reservation;
+ *   - the reservation is a FLOOR guarantee, not a completeness guarantee. It
+ *     makes the cheapest-per-role combination reachable; it cannot promise
+ *     that combination survives Engine 3's pairwise FAIL gate, so
+ *     "within budget but 0 builds" stays a legitimate outcome.
  *
  * Eligibility and identity rules:
  *   - eligible statuses are exactly CANDIDATE_STATUSES.PASS | UNKNOWN
@@ -62,16 +109,28 @@
  *   - no compatibility evaluation and no verdict aggregation (Engine 2D)
  *   - no scoring and no score arithmetic (Engine 4)
  *   - no Engine 5 build ranking (whole-build build_score, Decision 13 STEP 3)
- *   - no Engine 3 work: assembly, GPU policy, prices, and
- *     max_builds_per_query (Decision 14 Rule 7) stay untouched
+ *   - no Engine 3 work: assembly, GPU policy and max_builds_per_query
+ *     (Decision 14 Rule 7) stay untouched
+ *   - exactly ONE Engine 3 import is permitted, and Decision 27 item 3 is the
+ *     authority for it: priceKey from ../assembly/prices, a pure key
+ *     constructor with no logic, imported so the carrier key format keeps a
+ *     single owner (offers/select.js imports it for the same reason). These
+ *     specifiers stay forbidden, and retention/index.test.js bans each of them
+ *     BY NAME - the assembler (../assembly/assemble), the composition entry
+ *     point (../assembly/pipeline), the GPU policy (../assembly/gpu-policy),
+ *     the Engine 3 input validator (../assembly/input), the barrel
+ *     (../assembly/index), and anything upward at
+ *     ../orchestrator or ../persistence. The ban is therefore aimed at the
+ *     single permitted edge, not lifted
  *   - no new error codes and no second status vocabulary: the Engine 2
  *     CandidateSelectionError / ERROR_CODES vocabulary and the Engine 2D
  *     CANDIDATE_STATUSES are reused unchanged
  *   - no persistence
  *
  * Determinism: no clock reads, no randomness, no I/O; buckets are emitted in
- * canonical COMPONENT_ROLES order (the Engine 2D emission order), so
- * identical inputs yield deeply equal, stably ordered output.
+ * canonical COMPONENT_ROLES order (the Engine 2D emission order), and the
+ * reservation tie-break is the Rule 3/5 order, so identical inputs yield
+ * deeply equal, stably ordered output.
  *
  * Pure: no database access, no framework.
  */
@@ -82,6 +141,9 @@ const { compareCandidates } = require('../candidates/select');
 const { COMPONENT_ROLES } = require('../candidates/roles');
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
 const { CANDIDATE_STATUSES } = require('../filtering/filter');
+// Decision 27 item 3: the single permitted Engine 3 import - a pure key
+// constructor, so the price-carrier key format keeps exactly one owner.
+const { priceKey } = require('../assembly/prices');
 
 /** Verdict statuses eligible for retention (Decision 14 Rule 2). */
 const RETENTION_ELIGIBLE_STATUSES = Object.freeze([
@@ -95,6 +157,16 @@ function fail(code, field, message) {
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Own-property read that is immune to a prototype key. The carrier is
+ * null-prototype, but pricesOf-style callers can hand a plain object, and a
+ * truthy inherited property would silently price a candidate at the wrong
+ * value.
+ */
+function hasOwn(target, key) {
+  return Object.prototype.hasOwnProperty.call(target, key);
 }
 
 /** Canonical Engine 2C identity key (candidates/select.js dedup key). */
@@ -137,6 +209,33 @@ function buildScoreIndex(candidateScores) {
 }
 
 /**
+ * The Stage 1 selected_price for one eligible verdict, or a fail-fast.
+ *
+ * A missing carrier entry and a non-finite selected_price are the SAME defect
+ * (the price is UNKNOWN) and are reported the same way, in the existing
+ * vocabulary and on the existing field. Neither is ever coerced to 0: this
+ * value decides the reservation, so an unpriced candidate treated as free
+ * would win the slot and then fail every downstream budget check, turning a
+ * data gap into a silent quality loss.
+ *
+ * Only called for buckets that actually exceed K, because a bucket that fits
+ * is returned whole and never consults a price.
+ */
+function priceOf(prices, verdict) {
+  const key = priceKey(verdict.product_id, verdict.product_variant_id, verdict.component_role);
+  const entry = hasOwn(prices, key) ? prices[key] : undefined;
+  if (entry === undefined || typeof entry.selected_price !== 'number'
+      || !Number.isFinite(entry.selected_price)) {
+    fail(
+      ERROR_CODES.MISSING_REQUIRED_FIELD,
+      'prices',
+      `"prices" has no usable selected_price for the eligible verdict ${key} - the cheapest-per-role reservation (Decision 27) cannot rank it, and a missing price is never read as 0`
+    );
+  }
+  return entry.selected_price;
+}
+
+/**
  * Rule 3/5 retention order for one role bucket: candidate score descending,
  * then the existing compareCandidates() chain - reused, never reimplemented.
  * Within a role bucket the comparator's role term is constant, so the
@@ -176,13 +275,17 @@ function deepFreeze(value) {
  *          { scores } (Decision 13 STEP 2)
  *        - topKPerRole: the positive-integer K
  *          (candidate_caps.top_k_per_role, Decision 11 Rule 8)
+ *        - prices: the Engine 2 Stage 1 price carrier (Decision 27), the
+ *          same frozen null-prototype object Engine 3 receives; REQUIRED
  * @returns {object} frozen { results: [retained verdict, ...] } - the exact
  *        Engine 3 candidate-pool input shape: verdicts are the producer's
  *        records handed over by reference, buckets in canonical
  *        COMPONENT_ROLES order, each bucket in Rule 3/5 retention order
  * @throws {CandidateSelectionError} fail-fast on a missing/malformed source,
  *        a malformed verdict or score entry, a duplicate score identity, an
- *        eligible verdict without a score, or a non-positive-integer K
+ *        eligible verdict without a score, a non-positive-integer K, a
+ *        malformed price carrier, or an eligible verdict the reservation cannot
+ *        price (missing entry or non-finite selected_price)
  */
 function retainTopKPerRole(sources) {
   if (sources === undefined || sources === null) {
@@ -199,7 +302,7 @@ function retainTopKPerRole(sources) {
       'Candidate retention requires an object carrying filterResult, candidateScores and topKPerRole'
     );
   }
-  const { filterResult, candidateScores, topKPerRole } = sources;
+  const { filterResult, candidateScores, topKPerRole, prices } = sources;
 
   // --- light gates (fail fast, before any work; existing vocabulary) -------
   if (!isPlainObject(filterResult) || !Array.isArray(filterResult.results)) {
@@ -226,6 +329,25 @@ function retainTopKPerRole(sources) {
       ERROR_CODES.INVALID_FIELD_VALUE,
       'topKPerRole',
       '"topKPerRole" must be a positive integer (candidate_caps.top_k_per_role, Decision 11 Rule 8)'
+    );
+  }
+
+  // Decision 27: the Stage 1 price carrier is REQUIRED, because the
+  // cheapest-per-role reservation cannot select without it. This is the LAST
+  // light gate on purpose: the three pre-existing gates above keep ownership of
+  // their own failure codes, so a caller that wired filterResult,
+  // candidateScores or topKPerRole wrong is still told which one. The check
+  // here is deliberately shallow - it proves only that a carrier-shaped object
+  // arrived; per-entry validation is lazy, in priceOf(), and only fires for a
+  // bucket that actually exceeds K.
+  //
+  // validatePrices is deliberately NOT re-run: the carrier is already validated
+  // by Stage 1, and re-validating it would duplicate Engine 3's contract here.
+  if (prices === null || typeof prices !== 'object' || Array.isArray(prices)) {
+    fail(
+      ERROR_CODES.INVALID_INPUT,
+      'prices',
+      '"prices" must be the Engine 2 Stage 1 price carrier (a null-prototype object keyed by priceKey)'
     );
   }
 
@@ -270,8 +392,45 @@ function retainTopKPerRole(sources) {
   const retained = [];
   const retainBucket = (bucket) => {
     bucket.sort(byScoreDescThenCanonical);
-    for (const entry of bucket.slice(0, topKPerRole)) {
-      retained.push(entry.verdict);
+    // n <= K: nothing is being cut, so the bucket is returned whole and no
+    // price is consulted at all.
+    if (bucket.length <= topKPerRole) {
+      for (const entry of bucket) {
+        retained.push(entry.verdict);
+      }
+      return;
+    }
+    // Decision 27: reserve one slot for the cheapest eligible candidate. A
+    // STRICTLY lower price moves the reservation, so equal prices fall to the
+    // earliest Rule 3/5 position - and that entry is already inside the
+    // top-(K-1) slice, which makes the reservation a no-op when prices tie.
+    let cheapest = 0;
+    for (let index = 1; index < bucket.length; index += 1) {
+      if (priceOf(prices, bucket[index].verdict) < priceOf(prices, bucket[cheapest].verdict)) {
+        cheapest = index;
+      }
+    }
+    // Membership is by object identity and every bucket entry is a distinct
+    // { verdict, score } object, so Set membership is exact - and the K-1
+    // slice is empty at K=1, where the reservation alone fills the slot.
+    const selected = new Set(bucket.slice(0, topKPerRole - 1));
+    selected.add(bucket[cheapest]);
+    // Top the set back UP to the unchanged cap, drawing the remainder in Rule
+    // 3/5 order. Without this the bucket would retain only K-1 entries whenever
+    // the reservation duplicated a candidate the K-1 slice already held, which
+    // would silently shrink retention BELOW min(K, eligible_count). The cap is
+    // not part of this change. Because bucket.length > K on this path, the
+    // top-up always has an entry to draw on.
+    for (const entry of bucket) {
+      if (selected.size >= topKPerRole) break;
+      selected.add(entry);
+    }
+    // Re-emitted in Rule 3/5 order: the reservation changes membership, never
+    // the output ordering contract.
+    for (const entry of bucket) {
+      if (selected.has(entry)) {
+        retained.push(entry.verdict);
+      }
     }
   };
   for (const role of COMPONENT_ROLES) {
