@@ -1,8 +1,10 @@
 # OG-01 Batch-2 Execution Plan — seed `004b` (56 products / 168 rows)
 
-**Date:** 2026-10-02 · **Owner:** data-research · **Status:** steps 0-6 DONE for the PILOT (`004b_cpu_motherboard.sql`, 63 rows:
-anchors frozen, researched, branch-applied, measured, shared-applied, verified);
-steps 1-6 still to run for `004b_ssd_ram.sql` and `004b_case_cooler.sql`
+**Date:** 2026-10-02 · **Owner:** data-research · **Status:** steps 0-6 DONE for TWO of
+the three files (`004b_cpu_motherboard.sql` 63 rows and `004b_ssd_ram.sql` 60 rows:
+anchors frozen, researched, branch-applied, measured, shared-applied, verified —
+123 of 168 rows done, assessments 112 -> 235);
+steps 1-6 still to run for `004b_case_cooler.sql` (15 products / 45 rows)
 **Parent plan:** `docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md` (this file is its executable
 companion: same hard rules, concrete anchors, per-file workflow) · **Closes:** OG-01
 **Gates:** `scripts/check-og01-coverage.js` · `scripts/check-deferred-rules.js` ·
@@ -17,8 +19,8 @@ missing-type branch of Decision 13 STEP 1, and they are its only live coverage.
 | File | Products | Rows | Types per product |
 |---|---|---|---|
 | `004b_cpu_motherboard.sql` (pilot) | 16 CPU + 5 MB = 21 | 63 | PERFORMANCE/QUALITY/VALUE · QUALITY/UPGRADEABILITY/VALUE |
-| `004b_ssd_ram.sql` | 15 SSD + 5 RAM = 20 | 60 | PERFORMANCE/QUALITY/VALUE |
-| `004b_case_cooler.sql` | 8 CASE + 7 COOLER = 15 | 45 | QUALITY/THERMALS/VALUE · THERMALS/QUALITY/VALUE |
+| `004b_ssd_ram.sql` **(DONE 2026-10-02)** | 15 SSD + 5 RAM = 20 | 60 | PERFORMANCE/QUALITY/VALUE |
+| `004b_case_cooler.sql` **(REMAINING)** | 8 CASE + 7 COOLER = 15 | 45 | QUALITY/THERMALS/VALUE · THERMALS/QUALITY/VALUE |
 
 Three independently appliable files so research can run in parallel sessions; each must
 satisfy section 6 of the parent plan for its own subset.

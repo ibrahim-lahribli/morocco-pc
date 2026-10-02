@@ -109,7 +109,7 @@ const CLAIM_BAND = { exact: 0, close: 2 };
  * batch 2, 25 + 87 + 63 = 175; see docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md).
  * Update in the same session as any seed that changes the canonical catalog
  * (AGENTS.md section 8). */
-const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 175, queries: 0 };
+const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 235, queries: 0 };
 
 function fail(message) {
   throw new Error(message);
