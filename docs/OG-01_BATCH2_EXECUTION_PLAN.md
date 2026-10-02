@@ -8,9 +8,10 @@ gate: `check-og01-coverage.js --strict` = **PASS**; flat-40 pool candidates
 57 -> **1 of 101** (the deliberate no-evidence fixture). The last file also closed
 **OG-05** as a side effect (all 10 of 10 cases now have a vendor-sourced radiator
 matrix) and registered **OG-27** (AIO `height_mm` NULL + 3 `max_tdp_watts` vendor
-disagreements) and **OG-28** (radiator fit is not a compatibility rule). Final
-reach: CPU 68.949, MOTHERBOARD 66.683, GPU 74.275, PSU 69.770, RAM 58.532,
-SSD_BOOT 71.220, CASE 68.530, CPU_COOLER 72.760.
+disagreements) and **OG-28** (a liquid cooler can never reach `PASS` on the radiator rule — `resolveCaseRadiator` IS implemented and wired, but `filtering/context-loader.js` hardcodes `radiator_size_mm: null` because `cooler_spec` has no radiator-size column). Final
+reach is score-driven in every role; re-measure it with
+`node scripts/measure-og01-reach.js` instead of reading numbers here, because
+assessment scores decay 0.5%/day and any figure copied into prose goes stale.
 **Parent plan:** `docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md` (this file is its executable
 companion: same hard rules, concrete anchors, per-file workflow) · **Closes:** OG-01
 **Gates:** `scripts/check-og01-coverage.js` · `scripts/check-deferred-rules.js` ·
