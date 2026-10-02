@@ -27,8 +27,19 @@
  *
  * Public surface (direct re-export only - no wrappers, no logic):
  *
- *   retainTopKPerRole({ filterResult, candidateScores, topKPerRole })
- *     - the Decision 12 retention stage (see ./retain).
+ *   retainTopKPerRole({ filterResult, candidateScores, topKPerRole, prices })
+ *     - the Decision 12 retention stage (see ./retain). `prices` is the Engine 2
+ *     Stage 1 carrier and is required since Decision 27.
+ *
+ *   computeBudgetFloor({ retained, prices, budgetAmount, currency })
+ *     - the Decision 27 zero-build diagnostic (see ./budget-floor): the
+ *     cheapest total the retained pool could form, and whether the budget can
+ *     afford it. Always called, on every pass.
+ *
+ *   BUDGET_FLOOR_ROLES
+ *     - the roles computeBudgetFloor sums over: EXPANSION_ORDER minus GPU, whose
+ *     price the Step 3 GPU policy can make omissible. Pinned against the real
+ *     EXPANSION_ORDER by budget-floor.test.js.
  *
  * Field sourcing (no invention, one owner per field):
  *   verdicts          Engine 2D filter result, handed over intact by
@@ -67,5 +78,6 @@
 'use strict';
 
 const { retainTopKPerRole } = require('./retain');
+const { BUDGET_FLOOR_ROLES, computeBudgetFloor } = require('./budget-floor');
 
-module.exports = { retainTopKPerRole };
+module.exports = { retainTopKPerRole, BUDGET_FLOOR_ROLES, computeBudgetFloor };
