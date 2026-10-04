@@ -433,9 +433,15 @@ test('commit.js issues the guards before the writer and COMMIT after it', () => 
   assert.ok(SOURCE.indexOf('client.query(ROLLBACK_SQL)') > commit);
 });
 
-test('commit.js imports exactly the error vocabulary and the writer module', () => {
+test('commit.js imports exactly the error vocabulary and the writer modules', () => {
   const requires = [...SOURCE.matchAll(/require\('([^']+)'\)/g)]
     .map((match) => match[1])
     .sort();
-  assert.deepEqual(requires, ['../candidates/errors', '../persistence/persist-ranked']);
+  // OG-04 adds the rejection writer; the pin is deliberately EXACT so a new
+  // import cannot slip in unreviewed.
+  assert.deepEqual(requires, [
+    '../candidates/errors',
+    '../persistence/persist-ranked',
+    '../persistence/persist-rejections',
+  ]);
 });

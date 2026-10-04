@@ -489,9 +489,11 @@ no FAIL, all conditions satisfied, no UNKNOWN     -> PASS
 
 UNKNOWN thus never blocks persistence but always demotes: the build is
 recorded honestly (DEFAULT 'UNKNOWN' exists precisely for this). A build whose
-status would be FAIL is NOT persisted as a surviving candidate; rejected
-combinations are logged only in engine diagnostics (no rejection-reason table
-exists - gap, section 16).
+status would be FAIL is NOT persisted as a surviving candidate. The REJECT
+verdicts behind those excluded combinations are now persisted per query in
+`build_rejection` (migration 014, Decision 29), written in the SAME transaction
+as the surviving builds - so a run that assembled nothing still records which
+candidates were rejected and why (CLOSED, was gap OG-04 in section 16).
 
 
 ## 11. Candidate generation strategy (staged / pruned)
@@ -649,7 +651,7 @@ write). After persistence, nothing in the recommendation path joins back to
 |-----|-------|--------|
 | Single `motherboard_spec.memory_type_id` cannot represent boards supporting DDR4 AND DDR5 | **IMPORTANT** | Possible false rejections for dual-memory boards; documented in section 6; fix = future migration (motherboard memory support table or nullable secondary FK) |
 | Presence-only tables (`case_motherboard_form_factor`, `case_radiator_support`, `platform_memory_support`) cannot store FAIL/UNKNOWN/CONDITIONAL explicitly | **IMPORTANT** | Asymmetric UNKNOWN policy (section 3.2) mitigates; explicit status columns would be cleaner but are not required to proceed |
-| No rejection-reason persistence (rejected combos invisible) | **IMPORTANT** | Limits debugging of "why was nothing recommended?"; mitigations: engine diagnostics log; a rejection-reason table is a future migration |
+| ~~No rejection-reason persistence (rejected combos invisible)~~ | **IMPORTANT** (resolved) | **CLOSED 2026-10-04 (OG-04, Decision 29):** `build_rejection` (migration 014) records each Engine 2D REJECT verdict - role, product/variant, optional partner, and the decisive `REASON_CODES` value - keyed to `recommendation_query_id` and written by the commit wrapper in the same transaction as the builds. A run that assembles nothing therefore still explains itself; `budget_floor` covers the budget axis, this covers the compatibility axis. A healthy pass writes zero rows. Pairwise rejections detected during assembly are NOT captured (they are combinations, not candidates) |
 | No integrated-graphics requirement expression beyond `integrated_gpu_present` BOOLEAN | ACCEPTABLE | The boolean + use_case mapping covers the engine's needs (section 12); iGPU performance tiering would need more data later |
 | CONDITIONAL semantics only exist in `cpu_motherboard_support` (via `min_bios_version`); not in other compatibility tables | ACCEPTABLE | Only CPU<->MB genuinely needs it today |
 | Multi-currency recommendations | **FUTURE** | No conversion infrastructure; single-currency-per-query policy (section 7) |

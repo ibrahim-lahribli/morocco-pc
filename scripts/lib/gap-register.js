@@ -39,6 +39,16 @@
  * and harvesting from that cell would excuse any gap that a closed row merely
  * name-drops — which is precisely the gap this check exists to catch.
  *
+ * Table CONTIGUITY is also checked, because a 6-column markdown table ends at
+ * the first blank line: prose that follows a row with no blank line between
+ * renders as a new, broken table rather than as text. That is not a cell-count
+ * defect, so ROW_CELL_COUNT cannot see it — every row is individually
+ * perfect while the document is shredded. This actually happened on
+ * 2026-10-04, when a shell heredoc expanded the backticks in a C-22 row and
+ * left ten shredded lines after it; the register passed every other check.
+ * A row followed directly by a non-blank, non-row, non-heading line is
+ * therefore a CONTIGUITY_BREAK.
+ *
  * Explicit NON-responsibilities: does not parse the closed tables (C-nn ids
  * are not gap ids), does not validate the class/status/owner vocabularies,
  * does not check that a row's claimed status matches reality, and does not
@@ -60,6 +70,12 @@ const MENTION_RE = /OG-\d{2}/g;
 
 /** A row of the closed tables (sections 2/3), which cite gap ids by subject. */
 const CLOSED_ROW_RE = /^\|\s*C-\d{2}\s*\|/;
+
+/** Any line that belongs to a markdown table. */
+const TABLE_LINE_RE = /^\|/;
+
+/** A markdown heading; legitimately ends a table without a blank line. */
+const HEADING_RE = /^#{1,6}\s/;
 
 /**
  * Parse the register's markdown and report every shape problem it finds.
@@ -84,6 +100,32 @@ function parseGapRegister(markdown) {
   const closedTableIds = new Set();
 
   for (let i = 0; i < lines.length; i++) {
+    // A row must not be followed directly by prose. Markdown ends a table at
+    // the first blank line, so a run like `| C-22 | ... |` then `  (migration`
+    // renders as a second broken table instead of text — every cell count is
+    // correct and no other check notices. Reported per offending line so the
+    // fix is localisable.
+    if (TABLE_LINE_RE.test(lines[i]) && i + 1 < lines.length) {
+      const next = lines[i + 1];
+      if (
+        next.trim() !== '' &&
+        !TABLE_LINE_RE.test(next) &&
+        !HEADING_RE.test(next)
+      ) {
+        problems.push({
+          code: 'CONTIGUITY_BREAK',
+          id: 'table',
+          line: i + 2,
+          detail:
+            'a table row is followed immediately by non-table text ("' +
+            next.trim().slice(0, 60) +
+            '") with no blank line between; markdown ends the table at the ' +
+            'blank line, so this renders as a second broken table and the ' +
+            'rows above it stop being readable',
+        });
+      }
+    }
+
     // Gap ids that are the SUBJECT of a closed-table row are accounted for by
     // that table, not by section 1 — see the module header on the closed-row
     // policy. Only the ID and Item cells count; a closed row's resolution prose

@@ -89,9 +89,9 @@ const decisions = (function checkDecisions() {
     if (inEngine3 && /^### Decision \d+/.test(line)) nested += 1;
     if (/^Status:/.test(line)) status += 1;
   }
-  const ok = global === 26 && nested === 5 && status === 32;
+  const ok = global === 27 && nested === 5 && status === 33;
   if (!ok) {
-    fail('decisions-parse', 'global=' + global + ' (want 26), nested=' + nested + ' (want 5), Status:=' + status + ' (want 32)');
+    fail('decisions-parse', 'global=' + global + ' (want 27), nested=' + nested + ' (want 5), Status:=' + status + ' (want 33)');
     return null;
   }
   pass('decisions-parse', global + ' headings + ' + nested + ' nested = ' + (global + 2) + ' global, ' + status + ' Status: lines');
@@ -118,7 +118,7 @@ const decisions = (function checkDecisions() {
 // six cells, no id is duplicated, and every OG id cited anywhere in
 // docs/OPEN_GAPS.md is accounted for by a section 1 row or a closed-table row.
 // Added 2026-10-02 after commit 10a8e87 registered OG-29 by editing the OG-26
-// row in place and lost its ID cell, leaving OG-26 with no row at all — an
+// row in place and lost its ID cell, leaving OG-26 with no row at all Ã¢ÂÂ an
 // IMPORTANT engine-code gap, invisible in the rendered table, caught by
 // nothing. Offline: a file read plus scripts/lib/gap-register.js.
 (function checkGapRegister() {
@@ -231,7 +231,7 @@ const decisions = (function checkDecisions() {
 // Includes the schema-digest freshness gate for the generated docs: the DB's
 // structure (tables, columns, enums) is hashed and compared against a digest
 // line embedded in docs/SCHEMA_REFERENCE.md. This is the CI-equivalent of
-// `gen-schema-reference.js --check` for offline machines — the decision index
+// `gen-schema-reference.js --check` for offline machines Ã¢ÂÂ the decision index
 // gets this for free (its --check is DB-free); the schema reference cannot,
 // so the digest is computed here read-only instead.
 //

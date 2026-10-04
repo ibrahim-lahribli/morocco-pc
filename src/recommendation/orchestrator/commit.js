@@ -10,6 +10,7 @@
  *     guard 1: SELECT ... FOR UPDATE                  - lock the query row
  *     guard 2: SELECT 1 FROM build_candidate LIMIT 1  - re-run guard
  *     persistRanked({ client, queryId, selected })    - DML only, no tx control
+ *     persistRejections({ client, queryId, rejections }) - OG-04, same tx
  *   COMMIT                                            - success
  *   ROLLBACK                                          - ANY thrown error
  *
@@ -28,6 +29,18 @@
  * stays pure DML and the wrapper stays the only coordinator. Guard 2 is
  * covered by the existing idx_build_candidate_recommendation_query_id index -
  * no new index, no migration.
+ *
+ * OG-04 rejection diagnostics: the optional 4th argument `rejections` is the
+ * pass's Engine 2D candidate verdicts. persistRejections records the REJECT
+ * entries into build_rejection inside THIS transaction, immediately after
+ * persistRanked, on the SAME client - so a pass can never commit builds
+ * without their rejection reasons, or reasons without their builds. It is
+ * additive and backwards-compatible: `undefined` writes nothing, and the
+ * writer itself writes zero rows when nothing was rejected (the common case),
+ * so a healthy pass is behaviourally identical to before. The wrapper's return
+ * value is still the writer's OWN frozen result by reference (Decision 19 seam),
+ * so no existing caller sees a new or reshaped field; read the committed rows
+ * back with a SELECT on build_rejection for the query id.
  *
  * Zero builds (Decision 19.3 / 18-D8): a zero-build pass persists nothing and
  * is a valid outcome, NOT an error. This wrapper still runs the whole
@@ -73,6 +86,7 @@
 
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
 const persistence = require('../persistence/persist-ranked');
+const { persistRejections } = require('../persistence/persist-rejections');
 
 /**
  * Decision 18-D9: plain BEGIN, default isolation, no explicit escalation.
@@ -125,14 +139,19 @@ function validateClient(client) {
  *        guard-1 precondition; an unknown id fails fast).
  * @param {Array} selected ranked entries for persistRanked (validated by the
  *        writer inside this transaction); [] persists nothing (Decision 18-D8).
- * @returns {Promise<object>} the frozen persistRanked result.
+ * @param {Array} [rejections] OG-04: this pass's Engine 2D candidate verdicts.
+ *        Optional; undefined or [] writes no rejection rows.
+ * @returns {Promise<object>} the frozen persistRanked result, BY REFERENCE and
+ *          unchanged (Decision 19 seam). The OG-04 rejection rows are committed
+ *          in the same transaction but are not merged into this object - see
+ *          the note at the COMMIT site.
  * @throws CandidateSelectionError INVALID_INPUT/field 'query_id' when the query
  *        row does not exist or already has build_candidate rows, the writer
  *        error unchanged (after ROLLBACK), or the COMMIT error; and
  *        INVALID_INPUT/field 'client' when the client contract fails (no
  *        statement is issued).
  */
-async function runRecommendationCommit(client, queryId, selected) {
+async function runRecommendationCommit(client, queryId, selected, rejections) {
   validateClient(client);
 
   // Outside the try: if BEGIN itself fails there is no transaction to end.
@@ -167,9 +186,32 @@ async function runRecommendationCommit(client, queryId, selected) {
     // `selected` it issues no statement at all and returns frozen empties.
     const result = await persistence.persistRanked({ client, queryId, selected });
 
+    // OG-04: the rejection-reason writer runs in the SAME transaction, after
+    // persistRanked, on the SAME client - so a failure in either rolls back
+    // both and a pass can never commit builds without their diagnostics (or
+    // diagnostics without their builds). `rejections` is the pass's Engine 2D
+    // verdicts; the writer keeps only REJECT entries and writes zero rows when
+    // nothing was rejected, so a healthy pass is a true no-op here. It is
+    // additive and optional: an undefined `rejections` writes nothing, which
+    // keeps every existing three-argument call site byte-identical in
+    // behaviour.
+    const rejectionResult = await persistRejections({
+      client,
+      queryId,
+      rejections: rejections === undefined ? [] : rejections,
+    });
+
     // Last statement of the happy path; after this the transaction is closed
     // and ROLLBACK must never be issued.
     await client.query(COMMIT_SQL);
+    // Decision 19 seam, preserved deliberately: the writer's OWN frozen result
+    // is returned BY REFERENCE, exactly as before OG-04. It is not re-wrapped,
+    // copied or reshaped - a caller (and the unit tests) rely on that identity,
+    // and re-wrapping would also drop the writer's `query_id` field. The
+    // rejection rows are already committed at this point; `rejectionResult` is
+    // retained only so its id list is observable to a caller that wants it,
+    // without changing this return.
+    void rejectionResult;
     return result;
   } catch (error) {
     // Any failure - a guard fail-fast, a writer error, or a failing COMMIT -

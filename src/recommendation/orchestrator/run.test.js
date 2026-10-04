@@ -368,6 +368,8 @@ test('runRecommendation: one pass returns the frozen Decision 17.2 shape', async
     'build_contributions',
     // Decision 27: last, so the two index-aligned fields stay adjacent.
     'budget_floor',
+    // OG-04: this pass's Engine 2D verdicts, for the rejection writer.
+    'filter_verdicts',
   ]);
   assert.equal(result.query_id, QUERY_ID);
   assert.equal(result.scoring_model_id, MODEL_ID);

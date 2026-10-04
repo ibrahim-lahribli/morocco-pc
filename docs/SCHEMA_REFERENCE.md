@@ -8,7 +8,7 @@ live database (`information_schema` / `pg_catalog`). Per `AGENTS.md` section 9,
 generated lookup so "does this column exist?" never requires reading 11 SQL files
 (the question that produced audit finding D2).
 
-<!-- schema-digest: b2d47f96779cdf24 -->
+<!-- schema-digest: f1daa82f581a25d9 -->
 
 ## Enum vocabularies (14)
 
@@ -29,7 +29,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `ssd_form_factor` | M_2_2280 \| M_2_2242 \| M_2_2260 \| M_2_22110 \| SATA_25 \| SATA_35 \| U_2 \| PCIE_CARD \| MSATA \| NGFF |
 | `support_status` | ACTIVE \| DISCONTINUED \| END_OF_LIFE |
 
-## Tables (40)
+## Tables (41)
 
 ### `benchmark` (17 columns)
 
@@ -155,6 +155,29 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 - `chk_build_component_store_requires_checked_at` — CHECK (((store_id IS NULL) OR (price_checked_at IS NOT NULL)))
 
 **Indexes:** `build_component_pkey` · `idx_build_component_build_candidate_id` · `idx_build_component_product_id` · `idx_build_component_product_variant_id` · `idx_build_component_store_id` · `uq_build_component_role_singular`
+
+### `build_rejection` (9 columns)
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` 🔑 | uuid | NO | gen_random_uuid() |
+| `recommendation_query_id` | uuid | NO |  |
+| `component_role` | USER-DEFINED | NO |  |
+| `product_id` | uuid | NO |  |
+| `product_variant_id` | uuid | YES |  |
+| `partner_product_id` | uuid | YES |  |
+| `partner_product_variant_id` | uuid | YES |  |
+| `reason_code` | text | NO |  |
+| `created_at` | timestamp with time zone | NO | now() |
+
+**Foreign keys:** `build_rejection_partner_product_id_fkey`: `partner_product_id` → `product.id` (ON DELETE CASCADE) · `build_rejection_partner_product_variant_id_fkey`: `partner_product_variant_id` → `product_variant.id` (ON DELETE CASCADE) · `build_rejection_product_id_fkey`: `product_id` → `product.id` (ON DELETE CASCADE) · `build_rejection_product_variant_id_fkey`: `product_variant_id` → `product_variant.id` (ON DELETE CASCADE) · `build_rejection_recommendation_query_id_fkey`: `recommendation_query_id` → `recommendation_query.id` (ON DELETE CASCADE)
+
+**CHECK constraints:**
+
+- `chk_build_rejection_partner_pair_complete` — CHECK ((((partner_product_id IS NULL) AND (partner_product_variant_id IS NULL)) OR ((partner_product_id IS NOT NULL) AND (partner_product_variant_id IS NOT NULL))))
+- `chk_build_rejection_reason_not_blank` — CHECK ((btrim(reason_code) <> ''::text))
+
+**Indexes:** `build_rejection_pkey` · `idx_build_rejection_query` · `idx_build_rejection_role_reason`
 
 ### `case_motherboard_form_factor` (5 columns)
 

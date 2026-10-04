@@ -15,7 +15,7 @@
  *        barrel constants
  *     -> explainSelection({ selected, builds, contributions, budget }) - Engine
  *        6, Decision 22 item 3, pure/DB-free; produces the EXPLAINED array
- *     -> runRecommendationCommit(client, queryId, explained) - separate
+ *     -> runRecommendationCommit(client, queryId, explained, verdicts) - separate
  *        later write pass on the same client, after the read pass has ended
  *        (the session is idle by then); still called with an empty array
  *        when there is nothing to persist
@@ -72,7 +72,16 @@ async function runRecommendationFullRun(client, queryId) {
     contributions: snap.build_contributions,
     budget: { amount: snap.budget_amount, currency: snap.currency },
   });
-  const persisted = await commit.runRecommendationCommit(client, queryId, explained);
+  const persisted = await commit.runRecommendationCommit(
+    client,
+    queryId,
+    explained,
+    // OG-04: the pass's Engine 2D verdicts, so the commit wrapper can record
+    // WHY each REJECTed candidate was rejected in build_rejection - in the SAME
+    // transaction as the builds. Omitting this would leave the diagnostics
+    // unwritten while everything else still committed.
+    snap.filter_verdicts
+  );
   return Object.freeze({
     query_id: snap.query_id,
     scoring_model_id: snap.scoring_model_id,

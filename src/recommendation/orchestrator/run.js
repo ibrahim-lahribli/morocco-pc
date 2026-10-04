@@ -399,6 +399,12 @@ async function runRecommendation(args) {
     build_contributions: buildContributions.contributions,
     // Decision 27: last, so the two index-aligned fields stay adjacent.
     budget_floor: budgetFloor,
+    // OG-04: this run's Engine 2D candidate verdicts, passed through by
+    // reference and never re-derived. They are what persistRejections reads
+    // to record WHY a candidate was rejected. Additive field: budget_floor
+    // above deliberately stays last-in-spirit among the Decision 27 pair, and
+    // no existing consumer reads this one yet.
+    filter_verdicts: filterResult.results,
   });
 }
 

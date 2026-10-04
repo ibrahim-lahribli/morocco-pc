@@ -357,7 +357,10 @@ test('full-run.js keeps its source boundary (no SQL, no tx control, no driver)',
   assert.ok(source.includes('ranking.TOP_N_PERSISTED'));
   assert.ok(source.includes('ranking.MAX_PER_PAIR'));
   assert.ok(source.includes('explanation.explainSelection('));
-  assert.ok(source.includes('commit.runRecommendationCommit(client, queryId, explained)'));
+  // OG-04: the pass's Engine 2D verdicts are forwarded as the 4th argument so
+  // the commit wrapper can persist rejection reasons in the same transaction.
+  assert.ok(source.includes('commit.runRecommendationCommit('));
+  assert.ok(source.includes('snap.filter_verdicts'));
   assert.ok(!source.includes('limit: 10'));
   assert.ok(!source.includes('maxPerPair: 3'));
 });
