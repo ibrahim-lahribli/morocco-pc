@@ -116,7 +116,7 @@ Four data layers; pure-JS engine modules in `src/recommendation/` mirror the sch
 - **UNKNOWN must remain distinct from FAIL** — missing data is never permissive (PASS/FAIL/UNKNOWN/CONDITIONAL are all first-class).
 - **Cooler ↔ socket compatibility is explicit** (`cooler_socket_support`), not derived.
 - **Case ↔ motherboard form-factor compatibility is explicit** (not derived from dimensions).
-- **Case ↔ radiator compatibility is explicit** (`case_radiator_support`, includes size and position).
+- **Case ↔ radiator compatibility is explicit** (`case_radiator_support`, includes size and position). The cooler's own radiator size lives on `cooler_spec.radiator_size_mm` (migration 013 / seed 007, OG-28 closed 2026-10-04): it is NULL for every AIR cooler (not applicable) and vendor-cited for all 5 LIQUID coolers. Both sides are now directly comparable, so rule 5 can reach a real PASS instead of holding UNKNOWN forever.
 - **GPU ↔ case compatibility is calculated** from dimensions (`gpu_board_spec` vs `case_spec` max GPU length/thickness).
 - **GPU ↔ PSU compatibility is calculated** from wattage and connectors (`recommended_psu_watts` vs `rated_wattage`; connector comparison).
 - **Variant-specific GPU physical properties belong to `gpu_board_spec`** (length, slot width, height, board TGP, connectors), not to the chipset or `product` row.

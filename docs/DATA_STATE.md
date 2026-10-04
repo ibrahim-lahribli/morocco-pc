@@ -49,7 +49,7 @@ the catalog.
 | `recommendation_query` | 0 |
 | `recommendation_result` | 0 |
 | `retailer_listing_alias` | 0 |
-| `schema_migrations` | 12 |
+| `schema_migrations` | 13 |
 | `scoring_model` | 1 |
 | `socket` | 3 |
 | `spec_provenance` | 0 |

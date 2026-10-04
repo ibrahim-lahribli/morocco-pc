@@ -3,7 +3,7 @@
 **GENERATED FILE — do not edit by hand.** Regenerate with `node scripts/gen-decision-index.js`
 (or `npm run gen:decisions`) after any change to `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 `node scripts/gen-decision-index.js --check` exits non-zero when this file is stale.
-Generated 2026-10-02 from RECOMMENDATION_ENGINE_DECISIONS.md (3824 lines).
+Generated 2026-10-04 from RECOMMENDATION_ENGINE_DECISIONS.md (3846 lines).
 
 Generated for audit finding **D5** (decision-log navigability): one row per decision with number,
 title, status, date and line anchor. Every status comes from the normalized `Status:` line at the
@@ -17,9 +17,9 @@ section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` a
 
 ## Open decisions
 
-None. All 27 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-02.
+None. All 28 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-04.
 
-## Global decisions (25 `## Decision` headings + 2 nested 4/5 aliases = 27)
+## Global decisions (26 `## Decision` headings + 2 nested 4/5 aliases = 28)
 
 | # | Title | Status | Date | DECISIONS.md line |
 |---|---|---|---|---|
@@ -48,6 +48,7 @@ None. All 27 global decisions (including the two nested 4/5 aliases) and all 5 E
 | 25 | Assembly cap starvation of the O4 diversity objective | RESOLVED 2026-09-28 — assembly cap starvation of the O4 diversity objective (`max_builds_per_query = 25` is the immediate structural blocker). | 2026-09-28 | 3315 |
 | 26 | S5.2 HIGH-TGP connector escalation implemented; the four S5.3/S6 HARD rules explicitly deferred | RESOLVED 2026-09-28 — hybrid (audit D2): item A IMPLEMENTED (`GPU_PSU_CONNECTOR_NULL_HIGH_TGP`); item B (four S5.3/S6 HARD rules) EXPLICITLY DEFERRED and unenforced. | 2026-09-28 | 3417 |
 | 27 | Budget-blind retention replaced by a cheapest-per-role reservation, plus a budget_floor diagnostic | RESOLVED 2026-10-02; IMPLEMENTED 2026-10-02 — budget-aware retention, cheapest-per-role reservation of 1 of K slots plus a budget_floor diagnostic on the pass result; closes OG-26 (see docs/OPEN_GAPS.md C-17), unit tests 829 -> 859 with 0 failures. | 2026-10-02 | 3571 |
+| 28 | Per-cooler radiator size added to `cooler_spec`, making rule 5 reachable | RESOLVED 2026-10-04; IMPLEMENTED and APPLIED 2026-10-04 — migration `013_cooler_radiator_size.sql` adds a nullable `cooler_spec.radiator_size_mm` and seed `007_cooler_radiator_size.sql` populates the 5 liquid coolers, so rule 5's size match can now succeed instead of comparing a NOT NULL integer against `null`. | 2026-10-04 | 3827 |
 
 ## Engine 3 contract decisions (Engine-3-local numbering; local 4–5 ARE global Decisions 4–5)
 
@@ -61,9 +62,9 @@ None. All 27 global decisions (including the two nested 4/5 aliases) and all 5 E
 
 ## Reconciliation
 
-- Global decisions: 27 = 25 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
+- Global decisions: 28 = 26 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
 - Engine-3-local contracts: 5 (`### Decision 1–5` under "Engine 3 contract decisions"; local 1–3 are NOT global 1–3, local 4/5 ARE global 4/5 — AGENTS.md §2).
-- Parsed headings: 25 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
+- Parsed headings: 26 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
 - Status source: each entry’s normalized `Status:` line (first content line). The generator exits
   non-zero if a decision is added without one, so this table cannot go stale silently.
 - Open decisions: none.

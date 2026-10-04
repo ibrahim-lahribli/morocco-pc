@@ -278,6 +278,34 @@ test('psu power_connectors normalization: boolean and counts, NULL preserved', a
   });
 });
 
+test('cooler_spec.radiator_size_mm is carried through; NULL stays NULL (OG-28)', async () => {
+  // Migration 013 / seed 007 give the COOLER side of rule 5 the value it
+  // needs. The loader must pass the researched size through and must NOT
+  // invent one: a NULL (AIR cooler, or an un-researched liquid cooler) has to
+  // survive as NULL so the resolver takes its UNKNOWN branch rather than
+  // comparing against 0.
+  for (const size of [120, 240, 280, 360]) {
+    const routes = singleOfEachRoutes();
+    routes.COOLER = [{ product_id: U(6), cooling_type: 'LIQUID', radiator_size_mm: size }];
+    const { context } = await fullContext(routes);
+    assert.deepEqual(context.specs['p:' + U(6)], {
+      cooling_type: 'LIQUID', cooler_requires_radiator: true,
+      radiator_size_mm: size, radiator_position: null,
+    });
+  }
+
+  // NULL and absent are indistinguishable and both stay null - never 0.
+  for (const row of [
+    { product_id: U(6), cooling_type: 'LIQUID', radiator_size_mm: null },
+    { product_id: U(6), cooling_type: 'LIQUID' },
+  ]) {
+    const routes = singleOfEachRoutes();
+    routes.COOLER = [row];
+    const { context } = await fullContext(routes);
+    assert.strictEqual(context.specs['p:' + U(6)].radiator_size_mm, null);
+  }
+});
+
 test('cooler specs derive cooler_requires_radiator; cooling_type preserved', async () => {
   const { context } = await fullContext();
   assert.deepEqual(context.specs['p:' + U(6)], {

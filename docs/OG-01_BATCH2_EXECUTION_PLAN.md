@@ -8,7 +8,7 @@ gate: `check-og01-coverage.js --strict` = **PASS**; flat-40 pool candidates
 57 -> **1 of 101** (the deliberate no-evidence fixture). The last file also closed
 **OG-05** as a side effect (all 10 of 10 cases now have a vendor-sourced radiator
 matrix) and registered **OG-27** (AIO `height_mm` NULL + 3 `max_tdp_watts` vendor
-disagreements) and **OG-28** (a liquid cooler can never reach `PASS` on the radiator rule — `resolveCaseRadiator` IS implemented and wired, but `filtering/context-loader.js` hardcodes `radiator_size_mm: null` because `cooler_spec` has no radiator-size column). Final
+disagreements) and **OG-28** (a liquid cooler could never reach `PASS` on the radiator rule — `resolveCaseRadiator` was already implemented and wired, but `filtering/context-loader.js` hardcoded `radiator_size_mm: null` because `cooler_spec` had no radiator-size column; **CLOSED 2026-10-04** by migration `013` + seed `007`, see OPEN_GAPS C-20). Final
 reach is score-driven in every role; re-measure it with
 `node scripts/measure-og01-reach.js` instead of reading numbers here, because
 assessment scores decay 0.5%/day and any figure copied into prose goes stale.

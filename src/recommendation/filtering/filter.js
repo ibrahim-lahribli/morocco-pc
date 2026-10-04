@@ -72,9 +72,10 @@
  *
  * Resolver wiring preserves the B2-C data semantics exactly:
  *   - null stays null and is never converted to 0 / false / 'unknown';
- *   - the cooler radiator_size_mm stays null (the schema provides no
- *     authoritative value) and a HYBRID / null cooler radiator requirement
- *     stays tri-state UNKNOWN;
+ *   - the cooler radiator_size_mm is passed through exactly as loaded
+ *     (cooler_spec.radiator_size_mm, migration 013 / seed 007) and stays null
+ *     for an AIR cooler or an un-researched liquid cooler; a HYBRID / null
+ *     cooler radiator requirement stays tri-state UNKNOWN;
  *   - an ambiguous / unmapped socket leaves the platform unresolved, so the
  *     platform-memory check reads as UNKNOWN (never FAIL);
  *   - GPU width_slots stays a JS number and required_power_connectors stays
@@ -446,8 +447,9 @@ function evaluateCaseFormFactorPair(context, motherboard, caseCandidate) {
 
 /**
  * CPU_COOLER <-> CASE: radiator compatibility (rule 5). The cooler spec
- * fields are passed through exactly as loaded - radiator_size_mm stays
- * null and cooler_requires_radiator stays tri-state.
+ * fields are passed through exactly as loaded - radiator_size_mm carries the
+ * researched cooler_spec value (null for AIR) and cooler_requires_radiator
+ * stays tri-state.
  */
 function evaluateCaseRadiatorPair(context, cooler, caseCandidate) {
   const coolerSpec = productSpecOf(context, cooler);

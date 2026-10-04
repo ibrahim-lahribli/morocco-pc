@@ -230,7 +230,7 @@ SELECT product_id, memory_type_id
  ORDER BY product_id ASC`;
 
 const COOLER_SPEC_SQL = `
-SELECT product_id, cooling_type
+SELECT product_id, cooling_type, radiator_size_mm
   FROM cooler_spec
  WHERE product_id = ANY($1::uuid[])
  ORDER BY product_id ASC`;
@@ -359,8 +359,10 @@ function normalizeSpecForRole(role, row) {
       return {
         cooling_type: row.cooling_type ?? null,
         cooler_requires_radiator: deriveCoolerRequiresRadiator(row.cooling_type ?? null),
-        // The schema provides no authoritative values; never invent them.
-        radiator_size_mm: null,
+        // cooler_spec.radiator_size_mm (migration 013, seed 007). NULL is
+        // preserved exactly as PostgreSQL returned it: an AIR cooler never
+        // needs one, and an un-researched liquid cooler is UNKNOWN, never 0.
+        radiator_size_mm: row.radiator_size_mm ?? null,
         radiator_position: null,
       };
     case 'CASE':

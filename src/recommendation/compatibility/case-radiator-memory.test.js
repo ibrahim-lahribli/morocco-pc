@@ -187,6 +187,51 @@ test('liquid cooler + ZERO radiator rows -> FAIL RADIATOR_UNSUPPORTED', () => {
   assert.equal(result.evidence[0].cooler_requires_radiator, true);
 });
 
+test('OG-28 invariant: supplying a radiator size can only lift UNKNOWN, never cause FAIL', () => {
+  // Before seed 007 the loader always passed radiator_size_mm: null, so every
+  // liquid cooler in a case that HAD a matrix returned UNKNOWN forever. Now
+  // that cooler_spec carries a real size, the safety property that made that
+  // change acceptable must be pinned here: for any case matrix that is
+  // non-empty, every possible cooler size resolves to PASS or UNKNOWN, and
+  // NEVER to FAIL. FAIL is reachable only from an empty matrix, which is the
+  // pre-existing `liquid + ZERO rows` rule and is unaffected by the size.
+  const matrix = [
+    { radiator_size_mm: 240, position: 'TOP' },
+    { radiator_size_mm: 360, position: 'FRONT' },
+  ];
+  for (const size of [120, 140, 240, 280, 360, 420, null]) {
+    const result = resolveCaseRadiator(
+      radiatorInput({ radiator_size_mm: size, radiator_records: radiatorRows(...matrix) })
+    );
+    assert.notEqual(
+      result.status, FAIL,
+      'a non-empty matrix must never FAIL, got FAIL for size ' + size
+    );
+  }
+  // 240 and 360 are genuinely supported -> a real PASS, not a held UNKNOWN.
+  for (const size of [240, 360]) {
+    assert.equal(
+      resolveCaseRadiator(
+        radiatorInput({ radiator_size_mm: size, radiator_records: radiatorRows(...matrix) })
+      ).status,
+      PASS
+    );
+  }
+  // An absent size stays UNKNOWN rather than being read as 0 or as a match.
+  assert.equal(
+    resolveCaseRadiator(
+      radiatorInput({ radiator_size_mm: null, radiator_records: radiatorRows(...matrix) })
+    ).status,
+    UNKNOWN
+  );
+  // The empty-matrix branch is unchanged - it is the only FAIL, and it does
+  // not depend on the size at all.
+  assert.equal(
+    resolveCaseRadiator(radiatorInput({ radiator_size_mm: 360, radiator_records: [] })).status,
+    FAIL
+  );
+});
+
 test('air cooler + zero radiator rows -> PASS (special rule NOT triggered)', () => {
   const result = resolveCaseRadiator(
     radiatorInput({ cooler_requires_radiator: false, radiator_records: [] })

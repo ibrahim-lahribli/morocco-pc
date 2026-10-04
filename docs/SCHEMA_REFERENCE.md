@@ -8,7 +8,7 @@ live database (`information_schema` / `pg_catalog`). Per `AGENTS.md` section 9,
 generated lookup so "does this column exist?" never requires reading 11 SQL files
 (the question that produced audit finding D2).
 
-<!-- schema-digest: d41dec0e5a6f1db1 -->
+<!-- schema-digest: b2d47f96779cdf24 -->
 
 ## Enum vocabularies (14)
 
@@ -267,7 +267,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 
 **Indexes:** `cooler_socket_support_pkey` · `idx_cooler_socket_support`
 
-### `cooler_spec` (8 columns)
+### `cooler_spec` (9 columns)
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -279,6 +279,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `width_mm` | integer | YES |  |
 | `created_at` | timestamp without time zone | NO | now() |
 | `updated_at` | timestamp without time zone | NO | now() |
+| `radiator_size_mm` | integer | YES |  |
 
 **Foreign keys:** `cooler_spec_product_id_fkey`: `product_id` → `product.id` (ON DELETE NO ACTION)
 
@@ -287,6 +288,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 - `chk_cooler_height_positive` — CHECK ((height_mm > 0))
 - `chk_cooler_length_positive` — CHECK ((length_mm > 0))
 - `chk_cooler_max_tdp_positive` — CHECK ((max_tdp_watts > 0))
+- `chk_cooler_radiator_size_positive` — CHECK ((radiator_size_mm > 0))
 - `chk_cooler_width_positive` — CHECK ((width_mm > 0))
 
 **Indexes:** `cooler_spec_pkey`

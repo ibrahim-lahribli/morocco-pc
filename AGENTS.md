@@ -23,7 +23,7 @@ points are the engine's public barrels (`src/recommendation/*/index.js`) and the
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–27). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–28). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
    To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
@@ -69,7 +69,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `docs/GLOSSARY.md` | Load-bearing vocabulary (status vocabulary, decision ids, the `D2` vs `Decision 2` collision) |
 | `docs/TEST_MAP.md` | Which test pins which contract — check before changing pinned behavior |
 | `docs/RECIPES/` | Task checklists: add a migration/seed/scoring-model/pair-evaluator/stage/status-claim |
-| `database/migrations/` | Authoritative schema (`001`–`012`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
+| `database/migrations/` | Authoritative schema (`001`–`013`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
 | `database/seeds/` | DML-only, idempotent seed data |
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |
 | `scripts/` | CLIs: migrations, seeds, schema verifiers, engine checks |
@@ -178,6 +178,30 @@ Command gotchas (verified 2026-09-28):
   `budget_floor` is a data field only, deliberately not wired into Engine 6 explanation text.
 
 - A seed file that embeds its own `BEGIN;`/`COMMIT;` cannot be rollback-rehearsed by wrapping it in an outer transaction: the inner COMMIT ends the outer one, so the caller's `ROLLBACK` is a no-op and the write commits. Strip the BEGIN/COMMIT before sending it if a real rollback test is needed, or rehearse on a throwaway branch and reset the branch.
+
+- **CRLF gotcha (cost a whole-file diff twice this session).** Never "normalize" a CRLF file with
+  `s.split('\n').join('\r\n')` — the existing `\r` survives and you write `\r\r\n`, which git renders
+  as every line changed. Check first with `grep -qU $'\r' <file>`; if it is already CRLF, append the
+  new text with `split('\n').join('\r\n')` and `fs.appendFileSync` only. `docs/RECOMMENDATION_ENGINE_DECISIONS.md`
+  also carries a UTF-8 BOM; rewriting it as utf8 drops the BOM and adds a spurious first-line diff.
+- `python` is not installed in this shell (Windows alias stub); use `node -e` for file surgery.
+  A bare `TEST_DATABASE_URL="$TEST_DATABASE_URL" node -e ...` prefix is a trap — the outer shell has
+  no such var, so it exports an EMPTY value that shadows the one `dotenv` just loaded, and the
+  failure surfaces as a bare `ERR` with an empty message.
+- Adding a decision to the log **breaks `verify-docs` by design**: `scripts/verify-docs.js` hardcodes
+  the expected heading and `Status:` counts (now 26 / 32) and derives AGENTS.md's required
+  "Decisions 1-N" from that parse. Bump both counts when you add Decision N+1, and update the
+  `database/migrations/` range cited in AGENTS.md §4 or `migrations-range-documented` warns.
+- Writing a spec-data seed: put the guard in the DML, not only the header comment. `UPDATE..FROM
+  (VALUES) JOIN product ON p.name = v.name WHERE cs.radiator_size_mm IS NULL` honours any name you
+  list, so also constrain the type column (e.g. `AND cs.cooling_type = 'LIQUID'`) — then prove it by
+  pointing one VALUES row at a wrong-type product and observing no write.
+- To exercise the engine against a real DB without the orchestrator, call
+  `filterCandidatesForRecommendation({input, pool}, db)` — positional args, not an object. A pool
+  entry needs `component_role`, `product_id`, `product_variant_id: null` and `category`, where
+  `category` is the `product_category` enum (`COOLER`, not the `CPU_COOLER` role). `input` needs a
+  valid Engine 2A selection input (all 8 `EXPANSION_ORDER` roles, `RAM` not `MEMORY`); each failure
+  mode raises its own missing-field error, which is the fastest way to discover the contract.
 
 No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent or add them.
 

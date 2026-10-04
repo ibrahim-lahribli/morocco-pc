@@ -83,7 +83,7 @@ function coolerSpec(overrides = {}) {
   return {
     cooling_type: 'AIR',
     cooler_requires_radiator: false,
-    radiator_size_mm: null, // B2-C: no authoritative value; stays null
+    radiator_size_mm: null, // AIR / un-researched: stays null (never invented)
     radiator_position: null,
     ...overrides,
   };
@@ -840,8 +840,9 @@ test('B2-D: HYBRID/null cooler radiator requirement stays tri-state UNKNOWN', ()
   assert.equal(hybridCooler.status, CANDIDATE_STATUSES.UNKNOWN);
   assert.equal(hybridCooler.reason, REASON_CODES.RADIATOR_SUPPORT_UNKNOWN);
 
-  // (b) Liquid cooler: radiator_size_mm stays null (B2-C contract) - the
-  //     required size is never invented, so the check stays UNKNOWN.
+  // (b) Liquid cooler with no radiator size: stays UNKNOWN. The size is
+  //     never invented (an un-researched cooler has NULL, not 0), so the
+  //     check holds UNKNOWN rather than falsely matching the 240mm matrix.
   const liquidSpecs = goldenSpecs();
   liquidSpecs['p:' + COOLER_ID] = coolerSpec({
     cooling_type: 'LIQUID',
@@ -857,6 +858,45 @@ test('B2-D: HYBRID/null cooler radiator requirement stays tri-state UNKNOWN', ()
   assert.equal(liquidCooler.relationships.case_radiator, FINAL_STATUSES.UNKNOWN);
   assert.equal(liquidCooler.status, CANDIDATE_STATUSES.UNKNOWN);
   assert.equal(liquidCooler.reason, REASON_CODES.RADIATOR_SUPPORT_UNKNOWN);
+
+  // (c) OG-28: the same liquid cooler, now carrying a researched radiator
+  //     size that the case matrix actually supports, must reach PASS. This is
+  //     the transition seed 007 makes possible, and it is a genuine PASS
+  //     rather than a held UNKNOWN - which is what stops each liquid cooler
+  //     from costing a build unknown_compat_penalty points.
+  const sizedSpecs = goldenSpecs();
+  sizedSpecs['p:' + COOLER_ID] = coolerSpec({
+    cooling_type: 'LIQUID',
+    cooler_requires_radiator: true,
+    radiator_size_mm: 240,
+  });
+  const sizedResult = filterCandidates(buildContext({
+    pool: basePool(),
+    specs: sizedSpecs,
+    platform_by_socket: goldenPlatformBySocket(),
+    compat: goldenCompat(),
+  }));
+  const sizedCooler = findResult(sizedResult, 'CPU_COOLER', COOLER_ID);
+  assert.equal(sizedCooler.relationships.case_radiator, FINAL_STATUSES.PASS);
+  assert.equal(sizedCooler.status, CANDIDATE_STATUSES.PASS);
+
+  // (d) A size the case matrix does not carry stays UNKNOWN - support is
+  //     never invented, and a mismatch is not a FAIL either.
+  const mismatchedSpecs = goldenSpecs();
+  mismatchedSpecs['p:' + COOLER_ID] = coolerSpec({
+    cooling_type: 'LIQUID',
+    cooler_requires_radiator: true,
+    radiator_size_mm: 360,
+  });
+  const mismatchedResult = filterCandidates(buildContext({
+    pool: basePool(),
+    specs: mismatchedSpecs,
+    platform_by_socket: goldenPlatformBySocket(),
+    compat: goldenCompat(),
+  }));
+  const mismatchedCooler = findResult(mismatchedResult, 'CPU_COOLER', COOLER_ID);
+  assert.equal(mismatchedCooler.relationships.case_radiator, FINAL_STATUSES.UNKNOWN);
+  assert.equal(mismatchedCooler.status, CANDIDATE_STATUSES.UNKNOWN);
 });
 
 test('B2-D: CPU<->MOTHERBOARD exact/family support wiring (exact > family > UNKNOWN)', () => {
