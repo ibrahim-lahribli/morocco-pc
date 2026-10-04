@@ -70,9 +70,9 @@ the catalog.
 
 - Products: 100 (22 variants)
 - Assessed products: 99 of 100 (280 assessment rows) — the rest score the flat no-evidence baseline (OG-01)
-- Offers: 101 (checked 2026-09-19 22:33:23.358251+00 … 2026-09-25 15:29:19.121345+00)
+- Offers: 101 (checked 2026-10-04 04:27:21.455192+00 … 2026-10-04 04:27:21.455192+00)
 - GPU variants with NULL width_slots/height_mm: 7 (OG-07)
-- PSUs with NULL connector_12vhpwr: 3 (OG-08)
+- PSUs with NULL connector_12vhpwr: 2 (OG-08)
 - Layer 4 emptiness: ALL five tables 0 rows (write path proven only on the test branch)
 
 ---

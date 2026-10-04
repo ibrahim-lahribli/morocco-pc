@@ -868,3 +868,64 @@ Verification (this D7 pass): read-only. `git status --porcelain` clean before ed
   (208/208, 0 bare LF, ASCII-only) like 003; run-seeds --dry-run detects it;
   TEST branch reachable (products=100) for the pending branch-first apply.
 
+## 2026-10-04 (later) - seed 005 APPLIED after the re-check found BOTH PSU rows wrong
+
+- **The authoring session's own "should be human re-checked before apply"
+  note was load-bearing, not ceremony.** Doing that re-check found TWO of the
+  file's three data rows wrong. Had it been applied on trust, the shared
+  database would now carry a fabricated connector count.
+- **REV-1 - the Antec G850 row was wrong on PREMISE and on COUNTS.** The
+  first pass excluded Atom (semi) / GSK (full) via the catalog's
+  `modularity = NON_MODULAR`, then sourced the remainder to
+  `antec.com/product/power/g850-850`. That page 404s (for the original author
+  on retry AND for the re-check), and **the plain G850 is itself
+  SEMI-MODULAR** per computervillage / distributionhub / pcbstore / ultratech /
+  ryans / amazon.in - so NON_MODULAR excluded NONE of the three candidates and
+  identified nothing. Counts were wrong too: the pass wrote `pcie_8pin = 6` on
+  that 404 page's authority alone, while four independent retailers publish
+  **4** x 8(6+2) PCI-E, and 6 matches Antec's HCG GOLD 850W - a DIFFERENT,
+  fully-modular unit. The pass most likely transposed the HCG table onto the
+  G850. **Lesson: when a disambiguation argument rests on ONE stored field,
+  verify that field is actually true before trusting the argument.** A wrong
+  Layer-1 value does not just mislead queries, it misdirects RESEARCH - this
+  one bad cell caused two wrong passes (003 D7 and 005). Registered **OG-31**.
+- **REV-2 - the A750GL eps count was simply wrong (1, not 2).** PCPartPicker
+  (part 306-7ZP8B11-CE0), MSI's own spec page and the unboxing sheet all read
+  EPS (4+4) x 2. Vendor spec wins per the project source-precedence rule.
+  Small blast radius (GPUs never require EPS) but still incorrect.
+- **A single 404 is not a source.** Both wrong PSU rows trace to one page that
+  could not be re-read. When the sole citation for a value cannot be re-fetched
+  by a second reader, treat the value as UNVERIFIED regardless of how
+  confident the authoring session was.
+- **Applied values (measured, not asserted).** Branch-first on
+  TEST_DATABASE_URL, then shared via `npm run seed`. Live: GPU NULL
+  width_slots **7 -> 6** (height_mm stays 7), PSU any-NULL-connector **4 -> 2**;
+  G850 `eps 2 / pcie 4 / 12vhpwr 0 / sata 8`, A750GL `eps 2`; Connect 850 and
+  HYBROK 650 stay NULL. Re-run verified a no-op.
+- **D4 effects measured by calling the resolvers directly** (`scripts/tmp-005-measure.js`,
+  since deleted) - every prediction held exactly: Rule 9 flips UNKNOWN -> PASS
+  for **10 of 10** cases; Rule 11 over 22 GPUs x G850 gives **9 UNKNOWN -> PASS**
+  and **13 FAIL -> FAIL** with the reason upgrading
+  `GPU_PSU_CONNECTOR_NULL_HIGH_TGP` -> `GPU_PSU_CONNECTOR_UNAVAILABLE`. No
+  verdict flips the other way. Worth noting the wrong `pcie 6` would have
+  produced the SAME verdict count as the correct `4` - right by luck, not by
+  reasoning, which is why the count itself still had to be right.
+- **A seed that embeds its own `BEGIN;`/`COMMIT;` cannot be rollback-tested by
+  wrapping it in an outer transaction.** The inner COMMIT ends the outer one,
+  so the caller's `ROLLBACK` is a no-op and the write COMMITS. My first
+  "rollback validation" reported success while actually persisting. If you need
+  a true rollback rehearsal, strip the file's own BEGIN/COMMIT before sending
+  it, or validate against a throwaway branch and reset the branch. The branch
+  made this harmless here; against the shared DB it would not have been.
+- **`gap-register-shape` caught a real duplicate-ID collision.** The other
+  agent had registered **OG-30** (the offer-freshness cliff - the same finding
+  reported independently) while this session was mid-flight, and my new row
+  reused the id. The gate failed with `[DUPLICATE_ID]`, which is exactly the
+  class of silent merge damage it was built for. Renumbered to **OG-31**.
+  **Lesson: re-read the register immediately before adding a row, and let the
+  gate arbitrate the id.**
+- **OG-30 is the only BLOCKING gap** (offer freshness: all 101 `store_offer`
+  rows expire by 2026-10-25 against Stage 1's 30-day window). It gates any API
+  launch. OG-07 / OG-08 both stay OPEN with irreducibly-unresolvable residue
+  (6 GPU identities, 2 PSUs with no citable connector data).
+

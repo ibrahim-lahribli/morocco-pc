@@ -11,6 +11,11 @@
 --   * psu_spec connector counts for Seed Antec G850 850W Gold (all four).
 --     2 of the 4 OG-08 rows stay NULL (D3).
 --
+-- REVISION 2026-10-04 (second pass, after the independent re-check the
+-- authoring session itself asked for): D3's Antec row and D3's A750GL row
+-- were BOTH WRONG and have been corrected. See REV-1/REV-2 below. The GB5060
+-- row (D1) re-verified unchanged. Nothing was applied between the two passes.
+--
 -- Scope: EXACTLY the rows named below; no other product, variant or spec
 -- row is touched. height_mm is NOT written for any row (see D1).
 --
@@ -93,32 +98,21 @@
 --         the only in-range reading is source-dependent and the slot
 --         VALUE itself is not determinate -> NULL.
 --
---   D3. PSU identity + counts (OG-08).
---       * MSI MAG A750GL PCIE5 750W: connector_eps_count = 1. Sources:
---         TechPowerUp PSU database (connector list "1x 12V-2x6,
---         3x 6+2-pin PCIe, 8x SATA, 2x 4-pin Peripheral, 1x EPS,
---         1x ATX-24") + Nikas' Parts review spec table ("1x EPS
---         (4+4 pin)"). 003 already filled the other three columns.
---       * Seed Antec G850 850W Gold: the catalog row is 80 PLUS Gold,
---         NON_MODULAR, 140 mm, named "G850". Three Antec 850W Gold units
---         can be confused; the recorded fields separate them:
---           - "G850" (antec.com/product/power/g850-850 - Gold, ATX 3.1):
---             name-exact match; its spec table reads ATX 1, EPS 2,
---             PCI-E 6, SATA 8, Peripheral 2, 12VHPWR 0, length 140.
---           - "Atom G850" is Semi-Modular (comx, laptopdirect, progenix,
---             mctech, rebelgaming, titan-ice) -> EXCLUDED by the
---             catalog's NON_MODULAR. It publishes the same connector
---             counts anyway (antec.com/product/power/atom-g850).
---           - "GSK850" is Fully Modular with 1x12VHPWR, 2x CPU (EPS),
---             4x PCIe, 8x SATA (comx.co.za spec sheet, skycomp) ->
---             EXCLUDED by NON_MODULAR. This is exactly the ambiguity
---             003 D7 recorded ("GSK ATX 850 = one 12VHPWR"); modularity
---             settles it, and the GSK reading never reaches the data.
---         Result: eps 2, pcie_8pin 6, 12vhpwr 0, sata 8. The 0 is a
---         VERIFIED zero taken from the manufacturer's own connector
---         table - stronger than 003 D5's "list omits it" test - so a
---         12vhpwr requirement resolves FAIL GPU_PSU_CONNECTOR_UNAVAILABLE
---         (a real deficit) instead of Decision 26's NULL escalation.
+--   D3. PSU identity + counts (OG-08). REVISED 2026-10-04 - see REV-1/REV-2.
+--       * MSI MAG A750GL PCIE5 750W: connector_eps_count = 2 (REV-2).
+--         003 already filled the other three columns (pcie 3, 12vhpwr 1,
+--         sata 8), all consistent with the sources re-checked in REV-2.
+--       * Seed Antec G850 850W Gold: eps 2, pcie_8pin 4, 12vhpwr 0, sata 8
+--         (REV-1). Identity is established by NAME plus a converging
+--         connector table across independent retailers, NOT by modularity -
+--         the first pass used the catalog's NON_MODULAR value to exclude
+--         the rivals, and that premise was itself wrong (REV-1).
+--         The three confusable units are plain G850 / ATOM G850 / GSK850;
+--         the first pass separated them by the catalog's stored
+--         `modularity` value, and the re-check showed that separation was
+--         invalid (REV-1a) - so identity now rests on the product NAME
+--         plus a connector table that converges across retailers.
+--
 --       * Seed Connect PSU 850 Bronze + Seed HYBROK PSU 650 Bronze: STAY
 --         NULL across all four columns, with stated reason. Both brands
 --         exist in the Moroccan/North-African retail the catalog came
@@ -127,10 +121,77 @@
 --         Bronze; Non-modular - matching the catalog row); HYBROK 650W
 --         Bronze: upscalemedia-dz, click-dz (model PSU650WB,
 --         EAN 3722104523243), qsnet.tn, pcgamer.ma - but NOT ONE listing
---         publishes connector counts: wattage, efficiency, modularity
---         and dimensions only, and the one distributor sheet found
---         (click-dz) stops before the connector block. No citable source
---         exists, so the columns stay NULL rather than plausible.
+--         publishes connector counts: wattage, efficiency, modularity--       and dimensions only, and the one distributor sheet found
+--       (click-dz) stops before the connector block. No citable source
+--       exists, so the columns stay NULL rather than plausible.
+--
+--       REV-1. THE FIRST PASS'S ANTEC ROW WAS WRONG ON BOTH PREMISE AND
+--             COUNTS, and was NOT applied. Two independent defects:
+--             (a) PREMISE. The first pass excluded "ATOM G850" (semi) and
+--                 "GSK850" (full) because the catalog stores
+--                 modularity = NON_MODULAR, then attributed the residue
+--                 to a name-exact "G850" at antec.com/product/power/
+--                 g850-850. That page 404s (it did for the first-pass
+--                 author on retry, and again on the independent
+--                 re-check), and MORE IMPORTANTLY the plain G850 is
+--                 ITSELF SEMI-MODULAR per every reachable source:
+--                 computervillage ("Modular Type: Semi-Modular"),
+--                 distributionhub ("Semi Modular"), pcbstore
+--                 ("Semi-Modular"), ultratech ("Modular Type:
+--                 Semi-Modular"), ryans ("Semi Modular"), plus
+--                 amazon.in, cloudwavebd and againtheme. So NON_MODULAR
+--                 excludes NONE of the three candidates and cannot
+--                 identify the row - the disambiguation was invalid.
+--             (b) COUNTS. The first pass wrote pcie_8pin = 6 on the sole
+--                 authority of the 404 page. Four independent retailers
+--                 publish 4 x 8(6+2) PCI-E for the plain G850:
+--                 computervillage, distributionhub, pcbstore, ultratech
+--                 (againtheme: "4 x 8(6+2) Pin PCI-E"). The 6 figure
+--                 matches Antec's HCG GOLD 850W - a DIFFERENT, fully
+--                 modular unit - so the first pass most likely
+--                 transposed the HCG connector table onto the G850.
+--                 SATA is 8 on computervillage / pcbstore / ultratech
+--                 and 6 on distributionhub / sclgaming; 8 is the
+--                 majority reading and is what the first pass had, so
+--                 it is retained, but the disagreement is recorded
+--                 rather than hidden. EPS 2 is unanimous everywhere.
+--             CONSEQUENCE: this row was NOT applied between the two passes.
+--             Applying it on trust would have written a wrong pcie_8pin
+--             (6 vs 4) AND a spurious "verified zero" 12vhpwr into the
+--             shared database - and D4 shows this row moves live
+--             verdicts (UNKNOWN -> PASS for 9 GPUs, a reason change for
+--             13 more), so a wrong count here is a wrong build decision,
+--             not cosmetic data drift. The authoring session's own
+--             "should be human re-checked before apply" note is what
+--             caught this.
+--
+--       REV-2. THE FIRST PASS'S A750GL EPS COUNT WAS WRONG: it wrote 1.
+--             The re-check gives 2. PCPartPicker's spec table for part
+--             MAG A750GL PCIE5 (306-7ZP8B11-CE0) lists "EPS 8-pin
+--             Connectors: 2", alongside PCIe 6+2 x 3, SATA x 8 and
+--             PCIe 16-pin 12VHPWR x 1 - the latter three matching what
+--             003 already stored. MSI's own specification page carries
+--             the same "EPS (4+4 pin) 2" (msi.com returns 403 to
+--             automated fetches, so the indexed snippet is the
+--             evidence), and the MSI MAG A750GL PCIE5 unboxing spec
+--             sheet reads "EPS (4+4 PIN) : 2". VENDOR SPEC WINS per the
+--             project's source-precedence rule, so 2 it is. Blast radius
+--             is small - GPUs never require EPS, so this is data
+--             completion, not a verdict change (D4) - but 1 was simply
+--             incorrect.
+--
+--       NEW FINDING (NOT fixed here; registered for the gap register):
+--             psu_spec.modularity = NON_MODULAR for "Seed Antec G850
+--             850W Gold" contradicts the published Semi-Modular design.
+--             modularity is read by NO engine module (verified by grep
+--             across src/), so it is inert for compatibility today - but
+--             it is the exact field seed 003 D7 and seed 005's first
+--             pass both leaned on to disambiguate this row, so a wrong
+--             value there caused two wrong research passes. Correcting
+--             an already-applied Layer-1 spec value must be a SEPARATE
+--             seed file: this file's own convention forbids rewriting a
+--             stored value in place, and the COALESCE guards here would
+--             not overwrite it even if it tried.
 --
 --   D4. EXPECTED ENGINE EFFECT (measured read-only after apply):
 --       * Rule 9 (compatibility/gpu.js resolveGpuCaseThickness):
@@ -139,7 +200,9 @@
 --         publishes max_gpu_thickness_slots = 3 and 2.00 <= 3.
 --       * Rule 11 (compatibility/gpu.js resolveGpuPsuConnectors):
 --         - the 9 pcie_8pin GPUs (8 requiring 1x, 1 requiring 2x) vs the
---           Antec G850: UNKNOWN -> PASS (1,2 <= 6);
+--           Antec G850: UNKNOWN -> PASS (1,2 <= 4; the first pass wrote
+--           6 here, which would ALSO have passed, so the verdict count
+--           is unchanged - but it would have been right by luck);
 --         - the 13 {12vhpwr:1} GPUs vs the Antec G850: all 13 are
 --           >= 200 W-TGP boards, so they were already FAIL via
 --           GPU_PSU_CONNECTOR_NULL_HIGH_TGP (Decision 26); they stay FAIL
@@ -159,6 +222,13 @@
 --     the A750GL leave the NULL set; Connect and HYBROK stay).
 --     Per column: NULL eps 4 -> 2, NULL pcie_8pin 3 -> 2,
 --     NULL 12vhpwr 3 -> 2 (Antec 0 replaces NULL), NULL sata 3 -> 2.
+--   * The Antec 12vhpwr = 0 is a VERIFIED zero: no reachable source lists
+--     a 12VHPWR connector for the plain G850 (its connector tables are
+--     MB / CPU / PCI-E / SATA / Molex only, across all five retailers in
+--     REV-1), so 0 is a positive absence of the connector, not an
+--     omitted field. A 12vhpwr requirement therefore resolves FAIL
+--     GPU_PSU_CONNECTOR_UNAVAILABLE (real deficit) rather than Decision
+--     26's NULL escalation.
 --   * Re-running this file changes nothing (COALESCE guards).
 -- ===========================================================================
 
@@ -182,8 +252,9 @@ UPDATE gpu_board_spec b
 
 -- ---------------------------------------------------------------------------
 -- 2. psu_spec: TWO rows.
---    A750GL: eps only (the other three columns were filled by 003).
---    Antec G850: all four columns (D3, antec.com G850 spec table).
+--    A750GL: eps only = 2 (the other three columns were filled by 003).
+--    Antec G850: all four columns (D3 as revised by REV-1: the connector
+--    table below is the converged retailer consensus, NOT the 404 page).
 --    The other two NULL rows are deliberate (D3): the COALESCE guards leave
 --    Connect and HYBROK exactly as 002 stored them.
 -- ---------------------------------------------------------------------------
@@ -193,11 +264,12 @@ UPDATE psu_spec s
        connector_12vhpwr   = COALESCE(s.connector_12vhpwr,   v.hvpwr::integer),
        connector_sata      = COALESCE(s.connector_sata,      v.sata::integer)
   FROM (VALUES
-    -- TechPowerUp PSU database + Nikas' Parts: 1x EPS (4+4) (D3)
-    ('Seed MSI MAG A750GL PCIE5 750W', 1, NULL::integer, NULL::integer, NULL::integer),
-    -- antec.com/product/power/g850-850 (Gold, ATX 3.1): EPS 2, PCI-E 6,
-    -- 12VHPWR 0 (verified zero), SATA 8 (D3)
-    ('Seed Antec G850 850W Gold', 2, 6, 0, 8)
+    -- REV-2: vendor spec wins - MSI spec page + PCPartPicker +
+    -- unboxing sheet all read EPS (4+4) x 2 (the first pass wrote 1)
+    ('Seed MSI MAG A750GL PCIE5 750W', 2, NULL::integer, NULL::integer, NULL::integer),
+    -- REV-1: converged retailer consensus for the plain G850 (semi-
+    -- modular): EPS 2, PCI-E 4, 12VHPWR 0 (verified absent), SATA 8
+    ('Seed Antec G850 850W Gold', 2, 4, 0, 8)
   ) AS v(name, eps, pcie8, hvpwr, sata)
   JOIN product p ON p.name = v.name
  WHERE s.product_id = p.id;
