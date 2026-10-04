@@ -12,7 +12,7 @@ Retention warning (AGENTS.md section 5): retention ties fall through to random
 database reset — reach figures below are one instance's draw, not a property of
 the catalog.
 
-## Row counts (39 tables)
+## Row counts (40 tables)
 
 | Table | Rows |
 |---|---|
@@ -49,6 +49,7 @@ the catalog.
 | `recommendation_query` | 0 |
 | `recommendation_result` | 0 |
 | `retailer_listing_alias` | 0 |
+| `schema_migrations` | 12 |
 | `scoring_model` | 1 |
 | `socket` | 3 |
 | `spec_provenance` | 0 |

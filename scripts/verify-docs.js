@@ -62,7 +62,7 @@ function readRepo(rel) {
   const first = String(nums[0]).padStart(3, '0');
   const last = String(nums[nums.length - 1]).padStart(3, '0');
   const agents = readRepo('AGENTS.md');
-  if (!(agents.includes('`001`') && agents.includes('`011`'))) {
+  if (!(agents.includes('`' + first + '`') && agents.includes('`' + last + '`'))) {
     warn('migrations-range-documented', 'tree 001->' + last + ' not visibly cited in AGENTS.md');
   }
   pass('migrations-contiguous', files.length + ' files, range ' + first + '->' + last);
@@ -71,7 +71,7 @@ function readRepo(rel) {
 // 2. Decision log parses to the expected counts with Status: lines.
 // 24 global headings (no ## Decision 4/5) + nested 1..5 where local 4/5
 // double as global 4/5 => 26 global decisions; 24 + 5 entries plus the
-// Decision 18 addendum each carry a Status: line => 30.
+// Decision 18 addendum each carry a Status: line => 30; Decision 27 added one => 31.
 const decisions = (function checkDecisions() {
   const raw = readRepo('docs/RECOMMENDATION_ENGINE_DECISIONS.md');
   if (!raw.includes('\r\n')) {

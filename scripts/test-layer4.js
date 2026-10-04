@@ -9,7 +9,7 @@ const { Client } = require('pg');
 // cleanup (executed even when assertions fail) and a final ROLLBACK as a
 // safety net. No TRUNCATE; no non-test data is touched.
 //
-// Limitation: a fresh 001 -> 011 migration on an empty isolated database
+// Limitation: a fresh 001 -> 012 migration on an empty isolated database
 // is NOT VERIFIED (a TEST_DATABASE_URL Neon branch exists since 2026-09-21,
 // but it snapshots parent data, so it is not an empty-DB migration test).
 // This suite only exercises the already-migrated Neon environment.

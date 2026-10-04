@@ -8,7 +8,7 @@ live database (`information_schema` / `pg_catalog`). Per `AGENTS.md` section 9,
 generated lookup so "does this column exist?" never requires reading 11 SQL files
 (the question that produced audit finding D2).
 
-<!-- schema-digest: de031a6559fa56c9 -->
+<!-- schema-digest: d41dec0e5a6f1db1 -->
 
 ## Enum vocabularies (14)
 
@@ -29,7 +29,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `ssd_form_factor` | M_2_2280 \| M_2_2242 \| M_2_2260 \| M_2_22110 \| SATA_25 \| SATA_35 \| U_2 \| PCIE_CARD \| MSATA \| NGFF |
 | `support_status` | ACTIVE \| DISCONTINUED \| END_OF_LIFE |
 
-## Tables (39)
+## Tables (40)
 
 ### `benchmark` (17 columns)
 
@@ -735,6 +735,15 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 - `chk_alias_matched_requires_confidence` — CHECK (((matched_product_id IS NULL) OR (confidence = ANY (ARRAY['CONFIRMED'::confidence_level, 'HIGH'::confidence_level, 'MEDIUM'::confidence_level]))))
 
 **Indexes:** `idx_retailer_listing` · `idx_retailer_listing_match` · `retailer_listing_alias_pkey`
+
+### `schema_migrations` (2 columns)
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `filename` 🔑 | text | NO |  |
+| `applied_at` | timestamp with time zone | NO | now() |
+
+**Indexes:** `schema_migrations_pkey`
 
 ### `scoring_model` (8 columns)
 

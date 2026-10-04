@@ -69,7 +69,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `docs/GLOSSARY.md` | Load-bearing vocabulary (status vocabulary, decision ids, the `D2` vs `Decision 2` collision) |
 | `docs/TEST_MAP.md` | Which test pins which contract — check before changing pinned behavior |
 | `docs/RECIPES/` | Task checklists: add a migration/seed/scoring-model/pair-evaluator/stage/status-claim |
-| `database/migrations/` | Authoritative schema (`001`–`011`, apply in filename order) |
+| `database/migrations/` | Authoritative schema (`001`–`012`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
 | `database/seeds/` | DML-only, idempotent seed data |
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |
 | `scripts/` | CLIs: migrations, seeds, schema verifiers, engine checks |
@@ -119,9 +119,10 @@ deliberately not duplicated here.
 | `npm run verify:docs` | Verify fact-shaped doc claims vs tree (offline) or + read-only DB (`--live`) |
 | `node scripts/verify-docs.js --live` | Adds read-only live-DB checks: 15 core tables + counts (INFO), and the schema-digest gate — FAILs when `docs/SCHEMA_REFERENCE.md`'s `schema-digest:` line no longer matches the live tables/columns/enums (fix: `npm run gen:schema`) |
 | `node scripts/run-seeds.js --dry-run` | Report seed statements without executing |
-| `node scripts/run-migrations.js` | Apply migrations — FRESH DB ONLY (not re-runnable) |
+| `node scripts/run-migrations.js` | Apply PENDING migrations via the `schema_migrations` ledger (OG-14, 2026-10-03) — re-runnable; flags `--dry-run` (list pending), `--check` (exit 1 on pending), `--offline` (no DB), `--baseline` (adopt an already-migrated DB without running), `--test-db` (guarded `TEST_DATABASE_URL`) |
 | `node --test scripts/lib/db-url.test.js` | Guard unit tests (not in `test:unit`) |
 | `node --test scripts/lib/gap-register.test.js` | Gap-register table-shape tests (not in `test:unit`; the check itself runs in `verify:docs` as `gap-register-shape`) |
+| `node --test scripts/lib/migrations.test.js` | Applied-migrations ledger helper tests (OG-14; not in `test:unit`) |
 | `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance fixtures |
 | `node scripts/test-layer3.js --verify --functional` | Layer 3 schema (flags required; needs ALL THREE Layer 3 tables empty — `store` too; non-empty on shared DB AND on the test branch as of 2026-09-28, so it cannot pass in either environment today) |
 | `node scripts/test-layer4.js` | Layer 4 canonical schema (unguarded: reads `DATABASE_URL`; writes `TestL4%` fixtures inside one transaction with final ROLLBACK; does NOT require empty Layer 4 tables) |
@@ -192,15 +193,23 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
    explicitly when an environment limitation prevents a run.
 5. Note: the fresh `001→011` migration was VERIFIED 2026-09-30 (OG-13: empty-DB replay on a
    throwaway Neon DB; 39/39 tables, 336/336 columns, 14/14 enums — see `docs/OPEN_GAPS.md` C-15).
-   Do not re-run it against the shared DB; the surfaced live-only drift is tracked as OG-25.
+   The live-only benchmark drift it surfaced was RECONCILED 2026-10-04 by migration
+   `012_reconcile_benchmark_drift.sql` (OG-25), so the tree is now `001→012`. The shared and TEST
+   databases are baselined in the `schema_migrations` ledger (OG-14) at 012 as of 2026-10-04.
+6. **Migration ledger (OG-14, 2026-10-04).** `run-migrations.js` is ledger-driven: it records each
+   applied filename in `schema_migrations` and applies only the pending tail, so it is re-runnable
+   (the bare `CREATE TYPE` in `002_enums.sql` no longer aborts a second run). A database that
+   predates the ledger is adopted once with `node scripts/run-migrations.js --baseline` (writes the
+   ledger only, runs nothing). `--check` is the freshness gate; `--offline` needs no DB. Never rely
+   on the old "apply files individually via a throwaway script" workaround — it is superseded.
 
 ## 8. Hard rules
 
 - **Never reset, drop, truncate, or restore the shared Neon database.** It is the only dev DB.
 - **Never rewrite or renumber a committed migration.** Schema changes require a new sequential
   `NNN_short_description.sql`.
-- **Never re-run the full migration runner on the live DB** — `002_enums.sql` uses a bare
-  `CREATE TYPE`, so it is not idempotent. Apply new files individually.
+- **Never bypass the migration ledger** — apply migrations only through the ledger-driven
+  `run-migrations.js` (OG-14: pending tail only, one transaction per file — re-running on the live DB is safe); never replay the files by hand.
 - **Never commit `.env`, `node_modules`, or secrets.** `.env.example` holds key names only.
 - **Never add a migration just to make a test pass.**
 - Keep engine modules pure; put DB access in loaders/orchestrator only.
@@ -279,7 +288,7 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
 - **Decision 22 status - FIXED 2026-09-28 (audit D3).** Its `Status:` line said implementation was
   future work; it now records items 1-5 as IMPLEMENTED with a dated UPDATE block in the decision
   itself. Engine 6 is shipped - do not re-implement it.
-Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every finding (D1–D12) plus items 8/9-part-1 was independently re-verified 2026-09-29 (all green: 829 unit tests, verify:docs offline + live, decision-index `--check`); treat its RESOLVED banners as trustworthy and do not re-open the findings without new evidence. **The audit is CLOSED (2026-09-29/30)**: all recommendations A1–A12 landed and the last residue, OG-13 (fresh 001→011 empty-DB run), was RAN AND VERIFIED 2026-09-30 — see `docs/OPEN_GAPS.md` OG-13 / C-15. The drift that run surfaced is tracked forward as OG-25 (schema-migration).
+Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every finding (D1–D12) plus items 8/9-part-1 was independently re-verified 2026-09-29 (all green: 829 unit tests, verify:docs offline + live, decision-index `--check`); treat its RESOLVED banners as trustworthy and do not re-open the findings without new evidence. **The audit is CLOSED (2026-09-29/30)**: all recommendations A1–A12 landed and the last residue, OG-13 (fresh 001→011 empty-DB run), was RAN AND VERIFIED 2026-09-30 — see `docs/OPEN_GAPS.md` OG-13 / C-15. The drift that run surfaced was tracked as OG-25 and is now CLOSED too (reconciled 2026-10-04 by migration `012_reconcile_benchmark_drift.sql`; the migration runner gained a `schema_migrations` ledger, OG-14/C-19).
 - When a session's job is to verify prior work, verify against the working tree and re-run the mechanical gates (not just the banners), then append a dated VERIFIED note to the audit doc itself so the next session does not repeat the pass.
 - Gap-closure propagation: when a gap closes in `docs/OPEN_GAPS.md`, grep the tree for its ID + key phrases in the SAME commit — closures have landed twice now without the same-session propagation the register §6 rule requires (OG-13 needed a follow-up 6-file sync, commit 7d336cd). Shape: `grep -rn "<OG-id>|<key phrase>" --include="*.md" .`
 - Dated RESOLVED/CLOSED banners in audit/status docs are historical records — update only current status sections (`CONTEXT.md`, AGENTS §10, register rows); never retro-edit an old banner, mark supersession in the newer one instead.
