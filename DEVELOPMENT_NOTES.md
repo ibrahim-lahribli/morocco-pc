@@ -838,3 +838,33 @@ Verification (this D7 pass): read-only. `git status --porcelain` clean before ed
   off it yields `undefined` with no warning. Also: the `budget_floor` is the cheapest-
   per-role sum, deliberately NOT the price of an assembled build; asserting the build price
   against it conflates the two.
+
+## 2026-10-04 - OG-07/OG-08 research complete, seed 005 authored (UNAPPLIED)
+
+- **Seed `005_gpu_dimensions_psu_connectors.sql` is AUTHORED but NOT APPLIED.**
+  Branch-first apply, resolver measurement (Rule 9 GP5060x10-case PASS flip,
+  Rule 11 Antec pcie UNKNOWN->PASS and 12vhpwr reason upgrade) and shared
+  apply are outstanding; `docs/OPEN_GAPS.md` OG-07/OG-08 and `CONTEXT.md` all
+  say UNAPPLIED so nothing can be cited as closed. Live state unchanged.
+- **Method that worked:** vendor-neutral aggregators with full model tables
+  beat vendor pages (gigabyte.com/msi.com 403, pny.com slug roulette).
+  `gpus.se/gpus/<family>/` carries Slot/Langd/Hojd/Bredd for EVERY model and
+  settled 5 of 7 GPU rows; LDLC (Length/Width/Thickness + Slot) corroborated
+  the GB 5060 cluster; Scan UK carried manufacturer code + GTIN for the MSI
+  VENTUS 2X; ultrapc.ma corroborated the catalog's exact retail names.
+- **D1 rule to remember (seed 005 header):** per-column value determinacy -
+  fill width_slots only when EVERY brand+chipset model within stored length
+  +/-2 mm shares the same thickness; height_mm keeps 003 D4's full-identity
+  rule (and is engine-unread anyway). One seedable row (GB5060 -> 2.00) fell
+  out of seven researched.
+- **Honest recording:** a mid-session "PNY 5060 Dual Fan OC = 245mm exact
+  match" claim was unsourced and was retracted the same session (no PNY
+  5060 publishes at 245); one in-session antec.com G850 fetch (EPS 2 / PCIe
+  6 / SATA 8 / 12VHPWR 0) is the SOLE direct source for the Antec counts and
+  should be human re-checked before apply (page 404'd on retry); Antec
+  modularity (Atom semi, GSK full) is what excludes the 003-D7 confusions
+  against the catalog's NON_MODULAR, not the name alone.
+- **TXT hygiene:** `database/seeds/005...sql` was byte-verified CRLF-pure
+  (208/208, 0 bare LF, ASCII-only) like 003; run-seeds --dry-run detects it;
+  TEST branch reachable (products=100) for the pending branch-first apply.
+
