@@ -177,6 +177,8 @@ Command gotchas (verified 2026-09-28):
   `budget_floor.within_budget` is `true` (the emptiness is compatibility, not budget); and
   `budget_floor` is a data field only, deliberately not wired into Engine 6 explanation text.
 
+- A seed file that embeds its own `BEGIN;`/`COMMIT;` cannot be rollback-rehearsed by wrapping it in an outer transaction: the inner COMMIT ends the outer one, so the caller's `ROLLBACK` is a no-op and the write commits. Strip the BEGIN/COMMIT before sending it if a real rollback test is needed, or rehearse on a throwaway branch and reset the branch.
+
 No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent or add them.
 
 ## 7. Verification workflow
@@ -229,6 +231,7 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
   `grep -rn "<key phrase>" --include="*.md" .` in the same commit. Leave dated `DEVELOPMENT_NOTES.md`
   entries alone; they record what was believed then.
 - Stage only intended files; check `git status` first (shared checkout).
+- **Another agent may commit to this checkout while you work — re-read `git log`/`git status` before you rely on any row ID or file state.** Commit with an explicit pathspec (`git commit <msg> -- <paths>`) rather than staging, so the index and other agents' staged files are untouched. A shared file (e.g. `docs/OPEN_GAPS.md`) can pick up both agents' rows; say so in the commit body rather than silently including it, and re-read the register right before adding a row — `gap-register-shape` FAILs on a duplicate ID, which is exactly the collision that happens when both agents pick the next free number.
 - Preserve the repo's line endings: root `AGENTS.md` is LF; `CONTEXT.md`, `DEVELOPMENT_NOTES.md`,
   `docs/*.md` and `database/**` are CRLF. Match the file you edit — a stray-LF file reads as a
   whole-file diff.
@@ -293,3 +296,7 @@ Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every
 - Gap-closure propagation: when a gap closes in `docs/OPEN_GAPS.md`, grep the tree for its ID + key phrases in the SAME commit — closures have landed twice now without the same-session propagation the register §6 rule requires (OG-13 needed a follow-up 6-file sync, commit 7d336cd). Shape: `grep -rn "<OG-id>|<key phrase>" --include="*.md" .`
 - Dated RESOLVED/CLOSED banners in audit/status docs are historical records — update only current status sections (`CONTEXT.md`, AGENTS §10, register rows); never retro-edit an old banner, mark supersession in the newer one instead.
 - Generated-docs freshness: `gen-decision-index --check` is DB-free (runs in CI); `SCHEMA_REFERENCE.md` is gated by a schema digest — `verify-docs --live` hashes the DB's tables/columns/enums and fails when the digest line in the doc no longer matches (run `npm run gen:schema` after any seed or migration). The digest query is duplicated in `gen-schema-reference.js` and `verify-docs.js` — change both together. `DATA_STATE.md` is deliberately NOT digest-gated: its figures describe the instance and drift legitimately.
+
+- **A seed's own citation must be re-fetchable by a second reader before you apply it.** A value whose sole source 404s (or 403s) to automated fetches is UNVERIFIED, however confident the authoring session was — treat it as you would a missing spec. Vendor-neutral spec aggregators converge faster and survive vendor-site blocks (gigabyte.com and msi.com both 403); a vendor spec page outranks an aggregator when both are reachable.
+- **When a data-identity argument rests on ONE stored column, verify that column is actually true before trusting the argument.** A wrong Layer-1 value does not only mislead queries — it misdirects RESEARCH: `psu_spec.modularity = NON_MODULAR` on the Antec G850 (published design is Semi-Modular, OG-31) caused two wrong research passes in a row (seed 003 D7, seed 005 first pass) before anything was written.
+
