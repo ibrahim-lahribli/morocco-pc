@@ -94,6 +94,7 @@ async function countsForQuery(client, queryId) {
     client,
     'SELECT (SELECT count(*)::int FROM build_candidate WHERE recommendation_query_id = $1) AS candidates,'
       + ' (SELECT count(*)::int FROM recommendation_result WHERE recommendation_query_id = $1) AS results,'
+      + ' (SELECT count(*)::int FROM build_rejection WHERE recommendation_query_id = $1) AS rejections,'
       + ' (SELECT count(*)::int FROM build_component c JOIN build_candidate b ON b.id = c.build_candidate_id'
       + '   WHERE b.recommendation_query_id = $1) AS components',
     [queryId]
@@ -107,6 +108,7 @@ async function countsForQueries(client, queryIds) {
     'SELECT (SELECT count(*)::int FROM recommendation_query WHERE id = ANY($1::uuid[])) AS queries,'
       + ' (SELECT count(*)::int FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[])) AS candidates,'
       + ' (SELECT count(*)::int FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[])) AS results,'
+      + ' (SELECT count(*)::int FROM build_rejection WHERE recommendation_query_id = ANY($1::uuid[])) AS rejections,'
       + ' (SELECT count(*)::int FROM build_component c JOIN build_candidate b ON b.id = c.build_candidate_id'
       + '   WHERE b.recommendation_query_id = ANY($1::uuid[])) AS components',
     [queryIds]
@@ -158,6 +160,13 @@ async function insertQuery(client, scoringModelId) {
 /** Reverse-dependency cleanup of exactly the ids this run created. */
 async function cleanup(client, queryIds) {
   if (queryIds.length === 0) return;
+  // build_rejection first (dependents before parent, AGENTS section 8), even
+  // though the query FK would CASCADE it - explicit so a residue check proves
+  // the delete happened rather than assuming the cascade did.
+  await client.query(
+    'DELETE FROM build_rejection WHERE recommendation_query_id = ANY($1::uuid[])',
+    [queryIds]
+  );
   await client.query(
     'DELETE FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[])',
     [queryIds]
@@ -416,7 +425,89 @@ async function testZeroBuild(client, other, ctx, createdIds) {
 }
 
 // ---------------------------------------------------------------------------
-// Main: connect, preflight, run the five cases, clean up, report.
+// 6. Decision 31 / OG-33: rejection writes are replace-idempotent per query.
+// ---------------------------------------------------------------------------
+
+async function testRejectionReplace(client, other, ctx, createdIds) {
+  console.log('\n--- 6. rejection writes replace per query, never duplicate (Decision 31, OG-33) ---');
+  const queryId = await insertQuery(client, ctx.scoringModelId);
+  createdIds.push(queryId);
+
+  const [p0, p1] = ctx.productIds;
+  const verdicts = [
+    {
+      component_role: 'GPU',
+      product_id: p0,
+      product_variant_id: null,
+      status: 'REJECT',
+      reason: 'GPU_TOO_THICK',
+    },
+    {
+      component_role: 'CPU_COOLER',
+      product_id: p1,
+      product_variant_id: null,
+      status: 'REJECT',
+      reason: 'COOLER_TOO_TALL',
+    },
+  ];
+  const rejCount = async () => (await other.query(
+    'SELECT count(*)::int AS n FROM build_rejection WHERE recommendation_query_id = $1',
+    [queryId]
+  )).rows[0].n;
+
+  // The OG-33 defect, measured 2026-10-04: these three zero-build commits of
+  // the SAME verdicts took the row count 2 -> 4 -> 6. Decision 31's replace
+  // step makes every commit converge instead.
+  await runRecommendationCommit(client, queryId, [], verdicts);
+  assert(await rejCount() === 2,
+    'zero-build commit 1 persists 2 rejection rows (got ' + await rejCount() + ')');
+  await runRecommendationCommit(client, queryId, [], verdicts);
+  assert(await rejCount() === 2,
+    'commit 2 of the SAME pass does NOT duplicate (got ' + await rejCount() + ', pre-fix: 4)');
+  await runRecommendationCommit(client, queryId, [], verdicts);
+  assert(await rejCount() === 2,
+    'commit 3 still 2 rows (got ' + await rejCount() + ', pre-fix: 6)');
+
+  // A changed verdict set REPLACES the old one; an explicit empty set clears.
+  await runRecommendationCommit(client, queryId, [], [verdicts[0]]);
+  const replaced = await other.query(
+    'SELECT reason_code FROM build_rejection WHERE recommendation_query_id = $1',
+    [queryId]
+  );
+  assert(await rejCount() === 1 && replaced.rows[0].reason_code === 'GPU_TOO_THICK',
+    'a changed pass REPLACES the set (1 row, GPU_TOO_THICK): got '
+      + await rejCount() + ' ' + JSON.stringify(replaced.rows));
+  await runRecommendationCommit(client, queryId, [], []);
+  assert(await rejCount() === 0,
+    'a later pass with zero rejections clears stale rows (got ' + await rejCount() + ')');
+
+  // Guard 2 is UNCHANGED (Decision 19.2): a NON-empty commit is still allowed
+  // while no build_candidate rows exist, carries its rejections alongside the
+  // builds, and only then does the re-run guard start refusing.
+  await runRecommendationCommit(
+    client,
+    queryId,
+    [makeEntry(1, [makeComponent('GPU', p0, 4000), makeComponent('CPU', p1, 2000)])],
+    verdicts
+  );
+  const withBuilds = await countsForQuery(other, queryId);
+  assert(withBuilds.candidates === 1 && withBuilds.rejections === 2,
+    'the later NON-empty commit persisted 1 build + 2 rejections, no duplicates: '
+      + JSON.stringify(withBuilds));
+
+  await rejectsWith(
+    () => runRecommendationCommit(client, queryId, [], verdicts),
+    isGuardRefusal,
+    'CandidateSelectionError INVALID_INPUT on field query_id',
+    'guard 2 still refuses once build_candidate rows exist (Decision 19.2 untouched)'
+  );
+  const afterRefusal = await countsForQuery(other, queryId);
+  assert(afterRefusal.rejections === 2,
+    'the refused commit changed no rejection rows: ' + JSON.stringify(afterRefusal));
+}
+
+// ---------------------------------------------------------------------------
+// Main: connect, preflight, run the six cases, clean up, report.
 // ---------------------------------------------------------------------------
 
 async function main() {
@@ -451,13 +542,15 @@ async function main() {
     await testRerunGuard(client, other, ctx, createdIds);
     await testUnknownQueryId(client, ctx);
     await testZeroBuild(client, other, ctx, createdIds);
+    await testRejectionReplace(client, other, ctx, createdIds);
   } finally {
     if (connected) {
       try {
         await cleanup(client, createdIds);
         const leftovers = await countsForQueries(client, createdIds);
         const clean = leftovers.queries === 0 && leftovers.candidates === 0
-          && leftovers.components === 0 && leftovers.results === 0;
+          && leftovers.components === 0 && leftovers.results === 0
+          && leftovers.rejections === 0;
         assert(clean, 'cleanup removed every row this run created (' + JSON.stringify(leftovers) + ')');
       } catch (cleanupError) {
         console.error('CLEANUP FAILED:', cleanupError.message,

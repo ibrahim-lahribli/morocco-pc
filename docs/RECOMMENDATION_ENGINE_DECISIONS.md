@@ -3872,6 +3872,10 @@ Verification. Branch-first: migration 014 applied to `TEST_DATABASE_URL` via the
 
 Out of scope, deliberately. Pairwise rejections detected during assembly (`assemble.js` abandons a branch when an aggregated pair FAILs) are combinations rather than candidates and are NOT captured; closing that is a separate change. UNKNOWN verdicts are not persisted. No UI or API surface reads `build_rejection` yet — there is no such layer in this repository yet, so the payoff is queryable diagnostics rather than rendered output. `run.js` gained one additive `filter_verdicts` field to carry the verdicts to the writer; no existing consumer reads it, and the run-result shape pin was updated rather than worked around.
 
+### UPDATE 2026-10-05 — idempotency residual closed by Decision 31 (OG-33)
+
+The adversarial review of this decision's commit (2026-10-04) found that relying on the re-run guard for idempotency does not hold: guard 2 keys on `build_candidate` ONLY, so a zero-build pass that wrote `build_rejection` rows could be committed again and duplicated (measured 1→2 rows). The "a re-run cannot duplicate diagnostics" sentence that was originally in `persist-rejections.js`'s header was wrong and was corrected in place when OG-33 was registered. **Decision 31 (2026-10-05) fixes it** with replace semantics in the writer — a scoped `DELETE ... WHERE recommendation_query_id = $1` before the INSERTs, same transaction — leaving guard 2 and this decision's schema, shape and transaction discipline otherwise unchanged. See OG-33 / C-27 in `docs/OPEN_GAPS.md`.
+
 ---
 
 ## Decision 30 — OG-10 un-deferred: the AIR-cooler height rule is now IMPLEMENTED (RESOLVED 2026-10-05)
@@ -3929,3 +3933,54 @@ End-to-end on the branch DB: the full pipeline returns 101 verdicts (87/12/2) un
 ```text
 VERDICT: RESOLVED - OG-10 IMPLEMENTED (AIR-only, tri-state, NULL=UNKNOWN). OG-09/OG-11/OG-12 remain EXPLICITLY DEFERRED per Decision 26 item B. Live catalog behaviour-neutral: 40/40 AIR pairs PASS, full pass 101 verdicts unchanged (87 PASS / 12 UNKNOWN / 2 REJECT). Suite 891 tests, 0 failures.
 ```
+
+---
+
+## Decision 31 — build_rejection writes are replace-idempotent per query (OG-33)
+
+Status: RESOLVED 2026-10-05; IMPLEMENTED 2026-10-05 — the rejection writer now clears the query's `build_rejection` rows and re-inserts the current pass's set inside the commit transaction, so a re-commit converges instead of duplicating; guard 2 (Decision 19.2) is unchanged. Closes OG-33.
+
+Date: 2026-10-05. Scope: closes OG-33 (docs/OPEN_GAPS.md, see C-27), the duplication defect found 2026-10-04 by the adversarial review of the OG-04 / Decision 29 commit. It is NOT a schema change (no migration, no seed), NOT a change to guard 2 / Decision 19.2, NOT a change to any verdict, scoring, ranking, retention or assembly behaviour, and NOT a fix for OG-32 (partner identity stays NULL — that needs an Engine 2D verdict-shape change and keeps its own row).
+
+### Current situation
+
+* `commit.js` guard 2 is `SELECT 1 FROM build_candidate WHERE recommendation_query_id = $1 LIMIT 1` (Decision 19.2): it never mentions `build_rejection`. A ZERO-BUILD pass that still rejected candidates therefore leaves its diagnostics unguarded, and a second commit for the same query_id is reachable.
+* Measured on the live branch 2026-10-04: two consecutive zero-build commits with identical rejections took `build_rejection` from 1 row to 2; a later NON-empty commit duplicated them alongside the builds. `persist-rejections.js`'s own header had claimed the opposite ("a re-run cannot duplicate diagnostics"); that claim was wrong and was corrected in place when OG-33 was registered.
+* The consequence is bounded but real: `rejection_count` and any per-query diagnostic aggregation double-count — exactly the query an operator runs to explain an empty result. `build_rejection` is read by nothing in `src/` (grep-verified), so ranking, scoring, assembly and explanation are unaffected.
+
+### Problem
+
+The OG-04 closure (C-22) says the table answers "why was nothing recommended?" for a specific past run — but a table that silently doubles its rows under a legitimate re-commit gives the wrong answer to precisely that question, and the re-commit path is legitimate: Decisions 19.3 / 18-D8 keep the zero-build → later non-empty sequence open by design (harness section 5 pins it). Something had to make the writer safe under the guard the architecture actually has, without narrowing that path.
+
+### Decision
+
+1. **Replace semantics, owned by the writer.** `persistRejections` (`src/recommendation/persistence/persist-rejections.js`) issues `DELETE FROM build_rejection WHERE recommendation_query_id = $1` (new exported constant `DELETE_BUILD_REJECTION_SQL`) as its FIRST statement, then one INSERT per REJECT verdict — all on the wrapper's client, inside the wrapper's transaction, serialized by guard 1's row lock. The stored rows for a query always equal the last committed pass's REJECT set.
+2. **Validation still precedes the DELETE** — a malformed input issues zero statements (the fail-fast contract is unchanged), and a writer error rolls the DELETE back with everything else via the wrapper's ROLLBACK.
+3. **The wrapper invokes the writer only when the caller supplied the 4th argument.** `rejections === undefined` → the writer is not called at all (zero statements; legacy three-argument call sites stay byte-identical in behaviour). An explicit array — including `[]` — means "this pass's set", so `[]` clears stale rows rather than silently leaving them.
+4. **Guard 2 is UNCHANGED.** It still keys on `build_candidate` only and still refuses only when builds exist; Decision 19.2's "no overwrite, no delete, no upsert" continues to describe `build_candidate` / `persistRanked`, which this decision does not touch.
+5. **No schema change.** Idempotency is the statement shape, not a uniqueness key — no migration; `database/migrations/014_build_rejection.sql` stays as committed.
+6. **OG-33 closes** (docs/OPEN_GAPS.md → C-27), and the `AGENTS.md` §8 lesson is rewritten from "confirm guard 2's SQL mentions X's table" to the Decision-31 shape: an unguarded table is made safe by writing it replace-style, not by growing the guard.
+
+### Rejected alternatives
+
+* **Widen guard 2 to also refuse when `build_rejection` rows exist.** Rejected: it would refuse the legitimate zero-build → later non-empty sequence for the same query — the exact sequence Decisions 19.3 / 18-D8 keep open and harness section 5 pins — permanently stranding a query that later assembles builds behind diagnostics it wrote itself. It would also make diagnostics STRICTER than builds, the wrong precedence for a diagnostic table.
+* **UNIQUE index on (query, role, product, variant, partner, reason) + `INSERT ... ON CONFLICT DO NOTHING`.** Rejected on two counts: it needs a migration (015), and it would not fire on today's rows at all — `partner_product_id` is always NULL (OG-32), and Postgres treats NULLs as DISTINCT in a unique index, so the key would never collide on the exact rows that duplicate. It only becomes sound after OG-32 lands.
+* **Existence-check-then-insert in the wrapper (SELECT + set diff).** Rejected: it would push set-difference logic into the wrapper, whose source-boundary test bans DML there, and it still solves only duplication — a changed pass would leave stale rows that an unconditional DELETE removes for free.
+
+### Verdict for this pass
+
+* **Unit — PASS.** Suite 891 → **896, 0 failures**. Three new writer pins (`DELETE_BUILD_REJECTION_SQL`'s exact string and scope, the clear-before-insert sequence across two identical calls, DELETE-even-when-the-new-set-is-empty) and two new wrapper pins (a three-argument call issues no `build_rejection` statement at all; a supplied array runs DELETE + INSERT between guard 2 and COMMIT). Existing assertions were updated where the statement sequence legitimately changed; none was relaxed.
+* **Real round-trip — PASS** (temporary probe against the test branch, removed after recording; baseline `{queries: 0, build_rejection: 0}`): three consecutive zero-build commits with the same 2 verdicts held the count at **2 → 2 → 2** (pre-fix: 2 → 4 → 6); a changed pass replaced the set (**2 → 1**, reason `GPU_TOO_THICK`); an explicit empty pass cleared it (**→ 0**); a later NON-empty commit persisted 1 build alongside exactly **2** rejections; guard 2 then refused a further commit (`INVALID_INPUT` / `query_id`) and left the rows untouched; cleanup restored both tables to baseline (residue 0). **16/16 PASS.**
+* **Durable pin — PASS.** `scripts/test-orchestrator-commit.js` gained section 6 running the same sequence with counts read from the SECOND connection; its `countsForQuery` / `countsForQueries` now count `build_rejection` and its `cleanup` deletes it explicitly (dependents before parent). Re-run on the branch: **37 pass / 0 fail** (was 29/0), cleanup residue `{rejections: 0, …}`.
+* **Gates — PASS.** `npm run test:unit` 896/0; `verify-docs` decision counts bumped (29 global / 35 `Status:` lines); `npm run gen:decisions` re-run; `AGENTS.md` range → Decisions 1–31; gap register OG-33 → CLOSED with C-27.
+
+### Supersedes / superseded by
+
+* **Amends Decision 29's writer contract** — specifically the idempotency Decision 29 implicitly leaned on the re-run guard for. An UPDATE block was added INSIDE Decision 29's entry (edited in place, per `docs/decisions/TEMPLATE.md`), and its Status line was left unchanged.
+* **`database/migrations/014_build_rejection.sql`'s header comment is NOT edited** (migrations are never rewritten): its sentence "a re-run guard already refuses to persist a second time" was already false when OG-33 was registered and is superseded by this decision. Its other clause — "the same reason can legitimately be recorded on repeated runs of the same query id" — remains true; only the guard-based idempotency claim it was paired with is replaced.
+* The `AGENTS.md` §8 bullet about the guard keying on `build_candidate` only was rewritten in place to record the Decision-31 replace shape.
+
+```text
+VERDICT: RESOLVED - build_rejection writes are replace-idempotent per query (scoped DELETE first, then one INSERT per REJECT, same transaction). Guard 2 / Decision 19.2 unchanged; no migration; OG-32 untouched. Measured on the branch: 3 identical zero-build commits hold 2 rows (pre-fix 2->4->6), a changed pass replaces, an empty pass clears, guard 2 still refuses once builds exist, residue 0. Harness 37/0 (was 29/0), unit suite 896/0 (was 891).
+```
+
