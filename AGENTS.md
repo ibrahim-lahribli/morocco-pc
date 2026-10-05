@@ -125,6 +125,7 @@ deliberately not duplicated here.
 | `node --test scripts/lib/migrations.test.js` | Applied-migrations ledger helper tests (OG-14; not in `test:unit`) |
 | `npm run test:scripts` | Every `scripts/lib/*.test.js` suite (`db-url`, `gap-register`, `migrations`, `schema-diff`, `replay-harness`). `test:unit` globs `src/**/*.test.js` ONLY, so these never ran in CI until the `test:scripts` step was added — run it after touching anything in `scripts/` |
 | `npm run verify:replay` | Replays every migration into a genuinely EMPTY scratch database on the `TEST_DATABASE_URL` instance and diffs it against the live schema by definition (`pg_get_constraintdef` / `indexdef` / column type+nullability+default). `--test-db` is required so it can never create a database implicitly; `--dry-run` contacts nothing; `--keep-db` skips the drop. Exits non-zero on any drift |
+| `npm run verify:pi1` | Decision 23 criterion 3 (PI-1) **pool independence**: inserts a probe PSU (own `product_family`, 100 kW, NULL connectors) into the TEST branch, re-runs GAMING + OFFICE, asserts no pre-existing `build_score` moved. Writes to the TEST branch, so it is not read-only; the probe is removed in a `finally` and a cleanup failure exits non-zero. Delete `psu_spec` before `product`, and `product` before `product_family` — see §7 item 11. Give any anchor row lookup an explicit `ORDER BY`: a `LIMIT 1` without one made this gate report intermittent false drift |
 | `node scripts/check-offer-freshness.js --fail-days=14` | OG-30 offer-freshness gate: offers at/inside their blackout window. **Equals form is mandatory** — `--fail-days=N`; the space form `--fail-days 14` prints usage and exits 2. CI uses 14, not the default 7, so a nightly run warns with two weeks' lead time |
 | `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance fixtures |
 | `node scripts/test-layer3.js --verify --functional` | Layer 3 schema (flags required; needs ALL THREE Layer 3 tables empty — `store` too; non-empty on shared DB AND on the test branch as of 2026-09-28, so it cannot pass in either environment today) |
@@ -279,10 +280,24 @@ getting the nightly gate, which is why `workflow_dispatch` is wired up too.
     `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='migrations_replay_tmp'`
     then `DROP DATABASE IF EXISTS migrations_replay_tmp`. This is also why the CI job sets
     `cancel-in-progress: false`.
-11. **`scripts/lib/db-url.js` `resolveTestDbUrl(env)` returns a pg connection CONFIG OBJECT**
+11. **Spec tables are `ON DELETE NO ACTION`, not CASCADE — delete children first.** Every
+    `<role>_spec` FK back to `product`, and `product`'s own FK to `product_family`, forbid
+    cascading, so `DELETE FROM product WHERE id=...` raises a constraint violation and leaks every
+    row. `verify-pool-independence.js` hit this and its first cleanup silently failed while the
+    gate still printed PASS. Delete spec rows, then the product, then the family — and make a failed
+    cleanup fail the run: a gate that cannot prove it cleaned up has not proved anything. Note
+    `process.exit(code)` ignores `process.exitCode`, so a cleanup verdict set in a `finally` must be
+    folded into the exit path explicitly.
+12. **A probe fixture must be inert BY CONSTRUCTION, and its anchor must be deterministic.** PI-1's
+    first version anchored the probe to an existing product's family with `LIMIT 1` and no
+    `ORDER BY`; it intermittently borrowed a family that participates in a build and reported drift
+    that was not pool-dependence at all. A gate that cries wolf gets ignored. When a gate inserts
+    fixture data, give the fixture its own parent row so it cannot join anything existing, and order
+    every anchor lookup.
+13. **`scripts/lib/db-url.js` `resolveTestDbUrl(env)` returns a pg connection CONFIG OBJECT**
     (`{ connectionString, connectionTimeoutMillis }`), not a URL string. Treating it as a string
     surfaces as the deeply unhelpful `TypeError: str.charAt is not a function` from inside `pg`.
-12. **Tooling quirks on this box (both have cost real time).** `awk`'s `\r` regex misreports a CRLF
+14. **Tooling quirks on this box (both have cost real time).** `awk`'s `\r` regex misreports a CRLF
     file as bare-LF — trust `od -c` or a CR-vs-LF count instead; it will otherwise make you "fix"
     line endings that are already correct. And `git status` can report a file as modified while
     `git diff` is empty (CRLF/stat-cache); `git update-index --refresh` or `git checkout --` settles it.
