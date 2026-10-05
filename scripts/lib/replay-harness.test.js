@@ -137,6 +137,24 @@ describe('verify-migrations-replay helpers', () => {
     assert.doesNotMatch(client.calls.join('\n'), /DROP DATABASE/);
   });
 
+  // `if (opts.keepDb) return;` inside a finally block OVERRIDES the pending
+  // return, so the caller received undefined and read `.failed` off it. That made
+  // the documented --keep-db flag crash on every invocation while the test above
+  // still passed, because it discarded the return value. The value must survive.
+  it('withScratchDatabase still returns the body result when keeping the database', async () => {
+    const client = fakeClient();
+    const result = await withScratchDatabase(client, SCRATCH_DB, async () => ({ failed: null }), {
+      keepDb: true,
+    });
+    assert.deepEqual(result, { failed: null });
+  });
+
+  it('withScratchDatabase returns the body result on the drop path too', async () => {
+    const client = fakeClient();
+    const result = await withScratchDatabase(client, SCRATCH_DB, async () => ({ failed: null }));
+    assert.deepEqual(result, { failed: null });
+  });
+
   // Throwing from a finally block replaces the in-flight exception, so a failed
   // DROP buries the migration error that actually caused the run to stop.
   it('a failing cleanup does not mask the original error', async () => {

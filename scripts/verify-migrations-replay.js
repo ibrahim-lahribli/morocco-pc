@@ -135,20 +135,26 @@ async function dropScratchDatabase(client, name) {
 async function withScratchDatabase(client, name, fn, opts = {}) {
   await client.query(`CREATE DATABASE ${name}`);
   let bodyError = null;
+  let result;
   try {
-    return await fn();
+    result = await fn();
   } catch (err) {
     bodyError = err;
     throw err;
   } finally {
-    if (opts.keepDb) return;
-    try {
-      await dropScratchDatabase(client, name);
-    } catch (dropErr) {
-      if (!bodyError) throw dropErr;
-      bodyError.cleanupError = dropErr && dropErr.message ? dropErr.message : String(dropErr);
+    // Deliberately NOT `return` when keeping the database: a bare return inside a
+    // finally block overrides the value the try block produced, so the caller got
+    // undefined and read `.failed` off it. Branch around the cleanup instead.
+    if (!opts.keepDb) {
+      try {
+        await dropScratchDatabase(client, name);
+      } catch (dropErr) {
+        if (!bodyError) throw dropErr;
+        bodyError.cleanupError = dropErr && dropErr.message ? dropErr.message : String(dropErr);
+      }
     }
   }
+  return result;
 }
 
 // Neon propagates CREATE DATABASE asynchronously, so connecting to the scratch

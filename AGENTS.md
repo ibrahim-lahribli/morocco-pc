@@ -261,10 +261,19 @@ that to true. A workflow job cannot be triggered on demand from here — use the
    comparison passes a CHECK that kept its name and changed body — C-30's first pass had exactly
    that weakness. `schema_migrations` is created by `run-migrations.js`, not by a numbered migration,
    so a fresh replay legitimately lacks it and including it manufactures drift that does not exist.
-10. **`scripts/lib/db-url.js` `resolveTestDbUrl(env)` returns a pg connection CONFIG OBJECT**
+   `compareSchemaSnapshot(fresh, live)` takes `Record<string, string[]>` of PRE-FORMATTED definition
+   strings (e.g. `product.chk_x :: CHECK (...)`), not column objects — passing objects reports drift
+   on two identical snapshots.
+10. **A leftover `migrations_replay_tmp` blocks the next replay.** The scratch name is fixed, so a
+    crashed or `--keep-db` run makes every later run fail with `database ... is being accessed by
+    other users`. Clear it before re-running:
+    `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='migrations_replay_tmp'`
+    then `DROP DATABASE IF EXISTS migrations_replay_tmp`. This is also why the CI job sets
+    `cancel-in-progress: false`.
+11. **`scripts/lib/db-url.js` `resolveTestDbUrl(env)` returns a pg connection CONFIG OBJECT**
     (`{ connectionString, connectionTimeoutMillis }`), not a URL string. Treating it as a string
     surfaces as the deeply unhelpful `TypeError: str.charAt is not a function` from inside `pg`.
-11. **Tooling quirks on this box (both have cost real time).** `awk`'s `\r` regex misreports a CRLF
+12. **Tooling quirks on this box (both have cost real time).** `awk`'s `\r` regex misreports a CRLF
     file as bare-LF — trust `od -c` or a CR-vs-LF count instead; it will otherwise make you "fix"
     line endings that are already correct. And `git status` can report a file as modified while
     `git diff` is empty (CRLF/stat-cache); `git update-index --refresh` or `git checkout --` settles it.
