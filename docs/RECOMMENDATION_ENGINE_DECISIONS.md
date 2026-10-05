@@ -4029,3 +4029,49 @@ Date: 2026-10-05. Scope: closes OG-32 (docs/OPEN_GAPS.md, see C-28), the residua
 ```text
 VERDICT: RESOLVED - the Engine 2D verdict carries its decisive partner (product id, plus variant id for a variant-keyed partner), populated only for REJECT; migration 015 relaxes the partner CHECK to chk_build_rejection_partner_variant_requires_product so a product-keyed partner (id, NULL) is storable, which 014 CHECKed against. The validator mirrors it and still refuses an orphan variant. Migration applied on both DBs (schema_migrations 15, old constraint gone). Headless runs of the real filter confirm partner and reason come from the same pair and track bucket order. Harness 43/0 (was 37/0) with a durable partner-column pin and residue 0; unit suite 898/0 (was 896). Assembly, scoring, ranking, retention and guard 2 untouched.
 ```
+## Decision 33 - motherboard memory support becomes an explicit table; presence-only tables gain an explicit status (OG-02 + OG-03)
+
+Status: RESOLVED 2026-10-05; IMPLEMENTED 2026-10-05 - motherboard_memory_support (migration 016) is the source of truth for a board that has rows, the legacy single memory_type_id is the fallback for a board that has none, and the three presence-only compatibility tables gain a nullable support_status whose NULL preserves the presence-only meaning byte-for-byte.
+
+Date: 2026-10-05. Scope: closes OG-02 and OG-03 (docs/OPEN_GAPS.md, see C-32/C-33). It IS a schema migration (016), a data seed (012 backfill), an Engine 2D context-bucket addition (motherboard_memory) and a Rule 7 resolver change (new-table-wins / legacy-fallback). It is NOT a change to any other rule, to Engine 3/4/5/6, or to the Decision 1 asymmetric absence policy for the presence-only tables.
+
+### Current situation
+
+* motherboard_spec.memory_type_id is a single NOT NULL FK to memory_type (004_hardware_tables.sql:133). Rule 7 (compatibility/memory.js, Decision 2) FAILs any RAM whose memory_type_id differs from that one column, so a dual-DDR4/DDR5 LGA1700 board is unrepresentable and a matching RAM kit is falsely REJECTed (OG-02).
+* case_motherboard_form_factor, case_radiator_support and platform_memory_support have no status column; absence of a row is the only negative signal, softened by the Decision 1 asymmetric policy (OG-03). The resolvers already read an OPTIONAL support_status and treat a missing/null status exactly like a presence-only row (case-radiator.js, memory.js). The context loader already carries support_status for every compat row it loads (normalizeCompatRow).
+
+### Problem
+
+OG-02 makes the engine factually wrong on real hardware: boards that accept both memory technologies exist, and the schema forces a false rejection of half of the RAM pool for them. OG-03 leaves researched negative evidence (a vendor documenting that a form factor or memory type is NOT supported) unstorable, so it can only be expressed by omitting a row - which then reads as UNKNOWN, not FAIL.
+
+### Decision
+
+1. New table motherboard_memory_support (migration 016): motherboard_product_id x memory_type_id with support_status compatibility_status NOT NULL DEFAULT PASS, source_note, UNIQUE(board, type), an owner index, and chk_mms_status_not_unknown forbidding the UNKNOWN status on an explicit row (an explicit row IS evidence; an absence of rows is the only UNKNOWN this table expresses).
+2. Resolution precedence for Rule 7 (Decision 33): rows in motherboard_memory_support are the SOURCE OF TRUTH for a board that has any - a RAM type matching a row is judged on that row's support_status; a RAM type matching no row is FAIL MOTHERBOARD_MEMORY_TYPE_UNSUPPORTED (positive exclusion evidence). A board with ZERO rows falls back to the legacy motherboard_spec.memory_type_id with the Decision 2 rule byte-identical (equal PASS, different FAIL MISMATCH, either-null UNKNOWN).
+3. Seed 012 backfills one PASS row per existing board from the legacy column, so every seeded board is represented in the new table and the dual-memory case is from now on expressed ONLY by adding a second row. The legacy column is deliberately NOT dropped: 001-015 are replay-verified as a fixed set (C-30) and loaders/seeds still write it; it becomes denormalized legacy data for single-memory boards.
+4. The three presence-only tables gain a nullable support_status compatibility_status column. NULL preserves the presence-only semantics exactly (row present = PASS, row absent = Decision 1 policy); a non-NULL value is honoured as explicit evidence by the existing resolvers without code change. No status is invented: the columns ship all-NULL and gain values only with research.
+5. Engine 2D wiring: a new candidate-scoped motherboard_memory compat bucket in context-loader.js (MOTHERBOARD_MEMORY_SUPPORT_SQL, $1::uuid[] parameterized, deterministic ordering, appended LAST in CONTEXT_COMPAT_KEYS so pre-existing keys keep their canonical positions), and evaluateMotherboardMemoryPair passes the rows into resolveMotherboardRamMemoryType.
+
+### Rejected alternatives
+
+* Drop the legacy motherboard_spec.memory_type_id in the same migration. Rejected: it would break the 001-015 replay-verification contract (C-30 measured 015 as the last verified state), require touching every loader/seed that writes the column, and couple a data-model improvement to a destructive schema change. The denormalized-legacy approach keeps every existing verdict byte-identical (proven: 898/0 before the new tests, and PI-1 below).
+* Nullable secondary memory_type_id column on motherboard_spec. Rejected: it cannot express per-type support status (FAIL/CONDITIONAL), cannot represent a board supporting three technologies, and duplicates the concept platform_memory_support already models at platform level.
+* Table without a status column (pure presence like platform_memory_support). Rejected for the motherboard level: OG-03 is precisely the finding that presence-only storage cannot hold researched negative evidence, so the new table must not repeat the defect it sits beside.
+* Forbidding UNKNOWN on the presence-only columns too. Rejected: an explicit row on the NEW table is research, so UNKNOWN there is meaningless and the CHECK is right; on the three legacy tables the column is nullable precisely because a row whose status was never researched must remain honest-NULL rather than a default PASS.
+
+### Verdict for this pass
+
+* Unit - PASS. Suite 898 -> 907, 0 failures. New pins: dual-memory board (DDR4+DDR5 rows) PASSes both types; rows-present/type-absent FAILs MOTHERBOARD_MEMORY_TYPE_UNSUPPORTED with the supported id list in evidence; an explicit FAIL row FAILs MISMATCH; CONDITIONAL row UNKNOWN (preserved); zero rows reproduce the Decision 2 tri-state exactly (PASS / MISMATCH / UNKNOWN); RAM type NULL with rows UNKNOWN; the legacy-only call shape (no rows argument) stays valid; a non-array rows argument throws; the loader test pins candidate-scoped loading of the new bucket with the unrelated board never queried.
+* Behaviour-neutrality on the live catalog - by construction plus measurement: seed 012 gives every board one row equal to its legacy value, so table-wins and legacy-fallback agree on every seeded pair; the 898 pre-existing tests pass unchanged before the new pins were added; PI-1 (verify:pi1) reported 0 moved scores after the change.
+* Schema - migration 016 applied first to the TEST branch then to the shared DB via the OG-14 ledger runner; seed 012 applied idempotently (re-run 0 rows). verify-migrations-replay replays 001-016 into a scratch database with zero drift.
+* Gates - verify-docs decision counts bumped (31 global headings / 37 Status lines), gen:decisions re-run, AGENTS.md range updated, gap register OG-02/OG-03 closed with C-32/C-33, SCHEMA_REFERENCE regenerated (schema-digest moved with the new table/columns).
+
+### Honest limitations
+
+* The legacy column and the new table CAN now disagree (a board re-typed on one side only). The resolution rule makes the table win, and seed 012 synced them at apply time; there is no standing consistency gate between the two - the natural follow-up is a check script if spec-data edits ever touch motherboard memory again.
+* Dual-memory boards do not exist in the seed catalog yet, so the new-tables-win branch is exercised by tests and fixtures only until the first real LGA1700 dual-DDR board is ingested. The engine change is live but currently unreachable through live data - the same shape as OG-10 between Decision 30 and OG-36, which is why the fallback branch was pinned byte-identical rather than assumed.
+* Presence-only support_status columns ship all-NULL; no existing verdict can change until researched statuses are written.
+
+```text
+VERDICT: RESOLVED - motherboard_memory_support (016) is the source of truth where present, legacy memory_type_id is the fallback otherwise, seed 012 syncs both, and the three presence-only tables gained nullable support_status columns honoured by the existing resolvers. Unit 907/0 (was 898), behaviour-neutral on the seeded catalog (PI-1: 0 scores moved), migration applied on both databases and replay-verified through 016.
+```

@@ -81,6 +81,9 @@ const CONTEXT_COMPAT_KEYS = Object.freeze([
   'case_form_factor',
   'case_radiator',
   'platform_memory',
+  // Motherboard memory-support rows (migration 016, OG-02/Decision 33).
+  // Appended last so every pre-existing key keeps its canonical position.
+  'motherboard_memory',
 ]);
 
 function fail(code, field, message) {
@@ -291,10 +294,20 @@ SELECT id, socket_id
  ORDER BY id ASC`;
 
 const PLATFORM_MEMORY_SUPPORT_SQL = `
-SELECT platform_id, memory_type_id
+SELECT platform_id, memory_type_id, support_status
   FROM platform_memory_support
  WHERE platform_id = ANY($1::uuid[])
  ORDER BY platform_id ASC, memory_type_id ASC`;
+
+// Motherboard-level memory support (migration 016, OG-02): the source of
+// truth for a board that has any row. A board with zero rows here falls back
+// to its legacy motherboard_spec.memory_type_id, which MOTHERBOARD_SPEC_SQL
+// already carries.
+const MOTHERBOARD_MEMORY_SUPPORT_SQL = `
+SELECT id, motherboard_product_id, memory_type_id, support_status
+  FROM motherboard_memory_support
+ WHERE motherboard_product_id = ANY($1::uuid[])
+ ORDER BY motherboard_product_id ASC, memory_type_id ASC`;
 
 // ---------------------------------------------------------------------------
 // Spec normalization. Canonical keys only; NULL is preserved exactly as
@@ -642,6 +655,17 @@ async function loadCompatContext(db, candidates, platform_by_socket) {
     const rows = await queryRows(db, PLATFORM_MEMORY_SUPPORT_SQL, [platformIds]);
     compat.platform_memory = groupCompatRows(
       rows, 'platform_id', 'platform_memory_support', ['memory_type_id']
+    );
+  }
+
+  // motherboard_memory (migration 016, OG-02): explicit per-board memory
+  // technology support. Candidate-scoped like every other bucket; a board
+  // with no rows simply has no entry, which Rule 7 reads as the legacy
+  // fallback path - never as an empty exclusion set.
+  if (motherboardIds.length > 0) {
+    const rows = await queryRows(db, MOTHERBOARD_MEMORY_SUPPORT_SQL, [motherboardIds]);
+    compat.motherboard_memory = groupCompatRows(
+      rows, 'motherboard_product_id', 'motherboard_memory_support', ['memory_type_id']
     );
   }
 

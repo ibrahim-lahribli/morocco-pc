@@ -386,3 +386,124 @@ test('aggregateCompatibilityResults consumes the new resolver outputs', () => {
   assert.equal(aggregated.evidence.length, 4);
   assert.equal(aggregated.penalty, null);
 });
+
+// ---------------------------------------------------------------------------
+// Rule 7, Decision 33 (OG-02): explicit motherboard_memory_support rows are
+// the source of truth; zero rows fall back to the legacy strict rule.
+// ---------------------------------------------------------------------------
+
+test('OG-02: dual-memory board (DDR4 + DDR5 rows) supports BOTH types', () => {
+  const rows = [
+    { source_id: 'mms-1', memory_type_id: DDR4, support_status: 'PASS' },
+    { source_id: 'mms-2', memory_type_id: DDR5, support_status: 'PASS' },
+  ];
+  for (const ramType of [DDR4, DDR5]) {
+    const result = resolveMotherboardRamMemoryType({
+      motherboard_memory_type_id: DDR4, // legacy value ignored when rows exist
+      ram_memory_type_id: ramType,
+      motherboard_memory_rows: rows,
+    });
+    assert.equal(result.status, PASS, ramType);
+    assert.equal(result.reason, null);
+    assert.equal(result.evidence[0].rule, 'motherboard_memory_type');
+    assert.equal(result.evidence[0].source_status, 'PASS');
+  }
+});
+
+test('OG-02: rows present, requested type not among them -> FAIL MOTHERBOARD_MEMORY_TYPE_UNSUPPORTED', () => {
+  const result = resolveMotherboardRamMemoryType({
+    motherboard_memory_type_id: DDR4,
+    ram_memory_type_id: DDR5,
+    motherboard_memory_rows: [
+      { source_id: 'mms-1', memory_type_id: DDR4, support_status: 'PASS' },
+    ],
+  });
+  assert.equal(result.status, FAIL);
+  assert.equal(result.reason, REASON_CODES.MOTHERBOARD_MEMORY_TYPE_UNSUPPORTED);
+  assert.deepEqual(
+    result.evidence[0].supported_memory_type_ids, [DDR4]
+  );
+});
+
+test('OG-02: a row with support_status FAIL -> FAIL MOTHERBOARD_MEMORY_TYPE_MISMATCH', () => {
+  const result = resolveMotherboardRamMemoryType({
+    ram_memory_type_id: DDR4,
+    motherboard_memory_rows: [
+      { source_id: 'mms-1', memory_type_id: DDR4, support_status: 'FAIL' },
+    ],
+  });
+  assert.equal(result.status, FAIL);
+  assert.equal(result.reason, REASON_CODES.MOTHERBOARD_MEMORY_TYPE_MISMATCH);
+  assert.equal(result.evidence[0].source_status, 'FAIL');
+});
+
+test('OG-02: a row with support_status CONDITIONAL -> UNKNOWN (preserved)', () => {
+  const result = resolveMotherboardRamMemoryType({
+    ram_memory_type_id: DDR4,
+    motherboard_memory_rows: [
+      { source_id: 'mms-1', memory_type_id: DDR4, support_status: 'CONDITIONAL' },
+    ],
+  });
+  assert.equal(result.status, UNKNOWN);
+  assert.equal(result.reason, REASON_CODES.MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN);
+});
+
+test('OG-02: zero rows -> legacy fallback byte-identical to the Decision 2 rule', () => {
+  // equal -> PASS
+  const equal = resolveMotherboardRamMemoryType({
+    motherboard_memory_type_id: DDR4,
+    ram_memory_type_id: DDR4,
+    motherboard_memory_rows: [],
+  });
+  assert.equal(equal.status, PASS);
+  assert.equal(equal.reason, null);
+  // different -> FAIL MISMATCH (NOT the new UNSUPPORTED code)
+  const different = resolveMotherboardRamMemoryType({
+    motherboard_memory_type_id: DDR4,
+    ram_memory_type_id: DDR5,
+    motherboard_memory_rows: [],
+  });
+  assert.equal(different.status, FAIL);
+  assert.equal(different.reason, REASON_CODES.MOTHERBOARD_MEMORY_TYPE_MISMATCH);
+  // missing legacy value -> UNKNOWN
+  const unknown = resolveMotherboardRamMemoryType({
+    motherboard_memory_type_id: null,
+    ram_memory_type_id: DDR4,
+    motherboard_memory_rows: [],
+  });
+  assert.equal(unknown.status, UNKNOWN);
+  assert.equal(unknown.reason, REASON_CODES.MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN);
+});
+
+test('OG-02: rows present and RAM type NULL -> UNKNOWN (never a pass)', () => {
+  const result = resolveMotherboardRamMemoryType({
+    motherboard_memory_type_id: DDR4,
+    ram_memory_type_id: null,
+    motherboard_memory_rows: [
+      { source_id: 'mms-1', memory_type_id: DDR4, support_status: 'PASS' },
+    ],
+  });
+  assert.equal(result.status, UNKNOWN);
+  assert.equal(result.reason, REASON_CODES.MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN);
+});
+
+test('OG-02: default rows argument keeps the legacy-only call shape valid', () => {
+  // Pre-Decision-33 callers pass no motherboard_memory_rows at all.
+  const result = resolveMotherboardRamMemoryType({
+    motherboard_memory_type_id: DDR5,
+    ram_memory_type_id: DDR5,
+  });
+  assert.equal(result.status, PASS);
+  assert.equal(result.evidence[0].rule, 'motherboard_memory_type');
+});
+
+test('OG-02: non-array motherboard_memory_rows is rejected', () => {
+  assert.throws(
+    () => resolveMotherboardRamMemoryType({
+      motherboard_memory_type_id: DDR4,
+      ram_memory_type_id: DDR4,
+      motherboard_memory_rows: 'mms-1',
+    }),
+    /motherboard_memory_rows must be an array/
+  );
+});

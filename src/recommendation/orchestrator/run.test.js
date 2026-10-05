@@ -250,6 +250,7 @@ function baseRoutes(overrides = {}) {
     'FROM platform_memory_support': [{
       platform_id: PLATFORM_ID, memory_type_id: MEMORY_TYPE_ID,
     }],
+    'FROM motherboard_memory_support': [],
     'FROM platform': [{ id: PLATFORM_ID, socket_id: SOCKET_ID }],
     'FROM component_assessment': overrides.assessments || defaultAssessments(),
   };
@@ -333,6 +334,7 @@ const CONTEXT_MARKERS = [
   'FROM cpu_motherboard_support', 'FROM cooler_socket_support',
   'FROM case_motherboard_form_factor', 'FROM case_radiator_support',
   'FROM platform_memory_support', 'FROM platform',
+  'FROM motherboard_memory_support',
 ];
 function isContextQuery(call) {
   if (!Array.isArray(call.params) || !Array.isArray(call.params[0])) return false;

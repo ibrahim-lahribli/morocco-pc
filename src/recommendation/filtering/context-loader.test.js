@@ -27,6 +27,7 @@ const SQL = {
   CASE_RAD: 'FROM case_radiator_support',
   PLATFORM: 'FROM platform',
   PLATFORM_MEM: 'FROM platform_memory_support',
+  MOTHERBOARD_MEM: 'FROM motherboard_memory_support',
 };
 
 function bySql(routes) {
@@ -120,6 +121,7 @@ function emptyRoutes() {
     CASE: [], PSU: [], GPU: [], CPU_MB: [],
     COOLER_SOCKET: [], CASE_FF: [], CASE_RAD: [],
     PLATFORM: [], PLATFORM_MEM: [],
+    MOTHERBOARD_MEM: [],
   };
 }
 
@@ -522,6 +524,27 @@ test('platform_memory is scoped to platforms resolvable from candidate sockets',
   ];
   const { context: c2 } = await fullContext(ambiguous);
   assert.deepEqual(c2.compat.platform_memory, {});
+});
+
+test('OG-02: motherboard_memory bucket loads candidate-scoped rows with status', async () => {
+  const calls = [];
+  const routes = singleOfEachRoutes();
+  routes.MOTHERBOARD_MEM = [
+    { id: 'mms-1', motherboard_product_id: U(2), memory_type_id: P(20), support_status: 'PASS' },
+    { id: 'mms-2', motherboard_product_id: U(2), memory_type_id: P(22), support_status: 'PASS' },
+    { id: 'mms-3', motherboard_product_id: U(77), memory_type_id: P(20), support_status: 'PASS' }, // unrelated board
+  ];
+  const db = createDb(routes, { record: calls });
+  const context = await loadFilteringContext(poolResult(fullPool()), db);
+
+  assert.deepEqual(context.compat.motherboard_memory, {
+    [U(2)]: [
+      { source_table: 'motherboard_memory_support', source_id: 'mms-1', support_status: 'PASS', memory_type_id: P(20) },
+      { source_table: 'motherboard_memory_support', source_id: 'mms-2', support_status: 'PASS', memory_type_id: P(22) },
+    ],
+  });
+  const memCall = calls.find((c) => c.sql.includes(SQL.MOTHERBOARD_MEM));
+  assert.deepEqual(memCall.params, [[U(2)]]); // U(77) never queried
 });
 
 test('compat buckets stay empty maps when no candidates exist for their owner role', async () => {

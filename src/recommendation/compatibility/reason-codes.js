@@ -36,8 +36,13 @@ const REASON_CODES = Object.freeze({
   PLATFORM_MEMORY_TYPE_UNSUPPORTED: 'PLATFORM_MEMORY_TYPE_UNSUPPORTED',
   PLATFORM_MEMORY_SUPPORT_UNKNOWN: 'PLATFORM_MEMORY_SUPPORT_UNKNOWN',
 
-  // Motherboard <-> RAM memory type
+  // Motherboard <-> RAM memory type. MOTHERBOARD_MEMORY_TYPE_MISMATCH is the
+  // legacy single-column strict rule (Decision 2) and also an explicit FAIL
+  // row on motherboard_memory_support; MOTHERBOARD_MEMORY_TYPE_UNSUPPORTED is
+  // positive exclusion evidence from that table's row set (Decision 33,
+  // OG-02): the board has rows, and the requested type is not among them.
   MOTHERBOARD_MEMORY_TYPE_MISMATCH: 'MOTHERBOARD_MEMORY_TYPE_MISMATCH',
+  MOTHERBOARD_MEMORY_TYPE_UNSUPPORTED: 'MOTHERBOARD_MEMORY_TYPE_UNSUPPORTED',
   MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN: 'MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN',
 
   // GPU <-> case (derived from numeric specs)

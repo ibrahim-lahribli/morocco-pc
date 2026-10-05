@@ -41,6 +41,7 @@ const SQL = {
   CASE_RAD: 'FROM case_radiator_support',
   PLATFORM: 'FROM platform',
   PLATFORM_MEM: 'FROM platform_memory_support',
+  MOTHERBOARD_MEM: 'FROM motherboard_memory_support',
 };
 
 function bySql(routes) {
@@ -109,6 +110,7 @@ function emptyRoutes() {
     CASE: [], PSU: [], GPU: [], CPU_MB: [],
     COOLER_SOCKET: [], CASE_FF: [], CASE_RAD: [],
     PLATFORM: [], PLATFORM_MEM: [],
+    MOTHERBOARD_MEM: [],
   };
 }
 

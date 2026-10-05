@@ -111,6 +111,7 @@ const SQL = {
   CASE_RAD: 'FROM case_radiator_support',
   PLATFORM: 'FROM platform',
   PLATFORM_MEM: 'FROM platform_memory_support',
+  MOTHERBOARD_MEM: 'FROM motherboard_memory_support',
   STORE_OFFER: 'FROM store_offer',
 };
 
@@ -239,6 +240,7 @@ function routes(cpuRows) {
     CASE_RAD: [],
     PLATFORM: [],
     PLATFORM_MEM: [],
+    MOTHERBOARD_MEM: [],
     STORE_OFFER: OFFERS,
   };
 }

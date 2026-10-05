@@ -409,7 +409,11 @@ function evaluateCoolerSocketPair(context, cpu, cooler) {
 }
 
 /**
- * MOTHERBOARD <-> RAM: memory type (rule 7, strict equality).
+ * MOTHERBOARD <-> RAM: memory type (rule 7).
+ *
+ * Decision 33 (OG-02): explicit motherboard_memory_support rows are the
+ * source of truth for a board that has any; the legacy single
+ * motherboard_spec.memory_type_id is the fallback for a board with none.
  */
 function evaluateMotherboardMemoryPair(context, motherboard, ram) {
   const motherboardSpec = productSpecOf(context, motherboard);
@@ -418,6 +422,7 @@ function evaluateMotherboardMemoryPair(context, motherboard, ram) {
     resolveMotherboardRamMemoryType({
       motherboard_memory_type_id: motherboardSpec ? motherboardSpec.memory_type_id : null,
       ram_memory_type_id: ramSpec ? ramSpec.memory_type_id : null,
+      motherboard_memory_rows: compatRowsOf(context, 'motherboard_memory', motherboard.product_id),
     }),
   ];
 }

@@ -113,17 +113,32 @@ function resolvePlatformMemorySupport(input) {
 /**
  * Rule 7: motherboard <-> RAM memory type.
  *
- * Conservative strict rule (Decision 2; the dual-memory motherboard gap is
- * intentionally deferred - no compatibility table is created and no
- * DDR4/DDR5 dual-memory support is attempted):
+ * Two sources, with a strict precedence (Decision 33, closing OG-02):
  *
- *   both known and equal      -> PASS
- *   both known and different  -> FAIL (MOTHERBOARD_MEMORY_TYPE_MISMATCH)
- *   either value missing      -> UNKNOWN (MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN)
+ * 1. motherboard_memory_support rows (migration 016) when the board has
+ *    ANY: the row set is the source of truth. A RAM type matching a row
+ *    is judged on that row's support_status (NULL of the legacy column is
+ *    irrelevant); a RAM type matching no row is positive exclusion
+ *    evidence (FAIL MOTHERBOARD_MEMORY_TYPE_UNSUPPORTED). This is what
+ *    makes a dual-DDR4/DDR5 board representable: two rows, both PASS.
+ * 2. Zero rows: fall back to the legacy single motherboard memory_type_id
+ *    exactly as Decision 2 shipped it, byte-identical semantics:
+ *
+ *      both known and equal      -> PASS
+ *      both known and different  -> FAIL (MOTHERBOARD_MEMORY_TYPE_MISMATCH)
+ *      either value missing      -> UNKNOWN (MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN)
+ *
+ * A row carrying support_status UNKNOWN is impossible at the schema level
+ * (chk_mms_status_not_unknown) and is treated as UNKNOWN here rather than
+ * trusted, the same defensive reading the other resolvers apply.
  *
  * @param {object} input
- * @param {string|null} input.motherboard_memory_type_id
+ * @param {string|null} input.motherboard_memory_type_id  Legacy column; used
+ *   only when motherboard_memory_rows is empty.
  * @param {string|null} input.ram_memory_type_id
+ * @param {Array<object>} [input.motherboard_memory_rows]  Loaded
+ *   motherboard_memory_support rows for the board (each with memory_type_id
+ *   and optional support_status).
  */
 function resolveMotherboardRamMemoryType(input) {
   if (input === null || typeof input !== 'object') {
@@ -132,33 +147,99 @@ function resolveMotherboardRamMemoryType(input) {
     );
   }
 
-  const { motherboard_memory_type_id, ram_memory_type_id } = input;
+  const {
+    motherboard_memory_type_id,
+    ram_memory_type_id,
+    motherboard_memory_rows = [],
+  } = input;
 
-  const evidenceItem = {
+  const baseEvidence = {
     rule: 'motherboard_memory_type',
     motherboard_memory_type_id: motherboard_memory_type_id ?? null,
     ram_memory_type_id: ram_memory_type_id ?? null,
   };
 
+  if (!Array.isArray(motherboard_memory_rows)) {
+    throw new TypeError('motherboard_memory_rows must be an array');
+  }
+
+  // --- Source of truth: explicit motherboard_memory_support rows ---
+  const rows = motherboard_memory_rows.filter((row) => row != null);
+  if (rows.length > 0) {
+    if (ram_memory_type_id == null) {
+      return createCompatibilityResult({
+        status: FINAL_STATUSES.UNKNOWN,
+        reason: REASON_CODES.MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN,
+        evidence: [{ ...baseEvidence, row_count: rows.length }],
+      });
+    }
+
+    const matching = rows.find((row) => row.memory_type_id === ram_memory_type_id);
+
+    if (!matching) {
+      return createCompatibilityResult({
+        status: FINAL_STATUSES.FAIL,
+        reason: REASON_CODES.MOTHERBOARD_MEMORY_TYPE_UNSUPPORTED,
+        evidence: [{
+          ...baseEvidence,
+          source_status: null,
+          row_count: rows.length,
+          supported_memory_type_ids: rows
+            .map((row) => row.memory_type_id)
+            .filter((id) => id != null),
+        }],
+      });
+    }
+
+    const evidenceItem = {
+      ...baseEvidence,
+      source_id: matching.source_id ?? null,
+      source_status: matching.support_status ?? SOURCE_STATUSES.PASS,
+    };
+
+    switch (matching.support_status ?? SOURCE_STATUSES.PASS) {
+      case SOURCE_STATUSES.PASS:
+        return createCompatibilityResult({
+          status: FINAL_STATUSES.PASS,
+          evidence: [evidenceItem],
+        });
+      case SOURCE_STATUSES.FAIL:
+        return createCompatibilityResult({
+          status: FINAL_STATUSES.FAIL,
+          reason: REASON_CODES.MOTHERBOARD_MEMORY_TYPE_MISMATCH,
+          evidence: [evidenceItem],
+        });
+      case SOURCE_STATUSES.CONDITIONAL:
+      case SOURCE_STATUSES.UNKNOWN:
+      default:
+        return createCompatibilityResult({
+          status: FINAL_STATUSES.UNKNOWN,
+          reason: REASON_CODES.MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN,
+          evidence: [evidenceItem],
+        });
+    }
+  }
+
+  // --- Legacy fallback: zero explicit rows -> the Decision 2 strict rule ---
   if (motherboard_memory_type_id == null || ram_memory_type_id == null) {
     return createCompatibilityResult({
       status: FINAL_STATUSES.UNKNOWN,
       reason: REASON_CODES.MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN,
-      evidence: [evidenceItem],
+      evidence: [baseEvidence],
     });
   }
 
   if (motherboard_memory_type_id === ram_memory_type_id) {
     return createCompatibilityResult({
       status: FINAL_STATUSES.PASS,
-      evidence: [evidenceItem],
+      evidence: [baseEvidence],
     });
   }
 
   return createCompatibilityResult({
     status: FINAL_STATUSES.FAIL,
     reason: REASON_CODES.MOTHERBOARD_MEMORY_TYPE_MISMATCH,
-    evidence: [evidenceItem],
+    evidence: [baseEvidence],
   });
 }
 

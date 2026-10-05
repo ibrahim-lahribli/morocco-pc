@@ -46,6 +46,7 @@ const SQL = {
   CASE_RAD: 'FROM case_radiator_support',
   PLATFORM: 'FROM platform',
   PLATFORM_MEM: 'FROM platform_memory_support',
+  MOTHERBOARD_MEM: 'FROM motherboard_memory_support',
 };
 
 function bySql(routes) {
@@ -204,6 +205,7 @@ function routes() {
       { id: P(32), socket_id: AMBIGUOUS_SOCKET_ID },
     ],
     PLATFORM_MEM: [{ platform_id: COMPATIBLE_PLATFORM_ID, memory_type_id: MEMORY_TYPE_ID }],
+    MOTHERBOARD_MEM: [],
   };
 }
 
