@@ -316,6 +316,12 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
 
 ## 10. Known doc drift — verify before trusting
 
+- **Acceptance-criterion numbers are easy to attribute to the WRONG decision.** PI-1 (pool
+  independence) is **Decision 23** criterion 3, NOT Decision 20 — Decision 20's criteria 1-2 are the
+  CPU/GPU pair-diversity claims `measure-orchestrator.js` was built for. Before citing a criterion,
+  match it to the decision's own `## Decision NN` heading; `Status:` lines do not disambiguate when
+  one decision cross-references another.
+
 - **Engine 6 status is stale in prose.** `src/recommendation/explanation/` exists and
   `orchestrator/full-run.js` wires it (Decision 22 items 2/3/4, plus 7 and 8a/8b), while some
   docs still describe Engine 6 as planned/unimplemented. Decision 22 is the Engine 6 contract —

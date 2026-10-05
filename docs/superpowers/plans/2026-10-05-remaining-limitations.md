@@ -415,3 +415,102 @@ Expected: exactly `neondb`, `postgres` — and nothing else.
 Run: `npm run test:scripts && node scripts/verify-migrations-replay.js --test-db`
 Expected: script tests pass, `RESULT: 0 drift`. If no file changed, there is nothing to commit —
 report the result and stop.
+
+---
+
+### Task 6: Build Decision 23's PI-1 (pool independence) — added 2026-10-05
+
+Found while reviewing Task 1's own record. **Decision 23** (`docs/RECOMMENDATION_ENGINE_DECISIONS.md`
+section 6, "Acceptance verification") carries **three** acceptance criteria, and its own status line
+reads `acceptance criterion 3 / PI-1 NOT built`. `measure-orchestrator.js` measures criteria 1-2 only
+and says so on its own line 763. A Task 1 record claiming "nothing outstanding" would have let a
+future session believe PI-1 was verified. It is not, and it is the last unbuilt acceptance criterion
+of a RESOLVED decision.
+
+> Attribution correction (2026-10-05, review pass): an earlier draft of this task and of the
+> `CONTEXT.md` line said **Decision 20**. That is wrong. Decision 20's criteria 1-2 are the CPU/GPU
+> pair-diversity claims (`scripts/measure-orchestrator.js` lines 3-19 and its `printSummary`
+> sections); PI-1 is Decision 23's criterion 3. Decision 20's `Status:` line does not mention PI-1
+> at all. Cross-check the decision number against the decision's own `## Decision NN` heading before
+> citing a criterion.
+
+**Files:**
+- Create: `scripts/verify-pool-independence.js`
+- Create: `scripts/lib/score-vector.js`
+- Test: `scripts/lib/score-vector.test.js`
+
+**Interfaces:**
+- Consumes: the GAMING and OFFICE query entry points used by `scripts/measure-orchestrator.js` (read
+  that file for the exact calls); `TEST_DATABASE_URL` via `scripts/lib/db-url.js`.
+- Produces: `captureScoreVector(verdicts) -> Map<string, number>` and
+  `scoreVectorDrift(before, after) -> string[]` in `scripts/lib/score-vector.js`, pure — keyed by
+  build signature, so the comparison is about scores rather than row order.
+
+- [ ] **Step 1: Write the failing tests for the pure comparator**
+
+Create `scripts/lib/score-vector.test.js`. `scoreVectorDrift` must return the signatures whose score
+moved or vanished, and must ignore a build that exists only in `after` — Decision 23 permits new
+builds, it forbids existing scores moving:
+
+```js
+test('an unchanged score is not drift', () => {
+  const v = new Map([['sig-a', 60.52]]);
+  assert.deepEqual(scoreVectorDrift(v, new Map([['sig-a', 60.52]])), []);
+});
+test('a moved score is drift', () => {
+  assert.deepEqual(scoreVectorDrift(new Map([['sig-a', 60.52]]), new Map([['sig-a', 60.5]])), ['sig-a']);
+});
+test('a build that disappears is drift', () => {
+  assert.deepEqual(scoreVectorDrift(new Map([['sig-a', 1]]), new Map()), ['sig-a']);
+});
+test('a new build only is NOT drift', () => {
+  assert.deepEqual(scoreVectorDrift(new Map([['sig-a', 1]]), new Map([['sig-a', 1], ['sig-b', 9]])), []);
+});
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `node --test scripts/lib/score-vector.test.js`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement both functions in `scripts/lib/score-vector.js`**
+
+Pure. `captureScoreVector` maps each ranked build's signature (its component ids, sorted and joined)
+to its `build_score`. `scoreVectorDrift(before, after)` returns the sorted signatures present in
+`before` whose score differs in `after`, or which are missing from `after`. Keys present only in
+`after` are ignored.
+
+- [ ] **Step 4: Implement `scripts/verify-pool-independence.js` following Decision 23 steps a-d**
+
+Capture the score vector for GAMING and OFFICE on the `TEST_DATABASE_URL` branch; insert ONE
+unrelated product with NULL connector columns that cannot enter a finished build; re-capture; assert
+`scoreVectorDrift` is empty for both profiles; delete the product and verify it is gone. **Always
+delete in a `finally`** — this writes to a real branch, and a leaked product would corrupt every
+later measurement.
+
+Two reasons this must be its own script, not a flag on `measure-orchestrator.js`:
+1. **The harness cannot emit the thing PI-1 compares.** Its score facts come from
+   `ranked.slice(0, TOP_N_PERSISTED)` (line 638) — a top-10 slice, not the full ranked set. PI-1
+   must diff *every* pre-existing signature, so it needs the whole vector.
+2. **The preflight aborts on the probe row.** `preflight()` asserts exact counts, and the
+   `products`/`offers` counts are `name LIKE 'Seed %'`-scoped (lines 166, 170). Do NOT relax those
+   assertions to accommodate a probe; they are a real tripwire for an out-of-band catalog change.
+
+Note the candidate pool is name-agnostic: `loadCandidates` selects by `lifecycle_status = 'ACTIVE'`
+plus spec-table membership (`src/recommendation/candidates/loader.js`), so the probe product DOES
+enter the pool even if it is named outside `Seed %` — which is exactly the condition PI-1 needs to
+test. Give it a `psu_spec` row so it is a real PSU candidate.
+
+- [ ] **Step 5: Prove it detects a real violation**
+
+Add a second in-pool product a build *can* select, confirm the script exits non-zero naming the moved
+signature, then revert. A gate never seen red proves nothing.
+
+- [ ] **Step 6: Record the result and commit**
+
+Add one line to `CONTEXT.md` stating PI-1's outcome and the date, then:
+
+```bash
+git add scripts/verify-pool-independence.js scripts/lib/score-vector.js scripts/lib/score-vector.test.js package.json CONTEXT.md
+git commit -m "feat(tooling): build Decision 23's PI-1 pool-independence check"
+```
