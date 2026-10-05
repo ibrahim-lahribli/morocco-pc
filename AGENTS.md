@@ -217,6 +217,15 @@ the replay creates and drops one fixed scratch database name (`migrations_replay
 that to true. A workflow job cannot be triggered on demand from here — use the Actions tab's
 "Run workflow" button to exercise it before trusting a schedule.
 
+**The scheduled job is UNVERIFIED until it has run on GitHub** (as of 2026-10-05 it had never run).
+Everything checkable locally was checked — the YAML parses, both scripts pass with the exact CI
+arguments, and every secret reference resolves — but two things can only be proven by a real run:
+that both secrets are named correctly in the repository, and that the Neon instance accepts
+connections from a GitHub runner. A failed run is expected to be a configuration problem, not a
+code problem. Note also that **scheduled workflows only run from the default branch** and GitHub
+**disables them automatically after 60 days of repository inactivity** — an idle repo silently stops
+getting the nightly gate, which is why `workflow_dispatch` is wired up too.
+
 ## 7. Verification workflow
 
 1. Run `npm run test:unit` after any engine change; it needs no database.
