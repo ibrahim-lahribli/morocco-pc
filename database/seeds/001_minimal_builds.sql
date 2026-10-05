@@ -213,13 +213,24 @@ JOIN product p ON p.name = v.name
 WHERE NOT EXISTS (SELECT 1 FROM psu_spec s WHERE s.product_id = p.id);
 
 -- Cases: compact 280mm (FAILs the 320mm OC board) vs full 360mm (fits both)
+--
+-- max_cpu_cooler_height_mm CORRECTED 2026-10-05 (OG-36, seed 011): this INSERT
+-- originally wrote a bare literal 160 covering BOTH cases, which cannot be
+-- right for two different manufacturers - the identical-placeholder defect
+-- seed 010 closed for the cooler side. Corrected to the vendors' own figures:
+-- Pop XL 185mm (fractal-design.com Pop XL Air product page, Compatibility
+-- block, "CPU cooler max height 185 mm"), H5 Flow 170mm (nzxt.com H5 Flow,
+-- "CPU Cooler Clearance: Up to 170 mm"; TechPowerUp's 2022 launch review says
+-- 165mm, but that covers the original chassis - the manufacturer's current
+-- figure wins, flagged in seed 011). Both corrections RAISE the value, which is
+-- the conservative direction for a maximum.
 INSERT INTO case_spec (product_id, max_gpu_length_mm, max_gpu_thickness_slots,
     max_cpu_cooler_height_mm, psu_form_factor, max_psu_length_mm)
-SELECT p.id, v.gpul, v.gput, 160, 'ATX'::psu_form_factor, 200
+SELECT p.id, v.gpul, v.gput, v.cooler_h, 'ATX'::psu_form_factor, 200
 FROM (VALUES
-    ('Seed NZXT H5 Flow Compact', 280, 3),
-    ('Seed Fractal Pop XL',       360, 3)
-) AS v(name, gpul, gput)
+    ('Seed NZXT H5 Flow Compact', 280, 3, 170),
+    ('Seed Fractal Pop XL',       360, 3, 185)
+) AS v(name, gpul, gput, cooler_h)
 JOIN product p ON p.name = v.name
 WHERE NOT EXISTS (SELECT 1 FROM case_spec c WHERE c.product_id = p.id);
 
