@@ -88,6 +88,89 @@ const TABLE_LINE_RE = /^\|/;
 const HEADING_RE = /^#{1,6}\s/;
 
 /**
+ * Minimum number of consecutively-shaped C-rows needed before a headerless run
+ * is allowed to establish its own column count. One or two rows cannot: a 3-cell
+ * row there is as likely to belong to a differently-shaped table as to be a
+ * broken one, and guessing is what this check was originally written to avoid.
+ */
+const INFER_RUN_LENGTH = 3;
+
+/**
+ * The shape a headerless run of C-rows implies: the cell count shared by a
+ * strict majority of them. A tie means no shape is implied (every count is
+ * equally common), and a run below INFER_RUN_LENGTH establishes nothing.
+ *
+ * @param {Array<{cellCount: number}>} run
+ * @returns {number|null} the inferred cell count, or null when undecidable
+ */
+function inferRunCellCount(run) {
+  if (run.length < INFER_RUN_LENGTH) return null;
+  const tally = new Map();
+  for (const entry of run) {
+    tally.set(entry.cellCount, (tally.get(entry.cellCount) || 0) + 1);
+  }
+  let best = null;
+  let bestCount = 0;
+  for (const [cellCount, seen] of tally) {
+    if (seen > bestCount) {
+      best = cellCount;
+      bestCount = seen;
+    }
+  }
+  // A strict majority only: 2-of-4 is not a shape, it is a coin flip.
+  return bestCount * 2 > run.length ? best : null;
+}
+
+/**
+ * Report one closed-table row whose cell count does not match its table.
+ *
+ * @param {Array} problems collector to push onto
+ * @param {string[]} cells the row already split on '|'
+ * @param {number} cellCount cells.length - 2
+ * @param {number} expected the column count the row should have had
+ * @param {number} line 1-based line number
+ * @param {boolean} inferred true when `expected` came from the run's own
+ *   majority shape rather than from a header row. Distinguishes a guess the
+ *   checker made from a fact the document states, so a reader can judge it.
+ */
+function reportClosedCellCount(problems, cells, cellCount, expected, line, inferred) {
+  problems.push({
+    code: 'CLOSED_ROW_CELL_COUNT',
+    id: (cells[1] || '').trim(),
+    line,
+    detail:
+      'closed-table row has ' +
+      cellCount +
+      ' cells, expected ' +
+      expected +
+      (inferred
+        ? ', inferred from the majority shape of this table\'s own rows ' +
+          '(it carries no header row to read the count from)'
+        : ' from its table header') +
+      '; a missing cell makes the row render as a broken table',
+  });
+}
+
+/**
+ * Check a headerless run of closed-table rows against the shape they imply.
+ *
+ * @param {Array} problems collector to push onto
+ * @param {Array<{id: string, cellCount: number, line: number}>} run
+ * @returns {void} pushes a problem per disagreeing row; a run too short to
+ *   imply a shape, or one with no strict majority, produces nothing.
+ */
+function flushPendingClosedRun(problems, run) {
+  if (run.length === 0) return;
+  const expected = inferRunCellCount(run);
+  if (expected === null) return;
+  for (const entry of run) {
+    if (entry.cellCount !== expected) {
+      reportClosedCellCount(problems, ['', entry.id], entry.cellCount, expected, entry.line, true);
+    }
+  }
+}
+
+/**
  * Parse the register's markdown and report every shape problem it finds.
  *
  * @param {string} markdown the full contents of docs/OPEN_GAPS.md
@@ -114,6 +197,11 @@ function parseGapRegister(markdown) {
   // then skipped rather than guessing, so a C-row in an excerpt that carries no
   // header cannot be reported against the wrong column count.
   let currentTableCells = null;
+  // Closed-table rows seen since the last header/heading/section-1 row, each
+  // with its cell count and line. A run of >= INFER_RUN_LENGTH identically
+  // shaped rows establishes the table's shape on its own, so a C-row in an
+  // excerpt that carries no header is still checked.
+  let pendingClosedRun = [];
   // Line index of the previous data-research sub-table row, so a blank line
   // splitting that table can be detected.
   let prevSubRowIdx = null;
@@ -154,9 +242,16 @@ function parseGapRegister(markdown) {
     // cell check from needing a hardcoded constant.
     if (TABLE_HEADER_RE.test(lines[i])) {
       currentTableCells = lines[i].split('|').length - 2;
+      pendingClosedRun = [];
     } else if (HEADING_RE.test(lines[i])) {
       // A new section means a new table; its shape is unknown until its header.
       currentTableCells = null;
+      flushPendingClosedRun(problems, pendingClosedRun);
+      pendingClosedRun = [];
+    } else if (!TABLE_LINE_RE.test(lines[i])) {
+      // Prose or a blank line ends a markdown table, so it ends the run too.
+      flushPendingClosedRun(problems, pendingClosedRun);
+      pendingClosedRun = [];
     }
 
     // The data-research sub-table must be ONE table. A blank line ends a
@@ -196,19 +291,14 @@ function parseGapRegister(markdown) {
       // that lost a cell renders as a broken table exactly like a section 1 row
       // does, so it is checked against its own table's header column count.
       const cellCount = cells.length - 2;
-      if (currentTableCells !== null && cellCount !== currentTableCells) {
-        problems.push({
-          code: 'CLOSED_ROW_CELL_COUNT',
-          id: (cells[1] || '').trim(),
-          line: i + 1,
-          detail:
-            'closed-table row has ' +
-            cellCount +
-            ' cells, expected ' +
-            currentTableCells +
-            ' from its table header; a missing cell makes the row render as a ' +
-            'broken table',
-        });
+      if (currentTableCells !== null) {
+        if (cellCount !== currentTableCells) {
+          reportClosedCellCount(problems, cells, cellCount, currentTableCells, i + 1, false);
+        }
+      } else {
+        // No header for this table. Defer the verdict: the run's own majority
+        // shape decides it, and that is not known until the run ends.
+        pendingClosedRun.push({ id: (cells[1] || '').trim(), cellCount, line: i + 1 });
       }
       continue;
     }
@@ -227,6 +317,8 @@ function parseGapRegister(markdown) {
     // whatever comes next, so the closed-row check falls back to "unknown"
     // rather than checking a C-row against section 1's 6 columns.
     currentTableCells = null;
+    flushPendingClosedRun(problems, pendingClosedRun);
+    pendingClosedRun = [];
 
     if (rowLineById.has(id)) {
       problems.push({
@@ -257,6 +349,10 @@ function parseGapRegister(markdown) {
       });
     }
   }
+
+  // A headerless run can also end at end-of-file.
+  flushPendingClosedRun(problems, pendingClosedRun);
+  pendingClosedRun = [];
 
   // An id referenced in prose (section 5 contradictions, section 6 rules,
   // section 7 next actions, or another row's Source cell) but with no row of

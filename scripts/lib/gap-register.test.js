@@ -241,4 +241,71 @@ describe('parseGapRegister', () => {
     const md = [HEADER, row('OG-01', 'a'), '', 'Tail prose.'].join('\r\n');
     assert.deepStrictEqual(parseGapRegister(md).problems, []);
   });
+
+  // A C-row in an excerpt that carries no header used to be skipped outright,
+  // so a row that lost a cell there rendered as a broken table undetected. A
+  // run of >= 3 identically-shaped C-rows establishes the shape on its own.
+  it('infers a closed-table shape from its rows when no header is present', () => {
+    const md = ['| C-30 | a | b | c |', '| C-31 | d | e | f |', '| C-32 | g | h | i |'].join('\n');
+    assert.deepStrictEqual(
+      parseGapRegister(md).problems.filter((x) => x.code === 'CLOSED_ROW_CELL_COUNT'),
+      [],
+    );
+  });
+
+  it('flags a row that disagrees with the majority shape of its headerless run', () => {
+    const md = ['| C-30 | a | b | c |', '| C-31 | d | e |', '| C-32 | g | h | i |'].join('\n');
+    const p = parseGapRegister(md).problems.find((x) => x.code === 'CLOSED_ROW_CELL_COUNT');
+    assert.ok(p, 'expected a CLOSED_ROW_CELL_COUNT problem');
+    assert.equal(p.line, 2);
+    assert.match(p.detail, /inferred/);
+  });
+
+  it('leaves a lone headerless C-row unchecked rather than guessing at a shape', () => {
+    // One row cannot establish a shape: 3 cells here is as likely to be a
+    // different table as a broken one.
+    const md = ['| C-30 | a | b | c |'].join('\n');
+    assert.deepStrictEqual(
+      parseGapRegister(md).problems.filter((x) => x.code === 'CLOSED_ROW_CELL_COUNT'),
+      [],
+    );
+  });
+
+  it('lets an explicit header win over inference', () => {
+    const md = ['| ID | Item | Status | Resolution |', '|---|---|---|---|', '| C-30 | a | b |'].join('\n');
+    const p = parseGapRegister(md).problems.find((x) => x.code === 'CLOSED_ROW_CELL_COUNT');
+    assert.ok(p, 'expected a CLOSED_ROW_CELL_COUNT problem');
+    assert.doesNotMatch(p.detail, /inferred/);
+  });
+
+  it('stays silent when a headerless run has no majority shape', () => {
+    // Two rows of each shape: 2-of-4 is a coin flip, not a shape. Reporting
+    // here would be the guessing this check was written to avoid.
+    const md = [
+      '| C-30 | a | b | c |',
+      '| C-31 | d | e | f |',
+      '| C-32 | g | h |',
+      '| C-33 | i | j |',
+    ].join('\n');
+    assert.deepStrictEqual(
+      parseGapRegister(md).problems.filter((x) => x.code === 'CLOSED_ROW_CELL_COUNT'),
+      [],
+    );
+  });
+
+  it('does not let one table\'s headerless run judge another table\'s rows', () => {
+    // The heading ends the first run, so C-33 starts a run of one and stays
+    // unchecked even though it is the only row that could be judged.
+    const md = [
+      '| C-30 | a | b | c |',
+      '| C-31 | d | e | f |',
+      '| C-32 | g | h | i |',
+      '## 4. Another table',
+      '| C-33 | a | b |',
+    ].join('\n');
+    assert.deepStrictEqual(
+      parseGapRegister(md).problems.filter((x) => x.code === 'CLOSED_ROW_CELL_COUNT'),
+      [],
+    );
+  });
 });
