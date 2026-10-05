@@ -403,7 +403,16 @@ git commit -m "feat(tooling): add a behavioural check for a freshly replayed dat
 
 ---
 
-### Task 5: Retire the orphaned test database
+### Task 5: Retire the orphaned test database — DONE 2026-10-05
+
+> **EXECUTED.** `temp_test_db_1789106515699` was dropped from the TEST Neon instance after the
+> inspect-then-destroy checks below: no script, JSON, workflow or doc referenced it (only this plan);
+> it held **0 rows in every table**, was 8.7 MB, had **26 tables but no `schema_migrations`** — a
+> stale partial schema snapshot from before the ledger existed, so it was not a runnable target and
+> held nothing not reproducible from `database/migrations/`. Zero active connections.
+> The TEST instance now holds exactly `neondb` and `postgres`. The live work database was verified
+> untouched afterwards: `verify-docs --live` → `products=100 variants=22 offers=101
+> assessments=280`, schema digest `f1daa82f581a25d9`.
 
 `temp_test_db_1789106515699` sits on the TEST Neon instance. It predates this session and is not
 referenced by any script.
