@@ -29,12 +29,20 @@
  *   * Any verdict logic. This module never re-evaluates compatibility; it
  *     copies what the filter decided.
  *
- * Idempotency and the re-run guard: the commit wrapper's guard 2 already
- * refuses a second commit for the same query_id when build_candidate rows
- * exist, so a re-run cannot duplicate diagnostics. A zero-build pass persists
- * no candidates, so a later non-empty commit for the same query id stays
- * allowed - and in that case its rejections are written for the first time,
- * which is correct rather than a duplicate.
+ * Idempotency and the re-run guard — READ THIS BEFORE RELYING ON IT. The
+ * commit wrapper's guard 2 refuses a second commit for the same query_id ONLY
+ * when `build_candidate` rows exist (Decision 19.2; the guard SQL never
+ * mentions build_rejection). That is enough for any pass which produced
+ * builds, but NOT for a ZERO-BUILD pass that still rejected candidates:
+ * such a pass writes build_rejection rows and no build_candidate rows, so
+ * guard 2 still passes and a second commit writes the SAME rejections again.
+ * Measured on the live branch 2026-10-04: two consecutive zero-build commits
+ * with the same rejections took build_rejection from 1 row to 2. A later
+ * NON-empty commit duplicates them too, alongside the builds. The earlier
+ * claim in this header — that a re-run "cannot duplicate diagnostics" — was
+ * WRONG; it is registered as **OG-33** rather than fixed here, because closing
+ * it means widening a Decision 19 guard (or making the insert idempotent),
+ * which is a decision, not a writer tweak.
  *
  * Shape decisions, and why:
  *   - partner_product_id / partner_product_variant_id are NULL together or
@@ -54,12 +62,23 @@ const { randomUUID } = require('node:crypto');
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
 const { validateRejections } = require('./validate-rejections');
 
-/** REASON_CODES member + product identity + optional partner identity. */
+/**
+ * REASON_CODES member + product identity + optional partner identity.
+ *
+ * The id is the FIRST parameter and is passed explicitly, exactly as
+ * persist-ranked does for build_candidate / recommendation_result. It must
+ * NOT be left to the column DEFAULT: this writer returns the ids it inserted,
+ * so an id the server chooses instead would make every value in
+ * build_rejection_ids a reference to a row that does not exist (measured
+ * before this was fixed: the returned UUID and the stored `id` were two
+ * different values for the same row). Decision 19.4 - UUIDs are generated in
+ * JS via crypto.randomUUID().
+ */
 const INSERT_BUILD_REJECTION_SQL =
   'INSERT INTO build_rejection ('
-  + 'recommendation_query_id, component_role, product_id, product_variant_id, '
+  + 'id, recommendation_query_id, component_role, product_id, product_variant_id, '
   + 'partner_product_id, partner_product_variant_id, reason_code'
-  + ') VALUES ($1,$2,$3,$4,$5,$6,$7)';
+  + ') VALUES ($1,$2,$3,$4,$5,$6,$7,$8)';
 
 function fail(code, field, message) {
   throw new CandidateSelectionError(code, message, field);
@@ -111,6 +130,7 @@ async function persistRejections({ client, queryId, rejections }) {
     // sibling boundary test bans outright as non-reproducible).
     const id = randomUUID();
     await client.query(INSERT_BUILD_REJECTION_SQL, [
+      id,
       queryId,
       row.component_role,
       row.product_id,

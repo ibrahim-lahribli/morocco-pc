@@ -93,7 +93,7 @@ test('a REJECT verdict issues one parameterized INSERT and returns a UUID', asyn
 
   assert.equal(client.calls.length, 1);
   assert.equal(client.calls[0].sql, INSERT_BUILD_REJECTION_SQL);
-  assert.deepEqual(client.calls[0].params, [
+  assert.deepEqual(client.calls[0].params.slice(1), [
     QUERY_ID,
     'CPU',
     'p-cpu-1',
@@ -106,6 +106,10 @@ test('a REJECT verdict issues one parameterized INSERT and returns a UUID', asyn
   assert.equal(result.rejection_count, 1);
   assert.equal(result.build_rejection_ids.length, 1);
   assert.match(result.build_rejection_ids[0], UUID_V4_RE);
+  // The returned id must be the id SENT to the database. When the INSERT
+  // omitted the id column, Postgres applied gen_random_uuid() and every
+  // returned value pointed at a row that did not exist.
+  assert.equal(client.calls[0].params[0], result.build_rejection_ids[0]);
   assert.ok(Object.isFrozen(result));
   assert.ok(Object.isFrozen(result.build_rejection_ids));
 });
@@ -126,7 +130,7 @@ test('a partner pair and a variant are passed through; absent ids stay null', as
       }),
     ],
   });
-  assert.deepEqual(client.calls[0].params, [
+  assert.deepEqual(client.calls[0].params.slice(1), [
     QUERY_ID,
     'GPU',
     'p-gpu',
@@ -155,11 +159,11 @@ test('every REJECT is written, in input order, with a distinct id', async () => 
   });
   assert.equal(client.calls.length, 3);
   assert.deepEqual(
-    client.calls.map((c) => c.params[2]),
+    client.calls.map((c) => c.params[3]),
     ['a', 'b', 'c']
   );
   assert.deepEqual(
-    client.calls.map((c) => c.params[6]),
+    client.calls.map((c) => c.params[7]),
     ['CPU_SOCKET_MISMATCH', 'CPU_SOCKET_UNKNOWN', 'GPU_TOO_THICK']
   );
   assert.equal(result.rejection_count, 3);
@@ -219,7 +223,7 @@ test('PASS and UNKNOWN verdicts are skipped, never written', async () => {
   });
   assert.equal(result.rejection_count, 1);
   assert.equal(client.calls.length, 1);
-  assert.equal(client.calls[0].params[2], 'p3');
+  assert.equal(client.calls[0].params[3], 'p3');
 });
 
 test('a verdict with no status field is treated as a rejection candidate', () => {

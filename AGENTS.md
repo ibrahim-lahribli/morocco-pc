@@ -220,8 +220,9 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
 5. Note: the fresh `001→011` migration was VERIFIED 2026-09-30 (OG-13: empty-DB replay on a
    throwaway Neon DB; 39/39 tables, 336/336 columns, 14/14 enums — see `docs/OPEN_GAPS.md` C-15).
    The live-only benchmark drift it surfaced was RECONCILED 2026-10-04 by migration
-   `012_reconcile_benchmark_drift.sql` (OG-25), so the tree is now `001→012`. The shared and TEST
-   databases are baselined in the `schema_migrations` ledger (OG-14) at 012 as of 2026-10-04.
+   `012_reconcile_benchmark_drift.sql` (OG-25), so the tree reached `001→012`. The shared and TEST
+   databases are baselined in the `schema_migrations` ledger (OG-14) and both now stand at **014**
+   as of 2026-10-04 (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04).
 6. **Migration ledger (OG-14, 2026-10-04).** `run-migrations.js` is ledger-driven: it records each
    applied filename in `schema_migrations` and applies only the pending tail, so it is re-runnable
    (the bare `CREATE TYPE` in `002_enums.sql` no longer aborts a second run). A database that
@@ -323,4 +324,10 @@ Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every
 
 - **A seed's own citation must be re-fetchable by a second reader before you apply it.** A value whose sole source 404s (or 403s) to automated fetches is UNVERIFIED, however confident the authoring session was — treat it as you would a missing spec. Vendor-neutral spec aggregators converge faster and survive vendor-site blocks (gigabyte.com and msi.com both 403); a vendor spec page outranks an aggregator when both are reachable.
 - **When a data-identity argument rests on ONE stored column, verify that column is actually true before trusting the argument.** A wrong Layer-1 value does not only mislead queries — it misdirects RESEARCH: `psu_spec.modularity = NON_MODULAR` on the Antec G850 (published design is Semi-Modular, OG-31) caused two wrong research passes in a row (seed 003 D7, seed 005 first pass) before anything was written.
+- **A layer-1 value can be correct LIVE but not REPRODUCIBLE FROM THE TREE.** The G850 `modularity` was fixed to `SEMI_MODULAR` by hand on the shared DB while `002_catalog_expansion.sql` still inserts `NON_MODULAR`, so a fresh replay silently restores the wrong value. After any live data correction, grep the seeds for the row and confirm a committed file writes the corrected value — a live-only fix is not a fix.
+- **A writer that returns generated ids MUST pass them to the INSERT.** Leaving `id` to the column DEFAULT makes every returned id a reference to a row that does not exist, because Postgres applies `DEFAULT gen_random_uuid()`. Fake-client unit tests cannot catch this — they accept any params. Only a real round-trip can.
+- **The commit wrapper's re-run guard keys on `build_candidate` ONLY** (`commit.js` guard 2, Decision 19.2). Anything else the commit writes is unguarded: a zero-build pass that wrote `build_rejection` rows can be committed repeatedly and duplicates them (OG-33). Before relying on "a re-run cannot duplicate X", confirm guard 2's SQL actually mentions X's table.
+- **Prove claims about persisted ids/rows with a real round-trip, not a fake client:** insert, SELECT the row back, compare the stored id to the returned one, and assert residue is 0 in the same script's `finally`. `scripts/lib/db-url.js`'s `getWriteTestDbUrl()` returns a **config OBJECT** (`{ connectionString, connectionTimeoutMillis }`), not a string — pass it straight to `new Client(...)`.
+- **Probe scripts must delete dependents before the parent.** `build_candidate` rows block deleting their `recommendation_query`, so order is `build_rejection` -> `recommendation_result` -> `build_component` -> `build_candidate` -> `recommendation_query`. Leftovers break the guarded harnesses' `queries: 0` preflight.
+- **`grep -c '^. (tests|pass|fail)'` on `node --test` output matches nothing** — those summary lines start with a unicode `ℹ`, so the grep exits 1 and reads like a test failure. Capture `$?` from the test command itself, never from the output filter.
 
