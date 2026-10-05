@@ -223,12 +223,13 @@ The workflow runs on `ubuntu-latest` with no `.env`. It therefore needs `DATABAS
 `TEST_DATABASE_URL` configured as **repository secrets**. Confirm with the repository owner that they
 exist; if they do not, stop and say so rather than committing a job that cannot work.
 
-> **Status 2026-10-05: BLOCKED — not started.** Neither secret is configured on the repository, so
-> Steps 2-6 are not executed. Verified while blocked: `check-offer-freshness.js --fail-days=14`
-> passes locally (`RESULT: PASS`, 101 offers, first expiry 2026-11-03, 28.9 days), and the equals
-> form is confirmed mandatory — `--fail-days 14` prints usage and exits 2.
+> **Status 2026-10-05: UNBLOCKED — EXECUTED.** The repository owner added both secrets, so Steps
+> 2-6 ran and committed. Both gates were first run locally with the exact CI arguments:
+> `check-offer-freshness.js --fail-days=14` → `RESULT: PASS` (101 offers, first expiry 2026-11-03,
+> 28.9 days), exit 0; `verify-migrations-replay.js --test-db` → `RESULT: 0 drift`
+> (columns 346/346, checks 76/76, fks 55/55, indexes 93/93), exit 0, scratch database dropped.
 >
-> Two facts that make this harder than "add two secrets", both verified in the source:
+> Two facts that made this harder than "add two secrets", both verified in the source:
 > 1. **Both** secrets are required, not just the test one. `resolveTestDbUrl` (`scripts/lib/db-url.js`)
 >    needs `TEST_DATABASE_URL` *and* `DATABASE_URL`, and throws when their normalized hostnames
 >    match — a `-pooler` suffix is stripped before comparing, so pooled and direct URLs to the same
@@ -237,8 +238,15 @@ exist; if they do not, stop and say so rather than committing a job that cannot 
 >    `verify-migrations-replay.js:309`), so they work locally with an empty shell but have nothing to
 >    read in CI. The workflow's `env:` block is the only source there.
 >
-> To unblock: add both as repository secrets pointing at the live instance and its separate TEST
-> instance, then run Steps 2-6 unchanged. A dry run of Steps 4-5 is possible today.
+> **Three deliberate deviations from Steps 2-4 as written:**
+> 1. `unit-and-docs` gained `if: github.event_name != 'schedule'`. Step 2 adds `schedule` to the
+>    shared `on:` block, which would also fire the PR job nightly — duplicating the push/PR signal
+>    and filing any failure under the wrong job. `workflow_dispatch` still runs both.
+> 2. The job gained `permissions: contents: read` (least privilege).
+> 3. Step 4's string-grep check was replaced with a real YAML parse (`pyyaml`) asserting 10
+>    properties of the parsed structure — triggers, cron, both jobs' `if`, concurrency, per-step
+>    `env`, the equals form, and that no literal connection string appears in the file. A grep
+>    cannot tell a valid workflow from an indentation error.
 
 - [ ] **Step 2: Add the triggers to `ci.yml`**
 

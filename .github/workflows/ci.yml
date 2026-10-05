@@ -3,9 +3,17 @@ name: ci
 on:
   push:
   pull_request:
+  workflow_dispatch:
+  schedule:
+    # 03:17 UTC nightly - off the hour, so it does not pile onto :00 with other repos.
+    - cron: "17 3 * * *"
 
 jobs:
   unit-and-docs:
+    # The schedule event exists for recurring-gates only. Running this job on it
+    # too would duplicate the push/PR signal nightly and, if it failed, file the
+    # failure under the wrong job. workflow_dispatch still runs everything.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,3 +24,41 @@ jobs:
       - run: npm run test:scripts
       - run: node scripts/gen-decision-index.js --check
       - run: node scripts/verify-docs.js --offline
+
+  recurring-gates:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # Least privilege: this job only reads the repo and talks to Neon.
+    permissions:
+      contents: read
+    # Queue rather than overlap. verify-migrations-replay.js creates and drops a
+    # single scratch database (migrations_replay_tmp) on the TEST instance, so two
+    # concurrent runs would fight over the same name. cancel-in-progress: false so
+    # a slow run is never killed part-way through a CREATE/DROP against the real DB.
+    concurrency:
+      group: recurring-gates
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Assert secrets are present
+        # Fail with a named error instead of a DB connection timeout. GitHub masks
+        # secret values in logs, but an unset secret would otherwise surface as a
+        # confusing downstream failure.
+        run: |
+          test -n "${{ secrets.DATABASE_URL }}" || { echo "::error::DATABASE_URL secret is not set"; exit 1; }
+          test -n "${{ secrets.TEST_DATABASE_URL }}" || { echo "::error::TEST_DATABASE_URL secret is not set"; exit 1; }
+      - run: npm ci
+      # --fail-days=14, NOT the default 7 and NOT the space-separated form: the
+      # script parses --fail-days=N and rejects "--fail-days 14" with exit 2. A
+      # nightly job on a 7-day threshold would only page someone a week before the
+      # cliff, too late to re-stamp offers.
+      - run: node scripts/check-offer-freshness.js --fail-days=14
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - run: node scripts/verify-migrations-replay.js --test-db
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}

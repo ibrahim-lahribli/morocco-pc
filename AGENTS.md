@@ -125,6 +125,7 @@ deliberately not duplicated here.
 | `node --test scripts/lib/migrations.test.js` | Applied-migrations ledger helper tests (OG-14; not in `test:unit`) |
 | `npm run test:scripts` | Every `scripts/lib/*.test.js` suite (`db-url`, `gap-register`, `migrations`, `schema-diff`, `replay-harness`). `test:unit` globs `src/**/*.test.js` ONLY, so these never ran in CI until the `test:scripts` step was added — run it after touching anything in `scripts/` |
 | `npm run verify:replay` | Replays every migration into a genuinely EMPTY scratch database on the `TEST_DATABASE_URL` instance and diffs it against the live schema by definition (`pg_get_constraintdef` / `indexdef` / column type+nullability+default). `--test-db` is required so it can never create a database implicitly; `--dry-run` contacts nothing; `--keep-db` skips the drop. Exits non-zero on any drift |
+| `node scripts/check-offer-freshness.js --fail-days=14` | OG-30 offer-freshness gate: offers at/inside their blackout window. **Equals form is mandatory** — `--fail-days=N`; the space form `--fail-days 14` prints usage and exits 2. CI uses 14, not the default 7, so a nightly run warns with two weeks' lead time |
 | `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance fixtures |
 | `node scripts/test-layer3.js --verify --functional` | Layer 3 schema (flags required; needs ALL THREE Layer 3 tables empty — `store` too; non-empty on shared DB AND on the test branch as of 2026-09-28, so it cannot pass in either environment today) |
 | `node scripts/test-layer4.js` | Layer 4 canonical schema (unguarded: reads `DATABASE_URL`; writes `TestL4%` fixtures inside one transaction with final ROLLBACK; does NOT require empty Layer 4 tables) |
@@ -206,6 +207,15 @@ Command gotchas (verified 2026-09-28):
   mode raises its own missing-field error, which is the fastest way to discover the contract.
 
 No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent or add them.
+
+**CI (`.github/workflows/ci.yml`)** has two jobs with disjoint triggers. `unit-and-docs` runs on
+`push`/`pull_request` (and `workflow_dispatch`) and skips `schedule`. `recurring-gates` runs only on
+`schedule` (nightly, `17 3 * * *` UTC) and `workflow_dispatch`, and needs `DATABASE_URL` +
+`TEST_DATABASE_URL` repository secrets — CI has no `.env`, so the job exports both explicitly and
+fails fast if either is empty. It is `concurrency`-grouped with `cancel-in-progress: false` because
+the replay creates and drops one fixed scratch database name (`migrations_replay_tmp`); do not set
+that to true. A workflow job cannot be triggered on demand from here — use the Actions tab's
+"Run workflow" button to exercise it before trusting a schedule.
 
 ## 7. Verification workflow
 
