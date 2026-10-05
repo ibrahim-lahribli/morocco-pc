@@ -30,6 +30,10 @@ const {
   EXISTING_BUILD_CANDIDATES_SQL,
 } = require('./commit');
 const persistenceModule = require('../persistence/persist-ranked');
+const {
+  DELETE_BUILD_REJECTION_SQL,
+  INSERT_BUILD_REJECTION_SQL,
+} = require('../persistence/persist-rejections');
 const { ERROR_CODES, CandidateSelectionError } = require('../candidates/errors');
 
 /**
@@ -175,7 +179,60 @@ test('commit: zero builds still runs the whole transaction and commits zero writ
 });
 
 // ---------------------------------------------------------------------------
-// 2. The two guards: fail-fast, before any write (Decision 19.2).
+// 2. The rejection writer's invocation contract (OG-04 / Decision 31).
+// ---------------------------------------------------------------------------
+
+test('commit: with no rejections argument the rejection writer is never invoked', async () => {
+  const client = createClient();
+  await withStubbedWriter([{ result: WRITTEN }], async () => {
+    await runRecommendationCommit(client, QUERY_ID, SELECTED);
+  });
+  // Decision 31: `undefined` means "no diagnostics supplied". Not one
+  // statement may mention build_rejection - the writer would open with its
+  // replace-step DELETE if it ran at all, and a legacy three-argument call
+  // must stay byte-identical in behaviour.
+  assert.equal(
+    sqlsOf(client).some((sql) => sql.includes('build_rejection')),
+    false
+  );
+  assert.deepEqual(sqlsOf(client), [
+    BEGIN_SQL,
+    LOCK_RECOMMENDATION_QUERY_SQL,
+    EXISTING_BUILD_CANDIDATES_SQL,
+    COMMIT_SQL,
+  ]);
+});
+
+test('commit: a supplied rejections array runs the replace step inside the tx, after guard 2, before COMMIT', async () => {
+  const client = createClient();
+  const verdicts = [
+    {
+      component_role: 'GPU',
+      product_id: 'p-gpu-1',
+      status: 'REJECT',
+      reason: 'GPU_TOO_THICK',
+    },
+  ];
+  await withStubbedWriter([{ result: WRITTEN }], async () => {
+    await runRecommendationCommit(client, QUERY_ID, SELECTED, verdicts);
+  });
+  // The writer (real, not stubbed - its behaviour is persist-rejections.test.js's
+  // job) issues the Decision 31 DELETE first, then one INSERT for the REJECT.
+  // Both sit between guard 2 and COMMIT, so a refusal never clears anything
+  // and a failure rolls the whole set back together.
+  assert.deepEqual(sqlsOf(client), [
+    BEGIN_SQL,
+    LOCK_RECOMMENDATION_QUERY_SQL,
+    EXISTING_BUILD_CANDIDATES_SQL,
+    DELETE_BUILD_REJECTION_SQL,
+    INSERT_BUILD_REJECTION_SQL,
+    COMMIT_SQL,
+  ]);
+  assert.deepEqual(client.calls[3].params, [QUERY_ID]);
+});
+
+// ---------------------------------------------------------------------------
+// 3. The two guards: fail-fast, before any write (Decision 19.2).
 // ---------------------------------------------------------------------------
 
 test('commit: a nonexistent recommendation_query fails fast after guard 1 only', async () => {
@@ -234,7 +291,7 @@ test('commit: already-persisted candidates are refused fail-fast (any row shape 
 });
 
 // ---------------------------------------------------------------------------
-// 3. ROLLBACK on ANY thrown error, with the transaction error always winning.
+// 4. ROLLBACK on ANY thrown error, with the transaction error always winning.
 // ---------------------------------------------------------------------------
 
 test('commit: a writer CandidateSelectionError rolls back and propagates unchanged', async () => {
@@ -345,7 +402,7 @@ test('commit: a failing COMMIT rolls back and its error wins, even if ROLLBACK a
 });
 
 // ---------------------------------------------------------------------------
-// 4. BEGIN failure and the client contract.
+// 5. BEGIN failure and the client contract.
 // ---------------------------------------------------------------------------
 
 test('commit: a failing BEGIN propagates with no ROLLBACK and no writer call', async () => {
@@ -380,7 +437,7 @@ test('commit: a client without query() is rejected before any statement', async 
 });
 
 // ---------------------------------------------------------------------------
-// 5. Source boundary: the wrapper owns the transaction and the two guards only.
+// 6. Source boundary: the wrapper owns the transaction and the two guards only.
 // ---------------------------------------------------------------------------
 
 function stripComments(source) {

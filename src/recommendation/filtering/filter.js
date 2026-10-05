@@ -95,6 +95,16 @@
  *     relationships { [relationship key]: PASS | FAIL | UNKNOWN }
  *     unknown_pairwise_count  integer >= 0 (pairs that resolved UNKNOWN,
  *                             Decision 15; the Decision 13 count producer)
+ *     partner_product_id      Decision 32 (OG-32): for a REJECT, the product
+ *                             id of the decisive partner - the first FAIL pair
+ *                             of the decisive relationship (the same pair the
+ *                             `reason` is read from), in partner bucket order;
+ *                             null on PASS/UNKNOWN verdicts and never a
+ *                             variant id
+ *     partner_product_variant_id  the partner's variant id when the partner is
+ *                             variant-keyed, else null (a product-keyed partner
+ *                             such as a CASE carries no variant); always null
+ *                             when partner_product_id is null
  *     compatibility_notes     frozen array of CONDITIONAL pair-evidence notes
  *                             (Decision 22 item 8a; [] when none) - each note
  *                             carries relationship, rule, source_table,
@@ -635,10 +645,28 @@ function evaluateCandidate(context, role, candidate) {
     }
 
     const status = bestPartnerStatus(pairs.map((pair) => pair.status));
+    // Decision 32 (OG-32): a FAIL relationship is established by its first
+    // FAIL pair in partner bucket order - the SAME pair firstReasonWithStatus
+    // reads the decisive `reason` from - so record that pair's partner
+    // identity alongside the relationship. A non-FAIL relationship has no
+    // decisive partner and records nulls (the writer only persists REJECTs,
+    // and the pairing invariant lives in the validator / schema CHECK).
+    let relationshipPartnerId = null;
+    let relationshipPartnerVariantId = null;
+    if (status === FINAL_STATUSES.FAIL) {
+      const decisiveIndex = pairs.findIndex((pair) => pair.status === FINAL_STATUSES.FAIL);
+      const decisivePartner = decisiveIndex >= 0 ? partners[decisiveIndex] : null;
+      if (decisivePartner !== null) {
+        relationshipPartnerId = decisivePartner.product_id;
+        relationshipPartnerVariantId = decisivePartner.product_variant_id ?? null;
+      }
+    }
     evaluatedRelationships.push({
       key: relationshipKey,
       status,
       reason: firstReasonWithStatus(pairs, status),
+      partner_product_id: relationshipPartnerId,
+      partner_product_variant_id: relationshipPartnerVariantId,
     });
   }
 
@@ -652,9 +680,19 @@ function evaluateCandidate(context, role, candidate) {
 
   let status;
   let reason;
+  // Decision 32 (OG-32): the persisted rejection must be able to say AGAINST
+  // WHICH partner the candidate failed. The partner comes from the decisive
+  // FAIL relationship (the first one, in canonical relationship order) and is
+  // only populated for REJECT verdicts - the only status build_rejection
+  // persists. PASS/UNKNOWN verdicts carry nulls: a survival has no decisive
+  // rejection to name.
+  let partnerProductId = null;
+  let partnerProductVariantId = null;
   if (firstFailed) {
     status = CANDIDATE_STATUSES.REJECT;
     reason = firstFailed.reason;
+    partnerProductId = firstFailed.partner_product_id;
+    partnerProductVariantId = firstFailed.partner_product_variant_id;
   } else if (firstUnknown) {
     status = CANDIDATE_STATUSES.UNKNOWN;
     reason = firstUnknown.reason;
@@ -672,6 +710,8 @@ function evaluateCandidate(context, role, candidate) {
     reason,
     relationships: Object.freeze(relationships),
     unknown_pairwise_count: unknownPairwiseCount,
+    partner_product_id: partnerProductId,
+    partner_product_variant_id: partnerProductVariantId,
     compatibility_notes: Object.freeze(compatibilityNotes),
   });
 }

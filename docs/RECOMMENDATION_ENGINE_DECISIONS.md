@@ -3872,6 +3872,10 @@ Verification. Branch-first: migration 014 applied to `TEST_DATABASE_URL` via the
 
 Out of scope, deliberately. Pairwise rejections detected during assembly (`assemble.js` abandons a branch when an aggregated pair FAILs) are combinations rather than candidates and are NOT captured; closing that is a separate change. UNKNOWN verdicts are not persisted. No UI or API surface reads `build_rejection` yet — there is no such layer in this repository yet, so the payoff is queryable diagnostics rather than rendered output. `run.js` gained one additive `filter_verdicts` field to carry the verdicts to the writer; no existing consumer reads it, and the run-result shape pin was updated rather than worked around.
 
+### UPDATE 2026-10-05 — idempotency residual closed by Decision 31 (OG-33)
+
+The adversarial review of this decision's commit (2026-10-04) found that relying on the re-run guard for idempotency does not hold: guard 2 keys on `build_candidate` ONLY, so a zero-build pass that wrote `build_rejection` rows could be committed again and duplicated (measured 1→2 rows). The "a re-run cannot duplicate diagnostics" sentence that was originally in `persist-rejections.js`'s header was wrong and was corrected in place when OG-33 was registered. **Decision 31 (2026-10-05) fixes it** with replace semantics in the writer — a scoped `DELETE ... WHERE recommendation_query_id = $1` before the INSERTs, same transaction — leaving guard 2 and this decision's schema, shape and transaction discipline otherwise unchanged. See OG-33 / C-27 in `docs/OPEN_GAPS.md`.
+
 ---
 
 ## Decision 30 — OG-10 un-deferred: the AIR-cooler height rule is now IMPLEMENTED (RESOLVED 2026-10-05)
@@ -3928,4 +3932,100 @@ End-to-end on the branch DB: the full pipeline returns 101 verdicts (87/12/2) un
 
 ```text
 VERDICT: RESOLVED - OG-10 IMPLEMENTED (AIR-only, tri-state, NULL=UNKNOWN). OG-09/OG-11/OG-12 remain EXPLICITLY DEFERRED per Decision 26 item B. Live catalog behaviour-neutral: 40/40 AIR pairs PASS, full pass 101 verdicts unchanged (87 PASS / 12 UNKNOWN / 2 REJECT). Suite 891 tests, 0 failures.
+```
+
+---
+
+## Decision 31 — build_rejection writes are replace-idempotent per query (OG-33)
+
+Status: RESOLVED 2026-10-05; IMPLEMENTED 2026-10-05 — the rejection writer now clears the query's `build_rejection` rows and re-inserts the current pass's set inside the commit transaction, so a re-commit converges instead of duplicating; guard 2 (Decision 19.2) is unchanged. Closes OG-33.
+
+Date: 2026-10-05. Scope: closes OG-33 (docs/OPEN_GAPS.md, see C-27), the duplication defect found 2026-10-04 by the adversarial review of the OG-04 / Decision 29 commit. It is NOT a schema change (no migration, no seed), NOT a change to guard 2 / Decision 19.2, NOT a change to any verdict, scoring, ranking, retention or assembly behaviour, and NOT a fix for OG-32 (partner identity stays NULL — that needs an Engine 2D verdict-shape change and keeps its own row).
+
+### Current situation
+
+* `commit.js` guard 2 is `SELECT 1 FROM build_candidate WHERE recommendation_query_id = $1 LIMIT 1` (Decision 19.2): it never mentions `build_rejection`. A ZERO-BUILD pass that still rejected candidates therefore leaves its diagnostics unguarded, and a second commit for the same query_id is reachable.
+* Measured on the live branch 2026-10-04: two consecutive zero-build commits with identical rejections took `build_rejection` from 1 row to 2; a later NON-empty commit duplicated them alongside the builds. `persist-rejections.js`'s own header had claimed the opposite ("a re-run cannot duplicate diagnostics"); that claim was wrong and was corrected in place when OG-33 was registered.
+* The consequence is bounded but real: `rejection_count` and any per-query diagnostic aggregation double-count — exactly the query an operator runs to explain an empty result. `build_rejection` is read by nothing in `src/` (grep-verified), so ranking, scoring, assembly and explanation are unaffected.
+
+### Problem
+
+The OG-04 closure (C-22) says the table answers "why was nothing recommended?" for a specific past run — but a table that silently doubles its rows under a legitimate re-commit gives the wrong answer to precisely that question, and the re-commit path is legitimate: Decisions 19.3 / 18-D8 keep the zero-build → later non-empty sequence open by design (harness section 5 pins it). Something had to make the writer safe under the guard the architecture actually has, without narrowing that path.
+
+### Decision
+
+1. **Replace semantics, owned by the writer.** `persistRejections` (`src/recommendation/persistence/persist-rejections.js`) issues `DELETE FROM build_rejection WHERE recommendation_query_id = $1` (new exported constant `DELETE_BUILD_REJECTION_SQL`) as its FIRST statement, then one INSERT per REJECT verdict — all on the wrapper's client, inside the wrapper's transaction, serialized by guard 1's row lock. The stored rows for a query always equal the last committed pass's REJECT set.
+2. **Validation still precedes the DELETE** — a malformed input issues zero statements (the fail-fast contract is unchanged), and a writer error rolls the DELETE back with everything else via the wrapper's ROLLBACK.
+3. **The wrapper invokes the writer only when the caller supplied the 4th argument.** `rejections === undefined` → the writer is not called at all (zero statements; legacy three-argument call sites stay byte-identical in behaviour). An explicit array — including `[]` — means "this pass's set", so `[]` clears stale rows rather than silently leaving them.
+4. **Guard 2 is UNCHANGED.** It still keys on `build_candidate` only and still refuses only when builds exist; Decision 19.2's "no overwrite, no delete, no upsert" continues to describe `build_candidate` / `persistRanked`, which this decision does not touch.
+5. **No schema change.** Idempotency is the statement shape, not a uniqueness key — no migration; `database/migrations/014_build_rejection.sql` stays as committed.
+6. **OG-33 closes** (docs/OPEN_GAPS.md → C-27), and the `AGENTS.md` §8 lesson is rewritten from "confirm guard 2's SQL mentions X's table" to the Decision-31 shape: an unguarded table is made safe by writing it replace-style, not by growing the guard.
+
+### Rejected alternatives
+
+* **Widen guard 2 to also refuse when `build_rejection` rows exist.** Rejected: it would refuse the legitimate zero-build → later non-empty sequence for the same query — the exact sequence Decisions 19.3 / 18-D8 keep open and harness section 5 pins — permanently stranding a query that later assembles builds behind diagnostics it wrote itself. It would also make diagnostics STRICTER than builds, the wrong precedence for a diagnostic table.
+* **UNIQUE index on (query, role, product, variant, partner, reason) + `INSERT ... ON CONFLICT DO NOTHING`.** Rejected on two counts: it needs a migration (015), and it would not fire on today's rows at all — `partner_product_id` is always NULL (OG-32, **now CLOSED by Decision 32 — corrected inline below**), and Postgres treats NULLs as DISTINCT in a unique index, so the key would never collide on the exact rows that duplicate.
+* **Existence-check-then-insert in the wrapper (SELECT + set diff).** Rejected: it would push set-difference logic into the wrapper, whose source-boundary test bans DML there, and it still solves only duplication — a changed pass would leave stale rows that an unconditional DELETE removes for free.
+
+### Verdict for this pass
+
+* **Unit — PASS.** Suite 891 → **896, 0 failures**. Three new writer pins (`DELETE_BUILD_REJECTION_SQL`'s exact string and scope, the clear-before-insert sequence across two identical calls, DELETE-even-when-the-new-set-is-empty) and two new wrapper pins (a three-argument call issues no `build_rejection` statement at all; a supplied array runs DELETE + INSERT between guard 2 and COMMIT). Existing assertions were updated where the statement sequence legitimately changed; none was relaxed.
+* **Real round-trip — PASS** (temporary probe against the test branch, removed after recording; baseline `{queries: 0, build_rejection: 0}`): three consecutive zero-build commits with the same 2 verdicts held the count at **2 → 2 → 2** (pre-fix: 2 → 4 → 6); a changed pass replaced the set (**2 → 1**, reason `GPU_TOO_THICK`); an explicit empty pass cleared it (**→ 0**); a later NON-empty commit persisted 1 build alongside exactly **2** rejections; guard 2 then refused a further commit (`INVALID_INPUT` / `query_id`) and left the rows untouched; cleanup restored both tables to baseline (residue 0). **16/16 PASS.**
+* **Durable pin — PASS.** `scripts/test-orchestrator-commit.js` gained section 6 running the same sequence with counts read from the SECOND connection; its `countsForQuery` / `countsForQueries` now count `build_rejection` and its `cleanup` deletes it explicitly (dependents before parent). Re-run on the branch: **37 pass / 0 fail** (was 29/0), cleanup residue `{rejections: 0, …}`.
+* **Gates — PASS.** `npm run test:unit` 896/0; `verify-docs` decision counts bumped (29 global / 35 `Status:` lines); `npm run gen:decisions` re-run; `AGENTS.md` range → Decisions 1–31; gap register OG-33 → CLOSED with C-27.
+
+### Supersedes / superseded by
+
+* **Amends Decision 29's writer contract** — specifically the idempotency Decision 29 implicitly leaned on the re-run guard for. An UPDATE block was added INSIDE Decision 29's entry (edited in place, per `docs/decisions/TEMPLATE.md`), and its Status line was left unchanged.
+* **`database/migrations/014_build_rejection.sql`'s header comment is NOT edited** (migrations are never rewritten): its sentence "a re-run guard already refuses to persist a second time" was already false when OG-33 was registered and is superseded by this decision. Its other clause — "the same reason can legitimately be recorded on repeated runs of the same query id" — remains true; only the guard-based idempotency claim it was paired with is replaced.
+* The `AGENTS.md` §8 bullet about the guard keying on `build_candidate` only was rewritten in place to record the Decision-31 replace shape.
+
+```text
+VERDICT: RESOLVED - build_rejection writes are replace-idempotent per query (scoped DELETE first, then one INSERT per REJECT, same transaction). Guard 2 / Decision 19.2 unchanged; no migration; OG-32 untouched. Measured on the branch: 3 identical zero-build commits hold 2 rows (pre-fix 2->4->6), a changed pass replaces, an empty pass clears, guard 2 still refuses once builds exist, residue 0. Harness 37/0 (was 29/0), unit suite 896/0 (was 891).
+```
+
+
+## Decision 32 — a persisted rejection names its decisive partner (OG-32)
+
+Status: RESOLVED 2026-10-05; IMPLEMENTED and APPLIED 2026-10-05 — the Engine 2D candidate verdict gains two additive fields carrying the product identity of the partner the candidate decisively failed against, so a `build_rejection` row can now answer "against which partner" and not only "which candidate, and why". Migration `015_relax_rejection_partner.sql` relaxes the partner CHECK to permit a product-keyed partner. Closes OG-32.
+
+Date: 2026-10-05. Scope: closes OG-32 (docs/OPEN_GAPS.md, see C-28), the residual recorded against the OG-04 closure (C-22) and re-confirmed against Decision 30's `COOLER_TOO_TALL`. It IS an Engine 2D verdict-shape change (two additive fields), a schema migration (015), and a relaxation of one persistence validation rule. It is NOT a change to any verdict status, reason, relationship aggregation, `unknown_pairwise_count`, compatibility note, scoring, ranking, retention or assembly behaviour, and NOT a change to guard 2 / Decision 19.2 or to the Decision 31 replace semantics.
+### Current situation
+
+* `build_rejection` (migration 014, Decision 29) has carried `partner_product_id` / `partner_product_variant_id` since it was created, and `validate-rejections.js` has always read them — but they were **always NULL**, because an Engine 2D verdict carried partner identity only inside `compatibility_notes`, and only for CONDITIONAL evidence. The columns were storable and unreachable.
+* Two independent reasons the values could not simply have been filled in. First, the producer had no such field: `filter.js` froze verdicts with exactly `product_id, product_variant_id, category, component_role, status, reason, relationships, unknown_pairwise_count, compatibility_notes`. Second, and more seriously, migration 014's `chk_build_rejection_partner_pair_complete` demanded **both ids or neither**, with the header comment "a variant-keyed partner (GPU) always carries both ids, a product-keyed one carries neither". Since the decisive partner of most rules is **product-keyed** — the CASE behind `GPU_TOO_LONG` / `GPU_TOO_THICK`, the CASE behind `COOLER_TOO_TALL`, the MOTHERBOARD or PSU behind the socket / wattage rules — the constraint made the fix **forbidden rather than merely unimplemented**. Filling the producer alone would have converted a NULL column into a `23514` on every real rejection.
+* Measured on the live branch before this decision: a GAMING@10000 MAD pass persisted 2 rows, both `GPU_TOO_THICK`, both `partner_product_id = null`; forcing an AIR cooler to 300 mm produced a `CPU_COOLER` / `COOLER_TOO_TALL` rejection that was likewise NULL. The gap was therefore not rule-specific — it widened with every newly enforced reason code, which is why it had to be closed at the verdict-shape level rather than per rule.
+
+### Decision
+
+1. **The verdict names its decisive partner.** `filter.js` `evaluateCandidate` records, per relationship, the partner of the relationship's **first FAIL pair in partner bucket order** — the same pair `firstReasonWithStatus` reads the decisive `reason` from — and the candidate verdict inherits it from the **first FAIL relationship** in canonical relationship order. The partner and the reason therefore always come from the same pair; a reader can trust the pair.
+2. **PASS and UNKNOWN verdicts carry nulls.** A survival has no decisive rejection to name, and `build_rejection` persists REJECT verdicts only. The fields are present on every verdict (the shape is fixed, not conditional) so no consumer must branch on their existence.
+3. **The pairing rule is relaxed, not inverted.** Migration `015_relax_rejection_partner.sql` drops `chk_build_rejection_partner_pair_complete` and adds `chk_build_rejection_partner_variant_requires_product`: `partner_product_variant_id IS NULL OR partner_product_id IS NOT NULL`. The truth table is (NULL, NULL) OK — no partner, e.g. `CPU_SOCKET_UNKNOWN`; **(id, NULL) OK — product-keyed partner, the normal case this migration exists for**; (id, variant) OK — variant-keyed partner; (NULL, variant) **REFUSED** — an orphan variant can never identify a partner on its own.
+4. **`validate-rejections.js` mirrors the new CHECK**, so the failure names `partner_product_id` instead of surfacing as an opaque `23514`. A product-keyed partner is **valid**; refusing it is precisely what made OG-32 unfixable.
+5. **`015` supersedes `014`'s constraint by dropping it; `014` itself is NOT edited** (AGENTS.md section 8: committed migrations are never rewritten). The old constraint name disappears; anything still citing `chk_build_rejection_partner_pair_complete` — `014`'s own header included, deliberately — is historical.
+6. **Assembly is unaffected.** `assemble.js` `VERDICT_FIELDS` gates on *presence* of its eight required fields and does not reject extras, so the wider verdict passes Engine 3 validation unchanged, and emitted components keep their existing exact shape (the two new verdict fields are not copied onto components).
+7. **OG-32 closes** (docs/OPEN_GAPS.md → C-28). Decision 31's rejected-alternative note is corrected: the UNIQUE-index option it declined is now sound, but replace-at-the-writer remains the chosen mechanism (it also handles a *changed* pass, which a unique key cannot).
+### Rejected alternatives
+
+* **Fill the columns from `compatibility_notes`.** Rejected: those notes exist only for CONDITIONAL evidence, so the decisive partner of a plain FAIL is absent from them by construction. Deriving the partner from notes would cover a minority of rejections and silently leave the majority NULL — the defect again, quieter.
+* **Record the partner only at the relationship level and widen `relationships`.** Rejected: `relationships` is a `{key: status}` map consumed by assembly validation and asserted by exact shape in several tests; changing its value shape would ripple through Engine 3 for no diagnostic gain.
+* **Name every failing partner (an array).** Rejected as over-engineering for the diagnostic purpose: a `GPU_TOO_LONG` against a bucket of 8 short cases would store 8 ids to answer a question one decisive partner already answers. The honest limitation — *which* partner is named depends on bucket order — is recorded below rather than designed away.
+* **Keep 014's CHECK and store the product-keyed partner by inventing a placeholder variant.** Rejected: fabricating an identity to satisfy a constraint is exactly the class of wrong-data-instead-of-right-schema this repo's lessons file warns against (`NULL` is never coerced to an empty string or `0`).
+
+### Verdict for this pass
+
+* **Unit — PASS.** Suite 896 → **898, 0 failures**. New pins: a REJECT names its product-keyed partner, and a product-keyed partner is accepted by the writer with a NULL variant. The existing "both-present-or-both-absent is malformed" case was **replaced** by the orphan-variant case it actually still forbids, and the exact-verdict-key assertion gained the two fields. No assertion was weakened — the removed case is now a positive test.
+* **Behaviour, driven headlessly through the real `filterCandidates`** (not only the unit fixtures): two cases of differing length make `gpu_case` PASS, so no partner is named; a CASE whose only GPU is 400 mm against a 360 mm case yields `REJECT / GPU_TOO_LONG` naming the GPU's **product + variant**; a GPU failing **two** relationships (`gpu_case` and `gpu_psu`) names the `gpu_case` partner, the same relationship its `reason` is read from; swapping bucket order moves the named partner, confirming it is bucket-order-derived and deterministic. The validator truth table was exercised directly and matches migration 015 row for row, including (NULL, variant) refused and a blank id refused.
+* **Real round-trip — PASS.** Migration 015 is **applied on both databases**: `DATABASE_URL` and `TEST_DATABASE_URL` each report `schema_migrations = 15`, carry `chk_build_rejection_partner_variant_requires_product`, and no longer carry the 014 constraint. `docs/SCHEMA_REFERENCE.md` was regenerated and its schema-digest matches the live schema.
+* **Durable pin — PASS.** `scripts/test-orchestrator-commit.js` gained section 7, asserting against a real second connection that a `GPU_TOO_THICK` row stores a **non-null** `partner_product_id` with a **NULL** (never empty-string) variant, that a variant-keyed partner stores **both** ids and survives the real FK against a real `product_variant` row, that an orphan variant is refused **before any statement runs**, and that the refused attempt changed no rows. Re-run on the branch: **43 pass / 0 fail** (was 37/0), cleanup residue all zero.
+* **Gates — PASS.** `npm run test:unit` 898/0; `verify-docs` decision counts bumped (30 global / 36 `Status:` lines); `npm run gen:decisions` re-run; `AGENTS.md` range → Decisions 1–32 and migration range → `001`–`015`; gap register OG-32 → CLOSED with C-28.
+### Honest limitations and supersessions
+
+* **One decisive partner, chosen by bucket order.** The named partner is the first FAIL pair in Engine 2C pool order, not "the worst" or "all" of them. It is deterministic and reproducible (pool order is canonical), and it is always a genuine failing partner — but a rejection against several failing partners records one of them, so a reader must not infer "this was the only incompatibility".
+* **Assembly-level pairwise rejections remain out of scope**, exactly as in Decision 29: `assemble.js` abandons a branch on an aggregated pair FAIL without materialising a candidate verdict, so those never become `build_rejection` rows.
+* **Supersedes `014`'s CHECK semantics**, not the file. `database/migrations/014_build_rejection.sql` keeps its original comment describing both-or-neither; that description is historical from 2026-10-05. `015`'s own header was corrected in the same session to state accurately that only the `DROP ... IF EXISTS` half is re-runnable — Postgres has no `ADD CONSTRAINT IF NOT EXISTS`, so a hand re-application would raise `42710`; single application is guaranteed by the OG-14 ledger, not by the file.
+* **Corrects Decision 31's rejected-alternative note** (corrected inline above, in place, per the template): it recorded that a UNIQUE-index alternative "only becomes sound after OG-32 lands". OG-32 is now closed, so that condition is met — and the option is still declined. Replace-at-the-writer remains correct because it also handles a *changed* pass, which a uniqueness key cannot: a unique key prevents a duplicate row but leaves the stale one behind, whereas the scoped DELETE converges on the current pass either way. Decision 31 itself is otherwise unchanged.
+
+```text
+VERDICT: RESOLVED - the Engine 2D verdict carries its decisive partner (product id, plus variant id for a variant-keyed partner), populated only for REJECT; migration 015 relaxes the partner CHECK to chk_build_rejection_partner_variant_requires_product so a product-keyed partner (id, NULL) is storable, which 014 CHECKed against. The validator mirrors it and still refuses an orphan variant. Migration applied on both DBs (schema_migrations 15, old constraint gone). Headless runs of the real filter confirm partner and reason come from the same pair and track bucket order. Harness 43/0 (was 37/0) with a durable partner-column pin and residue 0; unit suite 898/0 (was 896). Assembly, scoring, ranking, retention and guard 2 untouched.
 ```

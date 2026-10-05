@@ -10,7 +10,8 @@
  *     guard 1: SELECT ... FOR UPDATE                  - lock the query row
  *     guard 2: SELECT 1 FROM build_candidate LIMIT 1  - re-run guard
  *     persistRanked({ client, queryId, selected })    - DML only, no tx control
- *     persistRejections({ client, queryId, rejections }) - OG-04, same tx
+ *     persistRejections({ client, queryId, rejections }) - OG-04, same tx;
+ *       Decision 31 replace semantics (invoked only when rejections !== undefined)
  *   COMMIT                                            - success
  *   ROLLBACK                                          - ANY thrown error
  *
@@ -35,12 +36,23 @@
  * entries into build_rejection inside THIS transaction, immediately after
  * persistRanked, on the SAME client - so a pass can never commit builds
  * without their rejection reasons, or reasons without their builds. It is
- * additive and backwards-compatible: `undefined` writes nothing, and the
- * writer itself writes zero rows when nothing was rejected (the common case),
- * so a healthy pass is behaviourally identical to before. The wrapper's return
+ * additive and backwards-compatible: `undefined` means the caller supplied no
+ * diagnostics, so the writer is NOT INVOKED AT ALL (zero statements, the table
+ * is left untouched); a provided array - including `[]` - makes the writer
+ * REPLACE this query's rejection set (Decision 31), so `[]` explicitly clears
+ * stale rows from an earlier commit of the same query. The wrapper's return
  * value is still the writer's OWN frozen result by reference (Decision 19 seam),
  * so no existing caller sees a new or reshaped field; read the committed rows
  * back with a SELECT on build_rejection for the query id.
+ *
+ * Why replace instead of a second guard (Decision 31, OG-33): guard 2 below
+ * keys on build_candidate ONLY, so a zero-build pass that still rejected
+ * candidates leaves build_rejection unguarded and a second commit for the same
+ * query_id is reachable. Widening guard 2 would also refuse the legitimate
+ * zero-build -> later non-empty sequence (the reason the empty pass commits at
+ * all), so idempotency lives in the writer instead: each invocation clears this
+ * query's rows and re-inserts the current set, inside this transaction,
+ * serialized by guard 1's row lock.
  *
  * Zero builds (Decision 19.3 / 18-D8): a zero-build pass persists nothing and
  * is a valid outcome, NOT an error. This wrapper still runs the whole
@@ -139,8 +151,12 @@ function validateClient(client) {
  *        guard-1 precondition; an unknown id fails fast).
  * @param {Array} selected ranked entries for persistRanked (validated by the
  *        writer inside this transaction); [] persists nothing (Decision 18-D8).
- * @param {Array} [rejections] OG-04: this pass's Engine 2D candidate verdicts.
- *        Optional; undefined or [] writes no rejection rows.
+ * @param {Array} [rejections] OG-04/Decision 31: this pass's Engine 2D
+ *        candidate verdicts. Optional; `undefined` means "no diagnostics
+ *        supplied" and the rejection writer is skipped entirely (zero
+ *        statements, table untouched). A provided array - including `[]` -
+ *        REPLACES this query's build_rejection rows with this pass's REJECT
+ *        set ([] clears stale rows, writing none).
  * @returns {Promise<object>} the frozen persistRanked result, BY REFERENCE and
  *          unchanged (Decision 19 seam). The OG-04 rejection rows are committed
  *          in the same transaction but are not merged into this object - see
@@ -186,20 +202,20 @@ async function runRecommendationCommit(client, queryId, selected, rejections) {
     // `selected` it issues no statement at all and returns frozen empties.
     const result = await persistence.persistRanked({ client, queryId, selected });
 
-    // OG-04: the rejection-reason writer runs in the SAME transaction, after
-    // persistRanked, on the SAME client - so a failure in either rolls back
-    // both and a pass can never commit builds without their diagnostics (or
-    // diagnostics without their builds). `rejections` is the pass's Engine 2D
-    // verdicts; the writer keeps only REJECT entries and writes zero rows when
-    // nothing was rejected, so a healthy pass is a true no-op here. It is
-    // additive and optional: an undefined `rejections` writes nothing, which
-    // keeps every existing three-argument call site byte-identical in
-    // behaviour.
-    const rejectionResult = await persistRejections({
-      client,
-      queryId,
-      rejections: rejections === undefined ? [] : rejections,
-    });
+    // OG-04 / Decision 31: the rejection-reason writer runs in the SAME
+    // transaction, after persistRanked, on the SAME client - so a failure in
+    // either rolls back both and a pass can never commit builds without their
+    // diagnostics (or diagnostics without their builds). `rejections` is the
+    // pass's Engine 2D verdicts; the writer keeps only REJECT entries and
+    // REPLACES this query's rejection set (idempotent - OG-33). Invoked ONLY
+    // when the caller supplied the argument: `undefined` (a legacy three-
+    // argument call site) writes nothing at all, byte-identical in behaviour
+    // to before OG-04; an explicit `[]` means "this pass rejected nothing"
+    // and clears any stale rows an earlier commit of this query left behind.
+    let rejectionResult;
+    if (rejections !== undefined) {
+      rejectionResult = await persistRejections({ client, queryId, rejections });
+    }
 
     // Last statement of the happy path; after this the transaction is closed
     // and ROLLBACK must never be issued.

@@ -29,33 +29,51 @@
  *   * Any verdict logic. This module never re-evaluates compatibility; it
  *     copies what the filter decided.
  *
- * Idempotency and the re-run guard — READ THIS BEFORE RELYING ON IT. The
- * commit wrapper's guard 2 refuses a second commit for the same query_id ONLY
- * when `build_candidate` rows exist (Decision 19.2; the guard SQL never
- * mentions build_rejection). That is enough for any pass which produced
- * builds, but NOT for a ZERO-BUILD pass that still rejected candidates:
- * such a pass writes build_rejection rows and no build_candidate rows, so
- * guard 2 still passes and a second commit writes the SAME rejections again.
- * Measured on the live branch 2026-10-04: two consecutive zero-build commits
- * with the same rejections took build_rejection from 1 row to 2. A later
- * NON-empty commit duplicates them too, alongside the builds. The earlier
- * claim in this header — that a re-run "cannot duplicate diagnostics" — was
- * WRONG; it is registered as **OG-33** rather than fixed here, because closing
- * it means widening a Decision 19 guard (or making the insert idempotent),
- * which is a decision, not a writer tweak.
+ * Idempotency — replace semantics (Decision 31, OG-33): every call REPLACES
+ * the query's rejection set. It issues one scoped
+ * `DELETE FROM build_rejection WHERE recommendation_query_id = $1` first, then
+ * one INSERT per REJECT verdict, all inside the commit wrapper's transaction.
+ * Committing the same pass twice therefore converges to the same rows instead
+ * of duplicating them, and a later pass whose verdicts differ REPLACES the old
+ * set rather than leaving stale diagnostics behind.
+ *
+ * Why the writer owns this and not the guard: the commit wrapper's guard 2
+ * (Decision 19.2) keys on `build_candidate` ONLY, so a ZERO-BUILD pass that
+ * still rejected candidates writes build_rejection rows and no build_candidate
+ * rows - guard 2 passes and a second commit for the same query_id is reachable
+ * (measured on the live branch 2026-10-04: consecutive zero-build commits took
+ * the row count 1 -> 2). Decision 31 chose replace-at-the-writer because
+ * widening guard 2 would refuse the legitimate zero-build -> later non-empty
+ * sequence that commit.js deliberately keeps open (Decision 19.3), and a
+ * unique-index ON CONFLICT alternative needs a migration AND cannot fire while
+ * partner ids are NULL (OG-32): Postgres treats NULLs as distinct in a unique
+ * index, so the key would never collide on the exact rows that duplicate.
+ *
+ * Scope and safety: the DELETE is parameterized on THIS query's id only (no
+ * other query's rows are ever touched), it runs after validation (a malformed
+ * input still issues zero statements), and it shares the wrapper's transaction,
+ * serialized by guard 1's row lock - a failure between DELETE and COMMIT rolls
+ * both back together.
  *
  * Shape decisions, and why:
- *   - partner_product_id / partner_product_variant_id are NULL together or
- *     neither, because a candidate verdict's decisive reason may not depend on
- *     a partner at all (e.g. CPU_SOCKET_UNKNOWN). The table's
- *     chk_build_rejection_partner_pair_complete CHECK enforces the pairing, so
- *     a half-populated row is impossible rather than merely avoided here.
- *   - No uniqueness constraint on the row: the same reason may legitimately be
- *     recorded on two different queries for the same product.
+ *   - partner_product_id / partner_product_variant_id follow the Decision 32
+ *     / migration 015 rule: (NULL, NULL) means the decisive reason depended on
+ *     no partner (e.g. CPU_SOCKET_UNKNOWN); (id, NULL) is a PRODUCT-KEYED
+ *     partner (a CASE, PSU or MOTHERBOARD carries no variant - the normal case
+ *     for GPU_TOO_THICK); (id, variant) is a VARIANT-KEYED partner. Only an
+ *     orphan variant (NULL, id) is refused. The table's
+ *     chk_build_rejection_partner_variant_requires_product CHECK enforces the
+ *     pairing, so a half-populated row is impossible rather than merely
+ *     avoided here.
+ *   - Still no uniqueness constraint on the row (unchanged from Decision 29):
+ *     idempotency is the DELETE-then-INSERT shape above, not a key. That keeps
+ *     the schema untouched (no migration) and sidesteps the NULL-distinct
+ *     problem an ON CONFLICT key would inherit from the (id, NULL)
+ *     product-keyed rows (OG-32).
  *
- * Parameterization: one parameterized INSERT with a fixed arity, called once
- * per rejected candidate. SQL is never built by concatenation and no value is
- * interpolated.
+ * Parameterization: one parameterized DELETE (scoped to this query) plus one
+ * parameterized INSERT with a fixed arity, called once per rejected candidate.
+ * SQL is never built by concatenation and no value is interpolated.
  */
 
 const { randomUUID } = require('node:crypto');
@@ -80,6 +98,15 @@ const INSERT_BUILD_REJECTION_SQL =
   + 'partner_product_id, partner_product_variant_id, reason_code'
   + ') VALUES ($1,$2,$3,$4,$5,$6,$7,$8)';
 
+/**
+ * Decision 31 replace step: clear THIS query's rejection rows before
+ * re-inserting the current pass's set. Parameterized on the query id alone -
+ * it can never touch another query's diagnostics, and it must run inside the
+ * wrapper's transaction (this module issues no transaction control of its own).
+ */
+const DELETE_BUILD_REJECTION_SQL =
+  'DELETE FROM build_rejection WHERE recommendation_query_id = $1';
+
 function fail(code, field, message) {
   throw new CandidateSelectionError(code, message, field);
 }
@@ -102,21 +129,32 @@ function validateClient(client) {
  * @param {object} args.client query executor exposing query(sql, params)
  * @param {string} args.queryId pinned recommendation_query.id
  * @param {Array} args.rejections Engine 2D candidate verdicts (validated by
- *        validateRejections); non-REJECT entries are ignored, and [] writes
- *        nothing.
+ *        validateRejections); non-REJECT entries are ignored. Must be an array
+ *        ([] means "this pass rejected nothing" and clears any stale rows).
  * @returns {Promise<object>} frozen { query_id, rejection_count,
- *          build_rejection_ids }
+ *          build_rejection_ids }. rejection_count is the size of THIS pass's
+ *          set - after a re-commit it equals the stored row count for the
+ *          query, never a multiple of it (Decision 31).
  * @throws CandidateSelectionError on a malformed input (no statement is
- *        issued) or the writer error unchanged.
+ *        issued - validation precedes the DELETE) or the writer error
+ *        unchanged (the wrapper's ROLLBACK undoes the DELETE too).
  */
 async function persistRejections({ client, queryId, rejections }) {
   validateClient(client);
 
   const rows = validateRejections({ queryId, rejections });
 
+  // Decision 31 (OG-33): replace, don't append. Validation already passed, so
+  // a malformed input never reaches this statement. Scoped to this query id;
+  // idempotent by construction - re-committing the same pass converges to the
+  // same rows instead of duplicating them, and a changed pass leaves no stale
+  // diagnostics behind.
+  await client.query(DELETE_BUILD_REJECTION_SQL, [queryId]);
+
   if (rows.length === 0) {
-    // A pass that rejected nothing writes nothing - the emptiness is the
-    // signal. Same no-op discipline as persistRanked on an empty selection.
+    // A pass that rejected nothing writes no rows - but the DELETE above has
+    // already made the table agree with that verdict (it clears anything an
+    // earlier commit for this query recorded). The emptiness is the signal.
     return Object.freeze({
       query_id: queryId,
       rejection_count: 0,
@@ -149,4 +187,4 @@ async function persistRejections({ client, queryId, rejections }) {
   });
 }
 
-module.exports = { persistRejections, INSERT_BUILD_REJECTION_SQL };
+module.exports = { persistRejections, INSERT_BUILD_REJECTION_SQL, DELETE_BUILD_REJECTION_SQL };

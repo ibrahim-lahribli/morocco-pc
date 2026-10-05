@@ -12,10 +12,14 @@
  *   - REJECT-ONLY filtering, including that a PASS/UNKNOWN verdict is skipped
  *     rather than written, which is the property that keeps UNKNOWN from being
  *     recorded as a rejection;
- *   - that a healthy pass (nothing rejected) issues ZERO statements;
+ *   - replace semantics (Decision 31, OG-33): every call issues the scoped
+ *     build_rejection DELETE first, so a re-commit converges instead of
+ *     duplicating, and a pass that rejected nothing clears stale rows rather
+ *     than writing zero statements;
  *   - NULL preservation: absent ids stay null in the params, never '' or 0;
  *   - every fail-fast path, and that no statement is issued when validation
- *     fails (a malformed diagnostic must never reach the database).
+ *     fails (validation precedes the DELETE, so a malformed diagnostic can
+ *     never reach the database).
  */
 
 const test = require('node:test');
@@ -26,6 +30,7 @@ const path = require('node:path');
 const {
   persistRejections,
   INSERT_BUILD_REJECTION_SQL,
+  DELETE_BUILD_REJECTION_SQL,
 } = require('./persist-rejections');
 const { validateRejections } = require('./validate-rejections');
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
@@ -87,13 +92,16 @@ async function rejectionOfAsync(fn) {
 
 // --- happy path ------------------------------------------------------------
 
-test('a REJECT verdict issues one parameterized INSERT and returns a UUID', async () => {
+test('a REJECT verdict issues the scoped DELETE then one INSERT, and returns a UUID', async () => {
   const client = createClient();
   const result = await persistRejections({ client, queryId: QUERY_ID, rejections: [rejection()] });
 
-  assert.equal(client.calls.length, 1);
-  assert.equal(client.calls[0].sql, INSERT_BUILD_REJECTION_SQL);
-  assert.deepEqual(client.calls[0].params.slice(1), [
+  assert.equal(client.calls.length, 2);
+  // Decision 31: replace step first, scoped to this query id only.
+  assert.equal(client.calls[0].sql, DELETE_BUILD_REJECTION_SQL);
+  assert.deepEqual(client.calls[0].params, [QUERY_ID]);
+  assert.equal(client.calls[1].sql, INSERT_BUILD_REJECTION_SQL);
+  assert.deepEqual(client.calls[1].params.slice(1), [
     QUERY_ID,
     'CPU',
     'p-cpu-1',
@@ -109,7 +117,7 @@ test('a REJECT verdict issues one parameterized INSERT and returns a UUID', asyn
   // The returned id must be the id SENT to the database. When the INSERT
   // omitted the id column, Postgres applied gen_random_uuid() and every
   // returned value pointed at a row that did not exist.
-  assert.equal(client.calls[0].params[0], result.build_rejection_ids[0]);
+  assert.equal(client.calls[1].params[0], result.build_rejection_ids[0]);
   assert.ok(Object.isFrozen(result));
   assert.ok(Object.isFrozen(result.build_rejection_ids));
 });
@@ -130,7 +138,7 @@ test('a partner pair and a variant are passed through; absent ids stay null', as
       }),
     ],
   });
-  assert.deepEqual(client.calls[0].params.slice(1), [
+  assert.deepEqual(client.calls[1].params.slice(1), [
     QUERY_ID,
     'GPU',
     'p-gpu',
@@ -140,7 +148,7 @@ test('a partner pair and a variant are passed through; absent ids stay null', as
     'GPU_TOO_LONG',
   ]);
   // NULL is never coerced to '' or 0 (AGENTS.md section 8).
-  for (const value of client.calls[0].params) {
+  for (const value of client.calls[1].params) {
     assert.notEqual(value, '');
     assert.notEqual(value, 0);
   }
@@ -157,13 +165,15 @@ test('every REJECT is written, in input order, with a distinct id', async () => 
       rejection({ product_id: 'c', reason: 'GPU_TOO_THICK' }),
     ],
   });
-  assert.equal(client.calls.length, 3);
+  assert.equal(client.calls.length, 4);
+  // calls[0] is the replace-step DELETE; the INSERTs follow in input order.
+  assert.equal(client.calls[0].sql, DELETE_BUILD_REJECTION_SQL);
   assert.deepEqual(
-    client.calls.map((c) => c.params[3]),
+    client.calls.slice(1).map((c) => c.params[3]),
     ['a', 'b', 'c']
   );
   assert.deepEqual(
-    client.calls.map((c) => c.params[7]),
+    client.calls.slice(1).map((c) => c.params[7]),
     ['CPU_SOCKET_MISMATCH', 'CPU_SOCKET_UNKNOWN', 'GPU_TOO_THICK']
   );
   assert.equal(result.rejection_count, 3);
@@ -172,19 +182,78 @@ test('every REJECT is written, in input order, with a distinct id', async () => 
 
 // --- the healthy case ------------------------------------------------------
 
-test('a pass that rejected nothing writes ZERO statements', async () => {
-  for (const rejections of [[], undefined, [rejection({ status: 'PASS', reason: null })]]) {
+test('a pass that rejected nothing issues ONLY the scoped DELETE (no INSERTs)', async () => {
+  for (const rejections of [[], [rejection({ status: 'PASS', reason: null })]]) {
     const client = createClient();
     const result = await persistRejections({
       client,
       queryId: QUERY_ID,
-      rejections: rejections === undefined ? [] : rejections,
+      rejections,
     });
-    assert.equal(client.calls.length, 0);
+    // Decision 31: "nothing rejected" still means "make the table agree" -
+    // the replace-step DELETE clears any stale rows an earlier commit of this
+    // query left behind, and no INSERT follows.
+    assert.equal(client.calls.length, 1);
+    assert.equal(client.calls[0].sql, DELETE_BUILD_REJECTION_SQL);
+    assert.deepEqual(client.calls[0].params, [QUERY_ID]);
     assert.equal(result.rejection_count, 0);
     assert.deepEqual(result.build_rejection_ids, []);
     assert.ok(Object.isFrozen(result.build_rejection_ids));
   }
+});
+
+// --- replace semantics (Decision 31, OG-33) --------------------------------
+
+test('the DELETE is the exact scoped statement: this query id, this table only', () => {
+  assert.equal(
+    DELETE_BUILD_REJECTION_SQL,
+    'DELETE FROM build_rejection WHERE recommendation_query_id = $1'
+  );
+  // No accidental widening: one predicate, one table - it can never reach
+  // another query's rows or another table's data.
+  assert.ok(!DELETE_BUILD_REJECTION_SQL.includes('AND'));
+  assert.ok(!DELETE_BUILD_REJECTION_SQL.includes('OR'));
+  assert.ok(!/build_candidate|recommendation_result|build_component/.test(DELETE_BUILD_REJECTION_SQL));
+});
+
+test('every call clears before it inserts, so a re-commit cannot append a duplicate set', async () => {
+  const verdicts = [
+    rejection({ product_id: 'a', reason: 'CPU_SOCKET_MISMATCH' }),
+    rejection({ product_id: 'b', reason: 'GPU_TOO_THICK' }),
+  ];
+  const sequences = [];
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const client = createClient();
+    await persistRejections({ client, queryId: QUERY_ID, rejections: verdicts });
+    sequences.push(client.calls.map((c) => c.sql));
+  }
+  const expected = [
+    DELETE_BUILD_REJECTION_SQL,
+    INSERT_BUILD_REJECTION_SQL,
+    INSERT_BUILD_REJECTION_SQL,
+  ];
+  // The DELETE is the FIRST statement of every call, before any INSERT.
+  assert.deepEqual(sequences[0], expected);
+  // A second commit of the same pass issues the identical sequence: it clears
+  // the rows the first commit wrote, then re-inserts the same set - the stored
+  // count converges instead of doubling (the defect OG-33 measured live:
+  // 1 row -> 2).
+  assert.deepEqual(sequences[1], sequences[0]);
+});
+
+test('a changed pass replaces: the DELETE runs even when the new set is empty', async () => {
+  // A first commit wrote two rejections; a later commit of the SAME query
+  // rejects nothing (its verdicts are all PASS). Without the unconditional
+  // DELETE the stale rows would survive alongside the newer state.
+  const client = createClient();
+  const result = await persistRejections({
+    client,
+    queryId: QUERY_ID,
+    rejections: [rejection({ status: 'PASS', reason: null })],
+  });
+  assert.equal(result.rejection_count, 0);
+  assert.equal(client.calls.length, 1);
+  assert.equal(client.calls[0].sql, DELETE_BUILD_REJECTION_SQL);
 });
 
 test('a real Engine 2D verdict shape is accepted verbatim (regression: `reason`, not `reason_code`)', () => {
@@ -222,8 +291,9 @@ test('PASS and UNKNOWN verdicts are skipped, never written', async () => {
     ],
   });
   assert.equal(result.rejection_count, 1);
-  assert.equal(client.calls.length, 1);
-  assert.equal(client.calls[0].params[3], 'p3');
+  assert.equal(client.calls.length, 2);
+  assert.equal(client.calls[0].sql, DELETE_BUILD_REJECTION_SQL);
+  assert.equal(client.calls[1].params[3], 'p3');
 });
 
 test('a verdict with no status field is treated as a rejection candidate', () => {
@@ -253,9 +323,9 @@ test('a malformed input is refused and issues NO statement', async () => {
     { rejections: [rejection({ reason: '   ' })] },
     { rejections: [rejection({ product_variant_id: '' })] },
     {
-      rejections: [rejection({ partner_product_id: 'p2' })],
-    },
-    {
+      // Decision 32: a variant without its product is still refused (the
+      // orphan variant can never identify a partner). A product WITHOUT a
+      // variant is now VALID and is covered by its own positive test below.
       rejections: [rejection({ partner_product_variant_id: 'v2' })],
     },
   ];
@@ -267,6 +337,34 @@ test('a malformed input is refused and issues NO statement', async () => {
     assert.ok(error.code, 'error carries an error code');
     assert.ok(client.calls.length === 0, 'no statement was issued');
   }
+});
+
+test('a product-keyed partner (product id, NULL variant) is accepted (Decision 32)', async () => {
+  // OG-32's decisive partners are product-keyed (CASE, PSU, MOTHERBOARD):
+  // refusing (product, null) made every one of them unstorable.
+  const client = createClient();
+  const result = await persistRejections({
+    client,
+    queryId: QUERY_ID,
+    rejections: [rejection({
+      component_role: 'GPU',
+      product_id: 'p-gpu',
+      partner_product_id: 'p-case',
+    })],
+  });
+  assert.equal(result.rejection_count, 1);
+  assert.equal(client.calls.length, 2);
+  // DELETE first (Decision 31), then the INSERT with the product-keyed
+  // partner: id present, variant null.
+  assert.deepEqual(client.calls[1].params.slice(1), [
+    QUERY_ID,
+    'GPU',
+    'p-gpu',
+    null,
+    'p-case',
+    null,
+    'CPU_SOCKET_MISMATCH',
+  ]);
 });
 
 test('queryId is required and must be a non-empty string', () => {
