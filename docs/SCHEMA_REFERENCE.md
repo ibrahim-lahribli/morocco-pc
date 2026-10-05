@@ -8,7 +8,7 @@ live database (`information_schema` / `pg_catalog`). Per `AGENTS.md` section 9,
 generated lookup so "does this column exist?" never requires reading 11 SQL files
 (the question that produced audit finding D2).
 
-<!-- schema-digest: f1daa82f581a25d9 -->
+<!-- schema-digest: 7257d1320bf172fe -->
 
 ## Enum vocabularies (14)
 
@@ -29,7 +29,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `ssd_form_factor` | M_2_2280 \| M_2_2242 \| M_2_2260 \| M_2_22110 \| SATA_25 \| SATA_35 \| U_2 \| PCIE_CARD \| MSATA \| NGFF |
 | `support_status` | ACTIVE \| DISCONTINUED \| END_OF_LIFE |
 
-## Tables (41)
+## Tables (42)
 
 ### `benchmark` (17 columns)
 
@@ -179,7 +179,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 
 **Indexes:** `build_rejection_pkey` · `idx_build_rejection_query` · `idx_build_rejection_role_reason`
 
-### `case_motherboard_form_factor` (5 columns)
+### `case_motherboard_form_factor` (6 columns)
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -188,12 +188,13 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `form_factor` | USER-DEFINED | NO |  |
 | `created_at` | timestamp without time zone | NO | now() |
 | `updated_at` | timestamp without time zone | NO | now() |
+| `support_status` | USER-DEFINED | YES |  |
 
 **Foreign keys:** `case_motherboard_form_factor_case_product_id_fkey`: `case_product_id` → `product.id` (ON DELETE NO ACTION)
 
 **Indexes:** `case_motherboard_form_factor_pkey` · `idx_case_mb_form_factor`
 
-### `case_radiator_support` (6 columns)
+### `case_radiator_support` (7 columns)
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -203,6 +204,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `position` | text | NO |  |
 | `created_at` | timestamp without time zone | NO | now() |
 | `updated_at` | timestamp without time zone | NO | now() |
+| `support_status` | USER-DEFINED | YES |  |
 
 **Foreign keys:** `case_radiator_support_case_product_id_fkey`: `case_product_id` → `product.id` (ON DELETE NO ACTION)
 
@@ -467,6 +469,26 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 
 **Indexes:** `idx_memory_type_name` · `memory_type_pkey`
 
+### `motherboard_memory_support` (7 columns)
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` 🔑 | uuid | NO | gen_random_uuid() |
+| `motherboard_product_id` | uuid | NO |  |
+| `memory_type_id` | uuid | NO |  |
+| `support_status` | USER-DEFINED | NO | 'PASS'::compatibility_status |
+| `source_note` | text | YES |  |
+| `created_at` | timestamp without time zone | NO | now() |
+| `updated_at` | timestamp without time zone | NO | now() |
+
+**Foreign keys:** `motherboard_memory_support_memory_type_id_fkey`: `memory_type_id` → `memory_type.id` (ON DELETE NO ACTION) · `motherboard_memory_support_motherboard_product_id_fkey`: `motherboard_product_id` → `product.id` (ON DELETE CASCADE)
+
+**CHECK constraints:**
+
+- `chk_mms_status_not_unknown` — CHECK ((support_status <> 'UNKNOWN'::compatibility_status))
+
+**Indexes:** `idx_mms_board_memory_type` · `idx_mms_motherboard_product_id` · `motherboard_memory_support_pkey`
+
 ### `motherboard_spec` (17 columns)
 
 | Column | Type | Null | Default |
@@ -519,12 +541,13 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 
 **Indexes:** `platform_pkey`
 
-### `platform_memory_support` (2 columns)
+### `platform_memory_support` (3 columns)
 
 | Column | Type | Null | Default |
 |---|---|---|---|
 | `platform_id` 🔑 | uuid | NO |  |
 | `memory_type_id` 🔑 | uuid | NO |  |
+| `support_status` | USER-DEFINED | YES |  |
 
 **Foreign keys:** `platform_memory_support_memory_type_id_fkey`: `memory_type_id` → `memory_type.id` (ON DELETE NO ACTION) · `platform_memory_support_platform_id_fkey`: `platform_id` → `platform.id` (ON DELETE NO ACTION)
 

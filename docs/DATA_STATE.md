@@ -12,7 +12,7 @@ Retention warning (AGENTS.md section 5): retention ties fall through to random
 database reset — reach figures below are one instance's draw, not a property of
 the catalog.
 
-## Row counts (41 tables)
+## Row counts (42 tables)
 
 | Table | Rows |
 |---|---|
@@ -36,6 +36,7 @@ the catalog.
 | `ingestion_record` | 0 |
 | `manufacturer` | 31 |
 | `memory_type` | 2 |
+| `motherboard_memory_support` | 7 |
 | `motherboard_spec` | 7 |
 | `platform` | 3 |
 | `platform_memory_support` | 4 |
@@ -50,7 +51,7 @@ the catalog.
 | `recommendation_query` | 0 |
 | `recommendation_result` | 0 |
 | `retailer_listing_alias` | 0 |
-| `schema_migrations` | 15 |
+| `schema_migrations` | 16 |
 | `scoring_model` | 1 |
 | `socket` | 3 |
 | `spec_provenance` | 0 |
