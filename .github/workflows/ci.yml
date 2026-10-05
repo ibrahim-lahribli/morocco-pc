@@ -13,5 +13,6 @@ jobs:
         with:
           node-version: '22'
       - run: npm run test:unit
+      - run: npm run test:scripts
       - run: node scripts/gen-decision-index.js --check
       - run: node scripts/verify-docs.js --offline

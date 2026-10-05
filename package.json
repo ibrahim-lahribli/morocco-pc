@@ -6,6 +6,7 @@
   "scripts": {
     "test:db": "node scripts/test-db.js",
     "test:unit": "node --test \"src/**/*.test.js\"",
+    "test:scripts": "node --test \"scripts/lib/*.test.js\"",
     "seed": "node scripts/run-seeds.js",
     "gen:decisions": "node scripts/gen-decision-index.js",
     "gen:schema": "node scripts/gen-schema-reference.js",
