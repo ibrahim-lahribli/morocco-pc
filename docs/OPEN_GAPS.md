@@ -71,7 +71,7 @@ Closed-row policy: a closed row stays in this table for one release cycle with i
 
 ### Data-research rows still open (2026-10-05), and what each is actually blocked on
 
-**Five** data-research rows remain, down from seven: **OG-31** (G850 modularity), **OG-27** (liquid pump heights + TDPs) and **OG-34** (AIR height placeholder) were each closable from work already done or from a spec-data pass, and are now closed. The five below each need something that does not yet exist, which is why they are grouped here rather than left to look equally actionable:
+**Five** data-research rows remain, down from the six listed here on 2026-10-04: **OG-27** (liquid pump heights + TDPs) and **OG-34** (AIR height placeholder) were both closable from a spec-data pass and are now closed (C-24, C-25), joining **OG-31** (G850 modularity), which had already left this list a commit earlier. The five below each need something that does not yet exist, which is why they are grouped here rather than left to look equally actionable:
 
 | Row | Live residue | Blocked on |
 |---|---|---|
