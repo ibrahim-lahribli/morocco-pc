@@ -174,7 +174,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 
 **CHECK constraints:**
 
-- `chk_build_rejection_partner_pair_complete` — CHECK ((((partner_product_id IS NULL) AND (partner_product_variant_id IS NULL)) OR ((partner_product_id IS NOT NULL) AND (partner_product_variant_id IS NOT NULL))))
+- `chk_build_rejection_partner_variant_requires_product` — CHECK (((partner_product_variant_id IS NULL) OR (partner_product_id IS NOT NULL)))
 - `chk_build_rejection_reason_not_blank` — CHECK ((btrim(reason_code) <> ''::text))
 
 **Indexes:** `build_rejection_pkey` · `idx_build_rejection_query` · `idx_build_rejection_role_reason`

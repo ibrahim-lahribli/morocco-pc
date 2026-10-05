@@ -23,7 +23,7 @@ points are the engine's public barrels (`src/recommendation/*/index.js`) and the
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–31). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–32). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
    To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
@@ -69,7 +69,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `docs/GLOSSARY.md` | Load-bearing vocabulary (status vocabulary, decision ids, the `D2` vs `Decision 2` collision) |
 | `docs/TEST_MAP.md` | Which test pins which contract — check before changing pinned behavior |
 | `docs/RECIPES/` | Task checklists: add a migration/seed/scoring-model/pair-evaluator/stage/status-claim |
-| `database/migrations/` | Authoritative schema (`001`–`014`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
+| `database/migrations/` | Authoritative schema (`001`–`015`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
 | `database/seeds/` | DML-only, idempotent seed data |
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |
 | `scripts/` | CLIs: migrations, seeds, schema verifiers, engine checks |
@@ -221,8 +221,9 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
    throwaway Neon DB; 39/39 tables, 336/336 columns, 14/14 enums — see `docs/OPEN_GAPS.md` C-15).
    The live-only benchmark drift it surfaced was RECONCILED 2026-10-04 by migration
    `012_reconcile_benchmark_drift.sql` (OG-25), so the tree reached `001→012`. The shared and TEST
-   databases are baselined in the `schema_migrations` ledger (OG-14) and both now stand at **014**
-   as of 2026-10-04 (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04).
+   databases are baselined in the `schema_migrations` ledger (OG-14) and both now stand at **015**
+   as of 2026-10-05 (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04,
+   `015_relax_rejection_partner.sql` / OG-32).
 6. **Migration ledger (OG-14, 2026-10-04).** `run-migrations.js` is ledger-driven: it records each
    applied filename in `schema_migrations` and applies only the pending tail, so it is re-runnable
    (the bare `CREATE TYPE` in `002_enums.sql` no longer aborts a second run). A database that
@@ -347,3 +348,7 @@ Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every
 - **Prove an implemented rule FIRES, not just that it returns 0 violations.** A rule with no violations is indistinguishable from a rule that never runs. Force the violation (e.g. set a cooler taller than every case) and assert the expected REJECT and reason code appear, then restore and assert the verdict set is byte-identical. For OG-10 this was the only check that distinguished a live rule from dead code.
 - **Un-deferring a Decision 26 rule is not a status edit — it is a new Decision.** Lifting OG-10 required: the rule, the loader columns, reason codes, unit tests, a Decision record, the register row plus a closed row, a CONTEXT line, AND updating `check-deferred-rules.js` so the standing gate stops calling an enforced rule latent. The gate bumping its hardcoded decision counts (now 28/34) is the documented `verify-docs` breakage for adding Decision N+1, not a regression — see the `agents-decision-range` check.
 
+
+- **In this environment a heredoc or shell redirection into `/tmp` is REFUSED, and backticks/'$' inside `node -e` are eaten by bash** — a `node -e` body containing SQL with '$1' or a backtick fence dies with `unexpected EOF` before Node runs. Build such strings from char codes (`String.fromCharCode(39)` for quotes, `96` for backticks) or write the file with a `node -e` that emits each line, then `node --check` it before running. Note a template literal needs NO `backslash-dollar` escape: writing `\`{1}`` emits a literal backslash into the SQL and Postgres fails with `syntax error at or near`.
+- **A row-COUNT assertion cannot detect a column silently going back to NULL.** OG-32's partner columns persisted correct rows while every id stayed NULL, and Decision 31's OG-33 harness counted rows only, so it would never have caught it. Whenever a fix is 'the value is finally populated', the durable pin must read the column back and assert its VALUE — a count-only pin passes against the original defect.
+- **Check whether a CHECK constraint forbids the fix before designing the producer.** 014's both-or-neither partner CHECK made every product-keyed partner unstorable, so fixing `filter.js` alone would have traded a NULL column for a `23514` on every real rejection. Relaxing the constraint was a prerequisite, not polish — and Postgres has no `ADD CONSTRAINT IF NOT EXISTS`, so a relax migration raises `42710` on re-application; single application comes from the OG-14 ledger, not the file.

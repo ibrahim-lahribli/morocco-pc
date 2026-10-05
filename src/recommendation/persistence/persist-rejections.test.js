@@ -323,9 +323,9 @@ test('a malformed input is refused and issues NO statement', async () => {
     { rejections: [rejection({ reason: '   ' })] },
     { rejections: [rejection({ product_variant_id: '' })] },
     {
-      rejections: [rejection({ partner_product_id: 'p2' })],
-    },
-    {
+      // Decision 32: a variant without its product is still refused (the
+      // orphan variant can never identify a partner). A product WITHOUT a
+      // variant is now VALID and is covered by its own positive test below.
       rejections: [rejection({ partner_product_variant_id: 'v2' })],
     },
   ];
@@ -337,6 +337,34 @@ test('a malformed input is refused and issues NO statement', async () => {
     assert.ok(error.code, 'error carries an error code');
     assert.ok(client.calls.length === 0, 'no statement was issued');
   }
+});
+
+test('a product-keyed partner (product id, NULL variant) is accepted (Decision 32)', async () => {
+  // OG-32's decisive partners are product-keyed (CASE, PSU, MOTHERBOARD):
+  // refusing (product, null) made every one of them unstorable.
+  const client = createClient();
+  const result = await persistRejections({
+    client,
+    queryId: QUERY_ID,
+    rejections: [rejection({
+      component_role: 'GPU',
+      product_id: 'p-gpu',
+      partner_product_id: 'p-case',
+    })],
+  });
+  assert.equal(result.rejection_count, 1);
+  assert.equal(client.calls.length, 2);
+  // DELETE first (Decision 31), then the INSERT with the product-keyed
+  // partner: id present, variant null.
+  assert.deepEqual(client.calls[1].params.slice(1), [
+    QUERY_ID,
+    'GPU',
+    'p-gpu',
+    null,
+    'p-case',
+    null,
+    'CPU_SOCKET_MISMATCH',
+  ]);
 });
 
 test('queryId is required and must be a non-empty string', () => {

@@ -3,7 +3,7 @@
 **GENERATED FILE — do not edit by hand.** Regenerate with `node scripts/gen-decision-index.js`
 (or `npm run gen:decisions`) after any change to `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 `node scripts/gen-decision-index.js --check` exits non-zero when this file is stale.
-Generated 2026-10-05 from RECOMMENDATION_ENGINE_DECISIONS.md (3987 lines).
+Generated 2026-10-05 from RECOMMENDATION_ENGINE_DECISIONS.md (4032 lines).
 
 Generated for audit finding **D5** (decision-log navigability): one row per decision with number,
 title, status, date and line anchor. Every status comes from the normalized `Status:` line at the
@@ -17,9 +17,9 @@ section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` a
 
 ## Open decisions
 
-None. All 31 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-05.
+None. All 32 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-05.
 
-## Global decisions (29 `## Decision` headings + 2 nested 4/5 aliases = 31)
+## Global decisions (30 `## Decision` headings + 2 nested 4/5 aliases = 32)
 
 | # | Title | Status | Date | DECISIONS.md line |
 |---|---|---|---|---|
@@ -52,6 +52,7 @@ None. All 31 global decisions (including the two nested 4/5 aliases) and all 5 E
 | 29 | REJECT verdicts are persisted per recommendation query | RESOLVED 2026-10-04; IMPLEMENTED and APPLIED 2026-10-04 — migration `014_build_rejection.sql` adds the `build_rejection` table and the commit wrapper now writes each Engine 2D REJECT verdict into it in the same transaction as the surviving builds. | 2026-10-04 | 3848 |
 | 30 | OG-10 un-deferred: the AIR-cooler height rule is now IMPLEMENTED | RESOLVED 2026-10-05; IMPLEMENTED 2026-10-05 — Decision 26 item B deferred four HARD rules (OG-09 cooler TDP vs CPU TDP, OG-10 AIR cooler height vs case clearance, OG-11 RAM module_count vs dimm_slots, OG-12 RAM capacity vs board max). This decision lifts the deferral for OG-10 ONLY. The other three remain EXPLICITLY DEFERRED and unenforced. | 2026-10-05 | 3881 |
 | 31 | build_rejection writes are replace-idempotent per query (OG-33) | RESOLVED 2026-10-05; IMPLEMENTED 2026-10-05 — the rejection writer now clears the query's `build_rejection` rows and re-inserts the current pass's set inside the commit transaction, so a re-commit converges instead of duplicating; guard 2 (Decision 19.2) is unchanged. Closes OG-33. | 2026-10-05 | 3939 |
+| 32 | a persisted rejection names its decisive partner (OG-32) | RESOLVED 2026-10-05; IMPLEMENTED and APPLIED 2026-10-05 — the Engine 2D candidate verdict gains two additive fields carrying the product identity of the partner the candidate decisively failed against, so a `build_rejection` row can now answer "against which partner" and not only "which candidate, and why". Migration `015_relax_rejection_partner.sql` relaxes the partner CHECK to permit a product-keyed partner. Closes OG-32. | 2026-10-05 | 3988 |
 
 ## Engine 3 contract decisions (Engine-3-local numbering; local 4–5 ARE global Decisions 4–5)
 
@@ -65,9 +66,9 @@ None. All 31 global decisions (including the two nested 4/5 aliases) and all 5 E
 
 ## Reconciliation
 
-- Global decisions: 31 = 29 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
+- Global decisions: 32 = 30 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
 - Engine-3-local contracts: 5 (`### Decision 1–5` under "Engine 3 contract decisions"; local 1–3 are NOT global 1–3, local 4/5 ARE global 4/5 — AGENTS.md §2).
-- Parsed headings: 29 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
+- Parsed headings: 30 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
 - Status source: each entry’s normalized `Status:` line (first content line). The generator exits
   non-zero if a decision is added without one, so this table cannot go stale silently.
 - Open decisions: none.

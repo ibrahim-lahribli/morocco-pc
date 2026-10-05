@@ -56,16 +56,20 @@
  * both back together.
  *
  * Shape decisions, and why:
- *   - partner_product_id / partner_product_variant_id are NULL together or
- *     neither, because a candidate verdict's decisive reason may not depend on
- *     a partner at all (e.g. CPU_SOCKET_UNKNOWN). The table's
- *     chk_build_rejection_partner_pair_complete CHECK enforces the pairing, so
- *     a half-populated row is impossible rather than merely avoided here.
+ *   - partner_product_id / partner_product_variant_id follow the Decision 32
+ *     / migration 015 rule: (NULL, NULL) means the decisive reason depended on
+ *     no partner (e.g. CPU_SOCKET_UNKNOWN); (id, NULL) is a PRODUCT-KEYED
+ *     partner (a CASE, PSU or MOTHERBOARD carries no variant - the normal case
+ *     for GPU_TOO_THICK); (id, variant) is a VARIANT-KEYED partner. Only an
+ *     orphan variant (NULL, id) is refused. The table's
+ *     chk_build_rejection_partner_variant_requires_product CHECK enforces the
+ *     pairing, so a half-populated row is impossible rather than merely
+ *     avoided here.
  *   - Still no uniqueness constraint on the row (unchanged from Decision 29):
  *     idempotency is the DELETE-then-INSERT shape above, not a key. That keeps
  *     the schema untouched (no migration) and sidesteps the NULL-distinct
- *     problem an ON CONFLICT key would inherit from the always-NULL partner
- *     columns (OG-32).
+ *     problem an ON CONFLICT key would inherit from the (id, NULL)
+ *     product-keyed rows (OG-32).
  *
  * Parameterization: one parameterized DELETE (scoped to this query) plus one
  * parameterized INSERT with a fixed arity, called once per rejected candidate.

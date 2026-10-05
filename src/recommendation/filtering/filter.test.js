@@ -684,6 +684,60 @@ test('B2-D: GPU<->CASE aggregates length and thickness into one pair verdict', (
   assert.equal(unknownGpu.reason, REASON_CODES.GPU_DIMENSIONS_UNKNOWN);
 });
 
+test('Decision 32 (OG-32): a REJECT verdict names its decisive partner; PASS/UNKNOWN verdicts carry nulls', () => {
+  // (a) PRODUCT-keyed partner: the CPU's decisive FAIL relationship is
+  // cpu_motherboard against the only MOTHERBOARD - a product with no variant.
+  const failingCompat = goldenCompat();
+  failingCompat.cpu_motherboard_exact = {
+    [MB_ID]: [cpuMotherboardExactRow({ support_status: 'FAIL' })],
+  };
+  const failing = filterCandidates(buildContext({
+    pool: [makeCandidate('CPU', CPU_ID), makeCandidate('MOTHERBOARD', MB_ID)],
+    specs: goldenSpecs(),
+    platform_by_socket: goldenPlatformBySocket(),
+    compat: failingCompat,
+  }));
+  const rejectedCpu = findResult(failing, 'CPU', CPU_ID);
+  assert.equal(rejectedCpu.status, CANDIDATE_STATUSES.REJECT);
+  assert.equal(rejectedCpu.reason, REASON_CODES.CPU_MOTHERBOARD_SUPPORT_FAIL);
+  assert.equal(rejectedCpu.partner_product_id, MB_ID);
+  assert.equal(rejectedCpu.partner_product_variant_id, null);
+
+  // (b) The same pair read from BOTH sides: the GPU names the product-keyed
+  // CASE behind GPU_TOO_LONG (variant null), and the CASE names the
+  // VARIANT-keyed GPU partner (both ids) - the two partner shapes migration
+  // 015's CHECK must accept.
+  const tooLong = goldenSpecs();
+  tooLong['v:' + GPU_VARIANT_ID] = gpuSpec({ length_mm: 400 });
+  const longResult = filterCandidates(buildContext({
+    pool: [makeCandidate('GPU', GPU_ID, GPU_VARIANT_ID), makeCandidate('CASE', CASE_ID)],
+    specs: tooLong,
+    platform_by_socket: {},
+    compat: goldenCompat(),
+  }));
+  const longGpu = findResult(longResult, 'GPU', GPU_ID);
+  assert.equal(longGpu.status, CANDIDATE_STATUSES.REJECT);
+  assert.equal(longGpu.reason, REASON_CODES.GPU_TOO_LONG);
+  assert.equal(longGpu.partner_product_id, CASE_ID);
+  assert.equal(longGpu.partner_product_variant_id, null);
+
+  const longCase = findResult(longResult, 'CASE', CASE_ID);
+  assert.equal(longCase.status, CANDIDATE_STATUSES.REJECT);
+  assert.equal(longCase.reason, REASON_CODES.GPU_TOO_LONG);
+  assert.equal(longCase.partner_product_id, GPU_ID);
+  assert.equal(longCase.partner_product_variant_id, GPU_VARIANT_ID);
+
+  // (c) PASS and UNKNOWN verdicts carry nulls: a survival has no decisive
+  // rejection to name (build_rejection persists REJECT verdicts only).
+  const golden = filterCandidates(goldenContext());
+  assert.ok(golden.results.length > 0);
+  for (const entry of golden.results) {
+    assert.equal(entry.partner_product_id, null);
+    assert.equal(entry.partner_product_variant_id, null);
+    assert.ok(Object.isFrozen(entry));
+  }
+});
+
 test('B2-D: GPU<->PSU aggregates wattage and connectors into one pair verdict', () => {
   // (a) wattage FAIL + connectors PASS -> FAIL (GPU_PSU_WATTAGE_INSUFFICIENT).
   const heavyGpuSpecs = goldenSpecs();
@@ -997,7 +1051,8 @@ test('B2-D: result records preserve the Engine 2C candidate identity exactly', (
         }
       );
       assert.deepEqual(Object.keys(entry).sort(), [
-        'category', 'compatibility_notes', 'component_role', 'product_id', 'product_variant_id',
+        'category', 'compatibility_notes', 'component_role', 'partner_product_id',
+        'partner_product_variant_id', 'product_id', 'product_variant_id',
         'reason', 'relationships', 'status', 'unknown_pairwise_count',
       ]);
       assert.ok(Object.isFrozen(entry));

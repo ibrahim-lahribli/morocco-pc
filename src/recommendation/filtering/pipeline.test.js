@@ -253,6 +253,9 @@ test('pipeline: composes the real loader and filter into the filtered result', a
       platform_memory: FINAL_STATUSES.PASS,
     },
     unknown_pairwise_count: 0,
+    // Decision 32: a PASS verdict names no decisive partner (nulls).
+    partner_product_id: null,
+    partner_product_variant_id: null,
     compatibility_notes: [],
   });
 });

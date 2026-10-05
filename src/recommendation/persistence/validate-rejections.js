@@ -32,10 +32,15 @@
  *   reason_code; that mapping happens in this validator, not in the caller.
  *   - `product_variant_id` and both partner ids are optional; when present they
  *     must be non-empty strings. NULL/undefined means "not applicable".
- *   - the partner pair must be both-present or both-absent, mirroring
- *     chk_build_rejection_partner_pair_complete at the schema level. This is
- *     checked here so the error names the field instead of surfacing as an
- *     opaque 23514 from the INSERT.
+ *   - the partner pair follows the Decision 32 / migration 015 rule: a
+ *     VARIANT without its PRODUCT is refused, but a PRODUCT without a variant
+ *     is VALID (a product-keyed partner - a CASE, a PSU - has no variant).
+ *     This mirrors chk_build_rejection_partner_variant_requires_product, and
+ *     is checked here so the error names the field instead of surfacing as an
+ *     opaque 23514 from the INSERT. (Before Decision 32 the rule was
+ *     both-present-or-both-absent, which made the decisive partner of any
+ *     product-keyed FAIL - e.g. the CASE behind GPU_TOO_THICK - unstorable,
+ *     exactly the OG-32 defect.)
  *   - an entry with a non-string or blank `reason_code` is rejected rather than
  *     defaulted: a REJECT always carries a decisive reason in filter.js, so a
  *     missing one means the caller passed something that is not a verdict.
@@ -172,15 +177,18 @@ function validateRejections({ queryId, rejections }) {
       index
     );
 
-    // Mirrors chk_build_rejection_partner_pair_complete, so the failure names
-    // the field instead of arriving as an opaque constraint violation.
+    // Decision 32 / migration 015: a variant-keyed partner always carries its
+    // product id (chk_build_rejection_partner_variant_requires_product); a
+    // product-keyed partner carries product id + NULL variant, which is the
+    // normal case for CASE/PSU/MOTHERBOARD partners and must be accepted -
+    // refusing it is what made OG-32's partner identity unstorable.
     const hasPartnerProduct = partnerProductId !== null;
     const hasPartnerVariant = partnerProductVariantId !== null;
-    if (hasPartnerProduct !== hasPartnerVariant) {
+    if (hasPartnerVariant && !hasPartnerProduct) {
       fail(
         ERROR_CODES.INVALID_FIELD_VALUE,
-        hasPartnerProduct ? 'partner_product_variant_id' : 'partner_product_id',
-        'rejections[' + index + '] partner ids must both be present or both be absent'
+        'partner_product_id',
+        'rejections[' + index + '] partner_product_variant_id requires partner_product_id'
       );
     }
 

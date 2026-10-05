@@ -507,7 +507,111 @@ async function testRejectionReplace(client, other, ctx, createdIds) {
 }
 
 // ---------------------------------------------------------------------------
-// Main: connect, preflight, run the six cases, clean up, report.
+// 7. Decision 32 / OG-32: the persisted rejection names its decisive partner.
+//    Migration 015 relaxed chk_build_rejection_partner_pair_complete to
+//    chk_build_rejection_partner_variant_requires_product, so a PRODUCT-KEYED
+//    partner (a CASE, PSU or MOTHERBOARD - the normal case behind GPU_TOO_THICK)
+//    is storable as (product_id, NULL). Under 014 the only storable shapes were
+//    (NULL, NULL) and (id, variant), so partner_product_id was always NULL and a
+//    stored row could not say AGAINST WHICH partner the candidate failed.
+// ---------------------------------------------------------------------------
+
+async function testRejectionPartnerIdentity(client, other, ctx, createdIds) {
+  console.log('\n--- 7. a persisted rejection names its decisive partner (Decision 32, OG-32) ---');
+  const queryId = await insertQuery(client, ctx.scoringModelId);
+  createdIds.push(queryId);
+
+  const [p0, p1] = ctx.productIds;
+  // A REAL product_variant row from the branch, so the variant-keyed partner
+  // shape is exercised against the real FK and not merely against the CHECK.
+  // The partner product id is taken from the same row, so the stored pair is
+  // internally coherent (the variant really belongs to that product).
+  const variantRow = (await client.query(
+    'SELECT pv.id, pv.product_id FROM product_variant pv ORDER BY pv.id LIMIT 1'
+  )).rows[0] || null;
+
+  const verdicts = [
+    {
+      component_role: 'GPU',
+      product_id: p0,
+      product_variant_id: null,
+      status: 'REJECT',
+      reason: 'GPU_TOO_THICK',
+      // PRODUCT-KEYED partner (the CASE behind the rejection): (id, NULL) is
+      // exactly what 014 CHECKed against and 015 permits.
+      partner_product_id: p1,
+      partner_product_variant_id: null,
+    },
+    {
+      component_role: 'CPU_COOLER',
+      product_id: p1,
+      product_variant_id: null,
+      status: 'REJECT',
+      reason: 'COOLER_TOO_TALL',
+      // VARIANT-KEYED partner: both ids, which 014 also allowed.
+      partner_product_id: variantRow ? variantRow.product_id : p0,
+      partner_product_variant_id: variantRow ? variantRow.id : null,
+    },
+  ];
+
+  await runRecommendationCommit(client, queryId, [], verdicts);
+
+  const rows = (await other.query(
+    'SELECT component_role, partner_product_id, partner_product_variant_id, reason_code'
+      + ' FROM build_rejection WHERE recommendation_query_id = $1 ORDER BY component_role',
+    [queryId]
+  )).rows;
+  assert(rows.length === 2, 'both rejections persisted (got ' + rows.length + ')');
+
+  const gpuRow = rows.find((r) => r.component_role === 'GPU');
+  const coolerRow = rows.find((r) => r.component_role === 'CPU_COOLER');
+
+  // The OG-32 defect in one assertion: this column was NULL on every row.
+  assert(gpuRow && gpuRow.partner_product_id === p1,
+    'GPU_TOO_THICK names its product-keyed partner (got '
+      + JSON.stringify(gpuRow && gpuRow.partner_product_id) + ', want ' + p1 + ')');
+  assert(gpuRow && gpuRow.partner_product_variant_id === null,
+    'a product-keyed partner stores NULL, never an empty string: '
+      + JSON.stringify(gpuRow && gpuRow.partner_product_variant_id));
+
+  if (variantRow) {
+    assert(coolerRow && coolerRow.partner_product_id === variantRow.product_id
+      && coolerRow.partner_product_variant_id === variantRow.id,
+    'a variant-keyed partner stores BOTH ids and survives the FK (got '
+      + JSON.stringify(coolerRow) + ')');
+  } else {
+    console.log('SKIP: no product_variant row on the branch; the variant-keyed partner'
+      + ' shape is pinned by the persistence unit tests instead');
+  }
+
+  // The orphan shape (NULL, variant) must be refused by the validator BEFORE
+  // any statement is issued - the writer no-write-on-bad-input contract.
+  await rejectsWith(
+    () => runRecommendationCommit(client, queryId, [], [{
+      component_role: 'GPU',
+      product_id: p0,
+      product_variant_id: null,
+      status: 'REJECT',
+      reason: 'GPU_TOO_THICK',
+      partner_product_id: null,
+      partner_product_variant_id: variantRow
+        ? variantRow.id
+        : '00000000-0000-0000-0000-000000000000',
+    }]),
+    (error) => error instanceof CandidateSelectionError
+      && error.code === ERROR_CODES.INVALID_FIELD_VALUE
+      && error.field === 'partner_product_id',
+    'INVALID_FIELD_VALUE on field partner_product_id',
+    'an orphan variant without its product is refused before any statement runs'
+  );
+
+  const after = await countsForQuery(other, queryId);
+  assert(after.rejections === 2,
+    'the refused commit changed no rows (still ' + after.rejections + ')');
+}
+
+// ---------------------------------------------------------------------------
+// Main: connect, preflight, run the seven cases, clean up, report.
 // ---------------------------------------------------------------------------
 
 async function main() {
@@ -543,6 +647,7 @@ async function main() {
     await testUnknownQueryId(client, ctx);
     await testZeroBuild(client, other, ctx, createdIds);
     await testRejectionReplace(client, other, ctx, createdIds);
+    await testRejectionPartnerIdentity(client, other, ctx, createdIds);
   } finally {
     if (connected) {
       try {
