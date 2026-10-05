@@ -26,6 +26,12 @@ const REASON_CODES = Object.freeze({
   RADIATOR_UNSUPPORTED: 'RADIATOR_UNSUPPORTED',
   RADIATOR_SUPPORT_UNKNOWN: 'RADIATOR_SUPPORT_UNKNOWN',
 
+  // Case <-> AIR cooler height (derived from numeric specs, Decision 26
+  // un-deferral of OG-10). A NULL cooler height or case clearance is UNKNOWN,
+  // never a PASS: an unmeasured cooler is not an unlimited one.
+  COOLER_TOO_TALL: 'COOLER_TOO_TALL',
+  COOLER_HEIGHT_UNKNOWN: 'COOLER_HEIGHT_UNKNOWN',
+
   // Platform <-> RAM memory type
   PLATFORM_MEMORY_TYPE_UNSUPPORTED: 'PLATFORM_MEMORY_TYPE_UNSUPPORTED',
   PLATFORM_MEMORY_SUPPORT_UNKNOWN: 'PLATFORM_MEMORY_SUPPORT_UNKNOWN',

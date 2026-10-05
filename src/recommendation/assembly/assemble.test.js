@@ -1011,8 +1011,8 @@ function o2MixedContext() {
       'p:mb-1': { socket_id: 'am5', memory_type_id: 'ddr5', form_factor: 'ATX' },
       'p:ram-1': { memory_type_id: 'ddr5' },
       'p:psu-1': { rated_wattage: 650 },
-      'p:case-1': { max_gpu_length_mm: 350, max_gpu_thickness_slots: 4 },
-      'p:cooler-1': { cooler_requires_radiator: false },
+      'p:case-1': { max_gpu_length_mm: 350, max_gpu_thickness_slots: 4, max_cpu_cooler_height_mm: 170 },
+      'p:cooler-1': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155 },
     }),
     platform_by_socket: Object.freeze({}),
     compat: Object.freeze({
@@ -1125,8 +1125,8 @@ test('Decision 23 O2: each co-occurring pair is counted once', () => {
       'p:mb-1': { socket_id: 'am5', memory_type_id: 'ddr5', form_factor: 'ATX' },
       'p:ram-1': { memory_type_id: 'ddr5' },
       'p:psu-1': { rated_wattage: 650 },
-      'p:case-1': { max_gpu_length_mm: 350, max_gpu_thickness_slots: 4 },
-      'p:cooler-1': { cooler_requires_radiator: false },
+      'p:case-1': { max_gpu_length_mm: 350, max_gpu_thickness_slots: 4, max_cpu_cooler_height_mm: 170 },
+      'p:cooler-1': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155 },
     }),
     platform_by_socket: Object.freeze({ am5: 'plat-am5' }),
     compat: Object.freeze({
@@ -1570,7 +1570,7 @@ test('Decision 26: a HIGH-TGP NULL connector FAIL prunes the (GPU, PSU) paths', 
 test('Decision 16: a GPU<->CASE FAIL prunes at the CASE pick', () => {
   const filteringContext = pairSpecContext({
     'v:gpu-1-var': { length_mm: 320, width_slots: 2 },
-    'p:case-small': { max_gpu_length_mm: 300, max_gpu_thickness_slots: 3 },
+    'p:case-small': { max_gpu_length_mm: 300, max_gpu_thickness_slots: 3, max_cpu_cooler_height_mm: 170 },
   });
   const results = [
     verdict('CPU', 'a-cpu'),

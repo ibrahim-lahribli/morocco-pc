@@ -176,8 +176,8 @@ function routes() {
       { product_id: AMBIGUOUS_MB_ID, socket_id: AMBIGUOUS_SOCKET_ID, form_factor: 'ATX', memory_type_id: MEMORY_TYPE_ID },
     ],
     RAM: [{ product_id: RAM_ID, memory_type_id: MEMORY_TYPE_ID }],
-    COOLER: [{ product_id: COOLER_ID, cooling_type: 'AIR' }],
-    CASE: [{ product_id: CASE_ID, max_gpu_length_mm: 360, max_gpu_thickness_slots: 3 }],
+    COOLER: [{ product_id: COOLER_ID, cooling_type: 'AIR', height_mm: 155 }],
+    CASE: [{ product_id: CASE_ID, max_gpu_length_mm: 360, max_gpu_thickness_slots: 3, max_cpu_cooler_height_mm: 170 }],
     PSU: [{
       product_id: PSU_ID, rated_wattage: 850, connector_24pin_atx: true,
       connector_eps_count: 2, connector_pcie_8pin: 2, connector_12vhpwr: 0, connector_sata: 4,

@@ -1,16 +1,25 @@
 'use strict';
 
 /**
- * Decision 26 item B violation gate — the four DEFERRED HARD rules
- * (OG-09, OG-10, OG-11, OG-12). Read-only; shared-DB safe.
+ * Decision 26 item B violation gate — the four HARD rules of architecture
+ * §5.3/§6 (OG-09, OG-10, OG-11, OG-12). Read-only; shared-DB safe.
  *
- * Why this exists: architecture §5.3/§6 specify four HARD rules that no
- * non-test module in `src/` implements — nothing reads `max_tdp_watts`,
- * `height_mm`, `max_cpu_cooler_height_mm`, `module_count` or
- * `max_memory_capacity_gb`. Decision 26 (2026-09-28) item B recorded them
- * as EXPLICITLY DEFERRED and UNENFORCED, which is only safe while the
- * catalog violates none of them (0 live violations measured 2026-09-28,
- * hence the "IMPORTANT (latent)" class in `docs/OPEN_GAPS.md`).
+ * SCOPE CHANGED 2026-10-05 (Decision 30). OG-10 (AIR cooler `height_mm` vs
+ * case `max_cpu_cooler_height_mm`) was UN-deferred and is now IMPLEMENTED and
+ * ENFORCED by `compatibility/cooler-height.js`. OG-09, OG-11 and OG-12 remain
+ * EXPLICITLY DEFERRED and UNENFORCED. This gate still measures all four: for
+ * the three deferred rules a violation is latent risk one seed away, and for
+ * OG-10 it now reports pairs the engine is ALREADY rejecting, so a non-zero
+ * count there is a live data defect rather than a theoretical one. The trigger
+ * below is unchanged and still binding.
+ *
+ * Why this exists: architecture §5.3/§6 specify four HARD rules. As of
+ * 2026-09-28 no non-test module in `src/` implemented any of them — nothing
+ * read `max_tdp_watts`, `height_mm`, `max_cpu_cooler_height_mm`,
+ * `module_count` or `max_memory_capacity_gb`. Decision 26 (2026-09-28) item B
+ * recorded them as EXPLICITLY DEFERRED and UNENFORCED, which is only safe
+ * while the catalog violates none of them (0 live violations measured
+ * 2026-09-28, hence the "IMPORTANT (latent)" class in `docs/OPEN_GAPS.md`).
  *
  * Decision 26 item 11 makes the re-check BINDING: "Any future seed that
  * adds or edits a CPU, cooler, case, motherboard or RAM row MUST re-run
@@ -347,8 +356,12 @@ async function main() {
 
     console.log('Decision 26 item B violation gate (read-only, DATABASE_URL)');
     console.log(
-      'The four DEFERRED HARD rules (architecture 5.3/6) are UNENFORCED in src/; ' +
-        'this gate is the binding pre-merge re-check (Decision 26 item 11).'
+      'Architecture 5.3/6 defines four HARD rules. OG-10 (AIR cooler height vs case ' +
+        'clearance) was UN-deferred and is now IMPLEMENTED and ENFORCED (Decision 30); ' +
+        'OG-09, OG-11 and OG-12 remain EXPLICITLY DEFERRED and UNENFORCED in src/. ' +
+        'This gate still measures all four and is still the binding pre-merge re-check ' +
+        '(Decision 26 item 11) - for OG-10 it now guards an ENFORCED rule, so a non-zero ' +
+        'violation count there is a live data defect, not merely latent risk.'
     );
 
     const coverage = (await client.query(COVERAGE_SQL)).rows[0];
@@ -408,10 +421,11 @@ async function main() {
     console.log('');
     console.log(
       totalViolations === 0
-        ? 'RESULT: PASS - 0 violations in every scope; the four rules stay LATENT (OG-09...OG-12)'
+        ? 'RESULT: PASS - 0 violations in every scope; OG-09/OG-11/OG-12 stay LATENT, OG-10 is ENFORCED and agrees'
         : 'RESULT: FAIL - ' +
             totalViolations +
-            ' violating pair(s) exist while the rules are UNENFORCED: an unsafe build is one seed away'
+            ' violating pair(s) exist: for the DEFERRED rules an unsafe build is one seed away, ' +
+            'and for the ENFORCED OG-10 these are pairs the engine is already rejecting (a data defect)'
     );
     process.exitCode = totalViolations === 0 ? 0 : 1;
     await client.end();

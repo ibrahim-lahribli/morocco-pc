@@ -23,7 +23,7 @@ points are the engine's public barrels (`src/recommendation/*/index.js`) and the
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–29). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–30). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
    To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
@@ -189,7 +189,7 @@ Command gotchas (verified 2026-09-28):
   no such var, so it exports an EMPTY value that shadows the one `dotenv` just loaded, and the
   failure surfaces as a bare `ERR` with an empty message.
 - Adding a decision to the log **breaks `verify-docs` by design**: `scripts/verify-docs.js` hardcodes
-  the expected heading and `Status:` counts (now 26 / 32) and derives AGENTS.md's required
+  the expected heading and `Status:` counts (now 28 / 34) and derives AGENTS.md's required
   "Decisions 1-N" from that parse. Bump both counts when you add Decision N+1, and update the
   `database/migrations/` range cited in AGENTS.md §4 or `migrations-range-documented` warns.
 - Writing a spec-data seed: put the guard in the DML, not only the header comment. `UPDATE..FROM
@@ -342,4 +342,7 @@ Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every
 - **A corrective seed's green exit does NOT prove every target row was corrected.** A `VALUES` row matching no product updates 0 rows with no error, because an UPDATE cannot violate a constraint the way an INSERT can. Renaming one target inside a transaction showed the other three corrected and the renamed one left stale, exit 0. To assert coverage, query the values back; to hard-fail on a miss you need a plpgsql `DO` block, which breaks the seeds directory's DML-only convention (008/009/010 all accept the documented exposure instead).
 - **Do NOT rehearse a seed inside `BEGIN`/`ROLLBACK` — the seed carries its own `COMMIT` and will commit your outer transaction.** Postgres lets the inner COMMIT end the outer one, so the ROLLBACK is a silent no-op and the rehearsal leaves its "temporary" damage live. This happened while probing seed 010: a renamed product and a stale 155 survived, and the only reason it was caught was a post-rollback assertion. Rehearse against the branch DB and repair forward, or wrap the whole probe so a wrong state is impossible.
 - **`product.name` has NO unique constraint** (`migrations/003_core_tables.sql`), so any seed matching `JOIN product p ON p.name = v.name` would silently widen to every duplicate rather than failing. Zero duplicates today, measured — but this is the same missing-unique-key family as OG-06's `store_offer`, and a future ingestion pass (F8) could introduce one.
+- **Adding a spec column to the loader breaks exact-shape test fixtures across FOUR files, and the failures are legitimate.** `deepStrictEqual` on a spec object fails on the new key even when the value is correct `null`. The fix is to give the fixture real data, never to relax the assertion: with the column absent the new pair is correctly UNKNOWN, so an "all-PASS" fixture would quietly stop being all-PASS. Sites hit when OG-10 landed: `filtering/context-loader.test.js`, `filtering/filter.test.js`, `filtering/integration.test.js`, `filtering/pipeline.test.js`, `assembly/assemble.test.js`.
+- **Prove an implemented rule FIRES, not just that it returns 0 violations.** A rule with no violations is indistinguishable from a rule that never runs. Force the violation (e.g. set a cooler taller than every case) and assert the expected REJECT and reason code appear, then restore and assert the verdict set is byte-identical. For OG-10 this was the only check that distinguished a live rule from dead code.
+- **Un-deferring a Decision 26 rule is not a status edit — it is a new Decision.** Lifting OG-10 required: the rule, the loader columns, reason codes, unit tests, a Decision record, the register row plus a closed row, a CONTEXT line, AND updating `check-deferred-rules.js` so the standing gate stops calling an enforced rule latent. The gate bumping its hardcoded decision counts (now 28/34) is the documented `verify-docs` breakage for adding Decision N+1, not a regression — see the `agents-decision-range` check.
 

@@ -71,7 +71,8 @@ function readRepo(rel) {
 // 2. Decision log parses to the expected counts with Status: lines.
 // 24 global headings (no ## Decision 4/5) + nested 1..5 where local 4/5
 // double as global 4/5 => 26 global decisions; 24 + 5 entries plus the
-// Decision 18 addendum each carry a Status: line => 30; Decision 27 added one => 31.
+// Decision 18 addendum each carry a Status: line => 30; Decision 27 added one
+// => 31; Decisions 28, 29 and 30 each added one more => 34.
 const decisions = (function checkDecisions() {
   const raw = readRepo('docs/RECOMMENDATION_ENGINE_DECISIONS.md');
   if (!raw.includes('\r\n')) {
@@ -89,9 +90,9 @@ const decisions = (function checkDecisions() {
     if (inEngine3 && /^### Decision \d+/.test(line)) nested += 1;
     if (/^Status:/.test(line)) status += 1;
   }
-  const ok = global === 27 && nested === 5 && status === 33;
+  const ok = global === 28 && nested === 5 && status === 34;
   if (!ok) {
-    fail('decisions-parse', 'global=' + global + ' (want 27), nested=' + nested + ' (want 5), Status:=' + status + ' (want 33)');
+    fail('decisions-parse', 'global=' + global + ' (want 28), nested=' + nested + ' (want 5), Status:=' + status + ' (want 34)');
     return null;
   }
   pass('decisions-parse', global + ' headings + ' + nested + ' nested = ' + (global + 2) + ' global, ' + status + ' Status: lines');

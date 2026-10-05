@@ -15,6 +15,7 @@ const {
   resolveCpuMotherboardSupport,
 } = require('./cpu-motherboard');
 const { resolveCoolerSocketSupport } = require('./cooler');
+const { resolveCoolerCaseHeight } = require('./cooler-height');
 const {
   resolveCaseMotherboardFormFactor,
   resolveCaseRadiator,
@@ -39,6 +40,7 @@ module.exports = {
   resolveCpuMotherboardSocket,
   resolveCpuMotherboardSupport,
   resolveCoolerSocketSupport,
+  resolveCoolerCaseHeight,
   resolveCaseMotherboardFormFactor,
   resolveCaseRadiator,
   resolvePlatformMemorySupport,

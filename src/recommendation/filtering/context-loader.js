@@ -230,13 +230,14 @@ SELECT product_id, memory_type_id
  ORDER BY product_id ASC`;
 
 const COOLER_SPEC_SQL = `
-SELECT product_id, cooling_type, radiator_size_mm
+SELECT product_id, cooling_type, radiator_size_mm, height_mm
   FROM cooler_spec
  WHERE product_id = ANY($1::uuid[])
  ORDER BY product_id ASC`;
 
 const CASE_SPEC_SQL = `
-SELECT product_id, max_gpu_length_mm, max_gpu_thickness_slots
+SELECT product_id, max_gpu_length_mm, max_gpu_thickness_slots,
+       max_cpu_cooler_height_mm
   FROM case_spec
  WHERE product_id = ANY($1::uuid[])
  ORDER BY product_id ASC`;
@@ -364,11 +365,23 @@ function normalizeSpecForRole(role, row) {
         // needs one, and an un-researched liquid cooler is UNKNOWN, never 0.
         radiator_size_mm: row.radiator_size_mm ?? null,
         radiator_position: null,
+        // cooler_spec.height_mm. For an AIR cooler this is the TOWER height,
+        // the dimension OG-10 compares against case
+        // max_cpu_cooler_height_mm (seed 010 replaced the 155 placeholder
+        // these rows all shared). For a LIQUID cooler it is the PUMP BLOCK
+        // height, a different physical dimension, so the resolver scopes the
+        // rule to AIR only. NULL is preserved exactly: an un-researched height
+        // is UNKNOWN, never 0 and never a pass.
+        height_mm: row.height_mm ?? null,
       };
     case 'CASE':
       return {
         max_gpu_length_mm: row.max_gpu_length_mm ?? null,
         max_gpu_thickness_slots: row.max_gpu_thickness_slots ?? null,
+        // case_spec.max_cpu_cooler_height_mm, the clearance side of OG-10.
+        // INTEGER with CHECK (> 0), so pg hands back a JS number; NULL stays
+        // NULL and the resolver reports UNKNOWN rather than assuming fit.
+        max_cpu_cooler_height_mm: row.max_cpu_cooler_height_mm ?? null,
       };
     case 'PSU':
       return {

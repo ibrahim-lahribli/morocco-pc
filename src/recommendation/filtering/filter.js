@@ -137,6 +137,7 @@ const {
   resolveCpuMotherboardSocket,
   resolveCpuMotherboardSupport,
   resolveCoolerSocketSupport,
+  resolveCoolerCaseHeight,
   resolveCaseMotherboardFormFactor,
   resolveCaseRadiator,
   resolvePlatformMemorySupport,
@@ -446,13 +447,21 @@ function evaluateCaseFormFactorPair(context, motherboard, caseCandidate) {
 }
 
 /**
- * CPU_COOLER <-> CASE: radiator compatibility (rule 5). The cooler spec
- * fields are passed through exactly as loaded - radiator_size_mm carries the
- * researched cooler_spec value (null for AIR) and cooler_requires_radiator
- * stays tri-state.
+ * CPU_COOLER <-> CASE: radiator compatibility (rule 5) and AIR-cooler height
+ * clearance (rule 6, OG-10). The cooler spec fields are passed through exactly
+ * as loaded - radiator_size_mm carries the researched cooler_spec value (null
+ * for AIR) and cooler_requires_radiator stays tri-state.
+ *
+ * Rule 6 is evaluated here, on the same CPU_COOLER <-> CASE pair, rather than
+ * as a separate relationship: it is the same two products and the same fit
+ * question, and the loader already carries both columns. The resolver scopes
+ * itself to AIR coolers and returns a no-reason PASS for anything else, so a
+ * liquid cooler is out of scope rather than wrongly judged on its pump-block
+ * height.
  */
 function evaluateCaseRadiatorPair(context, cooler, caseCandidate) {
   const coolerSpec = productSpecOf(context, cooler);
+  const caseSpec = productSpecOf(context, caseCandidate);
   return [
     resolveCaseRadiator({
       case_product_id: caseCandidate.product_id,
@@ -460,6 +469,13 @@ function evaluateCaseRadiatorPair(context, cooler, caseCandidate) {
       radiator_size_mm: coolerSpec ? coolerSpec.radiator_size_mm : null,
       radiator_position: coolerSpec ? coolerSpec.radiator_position : null,
       radiator_records: compatRowsOf(context, 'case_radiator', caseCandidate.product_id),
+    }),
+    resolveCoolerCaseHeight({
+      cooler_product_id: cooler.product_id,
+      case_product_id: caseCandidate.product_id,
+      cooling_type: coolerSpec ? coolerSpec.cooling_type : null,
+      cooler_height_mm: coolerSpec ? coolerSpec.height_mm : null,
+      case_max_cpu_cooler_height_mm: caseSpec ? caseSpec.max_cpu_cooler_height_mm : null,
     }),
   ];
 }

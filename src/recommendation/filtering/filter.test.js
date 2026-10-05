@@ -85,12 +85,23 @@ function coolerSpec(overrides = {}) {
     cooler_requires_radiator: false,
     radiator_size_mm: null, // AIR / un-researched: stays null (never invented)
     radiator_position: null,
+    // OG-10 rule 6: AIR tower height. 155mm against the fixture's 170mm case
+    // clearance, so the golden all-PASS pool stays genuinely all-PASS. With
+    // this null the rule would return UNKNOWN, which is correct but is not
+    // what an "everything passes" fixture should be exercising.
+    height_mm: 155,
     ...overrides,
   };
 }
 
 function caseSpec(overrides = {}) {
-  return { max_gpu_length_mm: 360, max_gpu_thickness_slots: 3, ...overrides };
+  return {
+    max_gpu_length_mm: 360,
+    max_gpu_thickness_slots: 3,
+    // OG-10 rule 6: CPU-cooler clearance.
+    max_cpu_cooler_height_mm: 170,
+    ...overrides,
+  };
 }
 
 function psuSpec(overrides = {}) {

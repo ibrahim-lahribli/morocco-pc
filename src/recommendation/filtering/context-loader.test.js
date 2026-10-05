@@ -190,6 +190,8 @@ test('specs keys use p:/v: prefixes and SQL rows are normalized', async () => {
   assert.deepEqual(context.specs['p:' + U(3)], { memory_type_id: P(20) });
   assert.deepEqual(context.specs['p:' + U(7)], {
     max_gpu_length_mm: 360, max_gpu_thickness_slots: 3,
+    // OG-10 clearance side. NULL here is the UNKNOWN branch, never 0.
+    max_cpu_cooler_height_mm: null,
   });
   // NUMERIC width_slots arrives as string, must be a number in the context.
   assert.deepEqual(context.specs['v:' + V(1)], {
@@ -291,6 +293,7 @@ test('cooler_spec.radiator_size_mm is carried through; NULL stays NULL (OG-28)',
     assert.deepEqual(context.specs['p:' + U(6)], {
       cooling_type: 'LIQUID', cooler_requires_radiator: true,
       radiator_size_mm: size, radiator_position: null,
+      height_mm: null,
     });
   }
 
@@ -311,6 +314,7 @@ test('cooler specs derive cooler_requires_radiator; cooling_type preserved', asy
   assert.deepEqual(context.specs['p:' + U(6)], {
     cooling_type: 'LIQUID', cooler_requires_radiator: true,
     radiator_size_mm: null, radiator_position: null,
+    height_mm: null,
   });
 
   const variants = { AIR: false, PASSIVE: false, LIQUID: true, HYBRID: null, null: null };

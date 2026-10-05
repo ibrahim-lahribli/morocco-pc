@@ -3871,3 +3871,61 @@ One bug worth recording, because the unit tests could not have caught it. The wr
 Verification. Branch-first: migration 014 applied to `TEST_DATABASE_URL` via the ledger, then the three guarded harnesses re-run green (`test-orchestrator-full-run.js` 28 pass / 0 fail; `test-orchestrator-commit.js` 29/0; `measure-orchestrator.js` exit 0). All seven schema constraints were probed against the live branch rather than assumed — a half-populated partner pair, a blank reason, a NULL reason, a NULL role and an out-of-enum role are all rejected, and deleting a query cascades its rows away. **Measured end-to-end on the branch and then the shared DB through the real `runRecommendationFullRun`:** a GAMING@10000 MAD pass surfaces 101 Engine 2D verdicts, 2 of them REJECT, and persists exactly 2 rows — `Seed ASUS GeForce RTX 5090 32 GB TUF GAMING` and `Seed GIGABYTE GeForce RTX 5080 16GB GAMING OC`, both `GPU_TOO_THICK` — committed alongside 6 `build_candidate` rows, identical on both databases. 15 new unit tests; the full suite is 876 pass / 0 fail, and each new test was mutation-checked by reverting the fix and confirming the test fails.
 
 Out of scope, deliberately. Pairwise rejections detected during assembly (`assemble.js` abandons a branch when an aggregated pair FAILs) are combinations rather than candidates and are NOT captured; closing that is a separate change. UNKNOWN verdicts are not persisted. No UI or API surface reads `build_rejection` yet — there is no such layer in this repository yet, so the payoff is queryable diagnostics rather than rendered output. `run.js` gained one additive `filter_verdicts` field to carry the verdicts to the writer; no existing consumer reads it, and the run-result shape pin was updated rather than worked around.
+
+---
+
+## Decision 30 — OG-10 un-deferred: the AIR-cooler height rule is now IMPLEMENTED (RESOLVED 2026-10-05)
+
+Status: RESOLVED 2026-10-05; IMPLEMENTED 2026-10-05 — Decision 26 item B deferred four HARD rules (OG-09 cooler TDP vs CPU TDP, OG-10 AIR cooler height vs case clearance, OG-11 RAM module_count vs dimm_slots, OG-12 RAM capacity vs board max). This decision lifts the deferral for OG-10 ONLY. The other three remain EXPLICITLY DEFERRED and unenforced.
+
+Date: 2026-10-05. Closes OG-10 (docs/OPEN_GAPS.md, see C-26). One rule added; no migration, no seed, no schema change.
+
+### Why now, and why this one first
+
+Decision 26 deferred these rules because their inputs were not trustworthy, not because the rules were wrong. That condition has now changed for exactly one of them, and the change is measurable rather than asserted:
+
+* **The input data was wrong until seed 010.** All four AIR coolers carried an identical placeholder `height_mm` of 155 (OG-34), one of them understated by 3 mm. Enforcing the rule against a placeholder is worse than not enforcing it: a 158 mm tower recorded as 155 mm PASSes a 156 mm case. Seed `010_air_cooler_heights.sql` replaced the placeholder with vendor-published heights (AG400 150, COREFROZR AA13 BLACK/WHITE 152, NH-U12S SE-AM5 158), each re-verified against the vendor for the seed itself.
+* **The loader never fetched either column.** `COOLER_SPEC_SQL` omitted `cooler_spec.height_mm` and `CASE_SPEC_SQL` omitted `case_spec.max_cpu_cooler_height_mm`, so the rule was not merely unenforced, it was unreachable. Both columns are now selected and normalized.
+* **Measured before implementing:** 4 AIR coolers x 10 cases = 40 pairs, **0 would-FAIL**. The smallest case clearance is 160 mm against a tallest cooler of 158 mm. Enforcing the rule is therefore behaviour-neutral on today's catalog: the full Engine 2C-2D pass returns 101 verdicts (87 PASS / 12 UNKNOWN / 2 REJECT) before and after, byte-identical.
+
+### Decision
+
+**The OG-10 height rule is ADOPTED as the shipped contract and implemented, scoped to AIR coolers only.**
+
+1. **Shipped semantics (exact).** `compatibility/cooler-height.js` `resolveCoolerCaseHeight`, evaluated on the existing CPU_COOLER <-> CASE pair alongside the radiator rule:
+
+   | condition | result |
+   |---|---|
+   | `height_mm <= max_cpu_cooler_height_mm` | PASS (evidence carries `headroom_mm`) |
+   | `height_mm > max_cpu_cooler_height_mm` | FAIL `COOLER_TOO_TALL` (evidence carries `over_by_mm`) |
+   | either value NULL / non-finite | UNKNOWN `COOLER_HEIGHT_UNKNOWN` |
+   | `cooling_type` positively non-AIR | PASS, `scope: not_applicable`, no reason |
+
+   The boundary is INCLUSIVE: a cooler exactly as tall as the published clearance fits, because the clearance is a maximum, not a recommendation with margin.
+
+2. **A NULL is UNKNOWN, never a PASS.** An unmeasured cooler is not an unlimited one. This is the property OG-34 was hiding, and it is pinned by unit test rather than by convention.
+
+3. **AIR ONLY, and the second reason is the binding one.** `cooler_spec.height_mm` means different physical things by `cooling_type`: for AIR it is the tower height that decides side-panel clearance, for LIQUID it is the pump-block height written by seed 009. Those are different constraints under one column name. A positively non-AIR cooler is out of scope — a no-reason PASS, so it can contribute neither a FAIL nor UNKNOWN noise to the aggregate — rather than being judged on a dimension the rule does not mean. A NULL `cooling_type` is NOT treated as out of scope: an unclassifiable cooler is not provably "not AIR", so it falls through to the numeric check and reports UNKNOWN unless a height is genuinely present. 50 liquid pairs therefore remain deliberately unmeasured.
+
+4. **Two new reason codes**, `COOLER_TOO_TALL` and `COOLER_HEIGHT_UNKNOWN`, added to `compatibility/reason-codes.js`. Reason codes are part of the resolver contract and may be persisted, so they are named once and never reused.
+
+### Rejected alternatives
+
+* **Cover all coolers in one rule (90 pairs):** rejected — it would judge a liquid pump-block height with a tower-height reason code, conflating two constraints that happen to share a column name.
+* **Two separate rules, AIR height and liquid pump height:** correct long-term and the eventual shape, but it is a larger change than the deferral warrants and needs its own decision. Recorded as the natural follow-up.
+* **Implement all four deferred rules together:** rejected — OG-11/OG-12 inputs were never wrong in the way OG-10's were, and bundling three unmeasured rules with one measured one would make the trigger meaningless.
+* **Treat the current 2 mm headroom as a safety guarantee:** rejected. It is a property of the present ten cases; a 158 mm-class case erases it. The rule is worth shipping because the DATA is now right, not because the catalog is forgiving.
+
+### Verification
+
+15 new unit tests in `compatibility/cooler-height.test.js` pin the tri-state contract, the inclusive boundary, the one-millimetre FAIL, the LIQUID exclusion (including that a 200 mm pump block against a 170 mm case does NOT reject), the NULL-`cooling_type` handling, and that NaN/Infinity/numeric-strings are UNKNOWN rather than coerced. Suite 876 -> 891 tests, 0 failures. Five existing fixtures that pinned the exact spec/verdict shape were given real cooler heights and case clearances, because with them absent the new pair is correctly UNKNOWN and an "all-PASS" fixture would stop being one; no assertion was weakened.
+
+End-to-end on the branch DB: the full pipeline returns 101 verdicts (87/12/2) unchanged on the real catalog, and forcing the AG400 to 200 mm — taller than every case in the catalog — produces a CPU_COOLER REJECT carrying `COOLER_TOO_TALL`, which is what proves the rule is live rather than merely present. Restoring the height returns the verdict set to byte-identical.
+
+### Standing obligation
+
+`scripts/check-deferred-rules.js` still reports all four rules. It must be updated or narrowed so it does not describe OG-10 as LATENT, and its "re-check before merging any cooler/RAM/case/motherboard seed" trigger now covers an ENFORCED rule as well as three deferred ones — a seed that adds a cooler taller than a case will start producing real REJECTs, and that is the intended behaviour, not a regression to be silenced.
+
+```text
+VERDICT: RESOLVED - OG-10 IMPLEMENTED (AIR-only, tri-state, NULL=UNKNOWN). OG-09/OG-11/OG-12 remain EXPLICITLY DEFERRED per Decision 26 item B. Live catalog behaviour-neutral: 40/40 AIR pairs PASS, full pass 101 verdicts unchanged (87 PASS / 12 UNKNOWN / 2 REJECT). Suite 891 tests, 0 failures.
+```
