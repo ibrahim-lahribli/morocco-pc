@@ -407,12 +407,17 @@ git commit -m "feat(tooling): add a behavioural check for a freshly replayed dat
 
 > **EXECUTED.** `temp_test_db_1789106515699` was dropped from the TEST Neon instance after the
 > inspect-then-destroy checks below: no script, JSON, workflow or doc referenced it (only this plan);
-> it held **0 rows in every table**, was 8.7 MB, had **26 tables but no `schema_migrations`** — a
-> stale partial schema snapshot from before the ledger existed, so it was not a runnable target and
-> held nothing not reproducible from `database/migrations/`. Zero active connections.
+> it held **0 rows in every table**, was 8.7 MB, and had **26 tables**. Zero active connections.
 > The TEST instance now holds exactly `neondb` and `postgres`. The live work database was verified
 > untouched afterwards: `verify-docs --live` → `products=100 variants=22 offers=101
-> assessments=280`, schema digest `f1daa82f581a25d9`.
+> assessments=280`, schema digest `f1daa82f581a25d9`, and `schema_migrations` = 15.
+>
+> **How its age was established** (corrected 2026-10-05): it lacked `component_assessment` and
+> `scoring_model` (migration `008`) and `store_offer` (migration `009`), so it predates `008`/`009`
+> and could never be brought current without replaying migrations into it. An earlier note here
+> attributed the missing `schema_migrations` table to the ledger being young; that inference was
+> wrong — **no migration creates `schema_migrations`**, `run-migrations.js` does (OG-14), so its
+> absence only shows the database was not built through the ledger runner and dates nothing.
 
 `temp_test_db_1789106515699` sits on the TEST Neon instance. It predates this session and is not
 referenced by any script.
