@@ -10,7 +10,8 @@
     "seed": "node scripts/run-seeds.js",
     "gen:decisions": "node scripts/gen-decision-index.js",
     "gen:schema": "node scripts/gen-schema-reference.js",
-    "verify:docs": "node scripts/verify-docs.js"
+    "verify:docs": "node scripts/verify-docs.js",
+    "verify:replay": "node scripts/verify-migrations-replay.js --test-db"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
