@@ -83,6 +83,32 @@
 --     row is provably left alone.
 --   * The UPDATE is additionally constrained to cooling_type = 'AIR', so a
 --     name ever re-typed onto a LIQUID row cannot receive an air-tower height.
+--
+-- ONE PROPERTY OF THIS FILE, measured 2026-10-05 and recorded because it is
+-- invisible from the SQL. A VALUES row whose product name matches NOTHING
+-- updates zero rows, and the file still exits 0 - there is no error and no
+-- row count, because the correction is an UPDATE (not an INSERT that could
+-- violate a constraint). Proven by renaming one target product and re-applying
+-- inside a transaction: the other three were corrected, the renamed row stayed
+-- at 155, and the apply reported success. So the "exact product name" match is
+-- silent about a renamed or missing product, and a green run of this file is
+-- NOT evidence that all four rows were touched.
+-- Two things bound the risk rather than remove it: every name here is verified
+-- to originate in an EARLIER seed (001_minimal_builds.sql and
+-- 002_catalog_expansion.sql), so a from-zero replay does find all four; and
+-- `product.name` carries NO unique constraint, so a duplicate name would widen
+-- this UPDATE to both rows instead of failing (measured: zero duplicates today).
+-- Adding a hard failure here would need a plpgsql DO block, which breaks this
+-- directory's DML-only convention, so the exposure is documented instead of
+-- guarded - the same trade seeds 008 and 009 make.
+--
+-- NOT IN SCOPE, but found while reviewing this file: 001 and 002 also
+-- hard-code length_mm = 120 and width_mm = 120 for all four AIR coolers, so
+-- the identical-placeholder defect survives in the two sibling columns of the
+-- very rows this seed corrects. Those columns are read by no engine module
+-- (COOLER_SPEC_SQL selects only product_id, cooling_type, radiator_size_mm),
+-- so the residue is inert; it is registered as OG-35 rather than fixed here,
+-- because fixing it is a research task and this file is a height correction.
 -- ===========================================================================
 
 BEGIN;
