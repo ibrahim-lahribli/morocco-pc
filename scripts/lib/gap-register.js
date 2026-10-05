@@ -71,6 +71,16 @@ const MENTION_RE = /OG-\d{2}/g;
 /** A row of the closed tables (sections 2/3), which cite gap ids by subject. */
 const CLOSED_ROW_RE = /^\|\s*C-\d{2}\s*\|/;
 
+/**
+ * A row of section 1's data-research sub-table, which repeats a gap id in BOLD
+ * and has three columns (Row | Live residue | Blocked on). It is deliberately
+ * not matched by ROW_RE, which requires a bare `OG-nn` first cell.
+ */
+const SUBTABLE_ROW_RE = /^\|\s*\*\*OG-\d{2}\*\*\s*\|/;
+
+/** A table header row, used to learn that table's column count. */
+const TABLE_HEADER_RE = /^\|\s*ID\s*\|/;
+
 /** Any line that belongs to a markdown table. */
 const TABLE_LINE_RE = /^\|/;
 
@@ -98,6 +108,15 @@ function parseGapRegister(markdown) {
   const problems = [];
   const rowLineById = new Map();
   const closedTableIds = new Set();
+  // Column count of the table currently being scanned, learned from its own
+  // header row rather than hardcoded, so adding a column later needs no edit.
+  // null means "no header seen yet for this table": the closed-row check is
+  // then skipped rather than guessing, so a C-row in an excerpt that carries no
+  // header cannot be reported against the wrong column count.
+  let currentTableCells = null;
+  // Line index of the previous data-research sub-table row, so a blank line
+  // splitting that table can be detected.
+  let prevSubRowIdx = null;
 
   for (let i = 0; i < lines.length; i++) {
     // A row must not be followed directly by prose. Markdown ends a table at
@@ -130,12 +149,66 @@ function parseGapRegister(markdown) {
     // that table, not by section 1 — see the module header on the closed-row
     // policy. Only the ID and Item cells count; a closed row's resolution prose
     // may name-drop other gaps, and those still need a row of their own.
+    // A header row tells us how many columns the table below it has. Section 1
+    // has 6; the closed tables have 4. Reading it here keeps the closed-table
+    // cell check from needing a hardcoded constant.
+    if (TABLE_HEADER_RE.test(lines[i])) {
+      currentTableCells = lines[i].split('|').length - 2;
+    } else if (HEADING_RE.test(lines[i])) {
+      // A new section means a new table; its shape is unknown until its header.
+      currentTableCells = null;
+    }
+
+    // The data-research sub-table must be ONE table. A blank line ends a
+    // markdown table, so a blank line between two of its rows renders the tail
+    // as a headerless fragment — the exact defect fixed in a95353a, which this
+    // check exists to stop recurring.
+    if (SUBTABLE_ROW_RE.test(lines[i])) {
+      if (prevSubRowIdx !== null) {
+        for (let j = prevSubRowIdx + 1; j < i; j += 1) {
+          if (lines[j].trim() === '') {
+            problems.push({
+              code: 'SUBTABLE_SPLIT',
+              id: 'table',
+              line: j + 1,
+              detail:
+                'a blank line splits the section 1 data-research sub-table; markdown ' +
+                'ends a table at the blank line, so the rows after it render as a ' +
+                'headerless fragment. ROW_RE does not match this table’s bolded ids, ' +
+                'so no other check sees it.',
+            });
+            break;
+          }
+        }
+      }
+      prevSubRowIdx = i;
+    }
+
     if (CLOSED_ROW_RE.test(lines[i])) {
       const cells = lines[i].split('|');
       for (const cell of [cells[1], cells[2]]) {
         for (const id of (cell || '').match(MENTION_RE) || []) {
           closedTableIds.add(id);
         }
+      }
+
+      // Closed-table rows were previously exempt from every cell check. A row
+      // that lost a cell renders as a broken table exactly like a section 1 row
+      // does, so it is checked against its own table's header column count.
+      const cellCount = cells.length - 2;
+      if (currentTableCells !== null && cellCount !== currentTableCells) {
+        problems.push({
+          code: 'CLOSED_ROW_CELL_COUNT',
+          id: (cells[1] || '').trim(),
+          line: i + 1,
+          detail:
+            'closed-table row has ' +
+            cellCount +
+            ' cells, expected ' +
+            currentTableCells +
+            ' from its table header; a missing cell makes the row render as a ' +
+            'broken table',
+        });
       }
       continue;
     }
@@ -148,6 +221,12 @@ function parseGapRegister(markdown) {
     const cells = lines[i].split('|').length - 2; // leading + trailing empties
 
     ids.push(id);
+
+    // A header governs the rows that immediately follow it in the SAME table.
+    // Once a section 1 gap row appears, the pending header no longer describes
+    // whatever comes next, so the closed-row check falls back to "unknown"
+    // rather than checking a C-row against section 1's 6 columns.
+    currentTableCells = null;
 
     if (rowLineById.has(id)) {
       problems.push({

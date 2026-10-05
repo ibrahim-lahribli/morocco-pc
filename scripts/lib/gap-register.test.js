@@ -10,6 +10,8 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { parseGapRegister } = require('./gap-register');
 
@@ -24,6 +26,86 @@ function row(id, gap) {
 }
 
 describe('parseGapRegister', () => {
+  // The closed tables (sections 2/3) were exempt from every cell check: a row
+  // that lost a cell renders as a broken table exactly like a section 1 row.
+  it('flags a closed-table row whose cell count does not match its header', () => {
+    const md = [
+      HEADER,
+      row('OG-01', 'a'),
+      '## 3. Closed',
+      '| ID | Item | Status | Resolution |',
+      '|---|---|---|---|',
+      '| C-30 | **OG-01 — something** | CLOSED 2026-10-05 |',
+    ].join('\n');
+    const r = parseGapRegister(md);
+    const p = r.problems.find((x) => x.code === 'CLOSED_ROW_CELL_COUNT');
+    assert.ok(p, 'expected a CLOSED_ROW_CELL_COUNT problem');
+    assert.equal(p.id, 'C-30');
+  });
+
+  it('accepts a well-formed closed-table row', () => {
+    const md = [
+      HEADER,
+      row('OG-01', 'a'),
+      '## 3. Closed',
+      '| ID | Item | Status | Resolution |',
+      '|---|---|---|---|',
+      '| C-30 | **OG-01 — something** | CLOSED 2026-10-05 | four cells here |',
+    ].join('\n');
+    const r = parseGapRegister(md);
+    assert.deepEqual(
+      r.problems.filter((x) => x.code === 'CLOSED_ROW_CELL_COUNT'),
+      [],
+    );
+  });
+
+  // The sub-table's bolded ids never matched ROW_RE, so a blank line splitting
+  // it was invisible — the defect fixed in commit a95353a.
+  it('flags a blank line that splits the data-research sub-table', () => {
+    const md = [
+      HEADER,
+      row('OG-01', 'a'),
+      '',
+      '| Row | Live residue | Blocked on |',
+      '|---|---|---|',
+      '| **OG-06** | residue | blocked |',
+      '',
+      '| **OG-29** | residue | blocked |',
+    ].join('\n');
+    const r = parseGapRegister(md);
+    const p = r.problems.find((x) => x.code === 'SUBTABLE_SPLIT');
+    assert.ok(p, 'expected a SUBTABLE_SPLIT problem');
+    assert.equal(p.line, 8); // the blank line between the two sub-table rows
+  });
+
+  it('accepts an unbroken data-research sub-table', () => {
+    const md = [
+      HEADER,
+      row('OG-01', 'a'),
+      '',
+      '| Row | Live residue | Blocked on |',
+      '|---|---|---|',
+      '| **OG-06** | residue | blocked |',
+      '| **OG-29** | residue | blocked |',
+    ].join('\n');
+    const r = parseGapRegister(md);
+    assert.deepEqual(r.problems.filter((x) => x.code === 'SUBTABLE_SPLIT'), []);
+  });
+
+  // Keeps the gate honest: it fails the moment the shipped register is edited
+  // into a shape the parser rejects.
+  it('accepts the shipped register', () => {
+    const md = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'docs', 'OPEN_GAPS.md'),
+      'utf8',
+    );
+    const r = parseGapRegister(md);
+    assert.deepEqual(
+      r.problems.map((p) => p.code + ' line ' + p.line + ': ' + p.detail),
+      [],
+    );
+  });
+
   it('accepts a well-formed register', () => {
     const md = [HEADER, row('OG-01', 'a'), row('OG-26', 'b')].join('\n');
     const r = parseGapRegister(md);
@@ -74,10 +156,17 @@ describe('parseGapRegister', () => {
   });
 
   it('ignores closed-table C-nn ids and prose without an OG mention', () => {
+    // The closed table has FOUR columns. The fixture previously hung 2-cell
+    // rows directly under section 1's 6-column header, a shape the real
+    // document never has, which the CLOSED_ROW_CELL_COUNT check rightly
+    // rejects. Same assertions, structurally valid fixture.
     const md = [
-      HEADER,
-      '| C-14 | OG-24 residue |',
-      '| C-16 | OG-01 closed |',
+      '## 3. Closed',
+      '',
+      '| ID | Item | Status | Resolution |',
+      '|---|---|---|---|',
+      '| C-14 | OG-24 residue | CLOSED 2026-09-29 | resolved |',
+      '| C-16 | OG-01 closed | CLOSED 2026-09-28 | resolved |',
       '',
       'Nothing to see; no gap ids here.',
     ].join('\n');
