@@ -321,6 +321,15 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
   CPU/GPU pair-diversity claims `measure-orchestrator.js` was built for. Before citing a criterion,
   match it to the decision's own `## Decision NN` heading; `Status:` lines do not disambiguate when
   one decision cross-references another.
+- **`.env` is loaded by the scripts themselves, not the shell.** Every DB-touching entry point
+  calls `require('dotenv').config()` internally (`check-offer-freshness.js:35`,
+  `verify-migrations-replay.js:309`, `verify-docs.js:258`), so `DATABASE_URL` is absent from
+  `process.env` in a bare shell yet the commands still work. Do not conclude a secret is unset from
+  the shell alone. In CI there is no `.env`, so the workflow must pass both URLs via `env:`.
+- **`TEST_DATABASE_URL` is only usable together with `DATABASE_URL`, and the two must be different
+  hosts.** `resolveTestDbUrl` needs both and compares normalized hostnames (a `-pooler` suffix is
+  stripped first), so it throws if they match. Any CI job or script touching the test DB therefore
+  needs both secrets wired up, not just the test one.
 
 - **Engine 6 status is stale in prose.** `src/recommendation/explanation/` exists and
   `orchestrator/full-run.js` wires it (Decision 22 items 2/3/4, plus 7 and 8a/8b), while some

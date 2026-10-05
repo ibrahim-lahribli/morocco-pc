@@ -223,6 +223,23 @@ The workflow runs on `ubuntu-latest` with no `.env`. It therefore needs `DATABAS
 `TEST_DATABASE_URL` configured as **repository secrets**. Confirm with the repository owner that they
 exist; if they do not, stop and say so rather than committing a job that cannot work.
 
+> **Status 2026-10-05: BLOCKED — not started.** Neither secret is configured on the repository, so
+> Steps 2-6 are not executed. Verified while blocked: `check-offer-freshness.js --fail-days=14`
+> passes locally (`RESULT: PASS`, 101 offers, first expiry 2026-11-03, 28.9 days), and the equals
+> form is confirmed mandatory — `--fail-days 14` prints usage and exits 2.
+>
+> Two facts that make this harder than "add two secrets", both verified in the source:
+> 1. **Both** secrets are required, not just the test one. `resolveTestDbUrl` (`scripts/lib/db-url.js`)
+>    needs `TEST_DATABASE_URL` *and* `DATABASE_URL`, and throws when their normalized hostnames
+>    match — a `-pooler` suffix is stripped before comparing, so pooled and direct URLs to the same
+>    Neon endpoint still count as the same host.
+> 2. The scripts self-load `.env` via dotenv (`check-offer-freshness.js:35`,
+>    `verify-migrations-replay.js:309`), so they work locally with an empty shell but have nothing to
+>    read in CI. The workflow's `env:` block is the only source there.
+>
+> To unblock: add both as repository secrets pointing at the live instance and its separate TEST
+> instance, then run Steps 2-6 unchanged. A dry run of Steps 4-5 is possible today.
+
 - [ ] **Step 2: Add the triggers to `ci.yml`**
 
 Add to the existing `on:` block, keeping `push` and `pull_request`:
