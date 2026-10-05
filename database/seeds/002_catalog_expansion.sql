@@ -708,9 +708,9 @@ FROM (VALUES
     ('Seed Corsair 3500X White',                410, 3, 170, 180),
     ('Seed Corsair 3500X Black',                410, 3, 170, 180),
     ('Seed Corsair iCUE LINK 3500X ARGB White', 410, 3, 170, 180),
-    ('Seed MSI MAG PANO 100R PZ Blanc',         390, 3, 175, 200),
+    ('Seed MSI MAG PANO 100R PZ Blanc',         390, 3, 166, 200),
     ('Seed MSI MPG VELOX 100R WHITE',           380, 3, 175, 250),
-    ('Seed MSI MAG FORGE 320R AIRFLOW White',   390, 3, 161, 210)
+    ('Seed MSI MAG FORGE 320R AIRFLOW White',   390, 3, 160, 210)
 ) AS v(name, gpu_len, gpu_slots, cooler_h, psu_len)
 JOIN product p ON p.name = v.name
 WHERE NOT EXISTS (SELECT 1 FROM case_spec cs WHERE cs.product_id = p.id);
