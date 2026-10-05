@@ -35,8 +35,18 @@
  *   missing from one snapshot is treated as an empty array, never as agreement.
  */
 function compareSchemaSnapshot(fresh, live) {
-  const freshSide = fresh || {};
-  const liveSide = live || {};
+  // A missing snapshot is a bug in the caller, not an empty schema. Treating
+  // null as {} would report hasDrift:false -- a false green from a gate whose
+  // whole job is to catch drift -- so refuse rather than guess.
+  if (fresh === null || fresh === undefined || live === null || live === undefined) {
+    throw new TypeError('compareSchemaSnapshot requires both snapshots');
+  }
+  if (typeof fresh !== 'object' || typeof live !== 'object') {
+    throw new TypeError('compareSchemaSnapshot requires snapshot objects');
+  }
+
+  const freshSide = fresh;
+  const liveSide = live;
 
   // Union of class names: a class present on only one side is drift, so it must
   // appear in the result rather than being dropped by whichever side was absent.

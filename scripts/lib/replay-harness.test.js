@@ -136,4 +136,53 @@ describe('verify-migrations-replay helpers', () => {
     await withScratchDatabase(client, SCRATCH_DB, async () => 'done', { keepDb: true });
     assert.doesNotMatch(client.calls.join('\n'), /DROP DATABASE/);
   });
+
+  // Throwing from a finally block replaces the in-flight exception, so a failed
+  // DROP buries the migration error that actually caused the run to stop.
+  it('a failing cleanup does not mask the original error', async () => {
+    const client = {
+      calls: [],
+      query: async (sql) => {
+        client.calls.push(sql);
+        if (/DROP DATABASE/.test(sql)) throw new Error('DROP refused: being accessed');
+        return { rows: [] };
+      },
+    };
+    await assert.rejects(
+      withScratchDatabase(client, SCRATCH_DB, async () => {
+        throw new Error('REAL BUG: migration 003 failed');
+      }),
+      /REAL BUG/,
+      'the body error must win over the cleanup error',
+    );
+  });
+
+  it('attaches the cleanup error to the original error for diagnosis', async () => {
+    const client = {
+      calls: [],
+      query: async (sql) => {
+        if (/DROP DATABASE/.test(sql)) throw new Error('DROP refused: being accessed');
+        return { rows: [] };
+      },
+    };
+    await withScratchDatabase(client, SCRATCH_DB, async () => {
+      throw new Error('REAL BUG: migration 003 failed');
+    }).catch((err) => {
+      assert.match(err.cleanupError, /DROP refused/);
+    });
+  });
+
+  it('a failing cleanup IS reported when the body succeeded', async () => {
+    const client = {
+      calls: [],
+      query: async (sql) => {
+        if (/DROP DATABASE/.test(sql)) throw new Error('DROP refused: being accessed');
+        return { rows: [] };
+      },
+    };
+    await assert.rejects(
+      withScratchDatabase(client, SCRATCH_DB, async () => 'done'),
+      /DROP refused/,
+    );
+  });
 });

@@ -124,12 +124,30 @@ async function dropScratchDatabase(client, name) {
 
 // Cleanup runs on BOTH the success and the failure path, so an interrupted or
 // failing migration never leaves a half-built database lying around.
+//
+// A cleanup failure must not swallow the error that got us here. Throwing from
+// a finally block replaces the in-flight exception, so a DROP that failed
+// (say, another session held a connection) would bury the actual cause — the
+// migration that failed — and send the reader to debug the wrong thing. So the
+// body's error wins, and the cleanup failure is attached to it. Only when the
+// body succeeded does a cleanup failure surface on its own, because then it is
+// the only problem there is.
 async function withScratchDatabase(client, name, fn, opts = {}) {
   await client.query(`CREATE DATABASE ${name}`);
+  let bodyError = null;
   try {
     return await fn();
+  } catch (err) {
+    bodyError = err;
+    throw err;
   } finally {
-    if (!opts.keepDb) await dropScratchDatabase(client, name);
+    if (opts.keepDb) return;
+    try {
+      await dropScratchDatabase(client, name);
+    } catch (dropErr) {
+      if (!bodyError) throw dropErr;
+      bodyError.cleanupError = dropErr && dropErr.message ? dropErr.message : String(dropErr);
+    }
   }
 }
 

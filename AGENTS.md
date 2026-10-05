@@ -123,6 +123,8 @@ deliberately not duplicated here.
 | `node --test scripts/lib/db-url.test.js` | Guard unit tests (not in `test:unit`) |
 | `node --test scripts/lib/gap-register.test.js` | Gap-register table-shape tests (not in `test:unit`; the check itself runs in `verify:docs` as `gap-register-shape`) |
 | `node --test scripts/lib/migrations.test.js` | Applied-migrations ledger helper tests (OG-14; not in `test:unit`) |
+| `npm run test:scripts` | Every `scripts/lib/*.test.js` suite (`db-url`, `gap-register`, `migrations`, `schema-diff`, `replay-harness`). `test:unit` globs `src/**/*.test.js` ONLY, so these never ran in CI until the `test:scripts` step was added — run it after touching anything in `scripts/` |
+| `npm run verify:replay` | Replays every migration into a genuinely EMPTY scratch database on the `TEST_DATABASE_URL` instance and diffs it against the live schema by definition (`pg_get_constraintdef` / `indexdef` / column type+nullability+default). `--test-db` is required so it can never create a database implicitly; `--dry-run` contacts nothing; `--keep-db` skips the drop. Exits non-zero on any drift |
 | `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance fixtures |
 | `node scripts/test-layer3.js --verify --functional` | Layer 3 schema (flags required; needs ALL THREE Layer 3 tables empty — `store` too; non-empty on shared DB AND on the test branch as of 2026-09-28, so it cannot pass in either environment today) |
 | `node scripts/test-layer4.js` | Layer 4 canonical schema (unguarded: reads `DATABASE_URL`; writes `TestL4%` fixtures inside one transaction with final ROLLBACK; does NOT require empty Layer 4 tables) |
@@ -218,11 +220,12 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
 4. Report results as **PASS / FAIL / BLOCKED**. Never claim a test passed unless it ran, and say so
    explicitly when an environment limitation prevents a run.
 5. Note: the fresh `001→011` migration was VERIFIED 2026-09-30 (OG-13: empty-DB replay on a
-   throwaway Neon DB; 39/39 tables, 336/336 columns, 14/14 enums — see `docs/OPEN_GAPS.md` C-15).
-   The live-only benchmark drift it surfaced was RECONCILED 2026-10-04 by migration
-   `012_reconcile_benchmark_drift.sql` (OG-25), so the tree reached `001→012`. The shared and TEST
-   databases are baselined in the `schema_migrations` ledger (OG-14) and both now stand at **015**
-   as of 2026-10-05 (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04,
+   throwaway Neon DB; 39/39 tables, 336/336 columns, 14/14 enums — see `docs/OPEN_GAPS.md` C-15),
+   and RE-VERIFIED 2026-10-05 through `001→015` with **0 drift by object definition** (C-30). That
+   check is now the repeatable `npm run verify:replay` gate, so re-run it after any migration lands
+   rather than trusting a one-off measurement. The shared and TEST databases are baselined in the
+   `schema_migrations` ledger (OG-14) and both stand at **015** as of 2026-10-05
+   (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04,
    `015_relax_rejection_partner.sql` / OG-32).
 6. **Migration ledger (OG-14, 2026-10-04).** `run-migrations.js` is ledger-driven: it records each
    applied filename in `schema_migrations` and applies only the pending tail, so it is re-runnable
@@ -230,6 +233,31 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
    predates the ledger is adopted once with `node scripts/run-migrations.js --baseline` (writes the
    ledger only, runs nothing). `--check` is the freshness gate; `--offline` needs no DB. Never rely
    on the old "apply files individually via a throwaway script" workaround — it is superseded.
+
+7. **Empty-database replay: use a real DATABASE, never a scratch schema.** Migrations `008` and `011`
+   guard enum creation with a namespace-blind catalog lookup
+   (`IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'assessment_type')`), and `pg_type` is
+   database-global. In a scratch schema the guard sees `public`'s copy and skips creating one, so the
+   result is either a phantom 12-vs-14 enum drift (with `public` on `search_path`) or
+   `42704: type "assessment_type" does not exist` (without it). Both are harness artifacts. Measured
+   on this box: two of three first attempts produced confidently wrong answers this way.
+8. **No empty database exists by default.** `TEST_DATABASE_URL` is a full snapshot (41 tables, 15-row
+   ledger, 100 products). The `neondb_owner` role on that Neon instance holds `rolcreatedb`, so
+   `CREATE DATABASE` on it is permitted — that is how the replay gets a genuinely empty target.
+   Neon propagates `CREATE DATABASE` asynchronously, so connecting immediately races it and fails
+   with a cached `database ... does not exist (server_login_retry)`; retry, do not report it as a
+   replay failure.
+9. **Schema diffs must compare definitions, and must exclude `schema_migrations`.** A name-only
+   comparison passes a CHECK that kept its name and changed body — C-30's first pass had exactly
+   that weakness. `schema_migrations` is created by `run-migrations.js`, not by a numbered migration,
+   so a fresh replay legitimately lacks it and including it manufactures drift that does not exist.
+10. **`scripts/lib/db-url.js` `resolveTestDbUrl(env)` returns a pg connection CONFIG OBJECT**
+    (`{ connectionString, connectionTimeoutMillis }`), not a URL string. Treating it as a string
+    surfaces as the deeply unhelpful `TypeError: str.charAt is not a function` from inside `pg`.
+11. **Tooling quirks on this box (both have cost real time).** `awk`'s `\r` regex misreports a CRLF
+    file as bare-LF — trust `od -c` or a CR-vs-LF count instead; it will otherwise make you "fix"
+    line endings that are already correct. And `git status` can report a file as modified while
+    `git diff` is empty (CRLF/stat-cache); `git update-index --refresh` or `git checkout --` settles it.
 
 ## 8. Hard rules
 

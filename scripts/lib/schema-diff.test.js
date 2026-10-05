@@ -74,4 +74,21 @@ describe('compareSchemaSnapshot', () => {
   it('an empty snapshot on both sides is not drift', () => {
     assert.equal(compareSchemaSnapshot({}, {}).hasDrift, false);
   });
+
+  // A gate whose job is catching drift must never report a false green.
+  it('throws rather than reporting a false green when a snapshot is missing', () => {
+    assert.throws(() => compareSchemaSnapshot(null, {}), TypeError);
+    assert.throws(() => compareSchemaSnapshot({}, null), TypeError);
+    assert.throws(() => compareSchemaSnapshot(undefined, {}), TypeError);
+  });
+
+  it('throws when a snapshot is not an object', () => {
+    assert.throws(() => compareSchemaSnapshot('x', {}), TypeError);
+  });
+
+  it('a class whose value is not an array is treated as empty, not as agreement', () => {
+    // { columns: undefined } must not be read as "both sides agree on columns".
+    const r = compareSchemaSnapshot({ columns: undefined }, { columns: ['t.c :: text'] });
+    assert.equal(r.hasDrift, true);
+  });
 });
