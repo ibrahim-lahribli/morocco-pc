@@ -279,6 +279,7 @@ test('full-run: zero builds still flow through rank, select, and commit with emp
   // null (not 0) because nothing was retained, not because everything is free.
   assert.equal(out.budget_floor.cheapest_total, null);
   assert.equal(out.budget_floor.within_budget, null);
+});
 
 test('full-run: zero selected still calls the write wrapper with empty array', async () => {
   const client = { query() {} };
@@ -370,6 +371,3 @@ test('full-run.js imports exactly the snapshot wrapper, the commit wrapper, the 
   const requires = [...source.matchAll(/require\('([^']+)'\)/g)].map((match) => match[1]).sort();
   assert.deepEqual(requires, ['../explanation', '../ranking', './commit', './snapshot']);
 });
-
-});
-
