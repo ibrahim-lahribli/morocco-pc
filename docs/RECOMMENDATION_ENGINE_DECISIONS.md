@@ -4077,7 +4077,7 @@ VERDICT: RESOLVED - motherboard_memory_support (016) is the source of truth wher
 ```
 ## Decision 34 — offer identity (natural key), offer provenance and the manual-import ingestion path (OG-06)
 
-Status: RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 on the TEST branch ONLY — `store_offer` gains a natural key and provenance columns (migration 017), ingestion is a reusable impure edge under `src/recommendation/ingestion/`, and the only shipped adapter is the operator-supplied manual file. No scraping. The shared database has NOT had migration 017 applied; OG-06 stays OPEN until the keys are live on the shared DB and verified there.
+Status: RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 — `store_offer` gains a natural key and provenance columns (migration 017), ingestion is a reusable impure edge under `src/recommendation/ingestion/`, and the only shipped adapter is the operator-supplied manual file. No scraping. Migration 017 is now applied on BOTH the TEST branch and the shared DB (ledger = 17 on each; verified 2026-10-06), so OG-06 is CLOSED — see the `### UPDATE 2026-10-06` block at the end of this entry.
 
 Date: 2026-10-06. Prompted by the F8 real-offer ingestion work (`docs/PIPELINE_DESIGN.md`). It closes the DESIGN of OG-06 (offer identity) and records that the F8 pipeline exists in code, while explicitly NOT closing OG-06 (the shared DB still has no unique key) or OG-19/OG-21 (untouched). Documentation + schema + code, no seed and no data change on the shared DB.
 
@@ -4115,3 +4115,15 @@ Migration `017_offer_identity_and_provenance.sql` authored and applied to the TE
 ### Supersedes / superseded by
 
 None. This decision does not supersede Decision 7 (the 30-day Stage 1 window), which remains in force; changing that predicate is a separate decision.
+
+### UPDATE 2026-10-06 — migration 017 applied to the SHARED database; OG-06 CLOSED
+
+This entry's Status line gated the shared apply on "the keys are live on the shared DB and verified there". That apply was performed and independently re-measured, read-only, on BOTH databases:
+
+- SHARED and TEST each report `schema_migrations` = **17**, with `017_offer_identity_and_provenance.sql` as the last applied filename, and `node scripts/run-migrations.js --check` reports "No pending migrations".
+- `store_offer` carries all three new columns (`listing_identifier`, `fetched_at`, `ingestion_record_id`) and BOTH unique indexes (`uq_store_offer_listing`, `uq_store_offer_legacy_identity`) on each database, and still holds **101** rows — so the two index creations lost no data.
+- Regenerating the generated docs for 017 (`docs/SCHEMA_REFERENCE.md` schema-digest + `docs/DATA_STATE.md` `schema_migrations`) is committed separately.
+
+**OG-06 is therefore CLOSED** (`docs/OPEN_GAPS.md` → C-34). **The residual this entry always carried is NOT closed and is restated here rather than quietly dropped:** the *price-value* half — that the assessment-era prices are unverified against live retailers — remains a data-research obligation of the F8 ingestion pipeline, and this apply re-stamped or price-corrected **nothing**. Closing OG-06 closes the *key*, not the prices.
+
+Per `docs/decisions/TEMPLATE.md`, the `Status:` line above was edited in place to drop its now-false "TEST branch ONLY / shared database has NOT had migration 017 applied" wording; the rest of the entry is unchanged. This block records the update rather than rewriting the entry.

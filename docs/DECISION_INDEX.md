@@ -3,7 +3,7 @@
 **GENERATED FILE — do not edit by hand.** Regenerate with `node scripts/gen-decision-index.js`
 (or `npm run gen:decisions`) after any change to `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 `node scripts/gen-decision-index.js --check` exits non-zero when this file is stale.
-Generated 2026-10-06 from RECOMMENDATION_ENGINE_DECISIONS.md (4118 lines).
+Generated 2026-10-06 from RECOMMENDATION_ENGINE_DECISIONS.md (4130 lines).
 
 Generated for audit finding **D5** (decision-log navigability): one row per decision with number,
 title, status, date and line anchor. Every status comes from the normalized `Status:` line at the
@@ -54,7 +54,7 @@ None. All 34 global decisions (including the two nested 4/5 aliases) and all 5 E
 | 31 | build_rejection writes are replace-idempotent per query (OG-33) | RESOLVED 2026-10-05; IMPLEMENTED 2026-10-05 — the rejection writer now clears the query's `build_rejection` rows and re-inserts the current pass's set inside the commit transaction, so a re-commit converges instead of duplicating; guard 2 (Decision 19.2) is unchanged. Closes OG-33. | 2026-10-05 | 3939 |
 | 32 | a persisted rejection names its decisive partner (OG-32) | RESOLVED 2026-10-05; IMPLEMENTED and APPLIED 2026-10-05 — the Engine 2D candidate verdict gains two additive fields carrying the product identity of the partner the candidate decisively failed against, so a `build_rejection` row can now answer "against which partner" and not only "which candidate, and why". Migration `015_relax_rejection_partner.sql` relaxes the partner CHECK to permit a product-keyed partner. Closes OG-32. | 2026-10-05 | 3988 |
 | 33 | motherboard memory support becomes an explicit table; presence-only tables gain an explicit status (OG-02 + OG-03) | RESOLVED 2026-10-05; IMPLEMENTED 2026-10-05 - motherboard_memory_support (migration 016) is the source of truth for a board that has rows, the legacy single memory_type_id is the fallback for a board that has none, and the three presence-only compatibility tables gain a nullable support_status whose NULL preserves the presence-only meaning byte-for-byte. | 2026-10-05 | 4032 |
-| 34 | offer identity (natural key), offer provenance and the manual-import ingestion path (OG-06) | RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 on the TEST branch ONLY — `store_offer` gains a natural key and provenance columns (migration 017), ingestion is a reusable impure edge under `src/recommendation/ingestion/`, and the only shipped adapter is the operator-supplied manual file. No scraping. The shared database has NOT had migration 017 applied; OG-06 stays OPEN until the keys are live on the shared DB and verified there. | 2026-10-06 | 4078 |
+| 34 | offer identity (natural key), offer provenance and the manual-import ingestion path (OG-06) | RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 — `store_offer` gains a natural key and provenance columns (migration 017), ingestion is a reusable impure edge under `src/recommendation/ingestion/`, and the only shipped adapter is the operator-supplied manual file. No scraping. Migration 017 is now applied on BOTH the TEST branch and the shared DB (ledger = 17 on each; verified 2026-10-06), so OG-06 is CLOSED — see the `### UPDATE 2026-10-06` block at the end of this entry. | 2026-10-06 | 4078 |
 
 ## Engine 3 contract decisions (Engine-3-local numbering; local 4–5 ARE global Decisions 4–5)
 
