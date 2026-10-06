@@ -929,3 +929,15 @@ Verification (this D7 pass): read-only. `git status --porcelain` clean before ed
   launch. OG-07 / OG-08 both stay OPEN with irreducibly-unresolvable residue
   (6 GPU identities, 2 PSUs with no citable connector data).
 
+## 2026-10-06 — Node 22 vs 24: the unterminated full-run test was red in CI, not locally
+
+`npm run test:unit` reported 907 pass / 0 fail on Node 24.21.0 but **902 pass / 1 fail / 4 cancelled**
+(exit 1) on Node 22.23.3 — the version both CI jobs pin. `src/recommendation/orchestrator/full-run.test.js`
+was missing the closing `});` on the "zero builds still flow through rank, select, and commit" test,
+so the four tests written after it were registered as its subtests. Node 22 finalizes the parent first
+and cancels them (`failureType: 'cancelledByParent'`); Node 24 waits for them, so the defect was
+invisible locally. Fixed in `e26a5fd` with no assertion changed. Reproduce the CI leg with
+`npx -y node@22 --test "src/**/*.test.js"`. A cancelled test is reported on the `# cancelled` line
+and is NOT counted as `fail`, so a failures-only grep misses it. Guard proposed but deliberately not
+implemented: `engines >= 22` + `.nvmrc`, a Node 22/24 CI matrix, and a `verify-docs` check that
+flags a `test()` registered inside another test callback.

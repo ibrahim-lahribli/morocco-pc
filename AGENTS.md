@@ -301,6 +301,7 @@ getting the nightly gate, which is why `workflow_dispatch` is wired up too.
     file as bare-LF — trust `od -c` or a CR-vs-LF count instead; it will otherwise make you "fix"
     line endings that are already correct. And `git status` can report a file as modified while
     `git diff` is empty (CRLF/stat-cache); `git update-index --refresh` or `git checkout --` settles it.
+15. **Node-version trap: `node --test` cancels an accidentally-nested test on Node 22 (`cancelledByParent`) but silently runs it on Node 24 — and both CI jobs pin Node 22, so a green local run on 24 can hide a red CI job.** A file with an unterminated `test(...)` registers the tests written after it as its subtests; Node 22 finalizes the parent first and cancels them. Reproduce the CI leg with `npx -y node@22 --test "src/**/*.test.js"` (and `... "scripts/lib/*.test.js"`), and read the `# cancelled` line — a cancelled test is NOT counted as `fail`. There is no `engines` field and no `.nvmrc`.
 
 ## 8. Hard rules
 
