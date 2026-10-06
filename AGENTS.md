@@ -23,7 +23,7 @@ points are the engine's public barrels (`src/recommendation/*/index.js`) and the
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–33). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–34). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
    To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
@@ -69,7 +69,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `docs/GLOSSARY.md` | Load-bearing vocabulary (status vocabulary, decision ids, the `D2` vs `Decision 2` collision) |
 | `docs/TEST_MAP.md` | Which test pins which contract — check before changing pinned behavior |
 | `docs/RECIPES/` | Task checklists: add a migration/seed/scoring-model/pair-evaluator/stage/status-claim |
-| `database/migrations/` | Authoritative schema (`001`–`016`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
+| `database/migrations/` | Authoritative schema (`001`–`017`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
 | `database/seeds/` | DML-only, idempotent seed data |
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |
 | `scripts/` | CLIs: migrations, seeds, schema verifiers, engine checks |

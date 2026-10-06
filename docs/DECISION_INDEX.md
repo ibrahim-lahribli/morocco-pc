@@ -3,7 +3,7 @@
 **GENERATED FILE — do not edit by hand.** Regenerate with `node scripts/gen-decision-index.js`
 (or `npm run gen:decisions`) after any change to `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 `node scripts/gen-decision-index.js --check` exits non-zero when this file is stale.
-Generated 2026-10-05 from RECOMMENDATION_ENGINE_DECISIONS.md (4078 lines).
+Generated 2026-10-06 from RECOMMENDATION_ENGINE_DECISIONS.md (4118 lines).
 
 Generated for audit finding **D5** (decision-log navigability): one row per decision with number,
 title, status, date and line anchor. Every status comes from the normalized `Status:` line at the
@@ -17,9 +17,9 @@ section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` a
 
 ## Open decisions
 
-None. All 33 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-05.
+None. All 34 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-06.
 
-## Global decisions (31 `## Decision` headings + 2 nested 4/5 aliases = 33)
+## Global decisions (32 `## Decision` headings + 2 nested 4/5 aliases = 34)
 
 | # | Title | Status | Date | DECISIONS.md line |
 |---|---|---|---|---|
@@ -54,6 +54,7 @@ None. All 33 global decisions (including the two nested 4/5 aliases) and all 5 E
 | 31 | build_rejection writes are replace-idempotent per query (OG-33) | RESOLVED 2026-10-05; IMPLEMENTED 2026-10-05 — the rejection writer now clears the query's `build_rejection` rows and re-inserts the current pass's set inside the commit transaction, so a re-commit converges instead of duplicating; guard 2 (Decision 19.2) is unchanged. Closes OG-33. | 2026-10-05 | 3939 |
 | 32 | a persisted rejection names its decisive partner (OG-32) | RESOLVED 2026-10-05; IMPLEMENTED and APPLIED 2026-10-05 — the Engine 2D candidate verdict gains two additive fields carrying the product identity of the partner the candidate decisively failed against, so a `build_rejection` row can now answer "against which partner" and not only "which candidate, and why". Migration `015_relax_rejection_partner.sql` relaxes the partner CHECK to permit a product-keyed partner. Closes OG-32. | 2026-10-05 | 3988 |
 | 33 | motherboard memory support becomes an explicit table; presence-only tables gain an explicit status (OG-02 + OG-03) | RESOLVED 2026-10-05; IMPLEMENTED 2026-10-05 - motherboard_memory_support (migration 016) is the source of truth for a board that has rows, the legacy single memory_type_id is the fallback for a board that has none, and the three presence-only compatibility tables gain a nullable support_status whose NULL preserves the presence-only meaning byte-for-byte. | 2026-10-05 | 4032 |
+| 34 | offer identity (natural key), offer provenance and the manual-import ingestion path (OG-06) | RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 on the TEST branch ONLY — `store_offer` gains a natural key and provenance columns (migration 017), ingestion is a reusable impure edge under `src/recommendation/ingestion/`, and the only shipped adapter is the operator-supplied manual file. No scraping. The shared database has NOT had migration 017 applied; OG-06 stays OPEN until the keys are live on the shared DB and verified there. | 2026-10-06 | 4078 |
 
 ## Engine 3 contract decisions (Engine-3-local numbering; local 4–5 ARE global Decisions 4–5)
 
@@ -67,9 +68,9 @@ None. All 33 global decisions (including the two nested 4/5 aliases) and all 5 E
 
 ## Reconciliation
 
-- Global decisions: 33 = 31 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
+- Global decisions: 34 = 32 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
 - Engine-3-local contracts: 5 (`### Decision 1–5` under "Engine 3 contract decisions"; local 1–3 are NOT global 1–3, local 4/5 ARE global 4/5 — AGENTS.md §2).
-- Parsed headings: 31 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
+- Parsed headings: 32 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
 - Status source: each entry’s normalized `Status:` line (first content line). The generator exits
   non-zero if a decision is added without one, so this table cannot go stale silently.
 - Open decisions: none.

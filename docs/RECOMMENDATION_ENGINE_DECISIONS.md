@@ -4075,3 +4075,43 @@ OG-02 makes the engine factually wrong on real hardware: boards that accept both
 ```text
 VERDICT: RESOLVED - motherboard_memory_support (016) is the source of truth where present, legacy memory_type_id is the fallback otherwise, seed 012 syncs both, and the three presence-only tables gained nullable support_status columns honoured by the existing resolvers. Unit 907/0 (was 898), behaviour-neutral on the seeded catalog (PI-1: 0 scores moved), migration applied on both databases and replay-verified through 016.
 ```
+## Decision 34 — offer identity (natural key), offer provenance and the manual-import ingestion path (OG-06)
+
+Status: RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 on the TEST branch ONLY — `store_offer` gains a natural key and provenance columns (migration 017), ingestion is a reusable impure edge under `src/recommendation/ingestion/`, and the only shipped adapter is the operator-supplied manual file. No scraping. The shared database has NOT had migration 017 applied; OG-06 stays OPEN until the keys are live on the shared DB and verified there.
+
+Date: 2026-10-06. Prompted by the F8 real-offer ingestion work (`docs/PIPELINE_DESIGN.md`). It closes the DESIGN of OG-06 (offer identity) and records that the F8 pipeline exists in code, while explicitly NOT closing OG-06 (the shared DB still has no unique key) or OG-19/OG-21 (untouched). Documentation + schema + code, no seed and no data change on the shared DB.
+
+### Current situation
+
+`store_offer` has had NO unique key since `010_reconcile_layer3.sql` dropped `uq_store_offer_store_product_variant`; a re-observed price therefore could only INSERT a second offer (seed 002's header documents this). Measured on the shared DB 2026-10-06: 101 offers, 101 with NULL `product_url`, 79 with NULL `product_variant_id`, 2 stores, 100 products, and ZERO duplicates by `(store_id, product_id, product_variant_id)`. Migration `007_provenance_tables.sql` already defines `ingestion_record`, `product_candidate`, `retailer_listing_alias` and `spec_provenance` (all 0 rows) — the whole staging/provenance flow exists and was unused. `product.lifecycle_status` already exists and the candidate loader already filters `ACTIVE`.
+
+### Problem
+
+Without a key, ingestion cannot distinguish "the same offer re-observed" from "a new offer", so prices cannot be updated safely and `price_history` cannot be appended on change only. Manual imports also need a documented, repeatable, idempotent path that never lets an unverified listing silently become a canonical product. Secondary: the beta launch runs on seed data only, so the pipeline must not create any incentive to re-stamp seed offers, and the freshness gate must be able to tell seed offers from verified ones.
+
+### Decision
+
+1. **Offer identity.** `store_offer.listing_identifier TEXT` carries the retailer-side stable id (site SKU, or the canonicalised listing URL). Uniqueness is `UNIQUE (store_id, listing_identifier) WHERE listing_identifier IS NOT NULL`, scoped per store.
+2. **Legacy/seed identity.** Legacy rows (NULL `listing_identifier`) keep a one-offer-per-variant-per-store cap via `UNIQUE (store_id, product_id, product_variant_id) NULLS NOT DISTINCT WHERE listing_identifier IS NULL`. The partial predicate is deliberate: ingested offers are NOT covered, so a real store may hold more than one listing for the same variant without a constraint error. PostgreSQL >= 15 is required; the shared server and the TEST branch both report 18.6.
+3. **Promotion conflict policy.** Promotion looks up `(store_id, listing_identifier)`, then INSERTs or UPDATEs. A second listing for the same variant is allowed (distinct `listing_identifier`); the engine's Stage 1 already selects the cheapest eligible offer per candidate. A constraint error is never the mechanism.
+4. **Provenance.** `product_url` is reused as the source URL (no second URL column). `store_offer.fetched_at` is the real fetch time and is deliberately NOT merged with `last_checked_at` (seed 006 re-stamps `last_checked_at` without a fetch). `ingestion_record_id` is nullable on BOTH `store_offer` and `price_history`. NULL provenance means seed/unverified, never an error; `fetched_at` alone is never evidence of verification. Provenance confidence for manual imports is `UNVERIFIED`; the operator's `source_note` records where/when the row was collected.
+5. **`price_history` append rule.** A row is appended if and only if the stored `price` or `availability` actually changes. An unchanged re-run appends nothing.
+6. **Staging reuse.** Ingestion reuses migration 007's tables. Unmatched or ambiguous listings go to `product_candidate` with status `REVIEW`; they NEVER auto-create a `product` or a `store_offer`.
+7. **Adapters.** The adapter interface is `parse(text, {format}) -> {rows, errors}` (the `fetchListings()` seam with the network replaced by a file). The ONLY shipped adapter is `manual` (operator CSV/JSON). No scraper is built, and retailer sites are not contacted. Dry-run is the CLI default; `--commit` is required to write, and a commit against the shared `DATABASE_URL` additionally requires `--confirm-shared`.
+8. **Seed handling unchanged.** No seed product, price or assessment is changed; no retirement or identity correction yet. The hybrid retirement strategy in `docs/PIPELINE_DESIGN.md` section 7 remains a later, gated change.
+
+### Rejected alternatives
+
+- **A single key on `(store_id, product_variant_id)` for everything** — rejected: it would forbid a legitimate second listing and would force seed rows through a key they cannot supply.
+- **Reusing `product_url` as the key** — rejected: all 101 seed rows have NULL `product_url`, and NULLs are not a usable key.
+- **A `listing_identifier` unique without `store_id`** — rejected: two stores may legitimately carry the same retailer SKU.
+- **ON CONFLICT for provenance** — rejected: `spec_provenance.target_column` may be NULL and NULLs are not a conflict target in Postgres, so a scoped DELETE-then-INSERT (Decision 31's replace pattern) is used instead.
+- **Scraping a retailer now** — rejected on terms grounds: `iris.ma`'s CGV Article 11 prohibits reproduction, `ultrapc.ma`'s terms could not be located, `pcbuilder.ma` is a direct competitor, and `nextlevelpc.ma` returns 403 on `/robots.txt`.
+
+### Verdict for this pass
+
+Migration `017_offer_identity_and_provenance.sql` authored and applied to the TEST branch with the OG-14 ledger (`run-migrations --check --test-db` clean). On TEST: the two indexes exist, 101 offers carry a backfilled `fetched_at`, and a functional probe produced `23505` for a duplicate legacy row and for a duplicate `(store_id, listing_identifier)`, while a second listing for the same variant INSERTed — residue 0. End-to-end on TEST (fixtures only): commit inserted 2, a re-run inserted 0 (2 UNCHANGED), a price change updated 1 + appended exactly 1 `price_history` row, and a rejection file reported 4 rows with line numbers (`PRICE_NOT_POSITIVE`, `DUPLICATE_LISTING_IDENTIFIER`, `UNKNOWN_STORE`, `UNKNOWN_CURRENCY`); residue 0, `store_offer` back to 101. Engine still green on TEST (`test-orchestrator-full-run.js` 28 pass / 0 fail; `measure-orchestrator.js` criteria 1-2 MET). Unit suite 937 / 0 and `test:scripts` 89 / 0 on Node 24 and Node 22, 0 cancelled. **NOT done:** migration 017 is not applied to the shared DB (gated), so OG-06 is NOT closed.
+
+### Supersedes / superseded by
+
+None. This decision does not supersede Decision 7 (the 30-day Stage 1 window), which remains in force; changing that predicate is a separate decision.
