@@ -8,7 +8,7 @@ live database (`information_schema` / `pg_catalog`). Per `AGENTS.md` section 9,
 generated lookup so "does this column exist?" never requires reading 11 SQL files
 (the question that produced audit finding D2).
 
-<!-- schema-digest: 7257d1320bf172fe -->
+<!-- schema-digest: 47a35a3c9e062141 -->
 
 ## Enum vocabularies (14)
 
@@ -553,7 +553,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 
 **Indexes:** `platform_memory_support_pkey`
 
-### `price_history` (7 columns)
+### `price_history` (8 columns)
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -564,8 +564,9 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `availability` | text | NO |  |
 | `observed_at` | timestamp with time zone | NO |  |
 | `created_at` | timestamp with time zone | NO | now() |
+| `ingestion_record_id` | uuid | YES |  |
 
-**Foreign keys:** `price_history_store_offer_id_fkey`: `store_offer_id` → `store_offer.id` (ON DELETE NO ACTION)
+**Foreign keys:** `price_history_ingestion_record_id_fkey`: `ingestion_record_id` → `ingestion_record.id` (ON DELETE NO ACTION) · `price_history_store_offer_id_fkey`: `store_offer_id` → `store_offer.id` (ON DELETE NO ACTION)
 
 **CHECK constraints:**
 
@@ -881,7 +882,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 
 **Indexes:** `idx_store_active` · `store_pkey`
 
-### `store_offer` (12 columns)
+### `store_offer` (15 columns)
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -897,8 +898,11 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `last_checked_at` | timestamp with time zone | NO |  |
 | `created_at` | timestamp with time zone | NO | now() |
 | `updated_at` | timestamp with time zone | NO | now() |
+| `listing_identifier` | text | YES |  |
+| `fetched_at` | timestamp with time zone | YES |  |
+| `ingestion_record_id` | uuid | YES |  |
 
-**Foreign keys:** `store_offer_product_id_fkey`: `product_id` → `product.id` (ON DELETE NO ACTION) · `store_offer_product_variant_id_fkey`: `product_variant_id` → `product_variant.id` (ON DELETE NO ACTION) · `store_offer_store_id_fkey`: `store_id` → `store.id` (ON DELETE NO ACTION)
+**Foreign keys:** `store_offer_ingestion_record_id_fkey`: `ingestion_record_id` → `ingestion_record.id` (ON DELETE NO ACTION) · `store_offer_product_id_fkey`: `product_id` → `product.id` (ON DELETE NO ACTION) · `store_offer_product_variant_id_fkey`: `product_variant_id` → `product_variant.id` (ON DELETE NO ACTION) · `store_offer_store_id_fkey`: `store_id` → `store.id` (ON DELETE NO ACTION)
 
 **CHECK constraints:**
 
@@ -906,7 +910,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 - `chk_store_offer_currency_not_empty` — CHECK ((btrim(currency) <> ''::text))
 - `chk_store_offer_price_positive` — CHECK ((price > (0)::numeric))
 
-**Indexes:** `idx_store_offer_last_checked_at` · `idx_store_offer_product_id` · `idx_store_offer_product_variant_id` · `idx_store_offer_store_id` · `store_offer_pkey`
+**Indexes:** `idx_store_offer_last_checked_at` · `idx_store_offer_product_id` · `idx_store_offer_product_variant_id` · `idx_store_offer_store_id` · `store_offer_pkey` · `uq_store_offer_legacy_identity` · `uq_store_offer_listing`
 
 ---
 
