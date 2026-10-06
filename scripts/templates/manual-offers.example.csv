@@ -1,0 +1,3 @@
+source,store_name,listing_identifier,raw_price,currency,availability,observed_at,product_url,title,sku,mpn,source_note
+manual,Seed UltraPC,ULTRA-R5-7500F,"1 299,00",MAD,IN_STOCK,2026-10-01T10:00:00Z,https://example.test/ultra/r5-7500f,Seed Ryzen 5 7500F,SEED-R5-7500F,,collected by hand 2026-10-01 from store page
+manual,Seed NextGamer,NEXTGAMER-RTX4060,"3 499,00",MAD,IN_STOCK,2026-10-01T10:05:00Z,https://example.test/next/rtx4060,Seed RTX 4060 8GB,SEED-GPU-4060,,collected by hand 2026-10-01 from store page
