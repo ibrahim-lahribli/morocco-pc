@@ -21,6 +21,15 @@ timestamp without touching prices (OG-06 stays open by design).
    `node scripts/verify-docs.js --live` and `node scripts/check-offer-freshness.js`
    (expect PASS, blackout ~+30d).
 
+**Since Decision 35 the gate reports two provenance classes** (`SEED_UNVERIFIED`
+= `ingestion_record_id IS NULL`, `VERIFIED` = non-NULL) and fails on the VERIFIED
+class ONLY, so this recipe's PASS line is about verified offers once real ingestion
+exists. A stale SEED class is a WARN, not a failure: a beta can keep running by
+passing `options.allow_unverified_seed_offers` to the orchestrator
+(`runRecommendationFullRun(client, queryId, { allow_unverified_seed_offers: true })`),
+which is default OFF. Re-stamping seed 006 is still the cure, and re-stamping is
+never allowed to touch prices.
+
 Verify:
 
 ```bash

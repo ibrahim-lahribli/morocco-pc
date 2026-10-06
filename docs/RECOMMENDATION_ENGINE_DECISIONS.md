@@ -4127,3 +4127,62 @@ This entry's Status line gated the shared apply on "the keys are live on the sha
 **OG-06 is therefore CLOSED** (`docs/OPEN_GAPS.md` → C-34). **The residual this entry always carried is NOT closed and is restated here rather than quietly dropped:** the *price-value* half — that the assessment-era prices are unverified against live retailers — remains a data-research obligation of the F8 ingestion pipeline, and this apply re-stamped or price-corrected **nothing**. Closing OG-06 closes the *key*, not the prices.
 
 Per `docs/decisions/TEMPLATE.md`, the `Status:` line above was edited in place to drop its now-false "TEST branch ONLY / shared database has NOT had migration 017 applied" wording; the rest of the entry is unchanged. This block records the update rather than rewriting the entry.
+
+## Decision 35 — a beta freshness exemption for seed offers, with the offer class snapshotted onto the build (OG-30 residual, OG-21)
+
+Status: RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 on the TEST branch (migration 018 applied there; the shared DB stays at 017 pending an explicit apply) — Stage 1 gains an explicit, default-OFF `allow_unverified_seed_offers` option that waives Decision 7's 30-day window for SEED offers only, every eligible offer now carries its provenance class (`SEED_UNVERIFIED` | `VERIFIED`) plus its offer id on the Engine 3 price carrier, and `build_component` SNAPSHOTS that class and the offer id so a permalink stays labelled after the offer changes.
+
+Date: 2026-10-06. Prompted by the beta-launch risk recorded in `docs/PIPELINE_DESIGN.md` section 13: the 101 seed offers expire out of the Decision 7 window on **2026-11-03** and nothing re-stamps them, so a beta running on seed data fails loud after that date. This decision implements that section's proposal. It is NOT a change to Decision 7's window for VERIFIED offers, NOT a source/retailer project (no scraper, no ToS work, no CLI or CI wiring), and NOT a re-stamp of any seed offer.
+
+### Current situation
+
+* Stage 1 hard-filters `o.last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'` (`src/recommendation/offers/select.js`, Decision 7), re-enforced in JS, and throws `EMPTY_CANDIDATE_POOL` when no candidate has an eligible offer. `budget_floor` is computed after Stage 1, so it never runs on that path.
+* `node scripts/check-offer-freshness.js --fail-days=14` measured on the shared DB: **101 offers, 101 fresh, 0 expired, first expiry 2026-11-03 (28.1 days)**.
+* Migration 017 (Decision 34) already supplies the provenance signal: `store_offer.ingestion_record_id` is NULL for every seed offer and non-NULL for an ingested one. `docs/PIPELINE_DESIGN.md` section 13 named this as the classifier and then explicitly stopped: "DESIGN ONLY — not implemented".
+* `build_component` (migration 011) carries `selected_price` / `currency` / `store_id` / `price_checked_at` but no offer identity and no provenance; `build_component` was EMPTY (0 rows, measured 2026-10-06).
+
+### Problem
+
+A beta on seed data dies on 2026-11-03 unless something changes, and every obvious fix is worse than the disease: re-stamping seed offers to keep the gate green **hides that the prices are unverified** (and `docs/PIPELINE_DESIGN.md` section 13 rejects it outright), while extending the 30-day window for everything silently loosens the rule for REAL offers too. The third defect is quieter: even if a decision existed, nothing carried the offer's provenance out of Stage 1, so a persisted build could not say whether its price came from a verified listing or a seed fixture.
+
+### Decision
+
+1. **The class is DERIVED from provenance, not stored as a new offer column.** `ingestion_record_id IS NULL` is `SEED_UNVERIFIED`; non-NULL is `VERIFIED`. Migration 017 already carries the signal, so no `store_offer` column is added.
+2. **The exemption is an explicit engine OPTION, default OFF.** `options.allow_unverified_seed_offers`, threaded unchanged through `runRecommendationFullRun(client, queryId, options)` → `runRecommendationSnapshot(client, queryId, options)` → `runRecommendation({ db, queryId, options })` → `selectOfferPrices(poolResult, db, options)`. An omitted or non-`true` options object leaves eligibility byte-identical to before.
+3. **The SQL predicate gains `$3` and stays inert when false.** `AND (o.last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days' OR ($3 AND o.ingestion_record_id IS NULL))`; the parameter is always bound, so there is no second SQL text and no interpolation.
+4. **The exemption waives the 30-day window ONLY, and only for SEED offers.** A missing or unparseable `last_checked_at` stays ineligible even with the option ON: `NULL` is UNKNOWN and must never be read as PASS (`AGENTS.md` section 8).
+5. **VERIFIED offers keep Decision 7 exactly.** The option ON never rescues a stale verified offer, and never changes a fresh one's verdict.
+6. **Every eligible offer carries `offer_id` and `offer_class` on the Engine 3 price carrier.** `assembly/prices.js` `PRICE_FIELDS` gains the pair, `validatePrices` validates it, and `select.js` fills it from the Stage 1 row — so the class reaches persistence without a second read of `store_offer`.
+7. **`build_component` snapshots the class and the offer id (migration 018).** `offer_class TEXT NOT NULL DEFAULT 'SEED_UNVERIFIED'` with `chk_build_component_offer_class CHECK (offer_class IN ('SEED_UNVERIFIED','VERIFIED'))` — **TEXT + CHECK, deliberately not an enum**. Plus `store_offer_id UUID REFERENCES store_offer(id)`. Both are written inside the commit's single transaction, so a later `store_offer` UPDATE cannot relabel an already-persisted build. The build-level label is DERIVED from its components, never stored.
+8. **The freshness gate reports the two classes separately and fails on the VERIFIED class only.** Seed offers never count toward "verified fresh"; a stale seed class is a loud WARN that names the option, never a PASS and never a gate failure.
+9. **`store_offer_id` lands OG-21's column early** (`docs/OPEN_GAPS.md` OG-21 was class FUTURE, "snapshot columns suffice today"). The class is only auditable if it can be traced to the offer that produced it.
+10. **Provenance confidence for manual imports stays `UNVERIFIED`** (Decision 34 item 4, unchanged). The ingest CLI and the manual-import e2e are still NOT wired into CI; `npm run test:unit` covers the pure logic.
+
+### Rejected alternatives
+
+* **Re-stamp the seed offers (re-apply seed 006) to keep the cliff away.** Rejected: it hides that the prices are unverified, and `docs/PIPELINE_DESIGN.md` section 13 already forbids it. Re-stamping remains the correct answer only for the *verified* class once real ingestion exists.
+* **Raise the 30-day window for everything.** Rejected: it silently loosens Decision 7 for real offers, which is the one change this decision exists to avoid.
+* **A new `store_offer.offer_class` column.** Rejected: the class is 100% derivable from `ingestion_record_id` (migration 017), so a stored copy is a second source of truth that can drift.
+* **An `offer_class` enum type.** Rejected on the repo's own rule: `AGENTS.md` section 8 forbids destructively altering an enum, so a vocabulary expected to grow needs TEXT + CHECK.
+* **Derive the label on read instead of persisting it.** Rejected: a later `store_offer` UPDATE (a seed row finally ingested) would silently relabel every historical permalink.
+* **A boolean `unverified` on the carrier instead of a class string.** Rejected: a two-value boolean cannot grow a third provenance tier (e.g. a REVIEWED state) without another migration, and the class name is what a permalink prints.
+* **Call the option from the CLI/CI.** Rejected for now: wiring the ingest path into CI is explicitly out of scope, and unit tests already cover the exemption with no DB.
+
+### Verdict for this pass
+
+* **Unit — PASS.** Suite 937 → **950, 0 failures**. New pins: option OFF leaves a stale seed offer expired and the SQL parameter `$3` false; option ON keeps it and labels the carrier `SEED_UNVERIFIED` with the offer id; option ON does NOT rescue a stale `VERIFIED` offer; a fresh offer is labelled `VERIFIED`; option ON never excuses a null/unparseable `last_checked_at`; a non-object/falsy options argument means OFF; the carrier rejects a missing/non-UUID `offer_id` and an unknown `offer_class`; `validate-selected` mirrors all of it. Existing exact-shape fixtures were updated to the wider carrier (never relaxed): `assemble.test.js`, `prices.test.js`, `persist-ranked.test.js`, `validate-selected.test.js`, `select.test.js`, plus the two orchestrator arity/source pins that legitimately changed.
+* **Behaviour, driven headlessly through the REAL 2B→2D path on the TEST branch** (temp probe, removed after the run; seed offers temporarily aged 40 days, every `last_checked_at` restored): **A** fresh + option OFF → pool 101, verdicts 87 PASS / 12 UNKNOWN / 2 REJECT, all 101 carrier entries `SEED_UNVERIFIED`, retained 40, `budget_floor.cheapest_total` 4477, `within_budget` true; **B** STALE + option OFF → throws `EMPTY_CANDIDATE_POOL` (Decision 7 unchanged); **C** STALE + option ON → identical to A, including `budget_floor`. Restore verified: 0 stale offers, 0 flipped `ingestion_record_id`.
+* **Durable pin — PASS.** `scripts/test-orchestrator-commit.js` gained section 8 on the branch: a deliberately MIXED build persists `SEED_UNVERIFIED` and `VERIFIED` per component, `store_offer_id` stores the exact offer, flipping THAT source offer to verified does not relabel the persisted row, the offer is restored (non-null `ingestion_record_id` back to baseline 0), and cleanup residue is 0. Re-run: **51 pass / 0 fail** (was 43/0).
+* **Gate — PASS.** `node scripts/check-offer-freshness.js --fail-days=14` now prints both classes (VERIFIED 0/0, SEED 101/0) and still exits 0; the `--fail-days 14` space form still exits 2; unit suite and `test:scripts` 89/0 are green on Node 22 and Node 24.
+* **Schema — TEST ONLY.** Migration `018_build_component_offer_provenance.sql` applied to the TEST branch via the OG-14 ledger (`schema_migrations` = **18**, both columns + CHECK + FK index present, `build_component` still 0 rows). The **shared DB is deliberately still at 017**, so `verify:replay` reports fresh-18 vs live-17 drift **by design** until the shared apply — exactly the state 017 itself was in while it waited for shared.
+
+### Honest limitations
+
+* **The option is not persisted per query.** A permalink shows the label that was STORED at commit time, which is the point; a fresh re-run of the same query at a later date can label differently if the data changed, and no run-level record says which option was in force.
+* **`SEED_UNVERIFIED` is a provenance label, not a verification.** The seed prices remain unverified against real retailers — that is OG-06's price-VALUE residual, unchanged by this decision.
+* **The exemption is measured with artificially aged data.** On the live catalogs every seed offer is currently fresh, so the stale branch is exercised by the probe and by unit fixtures rather than by live data — the same "live but currently unreachable" shape Decision 33 recorded for dual-memory boards.
+* **`store_offer_id` makes offer deletion FK-restricted.** No workflow deletes offers today (seed 006 only re-stamps), but a future cleanup that tries will be refused while a persisted build references the row — which is the intended provenance behaviour, recorded here so it is not discovered as a bug.
+
+```text
+VERDICT: RESOLVED - a default-OFF allow_unverified_seed_offers option waives Decision 7's 30-day window for SEED offers (ingestion_record_id IS NULL) only, every eligible offer carries offer_id + offer_class onto the price carrier, and migration 018 snapshots offer_class + store_offer_id onto build_component inside the commit transaction (TEXT + CHECK, no enum; OG-21's column landed early). VERIFIED offers keep Decision 7 unchanged; a null last_checked_at is never excused; the freshness gate reports both classes and fails on VERIFIED only. Measured: unit 937 -> 950/0; commit harness 43 -> 51/0 with a mixed-build + no-relabel pin and residue 0; real-path probe option OFF (stale) throws EMPTY_CANDIDATE_POOL while option ON returns the full 101-pool / 87-12-2 pass with budget_floor 4477; migration 018 is on TEST only (shared stays 017, so verify:replay is red by design until the gated apply).
+```

@@ -23,7 +23,7 @@ points are the engine's public barrels (`src/recommendation/*/index.js`) and the
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–34). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–35). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
    To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
@@ -69,7 +69,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `docs/GLOSSARY.md` | Load-bearing vocabulary (status vocabulary, decision ids, the `D2` vs `Decision 2` collision) |
 | `docs/TEST_MAP.md` | Which test pins which contract — check before changing pinned behavior |
 | `docs/RECIPES/` | Task checklists: add a migration/seed/scoring-model/pair-evaluator/stage/status-claim |
-| `database/migrations/` | Authoritative schema (`001`–`017`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
+| `database/migrations/` | Authoritative schema (`001`–`018`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
 | `database/seeds/` | DML-only, idempotent seed data |
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |
 | `scripts/` | CLIs: migrations, seeds, schema verifiers, engine checks |
@@ -244,10 +244,13 @@ getting the nightly gate, which is why `workflow_dispatch` is wired up too.
    and RE-VERIFIED 2026-10-05 through `001→015` with **0 drift by object definition** (C-30). That
    check is now the repeatable `npm run verify:replay` gate, so re-run it after any migration lands
    rather than trusting a one-off measurement. The shared and TEST databases are baselined in the
-   `schema_migrations` ledger (OG-14) and both stand at **017** as of 2026-10-06
-   (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04,
+   `schema_migrations` ledger (OG-14); the shared DB stands at **017** and the TEST branch at **018**
+   as of 2026-10-06 (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04,
    `015_relax_rejection_partner.sql` / OG-32, `016_og02_og03_memory_and_status.sql` / OG-02+OG-03,
-   `017_offer_identity_and_provenance.sql` / OG-06).
+   `017_offer_identity_and_provenance.sql` / OG-06, `018_build_component_offer_provenance.sql` /
+   Decision 35 — TEST first, shared apply still gated). Because `verify:replay` diffs a fresh
+   replay against `DATABASE_URL`, it reports fresh-018 vs live-017 drift **by design** until the
+   shared apply — that is expected, not a defect.
 6. **Migration ledger (OG-14, 2026-10-04).** `run-migrations.js` is ledger-driven: it records each
    applied filename in `schema_migrations` and applies only the pending tail, so it is re-runnable
    (the bare `CREATE TYPE` in `002_enums.sql` no longer aborts a second run). A database that
