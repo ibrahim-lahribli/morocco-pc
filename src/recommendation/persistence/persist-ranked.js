@@ -8,8 +8,11 @@
  * never builds SQL by concatenation, and writes entry.explanation as $5
  * (Decision 22 item 5). UUIDs are generated in JS via crypto.randomUUID()
  * (Decision 19.4). Build_component price columns come from component.price.*
- * (selected_price, currency, store_id, price_checked_at); component.category,
- * component.status, and build.currency are ignored (Decision 19.6).
+ * (selected_price, currency, store_id, price_checked_at, offer_id,
+ * offer_class); component.category, component.status, and build.currency are
+ * ignored (Decision 19.6). Decision 35: offer_class and store_offer_id are the
+ * provenance SNAPSHOT written inside this same transaction, so a later
+ * store_offer UPDATE cannot relabel an already-persisted build.
  */
 'use strict';
 
@@ -19,7 +22,7 @@ const { validateSelected } = require('./validate-selected');
 const INSERT_BUILD_CANDIDATE =
   'INSERT INTO build_candidate (id, recommendation_query_id, total_price, score, compatibility_status) VALUES ($1,$2,$3,$4,$5)';
 const INSERT_BUILD_COMPONENT =
-  'INSERT INTO build_component (id, build_candidate_id, product_id, product_variant_id, component_role, selected_price, currency, store_id, price_checked_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)';
+  'INSERT INTO build_component (id, build_candidate_id, product_id, product_variant_id, component_role, selected_price, currency, store_id, price_checked_at, offer_class, store_offer_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)';
 const INSERT_RECOMMENDATION_RESULT =
   'INSERT INTO recommendation_result (id, recommendation_query_id, build_candidate_id, rank, explanation) VALUES ($1,$2,$3,$4,$5)';
 
@@ -75,6 +78,8 @@ async function persistRanked({ client, queryId, selected }) {
         component.price.currency,
         component.price.store_id,
         component.price.price_checked_at,
+        component.price.offer_class,
+        component.price.offer_id,
       ]);
     }
 

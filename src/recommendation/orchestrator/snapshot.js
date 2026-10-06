@@ -75,12 +75,14 @@ function validateClient(client) {
  *        client.query(sql, params); never created, never closed, never a Pool.
  * @param {string} queryId pinned recommendation_query.id (validated by the
  *        query loader inside the transaction).
+ * @param {object} [options] Decision 35 engine options, forwarded unchanged to
+ *        the pass and ultimately to Stage 1; omitted means default OFF.
  * @returns {Promise<object>} the frozen runRecommendation result.
  * @throws the pass error unchanged (after ROLLBACK), or the ROLLBACK error on
  *        an otherwise successful pass; INVALID_INPUT client when the client
  *        contract fails (no statement is issued).
  */
-async function runRecommendationSnapshot(client, queryId) {
+async function runRecommendationSnapshot(client, queryId, options) {
   validateClient(client);
 
   // Outside the try: if BEGIN itself fails there is no transaction to end.
@@ -88,7 +90,7 @@ async function runRecommendationSnapshot(client, queryId) {
 
   let failure = null;
   try {
-    return await run.runRecommendation({ db: client, queryId });
+    return await run.runRecommendation({ db: client, queryId, options });
   } catch (error) {
     failure = error;
     throw error;

@@ -13,12 +13,16 @@ const STORE_B = '22222222-2222-4222-8222-222222222222';
 const TS = '2026-09-14T00:00:00.000Z';
 const TS2 = '2026-09-15T12:30:00.000Z';
 
+const OFFER_A = '33333333-3333-4333-8333-333333333333';
+
 function makeEntry(overrides = {}) {
   return {
     selected_price: 1299.5,
     currency: 'MAD',
     store_id: STORE_A,
     price_checked_at: TS,
+    offer_id: OFFER_A,
+    offer_class: 'SEED_UNVERIFIED',
     ...overrides,
   };
 }
@@ -190,9 +194,49 @@ test('rejects entry missing price_checked_at', () => {
   );
 });
 
+test('rejects entry missing offer_id', () => {
+  const { offer_id: _drop, ...rest } = makeEntry();
+  const key = priceKey('cpu-1', null, 'CPU');
+  assert.throws(
+    () => validatePrices(makeCarrier([[key, rest]])),
+    expectError(ERROR_CODES.MISSING_REQUIRED_FIELD, `prices.${key}.offer_id`)
+  );
+});
+
+test('rejects entry missing offer_class', () => {
+  const { offer_class: _drop, ...rest } = makeEntry();
+  const key = priceKey('cpu-1', null, 'CPU');
+  assert.throws(
+    () => validatePrices(makeCarrier([[key, rest]])),
+    expectError(ERROR_CODES.MISSING_REQUIRED_FIELD, `prices.${key}.offer_class`)
+  );
+});
+
+test('rejects a non-UUID offer_id and an unknown offer_class', () => {
+  const key = priceKey('cpu-1', null, 'CPU');
+  for (const [field, value] of [
+    ['offer_id', 'not-a-uuid'], ['offer_id', ''], ['offer_class', 'REVIEWED'], ['offer_class', null],
+  ]) {
+    assert.throws(
+      () => validatePrices(singleCarrier({ [field]: value })),
+      expectError(ERROR_CODES.INVALID_FIELD_VALUE, `prices.${key}.${field}`),
+      field + '=' + String(value)
+    );
+  }
+});
+
+test('accepts both Decision 35 offer classes and copies them', () => {
+  for (const offer_class of ['SEED_UNVERIFIED', 'VERIFIED']) {
+    const carrier = validatePrices(singleCarrier({ offer_class }));
+    const entry = carrier[priceKey('cpu-1', null, 'CPU')];
+    assert.equal(entry.offer_class, offer_class);
+    assert.equal(entry.offer_id, OFFER_A);
+  }
+});
+
 test('rejects every possible extra key', () => {
   const key = priceKey('cpu-1', null, 'CPU');
-  for (const extra of ['extra', 'price', 'offer_id', 'category', 'product_id']) {
+  for (const extra of ['extra', 'price', 'category', 'product_id']) {
     const entry = { ...makeEntry(), [extra]: 1 };
     assert.throws(
       () => validatePrices(makeCarrier([[key, entry]])),

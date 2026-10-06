@@ -17,6 +17,8 @@ function price(overrides) {
     currency: 'MAD',
     store_id: STORE_A,
     price_checked_at: TS,
+    offer_id: '33333333-3333-4333-8333-333333333333',
+    offer_class: 'SEED_UNVERIFIED',
   };
   if (overrides !== undefined) {
     for (const k of Object.keys(overrides)) base[k] = overrides[k];
@@ -270,6 +272,32 @@ test('store_id set plus price_checked_at null fails (migration 011 direction)', 
 
 test('price_checked_at set plus store_id null passes (asymmetric, allowed)', () => {
   assert.equal(validateSelected([singleEntry({}, build8({ store_id: null, price_checked_at: TS }))]), undefined);
+});
+
+test('Decision 35: offer_id and offer_class are required on every component price', () => {
+  const missingId = rejectionOf(() => validateSelected([singleEntry({}, build8({ offer_id: undefined }))]));
+  assert.ok(missingId instanceof CandidateSelectionError);
+  assert.equal(missingId.code, ERROR_CODES.MISSING_REQUIRED_FIELD);
+  assert.match(missingId.message, /offer_id/);
+  const missingClass = rejectionOf(() => validateSelected([singleEntry({}, build8({ offer_class: undefined }))]));
+  assert.ok(missingClass instanceof CandidateSelectionError);
+  assert.equal(missingClass.code, ERROR_CODES.MISSING_REQUIRED_FIELD);
+  assert.match(missingClass.message, /offer_class/);
+});
+
+test('Decision 35: a non-UUID offer_id or an unknown offer_class fails', () => {
+  const badId = rejectionOf(() => validateSelected([singleEntry({}, build8({ offer_id: 'nope' }))]));
+  assert.equal(badId.code, ERROR_CODES.INVALID_FIELD_VALUE);
+  assert.match(badId.message, /offer_id/);
+  const badClass = rejectionOf(() => validateSelected([singleEntry({}, build8({ offer_class: 'REVIEWED' }))]));
+  assert.equal(badClass.code, ERROR_CODES.INVALID_FIELD_VALUE);
+  assert.match(badClass.message, /offer_class/);
+});
+
+test('Decision 35: both offer classes are accepted', () => {
+  for (const offer_class of ['SEED_UNVERIFIED', 'VERIFIED']) {
+    assert.equal(validateSelected([singleEntry({}, build8({ offer_class }))]), undefined);
+  }
 });
 
 test('category and build.currency are ignored, never read', () => {

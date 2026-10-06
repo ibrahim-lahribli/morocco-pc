@@ -116,8 +116,17 @@ async function countsForQueries(client, queryIds) {
 }
 
 
-/** One synthetic component: real product_id (FK), no store snapshot. */
-function makeComponent(role, productId, price, status) {
+/**
+ * The real seed store_offer id every synthetic component anchors to. Set once
+ * from preflight: build_component.store_offer_id is a real FK (migration 018),
+ * so a synthetic id would fail the insert, and Decision 35's validate-selected
+ * requires a non-null UUID offer_id.
+ */
+let SEED_OFFER_ID = null;
+
+/** One synthetic component: real product_id (FK), real seed offer id (FK). */
+function makeComponent(role, productId, price, status, offer) {
+  const snapshot = offer || { offer_id: SEED_OFFER_ID, offer_class: 'SEED_UNVERIFIED' };
   return {
     component_role: role,
     product_id: productId,
@@ -126,8 +135,16 @@ function makeComponent(role, productId, price, status) {
     status: status || 'PASS',
     // store_id null + price_checked_at null: the store/price mapping is pinned
     // by persistence/persist-ranked.test.js; these fixtures exist to prove
-    // transaction semantics, so their preconditions stay minimal.
-    price: { selected_price: price, currency: 'MAD', store_id: null, price_checked_at: null },
+    // transaction semantics, so their preconditions stay minimal. offer_id and
+    // offer_class are the Decision 35 provenance snapshot.
+    price: {
+      selected_price: price,
+      currency: 'MAD',
+      store_id: null,
+      price_checked_at: null,
+      offer_id: snapshot.offer_id,
+      offer_class: snapshot.offer_class,
+    },
   };
 }
 
@@ -210,11 +227,27 @@ async function preflight(client) {
       + ' on the test branch - reset it from its parent and run the seeds first');
   }
 
+  // Decision 35 needs a REAL seed offer: build_component.store_offer_id is a
+  // real FK (migration 018). Ordered for determinism (AGENTS section 7 item 12).
+  const seedOffer = await client.query(
+    'SELECT id FROM store_offer WHERE ingestion_record_id IS NULL ORDER BY id LIMIT 1'
+  );
+  if (seedOffer.rows.length === 0) {
+    throw new Error('PREFLIGHT FAILED (no write was performed): no seed store_offer row exists'
+      + ' on the test branch - reset it from its parent and run the seeds first');
+  }
+  const flipped = await scalar(
+    client,
+    'SELECT count(*)::int AS flipped FROM store_offer WHERE ingestion_record_id IS NOT NULL'
+  );
+
   return {
     productIds: products.rows.map((row) => row.id),
     scoringModelId: model.rows[0].id,
     modelLabel: model.rows[0].name + ' ' + model.rows[0].version,
     observed,
+    seedOfferId: seedOffer.rows[0].id,
+    flippedBaseline: flipped.flipped,
   };
 }
 
@@ -614,6 +647,86 @@ async function testRejectionPartnerIdentity(client, other, ctx, createdIds) {
 // Main: connect, preflight, run the seven cases, clean up, report.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// 8. Decision 35: the offer provenance snapshot is written, and never relabels.
+// ---------------------------------------------------------------------------
+
+async function testOfferProvenanceSnapshot(client, other, ctx, createdIds) {
+  console.log('\n--- 8. Decision 35 offer provenance snapshot (offer_class + store_offer_id) ---');
+  const queryId = await insertQuery(client, ctx.scoringModelId);
+  createdIds.push(queryId);
+
+  const [cpu, motherboard] = ctx.productIds;
+  const OFFER = ctx.seedOfferId;
+  // A deliberately MIXED build: one SEED_UNVERIFIED component and one whose
+  // class DISAGREES with the live offer. The persisted classes must be exactly
+  // what was supplied - that is what proves the value is a snapshot rather than
+  // a join over store_offer.
+  const selected = [
+    makeEntry(1, [
+      makeComponent('CPU', cpu, 1000, 'PASS', { offer_id: OFFER, offer_class: 'SEED_UNVERIFIED' }),
+      makeComponent('MOTHERBOARD', motherboard, 1500, 'PASS', { offer_id: OFFER, offer_class: 'VERIFIED' }),
+    ]),
+  ];
+
+  await runRecommendationCommit(client, queryId, selected);
+
+  const readClasses = () => other.query(
+    'SELECT c.component_role::text AS role, c.offer_class, c.store_offer_id'
+      + ' FROM build_component c JOIN build_candidate b ON b.id = c.build_candidate_id'
+      + ' WHERE b.recommendation_query_id = $1 ORDER BY c.component_role::text',
+    [queryId]
+  );
+
+  const rows = (await readClasses()).rows;
+  assert(rows.length === 2, 'both components persisted (got ' + rows.length + ')');
+  const cpuRow = rows.find((row) => row.role === 'CPU');
+  const mbRow = rows.find((row) => row.role === 'MOTHERBOARD');
+  assert(cpuRow && cpuRow.offer_class === 'SEED_UNVERIFIED',
+    'the SEED component kept its class (' + (cpuRow ? cpuRow.offer_class : 'no row') + ')');
+  assert(mbRow && mbRow.offer_class === 'VERIFIED',
+    'the VERIFIED component kept its class (' + (mbRow ? mbRow.offer_class : 'no row') + ')');
+  assert(cpuRow && cpuRow.store_offer_id === OFFER,
+    'store_offer_id stores the exact offer that produced the price');
+  assert(mbRow && mbRow.store_offer_id === OFFER, 'every component anchors to that offer');
+
+  // Snapshot, not a join: flip the SOURCE offer to verified and prove the
+  // already-persisted rows do not move. Restored in the finally either way.
+  const ingestionId = randomUUID();
+  let mutated = false;
+  try {
+    await client.query(
+      "INSERT INTO ingestion_record (id, source_type, source_identifier, status, record_count, started_at)"
+        + " VALUES ($1, 'RETAILER', $2, 'COMPLETED', 1, now())",
+      [ingestionId, 'test-orchestrator-commit/decision-35']
+    );
+    const updated = await client.query(
+      'UPDATE store_offer SET ingestion_record_id = $1 WHERE id = $2',
+      [ingestionId, OFFER]
+    );
+    assert(updated.rowCount === 1, 'the source offer was flipped to VERIFIED for the relabel check');
+    mutated = true;
+
+    const after = (await readClasses()).rows;
+    const cpuAfter = after.find((row) => row.role === 'CPU');
+    assert(cpuAfter && cpuAfter.offer_class === 'SEED_UNVERIFIED',
+      'a later store_offer UPDATE does not relabel a persisted build (CPU stayed SEED_UNVERIFIED)');
+  } finally {
+    if (mutated) {
+      await client.query('UPDATE store_offer SET ingestion_record_id = NULL WHERE id = $1', [OFFER]);
+    }
+    await client.query('DELETE FROM ingestion_record WHERE id = $1', [ingestionId]);
+  }
+
+  const restored = await scalar(
+    client,
+    'SELECT count(*)::int AS flipped FROM store_offer WHERE ingestion_record_id IS NOT NULL'
+  );
+  assert(restored.flipped === ctx.flippedBaseline,
+    'the source offer was restored (non-null ingestion_record_id back to baseline '
+      + ctx.flippedBaseline + ', saw ' + restored.flipped + ')');
+}
+
 async function main() {
   const dbConfig = getWriteTestDbUrl();
   const client = new Client({
@@ -634,8 +747,10 @@ async function main() {
     console.log('the shared DATABASE_URL is never contacted and never printed');
 
     const ctx = await preflight(client);
+    SEED_OFFER_ID = ctx.seedOfferId;
     console.log('preflight ok: scoring_model ' + ctx.modelLabel
-      + ', ' + ctx.productIds.length + ' product id(s) available');
+      + ', ' + ctx.productIds.length + ' product id(s) available'
+      + ', seed offer ' + ctx.seedOfferId);
     console.log('Layer 4 write tables before this run: ' + JSON.stringify(ctx.observed));
 
     await other.connect();
@@ -648,6 +763,7 @@ async function main() {
     await testZeroBuild(client, other, ctx, createdIds);
     await testRejectionReplace(client, other, ctx, createdIds);
     await testRejectionPartnerIdentity(client, other, ctx, createdIds);
+    await testOfferProvenanceSnapshot(client, other, ctx, createdIds);
   } finally {
     if (connected) {
       try {

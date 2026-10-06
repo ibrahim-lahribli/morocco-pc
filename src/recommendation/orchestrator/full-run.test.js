@@ -352,7 +352,9 @@ test('full-run.js keeps its source boundary (no SQL, no tx control, no driver)',
   ]) {
     assert.ok(!source.includes(token), 'full-run.js must not contain ' + token);
   }
-  assert.ok(source.includes('snapshot.runRecommendationSnapshot(client, queryId)'));
+  // Decision 35: the engine options object is forwarded unchanged to the read
+  // wrapper, which forwards it to Stage 1.
+  assert.ok(source.includes('snapshot.runRecommendationSnapshot(client, queryId, options)'));
   assert.ok(source.includes('ranking.rankBuilds({ builds: snap.builds })'));
   assert.ok(source.includes('ranked: rankedResult.ranked'));
   assert.ok(source.includes('ranking.TOP_N_PERSISTED'));

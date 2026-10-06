@@ -52,11 +52,15 @@ const explanation = require('../explanation');
  *        created, never closed, never released here - handed first to the
  *        read wrapper and then to the write wrapper, sequentially.
  * @param {string} queryId pinned recommendation_query.id.
+ * @param {object} [options] Decision 35 engine options (e.g.
+ *        `allow_unverified_seed_offers`), forwarded unchanged to the read
+ *        wrapper and then to Stage 1. Omitted means default OFF, so existing
+ *        callers keep byte-identical behaviour.
  * @returns {Promise<object>} the frozen combined result (eleven fields, see
  *          above).
  */
-async function runRecommendationFullRun(client, queryId) {
-  const snap = await snapshot.runRecommendationSnapshot(client, queryId);
+async function runRecommendationFullRun(client, queryId, options) {
+  const snap = await snapshot.runRecommendationSnapshot(client, queryId, options);
   const rankedResult = ranking.rankBuilds({ builds: snap.builds });
   const selection = ranking.selectDiverseTop({
     ranked: rankedResult.ranked,

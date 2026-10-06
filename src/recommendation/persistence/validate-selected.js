@@ -21,6 +21,11 @@ function isFiniteNumber(value) {
 // 3-letter uppercase code, no trim, no folding (mirrors assembly/prices.js).
 const CURRENCY_RE = /^[A-Z]{3}$/;
 
+// Decision 35 offer-provenance vocabulary (mirrors assembly/prices.js and
+// migration 018's CHECK — deliberately mirrored, like the regexes above,
+// rather than importing from the assembly layer).
+const OFFER_CLASSES = Object.freeze(['SEED_UNVERIFIED', 'VERIFIED']);
+
 // Hex groups 8-4-4-4-12 (mirrors assembly/prices.js; private there).
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
@@ -76,6 +81,21 @@ function validatePrice(price, cwhere) {
   }
   if (price.store_id !== null && price.price_checked_at === null) {
     fail(ERROR_CODES.INVALID_FIELD_VALUE, 'selected', cwhere + '.price.store_id requires price_checked_at (migration 011 CHECK: store_id IS NULL OR price_checked_at IS NOT NULL)');
+  }
+  // Decision 35: the offer provenance snapshot is REQUIRED on a persisted
+  // component — a missing class would read as "unknown provenance" in a
+  // permalink, which migration 018 deliberately forbids (NOT NULL).
+  if (price.offer_id === undefined || price.offer_id === null) {
+    fail(ERROR_CODES.MISSING_REQUIRED_FIELD, 'selected', cwhere + '.price.offer_id is required');
+  }
+  if (!isUuid(price.offer_id)) {
+    fail(ERROR_CODES.INVALID_FIELD_VALUE, 'selected', cwhere + '.price.offer_id must be a UUID');
+  }
+  if (price.offer_class === undefined || price.offer_class === null) {
+    fail(ERROR_CODES.MISSING_REQUIRED_FIELD, 'selected', cwhere + '.price.offer_class is required');
+  }
+  if (!OFFER_CLASSES.includes(price.offer_class)) {
+    fail(ERROR_CODES.INVALID_FIELD_VALUE, 'selected', cwhere + '.price.offer_class must be exactly "SEED_UNVERIFIED" or "VERIFIED"');
   }
 }
 

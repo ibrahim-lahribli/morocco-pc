@@ -37,8 +37,10 @@ test('orchestrator barrel exposes exactly the Decision 17 + 21 entry points', ()
   assert.equal(typeof orchestrator.runRecommendationSnapshot, 'function');
   assert.equal(typeof orchestrator.runRecommendationFullRun, 'function');
   assert.equal(orchestrator.runRecommendation.length, 1);
-  assert.equal(orchestrator.runRecommendationSnapshot.length, 2);
-  assert.equal(orchestrator.runRecommendationFullRun.length, 2);
+  // Decision 35 added an optional third parameter (engine options) to both
+  // wrappers, so their arity is pinned at 3 rather than 2.
+  assert.equal(orchestrator.runRecommendationSnapshot.length, 3);
+  assert.equal(orchestrator.runRecommendationFullRun.length, 3);
 });
 
 test('orchestrator barrel re-exports by identity - no wrapper, no copy', () => {

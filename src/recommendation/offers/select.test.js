@@ -65,6 +65,9 @@ function offerRow(overrides = {}) {
     currency: 'MAD',
     availability: 'IN_STOCK',
     last_checked_at: LAST_FRESH,
+    // Decision 35: NULL provenance = SEED_UNVERIFIED. Existing tests keep
+    // their behaviour because the exemption is OFF unless a test opts in.
+    ingestion_record_id: null,
     ...overrides,
   };
 }
@@ -248,6 +251,8 @@ test('SQL contains required clauses and no forbidden tokens', async () => {
     'CURRENT_TIMESTAMP AS price_checked_at',
     '$1',
     '$2',
+    '$3',
+    'o.ingestion_record_id',
   ];
   for (const token of required) {
     assert.ok(SELECT_OFFER_PRICES_SQL.includes(token), `SQL must contain ${token}`);
@@ -267,7 +272,7 @@ test('query is parameterized with product ids and currency', async () => {
   const db = makeDb([offerRow({ product_id: 'cpu-1' })]);
   await selectOfferPrices(poolResult([cpu('cpu-1')]), db);
   assert.equal(db.calls.length, 1);
-  assert.deepEqual(db.calls[0].params, [['cpu-1'], 'MAD']);
+  assert.deepEqual(db.calls[0].params, [['cpu-1'], 'MAD', false]);
 });
 
 test('no second engine behavior is introduced', async () => {
@@ -292,6 +297,82 @@ test('no second engine behavior is introduced', async () => {
   }
   const barrel = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
   assert.ok(barrel.includes('selectOfferPrices'));
+});
+
+const VERIFIED_RECORD = '99999999-9999-4999-8999-999999999999';
+
+// ---------------------------------------------------------------------------
+// Decision 35: the beta seed-offer freshness exemption and the offer class.
+// ---------------------------------------------------------------------------
+
+test('Decision 35: option OFF keeps a stale seed offer expired (behaviour unchanged)', async () => {
+  const db = makeDb([
+    offerRow({ last_checked_at: msBeforeDecision(31 * 24 * 60 * 60 * 1000), ingestion_record_id: null }),
+  ]);
+  await assert.rejects(
+    () => selectOfferPrices(poolResult([cpu('cpu-1')]), db),
+    (err) => err instanceof CandidateSelectionError && err.code === ERROR_CODES.EMPTY_CANDIDATE_POOL
+  );
+  assert.deepEqual(db.calls[0].params, [['cpu-1'], 'MAD', false]);
+});
+
+test('Decision 35: option ON keeps a stale SEED offer and labels it SEED_UNVERIFIED', async () => {
+  const db = makeDb([
+    offerRow({
+      last_checked_at: msBeforeDecision(31 * 24 * 60 * 60 * 1000),
+      ingestion_record_id: null,
+    }),
+  ]);
+  const out = await selectOfferPrices(poolResult([cpu('cpu-1')]), db, {
+    allow_unverified_seed_offers: true,
+  });
+  assert.equal(out.pool.length, 1);
+  const entry = out.prices[priceKey('cpu-1', null, 'CPU')];
+  assert.equal(entry.offer_class, 'SEED_UNVERIFIED');
+  assert.equal(entry.offer_id, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+  assert.deepEqual(db.calls[0].params, [['cpu-1'], 'MAD', true]);
+});
+
+test('Decision 35: option ON does NOT rescue a stale VERIFIED offer', async () => {
+  const db = makeDb([
+    offerRow({
+      last_checked_at: msBeforeDecision(31 * 24 * 60 * 60 * 1000),
+      ingestion_record_id: VERIFIED_RECORD,
+    }),
+  ]);
+  await assert.rejects(
+    () => selectOfferPrices(poolResult([cpu('cpu-1')]), db, { allow_unverified_seed_offers: true }),
+    (err) => err instanceof CandidateSelectionError && err.code === ERROR_CODES.EMPTY_CANDIDATE_POOL
+  );
+});
+
+test('Decision 35: a fresh VERIFIED offer is labelled VERIFIED', async () => {
+  const db = makeDb([offerRow({ ingestion_record_id: VERIFIED_RECORD })]);
+  const out = await selectOfferPrices(poolResult([cpu('cpu-1')]), db);
+  assert.equal(out.prices[priceKey('cpu-1', null, 'CPU')].offer_class, 'VERIFIED');
+});
+
+test('Decision 35: option ON never excuses a missing or unparseable last_checked_at', async () => {
+  for (const bad of [null, undefined, 'not-a-date']) {
+    const db = makeDb([offerRow({ last_checked_at: bad, ingestion_record_id: null })]);
+    await assert.rejects(
+      () => selectOfferPrices(poolResult([cpu('cpu-1')]), db, { allow_unverified_seed_offers: true }),
+      (err) => err instanceof CandidateSelectionError && err.code === ERROR_CODES.EMPTY_CANDIDATE_POOL,
+      'stale-independent rejection for last_checked_at=' + String(bad)
+    );
+  }
+});
+
+test('Decision 35: a non-object or falsy options argument means the default (OFF)', async () => {
+  const stale = () =>
+    makeDb([offerRow({ last_checked_at: msBeforeDecision(31 * 24 * 60 * 60 * 1000) })]);
+  for (const options of [undefined, null, false, 'yes', 1, {}, { allow_unverified_seed_offers: false }]) {
+    await assert.rejects(
+      () => selectOfferPrices(poolResult([cpu('cpu-1')]), stale(), options),
+      (err) => err instanceof CandidateSelectionError && err.code === ERROR_CODES.EMPTY_CANDIDATE_POOL,
+      'options ' + JSON.stringify(options)
+    );
+  }
 });
 
 test('repeated and shuffled equivalent rows produce deterministic output', async () => {

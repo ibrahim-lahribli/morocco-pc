@@ -15,7 +15,12 @@ const PRICE_FIELDS = Object.freeze([
   'currency',
   'store_id',
   'price_checked_at',
+  'offer_id',
+  'offer_class',
 ]);
+
+/** Decision 35 offer-provenance vocabulary (mirrors migration 018's CHECK). */
+const OFFER_CLASSES = Object.freeze(['SEED_UNVERIFIED', 'VERIFIED']);
 
 /** 3-letter uppercase code, no trim, no folding. */
 const CURRENCY_RE = /^[A-Z]{3}$/;
@@ -84,7 +89,7 @@ function validateEntry(key, entry) {
       fail(ERROR_CODES.MISSING_REQUIRED_FIELD, `prices.${key}.${field}`, `Price entry "${key}" requires "${field}"`);
     }
   }
-  const { selected_price, currency, store_id, price_checked_at } = entry;
+  const { selected_price, currency, store_id, price_checked_at, offer_id, offer_class } = entry;
   if (typeof selected_price !== 'number' || !Number.isFinite(selected_price) || selected_price <= 0) {
     fail(ERROR_CODES.INVALID_FIELD_VALUE, `prices.${key}.selected_price`, `Price entry "${key}" has an invalid "selected_price"`);
   }
@@ -96,6 +101,12 @@ function validateEntry(key, entry) {
   }
   if (!isUtcIsoTimestamp(price_checked_at)) {
     fail(ERROR_CODES.INVALID_FIELD_VALUE, `prices.${key}.price_checked_at`, `Price entry "${key}" has an invalid "price_checked_at"`);
+  }
+  if (typeof offer_id !== 'string' || offer_id.length === 0 || !isUuid(offer_id)) {
+    fail(ERROR_CODES.INVALID_FIELD_VALUE, `prices.${key}.offer_id`, `Price entry "${key}" has an invalid "offer_id"`);
+  }
+  if (!OFFER_CLASSES.includes(offer_class)) {
+    fail(ERROR_CODES.INVALID_FIELD_VALUE, `prices.${key}.offer_class`, `Price entry "${key}" has an invalid "offer_class"`);
   }
 }
 
@@ -120,6 +131,8 @@ function validatePrices(prices) {
       currency: entry.currency,
       store_id: entry.store_id,
       price_checked_at: entry.price_checked_at,
+      offer_id: entry.offer_id,
+      offer_class: entry.offer_class,
     };
     deepFreeze(copy);
     Object.defineProperty(frozen, key, {

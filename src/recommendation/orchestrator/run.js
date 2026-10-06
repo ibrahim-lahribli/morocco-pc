@@ -247,10 +247,13 @@ function withBuildScore(build, buildScore) {
  * hands this function a bare client gets auto-commit reads; a caller that
  * wraps it owns the transaction.
  *
- * @param {object} args { db, queryId }
+ * @param {object} args { db, queryId, options? }
  * @param {object} args.db pg-compatible client exposing db.query(sql, params);
  *        injected and validated by the loaders, never created or closed here.
  * @param {string} args.queryId pinned recommendation_query.id.
+ * @param {object} [args.options] Decision 35 engine options, passed through to
+ *        Stage 1 unchanged and never interpreted here. Default OFF: an omitted
+ *        options object leaves every eligibility rule exactly as it was.
  * @returns {Promise<object>} frozen { query_id, scoring_model_id, builds,
  *        budget_amount, currency, build_contributions, budget_floor } - builds
  *        in Engine 3 discovery order, each an Engine 3 build plus build_score,
@@ -291,7 +294,7 @@ async function runRecommendation(args) {
   //    carrier. Its pool is a SUBSET of the 2C pool (candidates without a
   //    usable offer are dropped) and is the only pool used from here on: the
   //    carrier covers exactly its members.
-  const offerResult = await offers.selectOfferPrices(poolResult, db);
+  const offerResult = await offers.selectOfferPrices(poolResult, db, args.options);
 
   // 7./8. Engine 2D: the context is loaded ONCE and the SAME object is handed
   //    to the pure filter and to Engine 3 (Decision 16 pairwise gate).

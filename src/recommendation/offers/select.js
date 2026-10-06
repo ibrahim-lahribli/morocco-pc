@@ -17,7 +17,16 @@
  *   - availability != 'OUT_OF_STOCK' exactly (no case normalization)
  *   - price is a finite number > 0 (NUMERIC strings converted via Number())
  *   - freshness: last_checked_at within 30 days inclusive of the query
- *     decision timestamp, future values accepted
+ *     decision timestamp, future values accepted; UNLESS the caller sets
+ *     options.allow_unverified_seed_offers (Decision 35, default false) AND
+ *     the offer is a seed offer (ingestion_record_id IS NULL), in which case
+ *     the 30-day window is bypassed for THAT offer only. A missing or
+ *     unparseable last_checked_at stays ineligible either way: NULL is
+ *     UNKNOWN, never a waiver (AGENTS.md section 8)
+ *   - each eligible offer carries its provenance class, derived from
+ *     ingestion_record_id: NULL = SEED_UNVERIFIED, non-NULL = VERIFIED. The
+ *     class and the offer id travel on the price carrier so a persisted build
+ *     can be labelled without re-reading store_offer (Decision 35)
  *   - strict applicability with no fallback:
  *       null-variant candidate    -> only NULL-variant offers, same product
  *       non-null variant candidate -> exact (product_id, variant_id) match
@@ -52,22 +61,29 @@ const GPU_ROLE = 'GPU';
 /** 30-day freshness window in milliseconds (inclusive boundary). */
 const FRESHNESS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
+/** Decision 35 provenance classes (mirrors migration 018's CHECK vocabulary). */
+const SEED_UNVERIFIED = 'SEED_UNVERIFIED';
+const VERIFIED = 'VERIFIED';
+
 /** UUID check mirrors the Engine 3 price-carrier contract. */
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 /**
- * Single Stage 1 query. Parameterized only ($1, $2); no interpolation.
- * $1 ::uuid[] candidate product ids (prefilter; strict applicability in JS).
- * $2 text       required currency (exact match, no conversion).
+ * Single Stage 1 query. Parameterized only ($1, $2, $3); no interpolation.
+ * $1 ::uuid[]  candidate product ids (prefilter; strict applicability in JS).
+ * $2 text      required currency (exact match, no conversion).
+ * $3 boolean   allow_unverified_seed_offers (Decision 35). When true a seed
+ *              offer (ingestion_record_id IS NULL) bypasses the 30-day window;
+ *              when false the added term is inert and behaviour is unchanged.
  */
 const SELECT_OFFER_PRICES_SQL = [
-  'SELECT o.id, o.store_id, o.product_id, o.product_variant_id, o.price, o.currency, o.availability, o.last_checked_at, CURRENT_TIMESTAMP AS price_checked_at',
+  'SELECT o.id, o.store_id, o.product_id, o.product_variant_id, o.price, o.currency, o.availability, o.last_checked_at, o.ingestion_record_id, CURRENT_TIMESTAMP AS price_checked_at',
   'FROM store_offer o',
   'WHERE o.product_id = ANY($1::uuid[])',
   'AND o.currency = $2',
   'AND o.price > 0',
   "AND o.availability != 'OUT_OF_STOCK'",
-  "AND o.last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'",
+  "AND (o.last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days' OR ($3 AND o.ingestion_record_id IS NULL))",
   'ORDER BY o.price ASC, o.id ASC',
 ].join(' ');
 
@@ -191,7 +207,7 @@ function isCheaperOffer(a, b) {
  * Normalize one store_offer row, re-enforcing the exact SQL eligibility.
  * Returns null for ineligible rows.
  */
-function normalizeOfferRow(row, currency, decisionMs) {
+function normalizeOfferRow(row, currency, decisionMs, allowUnverifiedSeedOffers) {
   if (row === null || typeof row !== 'object' || Array.isArray(row)) {
     return null;
   }
@@ -207,9 +223,13 @@ function normalizeOfferRow(row, currency, decisionMs) {
   }
   const checkedMs = toFreshnessMs(row.last_checked_at);
   if (checkedMs === null) {
+    // Decision 35 does NOT excuse a missing observation timestamp: an
+    // unparseable last_checked_at is UNKNOWN, never PASS.
     return null;
   }
-  if (checkedMs < decisionMs - FRESHNESS_WINDOW_MS) {
+  const isSeedOffer = row.ingestion_record_id === null || row.ingestion_record_id === undefined;
+  const freshnessWaived = allowUnverifiedSeedOffers === true && isSeedOffer;
+  if (!freshnessWaived && checkedMs < decisionMs - FRESHNESS_WINDOW_MS) {
     return null;
   }
   const productId = row.product_id === null || row.product_id === undefined ? null : String(row.product_id);
@@ -229,7 +249,14 @@ function normalizeOfferRow(row, currency, decisionMs) {
   if (offerId === null || offerId.length === 0) {
     return null;
   }
-  return { id: offerId, store_id: storeId, product_id: productId, product_variant_id: variantId, price };
+  return {
+    id: offerId,
+    store_id: storeId,
+    product_id: productId,
+    product_variant_id: variantId,
+    price,
+    offer_class: isSeedOffer ? SEED_UNVERIFIED : VERIFIED,
+  };
 }
 
 /**
@@ -242,11 +269,19 @@ function normalizeOfferRow(row, currency, decisionMs) {
  *
  * @param {object} candidatePoolResult Engine 2C result { input, pool }
  * @param {object} db pg-compatible client exposing db.query(sql, params)
+ * @param {object} [options] Decision 35 engine options (default OFF)
+ * @param {boolean} [options.allow_unverified_seed_offers=false] when true, a
+ *        seed offer (ingestion_record_id IS NULL) bypasses the 30-day window
  * @returns {Promise<object>} frozen { input, pool, prices }
  */
-async function selectOfferPrices(candidatePoolResult, db) {
+async function selectOfferPrices(candidatePoolResult, db, options) {
   validateCandidatePoolResult(candidatePoolResult);
   validateDatabaseClient(db);
+
+  const allowUnverifiedSeedOffers =
+    options !== null &&
+    typeof options === 'object' &&
+    options.allow_unverified_seed_offers === true;
 
   const input = createCandidateSelectionInput(candidatePoolResult.input);
 
@@ -261,7 +296,7 @@ async function selectOfferPrices(candidatePoolResult, db) {
 
   const productIds = sortedIds(new Set(candidates.map((c) => c.product_id)));
 
-  const result = await db.query(SELECT_OFFER_PRICES_SQL, [productIds, input.currency]);
+  const result = await db.query(SELECT_OFFER_PRICES_SQL, [productIds, input.currency, allowUnverifiedSeedOffers]);
   const rows = result && Array.isArray(result.rows) ? result.rows : [];
 
   if (rows.length === 0) {
@@ -277,7 +312,7 @@ async function selectOfferPrices(candidatePoolResult, db) {
 
   const eligible = [];
   for (const row of rows) {
-    const offer = normalizeOfferRow(row, input.currency, decisionMs);
+    const offer = normalizeOfferRow(row, input.currency, decisionMs, allowUnverifiedSeedOffers);
     if (offer !== null) {
       eligible.push(offer);
     }
@@ -305,6 +340,10 @@ async function selectOfferPrices(candidatePoolResult, db) {
       currency: input.currency,
       store_id: best.store_id,
       price_checked_at: decisionIso,
+      // Decision 35: provenance travels with the price, so persistence can
+      // snapshot the class and the offer id without re-reading store_offer.
+      offer_id: best.id,
+      offer_class: best.offer_class,
     };
     Object.defineProperty(rawCarrier, key, {
       value: entry, enumerable: true, writable: true, configurable: true,

@@ -58,6 +58,8 @@ function carrierFor(verdicts, priceById = {}) {
         currency: 'MAD',
         store_id: STORE_A,
         price_checked_at: TS,
+        offer_id: '33333333-3333-4333-8333-333333333333',
+        offer_class: 'SEED_UNVERIFIED',
       },
       enumerable: true,
       writable: true,
@@ -805,7 +807,7 @@ test('the cap halts the walk: later paths stay unexplored', () => {
   for (const v of results) {
     if (v.product_id === 'cpu-2') continue;
     Object.defineProperty(raw, priceKey(v.product_id, v.product_variant_id, v.component_role), {
-      value: { selected_price: 100, currency: 'MAD', store_id: STORE_A, price_checked_at: TS },
+      value: { selected_price: 100, currency: 'MAD', store_id: STORE_A, price_checked_at: TS, offer_id: '33333333-3333-4333-8333-333333333333', offer_class: 'SEED_UNVERIFIED' },
       enumerable: true,
       writable: true,
       configurable: true,
@@ -1683,7 +1685,7 @@ test('full pipeline composes: Step 1 frozen input + Step 2 carrier + Step 4 asse
   const rawCarrier = Object.create(null);
   for (const v of results) {
     Object.defineProperty(rawCarrier, priceKey(v.product_id, v.product_variant_id, v.component_role), {
-      value: { selected_price: 100, currency: 'MAD', store_id: STORE_A, price_checked_at: TS },
+      value: { selected_price: 100, currency: 'MAD', store_id: STORE_A, price_checked_at: TS, offer_id: '33333333-3333-4333-8333-333333333333', offer_class: 'SEED_UNVERIFIED' },
       enumerable: true,
       writable: true,
       configurable: true,
@@ -1739,7 +1741,7 @@ test('full pipeline immutability: the complete composition never mutates caller-
   const rawCarrier = Object.create(null);
   for (const v of results) {
     Object.defineProperty(rawCarrier, priceKey(v.product_id, v.product_variant_id, v.component_role), {
-      value: { selected_price: 100, currency: 'MAD', store_id: STORE_A, price_checked_at: TS },
+      value: { selected_price: 100, currency: 'MAD', store_id: STORE_A, price_checked_at: TS, offer_id: '33333333-3333-4333-8333-333333333333', offer_class: 'SEED_UNVERIFIED' },
       enumerable: true,
       writable: true,
       configurable: true,

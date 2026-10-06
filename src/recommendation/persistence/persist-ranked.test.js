@@ -11,14 +11,22 @@ const STORE_B = '22222222-2222-4222-8222-222222222222';
 const TS1 = '2026-09-20T12:00:00.000Z';
 const TS2 = '2026-09-21T08:30:00.000Z';
 const SQL_CAND = 'INSERT INTO build_candidate (id, recommendation_query_id, total_price, score, compatibility_status) VALUES ($1,$2,$3,$4,$5)';
-const SQL_COMP = 'INSERT INTO build_component (id, build_candidate_id, product_id, product_variant_id, component_role, selected_price, currency, store_id, price_checked_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)';
+const SQL_COMP = 'INSERT INTO build_component (id, build_candidate_id, product_id, product_variant_id, component_role, selected_price, currency, store_id, price_checked_at, offer_class, store_offer_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)';
+const OFFER_ID = '33333333-3333-4333-8333-333333333333';
 const SQL_RES = 'INSERT INTO recommendation_result (id, recommendation_query_id, build_candidate_id, rank, explanation) VALUES ($1,$2,$3,$4,$5)';
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function makeClient() {
   return { calls: [], async query(sql, params) { this.calls.push({ sql, params }); return { rows: [] }; } };
 }
 function makePrice(sp, cur, sid, at) {
-  return { selected_price: sp, currency: cur, store_id: sid, price_checked_at: at };
+  return {
+    selected_price: sp,
+    currency: cur,
+    store_id: sid,
+    price_checked_at: at,
+    offer_id: OFFER_ID,
+    offer_class: 'SEED_UNVERIFIED',
+  };
 }
 function makeComp(role, pid, variant, priceObj, status) {
   return { component_role: role, product_id: pid, product_variant_id: variant, category: 'IGNORED-CAT', status: status || 'PASS', price: priceObj };
@@ -72,7 +80,7 @@ test('happy path exact SQL and params', async () => {
     const c = b1.components[i];
     assert.equal(client.calls[k].sql, SQL_COMP);
     assert.match(client.calls[k].params[0], UUID_V4_RE);
-    assert.deepEqual(client.calls[k].params.slice(1), [bc0, c.product_id, c.product_variant_id, c.component_role, c.price.selected_price, c.price.currency, c.price.store_id, c.price.price_checked_at]);
+    assert.deepEqual(client.calls[k].params.slice(1), [bc0, c.product_id, c.product_variant_id, c.component_role, c.price.selected_price, c.price.currency, c.price.store_id, c.price.price_checked_at, c.price.offer_class, c.price.offer_id]);
     k += 1;
   }
   assert.equal(client.calls[k].sql, SQL_RES);
@@ -85,7 +93,7 @@ test('happy path exact SQL and params', async () => {
     const c = b2.components[i];
     assert.equal(client.calls[k].sql, SQL_COMP);
     assert.match(client.calls[k].params[0], UUID_V4_RE);
-    assert.deepEqual(client.calls[k].params.slice(1), [bc1, c.product_id, c.product_variant_id, c.component_role, c.price.selected_price, c.price.currency, c.price.store_id, c.price.price_checked_at]);
+    assert.deepEqual(client.calls[k].params.slice(1), [bc1, c.product_id, c.product_variant_id, c.component_role, c.price.selected_price, c.price.currency, c.price.store_id, c.price.price_checked_at, c.price.offer_class, c.price.offer_id]);
     k += 1;
   }
   assert.equal(client.calls[k].sql, SQL_RES);
