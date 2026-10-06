@@ -4,7 +4,7 @@ Stage 1 hard-filters `store_offer.last_checked_at >= CURRENT_TIMESTAMP - INTERVA
 (`src/recommendation/offers/select.js:70`, Decision 7). Seeds 001/002 wrote
 `last_checked_at = NOW()` once; nothing refreshes it. Unrenewed, queries fail
 with `EMPTY_CANDIDATE_POOL` once all rows are stale. Seed 006 re-stamps the
-timestamp without touching prices (OG-06 stays open by design).
+timestamp without touching prices (OG-37 stays open by design).
 
 1. `git status` first. Check the cliff: `node scripts/check-offer-freshness.js`
    (read-only; exit 1 when offers are expired or the first expiry is near).

@@ -182,7 +182,7 @@ The acceptance gate is a small read-only script committed next to the seed — `
 
 ## 7. Out of scope (do not fold in)
 
-- Offer price verification (OG-06) — separate pass, but note VALUE scores depend on it; if the price
+- Offer price verification (OG-37) — separate pass, but note VALUE scores depend on it; if the price
   pass lands first, use its numbers.
 - Case radiator matrices (OG-05) — capture opportunistically during CASE research, but its seed is a
   separate file.

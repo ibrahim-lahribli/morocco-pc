@@ -67,7 +67,7 @@ Motherboard (socket · memory type · DIMM · max GB · mem speed · M.2 · PCIe
 
 ## 3. Price integrity gate (must run before any VALUE score)
 
-Seed 002's assessment-era prices are UNVERIFIED (OG-06) and the pilot set contains
+Seed 002's assessment-era prices are UNVERIFIED (OG-37) and the pilot set contains
 **internally impossible** combinations, so VALUE cannot be trusted blindly:
 
 - `5700G` 5160 MAD vs `5700X` 1890 MAD — same 8C/16T Zen 3 die, 2.7x price gap.
@@ -75,10 +75,10 @@ Seed 002's assessment-era prices are UNVERIFIED (OG-06) and the pilot set contai
 - `5950X` 2999 vs `5900X` 3199 — the 16-core priced below the 12-core.
 
 Rule for this batch: **sanity-check first, and where the live offer price fails the check,
-seed VALUE as `score NULL` / `rating 'Unrated'` with the reason and a pointer to OG-06 —
+seed VALUE as `score NULL` / `rating 'Unrated'` with the reason and a pointer to OG-37 —
 never derive a score from a price known to be wrong.** A documented NULL keeps the type on
 its documented no-evidence branch; a computed score from a 3x-wrong price is invented data
-with extra steps. Price correction itself is OG-06's own separate seed, out of scope here
+with extra steps. Price correction itself is OG-37's own separate seed, out of scope here
 (parent plan section 7).
 
 ## 4. Rubric anchors (frozen BEFORE scoring; written into each seed header)
@@ -165,7 +165,7 @@ and worst position in this 5-board set, with the price sanity check applied.
 
 | Risk | Mitigation |
 |---|---|
-| Wrong seed-002 prices poison VALUE | section 3 sanity gate => honest `NULL` + OG-06 pointer |
+| Wrong seed-002 prices poison VALUE | section 3 sanity gate => honest `NULL` + OG-37 pointer |
 | Gaming-specialised CPUs understated by a multi-thread anchor | documented limitation in the seed header and the register |
 | No credible review exists (LPC board, OEM-locked CPU) | honest `NULL` / `Unrated`; staying low is a legitimate outcome |
 | Scores drift from seed 001's incumbents | anchors reproduce 7500F = 78 by construction; cross-check 8600G, 990 Pro, NH-U12S, Flare X5 |
