@@ -8,7 +8,7 @@ live database (`information_schema` / `pg_catalog`). Per `AGENTS.md` section 9,
 generated lookup so "does this column exist?" never requires reading 11 SQL files
 (the question that produced audit finding D2).
 
-<!-- schema-digest: 47a35a3c9e062141 -->
+<!-- schema-digest: 8f2a845486839218 -->
 
 ## Enum vocabularies (14)
 
@@ -131,7 +131,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 
 **Indexes:** `build_candidate_pkey` · `idx_build_candidate_recommendation_query_id`
 
-### `build_component` (11 columns)
+### `build_component` (13 columns)
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -146,15 +146,18 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `price_checked_at` | timestamp with time zone | YES |  |
 | `created_at` | timestamp with time zone | NO | now() |
 | `updated_at` | timestamp with time zone | NO | now() |
+| `offer_class` | text | NO | 'SEED_UNVERIFIED'::text |
+| `store_offer_id` | uuid | YES |  |
 
-**Foreign keys:** `build_component_build_candidate_id_fkey`: `build_candidate_id` → `build_candidate.id` (ON DELETE NO ACTION) · `build_component_product_id_fkey`: `product_id` → `product.id` (ON DELETE NO ACTION) · `build_component_product_variant_id_fkey`: `product_variant_id` → `product_variant.id` (ON DELETE NO ACTION) · `build_component_store_id_fkey`: `store_id` → `store.id` (ON DELETE NO ACTION)
+**Foreign keys:** `build_component_build_candidate_id_fkey`: `build_candidate_id` → `build_candidate.id` (ON DELETE NO ACTION) · `build_component_product_id_fkey`: `product_id` → `product.id` (ON DELETE NO ACTION) · `build_component_product_variant_id_fkey`: `product_variant_id` → `product_variant.id` (ON DELETE NO ACTION) · `build_component_store_id_fkey`: `store_id` → `store.id` (ON DELETE NO ACTION) · `build_component_store_offer_id_fkey`: `store_offer_id` → `store_offer.id` (ON DELETE NO ACTION)
 
 **CHECK constraints:**
 
+- `chk_build_component_offer_class` — CHECK ((offer_class = ANY (ARRAY['SEED_UNVERIFIED'::text, 'VERIFIED'::text])))
 - `chk_build_component_selected_price_positive` — CHECK ((selected_price > (0)::numeric))
 - `chk_build_component_store_requires_checked_at` — CHECK (((store_id IS NULL) OR (price_checked_at IS NOT NULL)))
 
-**Indexes:** `build_component_pkey` · `idx_build_component_build_candidate_id` · `idx_build_component_product_id` · `idx_build_component_product_variant_id` · `idx_build_component_store_id` · `uq_build_component_role_singular`
+**Indexes:** `build_component_pkey` · `idx_build_component_build_candidate_id` · `idx_build_component_product_id` · `idx_build_component_product_variant_id` · `idx_build_component_store_id` · `idx_build_component_store_offer_id` · `uq_build_component_role_singular`
 
 ### `build_rejection` (9 columns)
 
