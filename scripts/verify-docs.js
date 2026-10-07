@@ -80,11 +80,10 @@ function readRepo(rel) {
 // more => 40, with global headings 33 -> 34 (global + 2 = 36 global decisions).
 const decisions = (function checkDecisions() {
   const raw = readRepo('docs/RECOMMENDATION_ENGINE_DECISIONS.md');
-  if (!raw.includes('\r\n')) {
-    fail('decisions-crlf', 'decision log is not CRLF');
-    return null;
-  }
-  const lines = raw.split('\r\n');
+  // Line-ending tolerant: the log is stored CRLF, but a Linux checkout
+  // materializes LF (Git stores text as LF, the CRLF is an autocrlf artifact).
+  // Normalize to LF before splitting so the parse is identical on every OS.
+  const lines = raw.replace(/\r\n/g, '\n').split('\n');
   let inEngine3 = false;
   let global = 0;
   let nested = 0;

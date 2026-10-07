@@ -54,8 +54,11 @@ function esc(s) {
 }
 
 const raw = fs.readFileSync(SRC, 'utf8');
-if (!raw.includes('\r\n')) fail('RECOMMENDATION_ENGINE_DECISIONS.md is not CRLF; refusing to parse');
-const lines = raw.split('\r\n');
+// Line-ending tolerant: the log is stored CRLF, but a Linux checkout materializes
+// LF (Git stores text as LF internally; CRLF on disk is an autocrlf artifact).
+// Normalize to LF before splitting so the parse is identical on every OS.
+const lines = raw.replace(/\r\n/g, '\n').split('\n');
+
 
 // ---------------------------------------------------------------------------
 // 1. Walk headings; track the current `## ` section for nested entries.

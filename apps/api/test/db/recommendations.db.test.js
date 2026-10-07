@@ -100,12 +100,36 @@ async function residueFor(pool, queryIds) {
   return result.rows[0];
 }
 
+/**
+ * Whole-table row counts for the six tables the API/engine path touches.
+ * Used for the before/after comparison around the whole run: after cleanup,
+ * every count must equal its pre-run value — scoped-to-our-ids zero would miss
+ * a row written OUTSIDE the tracked ids (e.g. by a crashed pass), a global
+ * comparison does not.
+ */
+async function countAll(pool) {
+  const result = await pool.query(
+    'SELECT'
+    + ' (SELECT count(*)::int FROM recommendation_profile) AS profiles,'
+    + ' (SELECT count(*)::int FROM recommendation_query) AS queries,'
+    + ' (SELECT count(*)::int FROM recommendation_result) AS results,'
+    + ' (SELECT count(*)::int FROM build_candidate) AS candidates,'
+    + ' (SELECT count(*)::int FROM build_component) AS components,'
+    + ' (SELECT count(*)::int FROM build_rejection) AS rejections'
+  );
+  return result.rows[0];
+}
+
 test('the API round-trips a real recommendation and leaves no residue', async () => {
   const pool = createPool();
   const app = createApp(pool);
   const createdQueryIds = [];
+  let beforeCounts = null;
 
   try {
+    // ---- baseline: whole-table counts BEFORE anything runs ------------------
+    beforeCounts = await countAll(pool);
+
     // ---- 0. the real active model drives the advertised vocabulary ----------
     const metaResponse = await app.inject({ method: 'GET', url: '/v1/meta/options' });
     assert.equal(metaResponse.statusCode, 200);
@@ -169,6 +193,25 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
     assert.equal(get.budget_floor, null);
     assert.equal(get.engine_version, null);
     assert.equal(get.served_by.engine_version, ENGINE_VERSION);
+    // Full-body deep equality: GET must equal POST on EVERY field except the
+    // two pass-only facts, which GET serves as null by contract. A field-by-
+    // field comparison would silently pass on a field one path forgets.
+    assert.deepEqual(
+      get,
+      Object.assign({}, post, { budget_floor: null, engine_version: null }),
+      'GET is POST minus the two pass-only facts, deep-equal on everything else'
+    );
+
+    // ---- 2b. residue exists BEFORE cleanup, with the expected shape ---------
+    // (asserting zero AFTER cleanup only proves something if cleanup had real
+    // rows to remove; this pins what the pass actually persisted.)
+    const persisted = await residueFor(pool, [post.id]);
+    assert.equal(Number(persisted.queries), 1, 'the POST persisted exactly one query row');
+    // One recommendation_result AND one build_candidate row per persisted build.
+    assert.equal(Number(persisted.results), post.builds.length, 'one result row per persisted build');
+    assert.equal(Number(persisted.candidates), post.builds.length, 'one candidate row per persisted build');
+    assert.ok(Number(persisted.components) >= Number(persisted.candidates), 'every candidate carries at least one component row entry');
+    assert.ok(Number(persisted.rejections) >= 0, 'rejection diagnostics are readable');
 
     // ---- 3. an impossible budget is a 200 with an empty list and a floor ----
     const empty = await app.inject({
@@ -188,12 +231,19 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
     assert.equal(emptyBody.reason, null);
 
     // ---- 4. vocabulary derived from the REAL model -------------------------
+    const pre422 = await countAll(pool);
     const rejected = await app.inject({
       method: 'POST',
       url: '/v1/recommendations',
       payload: { budget_amount: 20000, currency: 'MAD', use_case: 'OFFICE' },
     });
     assert.equal(rejected.statusCode, 422, 'OFFICE is not in the active model gpu_required_use_cases');
+    // The 422 short-circuits BEFORE any INSERT, so nothing may be written.
+    assert.deepEqual(
+      await countAll(pool),
+      pre422,
+      'a 422 validation rejection writes zero rows in all six tables'
+    );
 
     // ---- 5. an unknown id is a 404 ----------------------------------------
     const missing = await app.inject({
@@ -208,6 +258,16 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
       const total = Number(residue.queries) + Number(residue.candidates) + Number(residue.results)
         + Number(residue.components) + Number(residue.rejections);
       assert.equal(total, 0, 'this run left no rows behind: ' + JSON.stringify(residue));
+      // Global before/after: scoped residue zero cannot catch a row written
+      // outside the tracked ids (a crashed pass, an untracked query); the
+      // whole-table counts must return to their pre-run values.
+      if (beforeCounts !== null) {
+        assert.deepEqual(
+          await countAll(pool),
+          beforeCounts,
+          'whole-table row counts returned to their pre-run values'
+        );
+      }
     } finally {
       await pool.end();
     }
