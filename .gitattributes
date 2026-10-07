@@ -1,0 +1,15 @@
+# Normalize line endings on checkout, so the on-disk form of a tracked text file
+# no longer depends on a developer's core.autocrlf setting. Git always stores
+# text as LF in the index/objects; these rules only pin the working-tree form.
+#
+# CRLF on disk (how these are authored and edited on Windows).
+docs/** text eol=crlf
+database/** text eol=crlf
+CONTEXT.md text eol=crlf
+DEVELOPMENT_NOTES.md text eol=crlf
+
+# LF on disk.
+AGENTS.md text eol=lf
+*.js text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
