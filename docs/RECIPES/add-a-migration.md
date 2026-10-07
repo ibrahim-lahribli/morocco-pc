@@ -27,6 +27,25 @@ Schema change = **new sequential file**, never edit a committed one (`AGENTS.md`
 6. Update `docs/SCHEMA_REFERENCE.md` with `npm run gen:schema` (needs `DATABASE_URL`).
 7. If the change touches Layer 4, re-check `database/LAYER4_RECONCILIATION_PLAN.md`'s ledger.
 
+## The shared-apply audit log
+
+`database/migration-applies.jsonl` is **tracked** and **append-only**: one CRLF-terminated JSON
+object per applied file, so the file's history records what last changed the shared schema and from
+which restore point.
+
+The fields are a **whitelist** enforced by `formatApplyLogLine` (`scripts/lib/migrations.js`), not a
+convention: `applied_at`, `filename`, `git_sha`, `note`, `restore_point`, `target`. An unknown key
+is refused rather than dropped, so a connection string, user or hostname cannot be persisted into a
+tracked file. `restore_point` is `null` only for the 017 backfill — applied before the guard
+existed — and a null restore point **requires** a non-empty `note` saying why.
+
+The apply prints `Reminder: commit database/migration-applies.jsonl ...`; commit that line with the
+apply rather than later.
+
+**Honest limitation:** the log records only what `run-migrations.js` did. It cannot prove that
+nothing else wrote to the shared database, so it is an audit trail, not a guarantee — SQL applied by
+hand is invisible here. TEST-target runs are never logged (the branch ledger is disposable).
+
 Verify:
 
 ```bash

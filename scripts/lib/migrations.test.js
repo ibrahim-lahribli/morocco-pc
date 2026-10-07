@@ -1,17 +1,31 @@
 'use strict';
 
 // scripts/lib/migrations.test.js — tests for the applied-migrations ledger
-// helpers (gap OG-14).
+// helpers (gap OG-14) and for the shared-apply audit log (Checkpoint 5).
 //
-// Uses node:test + node:assert/strict only. Pure functions (inputs passed as
-// parameters; no file or DB access, no dotenv). NOT part of `npm run test:unit`
-// (that glob is `src/**/*.test.js`); run with:
+// Uses node:test + node:assert/strict only. The helpers are pure (inputs passed
+// as parameters; no DB, no dotenv). The last block additionally READS the tracked
+// database/migration-applies.jsonl to pin its shape — which is the reason its
+// field set is a whitelist rather than a convention. NOT part of
+// `npm run test:unit` (that glob is `src/**/*.test.js`); run with:
 //   node --test scripts/lib/migrations.test.js
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
-const { pendingMigrations, staleLedgerEntries, LEDGER_TABLE, isValidRestorePointId, shouldRefuseSharedApply } = require('./migrations');
+const {
+  pendingMigrations,
+  staleLedgerEntries,
+  LEDGER_TABLE,
+  isValidRestorePointId,
+  shouldRefuseSharedApply,
+  formatApplyLogLine,
+  APPLY_LOG_FIELDS,
+  APPLY_LOG_TARGETS,
+  APPLY_LOG_EOL,
+} = require('./migrations');
 
 const FILES = ['001_extensions.sql', '002_enums.sql', '011_reconcile_layer4.sql'];
 
@@ -137,5 +151,127 @@ describe('shouldRefuseSharedApply', () => {
 
   it('never refuses when nothing is pending', () => {
     assert.strictEqual(shouldRefuseSharedApply({ ...base, pendingCount: 0, restorePoint: null }), false);
+  });
+});
+
+describe('formatApplyLogLine', () => {
+  const normal = {
+    applied_at: '2026-10-07T00:00:00.000Z',
+    filename: '019_example.sql',
+    git_sha: 'abcdef1234567890abcdef1234567890abcdef12',
+    note: null,
+    restore_point: 'br-abc12345',
+    target: 'shared',
+  };
+
+  it('emits exactly the whitelisted fields', () => {
+    assert.deepStrictEqual(Object.keys(JSON.parse(formatApplyLogLine(normal))).sort(), APPLY_LOG_FIELDS);
+  });
+
+  // The log is TRACKED, so an unexpected key must be refused rather than dropped:
+  // that is what makes "no connection string or hostname is ever persisted" a
+  // property of the writer instead of a promise about its callers.
+  it('refuses an unknown field, so a URL, credential or host can never be persisted', () => {
+    assert.throws(() => formatApplyLogLine({ ...normal, connectionString: 'postgres://u:p@host/db' }), /unknown audit-log field/);
+    assert.throws(() => formatApplyLogLine({ ...normal, url: 'postgres://u:p@host/db' }), /unknown audit-log field/);
+    assert.throws(() => formatApplyLogLine({ ...normal, host: 'ep-example.neon.tech' }), /unknown audit-log field/);
+    assert.doesNotMatch(formatApplyLogLine(normal), /postgres|@|neon\.tech/);
+  });
+
+  it('refuses a missing or non-migration filename', () => {
+    assert.throws(() => formatApplyLogLine({ ...normal, filename: 'notes.txt' }), /filename/);
+    assert.throws(() => formatApplyLogLine({ ...normal, filename: undefined }), /filename/);
+  });
+
+  it('refuses an unknown target', () => {
+    assert.throws(() => formatApplyLogLine({ ...normal, target: 'staging' }), /target/);
+    assert.throws(() => formatApplyLogLine({ ...normal, target: undefined }), /target/);
+  });
+
+  it('refuses an unusable git sha or timestamp', () => {
+    assert.throws(() => formatApplyLogLine({ ...normal, git_sha: '' }), /git_sha/);
+    assert.throws(() => formatApplyLogLine({ ...normal, applied_at: 'yesterday' }), /applied_at/);
+  });
+
+  it('refuses a malformed restore point', () => {
+    assert.throws(() => formatApplyLogLine({ ...normal, restore_point: '<PASTE ID HERE>' }), /restore_point/);
+    assert.throws(() => formatApplyLogLine({ ...normal, restore_point: 'abc' }), /restore_point/);
+  });
+
+  // A missing restore point is only honest when something explains it, so the
+  // backfill case cannot be written without saying why.
+  it('requires a non-empty note whenever the restore point is null', () => {
+    assert.throws(() => formatApplyLogLine({ ...normal, restore_point: null, note: null }), /note/);
+    assert.throws(() => formatApplyLogLine({ ...normal, restore_point: null, note: '   ' }), /note/);
+    assert.throws(() => formatApplyLogLine({ ...normal, restore_point: null }), /note/);
+    assert.match(
+      formatApplyLogLine({ ...normal, restore_point: null, note: 'applied before guard' }),
+      /applied before guard/
+    );
+  });
+
+  it('returns one line with no terminator, and the terminator is CRLF', () => {
+    assert.doesNotMatch(formatApplyLogLine(normal), /[\r\n]/);
+    assert.strictEqual(APPLY_LOG_EOL, '\r\n');
+  });
+});
+
+describe('database/migration-applies.jsonl', () => {
+  const logPath = path.join(__dirname, '..', '..', 'database', 'migration-applies.jsonl');
+  const raw = fs.readFileSync(logPath, 'utf8');
+  const lines = raw.split(/\r?\n/).filter((line) => line !== '');
+
+  it('is present, non-empty and parses as JSONL', () => {
+    assert.ok(lines.length >= 1, 'the tracked audit log must carry at least the 017 backfill');
+    for (const line of lines) {
+      assert.doesNotThrow(() => JSON.parse(line), `unparseable audit line: ${line}`);
+    }
+  });
+
+  it('carries the 017 backfill, which must explain its missing restore point', () => {
+    const backfill = lines
+      .map((line) => JSON.parse(line))
+      .find((rec) => rec.filename === '017_offer_identity_and_provenance.sql');
+    assert.ok(backfill, 'migration 017 was applied to shared before the guard existed');
+    assert.strictEqual(backfill.restore_point, null);
+    assert.ok(backfill.note && backfill.note.length > 0, 'a null restore point needs a note');
+  });
+
+  it('has exactly the whitelisted fields on every line', () => {
+    for (const line of lines) {
+      assert.deepStrictEqual(Object.keys(JSON.parse(line)).sort(), APPLY_LOG_FIELDS, `unexpected fields in ${line}`);
+    }
+  });
+
+  it('never records a connection string, a credential or a hostname', () => {
+    assert.doesNotMatch(raw, /postgres(ql)?:\/\//i);
+    assert.doesNotMatch(raw, /@/);
+  });
+
+  it('keeps every field usable and every target known', () => {
+    for (const line of lines) {
+      const rec = JSON.parse(line);
+      assert.ok(APPLY_LOG_TARGETS.includes(rec.target), `unknown target in ${line}`);
+      assert.ok(
+        rec.restore_point === null || isValidRestorePointId(rec.restore_point),
+        `bad restore point in ${line}`
+      );
+      assert.ok(!Number.isNaN(Date.parse(rec.applied_at)), `bad applied_at in ${line}`);
+      if (rec.restore_point === null) {
+        assert.ok(
+          typeof rec.note === 'string' && rec.note.trim() !== '',
+          `a null restore point needs a note in ${line}`
+        );
+      }
+    }
+  });
+
+  // CRLF is what the writer appends, but git normalizes text on checkout, so a
+  // clone without autocrlf legitimately holds LF. What must never happen is a
+  // MIX produced by an append that used the wrong terminator.
+  it('does not mix line terminators', () => {
+    const terminators = raw.split('\n').slice(0, -1);
+    const crlf = terminators.filter((line) => line.endsWith('\r')).length;
+    assert.ok(crlf === 0 || crlf === terminators.length, 'every audit line must end the same way');
   });
 });

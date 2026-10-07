@@ -18,9 +18,11 @@
 // Without it the runner prints the pending files and exits 1.
 // --baseline is guarded TOO (it writes the ledger even though it runs no SQL)
 // and prints every filename it is about to record, while --dry-run / --check /
-// --offline and any --test-db run never require it. Successful shared applies
-// append one JSON line to database/migration-applies.jsonl (restore point, git
-// SHA, timestamp).
+// --offline and any --test-db run never require it. A successful shared apply
+// appends one CRLF-terminated JSON line PER APPLIED FILE to the tracked,
+// append-only database/migration-applies.jsonl, carrying exactly the six
+// whitelisted fields of scripts/lib/migrations.js APPLY_LOG_FIELDS (restore
+// point, git SHA, timestamp, filename, target, note).
 //   (no mode)          apply every PENDING migration, then verify
 //   --dry-run          list pending migrations without executing or writing
 //   --check            exit 0 when nothing is pending, 1 when something is
@@ -42,7 +44,15 @@ const { Client } = require('pg');
 const fs = require('fs');
 const path = require('path');
 
-const { pendingMigrations, staleLedgerEntries, LEDGER_TABLE, isValidRestorePointId, shouldRefuseSharedApply } = require('./lib/migrations');
+const {
+  pendingMigrations,
+  staleLedgerEntries,
+  LEDGER_TABLE,
+  isValidRestorePointId,
+  shouldRefuseSharedApply,
+  formatApplyLogLine,
+  APPLY_LOG_EOL,
+} = require('./lib/migrations');
 
 const MODES = ['--dry-run', '--check', '--baseline', '--offline', '--test-db'];
 
@@ -139,8 +149,13 @@ async function baselineLedger(files, client) {
 }
 
 /**
- * Append one audit line for a successful shared apply. Best-effort: a log
- * write failure warns but never fails the migration run itself.
+ * Append the audit line(s) for a successful shared apply — ONE line per applied
+ * file, each carrying the restore point, git SHA and timestamp of the run.
+ *
+ * Best-effort: a log write failure warns but never fails the migration run
+ * itself, because by this point every file has already committed. Each line is
+ * built by the whitelisting formatter, so a malformed record is refused rather
+ * than written into a tracked file.
  */
 function recordSharedApply({ restorePoint, files }) {
   const logPath = path.join(process.cwd(), 'database', 'migration-applies.jsonl');
@@ -150,16 +165,21 @@ function recordSharedApply({ restorePoint, files }) {
   } catch (_err) {
     gitSha = 'unknown';
   }
-  const line = JSON.stringify({
-    applied_at: new Date().toISOString(),
-    target: 'shared',
-    restore_point: restorePoint,
-    git_sha: gitSha,
-    files,
-  }) + '\n';
+  const appliedAt = new Date().toISOString();
   try {
-    fs.appendFileSync(logPath, line, 'utf8');
-    console.log('Recorded shared apply in database/migration-applies.jsonl');
+    const lines = files.map((filename) =>
+      formatApplyLogLine({
+        applied_at: appliedAt,
+        filename,
+        git_sha: gitSha,
+        note: null,
+        restore_point: restorePoint,
+        target: 'shared',
+      })
+    );
+    fs.appendFileSync(logPath, lines.join(APPLY_LOG_EOL) + APPLY_LOG_EOL, 'utf8');
+    console.log(`Recorded ${lines.length} audit line(s) in database/migration-applies.jsonl`);
+    console.log('Reminder: commit database/migration-applies.jsonl with this apply (tracked, append-only).');
   } catch (err) {
     console.log('WARNING: could not append to database/migration-applies.jsonl: ' + err.message);
   }

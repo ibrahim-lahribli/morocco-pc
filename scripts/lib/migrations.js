@@ -34,6 +34,23 @@ const LEDGER_TABLE = 'schema_migrations';
 const FILENAME_RE = /^\d+_.*\.sql$/;
 
 /**
+ * The audit log written by a successful shared apply lives in the TRACKED,
+ * append-only `database/migration-applies.jsonl`, so its field set is a
+ * whitelist rather than a convention: a caller must not be able to persist a
+ * connection string, a hostname or any other secret into a tracked file.
+ */
+const APPLY_LOG_FIELDS = ['applied_at', 'filename', 'git_sha', 'note', 'restore_point', 'target'];
+
+/**
+ * Permitted `target` values. `test` is accepted for symmetry; a TEST-branch
+ * apply is deliberately NOT logged (the branch ledger is disposable).
+ */
+const APPLY_LOG_TARGETS = ['shared', 'test'];
+
+/** Audit-log line terminator — CRLF, matching the rest of the tree. */
+const APPLY_LOG_EOL = '\r\n';
+
+/**
  * Return the migration files that still need to be applied, preserving the
  * caller's order.
  *
@@ -123,11 +140,67 @@ function shouldRefuseSharedApply(opts) {
   return !isValidRestorePointId(o.restorePoint);
 }
 
+/**
+ * Render ONE audit-log line: the restore point, git SHA and timestamp for a
+ * single applied file. Pure, and whitelisted in both directions — unknown keys
+ * are REFUSED rather than dropped, so a caller cannot smuggle a connection
+ * string into a tracked file, and an entry that would be incomplete is refused
+ * instead of written.
+ *
+ * Returned WITHOUT a trailing terminator; the caller joins lines with
+ * APPLY_LOG_EOL.
+ *
+ * @param {object} entry applied_at, filename, git_sha, note, restore_point, target
+ * @returns {string} JSON with exactly APPLY_LOG_FIELDS keys
+ * @throws {TypeError} when a field is unknown, missing or unusable
+ */
+function formatApplyLogLine(entry) {
+  const e = entry || {};
+  const unknown = Object.keys(e).filter((key) => !APPLY_LOG_FIELDS.includes(key));
+  if (unknown.length > 0) {
+    throw new TypeError(`unknown audit-log field(s): ${unknown.join(', ')}`);
+  }
+  if (typeof e.filename !== 'string' || !FILENAME_RE.test(e.filename)) {
+    throw new TypeError('audit-log entry needs a migration filename (NNN_name.sql)');
+  }
+  if (!APPLY_LOG_TARGETS.includes(e.target)) {
+    throw new TypeError(`audit-log target must be one of ${APPLY_LOG_TARGETS.join(', ')}`);
+  }
+  if (typeof e.git_sha !== 'string' || e.git_sha === '') {
+    throw new TypeError('audit-log entry needs a git_sha ("unknown" when unavailable)');
+  }
+  if (typeof e.applied_at !== 'string' || Number.isNaN(Date.parse(e.applied_at))) {
+    throw new TypeError('audit-log entry needs a parseable applied_at');
+  }
+  if (e.restore_point !== null && e.restore_point !== undefined && !isValidRestorePointId(e.restore_point)) {
+    throw new TypeError('audit-log restore_point must be null or a valid restore-point id');
+  }
+  const restorePoint = e.restore_point === undefined ? null : e.restore_point;
+  if (restorePoint === null && (typeof e.note !== 'string' || e.note.trim() === '')) {
+    throw new TypeError('a null restore_point requires a non-empty note explaining it');
+  }
+  if (e.note !== null && e.note !== undefined && typeof e.note !== 'string') {
+    throw new TypeError('audit-log note must be a string or null');
+  }
+  return JSON.stringify({
+    applied_at: e.applied_at,
+    filename: e.filename,
+    git_sha: e.git_sha,
+    note: e.note === undefined ? null : e.note,
+    restore_point: restorePoint,
+    target: e.target,
+  });
+}
+
 module.exports = {
   LEDGER_TABLE,
   FILENAME_RE,
+  APPLY_LOG_FIELDS,
+  APPLY_LOG_TARGETS,
+  APPLY_LOG_EOL,
   pendingMigrations,
   staleLedgerEntries,
   isValidRestorePointId,
   shouldRefuseSharedApply,
+  formatApplyLogLine,
 };

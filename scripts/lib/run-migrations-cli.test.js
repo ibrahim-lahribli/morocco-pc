@@ -46,6 +46,7 @@ const ALL_MIGRATIONS = fs
 
 // parseArgs never touches pg, so it is safe to load once up front.
 const { parseArgs } = require(RUNNER);
+const { APPLY_LOG_FIELDS } = require('./migrations');
 
 /** Size of the audit log, or 0 when it does not exist yet. */
 function auditLogSize() {
@@ -337,5 +338,44 @@ describe('run-migrations shared --baseline refusal', () => {
       res.calls.some((sql) => /INSERT INTO schema_migrations/i.test(sql)),
       'the TEST branch must be baselined without a restore point'
     );
+  });
+});
+
+describe('run-migrations shared-apply audit log', () => {
+  const PARTIAL_LEDGER = ['001_extensions.sql'];
+  const PENDING_COUNT = ALL_MIGRATIONS.length - PARTIAL_LEDGER.length;
+
+  // The ONE test that exercises the real append path: it lets the apply loop
+  // COMPLETE against the fake client, so the tracked audit log gains a line per
+  // applied file. The file is restored byte-for-byte in a finally, because a
+  // failing test must never leave a false row in a file that is committed.
+  it('writes one whitelisted line per applied file and restores the log afterwards', async () => {
+    const snapshot = fs.readFileSync(AUDIT_LOG);
+    const beforeCount = snapshot.toString('utf8').split(/\r?\n/).filter((line) => line !== '').length;
+    try {
+      const res = await runMain(['--restore-point=br-abc12345'], { ledger: PARTIAL_LEDGER });
+      assert.equal(res.exitCode, undefined, 'the CLI exits 0');
+      assert.match(res.out, new RegExp(`Recorded ${PENDING_COUNT} audit line\\(s\\)`));
+      assert.match(res.out, /Reminder: commit database\/migration-applies\.jsonl/);
+
+      const lines = fs
+        .readFileSync(AUDIT_LOG, 'utf8')
+        .split(/\r?\n/)
+        .filter((line) => line !== '');
+      assert.equal(lines.length, beforeCount + PENDING_COUNT, 'one line per applied file, not one per run');
+      for (const line of lines.slice(beforeCount)) {
+        const rec = JSON.parse(line);
+        assert.deepStrictEqual(Object.keys(rec).sort(), APPLY_LOG_FIELDS);
+        assert.match(rec.filename, /^\d+_.*\.sql$/);
+        assert.equal(rec.target, 'shared');
+        assert.equal(rec.restore_point, 'br-abc12345');
+        assert.equal(rec.note, null);
+        assert.match(rec.git_sha, /^[0-9a-f]{40}$/, 'the git SHA must be recorded, not "unknown"');
+        assert.ok(!Number.isNaN(Date.parse(rec.applied_at)));
+      }
+    } finally {
+      fs.writeFileSync(AUDIT_LOG, snapshot);
+    }
+    assert.deepStrictEqual(fs.readFileSync(AUDIT_LOG), snapshot, 'the tracked audit log must be restored');
   });
 });
