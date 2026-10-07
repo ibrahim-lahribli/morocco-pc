@@ -210,7 +210,53 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
     // One recommendation_result AND one build_candidate row per persisted build.
     assert.equal(Number(persisted.results), post.builds.length, 'one result row per persisted build');
     assert.equal(Number(persisted.candidates), post.builds.length, 'one candidate row per persisted build');
-    assert.ok(Number(persisted.components) >= Number(persisted.candidates), 'every candidate carries at least one component row entry');
+    // ...and the two agree EXACTLY: a build with a candidate but no result row
+    // (or the reverse) is a persistence defect, not a preference.
+    assert.equal(
+      Number(persisted.results),
+      Number(persisted.candidates),
+      'recommendation_result and build_candidate counts agree exactly'
+    );
+
+    // Every candidate carries at least one component row. Asserted per candidate,
+    // not just in aggregate: an aggregate `components >= candidates` check passes
+    // with any distribution, so one component-less candidate could hide behind
+    // another that carries two.
+    const perCandidate = (await pool.query(
+      'SELECT b.id AS id,'
+      + ' (SELECT count(*)::int FROM build_component c WHERE c.build_candidate_id = b.id) AS components'
+      + ' FROM build_candidate b WHERE b.recommendation_query_id = $1 ORDER BY b.id',
+      [post.id]
+    )).rows;
+    assert.equal(perCandidate.length, Number(persisted.candidates), 'one row per candidate');
+    for (const row of perCandidate) {
+      assert.ok(Number(row.components) >= 1, 'candidate ' + row.id + ' carries at least one component');
+    }
+
+    // The read-back is LOSSLESS for this query: SELECT_BUILDS_SQL returns exactly
+    // one row per persisted build_component row. This replaces a weaker
+    // `components >= candidates` check, which would still pass if the read-back's
+    // INNER JOINs silently dropped rows whose build_candidate was missing - the
+    // "returned ids never written" trap this repo has hit before. A component-less
+    // candidate would legitimately come back as one null-component row, and the
+    // per-candidate assertion above rules that case out, so equality is exact.
+    const readBack = await repository.readRecommendationResult(pool, post.id);
+    assert.equal(readBack.found, true, 'the query row is known to the read path');
+    assert.equal(
+      readBack.rows.length,
+      Number(persisted.components),
+      'read-back returns exactly one row per persisted component (no join drop): rows='
+      + readBack.rows.length + ' components=' + persisted.components
+    );
+    // And no result row orphans its candidate: an INNER JOIN would drop such a
+    // row silently, so assert the join key actually resolves.
+    const orphans = (await pool.query(
+      'SELECT count(*)::int AS n FROM recommendation_result r'
+      + ' LEFT JOIN build_candidate b ON b.id = r.build_candidate_id'
+      + ' WHERE r.recommendation_query_id = $1 AND b.id IS NULL',
+      [post.id]
+    )).rows[0];
+    assert.equal(Number(orphans.n), 0, 'no recommendation_result row orphans its build_candidate');
     assert.ok(Number(persisted.rejections) >= 0, 'rejection diagnostics are readable');
 
     // ---- 3. an impossible budget is a 200 with an empty list and a floor ----
