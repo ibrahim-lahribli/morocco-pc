@@ -21,8 +21,10 @@
  * reported as a loud WARN (the beta trade-off is explicit, not hidden), never
  * as a PASS.
  *
- * Distinct from OG-06 (price VALUE accuracy) and OG-19 (seller/url NULLs):
- * this measures eligibility (fresh vs expired), never accuracy.
+ * Distinct from OG-37 (price VALUE accuracy: the half of OG-06 that stayed open
+ * when OG-06's missing offer-level unique key closed as C-34 on 2026-10-06) and
+ * OG-19 (seller/url NULLs): this measures eligibility (fresh vs expired), never
+ * accuracy.
  *
  * Read-only: one SELECT against DATABASE_URL. It never writes, so it needs
  * no TEST_DATABASE_URL guard (same reasoning as the OG-01 gate).

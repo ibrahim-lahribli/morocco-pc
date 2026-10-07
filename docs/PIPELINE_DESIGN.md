@@ -358,7 +358,22 @@ pipeline ships **data**, not scores. Per new product:
 
 Nothing in this document has been applied to the shared database.
 
-## 13. Beta launch: seed-offer freshness (DESIGN ONLY — not implemented)
+> **UPDATE 2026-10-07 — the sentence above was true when written and is not true now.** Migration
+> `017_offer_identity_and_provenance.sql` (this document's section 2) WAS applied to the shared
+> database on 2026-10-06, and the `schema_migrations` ledger reads 17 on both shared and TEST. The
+> original sentence is kept for the record. Still unapplied on shared: section 13's migration
+> `018_build_component_offer_provenance.sql` (applied on the TEST branch only) and every seed/data
+> change section 7 describes.
+
+## 13. Beta launch: seed-offer freshness
+
+> **UPDATE 2026-10-07 — IMPLEMENTED as Decision 35; the "DESIGN ONLY — not implemented" status this
+> heading used to carry is superseded.** Migration `018_build_component_offer_provenance.sql` adds
+> `build_component.offer_class` + `store_offer_id`, the default-OFF engine option
+> `allow_unverified_seed_offers` waives Decision 7's 30-day window for SEED offers only (VERIFIED
+> offers keep it unchanged), and `scripts/check-offer-freshness.js` reports both classes and fails on
+> the VERIFIED one. `018` is applied on the TEST branch and still PENDING on shared. The original
+> design text follows, unedited, as the record of what was proposed.
 
 Per the task brief, seed offers are NOT re-stamped or extended. This section only proposes.
 
@@ -371,7 +386,7 @@ with `last_checked_at = NOW()` and seed 006 re-stamps them; the measured first e
 **2026-11-03**, so a beta running on seed data fails loudly after that date unless a
 decision is made.
 
-**Proposal (needs a new Decision — it would change Decision 7's predicate):**
+**Proposal (DECIDED 2026-10-06 as Decision 35 — it changed Decision 7's predicate for SEED offers only, through a default-OFF option rather than by editing the window; see the UPDATE at the top of this section):**
 1. Classify offers from provenance, not from a new column: an offer with
    `ingestion_record_id IS NULL` is **seed/demo**, an offer with a non-NULL id is
    **verified**. This is already derivable from migration 017.
