@@ -1,1 +1,2 @@
 {"applied_at":"2026-10-06T01:14:48.623Z","filename":"017_offer_identity_and_provenance.sql","git_sha":"593d78319c1fc681b70f94473237cd3d0ea135dd","note":"applied before guard; actor unrecorded","restore_point":null,"target":"shared"}
+{"applied_at":"2026-10-07T01:01:06.824Z","filename":"018_build_component_offer_provenance.sql","git_sha":"ea5e056644b3fbb2c45de75d320632abe18bfc3e","note":null,"restore_point":"br-empty-poetry-axw9a07t","target":"shared"}
