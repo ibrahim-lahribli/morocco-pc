@@ -127,7 +127,12 @@ describe('shouldRefuseSharedApply', () => {
     assert.strictEqual(shouldRefuseSharedApply({ ...base, restorePoint: null, dryRun: true }), false);
     assert.strictEqual(shouldRefuseSharedApply({ ...base, restorePoint: null, check: true }), false);
     assert.strictEqual(shouldRefuseSharedApply({ ...base, restorePoint: null, offline: true }), false);
-    assert.strictEqual(shouldRefuseSharedApply({ ...base, restorePoint: null, baseline: true }), false);
+  });
+
+  // --baseline executes no SQL but WRITES the ledger, so it is not an exemption:
+  // passing the flag must not suppress the refusal any more.
+  it('is not exempted by --baseline', () => {
+    assert.strictEqual(shouldRefuseSharedApply({ ...base, restorePoint: null, baseline: true }), true);
   });
 
   it('never refuses when nothing is pending', () => {

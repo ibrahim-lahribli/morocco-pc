@@ -16,19 +16,23 @@
 // --restore-point=<id> is given and matches ^[A-Za-z0-9_-]{8,}$ (Neon
 // restore-point id; placeholders like <PASTE ID HERE> fail the shape).
 // Without it the runner prints the pending files and exits 1.
-// --dry-run / --check / --offline / --baseline and any --test-db run never
-// require it. Successful shared applies append one JSON line to
-// database/migration-applies.jsonl (restore point, git SHA, timestamp).
+// --baseline is guarded TOO (it writes the ledger even though it runs no SQL)
+// and prints every filename it is about to record, while --dry-run / --check /
+// --offline and any --test-db run never require it. Successful shared applies
+// append one JSON line to database/migration-applies.jsonl (restore point, git
+// SHA, timestamp).
 //   (no mode)          apply every PENDING migration, then verify
 //   --dry-run          list pending migrations without executing or writing
 //   --check            exit 0 when nothing is pending, 1 when something is
 //                      (CI-shaped freshness gate; executes nothing)
 //   --offline          needs no DATABASE_URL and never connects — but with no ledger to
 //                      read, every file reports pending, so --offline --check always exits 1
-//   --baseline         record every file on disk as applied WITHOUT running it
+//   --baseline         record every PENDING file as applied WITHOUT running it
 //                       the one-time adoption step for a database that
 //                      predates the ledger (e.g. the shared dev DB, already at
-//                      011). Never runs a migration file.
+//                      011). Never runs a migration file, but it IS a ledger
+//                      write: on the SHARED target it needs --restore-point=<id>
+//                      like an apply does, and names each file it records.
 //   --test-db          target TEST_DATABASE_URL (guarded by scripts/lib/db-url.js)
 //                      instead of DATABASE_URL  for the empty-DB replay.
 //
@@ -232,12 +236,6 @@ async function main(argv = process.argv.slice(2)) {
       console.log(`WARNING: ${stale.length} ledger entr${stale.length === 1 ? 'y' : 'ies'} with no file on disk: ${stale.join(', ')}`);
     }
 
-    if (flags.has('--baseline')) {
-      await baselineLedger(files, client);
-      await verify(client);
-      return;
-    }
-
     if (pending.length === 0) {
       console.log('No pending migrations; database is up to date.');
       return;
@@ -265,13 +263,26 @@ async function main(argv = process.argv.slice(2)) {
       dryRun: flags.has('--dry-run'),
       check: flags.has('--check'),
       offline: flags.has('--offline'),
-      baseline: flags.has('--baseline'),
       restorePoint,
     })) {
-      console.error('ERROR: refusing to apply to the shared DATABASE_URL without --restore-point=<id>');
+      const action = flags.has('--baseline') ? 'baseline' : 'apply to';
+      console.error(`ERROR: refusing to ${action} the shared DATABASE_URL without --restore-point=<id>`);
       console.error('       Pending (NOT applied): ' + pending.join(', '));
       console.error('       Re-run with --restore-point=<id> matching ^[A-Za-z0-9_-]{8,}$');
       process.exitCode = 1;
+      return;
+    }
+
+    // --baseline executes no SQL but WRITES the ledger, so it sits BEHIND the
+    // guard: a mis-typed --baseline used to be able to record a migration as
+    // applied that was never applied, leaving the database silently behind its
+    // own ledger. Every filename it is about to record is printed first, because
+    // an unnoticed row is the whole hazard.
+    if (flags.has('--baseline')) {
+      console.log(`BASELINE: recording ${pending.length} file(s) as applied WITHOUT running them:`);
+      for (const file of pending) console.log(`  ${file}`);
+      await baselineLedger(pending, client);
+      await verify(client);
       return;
     }
 

@@ -119,7 +119,7 @@ deliberately not duplicated here.
 | `npm run verify:docs` | Verify fact-shaped doc claims vs tree (offline) or + read-only DB (`--live`) |
 | `node scripts/verify-docs.js --live` | Adds read-only live-DB checks: 15 core tables + counts (INFO), and the schema-digest gate — FAILs when `docs/SCHEMA_REFERENCE.md`'s `schema-digest:` line no longer matches the live tables/columns/enums (fix: `npm run gen:schema`) |
 | `node scripts/run-seeds.js --dry-run` | Report seed statements without executing |
-| `node scripts/run-migrations.js` | Apply PENDING migrations via the `schema_migrations` ledger (OG-14, 2026-10-03) — re-runnable; flags `--dry-run` (list pending), `--check` (exit 1 on pending), `--offline` (no DB), `--baseline` (adopt an already-migrated DB without running), `--test-db` (guarded `TEST_DATABASE_URL`). **A real apply against the shared `DATABASE_URL` REFUSES (exit 1, ledger untouched) unless `--restore-point=<id>` matches `^[A-Za-z0-9_-]{8,}$`** — it prints the pending files instead. `--test-db` and the read-only modes (`--dry-run` / `--check` / `--offline`) never need one |
+| `node scripts/run-migrations.js` | Apply PENDING migrations via the `schema_migrations` ledger (OG-14, 2026-10-03) — re-runnable; flags `--dry-run` (list pending), `--check` (exit 1 on pending), `--offline` (no DB), `--baseline` (adopt an already-migrated DB without running), `--test-db` (guarded `TEST_DATABASE_URL`). **A real apply against the shared `DATABASE_URL` REFUSES (exit 1, ledger untouched) unless `--restore-point=<id>` matches `^[A-Za-z0-9_-]{8,}$`** — it prints the pending files instead. **`--baseline` needs one too** (it writes the ledger even though it runs no SQL) and lists each filename it is about to record. `--test-db` and the read-only modes (`--dry-run` / `--check` / `--offline`) never need one |
 | `node --test scripts/lib/db-url.test.js` | Guard unit tests (not in `test:unit`) |
 | `node --test scripts/lib/gap-register.test.js` | Gap-register table-shape tests (not in `test:unit`; the check itself runs in `verify:docs` as `gap-register-shape`) |
 | `node --test scripts/lib/migrations.test.js` | Applied-migrations ledger helper tests (OG-14; not in `test:unit`) |
@@ -320,6 +320,14 @@ getting the nightly gate, which is why `workflow_dispatch` is wired up too.
   `run-migrations.js` refuses — exit 1, ledger untouched — unless `--restore-point=<id>` matches
   `^[A-Za-z0-9_-]{8,}$`, printing the pending files instead. The requirement is scoped to a real
   shared apply: `--test-db` and the read-only modes (`--dry-run` / `--check` / `--offline`) never need it.
+- **`--baseline` writes the ledger without running any SQL, so it is guarded too.** On the shared
+  target it needs the same `--restore-point=<id>` and prints every filename it is about to record;
+  without a valid id it refuses and the ledger is untouched. The hazard it closes: a mis-typed
+  `--baseline` could record a migration as applied that was never applied, leaving the database
+  silently behind its own ledger while every later run reports "No pending migrations". It cannot
+  verify that either, so the future improvement is to confirm the objects those files create
+  actually exist (the read-only `verify-schema.js` / `verify-constraints.js` / `verify-fks.js`
+  checks) before adopting an already-migrated database.
 - **Never commit `.env`, `node_modules`, or secrets.** `.env.example` holds key names only.
 - **Never add a migration just to make a test pass.**
 - Keep engine modules pure; put DB access in loaders/orchestrator only.

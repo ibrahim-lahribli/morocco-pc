@@ -274,3 +274,68 @@ describe('run-migrations shared-apply refusal', () => {
     assert.equal(auditLogSize(), before, 'a TEST apply must not append to the shared audit log');
   });
 });
+
+describe('run-migrations shared --baseline refusal', () => {
+  const PARTIAL_LEDGER = ['001_extensions.sql'];
+  const PENDING_COUNT = ALL_MIGRATIONS.length - PARTIAL_LEDGER.length;
+
+  // --baseline runs no SQL, but a ledger row it writes without applying anything
+  // leaves the database behind its own ledger — the reason it is guarded at all.
+  it('refuses a shared --baseline with no restore point and leaves the ledger unchanged', async () => {
+    const res = await runMain(['--baseline'], { ledger: PARTIAL_LEDGER });
+    assert.equal(res.exitCode, 1, 'a refusal must exit non-zero');
+    assert.match(res.err, /refusing to baseline the shared DATABASE_URL/);
+    assert.match(res.err, /002_enums\.sql/, 'the refusal must name what was NOT recorded');
+    assert.deepEqual(
+      res.calls.filter((sql) => /INSERT INTO schema_migrations/i.test(sql)),
+      [],
+      'a refused baseline must not write a single ledger row'
+    );
+  });
+
+  it('refuses a shared --baseline with a malformed id', async () => {
+    const res = await runMain(['--baseline', '--restore-point=<PASTE ID HERE>'], { ledger: PARTIAL_LEDGER });
+    assert.equal(res.exitCode, 1);
+    assert.match(res.err, /refusing to baseline/);
+    assert.deepEqual(
+      res.calls.filter((sql) => /INSERT INTO schema_migrations/i.test(sql)),
+      []
+    );
+  });
+
+  it('lets a valid restore point baseline, printing every file it records', async () => {
+    const before = auditLogSize();
+    const res = await runMain(['--baseline', '--restore-point=br-abc12345'], { ledger: PARTIAL_LEDGER });
+    assert.equal(res.exitCode, undefined, 'the CLI exits 0');
+    assert.doesNotMatch(res.err, /refusing to/);
+    assert.match(
+      res.out,
+      new RegExp(`BASELINE: recording ${PENDING_COUNT} file\\(s\\) as applied WITHOUT running them`)
+    );
+    assert.match(res.out, / 002_enums\.sql/, 'each recorded filename must be listed');
+    assert.equal(
+      res.calls.filter((sql) => /INSERT INTO schema_migrations/i.test(sql)).length,
+      PENDING_COUNT,
+      'baseline must record exactly the pending files'
+    );
+    assert.deepEqual(
+      res.calls.filter((sql) => /^\s*BEGIN\s*$/i.test(sql)),
+      [],
+      'baseline must never open an apply transaction'
+    );
+    assert.equal(auditLogSize(), before, 'baseline applies nothing, so it must not append to the audit log');
+  });
+
+  it('never refuses a TEST-branch baseline', async () => {
+    const res = await runMain(['--baseline', '--test-db'], {
+      ledger: PARTIAL_LEDGER,
+      env: { TEST_DATABASE_URL: FAKE_TEST },
+    });
+    assert.equal(res.exitCode, undefined, 'the CLI exits 0');
+    assert.doesNotMatch(res.err, /refusing to/);
+    assert.ok(
+      res.calls.some((sql) => /INSERT INTO schema_migrations/i.test(sql)),
+      'the TEST branch must be baselined without a restore point'
+    );
+  });
+});

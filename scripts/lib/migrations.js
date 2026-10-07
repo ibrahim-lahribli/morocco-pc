@@ -88,13 +88,23 @@ function isValidRestorePointId(value) {
 }
 
 /**
- * Decide whether a shared-target run must refuse to apply. Pure so the
- * refusal path is unit-testable without a database.
+ * Decide whether a shared-target run must refuse. Pure so the refusal path is
+ * unit-testable without a database.
  *
- * Refuse when ALL of these hold: the target is the shared DATABASE_URL
- * (not --test-db), the mode actually applies (not --dry-run / --check /
- * --offline / --baseline), at least one migration is pending, and no valid
- * `--restore-point=<id>` was supplied.
+ * Refuse when ALL of these hold: the target is the shared DATABASE_URL (not
+ * --test-db), the mode is not read-only (--dry-run / --check / --offline), at
+ * least one migration is pending, and no valid `--restore-point=<id>` was
+ * supplied.
+ *
+ * `--baseline` is deliberately NOT exempt, even though it executes no SQL: it
+ * WRITES the ledger. A mis-typed `--baseline` on the shared database could
+ * therefore record a migration as applied that was never applied, leaving the
+ * database silently behind its own ledger while every later run reports "No
+ * pending migrations".
+ *
+ * Of the three read-only flags, only the exemption itself matters here: main()
+ * returns before this point for each of them, so they are always false at the
+ * current call site and are kept as defensive guards.
  *
  * @param {object} opts
  * @param {boolean} opts.targetShared true when targeting DATABASE_URL
@@ -102,14 +112,13 @@ function isValidRestorePointId(value) {
  * @param {boolean} [opts.dryRun] read-only preview mode
  * @param {boolean} [opts.check] freshness-gate mode (executes nothing)
  * @param {boolean} [opts.offline] no-DB mode
- * @param {boolean} [opts.baseline] ledger-adoption mode (runs nothing)
  * @param {unknown} [opts.restorePoint] raw restore-point value
  * @returns {boolean} true when the run must refuse
  */
 function shouldRefuseSharedApply(opts) {
   const o = opts || {};
   if (!o.targetShared) return false;
-  if (o.dryRun || o.check || o.offline || o.baseline) return false;
+  if (o.dryRun || o.check || o.offline) return false;
   if (typeof o.pendingCount !== 'number' || o.pendingCount <= 0) return false;
   return !isValidRestorePointId(o.restorePoint);
 }
