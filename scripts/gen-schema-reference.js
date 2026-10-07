@@ -13,6 +13,10 @@
  *   node scripts/gen-schema-reference.js --check    # exit 1 if either file
  *                                                   # is stale vs a regen
  *
+ * --check compares through scripts/lib/generated-doc-check.js, which normalizes
+ * CRLF/LF + a leading BOM + the volatile `Generated <date>` token on BOTH sides,
+ * so a clean Linux checkout (LF, GitHub Actions) does not read as STALE.
+ *
  * Both output files are GENERATED — never edit by hand. Structure facts
  * (columns, constraints, enums) are authoritative as of generation; DATA_STATE
  * figures are instance-specific snapshots and must never be cited as permanent
@@ -74,8 +78,10 @@ function writeIfChanged(file, content, label) {
       console.error('STALE: ' + label + ' is missing; run `npm run gen:schema`');
       process.exit(1);
     }
-    if (current !== content) {
+    if (isStale(current, content)) {
       console.error('STALE: ' + label + ' differs from a fresh generation; run `npm run gen:schema`');
+      console.error('First differing lines (normalized, date-stripped):');
+      console.error(firstDiff(current, content));
       process.exit(1);
     }
     console.log('OK: ' + label + ' is up to date');
@@ -93,6 +99,14 @@ function q(text) {
 function esc(s) {
   return String(s === null || s === undefined ? '' : s).replace(/\|/g, '\\|');
 }
+
+// Line-ending / BOM / volatile-date tolerant comparison. Shared with
+// gen-decision-index.js so both generated-file gates behave identically on every
+// OS and checkout: git stores text as LF, a Windows checkout materializes CRLF,
+// a Linux checkout (GitHub Actions) materializes LF, while these writers always
+// emit CRLF. A raw byte compare therefore reports STALE on every Linux checkout.
+// The helper normalizes comparison-only; the files stay CRLF on disk.
+const { isStale, firstDiff } = require('./lib/generated-doc-check');
 
 // ---------------------------------------------------------------- schema ref
 

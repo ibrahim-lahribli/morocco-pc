@@ -941,3 +941,33 @@ invisible locally. Fixed in `e26a5fd` with no assertion changed. Reproduce the C
 and is NOT counted as `fail`, so a failures-only grep misses it. Guard proposed but deliberately not
 implemented: `engines >= 22` + `.nvmrc`, a Node 22/24 CI matrix, and a `verify-docs` check that
 flags a `test()` registered inside another test callback.
+
+## 2026-10-07 — CI red on a clean Linux checkout: the generated-file gates compared raw bytes
+
+`unit-and-docs` (GitHub Actions, ubuntu) failed `node scripts/gen-decision-index.js --check` with
+"docs/DECISION_INDEX.md is STALE" while the same command passed on the Windows checkout. Cause: the
+repository stores the index as LF (its blob has zero CR bytes), the generator WRITES CRLF
+(`out.join('\r\n')`), and the `--check` branch compared the committed file to a fresh generation
+raw. A Linux checkout (`core.autocrlf` unset/false — i.e. GitHub Actions) materializes the blob as
+LF, so the two differed on EVERY line ending though not on a byte of content. `8ffeee4` had made
+only the *parse* of `RECOMMENDATION_ENGINE_DECISIONS.md` line-ending tolerant, never the
+*comparison*. Reproduce exactly:
+`git -c core.autocrlf=false clone --depth 1 <repo> /tmp/x && cd /tmp/x && node scripts/gen-decision-index.js --check`
+(exit 1). Running `node scripts/gen-decision-index.js` first and re-running the check exits 0 — a
+gate that its own generation "fixes" is a materialization artifact, not drift.
+
+Fix: `scripts/lib/generated-doc-check.js` normalizes BOTH sides before comparing (CRLF→LF, a
+leading BOM stripped, `Generated <date>` / `as of <date>` neutralized) and prints a
+unified-diff-style report of the first differing lines on failure, so CI logs show why. Both
+`gen-decision-index.js --check` and `gen-schema-reference.js --check` use it, so the two gates
+cannot drift apart again; the files stay CRLF on disk (writers unchanged). `verify-docs.js` needed
+no change — its `schema-digest` check parses the digest out of the line (ending-agnostic) and its
+`decision-index-fresh` check shells out to `gen-decision-index --check`. Pinned by
+`node --test scripts/lib/generated-doc-check.test.js` (LF vs CRLF in both directions, BOM,
+date-only, real drift still failing, and an end-to-end `--check` in a temp repo layout).
+
+Two traps: (1) the first pass at the fix normalized only the committed side and dropped the date
+normalization from it, so `--check` then failed on the `Generated <date>` line every day — a false
+STALE swapped for another. Apply the SAME normalization to BOTH sides. (2) The generated index's
+`(N lines)` footer is a parse-derived value; it is stable across CRLF/LF source materialization
+because the parse normalizes first, and the new test asserts that instead of assuming it.

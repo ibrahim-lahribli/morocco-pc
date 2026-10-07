@@ -5,7 +5,7 @@
  * docs/RECOMMENDATION_ENGINE_DECISIONS.md so the index cannot drift.
  *
  * What it does:
- *   1. Reads RECOMMENDATION_ENGINE_DECISIONS.md (CRLF required; BOM tolerated).
+ *   1. Reads RECOMMENDATION_ENGINE_DECISIONS.md (BOM-tolerant, CRLF or LF both accepted).
  *   2. Finds every decision entry: the `## Decision N ...` global headings plus the
  *      nested `### Decision N ...` entries inside "Engine 3 contract decisions".
  *      Engine-3-local numbering: local 4/5 ARE global Decisions 4/5 (the file has
@@ -32,6 +32,10 @@
  *
  * The only volatile line is `Generated <date> ...`; --check normalizes that date so
  * the check is stable across days while still catching every other content change.
+ * --check also normalizes CRLF/LF and a leading BOM on BOTH sides (shared helper
+ * scripts/lib/generated-doc-check.js): git stores this file as LF while the
+ * generator writes CRLF, so a raw byte compare reports STALE on every clean Linux
+ * checkout (the 2026-10-07 CI failure). The written file stays CRLF on disk.
  * No dependencies beyond Node built-ins.
  */
 
@@ -212,13 +216,19 @@ out.push('Precedence when sources conflict: `AGENTS.md` §9. This file is a **lo
 out.push('');
 
 const content = out.join('\r\n') + '\r\n';
-const stripDate = (s) => s.replace(/^Generated \d{4}-\d{2}-\d{2} /m, 'Generated <DATE> ').replace(/as of \d{4}-\d{2}-\d{2}/g, 'as of <DATE>');
+
+// Comparison is line-ending / BOM / volatile-date tolerant (see the helper's own
+// header): the repository stores this file as LF while the generator writes CRLF,
+// so a raw byte compare reports STALE on every Linux checkout. Shared with
+// gen-schema-reference.js so the two gates cannot drift apart again.
+const { isStale, firstDiff } = require('./lib/generated-doc-check');
 
 if (CHECK) {
   if (!fs.existsSync(OUT)) fail('--check: docs/DECISION_INDEX.md does not exist; run `npm run gen:decisions`');
   const existing = fs.readFileSync(OUT, 'utf8');
-  if (stripDate(existing) !== stripDate(content)) {
-    fail('--check: docs/DECISION_INDEX.md is STALE; run `npm run gen:decisions` and commit the result');
+  if (isStale(existing, content)) {
+    fail('--check: docs/DECISION_INDEX.md is STALE; run `npm run gen:decisions` and commit the result\n' +
+      firstDiff(existing, content));
   }
   console.log('gen-decision-index: OK - docs/DECISION_INDEX.md is up to date');
 } else {
