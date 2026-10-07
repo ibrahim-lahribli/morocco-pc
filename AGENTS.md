@@ -119,12 +119,12 @@ deliberately not duplicated here.
 | `npm run verify:docs` | Verify fact-shaped doc claims vs tree (offline) or + read-only DB (`--live`) |
 | `node scripts/verify-docs.js --live` | Adds read-only live-DB checks: 15 core tables + counts (INFO), and the schema-digest gate — FAILs when `docs/SCHEMA_REFERENCE.md`'s `schema-digest:` line no longer matches the live tables/columns/enums (fix: `npm run gen:schema`) |
 | `node scripts/run-seeds.js --dry-run` | Report seed statements without executing |
-| `node scripts/run-migrations.js` | Apply PENDING migrations via the `schema_migrations` ledger (OG-14, 2026-10-03) — re-runnable; flags `--dry-run` (list pending), `--check` (exit 1 on pending), `--offline` (no DB), `--baseline` (adopt an already-migrated DB without running), `--test-db` (guarded `TEST_DATABASE_URL`) |
+| `node scripts/run-migrations.js` | Apply PENDING migrations via the `schema_migrations` ledger (OG-14, 2026-10-03) — re-runnable; flags `--dry-run` (list pending), `--check` (exit 1 on pending), `--offline` (no DB), `--baseline` (adopt an already-migrated DB without running), `--test-db` (guarded `TEST_DATABASE_URL`). **A real apply against the shared `DATABASE_URL` REFUSES (exit 1, ledger untouched) unless `--restore-point=<id>` matches `^[A-Za-z0-9_-]{8,}$`** — it prints the pending files instead. `--test-db` and the read-only modes (`--dry-run` / `--check` / `--offline`) never need one |
 | `node --test scripts/lib/db-url.test.js` | Guard unit tests (not in `test:unit`) |
 | `node --test scripts/lib/gap-register.test.js` | Gap-register table-shape tests (not in `test:unit`; the check itself runs in `verify:docs` as `gap-register-shape`) |
 | `node --test scripts/lib/migrations.test.js` | Applied-migrations ledger helper tests (OG-14; not in `test:unit`) |
-| `npm run test:scripts` | Every `scripts/lib/*.test.js` suite (`db-url`, `gap-register`, `migrations`, `schema-diff`, `replay-harness`). `test:unit` globs `src/**/*.test.js` ONLY, so these never ran in CI until the `test:scripts` step was added — run it after touching anything in `scripts/` |
-| `npm run verify:replay` | Replays every migration into a genuinely EMPTY scratch database on the `TEST_DATABASE_URL` instance and diffs it against the live schema by definition (`pg_get_constraintdef` / `indexdef` / column type+nullability+default). `--test-db` is required so it can never create a database implicitly; `--dry-run` contacts nothing; `--keep-db` skips the drop. Exits non-zero on any drift |
+| `npm run test:scripts` | Every `scripts/lib/*.test.js` suite (`db-url`, `gap-register`, `migrations`, `run-migrations-cli`, `schema-diff`, `replay-harness`). `test:unit` globs `src/**/*.test.js` ONLY, so these never ran in CI until the `test:scripts` step was added — run it after touching anything in `scripts/` |
+| `npm run verify:replay` | Replays every migration into a genuinely EMPTY scratch database on the `TEST_DATABASE_URL` instance and diffs it against the live schema by definition (`pg_get_constraintdef` / `indexdef` / column type+nullability+default). `--test-db` is required so it can never create a database implicitly; `--dry-run` contacts nothing; `--keep-db` skips the drop; `--reference=<test|shared>` picks the diff target (`shared` = `DATABASE_URL`, the default; `test` = the TEST branch). Exits non-zero on any drift |
 | `npm run verify:pi1` | Decision 23 criterion 3 (PI-1) **pool independence**: inserts a probe PSU (own `product_family`, 100 kW, NULL connectors) into the TEST branch, re-runs GAMING + OFFICE, asserts no pre-existing `build_score` moved. Writes to the TEST branch, so it is not read-only; the probe is removed in a `finally` and a cleanup failure exits non-zero. Delete `psu_spec` before `product`, and `product` before `product_family` — see §7 item 11. Give any anchor row lookup an explicit `ORDER BY`: a `LIMIT 1` without one made this gate report intermittent false drift |
 | `node scripts/check-offer-freshness.js --fail-days=14` | OG-30 offer-freshness gate: offers at/inside their blackout window. **Equals form is mandatory** — `--fail-days=N`; the space form `--fail-days 14` prints usage and exits 2. CI uses 14, not the default 7, so a nightly run warns with two weeks' lead time |
 | `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance fixtures |
@@ -250,7 +250,9 @@ getting the nightly gate, which is why `workflow_dispatch` is wired up too.
    `017_offer_identity_and_provenance.sql` / OG-06, `018_build_component_offer_provenance.sql` /
    Decision 35 — TEST first, shared apply still gated). Because `verify:replay` diffs a fresh
    replay against `DATABASE_URL`, it reports fresh-018 vs live-017 drift **by design** until the
-   shared apply — that is expected, not a defect.
+   shared apply — that is expected, not a defect. Use
+   `npm run verify:replay -- --reference=test` for the 0-drift answer on a TEST-first migration
+   while shared trails.
 6. **Migration ledger (OG-14, 2026-10-04).** `run-migrations.js` is ledger-driven: it records each
    applied filename in `schema_migrations` and applies only the pending tail, so it is re-runnable
    (the bare `CREATE TYPE` in `002_enums.sql` no longer aborts a second run). A database that
@@ -314,6 +316,10 @@ getting the nightly gate, which is why `workflow_dispatch` is wired up too.
   `NNN_short_description.sql`.
 - **Never bypass the migration ledger** — apply migrations only through the ledger-driven
   `run-migrations.js` (OG-14: pending tail only, one transaction per file — re-running on the live DB is safe); never replay the files by hand.
+- **Never apply a migration to the shared `DATABASE_URL` without a recorded Neon restore point.**
+  `run-migrations.js` refuses — exit 1, ledger untouched — unless `--restore-point=<id>` matches
+  `^[A-Za-z0-9_-]{8,}$`, printing the pending files instead. The requirement is scoped to a real
+  shared apply: `--test-db` and the read-only modes (`--dry-run` / `--check` / `--offline`) never need it.
 - **Never commit `.env`, `node_modules`, or secrets.** `.env.example` holds key names only.
 - **Never add a migration just to make a test pass.**
 - Keep engine modules pure; put DB access in loaders/orchestrator only.

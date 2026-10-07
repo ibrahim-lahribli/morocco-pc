@@ -50,6 +50,8 @@
 //   node scripts/verify-migrations-replay.js --dry-run    list migrations, connect to nothing
 //   node scripts/verify-migrations-replay.js --test-db    replay and diff (creates + drops a scratch DB)
 //   node scripts/verify-migrations-replay.js --test-db --keep-db   leave the scratch DB for debugging
+//   node scripts/verify-migrations-replay.js --test-db --reference=test   diff against the TEST branch
+//   node scripts/verify-migrations-replay.js --test-db --reference=shared  diff against DATABASE_URL (default)
 //
 // NOT part of `npm run test:unit` (that glob is `src/**/*.test.js`). Its
 // DB-free helpers are tested by scripts/lib/replay-harness.test.js via
@@ -187,6 +189,24 @@ async function snapshot(client) {
   return out;
 }
 
+// --reference=test|shared selects the diff target. Default `shared` is the
+// current behaviour (snapshot DATABASE_URL); `test` snapshots the TEST branch
+// instead, so a TEST-first migration can be replay-verified (expect 0 drift)
+// while the shared DB still trails by design.
+function parseReference(argv) {
+  let reference = 'shared';
+  for (const arg of argv) {
+    if (arg.startsWith('--reference=')) {
+      const value = arg.slice('--reference='.length);
+      if (value !== 'test' && value !== 'shared') {
+        return { error: `ERROR: --reference must be test or shared, got '${value}'` };
+      }
+      reference = value;
+    }
+  }
+  return { reference };
+}
+
 async function main(argv, env) {
   const flags = new Set(argv);
   const dryRun = flags.has('--dry-run');
@@ -196,6 +216,13 @@ async function main(argv, env) {
     console.error('       This script creates a database; it never does that implicitly.');
     return 1;
   }
+
+  const parsed = parseReference(argv);
+  if (parsed.error) {
+    console.error(parsed.error);
+    return 2;
+  }
+  const reference = parsed.reference;
 
   const files = listMigrations(MIGRATIONS_DIR);
 
@@ -264,7 +291,20 @@ async function main(argv, env) {
     }
     console.log(`\nReplayed ${files.length} migrations into an empty database.`);
 
-    const live = new Client({ connectionString: env.DATABASE_URL, connectionTimeoutMillis: testConfig.connectionTimeoutMillis, ssl });
+    // The reference side defaults to the shared DATABASE_URL; --reference=test
+    // snapshots the TEST branch instead. Scratch creation still ran on the
+    // TEST instance either way (AGENTS.md item 8).
+    const referenceUrl = reference === 'test' ? testConfig.connectionString : env.DATABASE_URL;
+    if (reference === 'test' && !referenceUrl) {
+      console.error('ERROR: --reference=test needs TEST_DATABASE_URL (guarded config missing connectionString)');
+      return 1;
+    }
+    if (reference !== 'test' && !env.DATABASE_URL) {
+      console.error('ERROR: DATABASE_URL is not set in .env');
+      return 1;
+    }
+    console.log(`Reference: ${reference === 'test' ? 'TEST_DATABASE_URL' : 'DATABASE_URL'}`);
+    const live = new Client({ connectionString: referenceUrl, connectionTimeoutMillis: testConfig.connectionTimeoutMillis, ssl });
     await live.connect();
     let result;
     let liveCounts;
@@ -309,6 +349,7 @@ module.exports = {
   dropScratchDatabase,
   withScratchDatabase,
   resolveReplayTarget,
+  parseReference,
 };
 
 if (require.main === module) {

@@ -73,9 +73,52 @@ function staleLedgerEntries(allFiles, appliedFiles) {
   return appliedFiles.filter((f) => !present.has(f));
 }
 
+/**
+ * A Neon restore-point id, e.g. `br-abc12345` or `rp_20261006_01`. The runner
+ * never validates that the id EXISTS (only Neon knows that) — it validates
+ * shape so a missing flag or a pasted placeholder cannot slip through:
+ * `[A-Za-z0-9_-]{8,}`. Placeholders such as `<PASTE ID HERE>` fail on the
+ * angle brackets and spaces alone.
+ *
+ * @param {unknown} value the raw `--restore-point=` value (or null/undefined)
+ * @returns {boolean} true when the value is an acceptable restore-point id
+ */
+function isValidRestorePointId(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{8,}$/.test(value);
+}
+
+/**
+ * Decide whether a shared-target run must refuse to apply. Pure so the
+ * refusal path is unit-testable without a database.
+ *
+ * Refuse when ALL of these hold: the target is the shared DATABASE_URL
+ * (not --test-db), the mode actually applies (not --dry-run / --check /
+ * --offline / --baseline), at least one migration is pending, and no valid
+ * `--restore-point=<id>` was supplied.
+ *
+ * @param {object} opts
+ * @param {boolean} opts.targetShared true when targeting DATABASE_URL
+ * @param {number} opts.pendingCount number of pending migrations
+ * @param {boolean} [opts.dryRun] read-only preview mode
+ * @param {boolean} [opts.check] freshness-gate mode (executes nothing)
+ * @param {boolean} [opts.offline] no-DB mode
+ * @param {boolean} [opts.baseline] ledger-adoption mode (runs nothing)
+ * @param {unknown} [opts.restorePoint] raw restore-point value
+ * @returns {boolean} true when the run must refuse
+ */
+function shouldRefuseSharedApply(opts) {
+  const o = opts || {};
+  if (!o.targetShared) return false;
+  if (o.dryRun || o.check || o.offline || o.baseline) return false;
+  if (typeof o.pendingCount !== 'number' || o.pendingCount <= 0) return false;
+  return !isValidRestorePointId(o.restorePoint);
+}
+
 module.exports = {
   LEDGER_TABLE,
   FILENAME_RE,
   pendingMigrations,
   staleLedgerEntries,
+  isValidRestorePointId,
+  shouldRefuseSharedApply,
 };

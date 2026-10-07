@@ -22,6 +22,7 @@ const {
   dropScratchDatabase,
   withScratchDatabase,
   resolveReplayTarget,
+  parseReference,
 } = require('../verify-migrations-replay');
 
 function fakeClient() {
@@ -100,6 +101,25 @@ describe('verify-migrations-replay helpers', () => {
       /shared/,
     );
   });
+
+  describe('parseReference', () => {
+    it('defaults to the shared database', () => {
+      assert.deepStrictEqual(parseReference(['--test-db']), { reference: 'shared' });
+    });
+
+    it('accepts --reference=test', () => {
+      assert.deepStrictEqual(parseReference(['--test-db', '--reference=test']), { reference: 'test' });
+    });
+
+    it('accepts an explicit --reference=shared', () => {
+      assert.deepStrictEqual(parseReference(['--test-db', '--reference=shared']), { reference: 'shared' });
+    });
+
+    it('rejects anything else', () => {
+      assert.match(parseReference(['--test-db', '--reference=bogus']).error, /test or shared/);
+    });
+  });
+
 
   // Review Focus #3: cleanup must terminate other backends before dropping.
   it('dropScratchDatabase terminates backends then drops the database', async () => {

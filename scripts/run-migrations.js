@@ -10,7 +10,15 @@
 // bare `CREATE TYPE`, so the old replay-everything runner aborted at
 // `type "product_category" already exists` (see DEVELOPMENT_NOTES.md).
 //
-// Usage: node scripts/run-migrations.js [mode]
+// Usage: node scripts/run-migrations.js [mode] [--restore-point=<id>]
+//
+// A real apply against the shared DATABASE_URL REFUSES unless
+// --restore-point=<id> is given and matches ^[A-Za-z0-9_-]{8,}$ (Neon
+// restore-point id; placeholders like <PASTE ID HERE> fail the shape).
+// Without it the runner prints the pending files and exits 1.
+// --dry-run / --check / --offline / --baseline and any --test-db run never
+// require it. Successful shared applies append one JSON line to
+// database/migration-applies.jsonl (restore point, git SHA, timestamp).
 //   (no mode)          apply every PENDING migration, then verify
 //   --dry-run          list pending migrations without executing or writing
 //   --check            exit 0 when nothing is pending, 1 when something is
@@ -30,25 +38,36 @@ const { Client } = require('pg');
 const fs = require('fs');
 const path = require('path');
 
-const { pendingMigrations, staleLedgerEntries, LEDGER_TABLE } = require('./lib/migrations');
+const { pendingMigrations, staleLedgerEntries, LEDGER_TABLE, isValidRestorePointId, shouldRefuseSharedApply } = require('./lib/migrations');
 
 const MODES = ['--dry-run', '--check', '--baseline', '--offline', '--test-db'];
 
-/** Parse argv into a mode set; reject anything unknown. */
+
+/**
+ * Parse argv into a mode set plus an optional restore-point id.
+ *
+ * PURE on purpose: an unrecognized flag or an unusable mode combination is
+ * RETURNED as `error` instead of calling process.exit, so the refusal paths are
+ * testable without a database (scripts/lib/run-migrations-cli.test.js). The
+ * bootstrap prints the error to stderr and exits 2.
+ */
 function parseArgs(argv) {
   const flags = new Set();
+  let restorePoint = null;
   for (const arg of argv) {
+    if (arg.startsWith('--restore-point=')) {
+      restorePoint = arg.slice('--restore-point='.length);
+      continue;
+    }
     if (!MODES.includes(arg)) {
-      console.error(`usage: node scripts/run-migrations.js [${MODES.join('] [')}]`);
-      process.exit(2);
+      return { error: `usage: node scripts/run-migrations.js [${MODES.join('] [')}] [--restore-point=<id>]` };
     }
     flags.add(arg);
   }
   if (flags.has('--baseline') && (flags.has('--dry-run') || flags.has('--check') || flags.has('--offline'))) {
-    console.error('ERROR: --baseline cannot be combined with --dry-run / --check / --offline');
-    process.exit(2);
+    return { error: 'ERROR: --baseline cannot be combined with --dry-run / --check / --offline' };
   }
-  return flags;
+  return { flags, restorePoint };
 }
 
 /**
@@ -115,6 +134,33 @@ async function baselineLedger(files, client) {
   console.log(`BASELINED: ${inserted} file(s) recorded as applied (no migration executed)`);
 }
 
+/**
+ * Append one audit line for a successful shared apply. Best-effort: a log
+ * write failure warns but never fails the migration run itself.
+ */
+function recordSharedApply({ restorePoint, files }) {
+  const logPath = path.join(process.cwd(), 'database', 'migration-applies.jsonl');
+  let gitSha = 'unknown';
+  try {
+    gitSha = require('child_process').execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+  } catch (_err) {
+    gitSha = 'unknown';
+  }
+  const line = JSON.stringify({
+    applied_at: new Date().toISOString(),
+    target: 'shared',
+    restore_point: restorePoint,
+    git_sha: gitSha,
+    files,
+  }) + '\n';
+  try {
+    fs.appendFileSync(logPath, line, 'utf8');
+    console.log('Recorded shared apply in database/migration-applies.jsonl');
+  } catch (err) {
+    console.log('WARNING: could not append to database/migration-applies.jsonl: ' + err.message);
+  }
+}
+
 /** Post-run structural verification, unchanged from the original runner. */
 async function verify(client) {
   console.log('\n--- Verification ---');
@@ -144,8 +190,18 @@ async function verify(client) {
 
 }
 
-async function main() {
-  const flags = parseArgs(process.argv.slice(2));
+/**
+ * The CLI entry point. Uses process.exitCode (never process.exit) so a test can
+ * call it in-process; the bootstrap passes process.argv.slice(2).
+ */
+async function main(argv = process.argv.slice(2)) {
+  const parsed = parseArgs(argv);
+  if (parsed.error) {
+    console.error(parsed.error);
+    process.exitCode = 2;
+    return;
+  }
+  const { flags, restorePoint } = parsed;
   const offline = flags.has('--offline');
 
   const migrationsDir = path.join(process.cwd(), 'database', 'migrations');
@@ -200,8 +256,35 @@ async function main() {
       return;
     }
 
+    // Shared-target guard: a real apply against DATABASE_URL refuses unless a
+    // valid --restore-point=<id> was supplied. The pending list is printed
+    // first so the refusal names exactly what was NOT applied.
+    if (shouldRefuseSharedApply({
+      targetShared: !flags.has('--test-db'),
+      pendingCount: pending.length,
+      dryRun: flags.has('--dry-run'),
+      check: flags.has('--check'),
+      offline: flags.has('--offline'),
+      baseline: flags.has('--baseline'),
+      restorePoint,
+    })) {
+      console.error('ERROR: refusing to apply to the shared DATABASE_URL without --restore-point=<id>');
+      console.error('       Pending (NOT applied): ' + pending.join(', '));
+      console.error('       Re-run with --restore-point=<id> matching ^[A-Za-z0-9_-]{8,}$');
+      process.exitCode = 1;
+      return;
+    }
+
     for (const file of pending) {
       await applyMigration(file, client);
+    }
+
+    // Record restore point + git SHA + timestamp for a shared apply. A JSONL
+    // log file, not a migration: schema_migrations is runner-created (never a
+    // numbered migration) so a fresh 001->NNN replay stays clean, and audit
+    // metadata is not schema. TEST-target runs never write here.
+    if (!flags.has('--test-db')) {
+      recordSharedApply({ restorePoint, files: pending });
     }
 
     await verify(client);
@@ -213,4 +296,8 @@ async function main() {
   }
 }
 
-main();
+module.exports = { parseArgs, main };
+
+if (require.main === module) {
+  main(process.argv.slice(2));
+}
