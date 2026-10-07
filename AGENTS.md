@@ -244,15 +244,14 @@ getting the nightly gate, which is why `workflow_dispatch` is wired up too.
    and RE-VERIFIED 2026-10-05 through `001→015` with **0 drift by object definition** (C-30). That
    check is now the repeatable `npm run verify:replay` gate, so re-run it after any migration lands
    rather than trusting a one-off measurement. The shared and TEST databases are baselined in the
-   `schema_migrations` ledger (OG-14); the shared DB stands at **017** and the TEST branch at **018**
-   as of 2026-10-06 (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04,
+   `schema_migrations` ledger (OG-14); both the shared DB and the TEST branch stand at **018**
+   as of 2026-10-07 (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04,
    `015_relax_rejection_partner.sql` / OG-32, `016_og02_og03_memory_and_status.sql` / OG-02+OG-03,
    `017_offer_identity_and_provenance.sql` / OG-06, `018_build_component_offer_provenance.sql` /
-   Decision 35 — TEST first, shared apply still gated). Because `verify:replay` diffs a fresh
-   replay against `DATABASE_URL`, it reports fresh-018 vs live-017 drift **by design** until the
-   shared apply — that is expected, not a defect. Use
-   `npm run verify:replay -- --reference=test` for the 0-drift answer on a TEST-first migration
-   while shared trails.
+   Decision 35 — 018 applied to both on 2026-10-07). `verify:replay` diffs a fresh
+   replay against `DATABASE_URL` and reports **0 drift** (18 files replayed); no shared-first
+   trail remains. Use `npm run verify:replay -- --reference=test` for the 0-drift answer on a
+   future TEST-first migration while shared trails.
 6. **Migration ledger (OG-14, 2026-10-04).** `run-migrations.js` is ledger-driven: it records each
    applied filename in `schema_migrations` and applies only the pending tail, so it is re-runnable
    (the bare `CREATE TYPE` in `002_enums.sql` no longer aborts a second run). A database that

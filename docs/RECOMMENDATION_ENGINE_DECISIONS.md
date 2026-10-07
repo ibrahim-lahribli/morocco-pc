@@ -4130,7 +4130,7 @@ Per `docs/decisions/TEMPLATE.md`, the `Status:` line above was edited in place t
 
 ## Decision 35 — a beta freshness exemption for seed offers, with the offer class snapshotted onto the build (OG-30 residual, OG-21)
 
-Status: RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 on the TEST branch (migration 018 applied there; the shared DB stays at 017 pending an explicit apply) — Stage 1 gains an explicit, default-OFF `allow_unverified_seed_offers` option that waives Decision 7's 30-day window for SEED offers only, every eligible offer now carries its provenance class (`SEED_UNVERIFIED` | `VERIFIED`) plus its offer id on the Engine 3 price carrier, and `build_component` SNAPSHOTS that class and the offer id so a permalink stays labelled after the offer changes.
+Status: RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 on the TEST branch and 2026-10-07 on the shared DB (migration 018 applied to both; ledger = 18 on each) — Stage 1 gains an explicit, default-OFF `allow_unverified_seed_offers` option that waives Decision 7's 30-day window for SEED offers only, every eligible offer now carries its provenance class (`SEED_UNVERIFIED` | `VERIFIED`) plus its offer id on the Engine 3 price carrier, and `build_component` SNAPSHOTS that class and the offer id so a permalink stays labelled after the offer changes.
 
 Date: 2026-10-06. Prompted by the beta-launch risk recorded in `docs/PIPELINE_DESIGN.md` section 13: the 101 seed offers expire out of the Decision 7 window on **2026-11-03** and nothing re-stamps them, so a beta running on seed data fails loud after that date. This decision implements that section's proposal. It is NOT a change to Decision 7's window for VERIFIED offers, NOT a source/retailer project (no scraper, no ToS work, no CLI or CI wiring), and NOT a re-stamp of any seed offer.
 
@@ -4186,3 +4186,16 @@ A beta on seed data dies on 2026-11-03 unless something changes, and every obvio
 ```text
 VERDICT: RESOLVED - a default-OFF allow_unverified_seed_offers option waives Decision 7's 30-day window for SEED offers (ingestion_record_id IS NULL) only, every eligible offer carries offer_id + offer_class onto the price carrier, and migration 018 snapshots offer_class + store_offer_id onto build_component inside the commit transaction (TEXT + CHECK, no enum; OG-21's column landed early). VERIFIED offers keep Decision 7 unchanged; a null last_checked_at is never excused; the freshness gate reports both classes and fails on VERIFIED only. Measured: unit 937 -> 950/0; commit harness 43 -> 51/0 with a mixed-build + no-relabel pin and residue 0; real-path probe option OFF (stale) throws EMPTY_CANDIDATE_POOL while option ON returns the full 101-pool / 87-12-2 pass with budget_floor 4477; migration 018 is on TEST only (shared stays 017, so verify:replay is red by design until the gated apply).
 ```
+
+### UPDATE 2026-10-07 — migration 018 applied to the shared database
+
+The shared `DATABASE_URL` received `018_build_component_offer_provenance.sql`
+from restore point `br-empty-poetry-axw9a07t` (ledger 17 -> 18; one `MIGRATED`
+line, one audit line in `database/migration-applies.jsonl`). `offer_class`,
+`store_offer_id`, `chk_build_component_offer_class` and
+`idx_build_component_store_offer_id` are present on both databases and
+`build_component` is still 0 rows. `npm run verify:replay` replayed 18 files
+into an empty database with **0 drift** (columns 362/362, checks 78/78, fks
+60/60, indexes 99/99), so the "fresh-18 vs live-17 by design" state recorded
+above is resolved. OG-21 / C-35 now read shared-applied. The restore branch was
+not deleted.

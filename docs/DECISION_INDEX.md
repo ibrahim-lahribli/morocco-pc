@@ -3,7 +3,7 @@
 **GENERATED FILE — do not edit by hand.** Regenerate with `node scripts/gen-decision-index.js`
 (or `npm run gen:decisions`) after any change to `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 `node scripts/gen-decision-index.js --check` exits non-zero when this file is stale.
-Generated 2026-10-06 from RECOMMENDATION_ENGINE_DECISIONS.md (4189 lines).
+Generated 2026-10-07 from RECOMMENDATION_ENGINE_DECISIONS.md (4202 lines).
 
 Generated for audit finding **D5** (decision-log navigability): one row per decision with number,
 title, status, date and line anchor. Every status comes from the normalized `Status:` line at the
@@ -17,7 +17,7 @@ section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` a
 
 ## Open decisions
 
-None. All 35 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-06.
+None. All 35 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-07.
 
 ## Global decisions (33 `## Decision` headings + 2 nested 4/5 aliases = 35)
 
@@ -55,7 +55,7 @@ None. All 35 global decisions (including the two nested 4/5 aliases) and all 5 E
 | 32 | a persisted rejection names its decisive partner (OG-32) | RESOLVED 2026-10-05; IMPLEMENTED and APPLIED 2026-10-05 — the Engine 2D candidate verdict gains two additive fields carrying the product identity of the partner the candidate decisively failed against, so a `build_rejection` row can now answer "against which partner" and not only "which candidate, and why". Migration `015_relax_rejection_partner.sql` relaxes the partner CHECK to permit a product-keyed partner. Closes OG-32. | 2026-10-05 | 3988 |
 | 33 | motherboard memory support becomes an explicit table; presence-only tables gain an explicit status (OG-02 + OG-03) | RESOLVED 2026-10-05; IMPLEMENTED 2026-10-05 - motherboard_memory_support (migration 016) is the source of truth for a board that has rows, the legacy single memory_type_id is the fallback for a board that has none, and the three presence-only compatibility tables gain a nullable support_status whose NULL preserves the presence-only meaning byte-for-byte. | 2026-10-05 | 4032 |
 | 34 | offer identity (natural key), offer provenance and the manual-import ingestion path (OG-06) | RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 — `store_offer` gains a natural key and provenance columns (migration 017), ingestion is a reusable impure edge under `src/recommendation/ingestion/`, and the only shipped adapter is the operator-supplied manual file. No scraping. Migration 017 is now applied on BOTH the TEST branch and the shared DB (ledger = 17 on each; verified 2026-10-06), so OG-06 is CLOSED — see the `### UPDATE 2026-10-06` block at the end of this entry. | 2026-10-06 | 4078 |
-| 35 | a beta freshness exemption for seed offers, with the offer class snapshotted onto the build (OG-30 residual, OG-21) | RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 on the TEST branch (migration 018 applied there; the shared DB stays at 017 pending an explicit apply) — Stage 1 gains an explicit, default-OFF `allow_unverified_seed_offers` option that waives Decision 7's 30-day window for SEED offers only, every eligible offer now carries its provenance class (`SEED_UNVERIFIED` \| `VERIFIED`) plus its offer id on the Engine 3 price carrier, and `build_component` SNAPSHOTS that class and the offer id so a permalink stays labelled after the offer changes. | 2026-10-06 | 4131 |
+| 35 | a beta freshness exemption for seed offers, with the offer class snapshotted onto the build (OG-30 residual, OG-21) | RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 on the TEST branch and 2026-10-07 on the shared DB (migration 018 applied to both; ledger = 18 on each) — Stage 1 gains an explicit, default-OFF `allow_unverified_seed_offers` option that waives Decision 7's 30-day window for SEED offers only, every eligible offer now carries its provenance class (`SEED_UNVERIFIED` \| `VERIFIED`) plus its offer id on the Engine 3 price carrier, and `build_component` SNAPSHOTS that class and the offer id so a permalink stays labelled after the offer changes. | 2026-10-06 | 4131 |
 
 ## Engine 3 contract decisions (Engine-3-local numbering; local 4–5 ARE global Decisions 4–5)
 
