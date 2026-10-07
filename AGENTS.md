@@ -10,9 +10,11 @@ Given a recommendation query (budget, currency, use case, scoring model), the en
 compatible components, assembles builds, scores them, ranks them, picks a diverse top set, and
 persists the results.
 
-It is currently a Node.js library plus a PostgreSQL schema — NOT a running service:
-there is no HTTP server, no API layer, no frontend, and no authentication. The only entry
-points are the engine's public barrels (`src/recommendation/*/index.js`) and the `scripts/` CLIs.
+The engine is still a pure Node.js library plus a PostgreSQL schema, and it stays that way: the
+HTTP surface is a separate, thin layer (`apps/api/`, Decision 36) that calls the engine's public
+barrels and owns no engine logic. There is still no frontend and no authentication. The entry
+points are the engine's public barrels (`src/recommendation/*/index.js`), the `scripts/` CLIs,
+and `apps/api/src/server.js`.
 
 ## 2. Read in this order
 
@@ -23,7 +25,7 @@ points are the engine's public barrels (`src/recommendation/*/index.js`) and the
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–35). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–36). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
    To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
@@ -45,7 +47,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | Area | Actual |
 |---|---|
 | Language | Node.js, CommonJS (`require`, `'use strict'`), no TypeScript, no build step |
-| Runtime deps | `pg`, `dotenv` only |
+| Runtime deps | Engine: `pg`, `dotenv`. API: `fastify`, `@fastify/cors`, `@fastify/rate-limit`, `@fastify/swagger`, `@sinclair/typebox` — all at the ROOT `package.json` (no nested package.json; the engine resolves `pg`/`dotenv` from the root `node_modules`). `pino-pretty` is a devDependency |
 | Database | PostgreSQL on Neon (cloud); single shared dev DB, NOT disposable |
 | Data access | Raw parameterized SQL via `pg`; no ORM |
 | Engine | Pure-JS modules under `src/recommendation/` |
@@ -53,7 +55,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | Package manager | npm (`package-lock.json` committed) |
 | Frontend / mobile | none |
 | Isolated write tests | Neon branch via `TEST_DATABASE_URL` + `scripts/lib/db-url.js` guard |
-| Lint / format / typecheck / CI | GitHub Actions CI (`.github/workflows/ci.yml`: `test:unit` + `gen-decision-index --check` + `verify-docs --offline`); no lint/format/typecheck |
+| Lint / format / typecheck / CI | GitHub Actions CI (`.github/workflows/ci.yml`: `unit-and-docs` = `test:unit` + `test:scripts` + `test:api` + `gen-decision-index --check` + `verify-docs --offline`; `recurring-gates` = freshness + migration replay + `test:api:db`); no lint/format/typecheck |
 
 ## 4. Repository map
 
@@ -74,7 +76,8 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |
 | `scripts/` | CLIs: migrations, seeds, schema verifiers, engine checks |
 | `scripts/lib/db-url.js` | `TEST_DATABASE_URL` guard for write-capable tests |
-| `src/recommendation/` | ALL application code — the engine |
+| `src/recommendation/` | ALL engine application code — the pipeline stages |
+| `apps/api/` | The HTTP API (Decision 36): Fastify routes, TypeBox contracts, the SQL repository, a Dockerfile. TEST DB only unless `API_ALLOW_SHARED=1`; no engine logic, no frontend |
 
 `src/recommendation/` has one directory per pipeline stage: `compatibility`, `candidates`,
 `offers`, `filtering`, `retention`, `assembly`, `scoring`, `query`, `ranking`, `persistence`,
@@ -124,6 +127,9 @@ deliberately not duplicated here.
 | `node --test scripts/lib/gap-register.test.js` | Gap-register table-shape tests (not in `test:unit`; the check itself runs in `verify:docs` as `gap-register-shape`) |
 | `node --test scripts/lib/migrations.test.js` | Applied-migrations ledger helper tests (OG-14; not in `test:unit`) |
 | `npm run test:scripts` | Every `scripts/lib/*.test.js` suite (`db-url`, `gap-register`, `migrations`, `run-migrations-cli`, `schema-diff`, `replay-harness`). `test:unit` globs `src/**/*.test.js` ONLY, so these never ran in CI until the `test:scripts` step was added — run it after touching anything in `scripts/` |
+| `npm run test:api` | HTTP API tests (`apps/api/test/unit/*.test.js`) — DB-free: `fastify.inject` + stubbed collaborators. Runs in the push/PR job |
+| `npm run test:api:db` | HTTP API end-to-end tests (`apps/api/test/db/*.db.test.js`) against the **`TEST_DATABASE_URL` branch**: the real engine, the real schema, residue asserted 0. The launcher fails fast (never skips) when `TEST_DATABASE_URL` is missing or targets shared, and fails on zero executed tests. Runs in `recurring-gates` + `workflow_dispatch` only |
+| `npm run start:api` | Start the HTTP API (`apps/api/src/server.js`). Write-capable: refuses to start unless the target is provably the TEST branch, or `API_ALLOW_SHARED=1` is set explicitly |
 | `npm run verify:replay` | Replays every migration into a genuinely EMPTY scratch database on the `TEST_DATABASE_URL` instance and diffs it against the live schema by definition (`pg_get_constraintdef` / `indexdef` / column type+nullability+default). `--test-db` is required so it can never create a database implicitly; `--dry-run` contacts nothing; `--keep-db` skips the drop; `--reference=<test|shared>` picks the diff target (`shared` = `DATABASE_URL`, the default; `test` = the TEST branch). Exits non-zero on any drift |
 | `npm run verify:pi1` | Decision 23 criterion 3 (PI-1) **pool independence**: inserts a probe PSU (own `product_family`, 100 kW, NULL connectors) into the TEST branch, re-runs GAMING + OFFICE, asserts no pre-existing `build_score` moved. Writes to the TEST branch, so it is not read-only; the probe is removed in a `finally` and a cleanup failure exits non-zero. Delete `psu_spec` before `product`, and `product` before `product_family` — see §7 item 11. Give any anchor row lookup an explicit `ORDER BY`: a `LIMIT 1` without one made this gate report intermittent false drift |
 | `node scripts/check-offer-freshness.js --fail-days=14` | OG-30 offer-freshness gate: offers at/inside their blackout window. **Equals form is mandatory** — `--fail-days=N`; the space form `--fail-days 14` prints usage and exits 2. CI uses 14, not the default 7, so a nightly run warns with two weeks' lead time |
@@ -193,7 +199,7 @@ Command gotchas (verified 2026-09-28):
   no such var, so it exports an EMPTY value that shadows the one `dotenv` just loaded, and the
   failure surfaces as a bare `ERR` with an empty message.
 - Adding a decision to the log **breaks `verify-docs` by design**: `scripts/verify-docs.js` hardcodes
-  the expected heading and `Status:` counts (now 28 / 34) and derives AGENTS.md's required
+  the expected heading and `Status:` counts (now 34 / 40) and derives AGENTS.md's required
   "Decisions 1-N" from that parse. Bump both counts when you add Decision N+1, and update the
   `database/migrations/` range cited in AGENTS.md §4 or `migrations-range-documented` warns.
 - Writing a spec-data seed: put the guard in the DML, not only the header comment. `UPDATE..FROM
@@ -368,6 +374,7 @@ getting the nightly gate, which is why `workflow_dispatch` is wired up too.
 | Which decisions exist, and their current status | each entry's `Status:` line + the generated `docs/DECISION_INDEX.md` (lookup aid, never a source of truth) |
 | What is still open (gaps, deferrals, unverified items) | `docs/OPEN_GAPS.md` (consolidated register; the underlying sources stay authoritative individually) |
 | Vocabulary/inputs/outputs of one module | that module's `index.js` header comment |
+| The HTTP API surface, status codes, option vocabulary | `docs/API.md` (the contract) and each `apps/api/src/` module's header comment |
 | Layer 4 reconciliation history | `database/LAYER4_RECONCILIATION_PLAN.md` |
 
 When sources conflict, prefer the more authoritative one, in this order:
@@ -464,7 +471,7 @@ Full findings, with evidence: `docs/DOCUMENTATION_AUDIT_2026-09-28.md` — every
 - **`product.name` has NO unique constraint** (`migrations/003_core_tables.sql`), so any seed matching `JOIN product p ON p.name = v.name` would silently widen to every duplicate rather than failing. Zero duplicates today, measured — but this is the same missing-unique-key family as OG-06's `store_offer`, and a future ingestion pass (F8) could introduce one.
 - **Adding a spec column to the loader breaks exact-shape test fixtures across FOUR files, and the failures are legitimate.** `deepStrictEqual` on a spec object fails on the new key even when the value is correct `null`. The fix is to give the fixture real data, never to relax the assertion: with the column absent the new pair is correctly UNKNOWN, so an "all-PASS" fixture would quietly stop being all-PASS. Sites hit when OG-10 landed: `filtering/context-loader.test.js`, `filtering/filter.test.js`, `filtering/integration.test.js`, `filtering/pipeline.test.js`, `assembly/assemble.test.js`.
 - **Prove an implemented rule FIRES, not just that it returns 0 violations.** A rule with no violations is indistinguishable from a rule that never runs. Force the violation (e.g. set a cooler taller than every case) and assert the expected REJECT and reason code appear, then restore and assert the verdict set is byte-identical. For OG-10 this was the only check that distinguished a live rule from dead code.
-- **Un-deferring a Decision 26 rule is not a status edit — it is a new Decision.** Lifting OG-10 required: the rule, the loader columns, reason codes, unit tests, a Decision record, the register row plus a closed row, a CONTEXT line, AND updating `check-deferred-rules.js` so the standing gate stops calling an enforced rule latent. The gate bumping its hardcoded decision counts (now 28/34) is the documented `verify-docs` breakage for adding Decision N+1, not a regression — see the `agents-decision-range` check.
+- **Un-deferring a Decision 26 rule is not a status edit — it is a new Decision.** Lifting OG-10 required: the rule, the loader columns, reason codes, unit tests, a Decision record, the register row plus a closed row, a CONTEXT line, AND updating `check-deferred-rules.js` so the standing gate stops calling an enforced rule latent. The gate bumping its hardcoded decision counts (now 34/40) is the documented `verify-docs` breakage for adding Decision N+1, not a regression — see the `agents-decision-range` check.
 - **Un-deferring a rule makes BOTH its operands load-bearing — audit the one you did not research.** OG-10 shipped on a researched cooler `height_mm` (seed 010 / OG-34) and an *unresearched* case `max_cpu_cooler_height_mm` that no seed had ever sourced, so `check-deferred-rules.js` reported "0 violations" by comparing good data against a literal. The violation gate answers "do these two stored values agree?", never "are these two stored values true?", so a green gate is not evidence about a column nobody sourced. When a rule starts reading a column, trace that column back to the INSERT that wrote it and ask which products share a literal. This is how OG-36 was found: the bare `160` covering both seed-001 cases was visible one screen from the `CROSS JOIN (SELECT 155 AS h)` that seed 010 had just fixed.
 - **A closure that justifies itself with a stored number must survive that number being corrected.** C-26 shipped OG-10 on "smallest case clearance 160mm vs a tallest cooler of 158mm". Both figures were right and the 2mm margin was real, but the 160 was the placeholder, so the margin was computed against a literal. Fixing the data did not change the margin or the verdict set — yet the sentence still had to be corrected, because a reader would have cited the wrong case. When a later correction changes which row holds an extremum, update the earlier prose that named it rather than leaving a figure that is accidentally still true.
 
