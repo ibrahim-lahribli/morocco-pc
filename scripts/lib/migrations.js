@@ -110,8 +110,13 @@ function isValidRestorePointId(value) {
  *
  * Refuse when ALL of these hold: the target is the shared DATABASE_URL (not
  * --test-db), the mode is not read-only (--dry-run / --check / --offline), at
- * least one migration is pending, and no valid `--restore-point=<id>` was
- * supplied.
+ * a KNOWN, non-negative (number-typed) `pendingCount`, and no valid
+ * `--restore-point=<id>` was supplied.
+ *
+ * The pending count is judged FAIL-CLOSED: an unknown, undefined, NaN,
+ * non-number or otherwise malformed count REFUSES, because "I could not
+ * determine what is pending" is not evidence that nothing is. A known `0`
+ * still never refuses (there is nothing to apply).
  *
  * `--baseline` is deliberately NOT exempt, even though it executes no SQL: it
  * WRITES the ledger. A mis-typed `--baseline` on the shared database could
@@ -136,8 +141,8 @@ function shouldRefuseSharedApply(opts) {
   const o = opts || {};
   if (!o.targetShared) return false;
   if (o.dryRun || o.check || o.offline) return false;
-  if (typeof o.pendingCount !== 'number' || o.pendingCount <= 0) return false;
-  return !isValidRestorePointId(o.restorePoint);
+  if (!Number.isInteger(o.pendingCount) || o.pendingCount < 0) return true;
+  return o.pendingCount > 0 && !isValidRestorePointId(o.restorePoint);
 }
 
 /**

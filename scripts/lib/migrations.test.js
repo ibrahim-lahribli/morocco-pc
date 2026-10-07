@@ -152,6 +152,21 @@ describe('shouldRefuseSharedApply', () => {
   it('never refuses when nothing is pending', () => {
     assert.strictEqual(shouldRefuseSharedApply({ ...base, pendingCount: 0, restorePoint: null }), false);
   });
+
+  // Fail CLOSED: an unknown, NaN or malformed count must refuse, because "I
+  // could not determine what is pending" is not evidence that nothing is. A
+  // valid restore point must NOT rescue it — the count is the subject of the
+  // check, and a caller that cannot say what is pending must not proceed.
+  it('refuses when pendingCount is unknown, NaN or malformed', () => {
+    const cases = [undefined, null, NaN, '1', 1.5, -1, Infinity, {}];
+    for (const pendingCount of cases) {
+      assert.strictEqual(
+        shouldRefuseSharedApply({ ...base, pendingCount, restorePoint: 'br-abc12345' }),
+        true,
+        'expected refusal for pendingCount=' + String(pendingCount)
+      );
+    }
+  });
 });
 
 describe('formatApplyLogLine', () => {
