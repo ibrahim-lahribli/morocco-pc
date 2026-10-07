@@ -65,6 +65,101 @@ the unprivileged `node` user. There is deliberately **no `apps/api/package.json`
 the engine's own `require('pg')` / `require('dotenv')` resolve upward, so a
 single root `node_modules` is what makes both the engine and the API work.
 
+## Production mode (designed 2026-10-07, not yet applied)
+
+The beta runs against the TEST branch. Pointing the API at the shared Neon
+project (`API_ALLOW_SHARED=1` + `DATABASE_URL`) is a production decision, and
+the facts below govern it.
+
+### The database role
+
+The API must not connect as the project owner. The engine's commit path issues
+INSERTs into the six Layer 4 tables and exactly ONE DELETE — verified from
+`src/recommendation/orchestrator/commit.js` and
+`src/recommendation/persistence/persist-rejections.js`: Decision 31's
+replace-idempotence clears this query's `build_rejection` rows before
+re-inserting. The production role is therefore:
+
+```sql
+CREATE ROLE morocco_pc_api LOGIN PASSWORD '<from the secret store>';
+GRANT USAGE ON SCHEMA public TO morocco_pc_api;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO morocco_pc_api;
+GRANT INSERT ON recommendation_profile, recommendation_query, build_candidate,
+  build_component, recommendation_result, build_rejection TO morocco_pc_api;
+GRANT DELETE ON build_rejection TO morocco_pc_api;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO morocco_pc_api;
+```
+
+Catalog tables (Layers 1–3, `store_offer` included) and `scoring_model` are
+read-only for this role. There is no UPDATE anywhere in the API or engine write
+path, and no sequence to grant (every id is an app-generated UUID). A
+`check_function_bodies` lock-down was considered and dropped: the API issues no
+functions, so the setting guards nothing here.
+
+Self-check (run after applying; every expected value is in the comment):
+
+```sql
+SELECT current_database();
+SELECT rolname, rolsuper, rolcreatedb, rolcreaterole FROM pg_roles
+  WHERE rolname = 'morocco_pc_api';                        -- rolsuper = f
+SELECT tableowner FROM pg_tables
+  WHERE tablename IN ('product','store_offer','build_candidate'); -- not morocco_pc_api
+SELECT has_schema_privilege('morocco_pc_api','public','CREATE');            -- f
+SELECT has_table_privilege('morocco_pc_api','product','INSERT'),            -- f
+       has_table_privilege('morocco_pc_api','product','UPDATE'),            -- f
+       has_table_privilege('morocco_pc_api','product','DELETE'),            -- f
+       has_table_privilege('morocco_pc_api','store_offer','INSERT'),        -- f
+       has_table_privilege('morocco_pc_api','store_offer','DELETE'),        -- f
+       has_table_privilege('morocco_pc_api','product','SELECT');            -- t
+SELECT has_table_privilege('morocco_pc_api','build_candidate','INSERT'),    -- t
+       has_table_privilege('morocco_pc_api','recommendation_query','INSERT'),  -- t
+       has_table_privilege('morocco_pc_api','build_component','DELETE'),    -- f
+       has_table_privilege('morocco_pc_api','build_rejection','DELETE');    -- t
+```
+
+**TEST-branch rehearsal plan** (proves the commit path runs under the role
+before any shared apply):
+
+1. Apply the same `CREATE ROLE` / `GRANT` script on the TEST branch
+   (branch-first; the branch is disposable).
+2. Connect a rehearsal run as `morocco_pc_api` and drive the full POST path
+   (`selectActiveScoringModel` → `createRecommendationQuery` →
+   `engine.runFullRun` → `readRecommendationResult`) — a role-parameterized run
+   of `scripts/measure-api-pass-phases.js`. Success = the whole flow completes
+   with no `42501` (insufficient privilege) and residue 0.
+3. Run the self-check on the branch and assert every expected value.
+
+### Region (facts only)
+
+- The Neon project hosting the shared `DATABASE_URL` is in **us-east-2**
+  (verified from the endpoint hostname, 2026-10-07).
+- A Neon project's region **cannot be changed in place**.
+- Moving regions means **creating a new project in the target region and
+  loading the data into it** — never a restore over the shared dev database.
+
+### Latency (measured 2026-10-07)
+
+`scripts/measure-api-pass-phases.js` wraps `client.query` and the engine's
+namespace seams (no engine edit) and measures ONE API-shaped pass on the TEST
+branch (GAMING / 20000 MAD): **75 statements, 10 670 ms of statement time in a
+12 114 ms wall, ≈142 ms per round trip**. By phase (statements / statement ms):
+
+| Phase | stmts | ms | Phase | stmts | ms |
+|---|---|---|---|---|---|
+| `engine.commit` | 37 | 4 906 | `engine.select_offer_prices` | 1 | 278 |
+| `engine.load_filtering_context` | 14 | 1 886 | `engine.load_assessments` | 1 | 274 |
+| `engine.load_candidates` | 9 | 1 235 | `api.read_back` | 2 | 282 |
+| `api.profile_query_insert` | 4 | 697 | `engine.snapshot` (tx open/close) | 2 | 278 |
+| `api.model_select` | 1 | 205 | pure stages (filter, retention, assembly, rank, explain…) | 0 | ~19 |
+| `engine.pass` (timestamp) | 1 | 143 | `engine.load_query` + `load_scoring_model` | 2 | 281 |
+
+The cost is per-statement latency to the remote Neon instance multiplied by a
+sequential pipeline — consistent with Decision 36's load verdict. The overlaps
+in the report are only parent→child nesting (`engine.snapshot` → `engine.pass`
+→ loaders); no sibling phases overlap. Any batching or parallelising of the
+engine's reads is ENGINE work (Decision 17's stage order is pinned by tests)
+and must not be smuggled into the API.
+
 ## Endpoints
 
 All routes are under `/v1` and speak JSON.
