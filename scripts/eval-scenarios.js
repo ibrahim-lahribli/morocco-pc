@@ -139,7 +139,9 @@ async function loadMaps(client) {
     'SELECT b.product_variant_id, c.vram_capacity_gb FROM gpu_board_spec b JOIN gpu_chipset c ON c.id = b.gpu_chipset_id'
   );
   const igpu = await client.query('SELECT product_id, integrated_gpu_present FROM cpu_spec');
+  const products = await client.query('SELECT id, name FROM product ORDER BY id');
   return {
+    productNames: new Map(products.rows.map((row) => [String(row.id), row.name])),
     vramByVariant: new Map(vram.rows.map((row) => [String(row.product_variant_id), row.vram_capacity_gb])),
     igpuByCpu: new Map(igpu.rows.map((row) => [String(row.product_id), row.integrated_gpu_present])),
   };
@@ -342,12 +344,12 @@ function renderBaseline({ meta, suite, selected, artifacts, results, summary, fu
   lines.push('');
   lines.push('## Observed metrics per scenario');
   lines.push('');
-  lines.push('| ID | builds | ranked | best total | best GPU | GPU share | CPU+RAM share | selected | distinct pairs | floor cheapest | within_budget |');
-  lines.push('|---|---|---|---|---|---|---|---|---|---|---|');
+  lines.push('| ID | builds | ranked | rank-1 CPU | CPU price | rank-1 GPU | GPU price | rank-1 cooler | cooler price | total (MAD) | GPU share | CPU+RAM share | selected | distinct pairs | floor cheapest | within_budget |');
+  lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
   for (const scenario of selected) {
     const artifact = artifacts.get(scenario.id);
     if (artifact === undefined || artifact === null) {
-      lines.push('| ' + scenario.id + ' | | | | | | | | | | |');
+      lines.push('| ' + scenario.id + ' | ' + Array(15).fill('-').join(' | ') + ' |');
       continue;
     }
     const best = artifact.best;
@@ -355,8 +357,13 @@ function renderBaseline({ meta, suite, selected, artifacts, results, summary, fu
     lines.push('| ' + scenario.id
       + ' | ' + artifact.build_count
       + ' | ' + artifact.ranked_count
-      + ' | ' + (best === null ? '-' : best.total_price)
+      + ' | ' + (best === null ? '-' : short(best.cpu_name).replace(/\|/g, '&#124;').replace(/\r?\n/g, ' ') || '-')
+      + ' | ' + (best === null || best.cpu_price === null ? '-' : best.cpu_price)
+      + ' | ' + (best === null ? '-' : short(best.gpu_name).replace(/\|/g, '&#124;').replace(/\r?\n/g, ' ') || '-')
       + ' | ' + (best === null || best.gpu_price === null ? '-' : best.gpu_price)
+      + ' | ' + (best === null ? '-' : short(best.cooler_name).replace(/\|/g, '&#124;').replace(/\r?\n/g, ' ') || '-')
+      + ' | ' + (best === null || best.cooler_price === null ? '-' : best.cooler_price)
+      + ' | ' + (best === null ? '-' : best.total_price)
       + ' | ' + (artifact.best_gpu_price_share === null || artifact.best_gpu_price_share === undefined ? '-' : artifact.best_gpu_price_share)
       + ' | ' + (artifact.best_cpu_ram_share === null || artifact.best_cpu_ram_share === undefined ? '-' : artifact.best_cpu_ram_share)
       + ' | ' + artifact.selected.length

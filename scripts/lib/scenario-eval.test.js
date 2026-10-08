@@ -126,6 +126,25 @@ test('projectArtifact derives shares, pair count, vram and iGPU from the run', (
   assert.equal(artifact.selected_has_reject, false);
 });
 
+test('projectArtifact carries rank-1 component names and exact selected prices, with explicit absence', () => {
+  const build = { ...BUILD, components: [...BUILD.components, component('CPU_COOLER', 'cooler-1', null, 200)] };
+  const entry = { ...ENTRY, build };
+  const maps = { ...MAPS, productNames: new Map([['cpu-1', 'CPU name'], ['gpu-1', 'GPU name'], ['cooler-1', 'Cooler name']]) };
+  const project = (b, m = maps) => projectArtifact('S', { builds: [b], budget_amount: 12000 },
+    { ranked: [{ ...entry, build: b }] }, { selected: [] }, m).best;
+  const best = project(build);
+  assert.equal(best.cpu_name, 'CPU name');
+  assert.equal(best.gpu_name, 'GPU name');
+  assert.equal(best.cooler_name, 'Cooler name');
+  assert.equal(best.cpu_price, 400);
+  assert.equal(best.gpu_price, 300);
+  assert.equal(best.cooler_price, 200);
+  const noGpu = project({ ...build, components: build.components.filter(c => c.component_role !== 'GPU') });
+  assert.equal(noGpu.gpu_name, null);
+  assert.equal(noGpu.gpu_price, null);
+  assert.equal(project(build, MAPS).cpu_name, null);
+});
+
 test('projectArtifact records the RAW build_score, not the rounded ranked-entry score', () => {
   const rawBuild = Object.assign({}, BUILD, { build_score: 60.00499 });
   const entry = Object.assign({}, ENTRY, { build_score: 60.0, build: rawBuild });

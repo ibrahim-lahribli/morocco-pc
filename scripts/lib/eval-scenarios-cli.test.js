@@ -57,6 +57,20 @@ test('baseline ignores volatile rows while sidecar preserves full evidence and I
   assert.equal(new Date(sidecar.generated_at).toISOString(), sidecar.generated_at);
 });
 
+test('baseline renders identities, prices, total and GPU share for every row, including no-build rows', () => {
+  const best = { cpu_name: 'CPU | name', cpu_price: 400, gpu_name: 'GPU name', gpu_price: 300,
+    cooler_name: 'Cooler name', cooler_price: 200, total_price: 1000 };
+  const artifact = { best, build_count: 1, ranked_count: 1, selected: [], selected_pair_count: 0,
+    best_gpu_price_share: 0.3, best_cpu_ram_share: 0.5 };
+  const text = renderBaseline({ meta: { date: '2026-10-08', branch: 'agent/engine',
+    scoringModel: { name: 'seed', version: '1', id: 'model' }, counts: {} }, suite: {},
+    selected: [{ id: 'S1', budget: 12000 }, { id: 'S0', budget: 1 }],
+    artifacts: new Map([['S1', artifact], ['S0', { ...artifact, best: null, build_count: 0, ranked_count: 0,
+      best_gpu_price_share: null, best_cpu_ram_share: null }]]), results: [], fullRuns: [], pi1: null });
+  assert.ok(text.includes('| S1 | 1 | 1 | CPU &#124; name | 400 | GPU name | 300 | Cooler name | 200 | 1000 | 0.3 |'));
+  assert.ok(text.includes('| S0 | 0 | 0 | - | - | - | - | - | - | - | - |'));
+});
+
 test('CLI exposes sidecar path and opt-out', () => {
   assert.equal(parseArgs(['node', 'cli', '--volatile=custom.json']).volatile, 'custom.json');
   assert.equal(parseArgs(['node', 'cli', '--no-volatile']).volatile, false);

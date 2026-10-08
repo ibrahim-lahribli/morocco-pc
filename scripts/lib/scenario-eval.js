@@ -209,6 +209,9 @@ function projectEntry(entry, maps) {
   const cpu = byRole.CPU === undefined ? null : byRole.CPU;
   const gpu = byRole.GPU === undefined ? null : byRole.GPU;
   const ram = byRole.RAM === undefined ? null : byRole.RAM;
+  const cooler = byRole.CPU_COOLER === undefined ? null : byRole.CPU_COOLER;
+  const nameOf = (component) => component === null || maps.productNames === undefined
+    ? null : (maps.productNames.get(String(component.product_id)) ?? null);
   const gpuPrice = priceOf(gpu);
   const cpuPrice = priceOf(cpu);
   const ramPrice = priceOf(ram);
@@ -231,6 +234,10 @@ function projectEntry(entry, maps) {
     total_price: total,
     compatibility_status: entry.compatibility_status,
     has_gpu: gpu !== null,
+    cpu_name: nameOf(cpu),
+    gpu_name: nameOf(gpu),
+    cooler_name: nameOf(cooler),
+    cooler_price: priceOf(cooler),
     gpu_price: gpuPrice,
     cpu_price: cpuPrice,
     ram_price: ramPrice,

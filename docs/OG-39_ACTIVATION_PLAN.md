@@ -1,140 +1,93 @@
-# OG-39 — activation plan for the launch-v2 scoring model
+# OG-39 — scoring-model activation plan
 
-**Status:** AUTHORED 2026-10-08 (E1b) — **NOT EXECUTED.** Every command below is written to be
-copy-pasteable but has NOT been run; nothing in this plan has touched a database.
+**Status: PROPOSED, NOT EXECUTED (E0d, 2026-10-08).** No seed, model activation,
+engine eligibility change or harness selector is implemented by this document.
+Audience: Engine and Platform maintainers coordinating a TEST-first activation.
+Scope: model selection and reproducible comparison, not E2/E3 or shared-DB changes.
 
-**Gap:** `docs/OPEN_GAPS.md` OG-39. **Decision:** 37. **Seed:** `database/seeds/013_scoring_model_launch_v2.sql`.
+## Verified constraints and selection
 
-**Why this is a plan and not a routine seed run.** Applying seed 013 flips the active scoring model
-from `seed-minimal-v1` to `launch-v2`. Four guarded harnesses pin `seed-minimal-v1 ... is_active = true`
-BY NAME in their preflight and fail if v1 is inactive, and `apps/api/`'s model resolution starts
-serving `launch-v2`. So activation is a coordinated, sequenced change.
+Migration 008 declares `UNIQUE(name, version)`, not single-active uniqueness.
+Migration 012 creates **non-unique** `idx_scoring_model_active ON scoring_model(is_active)`.
+Read-only inspection of the TEST branch on 2026-10-08 confirmed those indexes, the primary
+key, and no single-active constraint/partial unique index. Two active models are allowed
+by the committed schema and inspected TEST database. The shared database was not contacted.
 
-Acceptance for completing OG-39: seed 013 is applied on the dedicated engine branch, all four guarded
-harnesses are GREEN against that branch, and the golden baseline records BOTH models.
+The API (`apps/api/src/repository.js`, `SELECT_ACTIVE_SCORING_MODEL_SQL`) chooses
+`WHERE is_active = true ORDER BY created_at DESC, id ASC LIMIT 1`, then pins that ID on
+the query. Multiple active rows are therefore deterministic, but the newest active row
+becomes the API default; `id ASC` breaks equal-created-at ties.
 
----
+Both engine entry points resolve ONLY `recommendation_query.scoring_model_id`.
+`loadScoringModel` looks up `WHERE id = $1` and rejects an inactive row with
+`SCORING_MODEL_UNAVAILABLE`. **An explicit pin does not bypass eligibility.**
+The E1b plan's instruction to drop the discovery predicate and run an inactive v1 was
+incorrect and is superseded here. Removing that predicate alone cannot keep v1 runnable.
 
-## Step (a) — confirm a DEDICATED Neon branch for engine work
+Current golden preflight requires exactly one active model. The following relaxation is
+**a future change**, not part of E0d.
 
-The engine must never apply seed 013 (or any write) to the shared `DATABASE_URL`. `TEST_DATABASE_URL`
-must point at a dedicated branch of the shared instance whose normalised host differs from
-`DATABASE_URL` — `getWriteTestDbUrl()` throws when they match, so a successful connect already proves
-distinctness. `.env` is loaded by the scripts, not by the shell.
+## Case (a): two active models allowed (matches current schema)
 
-```bash
-# 1) Point TEST_DATABASE_URL at the dedicated engine branch in .env, then confirm reachability.
-node -e "require('dotenv').config();const{getWriteTestDbUrl}=require('./scripts/lib/db-url');const{Client}=require('pg');const c=new Client(Object.assign({},getWriteTestDbUrl(),{connectionTimeoutMillis:15000}));c.connect().then(()=>c.query('SELECT current_database() AS db')).then(r=>{console.log('TEST branch ok',r.rows[0]);return c.end();}).catch(e=>{console.error('ERR',e.message);process.exit(1);});"
+1. Obtain confirmation of the dedicated TEST engine branch. Use the existing
+   `getWriteTestDbUrl()` guard and verify reachability/catalog/ledger read-only.
+2. Add explicit `--model=<name>@<version>` selection to all comparison harnesses.
+   Require exactly one matching row and `is_active === true`; pin its ID on every
+   query. No latest-model substitution, no inactive override, no silent fallback.
+3. Change golden preflight from global active-count equality to **pinned model exists
+   and is active**; print the global active count for visibility. Preserve fail-fast
+   checks and add tests for missing, inactive and ambiguous name/version selectors.
+4. Do NOT apply the existing seed 013 as-is for this strategy: it deactivates v1.
+   Prepare a separately reviewed, transactional activation that keeps v1 active and
+   activates launch-v2 on TEST only. Do not rewrite a committed seed. Read back both
+   flags and require active count 2 before measuring.
+5. Run all four guarded harnesses and the golden suite explicitly against
+   `seed-minimal-v1@1.0.0`, then `launch-v2@1.0.0`; require cleanup residue zero.
+   Keep separate model-labelled baselines/columns, identities and assertion results.
+   Do not tune thresholds to force agreement. Compare configurations as well as rows.
+6. Verify API default selection separately. A newly created launch-v2 normally wins,
+   but use the actual `created_at DESC, id ASC` query rather than assuming it does.
+   Coordinate the API use-case vocabulary with Platform before a launch claim.
+7. Roll back the TEST default by deactivating launch-v2 while leaving v1 active, in
+   one explicit transaction, then verify the default and rerun v1 checks. Retain
+   model rows and historical query references; do not delete referenced models.
 
-# 2) Confirm the branch carries the canonical catalog and exactly ONE active model (pre-activation).
-node -e "require('dotenv').config();const{getWriteTestDbUrl}=require('./scripts/lib/db-url');const{Client}=require('pg');const c=new Client(Object.assign({},getWriteTestDbUrl(),{connectionTimeoutMillis:15000}));(async()=>{await c.connect();await c.query('SET search_path = public');console.log((await c.query(\"SELECT name,version,is_active FROM scoring_model ORDER BY is_active DESC,name\")).rows);console.log((await c.query(\"SELECT count(*)::int AS products FROM product WHERE name LIKE 'Seed %'\")).rows[0]);await c.end();})().catch(e=>{console.error('ERR',e.message);process.exit(1);});"
+Checkpoint: both pinned models run while active, their baselines remain distinguishable,
+and API default selection is known. This is the simplest current-schema comparison path.
 
-# 3) Confirm the migration ledger is current on the branch (seeds are DML, so this should be 018).
-node scripts/run-migrations.js --check --test-db
-```
+## Case (b): only one active model allowed (future Platform policy/constraint)
 
-Record the Neon branch name/endpoint in the branch metadata. Do NOT reuse the shared DB host.
+A single-active partial unique index would be a new Platform-owned sequential migration,
+not a property of today's schema. Inspect the actual target constraint before activation.
 
-Checkpoint: a 1-row SELECT succeeds, the branch is distinct from `DATABASE_URL`, and preflight shows
-one active model (`seed-minimal-v1 1.0.0`).
+1. Capture the v1 baseline while v1 is active. Teach harnesses explicit name/version
+   pins and fail-fast inactive diagnostics before the swap.
+2. On the confirmed TEST branch, use one caller-owned transaction to provision the
+   target row/configuration as inactive if absent, **deactivate v1 first**, activate
+   launch-v2 second, assert exactly one active row, then commit. The deactivate-first
+   sequence avoids a partial-unique violation; other sessions see the old or new
+   committed state, not a publicly visible intermediate zero-active state.
+   Review the seed's statement ordering before use; do not assume seed 013 is compatible
+   with an added single-active constraint. Never split its SQL by semicolons.
+3. Run launch-v2-pinned harnesses and API checks after the swap; require residue zero.
+   A v1-pinned harness now fails `SCORING_MODEL_UNAVAILABLE` by design. Removing
+   `is_active` from its preflight cannot change that outcome, and it must not silently
+   retarget v1 queries to launch-v2.
+4. Compare the saved v1 baseline with the new launch-v2 baseline. For live reruns of
+   both models, use separate isolated TEST branches or separate sequential, explicitly
+   authorized swaps; one database cannot execute both concurrently under this policy.
+5. Roll back transactionally: deactivate launch-v2, reactivate v1, assert one active
+   row, commit, and verify API default plus v1 harnesses. Preserve both model rows.
 
-## Step (b) — rewrite the four `is_active`-by-name harnesses
+An existing query pinned to a newly inactive model also becomes unrunnable under Decision
+11. Persisted results are not rewritten by the flag change; replay eligibility and readback
+are different contracts. Supporting replay of inactive historical models would require a
+separate approved Decision, not a harness workaround.
 
-Each harness must pin the model by **explicit name + version** and DROP the `is_active = true`
-requirement, because the harness passes the chosen `scoring_model_id` on the query it inserts — the
-engine then uses the pinned row regardless of which model is active.
+## Safety boundaries
 
-```bash
-grep -rn "seed-minimal-v1" scripts/measure-orchestrator.js scripts/test-orchestrator-full-run.js scripts/verify-pool-independence.js scripts/measure-og01-reach.js scripts/eval-scenarios.js
-```
-
-Exact call sites to change (measured 2026-10-08):
-
-| File | Line(s) | Current predicate |
-|---|---|---|
-| `scripts/measure-orchestrator.js` | 168, 192 | `name = 'seed-minimal-v1' AND version = '1.0.0' AND is_active = true` |
-| `scripts/test-orchestrator-full-run.js` | 91, 113 | same |
-| `scripts/verify-pool-independence.js` | 63 | same |
-| `scripts/measure-og01-reach.js` | 105 | same |
-| `scripts/eval-scenarios.js` | 95 | model-agnostic: `WHERE is_active = true ORDER BY created_at DESC, id ASC LIMIT 1` |
-
-Rewrite the four to `WHERE name = 'seed-minimal-v1' AND version = '1.0.0'` (explicit pin, no
-`is_active`). Leave `eval-scenarios.js` model-agnostic for step (d), but add a `--model=<name>@<version>`
-selector there so both models can be measured deliberately.
-
-Re-run each harness against the branch and require GREEN (the guards already refuse a non-branch target):
-
-```bash
-node scripts/test-orchestrator-full-run.js
-node scripts/measure-orchestrator.js
-node scripts/verify-pool-independence.js
-node scripts/measure-og01-reach.js
-```
-
-Checkpoint: all four GREEN with `seed-minimal-v1` still the active model. Do NOT apply seed 013 before
-this step.
-
-## Step (c) — apply seed 013 on the branch only, then re-run the guarded harnesses
-
-`scripts/run-seeds.js` ignores `--test-db` and always targets the shared `DATABASE_URL`, so it MUST NOT
-be used here. Apply branch-first with the same pattern the migration runner uses: connect through
-`getWriteTestDbUrl()`, `SET search_path = public` (the branch client defaults to `pg_temp`, so the
-tables are otherwise invisible), then send the WHOLE file (it carries no `BEGIN`/`COMMIT`, and must
-never be split on `;`).
-
-```bash
-node -e "require('dotenv').config();const fs=require('fs');const{getWriteTestDbUrl}=require('./scripts/lib/db-url');const{Client}=require('pg');const c=new Client(Object.assign({},getWriteTestDbUrl(),{connectionTimeoutMillis:15000}));(async()=>{await c.connect();await c.query('SET search_path = public');const sql=fs.readFileSync('database/seeds/013_scoring_model_launch_v2.sql','utf8');await c.query(sql);const rows=await c.query(\"SELECT name,version,is_active FROM scoring_model WHERE name IN ('seed-minimal-v1','launch-v2') ORDER BY is_active DESC,name\");console.log(rows.rows);const models=await c.query('SELECT count(*)::int AS active FROM scoring_model WHERE is_active = true');console.log('active models:',models.rows[0].active);await c.end();})().catch(e=>{console.error('ERR',e.message);process.exit(1);});"
-```
-
-Expected after a first apply: exactly one active model (`launch-v2 1.0.0`), with `seed-minimal-v1 1.0.0`
-retained but inactive. A second apply is a no-op (both statements are guarded) — verify by re-running
-the command and asserting the row count is unchanged.
-
-Then re-run the four harnesses AND the golden harness against the branch:
-
-```bash
-node scripts/test-orchestrator-full-run.js
-node scripts/measure-orchestrator.js
-node scripts/verify-pool-independence.js
-node scripts/measure-og01-reach.js
-node scripts/eval-scenarios.js --with-pi1
-```
-
-Checkpoint: all five GREEN, residue asserted 0. Confirm the public vocabulary is now
-`{GAMING, OFFICE, WORKSTATION}` (the seed's read-only verification SELECT at the bottom of the file).
-
-## Step (d) — record `seed-minimal-v1` and `launch-v2` as two columns in the golden baseline
-
-`eval-scenarios.js` currently reads the single active model. Extend it (in the execution commit, not
-here) to run the suite once per model and render BOTH in the baseline:
-
-- add `--model=<name>@<version>` (default: the active model);
-- run: `node scripts/eval-scenarios.js --model=seed-minimal-v1@1.0.0 --baseline=test/golden/baseline-2026-10.md`
-  and `node scripts/eval-scenarios.js --model=launch-v2@1.0.0 ...` — or one pass that emits a
-  `model` column per row;
-- the observed-metrics and assertion tables gain a `model` column so a difference between the two
-  models is visible, and the Environment section names both versions.
-
-Checkpoint: the committed baseline shows both models; any row that differs between them is explained
-(the two configurations differ ONLY by `use_case_profiles`, so scoring numbers should be identical).
-
-## Rollback
-
-Seed 013 is additive and reversible by hand on the branch:
-
-```sql
-UPDATE scoring_model SET is_active = false WHERE name = 'launch-v2' AND version = '1.0.0';
-UPDATE scoring_model SET is_active = true  WHERE name = 'seed-minimal-v1' AND version = '1.0.0';
-```
-
-Or delete the `launch-v2` row and re-activate v1. Never do this on the shared `DATABASE_URL`.
-
-## Risks / notes
-
-- `apps/api/` begins serving `launch-v2` as soon as it is active, and its meta vocabulary is still
-  derived from `gpu_required_use_cases` until the Platform request in `docs/briefs/requests.md` lands
-  (OFFICE stays 422 at the vocabulary gate). Coordinate the API change or accept that interim state.
-- The four harnesses measure `seed-minimal-v1` by design; if a future epic wants the ACTIVE model
-  measured instead, that is a deliberate change, not a side effect of this plan.
-- Apply this to the dedicated engine branch only; a later shared-DB apply needs a recorded Neon restore
-  point (AGENTS.md §8) and is a separate, explicit decision.
+- Nothing here authorizes applying seed 013 or touching the shared database.
+- Never use `run-seeds.js --test-db`: that flag does not route its writes to TEST.
+- A future apply must use the guarded target and a transaction-local public search path.
+- Shared activation, if ever requested, is a separate authorization with restore-point policy.
+- No model deletion, engine eligibility bypass, E2/E3 work or cache implementation in this batch.
