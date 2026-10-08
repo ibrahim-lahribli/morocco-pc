@@ -11,6 +11,10 @@ const assert = require('node:assert/strict');
 
 const {
   STATUSES,
+  EXPECTATION_STATUSES,
+  DISPOSITIONS,
+  epicIndex,
+  validateExpectation,
   pairKeyOf,
   projectArtifact,
   evaluateSuite,
@@ -73,13 +77,18 @@ function art(overrides) {
   }, overrides || {});
 }
 
-function run(assertion, thresholds, scenarios, artifacts, extra) {
-  return evaluateSuite(Object.assign({
-    suite: { scenarios, thresholds, assertions: [assertion] },
+function runSuite(assertion, thresholds, scenarios, artifacts, extra) {
+  const config = Object.assign({ artifactsSecond: new Map(), pi1: null }, extra || {});
+  return evaluateSuite({
+    suite: Object.assign({ scenarios, thresholds, assertions: [assertion] }, config.suite || {}),
     artifacts,
-    artifactsSecond: new Map(),
-    pi1: null,
-  }, extra || {})).results;
+    artifactsSecond: config.artifactsSecond,
+    pi1: config.pi1,
+  });
+}
+
+function run(assertion, thresholds, scenarios, artifacts, extra) {
+  return runSuite(assertion, thresholds, scenarios, artifacts, extra).results;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,29 +293,31 @@ test('A6: a discrete GPU in the OFFICE build FAILs; a bare iGPU build PASSes', (
   assert.equal(bare[0].status, STATUSES.PASS);
 });
 
-test('A7: build_count and within_budget must both match', () => {
-  const assertion = {
-    type: 'below_floor',
-    cases: [
-      { scenario: 'S01', within_budget: true },
-      { scenario: 'S01b', within_budget: false },
-    ],
-  };
+test('A7 (corrected): within_budget must equal (budget >= cheapest_total), read at run time', () => {
+  const assertion = { id: 'A7', type: 'below_floor', cases: [{ scenario: 'S01' }, { scenario: 'S01b' }] };
   const scenarios = [{ id: 'S01' }, { id: 'S01b' }];
 
-  const ok = run(assertion, {}, scenarios, new Map([
-    ['S01', art({ build_count: 0, budget_floor: { cheapest_total: 4477, within_budget: true } })],
-    ['S01b', art({ build_count: 0, budget_floor: { cheapest_total: 4477, within_budget: false } })],
+  // Above the floor (S01 @5000 >= 4477) within_budget is TRUE even with zero
+  // builds - the emptiness is a compatibility limit, not a budget shortfall.
+  // Below it (S01b @3805 < 4477) it is FALSE. The expectation is computed, not
+  // supplied by the case.
+  const both = run(assertion, {}, scenarios, new Map([
+    ['S01', art({ build_count: 0, budget_amount: 5000, budget_floor: { cheapest_total: 4477, within_budget: true } })],
+    ['S01b', art({ build_count: 0, budget_amount: 3805, budget_floor: { cheapest_total: 4477, within_budget: false } })],
   ]));
-  assert.equal(ok[0].status, STATUSES.PASS);
-  assert.equal(ok[1].status, STATUSES.PASS);
+  assert.equal(both[0].status, STATUSES.PASS);
+  assert.equal(both[1].status, STATUSES.PASS);
+  assert.equal(both[0].measured.expected_within_budget, true);
+  assert.equal(both[1].measured.expected_within_budget, false);
 
-  const wrong = run(assertion, {}, scenarios, new Map([
-    ['S01', art({ build_count: 0, budget_floor: { cheapest_total: 4477, within_budget: false } })],
-    ['S01b', art({ build_count: 3, budget_floor: { cheapest_total: 4477, within_budget: false } })],
+  // A stored within_budget contradicting budget vs cheapest_total FAILs, and so
+  // does a below-floor scenario that somehow assembled builds.
+  const mismatch = run(assertion, {}, scenarios, new Map([
+    ['S01', art({ build_count: 0, budget_amount: 12000, budget_floor: { cheapest_total: 4477, within_budget: false } })],
+    ['S01b', art({ build_count: 3, budget_amount: 3805, budget_floor: { cheapest_total: 4477, within_budget: false } })],
   ]));
-  assert.equal(wrong[0].status, STATUSES.FAIL);
-  assert.equal(wrong[1].status, STATUSES.FAIL);
+  assert.equal(mismatch[0].status, STATUSES.FAIL);
+  assert.equal(mismatch[1].status, STATUSES.FAIL);
 });
 
 // ---------------------------------------------------------------------------
@@ -374,4 +385,132 @@ test('A9: a REJECT in the selected set FAILs; PI-1 is recorded separately', () =
 
   const withPi1 = run(assertion, {}, scenarios, new Map([['S03', art()]]), { pi1: { status: 'PASS', code: 0 } });
   assert.equal(withPi1[1].status, STATUSES.PASS);
+});
+
+// ---------------------------------------------------------------------------
+// Expectations (manifest design) + dispositions
+// ---------------------------------------------------------------------------
+
+test('validateExpectation: absent -> hypothesis; approved/waived require reviewer+reviewed_on, waived a reason', () => {
+  assert.deepEqual(validateExpectation(undefined, 'x'), { status: EXPECTATION_STATUSES.HYPOTHESIS });
+  assert.deepEqual(validateExpectation({ status: 'hypothesis' }, 'x'), { status: 'hypothesis' });
+  assert.throws(() => validateExpectation({ status: 'approved' }, 'x'), /requires a non-empty "reviewer"/);
+  assert.throws(() => validateExpectation({ status: 'approved', reviewer: 'R' }, 'x'), /requires "reviewed_on"/);
+  assert.throws(() => validateExpectation({ status: 'waived', reviewer: 'R', reviewed_on: '2026-10-08' }, 'x'), /requires a non-empty "reason"/);
+  assert.throws(() => validateExpectation({ status: 'bogus' }, 'x'), /unknown expectation status/);
+  assert.deepEqual(
+    validateExpectation({ status: 'approved', reviewer: 'R', reviewed_on: '2026-10-08' }, 'x'),
+    { status: 'approved', reviewer: 'R', reviewed_on: '2026-10-08' }
+  );
+  assert.deepEqual(
+    validateExpectation({ status: 'waived', reviewer: 'R', reviewed_on: '2026-10-08', reason: 'known' }, 'x'),
+    { status: 'waived', reviewer: 'R', reviewed_on: '2026-10-08', reason: 'known' }
+  );
+});
+
+test('epicIndex parses E<n> and rejects a typo', () => {
+  assert.equal(epicIndex('E6'), 6);
+  assert.throws(() => epicIndex('six'), /epic label/);
+});
+
+test('a hypothesis FAIL is EXPECTED-RED and does not fail the run; approved fails hard; waived is accepted', () => {
+  const assertion = { id: 'A1', type: 'min_distinct_cpu_gpu_pairs', scenarios: ['S03'] };
+  const thresholds = { A1_min_distinct_pairs: { value: 3 } };
+  const scenarios = [{ id: 'S03' }];
+  const failing = new Map([['S03', art({ selected_pair_count: 2 })]]);
+
+  const hypo = runSuite(assertion, thresholds, scenarios, failing);
+  assert.equal(hypo.results[0].status, STATUSES.FAIL);
+  assert.equal(hypo.results[0].disposition, DISPOSITIONS.EXPECTED_RED);
+  assert.equal(hypo.summary.hard_fail, 0);
+  assert.equal(hypo.summary.exit_ok, true);
+
+  const approved = runSuite(
+    Object.assign({ status: 'approved', reviewer: 'R', reviewed_on: '2026-10-08' }, assertion),
+    thresholds, scenarios, failing
+  );
+  assert.equal(approved.results[0].disposition, DISPOSITIONS.FAIL);
+  assert.equal(approved.summary.hard_fail, 1);
+  assert.equal(approved.summary.exit_ok, false);
+
+  const waived = runSuite(
+    Object.assign({ status: 'waived', reviewer: 'R', reviewed_on: '2026-10-08', reason: 'known' }, assertion),
+    thresholds, scenarios, failing
+  );
+  assert.equal(waived.results[0].disposition, DISPOSITIONS.WAIVED);
+  assert.equal(waived.summary.exit_ok, true);
+});
+
+test('evaluateSuite REFUSES an approved assertion missing reviewer/reviewed_on', () => {
+  assert.throws(() => runSuite(
+    { id: 'A1', type: 'min_distinct_cpu_gpu_pairs', status: 'approved', scenarios: ['S03'] },
+    { A1_min_distinct_pairs: { value: 3 } },
+    [{ id: 'S03' }],
+    new Map([['S03', art()]])
+  ), /requires a non-empty "reviewer"/);
+});
+
+test('an UNKNOWN escalates to a hard FAIL only once expect_builds_after has landed', () => {
+  const assertion = { id: 'A1', type: 'min_distinct_cpu_gpu_pairs', scenarios: ['S17'] };
+  const thresholds = { A1_min_distinct_pairs: { value: 3 } };
+  const scenarios = [{ id: 'S17', expect_builds_after: 'E6' }];
+  const artifacts = new Map([['S17', art({ build_count: 0, selected: [], selected_pair_count: 0 })]]);
+
+  const preE6 = runSuite(assertion, thresholds, scenarios, artifacts, { suite: { current_epic: 'E1' } });
+  assert.equal(preE6.results[0].status, STATUSES.UNKNOWN);
+  assert.equal(preE6.results[0].disposition, DISPOSITIONS.UNKNOWN);
+  assert.equal(preE6.summary.exit_ok, true);
+
+  const atE6 = runSuite(assertion, thresholds, scenarios, artifacts, { suite: { current_epic: 'E6' } });
+  assert.equal(atE6.results[0].status, STATUSES.UNKNOWN);
+  assert.equal(atE6.results[0].disposition, DISPOSITIONS.FAIL);
+  assert.equal(atE6.results[0].escalated, true);
+  assert.equal(atE6.summary.hard_fail, 1);
+});
+
+test('A2b: rank-1 GPU price must grow by the factor across budgets; flat FAILs, missing GPU is UNKNOWN', () => {
+  const assertion = { id: 'A2b', type: 'gpu_price_growth', pairs: [{ low: 'S03', high: 'S05' }] };
+  const thresholds = { A2b_gpu_price_growth_min: { value: 1.3 } };
+  const scenarios = [{ id: 'S03' }, { id: 'S05' }];
+  const best = (gpuPrice, total) => ({ signature: 's' + gpuPrice, total_price: total, gpu_price: gpuPrice, has_gpu: gpuPrice !== null, cpu_integrated_gpu_present: gpuPrice === null });
+
+  const grown = run(assertion, thresholds, scenarios, new Map([
+    ['S03', art({ budget_amount: 12000, best: best(9000, 20000) })],
+    ['S05', art({ budget_amount: 30000, best: best(12000, 26000) })],
+  ]));
+  assert.equal(grown[0].status, STATUSES.PASS);
+  assert.equal(grown[0].measured.ratio, 12000 / 9000);
+
+  const flat = run(assertion, thresholds, scenarios, new Map([
+    ['S03', art({ budget_amount: 12000, best: best(9000, 20000) })],
+    ['S05', art({ budget_amount: 30000, best: best(9000, 20000) })],
+  ]));
+  assert.equal(flat[0].status, STATUSES.FAIL);
+  assert.equal(flat[0].measured.ratio, 1);
+
+  const noGpu = run(assertion, thresholds, scenarios, new Map([
+    ['S03', art({ budget_amount: 12000, best: best(null, 20000) })],
+    ['S05', art({ budget_amount: 30000, best: best(9000, 26000) })],
+  ]));
+  assert.equal(noGpu[0].status, STATUSES.UNKNOWN);
+});
+
+test('A3 share: a no-GPU build yields a null share; a zero-total build THROWS (never divides by zero)', () => {
+  const snapshot = (build) => ({ builds: [build], budget_floor: {}, budget_amount: 12000, currency: 'MAD' });
+
+  const noGpuBuild = { components: [component('CPU', 'cpu-1', null, 400)], total_price: 1000, currency: 'MAD' };
+  const noGpuEntry = { signature: 's', total_price: 1000, compatibility_status: 'PASS', build: noGpuBuild };
+  const noGpu = projectArtifact('S', snapshot(noGpuBuild), { ranked: [noGpuEntry] }, { selected: [noGpuEntry] }, MAPS);
+  assert.equal(noGpu.best_gpu_price_share, null);
+
+  const zeroBuild = {
+    components: [component('CPU', 'cpu-1', null, 0), component('GPU', 'gpu-1', 'var-1', 0)],
+    total_price: 0,
+    currency: 'MAD',
+  };
+  const zeroEntry = { signature: 's', total_price: 0, compatibility_status: 'PASS', build: zeroBuild };
+  assert.throws(
+    () => projectArtifact('S', snapshot(zeroBuild), { ranked: [zeroEntry] }, { selected: [zeroEntry] }, MAPS),
+    /positive finite total_price/
+  );
 });

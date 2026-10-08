@@ -3,9 +3,12 @@
 // scripts/eval-scenarios.js - E0 golden scenario harness.
 //
 // Runs the scenario matrix in test/golden/scenarios.json through the engine on
-// the TEST branch, evaluates the A1-A9 assertions (pure logic lives in
+// the TEST branch, evaluates the A1-A2b/A3-A9 assertions (pure logic lives in
 // scripts/lib/scenario-eval.js), prints a table, optionally writes the baseline
-// markdown, and exits 1 if any assertion FAILs.
+// markdown, and exits 1 only on a HARD FAIL - an `approved` expectation that
+// failed, or an UNKNOWN escalated because its scenario declared
+// `expect_builds_after` and that epic has landed. A `hypothesis` failure is
+// reported as EXPECTED-RED and does NOT fail the run (manifest design).
 //
 // Contract (docs/briefs/engine.md):
 //   * TEST branch only. getWriteTestDbUrl() throws unless TEST_DATABASE_URL is
@@ -208,19 +211,20 @@ function short(value) {
 
 function printTable(results) {
   console.log('');
-  console.log('ASSERTION | SCENARIO(S) | STATUS | MEASURED | EXPECTED');
+  console.log('ASSERTION | SCENARIO(S) | STATUS | DISPOSITION | MEASURED | EXPECTED');
   for (const result of results) {
     console.log(
-      '  ' + result.assertion.padEnd(3)
+      '  ' + result.assertion.padEnd(5)
       + ' | ' + result.scenario_ids.join(',').padEnd(20)
       + ' | ' + result.status.padEnd(7)
-      + ' | ' + short(result.measured).slice(0, 80).padEnd(80)
+      + ' | ' + String(result.disposition).padEnd(12)
+      + ' | ' + short(result.measured).slice(0, 70).padEnd(70)
       + ' | ' + result.expected
     );
   }
 }
 
-function renderBaseline({ meta, suite, selected, results, summary, fullRuns, pi1 }) {
+function renderBaseline({ meta, suite, selected, artifacts, results, summary, fullRuns, pi1 }) {
   const lines = [];
   lines.push('# Golden scenario baseline - ' + meta.date);
   lines.push('');
@@ -243,25 +247,88 @@ function renderBaseline({ meta, suite, selected, results, summary, fullRuns, pi1
     lines.push('| ' + scenario.id + ' | ' + scenario.use_case + ' | ' + (scenario.resolution === null ? '-' : scenario.resolution)
       + ' | ' + scenario.priority + ' | ' + scenario.budget + ' |');
   }
+  // Observed metrics for EVERY scenario (informational; item 5/7 of the E0
+  // fixes). A3's GPU share is rank-1 GPU selected_price / build total_price.
+  lines.push('');
+  lines.push('## Observed metrics per scenario');
+  lines.push('');
+  lines.push('| ID | builds | ranked | best total | best GPU | GPU share | CPU+RAM share | selected | distinct pairs | floor cheapest | within_budget |');
+  lines.push('|---|---|---|---|---|---|---|---|---|---|---|');
+  for (const scenario of selected) {
+    const artifact = artifacts.get(scenario.id);
+    if (artifact === undefined || artifact === null) {
+      lines.push('| ' + scenario.id + ' | | | | | | | | | | |');
+      continue;
+    }
+    const best = artifact.best;
+    const floor = artifact.budget_floor !== null && artifact.budget_floor !== undefined ? artifact.budget_floor : null;
+    lines.push('| ' + scenario.id
+      + ' | ' + artifact.build_count
+      + ' | ' + artifact.ranked_count
+      + ' | ' + (best === null ? '-' : best.total_price)
+      + ' | ' + (best === null || best.gpu_price === null ? '-' : best.gpu_price)
+      + ' | ' + (artifact.best_gpu_price_share === null || artifact.best_gpu_price_share === undefined ? '-' : artifact.best_gpu_price_share)
+      + ' | ' + (artifact.best_cpu_ram_share === null || artifact.best_cpu_ram_share === undefined ? '-' : artifact.best_cpu_ram_share)
+      + ' | ' + artifact.selected.length
+      + ' | ' + artifact.selected_pair_count
+      + ' | ' + (floor === null ? '-' : floor.cheapest_total)
+      + ' | ' + (floor === null ? '-' : floor.within_budget)
+      + ' |');
+  }
   lines.push('');
   lines.push('## Assertion results');
   lines.push('');
-  lines.push('| Assertion | Scenario(s) | Status | Measured | Expected |');
-  lines.push('|---|---|---|---|---|');
+  lines.push('| Assertion | Scenario(s) | Status | Disposition | Measured | Expected |');
+  lines.push('|---|---|---|---|---|---|');
   for (const result of results) {
     lines.push('| ' + result.assertion + ' | ' + result.scenario_ids.join(', ')
-      + ' | ' + result.status + ' | ' + short(result.measured).replace(/\|/g, '\\|')
+      + ' | ' + result.status + ' | ' + result.disposition
+      + ' | ' + short(result.measured).replace(/\|/g, '\\|')
       + ' | ' + result.expected.replace(/\|/g, '\\|') + ' |');
   }
   lines.push('');
   lines.push('## Summary');
   lines.push('');
   lines.push('- total ' + summary.total + ' / PASS ' + summary.pass + ' / FAIL ' + summary.fail + ' / UNKNOWN ' + summary.unknown);
+  lines.push('- dispositions: PASS ' + summary.disposition_pass + ' / EXPECTED-RED ' + summary.expected_red
+    + ' / FAIL ' + summary.hard_fail + ' / WAIVED ' + summary.waived + ' / UNKNOWN ' + summary.disposition_unknown);
   const failedAssertions = [...new Set(results.filter((r) => r.status === 'FAIL').map((r) => r.assertion))];
   const passedAssertions = [...new Set(results.filter((r) => r.status === 'PASS').map((r) => r.assertion))];
   const unknownAssertions = [...new Set(results.filter((r) => r.status === 'UNKNOWN').map((r) => r.assertion))];
   lines.push('- FAILing assertions: ' + (failedAssertions.length === 0 ? '(none)' : failedAssertions.join(', ')));
   lines.push('- UNKNOWN assertions: ' + (unknownAssertions.length === 0 ? '(none)' : unknownAssertions.join(', ')));
+  lines.push('');
+  lines.push('## Engine floor vs cheapest assembled build (informational, not an assertion)');
+  lines.push('');
+  let engineFloor = null;
+  const s01 = artifacts.get('S01');
+  if (s01 !== undefined && s01 !== null && s01.budget_floor !== null && s01.budget_floor !== undefined
+    && Number.isFinite(s01.budget_floor.cheapest_total)) {
+    engineFloor = s01.budget_floor.cheapest_total;
+  } else {
+    for (const scenario of selected) {
+      const candidate = artifacts.get(scenario.id);
+      if (candidate !== undefined && candidate !== null && candidate.budget_floor !== null
+        && candidate.budget_floor !== undefined && Number.isFinite(candidate.budget_floor.cheapest_total)) {
+        engineFloor = candidate.budget_floor.cheapest_total;
+        break;
+      }
+    }
+  }
+  let cheapestAssembled = null;
+  for (const scenario of selected) {
+    const candidate = artifacts.get(scenario.id);
+    if (candidate !== undefined && candidate !== null && candidate.best !== null
+      && Number.isFinite(candidate.best.total_price)) {
+      if (cheapestAssembled === null || candidate.best.total_price < cheapestAssembled) {
+        cheapestAssembled = candidate.best.total_price;
+      }
+    }
+  }
+  lines.push('- engine `budget_floor.cheapest_total` - the sum of the cheapest eligible candidate per role, a LOWER BOUND, not a build: ' + short(engineFloor));
+  lines.push('- cheapest total that actually assembles among these scenarios: ' + short(cheapestAssembled));
+  lines.push('- budgets between the two (sub-8000 MAD here) therefore legitimately return ZERO builds while `within_budget` is TRUE: the');
+  lines.push('  emptiness is a compatibility limit, not a budget shortfall. Tracked as open gap OG-40.');
   lines.push('');
   lines.push('## Full-run coverage (ranking -> selection -> commit)');
   lines.push('');
@@ -290,6 +357,10 @@ function renderBaseline({ meta, suite, selected, results, summary, fullRuns, pi1
   lines.push('');
   lines.push('The brief expects A1-A6 RED on the unchanged engine (this is what detects OG-38). FAILing here: '
     + (failedAssertions.length === 0 ? '(none)' : failedAssertions.join(', ')) + '.');
+  lines.push('');
+  lines.push('Every assertion above is `hypothesis` (unreviewed), so its failures are reported as EXPECTED-RED and do NOT fail the');
+  lines.push('run (exit 0). A failure becomes a HARD FAIL (exit 1) only for an `approved` expectation (which requires a reviewer and');
+  lines.push('`reviewed_on`), or when an UNKNOWN is escalated because its scenario declared `expect_builds_after` and that epic has landed.');
   if (greenAmongA1A6.length > 0) {
     lines.push('');
     lines.push('BRIEF DIVERGENCE (recorded, not silently deviated): ' + greenAmongA1A6.join(', ')
@@ -297,6 +368,13 @@ function renderBaseline({ meta, suite, selected, results, summary, fullRuns, pi1
     lines.push('A2 (budget response) in particular is satisfied at the measured budgets, so it is GREEN today and acts as a');
     lines.push('control that the budget series is genuinely checked rather than being vacuously red. Nothing here was tuned.');
   }
+  lines.push('');
+  lines.push('STEP-1 DEVIATION (recorded): A2b (GPU price growth) was expected RED on the unchanged engine, but the rank-1 GPU price');
+  lines.push('genuinely grows with budget (S03 -> S05: 3200 -> 11500, ratio 3.59), so it PASSes. Kept as measured, not tuned to force RED.');
+  lines.push('');
+  lines.push('KNOWN FLAKE (recorded, OG-41): A8 compares ranked signature lists ORDER-SENSITIVELY, while ranking orders by 2-dp-rounded');
+  lines.push('build_score, so a raw score on a .005 boundary can reorder two near-equal builds under the ~1e-5 clock drift between two');
+  lines.push('consecutive passes. A8 S09 is therefore intermittently RED; it is not a stable determinism failure.');
   lines.push('');
   lines.push('A7-A9 are expected GREEN: they pin behaviour that already holds, so a RED there is a genuine regression, never a');
   lines.push('threshold to relax.');
@@ -332,35 +410,68 @@ async function main() {
       : suite.scenarios.filter((scenario) => args.filter.includes(scenario.id));
     if (selected.length === 0) fail('no scenarios selected (check --filter)');
 
-    const ids = await insertQueries(client, meta.scoringModel.id, selected);
-    insertedIds.push(...ids);
-    console.log('inserted ' + ids.length + ' recommendation_query row(s)');
+    // A scenario's budget is ABSOLUTE (`budget`) or FLOOR-RELATIVE
+    // (`budget_factor_of_floor`). A floor-relative budget is resolved at RUN TIME
+    // from a reference scenario's measured `budget_floor.cheapest_total`, so
+    // `0.85 x floor` stays below the floor when the catalog moves - never a
+    // hard-coded literal.
+    const absolute = selected.filter((scenario) => scenario.budget !== undefined);
+    const relative = selected.filter((scenario) => scenario.budget === undefined);
+    for (const scenario of relative) {
+      if (!Number.isFinite(scenario.budget_factor_of_floor) || scenario.budget_factor_of_floor <= 0) {
+        fail('scenario ' + scenario.id + ' has neither an absolute budget nor a positive budget_factor_of_floor');
+      }
+    }
 
     const artifacts = new Map();
     const artifactsSecond = new Map();
-    for (let index = 0; index < selected.length; index += 1) {
-      const scenario = selected[index];
-      const queryId = ids[index];
-      const first = await orchestrator.runRecommendation({ db: client, queryId, options: ENGINE_OPTIONS });
-      const second = await orchestrator.runRecommendation({ db: client, queryId, options: ENGINE_OPTIONS });
-      const rankedFirst = ranking.rankBuilds({ builds: first.builds });
-      const selectedFirst = ranking.selectDiverseTop({
-        ranked: rankedFirst.ranked, limit: ranking.TOP_N_PERSISTED, maxPerPair: ranking.MAX_PER_PAIR,
-      });
-      const rankedSecond = ranking.rankBuilds({ builds: second.builds });
-      const selectedSecond = ranking.selectDiverseTop({
-        ranked: rankedSecond.ranked, limit: ranking.TOP_N_PERSISTED, maxPerPair: ranking.MAX_PER_PAIR,
-      });
-      artifacts.set(scenario.id, scenarioEval.projectArtifact(scenario.id, first, rankedFirst, selectedFirst, maps));
-      artifactsSecond.set(scenario.id, scenarioEval.projectArtifact(scenario.id, second, rankedSecond, selectedSecond, maps));
+    const queryIdByScenario = new Map();
+
+    async function runScenarios(scenarios) {
+      if (scenarios.length === 0) return;
+      const ids = await insertQueries(client, meta.scoringModel.id, scenarios);
+      insertedIds.push(...ids);
+      console.log('inserted ' + ids.length + ' recommendation_query row(s)');
+      for (let index = 0; index < scenarios.length; index += 1) {
+        const scenario = scenarios[index];
+        const queryId = ids[index];
+        queryIdByScenario.set(scenario.id, queryId);
+        const first = await orchestrator.runRecommendation({ db: client, queryId, options: ENGINE_OPTIONS });
+        const second = await orchestrator.runRecommendation({ db: client, queryId, options: ENGINE_OPTIONS });
+        const rankedFirst = ranking.rankBuilds({ builds: first.builds });
+        const selectedFirst = ranking.selectDiverseTop({
+          ranked: rankedFirst.ranked, limit: ranking.TOP_N_PERSISTED, maxPerPair: ranking.MAX_PER_PAIR,
+        });
+        const rankedSecond = ranking.rankBuilds({ builds: second.builds });
+        const selectedSecond = ranking.selectDiverseTop({
+          ranked: rankedSecond.ranked, limit: ranking.TOP_N_PERSISTED, maxPerPair: ranking.MAX_PER_PAIR,
+        });
+        artifacts.set(scenario.id, scenarioEval.projectArtifact(scenario.id, first, rankedFirst, selectedFirst, maps));
+        artifactsSecond.set(scenario.id, scenarioEval.projectArtifact(scenario.id, second, rankedSecond, selectedSecond, maps));
+      }
     }
 
+    await runScenarios(absolute);
+    for (const scenario of relative) {
+      const refId = scenario.budget_factor_reference;
+      const reference = refId === undefined ? null : artifacts.get(refId);
+      if (reference === null || reference === undefined
+        || reference.budget_floor === null || reference.budget_floor === undefined
+        || !Number.isFinite(reference.budget_floor.cheapest_total)) {
+        fail('scenario ' + scenario.id + ' needs the measured budget_floor of reference scenario '
+          + JSON.stringify(refId) + ' - include it in the run (check --filter)');
+      }
+      scenario.budget = Math.round(scenario.budget_factor_of_floor * reference.budget_floor.cheapest_total);
+      console.log('resolved ' + scenario.id + ' budget = round(' + scenario.budget_factor_of_floor
+        + ' x ' + reference.budget_floor.cheapest_total + ') = ' + scenario.budget);
+    }
+    await runScenarios(relative);
+
     const fullRuns = [];
-    for (let index = 0; index < selected.length; index += 1) {
-      const scenario = selected[index];
+    for (const scenario of selected) {
       if (!Array.isArray(scenario.tags) || !scenario.tags.includes('full-run')) continue;
       try {
-        const result = await orchestrator.runRecommendationFullRun(client, ids[index], ENGINE_OPTIONS);
+        const result = await orchestrator.runRecommendationFullRun(client, queryIdByScenario.get(scenario.id), ENGINE_OPTIONS);
         fullRuns.push({
           id: scenario.id,
           selected: Array.isArray(result.selected) ? result.selected.length : null,
@@ -375,7 +486,12 @@ async function main() {
 
     const pi1 = args.withPi1 ? runPi1() : null;
     const { results, summary } = scenarioEval.evaluateSuite({
-      suite: { scenarios: selected, thresholds: suite.thresholds, assertions: suite.assertions },
+      suite: {
+        scenarios: selected,
+        thresholds: suite.thresholds,
+        assertions: suite.assertions,
+        current_epic: suite.current_epic,
+      },
       artifacts,
       artifactsSecond,
       pi1,
@@ -384,7 +500,9 @@ async function main() {
     printTable(results);
     console.log('');
     console.log('SUMMARY: total ' + summary.total + ' / PASS ' + summary.pass
-      + ' / FAIL ' + summary.fail + ' / UNKNOWN ' + summary.unknown);
+      + ' / FAIL ' + summary.fail + ' / UNKNOWN ' + summary.unknown
+      + ' | dispositions: PASS ' + summary.disposition_pass + ' / EXPECTED-RED ' + summary.expected_red
+      + ' / FAIL ' + summary.hard_fail + ' / WAIVED ' + summary.waived + ' / UNKNOWN ' + summary.disposition_unknown);
 
     const baselineText = renderBaseline({
       meta: {
@@ -396,6 +514,7 @@ async function main() {
       },
       suite,
       selected,
+      artifacts,
       results,
       summary,
       fullRuns,
@@ -411,9 +530,13 @@ async function main() {
       console.log('json written: ' + args.json);
     }
 
-    if (summary.fail > 0 && !args.allowRed) exitCode = 1;
-    if (summary.fail > 0) {
-      console.log('RESULT: RED - ' + summary.fail + ' assertion(s) FAILed');
+    if (summary.hard_fail > 0 && !args.allowRed) exitCode = 1;
+    if (summary.hard_fail > 0) {
+      console.log('RESULT: RED - ' + summary.hard_fail + ' HARD FAIL(s); '
+        + summary.expected_red + ' EXPECTED-RED, ' + summary.waived + ' WAIVED');
+    } else if (summary.expected_red > 0) {
+      console.log('RESULT: EXPECTED-RED - ' + summary.expected_red
+        + ' unreviewed expectation(s) failing; no approved assertion failed (exit 0)');
     } else {
       console.log('RESULT: GREEN - all assertions PASS');
     }

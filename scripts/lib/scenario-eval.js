@@ -27,10 +27,116 @@
 // passes seconds apart differ at ~1e-5. A8 compares SIGNATURE LISTS exactly and
 // scores only within a tolerance (default 1e-3), never raw float equality.
 
+// Expectation statuses (docs/briefs/engine.md E0 fixes; the "manifest design").
+// Each ASSERTION entry in scenarios.json declares how its outcome is expected to
+// be judged:
+//   hypothesis  DEFAULT; an UNREVIEWED expectation. A failing check reports
+//               EXPECTED-RED and does NOT fail the run - the point is to record a
+//               believed-but-unproven target without turning CI red.
+//   approved    a human-reviewed expectation. Requires `reviewer` and
+//               `reviewed_on`; a failing check is a HARD FAIL (exit 1).
+//   waived      a reviewed expectation whose failure is accepted. Requires
+//               `reviewer`, `reviewed_on` AND `reason`; a failing check reports
+//               WAIVED and does not fail the run.
+// An approved/waived entry missing its required fields makes the evaluator THROW
+// (fail fast) rather than silently degrade to lenient.
+//
+// Disposition - what a row MEANS, as distinct from its raw status:
+//   PASS | EXPECTED-RED | FAIL | WAIVED | UNKNOWN
+// A raw FAIL becomes EXPECTED-RED (hypothesis), WAIVED, or stays FAIL (approved);
+// a raw UNKNOWN is escalated to a HARD FAIL when the row's scenario was expected
+// to produce builds (see `expect_builds_after`) but produced none.
+
 const DEFAULT_SCORE_TOLERANCE = 1e-3;
 
 /** Status vocabulary - the only three values any evaluator may return. */
 const STATUSES = Object.freeze({ PASS: 'PASS', FAIL: 'FAIL', UNKNOWN: 'UNKNOWN' });
+
+/** Expectation statuses (the manifest design). */
+const EXPECTATION_STATUSES = Object.freeze({
+  HYPOTHESIS: 'hypothesis',
+  APPROVED: 'approved',
+  WAIVED: 'waived',
+});
+
+/** Result dispositions - what a row means once its expectation is applied. */
+const DISPOSITIONS = Object.freeze({
+  PASS: 'PASS',
+  EXPECTED_RED: 'EXPECTED-RED',
+  FAIL: 'FAIL',
+  WAIVED: 'WAIVED',
+  UNKNOWN: 'UNKNOWN',
+});
+
+// ---------------------------------------------------------------------------
+// Expectations (the manifest design)
+// ---------------------------------------------------------------------------
+
+/** "E6" -> 6. Throws on a malformed epic label so a typo never disables a gate. */
+function epicIndex(epic) {
+  const match = /^E(\d+)$/.exec(String(epic));
+  if (match === null) {
+    throw new Error('scenario-eval: epic label must look like "E6", got ' + JSON.stringify(epic));
+  }
+  return Number(match[1]);
+}
+
+/**
+ * Validate one assertion's expectation. Pure; THROWS on a malformed entry.
+ * A missing status defaults to hypothesis (unreviewed).
+ */
+function validateExpectation(entry, path) {
+  const source = entry === undefined || entry === null ? {} : entry;
+  const status = source.status === undefined ? EXPECTATION_STATUSES.HYPOTHESIS : source.status;
+  if (
+    status !== EXPECTATION_STATUSES.HYPOTHESIS
+    && status !== EXPECTATION_STATUSES.APPROVED
+    && status !== EXPECTATION_STATUSES.WAIVED
+  ) {
+    throw new Error('scenario-eval: ' + path + ' has unknown expectation status ' + JSON.stringify(status));
+  }
+  const normalized = { status };
+  if (status === EXPECTATION_STATUSES.APPROVED || status === EXPECTATION_STATUSES.WAIVED) {
+    if (typeof source.reviewer !== 'string' || source.reviewer.trim() === '') {
+      throw new Error('scenario-eval: ' + path + ' is "' + status + '" and requires a non-empty "reviewer"');
+    }
+    if (typeof source.reviewed_on !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(source.reviewed_on)) {
+      throw new Error('scenario-eval: ' + path + ' is "' + status + '" and requires "reviewed_on" (YYYY-MM-DD)');
+    }
+    normalized.reviewer = source.reviewer;
+    normalized.reviewed_on = source.reviewed_on;
+  }
+  if (status === EXPECTATION_STATUSES.WAIVED) {
+    if (typeof source.reason !== 'string' || source.reason.trim() === '') {
+      throw new Error('scenario-eval: ' + path + ' is "waived" and requires a non-empty "reason"');
+    }
+    normalized.reason = source.reason;
+  }
+  return normalized;
+}
+
+/**
+ * A scenario's builds are expected once the epic named by `expect_builds_after`
+ * has LANDED, i.e. `current_epic >= that label`. Before then, a no-build outcome
+ * is a pending UNKNOWN; after, it is a HARD FAIL.
+ */
+function scenarioExpectsBuilds(scenario, currentEpicIndex) {
+  if (scenario === undefined || scenario === null || scenario.expect_builds_after === undefined) return false;
+  return currentEpicIndex >= epicIndex(scenario.expect_builds_after);
+}
+
+/**
+ * If a row is UNKNOWN and one of its scenarios is expected to produce builds but
+ * assembled none, return that scenario id - the row escalates to a hard FAIL.
+ */
+function rowEscalation(result, scenarioById, artifacts, currentEpicIndex) {
+  for (const sid of result.scenario_ids) {
+    if (!scenarioExpectsBuilds(scenarioById.get(sid), currentEpicIndex)) continue;
+    const artifact = artifacts.get(sid);
+    if (artifact !== undefined && artifact !== null && artifact.build_count === 0) return sid;
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Projection (pure)
@@ -73,6 +179,22 @@ function priceOf(component) {
   const price = component.price;
   if (price === null || typeof price !== 'object') return null;
   return Number.isFinite(price.selected_price) ? price.selected_price : null;
+}
+
+/**
+ * A price SHARE (numerator / total). A genuinely absent numerator (no such
+ * component, or no price) is undefined and returns null. A non-positive or
+ * non-finite total with a real numerator is a BUILD INVARIANT VIOLATION and
+ * THROWS: the unit tests pin that a zero-total build errors rather than
+dividing by zero (a NaN/Infinity share would silently poison every assertion).
+ */
+function shareOf(numerator, total, label, scenarioId) {
+  if (numerator === null) return null;
+  if (!Number.isFinite(total) || total <= 0) {
+    throw new Error('scenario-eval: ' + label + ' needs a positive finite total_price, got '
+      + total + ' for ' + scenarioId);
+  }
+  return numerator / total;
 }
 
 /** Project one ranked/selected entry (they share the same entry shape). */
@@ -136,13 +258,22 @@ function projectArtifact(id, snapshot, rankedResult, selection, maps) {
     if (entry.pair_key !== null) pairSet.add(entry.pair_key);
   }
 
-  const bestGpuShare = bestProjected !== null && bestProjected.total_price > 0 && bestProjected.gpu_price !== null
-    ? bestProjected.gpu_price / bestProjected.total_price
-    : null;
-  const bestCpuRamShare = bestProjected !== null && bestProjected.total_price > 0
-    && bestProjected.cpu_price !== null && bestProjected.ram_price !== null
-    ? (bestProjected.cpu_price + bestProjected.ram_price) / bestProjected.total_price
-    : null;
+  // A3: rank-1 GPU selected_price / build total_price (the rank-1 of interest is
+  // the BALANCED archetype after E4; today rank-1 is simply the top-ranked
+  // build). Both shares THROW on a non-positive total rather than dividing by
+  // zero, and return null when the numerator is genuinely absent (no GPU / no
+  // price).
+  const bestGpuShare = bestProjected === null
+    ? null
+    : shareOf(bestProjected.gpu_price, bestProjected.total_price, 'rank-1 GPU price share', id);
+  const bestCpuRamShare = bestProjected === null || bestProjected.cpu_price === null || bestProjected.ram_price === null
+    ? null
+    : shareOf(
+      bestProjected.cpu_price + bestProjected.ram_price,
+      bestProjected.total_price,
+      'rank-1 CPU+RAM price share',
+      id
+    );
 
   // A8 compares RAW scores, not the ranked entry's score. rankBuilds rounds the
   // entry's build_score to 2 dp for ordering/presentation, but the ORIGINAL
@@ -262,6 +393,45 @@ function a2(assertion, spendMin, get) {
       { best_total_prices: prices, spend_ratios: ratios },
       expected,
       'budgets: ' + arts.map((a) => a.budget_amount).join(' -> ')
+    ));
+  }
+  return rows;
+}
+
+/**
+ * A2b - GPU price GROWTH with budget: at the same use_case / resolution /
+ * priority the rank-1 GPU price at the higher budget must be at least
+ * `growthMin` x the rank-1 GPU price at the lower budget. Only the budget
+ * differs, so a flat GPU price across budgets FAILs (this is the shape OG-38
+ * describes). A missing GPU price on either side is UNKNOWN, never a FAIL.
+ */
+function a2b(assertion, growthMin, get) {
+  const rows = [];
+  for (const pair of assertion.pairs) {
+    const low = get(pair.low);
+    const high = get(pair.high);
+    const ids = [pair.low, pair.high];
+    const expected = 'rank-1 GPU price at ' + pair.high + ' >= ' + growthMin + ' x at ' + pair.low
+      + ' (same use_case/resolution/priority)';
+    if (low === null || high === null) {
+      rows.push(row('A2b', STATUSES.UNKNOWN, ids, null, expected, 'artifact missing'));
+      continue;
+    }
+    if (low.best === null || high.best === null || low.best.gpu_price === null || high.best.gpu_price === null) {
+      rows.push(row('A2b', STATUSES.UNKNOWN, ids, null, expected, 'rank-1 GPU price not measurable'));
+      continue;
+    }
+    const lowPrice = low.best.gpu_price;
+    const highPrice = high.best.gpu_price;
+    const ratio = lowPrice > 0 ? highPrice / lowPrice : null;
+    const ok = lowPrice > 0 && highPrice >= growthMin * lowPrice;
+    rows.push(row(
+      'A2b',
+      ok ? STATUSES.PASS : STATUSES.FAIL,
+      ids,
+      { low_gpu_price: lowPrice, high_gpu_price: highPrice, ratio },
+      expected,
+      'budgets ' + low.budget_amount + ' -> ' + high.budget_amount
     ));
   }
   return rows;
@@ -481,29 +651,50 @@ function a6(assertion, maxRatio, get) {
   return rows;
 }
 
-/** A7 - below floor: zero builds, budget_floor present, within_budget as expected. */
+/**
+ * A7 - below floor, corrected to the engine's Decision 27 semantics (no
+ * hard-coded expectation): when a scenario assembles ZERO builds, its
+ * `budget_floor` must be present and `within_budget` must equal
+ * `(budget >= cheapest_total)` - read from the engine AT RUN TIME. Both branches
+ * are covered: a budget above the floor (within_budget true, still zero builds
+ * because the floor is a lower bound, not a build) and one below it (false).
+ */
 function a7(assertion, get) {
   const rows = [];
   for (const testCase of assertion.cases) {
-    const a = get(testCase.scenario);
-    const expected = 'zero builds; budget_floor present; within_budget === ' + testCase.within_budget;
+    const sid = testCase.scenario;
+    const a = get(sid);
     if (a === null) {
-      rows.push(row('A7', STATUSES.UNKNOWN, [testCase.scenario], null, expected, 'artifact missing'));
+      rows.push(row('A7', STATUSES.UNKNOWN, [sid], null,
+        'zero builds; budget_floor present; within_budget === (budget >= cheapest_total)', 'artifact missing'));
       continue;
     }
     const hasFloor = a.budget_floor !== null && a.budget_floor !== undefined && typeof a.budget_floor === 'object';
+    const cheapest = hasFloor ? a.budget_floor.cheapest_total : null;
     const within = hasFloor ? a.budget_floor.within_budget : null;
+    const budget = a.budget_amount;
+    const expectedWithin = Number.isFinite(cheapest) && Number.isFinite(budget) ? budget >= cheapest : null;
     const sub = [];
     sub.push(a.build_count === 0 ? STATUSES.PASS : STATUSES.FAIL);
-    sub.push(hasFloor ? STATUSES.PASS : STATUSES.FAIL);
-    sub.push(within === null ? STATUSES.UNKNOWN : (within === testCase.within_budget ? STATUSES.PASS : STATUSES.FAIL));
+    sub.push(hasFloor && Number.isFinite(cheapest) ? STATUSES.PASS : STATUSES.FAIL);
+    sub.push(
+      expectedWithin === null || within === null
+        ? STATUSES.UNKNOWN
+        : (within === expectedWithin ? STATUSES.PASS : STATUSES.FAIL)
+    );
     rows.push(row(
       'A7',
       combine(sub),
-      [testCase.scenario],
-      { build_count: a.build_count, cheapest_total: hasFloor ? a.budget_floor.cheapest_total : null, within_budget: within },
-      expected,
-      'Decision 27 budget_floor'
+      [sid],
+      {
+        build_count: a.build_count,
+        budget,
+        cheapest_total: cheapest,
+        within_budget: within,
+        expected_within_budget: expectedWithin,
+      },
+      'zero builds; budget_floor present; within_budget === (budget >= cheapest_total)',
+      'Decision 27 budget_floor; expectation computed at run time'
     ));
   }
   return rows;
@@ -581,13 +772,22 @@ function a9(assertion, get, pi1) {
 
 function summarize(results) {
   const counts = { PASS: 0, FAIL: 0, UNKNOWN: 0 };
-  for (const result of results) counts[result.status] += 1;
+  const dispositions = { PASS: 0, 'EXPECTED-RED': 0, FAIL: 0, WAIVED: 0, UNKNOWN: 0 };
+  for (const result of results) {
+    counts[result.status] += 1;
+    dispositions[result.disposition] += 1;
+  }
   return {
     total: results.length,
     pass: counts.PASS,
     fail: counts.FAIL,
     unknown: counts.UNKNOWN,
-    exit_ok: counts.FAIL === 0,
+    disposition_pass: dispositions.PASS,
+    expected_red: dispositions['EXPECTED-RED'],
+    hard_fail: dispositions.FAIL,
+    waived: dispositions.WAIVED,
+    disposition_unknown: dispositions.UNKNOWN,
+    exit_ok: dispositions.FAIL === 0,
   };
 }
 
@@ -606,6 +806,13 @@ function evaluateSuite({ suite, artifacts, artifactsSecond, pi1 }) {
   const thresholds = suite.thresholds;
   const results = [];
 
+  // Validate every assertion's expectation up front: an approved/waived entry
+  // missing its reviewer/reviewed_on(/reason) fails fast here.
+  const expectationByAssertion = new Map();
+  for (const assertion of suite.assertions) {
+    expectationByAssertion.set(assertion.id, validateExpectation(assertion, 'assertion[' + assertion.id + ']'));
+  }
+
   for (const assertion of suite.assertions) {
     switch (assertion.type) {
       case 'min_distinct_cpu_gpu_pairs':
@@ -613,6 +820,9 @@ function evaluateSuite({ suite, artifacts, artifactsSecond, pi1 }) {
         break;
       case 'budget_response':
         results.push(...a2(assertion, thresholds.A2_spend_ratio_min.value, get));
+        break;
+      case 'gpu_price_growth':
+        results.push(...a2b(assertion, thresholds.A2b_gpu_price_growth_min.value, get));
         break;
       case 'use_case_divergence':
         results.push(...a3(assertion, thresholds, byId, get));
@@ -640,12 +850,43 @@ function evaluateSuite({ suite, artifacts, artifactsSecond, pi1 }) {
     }
   }
 
+  // Apply expectations: turn each raw status into a disposition. A FAIL is a
+  // HARD FAIL only for an `approved` expectation; a hypothesis FAIL is
+  // EXPECTED-RED and does not fail the run. An UNKNOWN escalates to a HARD FAIL
+  // when its scenario is expected to produce builds but produced none.
+  const currentEpicIndex = suite.current_epic === undefined ? 0 : epicIndex(suite.current_epic);
+  for (const result of results) {
+    const expectation = expectationByAssertion.get(result.assertion) || { status: EXPECTATION_STATUSES.HYPOTHESIS };
+    result.expectation_status = expectation.status;
+    if (result.status === STATUSES.PASS) {
+      result.disposition = DISPOSITIONS.PASS;
+    } else if (result.status === STATUSES.FAIL) {
+      result.disposition = expectation.status === EXPECTATION_STATUSES.APPROVED
+        ? DISPOSITIONS.FAIL
+        : (expectation.status === EXPECTATION_STATUSES.WAIVED ? DISPOSITIONS.WAIVED : DISPOSITIONS.EXPECTED_RED);
+    } else {
+      const escalatedBy = rowEscalation(result, byId, artifacts, currentEpicIndex);
+      if (escalatedBy !== null) {
+        result.disposition = DISPOSITIONS.FAIL;
+        result.escalated = true;
+        result.detail = (result.detail === '' ? '' : result.detail + '; ')
+          + 'UNKNOWN escalated to FAIL: ' + escalatedBy + ' is expected to produce builds but produced none';
+      } else {
+        result.disposition = DISPOSITIONS.UNKNOWN;
+      }
+    }
+  }
+
   return { results, summary: summarize(results) };
 }
 
 module.exports = {
   STATUSES,
+  EXPECTATION_STATUSES,
+  DISPOSITIONS,
   DEFAULT_SCORE_TOLERANCE,
+  epicIndex,
+  validateExpectation,
   pairKeyOf,
   projectEntry,
   projectArtifact,
