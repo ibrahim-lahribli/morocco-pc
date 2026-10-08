@@ -446,7 +446,7 @@ test('the caller-owned configuration is never mutated or frozen', () => {
 test('configuration.js is a pure validator with no database dependency', () => {
   const source = fs.readFileSync(path.join(__dirname, 'configuration.js'), 'utf8');
   const required = [...source.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
-  assert.deepEqual(required, ['../candidates/errors']);
+  assert.deepEqual(required, ['../candidates/errors', './use-cases']);
 
   const banned = ["require('pg')", '.query(', 'SELECT ', 'INSERT ', 'new Pool'];
   for (const token of banned) {

@@ -77,7 +77,9 @@ function readRepo(rel) {
 // 2026-10-05) added one more => 36; Decisions 33 and 34 each added one more
 // => 38; Decision 35 (Decision 35 beta seed-offer freshness, 2026-10-06) added
 // one more => 39; Decision 36 (the HTTP API contract, 2026-10-07) added one
-// more => 40, with global headings 33 -> 34 (global + 2 = 36 global decisions).
+// more => 40, with global headings 33 -> 34; Decision 37 (OG-39,
+// 2026-10-08, scoring-model use_case_profiles) added one more => 41, with
+// global headings 34 -> 35 (global + 2 = 37 global decisions).
 const decisions = (function checkDecisions() {
   const raw = readRepo('docs/RECOMMENDATION_ENGINE_DECISIONS.md');
   // Line-ending tolerant: the log is stored CRLF, but a Linux checkout
@@ -94,9 +96,9 @@ const decisions = (function checkDecisions() {
     if (inEngine3 && /^### Decision \d+/.test(line)) nested += 1;
     if (/^Status:/.test(line)) status += 1;
   }
-  const ok = global === 34 && nested === 5 && status === 40;
+  const ok = global === 35 && nested === 5 && status === 41;
   if (!ok) {
-    fail('decisions-parse', 'global=' + global + ' (want 34), nested=' + nested + ' (want 5), Status:=' + status + ' (want 40)');
+    fail('decisions-parse', 'global=' + global + ' (want 35), nested=' + nested + ' (want 5), Status:=' + status + ' (want 41)');
     return null;
   }
   pass('decisions-parse', global + ' headings + ' + nested + ' nested = ' + (global + 2) + ' global, ' + status + ' Status: lines');

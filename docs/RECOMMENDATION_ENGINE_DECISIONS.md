@@ -4291,3 +4291,33 @@ Recorded the same day, additive to items 3 and 11; changes no decision above and
 **3. Per-phase measurement (no engine edits).** New `scripts/measure-api-pass-phases.js` wraps `client.query` and patches ONLY the documented namespace seams (Decision 17/21's stub convention) to attribute every statement to a phase; all patches are restored in `finally`. Measured one API-shaped pass on the TEST branch (GAMING / 20000 MAD): 75 statements, 10 670 ms statement time in a 12 114 ms wall (≈142 ms/statement) — consistent with this decision's load verdict (74 statements / 10 893 ms, same cost model). Largest phases: `engine.commit` 37 stmts / 4 906 ms; `engine.load_filtering_context` 14 / 1 886; `engine.load_candidates` 9 / 1 235; the pure stages (filter, retention, budget floor, assembly, scoring, ranking, explanation) total ≈19 ms with zero statements. Reported overlaps are exclusively parent→child nesting (`engine.snapshot` → `engine.pass` → loaders); no sibling phase overlaps, confirming the pipeline is strictly sequential and the cost is per-statement round-trip latency, not compute. The script deletes its own Layer 4 rows (dependency order) and exits non-zero on cleanup failure.
 
 **4. `test:api:db` hardened.** The DB-backed suite now (a) captures per-table row counts BEFORE the run and asserts residue against those counts AFTER cleanup (profile, query, result, build_candidate, build_component, build_rejection — before/after equality, not just zero at the end), (b) asserts the 422 zero-row case writes nothing (row counts unchanged for the tables the pass would touch), and (c) pins POST==GET with `assert.deepEqual` over the full response bodies rather than a field-by-field comparison. Additive assertions only; no existing assertion weakened.
+
+## Decision 37 — a scoring model owns its use-case policy and its use-case vocabulary (`use_case_profiles`)
+
+Status: RESOLVED + IMPLEMENTED (2026-10-08) — `use_case_profiles` is an OPTIONAL scoring-model configuration key validated in `src/recommendation/scoring/configuration.js` / `scoring/use-cases.js`; `listUseCases(configuration)` is exported from the scoring barrel; the `launch-v2` seed is authored and rehearsed branch-first; activation on a live database is a coordinated step (OG-39).
+
+Context
+  OG-38 (2026-10-07) measured that the API derives its accepted use-case vocabulary from `configuration.gpu_required_use_cases` — the same list that makes the GPU mandatory — so OFFICE was rejected 422 and only GAMING / WORKSTATION were reachable. Vocabulary and GPU mandate were one field, so no policy could separate them, and `use_case` had no effect on any result below a single `Array.includes` test.
+
+Decision
+  1. A scoring model MAY declare `use_case_profiles`, keyed by use-case name. Per profile:
+       `gpu_policy`            REQUIRED | IGPU_ALLOWED                 (required)
+       `spend_targets`         { <component_role>: share of budget }   (required, each share in [0, 1])
+       `role_weights`          per-role weight override                (optional)
+       `archetype_objectives`  { <ARCHETYPE>: <number> }              (optional)
+     Unknown profile fields, a missing required field, an out-of-vocabulary `gpu_policy`, or an out-of-range share fail fast with the exact nested path, in the existing Engine 2 error vocabulary.
+  2. `use_case_profiles` is OPTIONAL. A model that omits it validates and loads byte-for-byte unchanged, so `seed-minimal-v1` remains reproducible — the key is added to `OPTIONAL_CONFIGURATION_KEYS`, never to the required vocabulary.
+  3. The use-case VOCABULARY is `listUseCases(configuration)`: the `use_case_profiles` keys when declared, falling back to `gpu_required_use_cases` only for a legacy model that declares no profiles. The API's meta vocabulary consumes this accessor instead of `gpu_required_use_cases`; this is the acceptance that the vocabulary is decoupled.
+  4. `gpu_required_use_cases` is retained unchanged (Decision 10 / Decision 11 Rule 8) as the Engine 3 GPU-mandate input and as the legacy vocabulary fallback. It is no longer the vocabulary SOURCE for a model that declares profiles.
+  5. `gpu_policy`, `spend_targets` and `archetype_objectives` are HYPOTHESES pending human review (H3). They are validated structurally now and consumed by later epics (E2 retention, E3 pair quota, E4 archetypes, E5 resolution, E6 OFFICE); no scoring, retention, assembly or ranking behaviour changes in this decision.
+
+Data
+  `database/seeds/013_scoring_model_launch_v2.sql` inserts `launch-v2` `1.0.0` as v1's exact configuration with `use_case_profiles` appended (`||`, so nothing else differs), then makes it the single active model with the v1 row retained but inactive. Rehearsed on the TEST branch inside a transaction that is rolled back: after the first apply exactly 1 active model (`launch-v2`), vocabulary `{GAMING, OFFICE, WORKSTATION}`; a second apply changed nothing (no duplicate row); `ROLLBACK` restored v1 active with no `launch-v2` row.
+
+Out of scope (deliberately not done here)
+  * Applying seed 013 to the shared or TEST database. Four harnesses pin `seed-minimal-v1 ... is_active = true` BY NAME (`scripts/measure-orchestrator.js`, `scripts/test-orchestrator-full-run.js`, `scripts/verify-pool-independence.js`, `scripts/measure-og01-reach.js`), so flipping the active model breaks their preflight until they are updated. Tracked as OG-39.
+  * Consuming the new policy in assembly / retention / scoring — E2–E6.
+  * `apps/api/src/meta.js` rewiring — Platform owns `apps/api/`; the scoring-barrel export is the interface.
+
+Verification
+  `npm run test:unit` = 962 pass / 0 fail (950 before; +12 new). `src/recommendation/scoring/use-cases.test.js` pins the profile contract, the vocabulary decoupling (OFFICE declared by the profiles while absent from `gpu_required_use_cases`), the optional-key integration (a model without profiles gains no key), and the legacy fallback. `scoring/index.test.js` and `configuration.test.js` were updated for the new export surface and the new require (no assertion was weakened). No engine pass, score, rank or persisted row changed: only new configuration is accepted, and nothing consumes it yet.

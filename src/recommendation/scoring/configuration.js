@@ -12,8 +12,11 @@
  *
  * Scope: the COMPLETE Decision 3(a) contract -- not merely the Engine 3 subset
  * (`candidate_caps`, `gpu_required_use_cases`) that has a consumer today. Every
- * key is REQUIRED; there are no silent defaults, no partial acceptance, no
- * normalization, and no acceptance of NULL.
+ * key in `SCORING_MODEL_CONFIGURATION_KEYS` is REQUIRED; there are no silent
+ * defaults, no partial acceptance, no normalization, and no acceptance of NULL.
+ * `OPTIONAL_CONFIGURATION_KEYS` (Decision 37: `use_case_profiles`) are accepted
+ * when DECLARED and omitted otherwise, so a model that predates the key stays
+ * valid byte-for-byte.
  *
  * Decision 11 Rule 3 + Rule 4 failure semantics (existing error vocabulary, no
  * new code): configuration NULL/absent -> MISSING_REQUIRED_FIELD
@@ -46,6 +49,7 @@
 'use strict';
 
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const { validateUseCaseProfiles, USE_CASE_PROFILES_KEY } = require('./use-cases');
 
 /** The frozen Decision 3(a) top-level vocabulary, in documented order. */
 const SCORING_MODEL_CONFIGURATION_KEYS = Object.freeze([
@@ -60,6 +64,14 @@ const SCORING_MODEL_CONFIGURATION_KEYS = Object.freeze([
   'candidate_caps',
   'gpu_required_use_cases',
 ]);
+
+/**
+ * OPTIONAL top-level keys (Decision 37). Declaring one is allowed and validated
+ * strictly; omitting it keeps a model valid byte-for-byte. `use_case_profiles`
+ * lives here so the retained `seed-minimal-v1` still validates unchanged while a
+ * launch-v2 model can own its use-case policy and vocabulary.
+ */
+const OPTIONAL_CONFIGURATION_KEYS = Object.freeze([USE_CASE_PROFILES_KEY]);
 
 /** `candidate_caps` is a strict closed two-key contract (Decision 11 Rule 7). */
 const CANDIDATE_CAPS_FIELDS = Object.freeze([
@@ -340,9 +352,12 @@ function validateScoringModelConfiguration(configuration) {
     );
   }
 
-  // --- unknown top-level keys ---------------------------------------------
+  // --- unknown top-level keys (required OR optional vocabulary) -----------
   for (const key of Object.keys(configuration)) {
-    if (!SCORING_MODEL_CONFIGURATION_KEYS.includes(key)) {
+    if (
+      !SCORING_MODEL_CONFIGURATION_KEYS.includes(key) &&
+      !OPTIONAL_CONFIGURATION_KEYS.includes(key)
+    ) {
       fail(
         ERROR_CODES.INVALID_FIELD_VALUE,
         key,
@@ -389,7 +404,7 @@ function validateScoringModelConfiguration(configuration) {
   );
 
   // Fresh nested copies are frozen; the caller's JSONB object is untouched.
-  return deepFreeze({
+  const validated = {
     version_note: configuration.version_note,
     role_weights,
     type_weights,
@@ -400,10 +415,20 @@ function validateScoringModelConfiguration(configuration) {
     staleness,
     candidate_caps,
     gpu_required_use_cases,
-  });
+  };
+  // Optional (Decision 37): present iff declared, so a legacy model's validated
+  // object keeps exactly its old shape and remains byte-identical.
+  if (Object.prototype.hasOwnProperty.call(configuration, USE_CASE_PROFILES_KEY)) {
+    validated[USE_CASE_PROFILES_KEY] = validateUseCaseProfiles(
+      configuration[USE_CASE_PROFILES_KEY]
+    );
+  }
+
+  return deepFreeze(validated);
 }
 
 module.exports = {
   validateScoringModelConfiguration,
   SCORING_MODEL_CONFIGURATION_KEYS,
+  OPTIONAL_CONFIGURATION_KEYS,
 };
