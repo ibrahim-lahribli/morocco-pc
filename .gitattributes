@@ -7,6 +7,7 @@ docs/** text eol=crlf
 database/** text eol=crlf
 CONTEXT.md text eol=crlf
 DEVELOPMENT_NOTES.md text eol=crlf
+test/golden/*.md text eol=crlf
 
 # LF on disk.
 AGENTS.md text eol=lf

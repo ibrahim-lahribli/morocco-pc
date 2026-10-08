@@ -13,6 +13,7 @@
     "verify:docs": "node scripts/verify-docs.js",
     "verify:replay": "node scripts/verify-migrations-replay.js --test-db",
     "verify:pi1": "node scripts/verify-pool-independence.js",
+    "eval:scenarios": "node scripts/eval-scenarios.js",
     "start:api": "node apps/api/src/server.js",
     "test:api": "node --test \"apps/api/test/unit/*.test.js\"",
     "test:api:db": "node apps/api/test/run-db-tests.js"

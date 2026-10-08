@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "note": "E0 golden scenarios (docs/briefs/engine.md). Data only: the assertion LOGIC lives in scripts/lib/scenario-eval.js; scenarios, thresholds and application rules live here so they can change without touching code. Every threshold is a HYPOTHESIS pending the PC-literate human review (H3) and carries a status field; changing one requires a test/golden/CHANGELOG.md entry naming the reviewer.",
+  "thresholds": {
+    "A1_min_budget": {
+      "value": 10000,
+      "status": "hypothesis",
+      "reason": "A1 (pair diversity) is asserted only at budgets at or above this."
+    },
+    "A1_min_distinct_pairs": {
+      "value": 3,
+      "status": "hypothesis",
+      "reason": "Distinct (CPU,GPU) pairs required in the selected/persisted set."
+    },
+    "A2_spend_ratio_min": {
+      "value": 0.8,
+      "status": "hypothesis",
+      "reason": "Performance-leaning top build must spend at least this share of budget."
+    },
+    "A3_signature_overlap_max": {
+      "value": 0.5,
+      "status": "hypothesis",
+      "reason": "GAMING vs WORKSTATION build-signature overlap must be strictly below this."
+    },
+    "A3_gaming_gpu_share": {
+      "min": 0.3,
+      "max": 0.5,
+      "status": "hypothesis",
+      "reason": "GAMING top-build GPU share of total price band."
+    },
+    "A4_vram_floor_gb": {
+      "value": {
+        "1080p": 8,
+        "1440p": 12,
+        "2160p": 16
+      },
+      "status": "hypothesis",
+      "reason": "Minimum selected-GPU VRAM per target resolution."
+    },
+    "A5_priority_strict": {
+      "value": true,
+      "status": "hypothesis",
+      "reason": "Priority 1 (price-first) rank-1 price must be strictly below priority 5."
+    },
+    "A6_office_price_ratio_max": {
+      "value": 0.4,
+      "status": "hypothesis",
+      "reason": "OFFICE top build must cost at most this multiple of the S03 GAMING top build."
+    },
+    "A7_within_budget": {
+      "value": null,
+      "status": "corrected",
+      "reason": "Corrected to the code's Decision 27 semantics on 2026-10-08: S01 @5000 sits ABOVE the 4477 floor so within_budget is TRUE (the zero builds are a compatibility limit, not a budget shortfall); S01b @4000 sits below the floor so within_budget is FALSE. The brief's literal 'within_budget false' at 5000 contradicted the engine."
+    },
+    "A8_score_tolerance": {
+      "value": 0.001,
+      "status": "hypothesis",
+      "reason": "Two consecutive passes differ by clock drift only; signatures are compared exactly, scores within this tolerance."
+    }
+  },
+  "scenarios": [
+    { "id": "S01", "use_case": "GAMING", "resolution": "1080p", "priority": 3, "budget": 5000, "tags": ["below-floor"] },
+    { "id": "S01b", "use_case": "GAMING", "resolution": "1080p", "priority": 3, "budget": 4000, "tags": ["sub-floor"] },
+    { "id": "S02", "use_case": "GAMING", "resolution": "1080p", "priority": 3, "budget": 8000, "tags": ["near-floor"] },
+    { "id": "S03", "use_case": "GAMING", "resolution": "1080p", "priority": 3, "budget": 12000, "tags": ["core", "full-run"] },
+    { "id": "S04", "use_case": "GAMING", "resolution": "1080p", "priority": 3, "budget": 20000, "tags": ["core"] },
+    { "id": "S05", "use_case": "GAMING", "resolution": "1080p", "priority": 3, "budget": 30000, "tags": ["core"] },
+    { "id": "S06", "use_case": "GAMING", "resolution": "1440p", "priority": 3, "budget": 12000, "tags": ["resolution"] },
+    { "id": "S07", "use_case": "GAMING", "resolution": "1440p", "priority": 3, "budget": 20000, "tags": ["resolution", "full-run"] },
+    { "id": "S08", "use_case": "GAMING", "resolution": "1440p", "priority": 3, "budget": 30000, "tags": ["resolution"] },
+    { "id": "S09", "use_case": "GAMING", "resolution": "2160p", "priority": 3, "budget": 30000, "tags": ["resolution"] },
+    { "id": "S10", "use_case": "GAMING", "resolution": "1080p", "priority": 1, "budget": 12000, "tags": ["priority"] },
+    { "id": "S11", "use_case": "GAMING", "resolution": "1080p", "priority": 5, "budget": 12000, "tags": ["priority"] },
+    { "id": "S12", "use_case": "GAMING", "resolution": "1080p", "priority": 1, "budget": 20000, "tags": ["priority", "full-run"] },
+    { "id": "S13", "use_case": "GAMING", "resolution": "1080p", "priority": 5, "budget": 20000, "tags": ["priority"] },
+    { "id": "S14", "use_case": "WORKSTATION", "resolution": "1080p", "priority": 3, "budget": 12000, "tags": ["use-case"] },
+    { "id": "S15", "use_case": "WORKSTATION", "resolution": "1080p", "priority": 3, "budget": 20000, "tags": ["use-case"] },
+    { "id": "S16", "use_case": "WORKSTATION", "resolution": "1080p", "priority": 3, "budget": 30000, "tags": ["use-case", "full-run"] },
+    { "id": "S17", "use_case": "OFFICE", "resolution": null, "priority": 3, "budget": 4000, "tags": ["igpu"] },
+    { "id": "S18", "use_case": "OFFICE", "resolution": null, "priority": 3, "budget": 6000, "tags": ["igpu"] },
+    { "id": "S19", "use_case": "OFFICE", "resolution": null, "priority": 3, "budget": 10000, "tags": ["igpu"] },
+    { "id": "S20", "use_case": "GAMING", "resolution": "1080p", "priority": 3, "budget": 7700, "tags": ["boundary"] }
+  ],
+  "assertions": [
+    {
+      "id": "A1",
+      "type": "min_distinct_cpu_gpu_pairs",
+      "scenarios": ["S03", "S04", "S05", "S06", "S07", "S08", "S09", "S10", "S11", "S12", "S13", "S14", "S15", "S16", "S19"]
+    },
+    {
+      "id": "A2",
+      "type": "budget_response",
+      "series": [["S03", "S04", "S05"], ["S06", "S07", "S08"]]
+    },
+    {
+      "id": "A3",
+      "type": "use_case_divergence",
+      "pairs": [
+        { "gaming": "S03", "workstation": "S14" },
+        { "gaming": "S04", "workstation": "S15" },
+        { "gaming": "S05", "workstation": "S16" }
+      ]
+    },
+    {
+      "id": "A4",
+      "type": "resolution_divergence",
+      "series": [["S04", "S07"], ["S05", "S08", "S09"]],
+      "strict_pair": ["S05", "S09"],
+      "vram_scenarios": ["S04", "S05", "S06", "S07", "S08", "S09"]
+    },
+    {
+      "id": "A5",
+      "type": "priority_divergence",
+      "pairs": [
+        { "price_first": "S10", "performance_first": "S11" },
+        { "price_first": "S12", "performance_first": "S13" }
+      ]
+    },
+    {
+      "id": "A6",
+      "type": "office_igpu",
+      "scenarios": ["S17", "S18", "S19"],
+      "reference": "S03"
+    },
+    {
+      "id": "A7",
+      "type": "below_floor",
+      "cases": [
+        { "scenario": "S01", "within_budget": true },
+        { "scenario": "S01b", "within_budget": false }
+      ]
+    },
+    {
+      "id": "A8",
+      "type": "determinism",
+      "scenarios": ["S01", "S01b", "S02", "S03", "S04", "S05", "S06", "S07", "S08", "S09", "S10", "S11", "S12", "S13", "S14", "S15", "S16", "S17", "S18", "S19", "S20"]
+    },
+    {
+      "id": "A9",
+      "type": "safety",
+      "scenarios": ["S01", "S01b", "S02", "S03", "S04", "S05", "S06", "S07", "S08", "S09", "S10", "S11", "S12", "S13", "S14", "S15", "S16", "S17", "S18", "S19", "S20"]
+    }
+  ]
+}
