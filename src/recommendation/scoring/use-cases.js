@@ -19,7 +19,7 @@
  *   use_case_profiles: {
  *     "<USE_CASE>": {
  *       "gpu_policy":           "REQUIRED" | "IGPU_ALLOWED",
- *       "spend_targets":        { "<component_role>": <share of budget, 0..1> },
+ *       "spend_targets":        { "<component_role>": <relative weight, 0..1> },
  *       "role_weights":         { "<role>": { "<assessment_type>": <number> } },   // optional
  *       "archetype_objectives": { "<ARCHETYPE>": <number> }                        // optional
  *     }
@@ -29,6 +29,13 @@
  * validated, unknown fields and out-of-range values fail fast with the exact
  * nested path, and values are never normalized (no trim, no case folding, no
  * coercion, no defaulting).
+ *
+ * `spend_targets` are NORMALISED RELATIVE WEIGHTS, not a partition (Decision 37
+ * item 6): they need NOT sum to 1 (launch-v2's profiles sum to 0.97 / 0.98 /
+ * 0.89) and a profile MAY declare only the roles its policy cares about. Each
+ * share is still a finite number in [0, 1]; the declared sum must be STRICTLY
+ * POSITIVE so a consumer can normalise by it, so an empty or all-zero
+ * `spend_targets` fails fast.
  *
  * `use_case_profiles` is an OPTIONAL top-level configuration key: models that do
  * not declare it (e.g. the retained `seed-minimal-v1`) stay valid byte-for-byte,
@@ -111,10 +118,22 @@ function validateSpendTargets(spend_targets, basePath) {
     );
   }
   const copy = {};
+  let total = 0;
   for (const role of Object.keys(spend_targets)) {
     requireKeyName(role, basePath, `"${basePath}" keys must be non-blank component-role strings`);
     requireShare(spend_targets[role], `${basePath}.${role}`);
     copy[role] = spend_targets[role];
+    total += spend_targets[role];
+  }
+  // Shares are relative weights, so the sum need NOT be 1 - but it MUST be
+  // positive, or a consumer could not normalise by it (and an empty map has no
+  // policy at all). This is the enforceable half of Decision 37 item 6.
+  if (!(total > 0)) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      basePath,
+      `"${basePath}" must declare at least one positive share (shares are relative weights, so their sum must be > 0)`
+    );
   }
   return copy;
 }

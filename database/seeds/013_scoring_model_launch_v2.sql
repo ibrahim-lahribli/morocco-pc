@@ -13,6 +13,9 @@
 --   `||` guarantees the two models differ only by the new key - the weights,
 --   caps, penalties and staleness are byte-identical to v1, so switching models
 --   changes the VOCABULARY and the policy surface, not today's scoring numbers.
+--   `spend_targets` are RELATIVE WEIGHTS, not a partition (Decision 37 item 6):
+--   they need not sum to 1 (GAMING sums to 0.97) and must sum to a positive
+--   number.
 --
 -- Activation
 --   The seed makes launch-v2 the single active model and deactivates v1's row.

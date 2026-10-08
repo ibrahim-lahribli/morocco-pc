@@ -170,6 +170,37 @@ test('rejects unknown profile fields and out-of-range share values', () => {
   );
 });
 
+test('spend_targets are RELATIVE WEIGHTS: a sum != 1 and a partial profile are both valid (Decision 37 item 6)', () => {
+  // The authored launch-v2 GAMING shares sum to 0.97, deliberately NOT 1.
+  const gaming = profile();
+  const sum = Object.values(gaming.spend_targets).reduce((acc, value) => acc + value, 0);
+  assert.ok(Math.abs(sum - 0.97) < 1e-9, `GAMING shares should sum to 0.97, got ${sum}`);
+  const validated = validateUseCaseProfiles({ GAMING: gaming });
+  assert.deepEqual(validated.GAMING.spend_targets, gaming.spend_targets);
+
+  // A PARTIAL profile (only the roles its policy cares about) is valid - the rest
+  // of the budget is unallocated headroom, not an error.
+  const partial = validateUseCaseProfiles({ GAMING: profile({ spend_targets: { GPU: 0.38, CPU: 0.17 } }) });
+  assert.deepEqual(partial.GAMING.spend_targets, { GPU: 0.38, CPU: 0.17 });
+
+  // A sum ABOVE 1 is still relative, not a partition.
+  const over = validateUseCaseProfiles({ GAMING: profile({ spend_targets: { GPU: 1, CPU: 1 } }) });
+  assert.deepEqual(over.GAMING.spend_targets, { GPU: 1, CPU: 1 });
+});
+
+test('spend_targets: an empty or all-zero map fails fast so normalisation is well-defined', () => {
+  assertFailure(
+    () => validateUseCaseProfiles({ GAMING: profile({ spend_targets: {} }) }),
+    ERROR_CODES.INVALID_FIELD_VALUE,
+    'use_case_profiles.GAMING.spend_targets'
+  );
+  assertFailure(
+    () => validateUseCaseProfiles({ GAMING: profile({ spend_targets: { CPU: 0, GPU: 0 } }) }),
+    ERROR_CODES.INVALID_FIELD_VALUE,
+    'use_case_profiles.GAMING.spend_targets'
+  );
+});
+
 // ---------------------------------------------------------------------------
 // listUseCases
 // ---------------------------------------------------------------------------
