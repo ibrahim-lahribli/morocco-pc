@@ -79,8 +79,12 @@ function art(overrides) {
 
 function runSuite(assertion, thresholds, scenarios, artifacts, extra) {
   const config = Object.assign({ artifactsSecond: new Map(), pi1: null }, extra || {});
+  // Fixtures declare hypothesis explicitly; production threshold entries may
+  // not rely on the assertion-only missing-status default.
+  const declaredThresholds = Object.fromEntries(Object.entries(thresholds).map(([key, entry]) =>
+    [key, Object.assign({ status: 'hypothesis' }, entry)]));
   return evaluateSuite({
-    suite: Object.assign({ scenarios, thresholds, assertions: [assertion] }, config.suite || {}),
+    suite: Object.assign({ scenarios, thresholds: declaredThresholds, assertions: [assertion] }, config.suite || {}),
     artifacts,
     artifactsSecond: config.artifactsSecond,
     pi1: config.pi1,
@@ -361,7 +365,7 @@ test('A8 tolerates the 2dp presentation step: raw deltas stay PASS when rounded 
   const results = evaluateSuite({
     suite: {
       scenarios: [{ id: 'S' }],
-      thresholds: { A8_score_tolerance: { value: 1e-3 } },
+      thresholds: { A8_score_tolerance: { value: 1e-3, status: 'hypothesis' } },
       assertions: [{ type: 'determinism', scenarios: ['S'] }],
     },
     artifacts: new Map([['S', first]]),
@@ -450,11 +454,76 @@ test('evaluateSuite REFUSES an approved assertion missing reviewer/reviewed_on',
   ), /requires a non-empty "reviewer"/);
 });
 
+test('evaluateSuite validates every threshold, including unused and malformed entries', () => {
+  const check = (entry) => evaluateSuite({
+    suite: { scenarios: [], assertions: [], thresholds: { unused: entry } },
+    artifacts: new Map(), artifactsSecond: new Map(), pi1: null,
+  });
+  for (const entry of [null, 3, [], { value: 3 }, { status: undefined }]) {
+    assert.throws(() => check(entry), /requires an explicit expectation status/);
+  }
+  for (const status of ['approved', 'waived']) {
+    assert.throws(() => check({ status, reviewer: ' ' }), /requires a non-empty "reviewer"/);
+    assert.throws(() => check({ status, reviewer: 'R' }), /requires "reviewed_on"/);
+    assert.throws(() => check({ status, reviewer: 'R', reviewed_on: 'today' }), /requires "reviewed_on"/);
+  }
+  for (const status of ['hypothesis', 'approved', 'waived']) {
+    assert.doesNotThrow(() => check({ status, reviewer: 'R', reviewed_on: '2026-10-08', reason: 'known' }));
+  }
+});
+
+test('evaluateSuite REFUSES a threshold with an unknown expectation status', () => {
+  assert.throws(() => runSuite(
+    { id: 'A1', type: 'min_distinct_cpu_gpu_pairs', scenarios: ['S03'] },
+    { A1_min_distinct_pairs: { value: 3, status: 'nonsense' } },
+    [{ id: 'S03' }],
+    new Map([['S03', art({ selected_pair_count: 3 })]])
+  ), /has unknown expectation status/);
+});
+
+test('evaluateSuite REFUSES an approved threshold missing reviewer/reviewed_on', () => {
+  assert.throws(() => runSuite(
+    { id: 'A1', type: 'min_distinct_cpu_gpu_pairs', scenarios: ['S03'] },
+    { A1_min_distinct_pairs: { value: 3, status: 'approved' } },
+    [{ id: 'S03' }],
+    new Map([['S03', art({ selected_pair_count: 3 })]])
+  ), /requires a non-empty "reviewer"/);
+});
+
+test('evaluateSuite REFUSES a waived threshold missing reason', () => {
+  assert.throws(() => runSuite(
+    { id: 'A1', type: 'min_distinct_cpu_gpu_pairs', scenarios: ['S03'] },
+    { A1_min_distinct_pairs: { value: 3, status: 'waived', reviewer: 'R', reviewed_on: '2026-10-08' } },
+    [{ id: 'S03' }],
+    new Map([['S03', art({ selected_pair_count: 3 })]])
+  ), /requires a non-empty "reason"/);
+});
+
 test('an UNKNOWN escalates to a hard FAIL only once expect_builds_after has landed', () => {
   const assertion = { id: 'A1', type: 'min_distinct_cpu_gpu_pairs', scenarios: ['S17'] };
   const thresholds = { A1_min_distinct_pairs: { value: 3 } };
   const scenarios = [{ id: 'S17', expect_builds_after: 'E6' }];
   const artifacts = new Map([['S17', art({ build_count: 0, selected: [], selected_pair_count: 0 })]]);
+
+  const preE6 = runSuite(assertion, thresholds, scenarios, artifacts, { suite: { current_epic: 'E1' } });
+  assert.equal(preE6.results[0].status, STATUSES.UNKNOWN);
+  assert.equal(preE6.results[0].disposition, DISPOSITIONS.UNKNOWN);
+  assert.equal(preE6.summary.exit_ok, true);
+
+  const atE6 = runSuite(assertion, thresholds, scenarios, artifacts, { suite: { current_epic: 'E6' } });
+  assert.equal(atE6.results[0].status, STATUSES.UNKNOWN);
+  assert.equal(atE6.results[0].disposition, DISPOSITIONS.FAIL);
+  assert.equal(atE6.results[0].escalated, true);
+  assert.equal(atE6.summary.hard_fail, 1);
+});
+
+test('any UNKNOWN escalates once expect_builds_after has landed, even with builds > 0', () => {
+  const assertion = { id: 'A1', type: 'min_distinct_cpu_gpu_pairs', scenarios: ['S17'] };
+  const thresholds = { A1_min_distinct_pairs: { value: 3 } };
+  const scenarios = [{ id: 'S17', expect_builds_after: 'E6' }];
+  // build_count > 0 but the assertion is UNKNOWN (no selected builds to measure):
+  // the OLD predicate (build_count === 0) would NOT have escalated this row.
+  const artifacts = new Map([['S17', art({ build_count: 5, selected: [], selected_pair_count: 0 })]]);
 
   const preE6 = runSuite(assertion, thresholds, scenarios, artifacts, { suite: { current_epic: 'E1' } });
   assert.equal(preE6.results[0].status, STATUSES.UNKNOWN);

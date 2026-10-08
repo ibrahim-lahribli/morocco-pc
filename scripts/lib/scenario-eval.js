@@ -44,8 +44,10 @@
 // Disposition - what a row MEANS, as distinct from its raw status:
 //   PASS | EXPECTED-RED | FAIL | WAIVED | UNKNOWN
 // A raw FAIL becomes EXPECTED-RED (hypothesis), WAIVED, or stays FAIL (approved);
-// a raw UNKNOWN is escalated to a HARD FAIL when the row's scenario was expected
-// to produce builds (see `expect_builds_after`) but produced none.
+// a raw UNKNOWN is escalated to a HARD FAIL when the row's scenario expects
+// builds and that epic has LANDED (see `expect_builds_after`) - ANY UNKNOWN, not
+// only an empty build set, because a landed epic means the harness should be able
+// to judge the row.
 
 const DEFAULT_SCORE_TOLERANCE = 1e-3;
 
@@ -117,8 +119,9 @@ function validateExpectation(entry, path) {
 
 /**
  * A scenario's builds are expected once the epic named by `expect_builds_after`
- * has LANDED, i.e. `current_epic >= that label`. Before then, a no-build outcome
- * is a pending UNKNOWN; after, it is a HARD FAIL.
+ * has LANDED, i.e. `current_epic >= that label`. Before then an UNKNOWN outcome
+ * is pending; once the epic lands, ANY UNKNOWN row for that scenario escalates to
+ * a HARD FAIL - the check is NOT limited to an empty build set.
  */
 function scenarioExpectsBuilds(scenario, currentEpicIndex) {
   if (scenario === undefined || scenario === null || scenario.expect_builds_after === undefined) return false;
@@ -126,14 +129,16 @@ function scenarioExpectsBuilds(scenario, currentEpicIndex) {
 }
 
 /**
- * If a row is UNKNOWN and one of its scenarios is expected to produce builds but
- * assembled none, return that scenario id - the row escalates to a hard FAIL.
+ * If a row is UNKNOWN and one of its scenarios expects builds whose epic has
+ * LANDED (`expect_builds_after` reached), return that scenario id - the row
+ * escalates to a hard FAIL. ANY UNKNOWN escalates once the epic has landed; the
+ * check is deliberately NOT limited to `build_count === 0`, because a row can be
+ * UNKNOWN for reasons other than an empty build set (e.g. no selected build
+ * carries a GPU) and a landed epic means the harness should be able to judge it.
  */
-function rowEscalation(result, scenarioById, artifacts, currentEpicIndex) {
+function rowEscalation(result, scenarioById, currentEpicIndex) {
   for (const sid of result.scenario_ids) {
-    if (!scenarioExpectsBuilds(scenarioById.get(sid), currentEpicIndex)) continue;
-    const artifact = artifacts.get(sid);
-    if (artifact !== undefined && artifact !== null && artifact.build_count === 0) return sid;
+    if (scenarioExpectsBuilds(scenarioById.get(sid), currentEpicIndex)) return sid;
   }
   return null;
 }
@@ -803,8 +808,20 @@ function evaluateSuite({ suite, artifacts, artifactsSecond, pi1 }) {
   const byId = new Map(suite.scenarios.map((scenario) => [scenario.id, scenario]));
   const get = (id) => (artifacts.has(id) ? artifacts.get(id) : null);
   const getSecond = (id) => (artifactsSecond.has(id) ? artifactsSecond.get(id) : null);
-  const thresholds = suite.thresholds;
+  const thresholds = suite.thresholds === undefined || suite.thresholds === null ? {} : suite.thresholds;
   const results = [];
+
+  // Validate every THRESHOLD entry's expectation up front, on the same contract
+  // as assertions (item 2c): a status must be one of hypothesis/approved/waived,
+  // and an approved/waived entry must carry its reviewer/reviewed_on (and reason
+  // when waived), or the evaluator THROWS rather than running lenient.
+  for (const key of Object.keys(thresholds)) {
+    const entry = thresholds[key];
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry) || entry.status === undefined) {
+      throw new Error('scenario-eval: threshold[' + key + '] requires an explicit expectation status');
+    }
+    validateExpectation(entry, 'threshold[' + key + ']');
+  }
 
   // Validate every assertion's expectation up front: an approved/waived entry
   // missing its reviewer/reviewed_on(/reason) fails fast here.
@@ -865,12 +882,12 @@ function evaluateSuite({ suite, artifacts, artifactsSecond, pi1 }) {
         ? DISPOSITIONS.FAIL
         : (expectation.status === EXPECTATION_STATUSES.WAIVED ? DISPOSITIONS.WAIVED : DISPOSITIONS.EXPECTED_RED);
     } else {
-      const escalatedBy = rowEscalation(result, byId, artifacts, currentEpicIndex);
+      const escalatedBy = rowEscalation(result, byId, currentEpicIndex);
       if (escalatedBy !== null) {
         result.disposition = DISPOSITIONS.FAIL;
         result.escalated = true;
         result.detail = (result.detail === '' ? '' : result.detail + '; ')
-          + 'UNKNOWN escalated to FAIL: ' + escalatedBy + ' is expected to produce builds but produced none';
+          + 'UNKNOWN escalated to FAIL: ' + escalatedBy + ' expects builds and expect_builds_after has landed';
       } else {
         result.disposition = DISPOSITIONS.UNKNOWN;
       }

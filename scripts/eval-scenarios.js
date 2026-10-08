@@ -32,7 +32,8 @@
 // Usage:
 //   node scripts/eval-scenarios.js [--file=test/golden/scenarios.json]
 //     [--baseline=test/golden/baseline-2026-10.md] [--json=out.json]
-//     [--filter=S03,S07] [--with-pi1] [--allow-red]
+//     [--volatile=<path>|--no-volatile] [--filter=S03,S07] [--with-pi1]
+//     [--allow-red]
 
 require('dotenv').config();
 
@@ -57,6 +58,7 @@ function parseArgs(argv) {
     file: DEFAULT_SCENARIO_FILE,
     baseline: DEFAULT_BASELINE_FILE,
     json: null,
+    volatile: null,
     filter: null,
     withPi1: false,
     allowRed: false,
@@ -75,6 +77,10 @@ function parseArgs(argv) {
       args.baseline = arg.slice('--baseline='.length);
     } else if (arg.startsWith('--json=')) {
       args.json = arg.slice('--json='.length);
+    } else if (arg.startsWith('--volatile=')) {
+      args.volatile = arg.slice('--volatile='.length);
+    } else if (arg === '--no-volatile') {
+      args.volatile = false;
     } else if (arg.startsWith('--filter=')) {
       args.filter = arg.slice('--filter='.length).split(',').map((id) => id.trim()).filter((id) => id !== '');
     } else {
@@ -91,26 +97,39 @@ function fail(message) {
 async function preflight(client) {
   const probe = await client.query('SELECT 1 AS ok');
   if (probe.rows.length !== 1) fail('preflight SELECT 1 returned no rows');
+  // Item 2b: assert EXACTLY ONE active scoring model by COUNT, not LIMIT 1. A
+  // LIMIT 1 silently accepts a second active row, and the eligibility flag must
+  // be unambiguous because the pinned-id loader fails fast on an inactive row.
+  const activeCount = await client.query('SELECT count(*)::int AS n FROM scoring_model WHERE is_active = true');
+  const activeModels = activeCount.rows[0].n;
+  if (activeModels !== 1) {
+    fail('expected exactly 1 active scoring model, found ' + activeModels + ' - seed the TEST branch first');
+  }
   const model = await client.query(
-    'SELECT id, name, version FROM scoring_model WHERE is_active = true ORDER BY created_at DESC, id ASC LIMIT 1'
+    'SELECT id, name, version FROM scoring_model WHERE is_active = true'
   );
   if (model.rows.length !== 1) {
-    fail('expected exactly 1 active scoring model, found ' + model.rows.length + ' - seed the TEST branch first');
+    fail('expected exactly 1 active scoring model row, found ' + model.rows.length);
   }
   const counts = await client.query(
     "SELECT (SELECT count(*)::int FROM product WHERE name LIKE 'Seed %') AS products,"
     + " (SELECT count(*)::int FROM store_offer o JOIN product p ON p.id = o.product_id WHERE p.name LIKE 'Seed %') AS offers,"
     + " (SELECT count(*)::int FROM component_assessment a JOIN product p ON p.id = a.product_id WHERE p.name LIKE 'Seed %') AS assessments"
   );
-  const freshness = await client.query(
+  const freshnessResult = await client.query(
     'SELECT min(last_checked_at) AS oldest, count(*)::int AS total,'
     + " count(*) FILTER (WHERE last_checked_at >= NOW() - INTERVAL '30 days')::int AS fresh"
     + ' FROM store_offer'
   );
+  // Item 2d: report the freshness instant as ISO (locale/timezone-independent).
+  // Date.prototype.toString() embeds a locale timezone and was needless
+  // committed-baseline churn.
+  const freshness = freshnessResult.rows[0];
+  if (freshness.oldest instanceof Date) freshness.oldest = freshness.oldest.toISOString();
   return {
     scoringModel: model.rows[0],
     counts: counts.rows[0],
-    freshness: freshness.rows[0],
+    freshness,
   };
 }
 
@@ -224,8 +243,79 @@ function printTable(results) {
   }
 }
 
+/**
+ * Rows whose committed result is not stable run-to-run (OG-41 family). They are
+ * excluded from the committed baseline and written to the volatile sidecar:
+ *   - A8: compares ranked signature lists ORDER-SENSITIVELY, so a raw build_score
+ *     on a .005 rounding boundary can flip a build's position under the ~1e-5
+ *     clock drift between two passes.
+ *   - the A9 PI-1 row (no scenarios): shells out to `npm run verify:pi1`, which
+ *     compares build_score before/after a probe insert, so the same drift makes
+ *     its PASS/FAIL flip. The A9 per-scenario (selected-set) rows stay committed.
+ */
+function isVolatileResult(result) {
+  if (result.assertion === 'A8') return true;
+  if (result.assertion === 'A9' && result.scenario_ids.length === 0) return true;
+  return false;
+}
+
+/** Count a subset of results exactly as the full-suite summary does. */
+function summarizeResults(results) {
+  const out = {
+    total: results.length,
+    pass: 0, fail: 0, unknown: 0,
+    disposition_pass: 0, expected_red: 0, hard_fail: 0, waived: 0, disposition_unknown: 0,
+  };
+  for (const result of results) {
+    if (result.status === 'PASS') out.pass += 1;
+    else if (result.status === 'FAIL') out.fail += 1;
+    else out.unknown += 1;
+    if (result.disposition === 'PASS') out.disposition_pass += 1;
+    else if (result.disposition === 'EXPECTED-RED') out.expected_red += 1;
+    else if (result.disposition === 'FAIL') out.hard_fail += 1;
+    else if (result.disposition === 'WAIVED') out.waived += 1;
+    else out.disposition_unknown += 1;
+  }
+  return out;
+}
+
+/**
+ * Volatile observations (item 2d). These change every run WITHOUT an engine
+ * change - A8's raw-score drift and the offer-freshness instant - so they live
+ * in a sidecar, keeping the committed baseline diff-free unless something real
+ * moved.
+ */
+function renderVolatile({ freshness, results, pi1 }) {
+  const a8Rows = {};
+  for (const result of results) {
+    if (result.assertion !== 'A8') continue;
+    a8Rows[result.scenario_ids.join(',')] = result;
+  }
+  return {
+    note: 'VOLATILE observations - not part of the committed baseline. Regenerated every run; excluded from git (see test/golden/*.volatile.json in .gitignore).',
+    generated_at: new Date().toISOString(),
+    results: results.filter(isVolatileResult),
+    offer_freshness: {
+      fresh: freshness.fresh,
+      total: freshness.total,
+      oldest_iso: freshness.oldest,
+    },
+    a8_rows: a8Rows,
+    pi1: pi1 === null || pi1 === undefined
+      ? null
+      : { status: pi1.status, code: pi1.code, tail: pi1.tail },
+  };
+}
+
 function renderBaseline({ meta, suite, selected, artifacts, results, summary, fullRuns, pi1 }) {
   const lines = [];
+  // Item 2d: assertions whose ROW can change without any real change (A8, whose
+  // order-sensitive signature-list comparison flips on a .005 rounding boundary
+  // under ~1e-5 clock drift - OG-41) are excluded from the committed baseline
+  // and written to the volatile sidecar instead.
+  const volatileResults = results.filter((r) => isVolatileResult(r));
+  const committedResults = results.filter((r) => !isVolatileResult(r));
+  const committedSummary = summarizeResults(committedResults);
   lines.push('# Golden scenario baseline - ' + meta.date);
   lines.push('');
   lines.push('Generated by `scripts/eval-scenarios.js` on the UNCHANGED engine. Do not hand-edit: thresholds live in');
@@ -237,7 +327,7 @@ function renderBaseline({ meta, suite, selected, artifacts, results, summary, fu
   lines.push('- scoring model: `' + meta.scoringModel.name + '` ' + meta.scoringModel.version + ' (`' + meta.scoringModel.id + '`)');
   lines.push('- target: `TEST_DATABASE_URL` (host hidden); engine options `allow_unverified_seed_offers: true`');
   lines.push('- catalog: ' + meta.counts.products + ' products / ' + meta.counts.offers + ' offers / ' + meta.counts.assessments + ' assessments');
-  lines.push('- offer freshness: ' + meta.freshness.fresh + ' of ' + meta.freshness.total + ' within 30 days; oldest ' + meta.freshness.oldest);
+  lines.push('- offer freshness: see the volatile sidecar (`<baseline>.volatile.json`, not committed) - it changes as offers age.');
   lines.push('');
   lines.push('## Scenario inputs');
   lines.push('');
@@ -280,21 +370,28 @@ function renderBaseline({ meta, suite, selected, artifacts, results, summary, fu
   lines.push('');
   lines.push('| Assertion | Scenario(s) | Status | Disposition | Measured | Expected |');
   lines.push('|---|---|---|---|---|---|');
-  for (const result of results) {
+  for (const result of committedResults) {
     lines.push('| ' + result.assertion + ' | ' + result.scenario_ids.join(', ')
       + ' | ' + result.status + ' | ' + result.disposition
       + ' | ' + short(result.measured).replace(/\|/g, '\\|')
       + ' | ' + result.expected.replace(/\|/g, '\\|') + ' |');
   }
   lines.push('');
+  if (volatileResults.length > 0) {
+    lines.push('Volatile assertion(s) omitted from this committed table (full rows in the sidecar): '
+      + [...new Set(volatileResults.map((r) => r.assertion))].join(', ')
+      + ' - A8 (order-sensitive ranking) and the A9 PI-1 row are drift-sensitive (OG-41).');
+    lines.push('');
+  }
   lines.push('## Summary');
   lines.push('');
-  lines.push('- total ' + summary.total + ' / PASS ' + summary.pass + ' / FAIL ' + summary.fail + ' / UNKNOWN ' + summary.unknown);
-  lines.push('- dispositions: PASS ' + summary.disposition_pass + ' / EXPECTED-RED ' + summary.expected_red
-    + ' / FAIL ' + summary.hard_fail + ' / WAIVED ' + summary.waived + ' / UNKNOWN ' + summary.disposition_unknown);
-  const failedAssertions = [...new Set(results.filter((r) => r.status === 'FAIL').map((r) => r.assertion))];
-  const passedAssertions = [...new Set(results.filter((r) => r.status === 'PASS').map((r) => r.assertion))];
-  const unknownAssertions = [...new Set(results.filter((r) => r.status === 'UNKNOWN').map((r) => r.assertion))];
+  lines.push('- total ' + committedSummary.total + ' / PASS ' + committedSummary.pass + ' / FAIL ' + committedSummary.fail + ' / UNKNOWN ' + committedSummary.unknown
+    + ' (volatile assertion(s) excluded; see the sidecar)');
+  lines.push('- dispositions: PASS ' + committedSummary.disposition_pass + ' / EXPECTED-RED ' + committedSummary.expected_red
+    + ' / FAIL ' + committedSummary.hard_fail + ' / WAIVED ' + committedSummary.waived + ' / UNKNOWN ' + committedSummary.disposition_unknown);
+  const failedAssertions = [...new Set(committedResults.filter((r) => r.status === 'FAIL').map((r) => r.assertion))];
+  const passedAssertions = [...new Set(committedResults.filter((r) => r.status === 'PASS').map((r) => r.assertion))];
+  const unknownAssertions = [...new Set(committedResults.filter((r) => r.status === 'UNKNOWN').map((r) => r.assertion))];
   lines.push('- FAILing assertions: ' + (failedAssertions.length === 0 ? '(none)' : failedAssertions.join(', ')));
   lines.push('- UNKNOWN assertions: ' + (unknownAssertions.length === 0 ? '(none)' : unknownAssertions.join(', ')));
   lines.push('');
@@ -344,11 +441,7 @@ function renderBaseline({ meta, suite, selected, artifacts, results, summary, fu
   if (pi1 === null) {
     lines.push('NOT RUN in this pass (pass `--with-pi1` to spawn `npm run verify:pi1`).');
   } else {
-    lines.push('`npm run verify:pi1` -> ' + pi1.status + ' (exit ' + pi1.code + ').');
-    lines.push('');
-    lines.push('```');
-    lines.push(pi1.tail);
-    lines.push('```');
+    lines.push('Run in this pass (`--with-pi1`). Its PASS/FAIL, exit code and stdout tail are drift-sensitive (OG-41) and live in the volatile sidecar, not committed here - a flip is expected and is not a committed-baseline change.');
   }
   lines.push('');
   lines.push('## Reading this baseline');
@@ -525,6 +618,19 @@ async function main() {
       fs.writeFileSync(args.baseline, baselineText, 'utf8');
       console.log('baseline written: ' + args.baseline);
     }
+    const volatilePath = args.volatile === false
+      ? null
+      : (args.volatile !== null
+        ? args.volatile
+        : (args.baseline !== null ? args.baseline.replace(/\.md$/i, '') + '.volatile.json' : null));
+    if (volatilePath !== null) {
+      // Item 2d: volatile observations live in a sidecar so the committed
+      // baseline only diffs on real changes.
+      const volatileText = JSON.stringify(renderVolatile({ freshness: meta.freshness, results, pi1 }), null, 2);
+      fs.mkdirSync(path.dirname(volatilePath), { recursive: true });
+      fs.writeFileSync(volatilePath, volatileText + '\n', 'utf8');
+      console.log('volatile observations written: ' + volatilePath);
+    }
     if (args.json !== null) {
       fs.writeFileSync(args.json, JSON.stringify({ summary, results, fullRuns, pi1 }, null, 2), 'utf8');
       console.log('json written: ' + args.json);
@@ -561,4 +667,6 @@ async function main() {
   process.exit(exitCode);
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { parseArgs, preflight, renderBaseline, renderVolatile };
