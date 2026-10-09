@@ -3,35 +3,73 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parseArgs, preflight, renderBaseline, renderVolatile } = require('../eval-scenarios');
+const modelPin = require('./model-pin');
 
-test('preflight rejects zero or multiple active models before loading one', async () => {
-  for (const n of [0, 2]) {
-    const calls = [];
-    const db = { async query(sql) {
-      calls.push(sql);
-      if (sql === 'SELECT 1 AS ok') return { rows: [{ ok: 1 }] };
-      assert.equal(sql, 'SELECT count(*)::int AS n FROM scoring_model WHERE is_active = true');
-      return { rows: [{ n }] };
-    } };
-    await assert.rejects(preflight(db), new RegExp('found ' + n));
-    assert.equal(calls.length, 2);
-  }
-});
-
-test('preflight accepts exactly one active model and formats freshness as ISO', async () => {
+test('preflight resolves the DEFAULT pin with bound parameters and never takes an arbitrary row', async () => {
+  const calls = [];
   const responses = [
-    [{ ok: 1 }], [{ n: 1 }], [{ id: 'model', name: 'seed', version: '1' }],
+    [{ ok: 1 }],
+    [{ id: 'model', name: 'seed-minimal-v1', version: '1.0.0', configuration: {} }],
     [{ products: 100, offers: 101, assessments: 280 }],
     [{ oldest: new Date('2026-10-04T04:27:18Z'), fresh: 101, total: 101 }],
   ];
-  const db = { async query(sql) {
-    assert.ok(!sql.includes('LIMIT 1'));
+  const db = { async query(sql, params) {
+    calls.push({ sql, params });
+    assert.ok(!sql.includes('LIMIT 1'), 'the pin must never resolve by taking one arbitrary row');
     return { rows: responses.shift() };
   } };
   const meta = await preflight(db);
-  assert.equal(meta.freshness.oldest, '2026-10-04T04:27:18.000Z');
   assert.equal(meta.scoringModel.id, 'model');
-  assert.equal(responses.length, 0);
+  assert.equal(meta.scoringModel.name, 'seed-minimal-v1');
+  assert.deepEqual(calls[1].params, ['seed-minimal-v1', '1.0.0'],
+    'the legacy identity is bound as a parameter, not interpolated');
+  assert.equal(meta.freshness.oldest, '2026-10-04T04:27:18.000Z');
+  assert.equal(responses.length, 0, 'no query beyond the four the preflight needs');
+});
+
+test('preflight accepts an explicit pin, so a two-active-model branch is measurable', async () => {
+  const calls = [];
+  const responses = [
+    [{ ok: 1 }],
+    [{ id: 'v2', name: 'launch-v2', version: '1.0.0', configuration: {} }],
+    [{ products: 100, offers: 101, assessments: 280 }],
+    [{ oldest: new Date('2026-10-04T04:27:18Z'), fresh: 101, total: 101 }],
+  ];
+  const db = { async query(sql, params) { calls.push({ sql, params }); return { rows: responses.shift() }; } };
+  const meta = await preflight(db, 'launch-v2@1.0.0');
+  assert.equal(meta.scoringModel.name, 'launch-v2');
+  assert.equal(meta.scoringModel.version, '1.0.0');
+  assert.deepEqual(calls[1].params, ['launch-v2', '1.0.0']);
+});
+
+test('preflight fails closed on an ambiguous, inactive or unmatched pin, before any catalog query', async () => {
+  const cases = [
+    ['ambiguous', [{ id: 'a', name: 'x', version: '1' }, { id: 'b', name: 'x', version: '1' }], [], [],
+      /ambiguous, refusing to guess/],
+    ['inactive', [], [{ is_active: false }], [{ name: 'seed-minimal-v1', version: '1.0.0' }],
+      /exists but is NOT ACTIVE.*seed-minimal-v1@1\.0\.0/s],
+    ['unmatched', [], [], [{ name: 'seed-minimal-v1', version: '1.0.0' }],
+      /matched no row\. Active: seed-minimal-v1@1\.0\.0/],
+  ];
+  for (const [label, pinned, exists, active, pattern] of cases) {
+    const seen = [];
+    const db = { async query(sql) {
+      seen.push(sql);
+      if (sql === 'SELECT 1 AS ok') return { rows: [{ ok: 1 }] };
+      if (sql === modelPin.PIN_SQL) return { rows: pinned };
+      if (sql === modelPin.PIN_EXISTS_SQL) return { rows: exists };
+      if (sql === modelPin.ACTIVE_MODELS_SQL) return { rows: active };
+      throw new Error(label + ': the pin must fail before any catalog query, but got ' + sql);
+    } };
+    await assert.rejects(preflight(db, 'x@1'), pattern, label);
+  }
+});
+
+test('CLI exposes the model pin alongside the sidecar path and opt-out', () => {
+  assert.equal(parseArgs(['node', 'cli', '--volatile=custom.json']).volatile, 'custom.json');
+  assert.equal(parseArgs(['node', 'cli', '--no-volatile']).volatile, false);
+  assert.equal(parseArgs(['node', 'cli']).model, null);
+  assert.equal(parseArgs(['node', 'cli', '--model=launch-v2@1.0.0']).model, 'launch-v2@1.0.0');
 });
 
 test('baseline ignores volatile rows while sidecar preserves full evidence and ISO timestamps', () => {
@@ -69,9 +107,4 @@ test('baseline renders identities, prices, total and GPU share for every row, in
       best_gpu_price_share: null, best_cpu_ram_share: null }]]), results: [], fullRuns: [], pi1: null });
   assert.ok(text.includes('| S1 | 1 | 1 | CPU &#124; name | 400 | GPU name | 300 | Cooler name | 200 | 1000 | 0.3 |'));
   assert.ok(text.includes('| S0 | 0 | 0 | - | - | - | - | - | - | - | - |'));
-});
-
-test('CLI exposes sidecar path and opt-out', () => {
-  assert.equal(parseArgs(['node', 'cli', '--volatile=custom.json']).volatile, 'custom.json');
-  assert.equal(parseArgs(['node', 'cli', '--no-volatile']).volatile, false);
 });

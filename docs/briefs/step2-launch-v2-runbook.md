@@ -1,6 +1,6 @@
 # Step 2 runbook — activate launch-v2 on test-engine (DO NOT RUN YET)
 
-Status: **PARTIAL — §1 preconditions SATISFIED and §2 pre-flight VERIFIED 2026-10-09; §3–§5 (apply seed 013, differential run, new baseline) NOT RUN.** This file describes a coordinated step. Do not execute any command below until the
+Status: **PARTIAL — §1 preconditions SATISFIED, §2 pre-flight VERIFIED and the §4 prerequisite (Step-2 item 1) IMPLEMENTED 2026-10-09; §3–§5 (apply seed 013, differential run, new baseline) NOT RUN.** This file describes a coordinated step. Do not execute any command below until the
 operator confirms it. Every write targets the **`test-engine` branch only** (`TEST_DATABASE_URL`, endpoint
 `ep-weathered-salad-axdc6r3t`); production, `test` and `pre-018-2026-10-06` are out of scope.
 
@@ -56,7 +56,7 @@ Target: **18 ledger rows, 100 `Seed %` products, 101 offers, exactly ONE active 
 
 ## 4. Differential run
 
-1. Pin the harness to a model **by name@version** (Step-2 item 1 — NOT yet implemented, see §7). Run the golden
+1. Pin the harness to a model **by name@version** (Step-2 item 1 — IMPLEMENTED 2026-10-09, see §7). Run the golden
    harness twice, once per model, with the suite's fixed `as_of` (`2026-10-08T20:00:00.000Z`):
    `node scripts/eval-scenarios.js --model=seed-minimal-v1@1.0.0` then
    `--model=launch-v2@1.0.0`.
@@ -89,8 +89,10 @@ Target: **18 ledger rows, 100 `Seed %` products, 101 offers, exactly ONE active 
 1. **`is_active` conflicts three ways.** Step 2 wants both models active; seed 013 wants only launch-v2; the
    current harness preflight asserts **exactly one** active model and fails on two. Until the harness is pinned
    by name@version (Step-2 item 1, below), the differential run in §4 cannot execute on a two-active-model branch.
-2. **Step-2 item 1 (pin harnesses by name@version via CLI/env flag, default `seed-minimal-v1 1.0.0`) is NOT
-   implemented.** It is a prerequisite for §4 and is deliberately out of scope for the E0e change.
+2. **Step-2 item 1 is IMPLEMENTED 2026-10-09** — `scripts/lib/model-pin.js`, default pin
+   `seed-minimal-v1@1.0.0`, override `--model=<name@version>` or `SCORING_MODEL_PIN`, wired
+   into the four name-pinned harnesses, the golden preflight and `og01-catalog.js`; verified on a
+   real two-active-model branch (17/17 assertions, temp row removed). **§4 is executable now.**
 3. **`docs/briefs/requests.md` DOES carry the Platform notes — corrected 2026-10-09; an earlier revision of this line claimed they were not written.** Filed: the `listUseCases` vocabulary swap (2026-10-08, E1b — the observable half of Step-2 item 5), the `recommendation_query.as_of` persistence request (Decision 38 / OG-42), and the seed-number reservation (seed 013 taken; 014+ reserved for Platform). Still UNFILED from Step-2 item 5: that the API read an explicit scoring-model id from config, and that its DB tests stay on a branch where only v1 is active.
 4. `node scripts/run-seeds.js` is **not** the tool for this step: it targets the shared `DATABASE_URL` and has no
    TEST-branch routing. Use `scripts/apply-seed.js`.

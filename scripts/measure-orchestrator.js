@@ -43,7 +43,7 @@
 //     no other statement is issued beyond the preflight counts and the reads
 //     the orchestrator's own loaders/scoring already perform.
 //   * Preflight READ-ONLY counts must match the seed exactly (100 Seed %
-//     products, 1 active seed-minimal-v1 model, 101 seed offers, 25 seed
+//     products, 1 row matching the PINNED model, 101 seed offers, 25 seed
 //     assessments, 0 recommendation_query rows) - the run aborts otherwise,
 //     before any insert.
 //   * Cleanup is idempotent by id: only rows this run inserted are deleted,
@@ -55,7 +55,8 @@
 //     cap is raised on an IN-MEMORY COPY of the row returned to the loader
 //     (a read-only db decorator that forwards every statement unchanged).
 //
-// Run: node scripts/measure-orchestrator.js   (only after the operator asks)
+// Run: node scripts/measure-orchestrator.js [--model=<name@version>]
+//   (only after the operator asks)
 
 require('dotenv').config();
 const { Client } = require('pg');
@@ -65,6 +66,7 @@ const { runRecommendationSnapshot } = require('../src/recommendation/orchestrato
 const { rankBuilds, TOP_N_PERSISTED } = require('../src/recommendation/ranking');
 const { EXPANSION_ORDER } = require('../src/recommendation/assembly');
 const { SELECT_SCORING_MODEL_SQL } = require('../src/recommendation/scoring');
+const modelPin = require('./lib/model-pin');
 
 /** The uncapped variant cap: never written anywhere, only seen by the loader. */
 const HIGH_CAP = 100000;
@@ -142,6 +144,8 @@ const CLAIM_BAND = { exact: 0, close: 2 };
  * batch 2, 25 + 87 + 63 = 175; see docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md).
  * Update in the same session as any seed that changes the canonical catalog
  * (AGENTS.md section 8). */
+// `models` counts the rows matching the PIN (Step-2 item 1 / OG-39), not the
+// active models: a two-active-model branch must still resolve its pin to one.
 const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 280, queries: 0 };
 
 function fail(message) {
@@ -162,10 +166,12 @@ async function count(client, sql, params = []) {
  * Read-only preflight. Aborts (before any write) unless every count matches
  * the seed exactly; returns the pinned seed scoring-model id.
  */
-async function preflight(client) {
+async function preflight(client, pin = modelPin.DEFAULT_MODEL_PIN) {
+  const pinParts = modelPin.parseModelPin(pin);
   const products = await count(client, "SELECT count(*)::int AS count FROM product WHERE name LIKE 'Seed %'");
   const models = await count(client,
-    "SELECT count(*)::int AS count FROM scoring_model WHERE name = 'seed-minimal-v1' AND version = '1.0.0' AND is_active = true");
+    'SELECT count(*)::int AS count FROM scoring_model WHERE name = $1 AND version = $2 AND is_active = true',
+    [pinParts.name, pinParts.version]);
   const offers = await count(client,
     "SELECT count(*)::int AS count FROM store_offer o JOIN product p ON p.id = o.product_id WHERE p.name LIKE 'Seed %'");
   const assessments = await count(client,
@@ -188,12 +194,13 @@ async function preflight(client) {
     fail('PREFLIGHT FAILED: build_candidate is not empty (' + buildCandidates + ' rows)');
   }
 
-  const model = await client.query(
-    "SELECT id, configuration FROM scoring_model WHERE name = 'seed-minimal-v1' AND version = '1.0.0' AND is_active = true");
+  // Step-2 item 1 (OG-39): resolve the PIN instead of a hard-coded name, so a
+  // two-active-model branch is measurable; it must match exactly one ACTIVE row.
+  const model = await modelPin.resolvePinnedModel(client, pin);
   // The Decision 23 O1 criteria need the per-occurrence penalty; it is read
   // from the same pinned row (read-only) so the acceptance margin is printed
   // rather than only the sign of the net score.
-  const configuration = model.rows[0].configuration;
+  const configuration = model.configuration;
   const unknownCompatPenalty = configuration === null || configuration === undefined
     ? undefined
     : configuration.unknown_compat_penalty;
@@ -201,7 +208,7 @@ async function preflight(client) {
     fail('PREFLIGHT FAILED: scoring_model.configuration.unknown_compat_penalty must be a finite number'
       + ' >= 0 to measure the Decision 23 O1 criteria (found: ' + JSON.stringify(unknownCompatPenalty) + ')');
   }
-  return { observed, scoringModelId: model.rows[0].id, unknownCompatPenalty };
+  return { observed, scoringModelId: model.id, unknownCompatPenalty, pin };
 }
 
 /** The two measurement queries, inserted in ONE transaction; ids captured. */
@@ -953,9 +960,10 @@ async function main() {
     console.log('target: test-scratch only (host: ' + hostOf(dbConfig.connectionString) + ')');
     console.log('the shared DATABASE_URL is never contacted and never printed');
 
-    const pre = await preflight(client);
+    const pin = modelPin.modelPinValue(modelPin.readModelPinFlag(process.argv.slice(2)));
+    const pre = await preflight(client, pin);
     console.log('preflight ok: ' + JSON.stringify(pre.observed)
-      + ' (seed scoring_model ' + pre.scoringModelId + ')');
+      + ' (' + pre.pin + ' -> scoring_model ' + pre.scoringModelId + ')');
 
     const labels = await loadPairLabels(client);
     console.log('pair labels loaded (read-only): ' + labels.productNames.size + ' product name(s), '

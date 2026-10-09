@@ -1,8 +1,14 @@
 # OG-39 — scoring-model activation plan
 
-**Status: PROPOSED, NOT EXECUTED (E0d, 2026-10-08).** No seed, model activation,
-engine eligibility change or harness selector is implemented by this document.
-Audience: Engine and Platform maintainers coordinating a TEST-first activation.
+**Status: PARTIALLY IMPLEMENTED (Step-2 item 1, 2026-10-09).** The HARNESS
+SELECTOR is implemented: `scripts/lib/model-pin.js` resolves a model by
+`name@version` among active rows (default `seed-minimal-v1@1.0.0`; override
+`--model=<pin>` or `SCORING_MODEL_PIN`) and every comparison harness plus the
+golden preflight uses it, so a TWO-ACTIVE-model branch is measurable. **No seed,
+model activation or engine eligibility change has been made by this document:**
+seed 013 is still unapplied, `launch-v2` exists on no database, and
+`seed-minimal-v1@1.0.0` remains the only active model. Audience: Engine and
+Platform maintainers coordinating a TEST-first activation.
 Scope: model selection and reproducible comparison, not E2/E3 or shared-DB changes.
 
 ## Verified constraints and selection
@@ -24,17 +30,18 @@ Both engine entry points resolve ONLY `recommendation_query.scoring_model_id`.
 The E1b plan's instruction to drop the discovery predicate and run an inactive v1 was
 incorrect and is superseded here. Removing that predicate alone cannot keep v1 runnable.
 
-Current golden preflight requires exactly one active model. The following relaxation is
-**a future change**, not part of E0d.
+**IMPLEMENTED 2026-10-09** - the golden preflight no longer asserts a global active
+count; it resolves the PIN (Step-2 item 1, Case (a) step 3) and prints the global
+count for visibility. The fail-fast checks are preserved and extended.
 
 ## Case (a): two active models allowed (matches current schema)
 
 1. Obtain confirmation of the dedicated TEST engine branch. Use the existing
    `getWriteTestDbUrl()` guard and verify reachability/catalog/ledger read-only.
-2. Add explicit `--model=<name>@<version>` selection to all comparison harnesses.
+2. **DONE 2026-10-09.** Add explicit `--model=<name>@<version>` selection to all comparison harnesses.
    Require exactly one matching row and `is_active === true`; pin its ID on every
    query. No latest-model substitution, no inactive override, no silent fallback.
-3. Change golden preflight from global active-count equality to **pinned model exists
+3. **DONE 2026-10-09.** Change golden preflight from global active-count equality to **pinned model exists
    and is active**; print the global active count for visibility. Preserve fail-fast
    checks and add tests for missing, inactive and ambiguous name/version selectors.
 4. Do NOT apply the existing seed 013 as-is for this strategy: it deactivates v1.

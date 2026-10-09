@@ -190,6 +190,19 @@ so the committed baseline is a faithful pre-change snapshot. E2–E8 remain unst
 blocked on Step-2 item 1 (pin a model by name@version), because the preflight asserts exactly one active
 scoring model. `docs/briefs/step2-launch-v2-runbook.md` §1–§2 record the verified preconditions.
 
+### Step-2 item 1 — the scoring-model pin (IMPLEMENTED 2026-10-09)
+
+`scripts/lib/model-pin.js` resolves a model by `name@version` among ACTIVE rows
+(default `seed-minimal-v1@1.0.0`; `--model=` beats `SCORING_MODEL_PIN` beats the
+default) and replaces both old selectors: the four hard-coded name pins and the
+golden preflight's "exactly ONE active model by COUNT" gate. It fails closed on a
+malformed, ambiguous, inactive or unmatched pin, and prints the active models when
+a pin does not resolve. Verified on a REAL two-active-model branch (temporary
+`pin-rehearsal-tmp@9.9.9`, 17/17 assertions, temp row removed; default pin gives a
+byte-identical golden baseline; PI-1 PASS pinned to the temp model). This unblocks
+runbook §4. §3 (applying seed 013) is still NOT run, so `launch-v2` exists on no
+database and this is a SELECTOR, not an activation.
+
 ## E1–E8 (after E0; one PR each)
 
 E1 scoring model "launch-v2" with use_case_profiles (gpu_policy, spend_targets by role, optional role_weights override); export listUseCases(configuration) from the scoring barrel; decouple the vocabulary from gpu_required_use_cases (Decision 37 supersedes 17.6). Keep seed-minimal-v1 for reproducibility; follow docs/RECIPES/add-a-scoring-model-version.md.

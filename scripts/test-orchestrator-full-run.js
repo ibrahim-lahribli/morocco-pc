@@ -16,6 +16,7 @@ const { Client } = require('pg');
 const { getWriteTestDbUrl } = require('./lib/db-url');
 const { runRecommendationFullRun } = require('../src/recommendation/orchestrator/full-run');
 const { ERROR_CODES, CandidateSelectionError } = require('../src/recommendation/candidates/errors');
+const modelPin = require('./lib/model-pin');
 
 let passed = 0;
 let failed = 0;
@@ -83,12 +84,16 @@ async function countsForQuery(client, queryId) {
 // OG-01 batch 1) + 004b (63 CPU/MOTHERBOARD rows + 60 SSD/RAM rows, OG-01
 // batch 2) = 235 assessments. Update this when a seed file changes the canonical
 // catalog (AGENTS.md section 8 same-session rule).
+// `models` counts the rows matching the PIN (Step-2 item 1 / OG-39), not the
+// active models: a two-active-model branch must still resolve its pin to one.
 const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 280, queries: 0 };
 
-async function preflight(client) {
+async function preflight(client, pin = modelPin.DEFAULT_MODEL_PIN) {
+  const pinParts = modelPin.parseModelPin(pin);
   const products = await count(client, "SELECT count(*)::int AS count FROM product WHERE name LIKE 'Seed %'");
   const models = await count(client,
-    "SELECT count(*)::int AS count FROM scoring_model WHERE name = 'seed-minimal-v1' AND version = '1.0.0' AND is_active = true");
+    'SELECT count(*)::int AS count FROM scoring_model WHERE name = $1 AND version = $2 AND is_active = true',
+    [pinParts.name, pinParts.version]);
   const offers = await count(client,
     "SELECT count(*)::int AS count FROM store_offer o JOIN product p ON p.id = o.product_id WHERE p.name LIKE 'Seed %'");
   const assessments = await count(client,
@@ -109,9 +114,9 @@ async function preflight(client) {
   if (buildCandidates !== 0) {
     throw new Error('PREFLIGHT FAILED: build_candidate is not empty (' + buildCandidates + ' rows)');
   }
-  const model = await client.query(
-    "SELECT id FROM scoring_model WHERE name = 'seed-minimal-v1' AND version = '1.0.0' AND is_active = true");
-  return { observed, scoringModelId: model.rows[0].id };
+  // Step-2 item 1 (OG-39): resolve the PIN instead of a hard-coded name.
+  const model = await modelPin.resolvePinnedModel(client, pin);
+  return { observed, scoringModelId: model.id, pin };
 }
 
 async function insertQuery(client, scoringModelId) {
@@ -226,8 +231,9 @@ async function main() {
     connected = true;
     console.log('target: test-scratch only (host: ' + hostOf(dbConfig.connectionString) + ')');
     console.log('the shared DATABASE_URL is never contacted and never printed');
-    const ctx = await preflight(client);
-    console.log('preflight ok: seed-minimal-v1, ' + JSON.stringify(ctx.observed));
+    const pin = modelPin.modelPinValue(modelPin.readModelPinFlag(process.argv.slice(2)));
+    const ctx = await preflight(client, pin);
+    console.log('preflight ok: ' + ctx.pin + ', ' + JSON.stringify(ctx.observed));
     await other.connect();
     console.log('second connection open (persisted rows are checked from it)');
     const queryId = await testFullPass(client, other, ctx, createdIds);

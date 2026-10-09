@@ -33,7 +33,7 @@
 //   node scripts/eval-scenarios.js [--file=test/golden/scenarios.json]
 //     [--baseline=test/golden/baseline-2026-10.md] [--json=out.json]
 //     [--volatile=<path>|--no-volatile] [--filter=S03,S07] [--with-pi1]
-//     [--allow-red] [--cleanup-orphans]
+//     [--allow-red] [--cleanup-orphans] [--model=<name@version>]
 //
 // Orphan safety (E0e): every row this harness inserts is linked to a
 // recommendation_profile named `golden-eval-<runId>` (selection logic in
@@ -43,6 +43,16 @@
 // id-scoped cleanup. Nothing outside the `golden-eval-` prefix is ever deleted;
 // rows predating the marker need a hand removal. `--cleanup-orphans` runs that
 // startup sweep alone and exits.
+//
+// Step-2 item 1 / OG-39: WHICH active scoring model this run measures is a PIN,
+// `--model=<name@version>` or the SCORING_MODEL_PIN environment variable,
+// defaulting to `seed-minimal-v1@1.0.0` (scripts/lib/model-pin.js). This
+// replaces the old "exactly ONE active model by COUNT" preflight, which refused
+// to run on the two-active-model branch the Step-2 differential run needs. The
+// pin still fails closed: zero matches, more than one match, or a pin naming
+// only an INACTIVE model are hard errors, and the active models are printed
+// when a pin does not resolve - so a second active model is measurable, never
+// guessed.
 
 require('dotenv').config();
 
@@ -56,6 +66,7 @@ const orchestrator = require('../src/recommendation/orchestrator');
 const ranking = require('../src/recommendation/ranking');
 const scenarioEval = require('./lib/scenario-eval');
 const orphans = require('./lib/harness-orphans');
+const modelPin = require('./lib/model-pin');
 
 const DEFAULT_SCENARIO_FILE = 'test/golden/scenarios.json';
 const DEFAULT_BASELINE_FILE = 'test/golden/baseline-2026-10.md';
@@ -70,6 +81,7 @@ function parseArgs(argv) {
     json: null,
     volatile: null,
     filter: null,
+    model: null,
     withPi1: false,
     allowRed: false,
     cleanupOrphans: false,
@@ -94,6 +106,8 @@ function parseArgs(argv) {
       args.volatile = arg.slice('--volatile='.length);
     } else if (arg === '--no-volatile') {
       args.volatile = false;
+    } else if (arg.startsWith('--model=')) {
+      args.model = arg.slice('--model='.length);
     } else if (arg.startsWith('--filter=')) {
       args.filter = arg.slice('--filter='.length).split(',').map((id) => id.trim()).filter((id) => id !== '');
     } else {
@@ -107,23 +121,16 @@ function fail(message) {
   throw new Error(message);
 }
 
-async function preflight(client) {
+async function preflight(client, pin = modelPin.DEFAULT_MODEL_PIN) {
   const probe = await client.query('SELECT 1 AS ok');
   if (probe.rows.length !== 1) fail('preflight SELECT 1 returned no rows');
-  // Item 2b: assert EXACTLY ONE active scoring model by COUNT, not LIMIT 1. A
-  // LIMIT 1 silently accepts a second active row, and the eligibility flag must
-  // be unambiguous because the pinned-id loader fails fast on an inactive row.
-  const activeCount = await client.query('SELECT count(*)::int AS n FROM scoring_model WHERE is_active = true');
-  const activeModels = activeCount.rows[0].n;
-  if (activeModels !== 1) {
-    fail('expected exactly 1 active scoring model, found ' + activeModels + ' - seed the TEST branch first');
-  }
-  const model = await client.query(
-    'SELECT id, name, version FROM scoring_model WHERE is_active = true'
-  );
-  if (model.rows.length !== 1) {
-    fail('expected exactly 1 active scoring model row, found ' + model.rows.length);
-  }
+  // Step-2 item 1 (OG-39): the old gate asserted EXACTLY ONE active model by
+  // COUNT, which makes the two-active-model differential run unrunnable. The pin
+  // replaces it and is strictly stronger: it names WHICH active model this run
+  // measures, still fails on zero or multiple matches, and still cannot execute
+  // an inactive row (resolvePinnedModel enforces all three and lists the active
+  // models when the pin does not resolve).
+  const model = await modelPin.resolvePinnedModel(client, pin);
   const counts = await client.query(
     "SELECT (SELECT count(*)::int FROM product WHERE name LIKE 'Seed %') AS products,"
     + " (SELECT count(*)::int FROM store_offer o JOIN product p ON p.id = o.product_id WHERE p.name LIKE 'Seed %') AS offers,"
@@ -140,7 +147,7 @@ async function preflight(client) {
   const freshness = freshnessResult.rows[0];
   if (freshness.oldest instanceof Date) freshness.oldest = freshness.oldest.toISOString();
   return {
-    scoringModel: model.rows[0],
+    scoringModel: { id: model.id, name: model.name, version: model.version },
     counts: counts.rows[0],
     freshness,
   };
@@ -654,13 +661,23 @@ async function main() {
       process.exit(orphanSweep.unmarked > 0 ? 1 : 0);
     }
     await assertNoUnmarkedQueries(client);
+    // Fail on an unresolvable pin BEFORE this run writes anything: the marker
+    // profile below is the first write, and a mistyped --model= must not leave
+    // one behind. Read-only, so a bad pin costs no cleanup.
+    const pin = modelPin.modelPinValue(args.model);
+    await modelPin.resolvePinnedModel(client, pin);
     const runId = newRunId();
     runProfileId = await createHarnessProfile(client, orphans.harnessProfileName(runId));
     console.log('run marker: ' + orphans.harnessProfileName(runId) + ' (' + runProfileId + ')');
 
-    const meta = await preflight(client);
+    const meta = await preflight(client, pin);
     console.log('scoring model: ' + meta.scoringModel.name + ' ' + meta.scoringModel.version
-      + ' (' + meta.scoringModel.id + ')');
+      + ' (' + meta.scoringModel.id + ') [pin ' + pin + ']');
+    // OG-39 / activation-plan Case (a) step 3: print the GLOBAL active count for
+    // visibility. On the differential branch this is 2 and that is expected; the
+    // pin above is what decided which of them this run measures.
+    const activeModels = await modelPin.listActiveModels(client);
+    console.log('active models: ' + activeModels.length + ' (' + activeModels.join(', ') + ')');
     console.log('catalog: ' + JSON.stringify(meta.counts));
     console.log('offers: ' + meta.freshness.fresh + '/' + meta.freshness.total + ' fresh; oldest ' + meta.freshness.oldest);
 
