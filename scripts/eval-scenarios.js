@@ -15,7 +15,7 @@
 //     set, DATABASE_URL is set, and the two normalized hosts differ. The shared
 //     DATABASE_URL is NEVER contacted for data.
 //   * Engine seam: for each scenario one recommendation_query row is inserted,
-//     then runRecommendation({ db, queryId, options }) runs TWICE (A8
+//     then runRecommendationSnapshot(client, queryId, options) runs TWICE (A8
 //     determinism). The four scenarios tagged "full-run" also run
 //     runRecommendationFullRun once, to cover ranking -> selection ->
 //     explanation -> commit.
@@ -33,7 +33,16 @@
 //   node scripts/eval-scenarios.js [--file=test/golden/scenarios.json]
 //     [--baseline=test/golden/baseline-2026-10.md] [--json=out.json]
 //     [--volatile=<path>|--no-volatile] [--filter=S03,S07] [--with-pi1]
-//     [--allow-red]
+//     [--allow-red] [--cleanup-orphans]
+//
+// Orphan safety (E0e): every row this harness inserts is linked to a
+// recommendation_profile named `golden-eval-<runId>` (selection logic in
+// scripts/lib/harness-orphans.js). Startup deletes the harness's OWN orphans
+// left by earlier killed runs, the preflight then FAILS while any UNMARKED
+// recommendation_query row exists, and a SIGINT/SIGTERM handler runs the same
+// id-scoped cleanup. Nothing outside the `golden-eval-` prefix is ever deleted;
+// rows predating the marker need a hand removal. `--cleanup-orphans` runs that
+// startup sweep alone and exits.
 
 require('dotenv').config();
 
@@ -42,10 +51,11 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { Client } = require('pg');
 
-const { getWriteTestDbUrl } = require('./lib/db-url');
+const { getWriteTestDbUrl, describeTarget } = require('./lib/db-url');
 const orchestrator = require('../src/recommendation/orchestrator');
 const ranking = require('../src/recommendation/ranking');
 const scenarioEval = require('./lib/scenario-eval');
+const orphans = require('./lib/harness-orphans');
 
 const DEFAULT_SCENARIO_FILE = 'test/golden/scenarios.json';
 const DEFAULT_BASELINE_FILE = 'test/golden/baseline-2026-10.md';
@@ -62,11 +72,14 @@ function parseArgs(argv) {
     filter: null,
     withPi1: false,
     allowRed: false,
+    cleanupOrphans: false,
   };
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--with-pi1') {
       args.withPi1 = true;
+    } else if (arg === '--cleanup-orphans') {
+      args.cleanupOrphans = true;
     } else if (arg === '--allow-red') {
       args.allowRed = true;
     } else if (arg === '--no-baseline') {
@@ -147,16 +160,16 @@ async function loadMaps(client) {
   };
 }
 
-/** Insert one recommendation_query per scenario, in one transaction. */
-async function insertQueries(client, scoringModelId, scenarios) {
+/** Insert one MARKED recommendation_query per scenario, in one transaction. */
+async function insertQueries(client, scoringModelId, scenarios, profileId) {
   const ids = [];
   await client.query('BEGIN');
   try {
     for (const scenario of scenarios) {
       const inserted = await client.query(
-        'INSERT INTO recommendation_query (scoring_model_id, budget_amount, currency, use_case, priority, resolution)'
-        + ' VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-        [scoringModelId, String(scenario.budget), 'MAD', scenario.use_case, scenario.priority, scenario.resolution]
+        'INSERT INTO recommendation_query (recommendation_profile_id, scoring_model_id, budget_amount, currency, use_case, priority, resolution)'
+        + ' VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
+        [profileId, scoringModelId, String(scenario.budget), 'MAD', scenario.use_case, scenario.priority, scenario.resolution]
       );
       ids.push(inserted.rows[0].id);
     }
@@ -172,18 +185,26 @@ async function insertQueries(client, scoringModelId, scenarios) {
   return ids;
 }
 
-/** Delete ONLY this run's rows, in dependency order, and verify residue 0. */
-async function cleanup(client, ids) {
+/** Delete ONLY this run's rows (and its marker profile), in dependency order, and verify residue 0. */
+async function cleanup(client, ids, profileId) {
+  if (ids.length === 0 && !profileId) return { q: 0, bc: 0, comp: 0, res: 0, rej: 0 };
+  if (ids.length > 0) {
+    await client.query('DELETE FROM build_rejection WHERE recommendation_query_id = ANY($1::uuid[])', [ids]);
+    await client.query('DELETE FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[])', [ids]);
+    await client.query(
+      'DELETE FROM build_component WHERE build_candidate_id IN'
+      + ' (SELECT id FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[]))',
+      [ids]
+    );
+    await client.query('DELETE FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[])', [ids]);
+    await client.query('DELETE FROM recommendation_query WHERE id = ANY($1::uuid[])', [ids]);
+  }
+  // The marker profile goes LAST: while it exists, an interrupted run's rows stay
+  // attributable and the next startup can sweep them.
+  if (profileId) {
+    await client.query('DELETE FROM recommendation_profile WHERE id = $1', [profileId]);
+  }
   if (ids.length === 0) return { q: 0, bc: 0, comp: 0, res: 0, rej: 0 };
-  await client.query('DELETE FROM build_rejection WHERE recommendation_query_id = ANY($1::uuid[])', [ids]);
-  await client.query('DELETE FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[])', [ids]);
-  await client.query(
-    'DELETE FROM build_component WHERE build_candidate_id IN'
-    + ' (SELECT id FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[]))',
-    [ids]
-  );
-  await client.query('DELETE FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[])', [ids]);
-  await client.query('DELETE FROM recommendation_query WHERE id = ANY($1::uuid[])', [ids]);
   const residue = await client.query(
     'SELECT'
     + ' (SELECT count(*)::int FROM recommendation_query WHERE id = ANY($1::uuid[])) AS q,'
@@ -198,6 +219,88 @@ async function cleanup(client, ids) {
   const total = row.q + row.bc + row.comp + row.res + row.rej;
   if (total !== 0) fail('residue after cleanup is not zero: ' + JSON.stringify(row));
   return row;
+}
+
+// ---------------------------------------------------------------------------
+// Orphan management (E0e). Pure selection lives in scripts/lib/harness-orphans.js;
+// only the SQL below is impure. Nothing outside the harness prefix is deleted.
+// ---------------------------------------------------------------------------
+
+/** Unique per process start: compact ISO timestamp + pid. */
+function newRunId() {
+  return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z') + '-' + process.pid;
+}
+
+/** Create this run's marker profile and return its id. */
+async function createHarnessProfile(client, profileName) {
+  const inserted = await client.query(
+    'INSERT INTO recommendation_profile (name, description) VALUES ($1, $2) RETURNING id',
+    [profileName, 'Golden scenario harness run marker (scripts/eval-scenarios.js)']
+  );
+  return inserted.rows[0].id;
+}
+
+/** Read the marker-bearing profiles and every query row (two SELECTs). */
+async function readOrphanState(client) {
+  const profiles = await client.query('SELECT id, name FROM recommendation_profile ORDER BY name');
+  const queries = await client.query('SELECT id, recommendation_profile_id FROM recommendation_query ORDER BY id');
+  return { profiles: profiles.rows, queries: queries.rows };
+}
+
+/**
+ * Delete ONLY harness-marked orphan rows, in FK dependency order, in one
+ * transaction: build_rejection -> recommendation_result -> build_component ->
+ * build_candidate -> recommendation_query -> recommendation_profile.
+ * Unmarked/foreign rows are counted and reported but never touched.
+ */
+async function cleanupOrphans(client) {
+  const state = await readOrphanState(client);
+  const owned = orphans.harnessProfileIds(state.profiles);
+  const { marked, unmarked } = orphans.classifyQueries(state.queries, owned);
+  const report = { profiles: 0, queries: 0, dependents: 0, unmarked: unmarked.length };
+  if (owned.length === 0 && marked.length === 0) return report;
+  const queryIds = marked.map((row) => String(row.id));
+  await client.query('BEGIN');
+  try {
+    if (queryIds.length > 0) {
+      const rej = await client.query('DELETE FROM build_rejection WHERE recommendation_query_id = ANY($1::uuid[])', [queryIds]);
+      const res = await client.query('DELETE FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[])', [queryIds]);
+      const comp = await client.query(
+        'DELETE FROM build_component WHERE build_candidate_id IN'
+        + ' (SELECT id FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[]))',
+        [queryIds]
+      );
+      const bc = await client.query('DELETE FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[])', [queryIds]);
+      await client.query('DELETE FROM recommendation_query WHERE id = ANY($1::uuid[])', [queryIds]);
+      report.dependents = rej.rowCount + res.rowCount + comp.rowCount + bc.rowCount;
+      report.queries = queryIds.length;
+    }
+    if (owned.length > 0) {
+      await client.query('DELETE FROM recommendation_profile WHERE id = ANY($1::uuid[])', [owned]);
+      report.profiles = owned.length;
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (_rollbackError) {
+      // already gone
+    }
+    throw error;
+  }
+  return report;
+}
+
+/** Fail while any recommendation_query row carries no harness marker. */
+async function assertNoUnmarkedQueries(client) {
+  const state = await readOrphanState(client);
+  const owned = orphans.harnessProfileIds(state.profiles);
+  const { unmarked } = orphans.classifyQueries(state.queries, owned);
+  if (unmarked.length > 0) {
+    fail('preflight: ' + unmarked.length + ' recommendation_query row(s) carry no harness marker ("'
+      + orphans.HARNESS_PROFILE_PREFIX + '" profile prefix); unmarked rows are never deleted by the harness.'
+      + ' Remove them by hand first - see docs/briefs/step2-launch-v2-runbook.md.');
+  }
 }
 
 function gitBranch() {
@@ -326,6 +429,7 @@ function renderBaseline({ meta, suite, selected, artifacts, results, summary, fu
   lines.push('## Environment');
   lines.push('');
   lines.push('- git branch: `' + meta.branch + '`');
+  lines.push('- as_of: `' + (suite.as_of || '(legacy transaction clock)') + '`');
   lines.push('- scoring model: `' + meta.scoringModel.name + '` ' + meta.scoringModel.version + ' (`' + meta.scoringModel.id + '`)');
   lines.push('- target: `TEST_DATABASE_URL` (host hidden); engine options `allow_unverified_seed_offers: true`');
   lines.push('- catalog: ' + meta.counts.products + ' products / ' + meta.counts.offers + ' offers / ' + meta.counts.assessments + ' assessments');
@@ -472,9 +576,12 @@ function renderBaseline({ meta, suite, selected, artifacts, results, summary, fu
   lines.push('STEP-1 DEVIATION (recorded): A2b (GPU price growth) was expected RED on the unchanged engine, but the rank-1 GPU price');
   lines.push('genuinely grows with budget (S03 -> S05: 3200 -> 11500, ratio 3.59), so it PASSes. Kept as measured, not tuned to force RED.');
   lines.push('');
-  lines.push('KNOWN FLAKE (recorded, OG-41): A8 compares ranked signature lists ORDER-SENSITIVELY, while ranking orders by 2-dp-rounded');
-  lines.push('build_score, so a raw score on a .005 boundary can reorder two near-equal builds under the ~1e-5 clock drift between two');
-  lines.push('consecutive passes. A8 S09 is therefore intermittently RED; it is not a stable determinism failure.');
+  if (suite.as_of) {
+    lines.push('OG-41 (Decision 38): this suite pins as_of for scoring and offer freshness. A8 still compares ordered signatures');
+    lines.push('and raw scores; changing wall time no longer changes its run input. Catalog/model changes can still change results.');
+  } else {
+    lines.push('LEGACY CLOCK SENSITIVITY (OG-41): different transaction times can reorder near-equal rounded scores.');
+  }
   lines.push('');
   lines.push('A7-A9 are expected GREEN: they pin behaviour that already holds, so a RED there is a genuine regression, never a');
   lines.push('threshold to relax.');
@@ -488,22 +595,74 @@ async function main() {
   const args = parseArgs(process.argv);
   const suite = JSON.parse(fs.readFileSync(args.file, 'utf8'));
   const dbConfig = getWriteTestDbUrl();
+  const target = describeTarget(dbConfig.connectionString);
   const client = new Client(Object.assign({}, dbConfig, {
     application_name: 'morocco-pc-eval-scenarios',
     statement_timeout: 30000,
   }));
   const insertedIds = [];
+  let runProfileId = null;
+  let shuttingDown = false;
   let exitCode = 0;
+
+  const runCleanup = async (label) => {
+    const residue = await cleanup(client, insertedIds, runProfileId);
+    console.log(label + ': residue ' + JSON.stringify(residue));
+    return residue;
+  };
+  // SIGKILL cannot be caught, so the durable safety net is the startup sweep;
+  // this handler covers the catchable signals (Ctrl-C, a tool SIGTERM).
+  const onSignal = (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.error('received ' + signal + '; running cleanup before exit');
+    (async () => {
+      try {
+        await runCleanup('signal cleanup');
+      } catch (error) {
+        exitCode = 1;
+        console.error('SIGNAL CLEANUP FAILED: ' + error.message);
+      }
+      try {
+        await client.end();
+      } catch (_endError) {
+        // already closed
+      }
+      process.exit(exitCode === 0 ? 130 : exitCode);
+    })();
+  };
+  process.on('SIGINT', () => onSignal('SIGINT'));
+  process.on('SIGTERM', () => onSignal('SIGTERM'));
 
   try {
     await client.connect();
+    console.log('target: TEST branch only; endpoint ' + target.endpointId
+      + ' (' + (target.pooled ? 'pooled' : 'direct') + '), database ' + target.database
+      + '; shared DATABASE_URL never contacted');
+
+    // E0e: sweep the harness's OWN orphans, then refuse to run while any
+    // unmarked (foreign or pre-marker) recommendation_query row exists.
+    const orphanSweep = await cleanupOrphans(client);
+    console.log('startup orphan cleanup: ' + JSON.stringify(orphanSweep));
+    await assertNoUnmarkedQueries(client);
+    if (args.cleanupOrphans) {
+      await client.end();
+      console.log('RESULT: --cleanup-orphans only; no scenarios run'
+        + (orphanSweep.unmarked > 0 ? ' - unmarked rows remain (see the runbook)' : ''));
+      process.exit(orphanSweep.unmarked > 0 ? 1 : 0);
+    }
+    const runId = newRunId();
+    runProfileId = await createHarnessProfile(client, orphans.harnessProfileName(runId));
+    console.log('run marker: ' + orphans.harnessProfileName(runId) + ' (' + runProfileId + ')');
+
     const meta = await preflight(client);
-    console.log('target: TEST branch only (host hidden); shared DATABASE_URL never contacted');
     console.log('scoring model: ' + meta.scoringModel.name + ' ' + meta.scoringModel.version
       + ' (' + meta.scoringModel.id + ')');
     console.log('catalog: ' + JSON.stringify(meta.counts));
     console.log('offers: ' + meta.freshness.fresh + '/' + meta.freshness.total + ' fresh; oldest ' + meta.freshness.oldest);
 
+    if (typeof suite.as_of !== 'string') fail('scenario manifest requires a fixed ISO as_of');
+    const engineOptions = Object.freeze({ ...ENGINE_OPTIONS, asOf: suite.as_of });
     const maps = await loadMaps(client);
     const selected = args.filter === null
       ? suite.scenarios
@@ -529,15 +688,15 @@ async function main() {
 
     async function runScenarios(scenarios) {
       if (scenarios.length === 0) return;
-      const ids = await insertQueries(client, meta.scoringModel.id, scenarios);
+      const ids = await insertQueries(client, meta.scoringModel.id, scenarios, runProfileId);
       insertedIds.push(...ids);
       console.log('inserted ' + ids.length + ' recommendation_query row(s)');
       for (let index = 0; index < scenarios.length; index += 1) {
         const scenario = scenarios[index];
         const queryId = ids[index];
         queryIdByScenario.set(scenario.id, queryId);
-        const first = await orchestrator.runRecommendation({ db: client, queryId, options: ENGINE_OPTIONS });
-        const second = await orchestrator.runRecommendation({ db: client, queryId, options: ENGINE_OPTIONS });
+        const first = await orchestrator.runRecommendationSnapshot(client, queryId, engineOptions);
+        const second = await orchestrator.runRecommendationSnapshot(client, queryId, engineOptions);
         const rankedFirst = ranking.rankBuilds({ builds: first.builds });
         const selectedFirst = ranking.selectDiverseTop({
           ranked: rankedFirst.ranked, limit: ranking.TOP_N_PERSISTED, maxPerPair: ranking.MAX_PER_PAIR,
@@ -571,7 +730,7 @@ async function main() {
     for (const scenario of selected) {
       if (!Array.isArray(scenario.tags) || !scenario.tags.includes('full-run')) continue;
       try {
-        const result = await orchestrator.runRecommendationFullRun(client, queryIdByScenario.get(scenario.id), ENGINE_OPTIONS);
+        const result = await orchestrator.runRecommendationFullRun(client, queryIdByScenario.get(scenario.id), engineOptions);
         fullRuns.push({
           id: scenario.id,
           selected: Array.isArray(result.selected) ? result.selected.length : null,
@@ -606,7 +765,7 @@ async function main() {
 
     const baselineText = renderBaseline({
       meta: {
-        date: new Date().toISOString().slice(0, 10),
+        date: suite.as_of.slice(0, 10),
         branch: gitBranch(),
         scoringModel: meta.scoringModel,
         counts: meta.counts,
@@ -658,8 +817,7 @@ async function main() {
     console.error('EVAL FAILED: ' + (error && error.message ? error.message : String(error)));
   } finally {
     try {
-      const residue = await cleanup(client, insertedIds);
-      console.log('cleanup verified: residue ' + JSON.stringify(residue));
+      await runCleanup('cleanup verified');
     } catch (cleanupError) {
       exitCode = 1;
       console.error('CLEANUP FAILED: ' + cleanupError.message);

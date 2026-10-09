@@ -68,9 +68,43 @@ function getWriteTestDbUrl() {
   return resolveTestDbUrl(process.env);
 }
 
+// --- target descriptor + direct host (E0e / Step-2 C) -----------------------
+// Pure host inspection, shared by the harness startup line and the seed apply.
+// `describeTarget` names the endpoint id and whether the host is pooled;
+// `toDirectUrl` returns the SAME connection string pointed at the direct
+// (non-pooler) host. Migrations and session-level SET want the direct host:
+// Neon pools through PgBouncer in transaction mode, where a session SET does
+// not survive past its own transaction.
+function splitHost(urlString) {
+  const parsed = new URL(urlString);
+  const labels = parsed.hostname.toLowerCase().split('.');
+  const pooled = labels.length > 0 && labels[0].endsWith('-pooler');
+  const endpointId = pooled ? labels[0].slice(0, labels[0].length - '-pooler'.length) : labels[0];
+  const database = parsed.pathname.replace(/^\//, '') || null;
+  return { parsed, labels, pooled, endpointId, database };
+}
+
+function describeTarget(urlString) {
+  const { endpointId, pooled, database } = splitHost(urlString);
+  return { endpointId, pooled, database };
+}
+
+/** Swap the pooled host for the direct one, preserving credentials verbatim. */
+function toDirectUrl(urlString) {
+  const { parsed, labels, pooled } = splitHost(urlString);
+  if (!pooled) return urlString;
+  labels[0] = labels[0].slice(0, labels[0].length - '-pooler'.length);
+  const directHost = labels.join('.');
+  const at = urlString.toLowerCase().indexOf(parsed.hostname);
+  if (at === -1) return urlString;
+  return urlString.slice(0, at) + directHost + urlString.slice(at + parsed.hostname.length);
+}
+
 module.exports = {
   CONNECTION_TIMEOUT_MILLIS,
   normalizeHost,
   resolveTestDbUrl,
   getWriteTestDbUrl,
+  describeTarget,
+  toDirectUrl,
 };
