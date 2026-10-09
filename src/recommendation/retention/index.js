@@ -41,6 +41,16 @@
  *     price the Step 3 GPU policy can make omissible. Pinned against the real
  *     EXPANSION_ORDER by budget-floor.test.js.
  *
+ *   computeRoleTargets({ spendTargets, budgetAmount, resolution })   (E2)
+ *     - the per-role price targets from a profile's `spend_targets` (see
+ *     ./targets); the orchestrator passes them to retainTopKPerRole as
+ *     `roleTargets`.
+ *
+ *   resolutionMultiplier(resolution) / RESOLUTION_MULTIPLIERS /
+ *   BAND_TOLERANCE / BAND_CEILING_FACTOR
+ *     - the E2 band constants, re-exported so a caller can explain a retained
+ *     set without re-deriving them.
+ *
  * Field sourcing (no invention, one owner per field):
  *   verdicts          Engine 2D filter result, handed over intact by
  *                     reference (no fields added, none removed)
@@ -79,5 +89,21 @@
 
 const { retainTopKPerRole } = require('./retain');
 const { BUDGET_FLOOR_ROLES, computeBudgetFloor } = require('./budget-floor');
+const {
+  RESOLUTION_MULTIPLIERS,
+  BAND_TOLERANCE,
+  BAND_CEILING_FACTOR,
+  resolutionMultiplier,
+  computeRoleTargets,
+} = require('./targets');
 
-module.exports = { retainTopKPerRole, BUDGET_FLOOR_ROLES, computeBudgetFloor };
+module.exports = {
+  retainTopKPerRole,
+  BUDGET_FLOOR_ROLES,
+  computeBudgetFloor,
+  computeRoleTargets,
+  resolutionMultiplier,
+  RESOLUTION_MULTIPLIERS,
+  BAND_TOLERANCE,
+  BAND_CEILING_FACTOR,
+};

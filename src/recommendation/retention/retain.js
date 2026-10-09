@@ -35,6 +35,18 @@
  *   existing candidate-pool input already expects ({ results } of Engine 2D
  *   verdicts; Decision 14 Rule 6: Engine 3 changes nothing)
  *
+ * E2 (2026-10-09) - target-aware price-band retention:
+ *   `retainTopKPerRole` takes an OPTIONAL `roleTargets` argument (the
+ *   computeRoleTargets map from ./targets). When a role HAS a target its bucket
+ *   switches from "top-(K-1) by score" to "the best scorer in each price band"
+ *   (below / at / above, the above band bounded by the target hard ceiling, see
+ *   bandOf). The Decision 27 cheapest reservation and the Rule 3/5 top-up are
+ *   SHARED by both modes, so the K cap and the min(K, eligible) floor cannot
+ *   drift. When `roleTargets` is null/absent - every model that declares no
+ *   `use_case_profiles`, e.g. the retained seed-minimal-v1 - the pre-E2 rule
+ *   runs byte-for-byte, which is what keeps the committed v1 golden baseline
+ *   reproducible.
+ *
  * Field sourcing (no invention, one owner per field):
  *   verdicts          the Engine 2D filter result entries, handed over
  *                     intact by reference: identity, status, reason,
@@ -144,6 +156,8 @@ const { CANDIDATE_STATUSES } = require('../filtering/filter');
 // Decision 27 item 3: the single permitted Engine 3 import - a pure key
 // constructor, so the price-carrier key format keeps exactly one owner.
 const { priceKey } = require('../assembly/prices');
+// E2: the band half-width, a pure code constant owned by ./targets.
+const { BAND_TOLERANCE } = require('./targets');
 
 /** Verdict statuses eligible for retention (Decision 14 Rule 2). */
 const RETENTION_ELIGIBLE_STATUSES = Object.freeze([
@@ -247,6 +261,30 @@ function byScoreDescThenCanonical(a, b) {
   return b.score - a.score || compareCandidates(a.verdict, b.verdict);
 }
 
+/**
+ * E2: the price band a candidate falls in for one role target.
+ *
+ *   'at'    |price - target| <= target x BAND_TOLERANCE
+ *   'below' price < target x (1 - BAND_TOLERANCE)
+ *   'above' price > target x (1 + BAND_TOLERANCE) AND price <= ceiling
+ *   null    priced above the hard ceiling - in no band at all. The ceiling
+ *           bounds the above-target PICK only; a Rule 3/5 top-up may still
+ *           retain such a candidate to keep the K cap meaningful.
+ */
+function bandOf(price, target) {
+  const tolerance = target.target * BAND_TOLERANCE;
+  if (Math.abs(price - target.target) <= tolerance) {
+    return 'at';
+  }
+  if (price < target.target - tolerance) {
+    return 'below';
+  }
+  if (price <= target.ceiling) {
+    return 'above';
+  }
+  return null;
+}
+
 /** Small private recursive freezer; no shared helper module is created. */
 function deepFreeze(value) {
   if (value === null || typeof value !== 'object') {
@@ -277,6 +315,9 @@ function deepFreeze(value) {
  *          (candidate_caps.top_k_per_role, Decision 11 Rule 8)
  *        - prices: the Engine 2 Stage 1 price carrier (Decision 27), the
  *          same frozen null-prototype object Engine 3 receives; REQUIRED
+ *        - roleTargets: the OPTIONAL computeRoleTargets map (E2). null/absent
+ *          keeps the pre-E2 top-K rule; a role with an entry gets band retention
+ *          whose slots are bounded by the unchanged K and the hard ceiling
  * @returns {object} frozen { results: [retained verdict, ...] } - the exact
  *        Engine 3 candidate-pool input shape: verdicts are the producer's
  *        records handed over by reference, buckets in canonical
@@ -302,7 +343,7 @@ function retainTopKPerRole(sources) {
       'Candidate retention requires an object carrying filterResult, candidateScores and topKPerRole'
     );
   }
-  const { filterResult, candidateScores, topKPerRole, prices } = sources;
+  const { filterResult, candidateScores, topKPerRole, prices, roleTargets = null } = sources;
 
   // --- light gates (fail fast, before any work; existing vocabulary) -------
   if (!isPlainObject(filterResult) || !Array.isArray(filterResult.results)) {
@@ -351,6 +392,18 @@ function retainTopKPerRole(sources) {
     );
   }
 
+  // E2: `roleTargets` is the OPTIONAL computeRoleTargets map. null/absent is
+  // the pre-E2 rule (every bucket keeps top-K by score); a provided map must be
+  // a plain object holder, so a caller that wired it wrong is told here rather
+  // than by a silently ignored bucket.
+  if (roleTargets !== null && (typeof roleTargets !== 'object' || Array.isArray(roleTargets))) {
+    fail(
+      ERROR_CODES.INVALID_INPUT,
+      'roleTargets',
+      '"roleTargets" must be null or the computeRoleTargets map keyed by component role'
+    );
+  }
+
   const scoreByIdentity = buildScoreIndex(candidateScores);
 
   // --- Rule 2: bucket the eligible verdicts per role; REJECT never ranks ---
@@ -390,7 +443,28 @@ function retainTopKPerRole(sources) {
 
   // --- Rules 3/5 + Rule 4: order each bucket, retain the first K -----------
   const retained = [];
-  const retainBucket = (bucket) => {
+
+  /**
+   * E2: the best scorer in each price band for one role target, capped at
+   * `cap` entries (the K-1 slots the Decision 27 reservation does not own).
+   * Bands are visited in the already-sorted Rule 3/5 order, so the first entry
+   * of a band IS its best scorer and the pick is deterministic. A candidate
+   * priced above target.ceiling belongs to no band.
+   */
+  const bandPicks = (bucket, target, cap) => {
+    const selected = new Set();
+    const seenBands = Object.create(null);
+    for (const entry of bucket) {
+      if (selected.size >= cap) break;
+      const band = bandOf(priceOf(prices, entry.verdict), target);
+      if (band === null || seenBands[band] === true) continue;
+      seenBands[band] = true;
+      selected.add(entry);
+    }
+    return selected;
+  };
+
+  const retainBucket = (role, bucket) => {
     bucket.sort(byScoreDescThenCanonical);
     // n <= K: nothing is being cut, so the bucket is returned whole and no
     // price is consulted at all.
@@ -400,6 +474,14 @@ function retainTopKPerRole(sources) {
       }
       return;
     }
+    // E2: a declared target switches this bucket from "top-(K-1) by score" to
+    // "best scorer in each price band". Everything after this line - the
+    // Decision 27 reservation and the Rule 3/5 top-up - is ONE implementation
+    // shared by both modes, so the K cap cannot drift between them.
+    const target = roleTargets === null ? undefined : roleTargets[role];
+    const selected = target === undefined || target === null
+      ? new Set(bucket.slice(0, topKPerRole - 1))
+      : bandPicks(bucket, target, topKPerRole - 1);
     // Decision 27: reserve one slot for the cheapest eligible candidate. A
     // STRICTLY lower price moves the reservation, so equal prices fall to the
     // earliest Rule 3/5 position - and that entry is already inside the
@@ -413,7 +495,6 @@ function retainTopKPerRole(sources) {
     // Membership is by object identity and every bucket entry is a distinct
     // { verdict, score } object, so Set membership is exact - and the K-1
     // slice is empty at K=1, where the reservation alone fills the slot.
-    const selected = new Set(bucket.slice(0, topKPerRole - 1));
     selected.add(bucket[cheapest]);
     // Top the set back UP to the unchanged cap, drawing the remainder in Rule
     // 3/5 order. Without this the bucket would retain only K-1 entries whenever
@@ -436,7 +517,7 @@ function retainTopKPerRole(sources) {
   for (const role of COMPONENT_ROLES) {
     const bucket = bucketsByRole.get(role);
     if (bucket !== undefined) {
-      retainBucket(bucket);
+      retainBucket(role, bucket);
       bucketsByRole.delete(role);
     }
   }
@@ -444,8 +525,8 @@ function retainTopKPerRole(sources) {
   // canonical COMPONENT_ROLES. Should a foreign role ever appear, its bucket
   // is still retained (capped at K) and emitted after the canonical ones in
   // first-encounter order - deterministic either way.
-  for (const bucket of bucketsByRole.values()) {
-    retainBucket(bucket);
+  for (const [role, bucket] of bucketsByRole) {
+    retainBucket(role, bucket);
   }
 
   // Seal the verdicts first (a no-op for the producer's already-frozen

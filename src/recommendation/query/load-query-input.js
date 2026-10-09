@@ -17,7 +17,7 @@
  *         |                built THROUGH createCandidateSelectionInput() (no
  *         |                re-implemented validation)
  *         v
- *   frozen { query_id, scoring_model_id, input }
+ *   frozen { query_id, scoring_model_id, input, resolution }
  *
  * Decision 10 Rule 1: `required_roles` is the loader-derived constant below,
  * in canonical `component_role` enum order (NOT `COMPONENT_ROLES` order, NOT
@@ -35,7 +35,9 @@
  * number), `currency = row.currency` (verbatim; format owned by Engine 2A),
  * `use_case = row.use_case` (verbatim; Rule 2), `required_roles` = Rule 1
  * constant. `resolution`, `priority`, and the profile-FK column are NOT
- * selected and NOT used (Decision 17.6).
+ * selected and NOT used (Decision 17.6). `resolution` IS selected and
+ * carried verbatim as a SIBLING of `input` (E2); it is deliberately NOT part
+ * of the Engine 2A input contract, because only the retention stage reads it.
  *
  * Budget conversion (amended 2026-09-21): node-postgres returns NUMERIC
  * columns as strings. ONLY strings matching /^[0-9]+(\.[0-9]+)?$/ convert
@@ -95,7 +97,7 @@ const REQUIRED_ROLES = Object.freeze([
  * the profile-FK column are deliberately absent (Decision 17.6).
  */
 const SELECT_QUERY_INPUT_SQL = [
-  'SELECT id, budget_amount, currency, use_case, scoring_model_id',
+  'SELECT id, budget_amount, currency, use_case, scoring_model_id, resolution',
   'FROM recommendation_query',
   'WHERE id = $1',
 ].join(' ');
@@ -223,6 +225,7 @@ async function loadQueryInput(queryId, db) {
     query_id: row.id,
     scoring_model_id: row.scoring_model_id,
     input,
+    resolution: row.resolution,
   });
 }
 

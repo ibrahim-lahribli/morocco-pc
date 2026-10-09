@@ -19,7 +19,8 @@
  *   nowMs (epoch milliseconds)
  *     |  loadScoringModel(scoring_model_id, db)   Decision 11 (pinned FK only)
  *     v
- *   scoring model (configuration: weights, candidate_caps, gpu_required_use_cases)
+ *   scoring model (configuration: weights, candidate_caps, gpu_required_use_cases,
+ *                   use_case_profiles)
  *     |  loadCandidates(input, db)                Engine 2B
  *     v
  *   { input, candidates }
@@ -43,7 +44,8 @@
  *     v
  *   candidateScores { scores }
  *     |  retainTopKPerRole({ filterResult, candidateScores, topKPerRole,
- *     |                        prices: offerResult.prices })   Decision 27
+ *     |                        prices: offerResult.prices,
+ *     |                        roleTargets })   Decision 27 + E2
  *     v
  *   retentionResult { results }                  Decision 12/14 retention
  *     |  computeBudgetFloor({ retained, prices, budgetAmount, currency })
@@ -326,11 +328,15 @@ async function runRecommendation(args) {
   //     STEP 2 scores, and the Decision 11 cap. Decision 27 adds Stage 1's own
   //     carrier BY REFERENCE - the same frozen object Engine 3 gets at step 13 -
   //     so the cheapest-per-role reservation needs no query and no new loader.
+  // E2: the active model's per-use-case spend targets become per-role price
+  // targets. A model that declares no `use_case_profiles`, or no profile for
+  // this query's use case, yields null and retention keeps the pre-E2 rule.
   const retentionResult = retention.retainTopKPerRole({
     filterResult,
     candidateScores,
     topKPerRole: configuration.candidate_caps.top_k_per_role,
     prices: offerResult.prices,
+    roleTargets: resolveRoleTargets(configuration, queryInput),
   });
 
   // 11b. Decision 27: the zero-build diagnostic. Pure, and computed
@@ -413,6 +419,35 @@ async function runRecommendation(args) {
     // above deliberately stays last-in-spirit among the Decision 27 pair, and
     // no existing consumer reads this one yet.
     filter_verdicts: filterResult.results,
+  });
+}
+
+/**
+ * E2: per-role price targets for this pass, or null.
+ *
+ * Reads the ACTIVE model's `use_case_profiles[queryInput.input.use_case]`
+ * (Decision 37). `use_case_profiles` is an OPTIONAL configuration key and a
+ * model may declare only some use cases, so a missing key - or a use case the
+ * model does not declare - yields null and retention keeps the pre-E2 rule
+ * byte-for-byte. The profile shape itself is already validated by
+ * validateScoringModelConfiguration at load time; this only routes it.
+ */
+function resolveRoleTargets(configuration, queryInput) {
+  const profiles = configuration === null || typeof configuration !== 'object'
+    ? undefined
+    : configuration.use_case_profiles;
+  if (profiles === null || typeof profiles !== 'object' || Array.isArray(profiles)) {
+    return null;
+  }
+  const profile = profiles[queryInput.input.use_case];
+  if (profile === null || typeof profile !== 'object'
+      || profile.spend_targets === null || typeof profile.spend_targets !== 'object') {
+    return null;
+  }
+  return retention.computeRoleTargets({
+    spendTargets: profile.spend_targets,
+    budgetAmount: queryInput.input.budget_amount,
+    resolution: queryInput.resolution,
   });
 }
 

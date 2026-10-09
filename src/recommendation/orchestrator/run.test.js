@@ -778,6 +778,66 @@ test('topKPerRole comes from candidate_caps: K=1 keeps one of two eligible coole
   });
 });
 // ---------------------------------------------------------------------------
+// 6b. E2: per-role price targets reach retention (roleTargets).
+// ---------------------------------------------------------------------------
+
+test('E2: a model with use_case_profiles gives retention per-role price targets', async () => {
+  const db = createDb({
+    routes: {
+      configuration: {
+        use_case_profiles: {
+          GAMING: {
+            gpu_policy: 'REQUIRED',
+            spend_targets: { CPU: 0.17, GPU: 0.38, MOTHERBOARD: 0.10 },
+          },
+        },
+      },
+    },
+  });
+  await withSpies([
+    { key: 'retention', namespace: retentionModule, name: 'retainTopKPerRole' },
+  ], async (spies) => {
+    await runRecommendation({ db, queryId: QUERY_ID });
+    const roleTargets = spies.retention.calls[0].args[0].roleTargets;
+    assert.notEqual(roleTargets, null);
+    assert.deepEqual(Object.keys(roleTargets).sort(), ['CPU', 'GPU', 'MOTHERBOARD']);
+    assert.equal(roleTargets.CPU.target, 0.17 * 12000);
+    // The fixture query row carries no resolution, so the GPU multiplier is neutral.
+    assert.equal(roleTargets.GPU.target, 0.38 * 12000);
+    assert.equal(roleTargets.GPU.ceiling, roleTargets.GPU.target * 2);
+  });
+});
+
+test('E2: a model without use_case_profiles passes roleTargets null (pre-E2 rule)', async () => {
+  const db = createDb();
+  await withSpies([
+    { key: 'retention', namespace: retentionModule, name: 'retainTopKPerRole' },
+  ], async (spies) => {
+    await runRecommendation({ db, queryId: QUERY_ID });
+    assert.equal(spies.retention.calls[0].args[0].roleTargets, null);
+  });
+});
+
+test('E2: a use case the model does not declare passes roleTargets null', async () => {
+  const db = createDb({
+    routes: {
+      configuration: {
+        use_case_profiles: {
+          OFFICE: { gpu_policy: 'IGPU_ALLOWED', spend_targets: { CPU: 0.22 } },
+        },
+      },
+    },
+  });
+  await withSpies([
+    { key: 'retention', namespace: retentionModule, name: 'retainTopKPerRole' },
+  ], async (spies) => {
+    // The fixture query use_case is GAMING, which this model does not declare.
+    await runRecommendation({ db, queryId: QUERY_ID });
+    assert.equal(spies.retention.calls[0].args[0].roleTargets, null);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 7. Fail-fast short-circuits (Decision 17.4) and the zero-build outcome.
 // ---------------------------------------------------------------------------
 

@@ -872,3 +872,164 @@ test('a bucket that fits within K is returned untouched, reservation or not', ()
   // drop anything - and in particular must not need a price for the survivors.
   assert.deepEqual(ids(out.results), ['case-a', 'case-cheap']);
 });
+// ---------------------------------------------------------------------------
+// E2: target-aware price-band retention (roleTargets)
+// ---------------------------------------------------------------------------
+
+/** One role target: a price point plus its hard ceiling. */
+function bandTarget(target, ceilingFactor = 2) {
+  return { target, ceiling: target * ceilingFactor };
+}
+
+/**
+ * A CPU-only retention fixture. rows are [id, score, price]; the price carrier
+ * is explicit, so band membership is decided by the numbers in the test.
+ */
+function cpuCase(rows) {
+  return {
+    filterResult: { results: rows.map(([id]) => verdict('CPU', id)) },
+    candidateScores: scores(...rows.map(([id, score]) => scoreEntry('CPU', id, score))),
+    prices: priced(rows.map(([id, , price]) => ['CPU', id, price])),
+  };
+}
+
+test('E2: roleTargets null or without the role keeps the pre-E2 rule byte-identical', () => {
+  const rows = [['cpu-a', 60, 1000], ['cpu-b', 50, 2000], ['cpu-c', 40, 500]];
+  const base = cpuCase(rows);
+  const legacy = retainTopKPerRole({ ...base, topKPerRole: 2 });
+  assert.deepEqual(ids(legacy.results), ['cpu-a', 'cpu-c']);
+  for (const roleTargets of [null, {}, { GPU: bandTarget(1000) }]) {
+    const out = retainTopKPerRole({ ...base, topKPerRole: 2, roleTargets });
+    assert.deepEqual(out, legacy, JSON.stringify(roleTargets));
+  }
+});
+
+test('E2: band retention keeps the best scorer below, at and above target', () => {
+  // target 1000 -> at [850, 1150], below < 850, above (1150, 2000].
+  const rows = [
+    ['cpu-a', 90, 500],  // best below
+    ['cpu-b', 80, 1000], // at
+    ['cpu-c', 70, 1500], // above
+    ['cpu-e', 50, 600],  // below, worse scorer
+    ['cpu-f', 40, 800],  // at, worse scorer
+    ['cpu-d', 10, 3000], // above the ceiling -> in no band
+  ];
+  const base = cpuCase(rows);
+  const out = retainTopKPerRole({ ...base, topKPerRole: 4, roleTargets: { CPU: bandTarget(1000) } });
+  // a/b/c are the three band picks; e is the Rule 3/5 top-up to the K cap.
+  assert.deepEqual(ids(out.results), ['cpu-a', 'cpu-b', 'cpu-c', 'cpu-e']);
+});
+
+test('E2: the above-target slot is bounded by the hard ceiling', () => {
+  const rows = [
+    ['cpu-a', 90, 500],
+    ['cpu-b', 80, 1000],
+    ['cpu-e', 60, 400],
+    ['cpu-f', 50, 900],
+    ['cpu-g', 40, 700],
+    ['cpu-x', 10, 3000], // over 2 x 1000
+  ];
+  const overCeiling = retainTopKPerRole({
+    ...cpuCase(rows), topKPerRole: 4, roleTargets: { CPU: bandTarget(1000) },
+  });
+  assert.deepEqual(ids(overCeiling.results), ['cpu-a', 'cpu-b', 'cpu-e', 'cpu-f']);
+
+  // The same shape with the extra candidate INSIDE the ceiling: it takes the band.
+  const under = cpuCase([...rows.slice(0, 5), ['cpu-x', 10, 1500]]);
+  const underCeiling = retainTopKPerRole({
+    ...under, topKPerRole: 4, roleTargets: { CPU: bandTarget(1000) },
+  });
+  assert.deepEqual(ids(underCeiling.results), ['cpu-a', 'cpu-b', 'cpu-e', 'cpu-x']);
+});
+
+test('E2: band retention keeps the Decision 27 cheapest reservation', () => {
+  // target 6000 -> at [5100, 6900], below < 5100, above (6900, 12000].
+  const rows = [
+    ['cpu-a', 90, 4000],     // best below
+    ['cpu-b', 80, 6000],     // at
+    ['cpu-c', 70, 8000],     // above
+    ['cpu-d', 60, 9000],     // above, worse scorer
+    ['cpu-cheap', 10, 500],  // below, worst scorer but cheapest by price
+  ];
+  const out = retainTopKPerRole({
+    ...cpuCase(rows), topKPerRole: 3, roleTargets: { CPU: bandTarget(6000) },
+  });
+  assert.deepEqual(ids(out.results), ['cpu-a', 'cpu-b', 'cpu-cheap']);
+});
+
+test('E2: band retention caps at K and never shrinks below min(K, eligible)', () => {
+  const rows = Array.from({ length: 7 }, (_, i) => ['cpu-' + i, 90 - i, 500 + i * 300]);
+  const base = cpuCase(rows);
+  for (let K = 1; K <= 9; K += 1) {
+    const out = retainTopKPerRole({ ...base, topKPerRole: K, roleTargets: { CPU: bandTarget(1400) } });
+    const got = ids(out.results);
+    assert.equal(got.length, Math.min(K, rows.length), 'length at K=' + K);
+    assert.equal(new Set(got).size, got.length, 'no duplicates at K=' + K);
+  }
+});
+
+test('E2: K=1 retains only the cheapest reservation', () => {
+  const rows = [['cpu-a', 90, 1000], ['cpu-b', 80, 2000], ['cpu-cheap', 10, 300]];
+  const out = retainTopKPerRole({
+    ...cpuCase(rows), topKPerRole: 1, roleTargets: { CPU: bandTarget(1000) },
+  });
+  assert.deepEqual(ids(out.results), ['cpu-cheap']);
+});
+
+test('E2: a role absent from roleTargets keeps the pre-E2 rule', () => {
+  const rows = [
+    ['CPU', 'cpu-a', 90, 4000], ['CPU', 'cpu-b', 80, 6000], ['CPU', 'cpu-c', 10, 500],
+    ['GPU', 'gpu-a', 90, 100], ['GPU', 'gpu-b', 80, 200], ['GPU', 'gpu-cheap', 10, 50],
+  ];
+  const sources = {
+    filterResult: { results: rows.map(([role, id]) => verdict(role, id)) },
+    candidateScores: scores(...rows.map(([role, id, score]) => scoreEntry(role, id, score))),
+    prices: priced(rows.map(([role, id, , price]) => [role, id, price])),
+    topKPerRole: 2,
+  };
+  const legacy = retainTopKPerRole(sources);
+  const out = retainTopKPerRole({ ...sources, roleTargets: { CPU: bandTarget(6000) } });
+  const gpuOf = (result) => ids(result.results).filter((id) => id.startsWith('gpu-'));
+  assert.deepEqual(gpuOf(out), gpuOf(legacy));
+  assert.deepEqual(gpuOf(out), ['gpu-a', 'gpu-cheap']);
+});
+
+test('E2: a bucket that fits within K is returned whole without reading prices', () => {
+  const filterResult = { results: [verdict('CPU', 'cpu-a'), verdict('CPU', 'cpu-b')] };
+  const candidateScores = scores(scoreEntry('CPU', 'cpu-a', 60), scoreEntry('CPU', 'cpu-b', 50));
+  const emptyCarrier = Object.freeze(Object.create(null));
+  const out = retainTopKPerRole({
+    filterResult, candidateScores, topKPerRole: 3, prices: emptyCarrier,
+    roleTargets: { CPU: bandTarget(1000) },
+  });
+  assert.deepEqual(ids(out.results), ['cpu-a', 'cpu-b']);
+});
+
+test('E2: an eligible candidate the carrier cannot price still fails fast in band mode', () => {
+  const rows = [['cpu-a', 90, 1000], ['cpu-b', 80, 2000], ['cpu-c', 70, 3000]];
+  const base = cpuCase(rows);
+  assertError(
+    rejectionOf(() => retainTopKPerRole({
+      ...base,
+      // cpu-c has no carrier entry: band retention must fail fast, not price it 0.
+      prices: priced([['CPU', 'cpu-a', 1000], ['CPU', 'cpu-b', 2000]]),
+      topKPerRole: 2,
+      roleTargets: { CPU: bandTarget(1000) },
+    })),
+    ERROR_CODES.MISSING_REQUIRED_FIELD,
+    'prices',
+    'band mode must never price a missing carrier entry at 0'
+  );
+});
+
+test('E2: roleTargets must be null or an object', () => {
+  const base = cpuCase([['cpu-a', 60, 1000], ['cpu-b', 50, 2000]]);
+  for (const bad of [5, 'targets', true]) {
+    assertError(
+      rejectionOf(() => retainTopKPerRole({ ...base, topKPerRole: 1, roleTargets: bad })),
+      ERROR_CODES.INVALID_INPUT,
+      'roleTargets',
+      'roleTargets=' + JSON.stringify(bad)
+    );
+  }
+});

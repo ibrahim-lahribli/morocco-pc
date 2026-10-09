@@ -17,12 +17,18 @@ const path = require('node:path');
 const retention = require('./index');
 const retain = require('./retain');
 const budgetFloor = require('./budget-floor');
+const targets = require('./targets');
 
-test('retention barrel exposes exactly its two-function public API', () => {
+test('retention barrel exposes exactly its public API', () => {
   assert.deepEqual(Object.keys(retention), [
     'retainTopKPerRole',
     'BUDGET_FLOOR_ROLES',
     'computeBudgetFloor',
+    'computeRoleTargets',
+    'resolutionMultiplier',
+    'RESOLUTION_MULTIPLIERS',
+    'BAND_TOLERANCE',
+    'BAND_CEILING_FACTOR',
   ]);
   assert.equal(typeof retention.retainTopKPerRole, 'function');
   assert.equal(retention.retainTopKPerRole.length, 1);
@@ -36,6 +42,10 @@ test('retention barrel re-exports by identity - no wrapper, no copy', () => {
   assert.strictEqual(retention.retainTopKPerRole, retain.retainTopKPerRole);
   assert.strictEqual(retention.computeBudgetFloor, budgetFloor.computeBudgetFloor);
   assert.strictEqual(retention.BUDGET_FLOOR_ROLES, budgetFloor.BUDGET_FLOOR_ROLES);
+  assert.strictEqual(retention.computeRoleTargets, targets.computeRoleTargets);
+  assert.strictEqual(retention.resolutionMultiplier, targets.resolutionMultiplier);
+  assert.strictEqual(retention.BAND_TOLERANCE, targets.BAND_TOLERANCE);
+  assert.strictEqual(retention.RESOLUTION_MULTIPLIERS, targets.RESOLUTION_MULTIPLIERS);
 });
 
 test('retention keeps its source boundary (pure composition, no DB, no SQL)', () => {
@@ -68,7 +78,7 @@ test('retention keeps its source boundary (pure composition, no DB, no SQL)', ()
   // substring scan would fail the documentation for documenting itself. The
   // complementary check below pins the real direction - the exact require list -
   // so stripping comments cannot hide an actual import.
-  for (const file of ['index.js', 'retain.js', 'budget-floor.js']) {
+  for (const file of ['index.js', 'retain.js', 'budget-floor.js', 'targets.js']) {
     const source = stripComments(fs.readFileSync(path.join(__dirname, file), 'utf8'));
     for (const token of banned) {
       assert.ok(!source.includes(token), `${file} must not contain ${token}`);
@@ -102,5 +112,6 @@ test('retain.js imports exactly the composed sources and nothing else', () => {
     '../candidates/roles',
     '../candidates/select',
     '../filtering/filter',
+    './targets',
   ]);
 });
