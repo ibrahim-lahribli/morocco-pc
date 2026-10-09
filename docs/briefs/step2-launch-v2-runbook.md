@@ -101,7 +101,7 @@ Target: **18 ledger rows, 100 `Seed %` products, 101 offers, exactly ONE active 
 With the pre-marker rows gone, the golden harness ran END-TO-END for the first time on the unchanged
 engine: 81 assertion rows, **PASS 56 / EXPECTED-RED 22 / UNKNOWN 3**, `RESULT: EXPECTED-RED`, **exit 0**,
 cleanup `residue {"q":0,"bc":0,"comp":0,"res":0,"rej":0}`. The third UNKNOWN is the suite-level A9 PI-1
-row, which the CLI does not embed — run `npm run verify:pi1` separately. Regenerating the baseline into a
+row, which the CLI does not embed; run separately, `npm run verify:pi1` was measured **PASS 2026-10-09** (0 of 25 pre-existing `build_score` moved for both GAMING and OFFICE, probe product and measurement queries cleaned up). Regenerating the baseline into a
 scratch path (`--baseline=test/golden/_tmp_baseline.md --no-volatile`) and diffing it against the committed
 `test/golden/baseline-2026-10.md` is **byte-identical**, so the committed v1 baseline is a faithful "before"
 snapshot and Decision 38's pinned `as_of` holds. 22 EXPECTED-RED is the CORRECT disposition here (every
