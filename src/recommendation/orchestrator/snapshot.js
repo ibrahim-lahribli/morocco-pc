@@ -77,6 +77,8 @@ function validateClient(client) {
  *        query loader inside the transaction).
  * @param {object} [options] Decision 35 engine options, forwarded unchanged to
  *        the pass and ultimately to Stage 1; omitted means default OFF.
+ * Decision 38: options.asOf is optional ISO time with an explicit timezone;
+ * when supplied it pins scoring/offer freshness, otherwise the transaction clock remains.
  * @returns {Promise<object>} the frozen runRecommendation result.
  * @throws the pass error unchanged (after ROLLBACK), or the ROLLBACK error on
  *        an otherwise successful pass; INVALID_INPUT client when the client

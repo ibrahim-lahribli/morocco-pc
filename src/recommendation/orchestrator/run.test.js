@@ -975,3 +975,23 @@ test('runRecommendationSnapshot: BEGIN ... one real pass ... ROLLBACK, never COM
   assert.equal(out.query_id, QUERY_ID);
   assert.equal(out.builds.length, 1);
 });
+
+test("Decision 38: absent asOf preserves legacy output and SQL; pinned run ignores DB clock", async () => {
+  const a = createDb(); const b = createDb();
+  const legacy = await runRecommendation({ db: a, queryId: QUERY_ID });
+  const absent = await runRecommendation({ db: b, queryId: QUERY_ID, options: { asOf: undefined } });
+  assert.deepEqual(absent, legacy); assert.deepEqual(b.calls, a.calls);
+  const c = createDb({ nowRows: [] });
+  const pinned = await runRecommendation({ db: c, queryId: QUERY_ID, options: { asOf: NOW_ISO } });
+  assert.deepEqual(pinned, legacy);
+  assert.equal(c.calls.some(x => x.sql === SELECT_NOW_SQL), false);
+  const offer = c.calls.find(x => x.sql.includes("FROM store_offer"));
+  assert.equal(offer.params[3], NOW_ISO);
+  assert.ok(!offer.sql.includes("CURRENT_TIMESTAMP"));
+});
+
+test("Decision 38: malformed explicit asOf fails closed", async () => {
+  for (const asOf of [null, 0, "2026-02-30T00:00:00Z", "2026-10-08", "2026-10-08T10:00:00"]) {
+    await assert.rejects(runRecommendation({ db: createDb(), queryId: QUERY_ID, options: { asOf } }), e => e.code === ERROR_CODES.INVALID_FIELD_VALUE && e.field === "asOf");
+  }
+});

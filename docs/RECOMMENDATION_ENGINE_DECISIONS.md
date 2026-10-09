@@ -4322,3 +4322,75 @@ Out of scope (deliberately not done here)
 
 Verification
   `npm run test:unit` = 964 pass / 0 fail (950 before; +12 in E1 from `use-cases.test.js`, +2 more in E1b for the `spend_targets` relative-weight invariants). `src/recommendation/scoring/use-cases.test.js` pins the profile contract, the vocabulary decoupling (OFFICE declared by the profiles while absent from `gpu_required_use_cases`), the optional-key integration (a model without profiles gains no key), and the legacy fallback. `scoring/index.test.js` and `configuration.test.js` were updated for the new export surface and the new require (no assertion was weakened). No engine pass, score, rank or persisted row changed: only new configuration is accepted, and nothing consumes it yet. Item 6 (2026-10-08, E1b) pins `spend_targets` as relative weights: `use-cases.test.js` asserts a sum != 1 and a partial profile are valid, and that an empty or all-zero map fails fast.
+## Decision 38 — explicit asOf pins scoring and offer freshness without a migration
+
+Status: RESOLVED 2026-10-08; IMPLEMENTED 2026-10-08 — optional options.asOf is an explicit run input; absent preserves the transaction-clock path, present pins scoring and offer freshness.
+
+Date: 2026-10-08. E2-pre only, OG-42. No migration, seed activation, API change, retention change or E2/E3 implementation.
+
+### Current situation
+
+The orchestration scoring clock is `orchestrator/run.js`'s SQL `CURRENT_TIMESTAMP AS now`.
+The offer loader independently uses SQL `CURRENT_TIMESTAMP` for `price_checked_at` and
+its inclusive 30-day cutoff. `scoring/load-assessments.js` also emits `loaded_at`, but the
+orchestrator does not use it as a scoring clock. Different runs therefore age assessments
+at different instants; rounding can change ranks even with unchanged catalog data (OG-41).
+The restricted Platform-owned candidate/filtering loaders and persistence need no changes
+for explicit run-time pinning.
+
+### Decision
+
+1. `runRecommendation({ db, queryId, options: { asOf } })`,
+   `runRecommendationSnapshot(client, queryId, options)` and
+   `runRecommendationFullRun(client, queryId, options)` accept optional `options.asOf`.
+   This extends the existing options interface, not a new positional argument or query column.
+2. Absent/undefined asOf preserves the existing transaction-clock read and exact offer SQL
+   and parameter list. Explicit asOf must be an ISO timestamp with an explicit timezone
+   and at most millisecond precision; null, malformed, impossible-calendar or ambiguous
+   local timestamps fail `INVALID_FIELD_VALUE` on `asOf`, without a wall-clock fallback.
+   Offset timestamps normalize to UTC. No implicit truncation of greater precision.
+3. Explicit asOf replaces the scoring clock for candidate/build/contribution decay and
+   both offer SQL timestamp uses via a bound `$4::timestamptz`. The same returned timestamp
+   drives JS freshness normalisation and price decision metadata. Seed-offer waiver policy,
+   inclusivity of the 30-day boundary, deterministic tie-breaks and compatibility are unchanged.
+4. Snapshot ownership is unchanged. Full-run and the golden harness use the existing
+   REPEATABLE READ READ ONLY wrapper. Direct runRecommendation callers still own their
+   snapshot; asOf does not create or change a transaction.
+5. The golden manifest declares fixed `as_of = 2026-10-08T20:00:00.000Z`, passed as options.asOf
+   to both read passes and full runs. The baseline header prints it; its date derives from
+   this explicit input rather than report-generation wall time. Volatile freshness metadata
+   stays outside the committed baseline. Assertions remain unchanged.
+6. Persisting as_of on recommendation_query is a separate Platform-owned migration/request,
+   not implemented here. Cache keys must include as_of, explicit model identity/configuration,
+   engine/policy version/options and a catalog-data revision. Pinning time does not freeze
+   mutable offers/assessments/compatibility/catalog data or provide historical snapshots.
+7. Replaying an old asOf is a reproducibility input, not permission to advertise stale offers
+   as currently purchasable. Current availability/freshness revalidation is a separate serving
+   policy; do not mutate an existing query's time to refresh it.
+
+### Rejected alternatives
+
+- Updating only score time: offer eligibility and price decision metadata would still depend
+  on the run clock and the result would not be reproducible at a freshness boundary.
+- Patching Platform-owned loaders/persistence or adding a migration here: neither is needed
+  for the explicit input; schema persistence belongs to Platform.
+- Freezing JS Date globally, rewriting SQL through a client proxy, or mutating model staleness:
+  those obscure the input contract or change scoring policy rather than expose its time input.
+- Tolerance-only A8: a rounded ranking boundary can change selection despite tiny raw deltas.
+
+### Verdict for this pass
+
+Unit pins cover absent-option deep equality and identical SQL/params, malformed timestamps,
+full-run forwarding, pinned scoring time and inclusive/exclusive freshness boundaries.
+Read-only TEST comparison for S03/S06 at the manifest instant versus normal transaction time:
+101 post-offer/filter candidates, 40 retained, 25 ranked; retained identities and ranked
+signatures equal. Assessment ages differ slightly by elapsed wall time; this is expected
+arithmetic, not an eligibility/signature deviation. Two full golden runs and mechanical
+baseline comparison are reported in the E2-pre brief verification record.
+
+### Supersedes / superseded by
+
+Amends Decision 17's transaction-clock-only rule and Decision 7's run-current offer timestamp
+ONLY when asOf is explicit. The no-option path remains unchanged. The E0d migration-first
+proposal in the engine brief is superseded by this engine-only input plus Platform persistence
+request; no historical migration or earlier dated verification is rewritten.

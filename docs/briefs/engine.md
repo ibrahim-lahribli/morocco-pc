@@ -114,7 +114,39 @@ Assertions (all evaluated per scenario unless a cross-scenario pair is named)
 | `scripts/eval-scenarios.js` | SQL `NOW()` preflight; zero-argument Date for report date/sidecar generation | Informational offer freshness and output timestamps, not scoring input. |
 | `ingestion/apply.js`, `ingestion/listings.js` | SQL `now()` audit stamps; parsing caller `options.now`/observed times | Ingestion lifecycle, outside recommendation scoring. Stored assessments/offers still affect future DB state. |
 
-### Proposed Decision — query-pinned `as_of` (NOT ADOPTED / NOT IMPLEMENTED)
+### E2-pre — Decision 38 explicit asOf (IMPLEMENTED 2026-10-08)
+
+Interface: `runRecommendation({ db, queryId, options: { asOf: ISO } })` and
+`runRecommendationFullRun(client, queryId, { asOf: ISO })`; the snapshot wrapper forwards
+the same options. Absent keeps legacy SQL/params/output; explicit time replaces the score
+clock and offer cutoff/price decision timestamp. No Platform-owned implementation file edited.
+
+Clock audit (executable SQL locations, ownership):
+- `src/recommendation/orchestrator/run.js:147` (before this change): scoring `CURRENT_TIMESTAMP AS now`, **Engine**; bypassed when asOf is present.
+- `src/recommendation/offers/select.js:80,86` (before this change): decision timestamp and 30-day cutoff, **Engine**; explicit branch binds the same asOf in both positions.
+- `src/recommendation/scoring/load-assessments.js:80`: `CURRENT_TIMESTAMP AS loaded_at`, **Engine** metadata only; not consumed for scoring and no required change.
+- `orchestrator/snapshot.js`: transaction control, **Engine**, no clock SQL of its own.
+- `filtering/context-loader.js`, `candidates/loader.js`, `orchestrator/commit.js`, `persistence/`: **Platform** restricted; no CURRENT_TIMESTAMP/now() clock input needed changing for this option. DB-generated persistence timestamps remain audit metadata, outside scored/ranked content.
+- `ingestion/apply.js:37,68,73,93`: SQL now() audit/lifecycle stamps, outside the recommendation pass; no required change.
+
+Golden manifest `as_of = 2026-10-08T20:00:00.000Z`. Its report date is derived from this
+input, so baseline headers do not drift across calendar dates. Normal-vs-pinned TEST
+comparison: S03/S06 each 101 post-offer/filter candidates, 40 retained, 25 ranked; retained
+identities and ordered signatures match. Raw scores differ by expected fractional assessment
+age; offers remain 101/101 eligible. The seed waiver remains explicitly enabled as before.
+
+Verification: two full golden CLI runs at different actual wall-clock times exit 0;
+committed baseline `cmp` exit 0. All 21 A8 rows PASS with zero raw-score delta; cooler
+identities/totals stable. 22 EXPECTED-RED hypotheses and 3 UNKNOWNs remain (S17/S18 plus
+unrun PI-1); no threshold tuned. Four full-run cases succeed and both cleanup vectors are
+q/bc/comp/res/rej = 0. OG-41's changing-time harness artifact is resolved for pinned runs;
+legacy unpinned runs remain intentionally clock-sensitive. OG-42 is implemented; persisting
+as_of is only a Platform request in `docs/briefs/requests.md`. E2/E3/seed activation unstarted.
+
+### Historical E0d proposal — query-pinned `as_of` (superseded by Decision 38)
+
+The migration-first proposal below is historical. Explicit Engine run input now ships without
+a migration; query-column persistence remains requested from Platform and is NOT implemented.
 
 Goal: repeated execution of the same query against identical data/model/code must use the
 same time input. This is a proposal to amend Decisions 7/17, not a numbered/resolved entry.

@@ -77,6 +77,7 @@ test('orchestrator modules import exactly their collaborators', () => {
     '../candidates/errors',
     '../filtering',
     '../offers',
+    '../offers/as-of',
     '../query',
     '../retention',
     '../scoring',

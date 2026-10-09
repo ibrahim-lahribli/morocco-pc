@@ -67,7 +67,8 @@
  *     is threaded into BOTH scoring steps. Decision 17 G4 rejected the
  *     assessment loader loaded_at (zero assessment rows -> null -> a
  *     legitimate no-evidence pool would fail the clock) and rejected any
- *     JS/injected clock. No Date.now() exists in this module.
+ *     JS/injected clock in the legacy path. Decision 38 permits explicit options.asOf
+ *     instead; no Date.now() exists in this module.
  *   - loadScoringModel runs immediately after that statement (Decision 17,
  *     clarification 2026-09-21, step 3): the pinned id comes from the query row
  *     and SCORING_MODEL_UNAVAILABLE must fail fast BEFORE the candidate / offer
@@ -131,6 +132,7 @@
  */
 // --- collaborators (called through their namespace objects - see the header) --
 
+const { parseAsOf } = require('../offers/as-of');
 const query = require('../query');
 const candidates = require('../candidates');
 const offers = require('../offers');
@@ -252,8 +254,10 @@ function withBuildScore(build, buildScore) {
  *        injected and validated by the loaders, never created or closed here.
  * @param {string} args.queryId pinned recommendation_query.id.
  * @param {object} [args.options] Decision 35 engine options, passed through to
- *        Stage 1 unchanged and never interpreted here. Default OFF: an omitted
+ *        Stage 1 unchanged; asOf is also consumed here (Decision 38). Default OFF: an omitted
  *        options object leaves every eligibility rule exactly as it was.
+ * Decision 38: options.asOf is optional ISO time with an explicit timezone;
+ * when supplied it pins scoring/offer freshness, otherwise the transaction clock remains.
  * @returns {Promise<object>} frozen { query_id, scoring_model_id, builds,
  *        budget_amount, currency, build_contributions, budget_floor } - builds
  *        in Engine 3 discovery order, each an Engine 3 build plus build_score,
@@ -278,7 +282,8 @@ async function runRecommendation(args) {
 
   // 2. Transaction timestamp (Decision 17.2): the FIRST statement after the
   //    query loader, and the only clock either scoring step sees.
-  const nowMs = await readTransactionTimestamp(db);
+  const asOf = parseAsOf(args.options);
+  const nowMs = asOf === null ? await readTransactionTimestamp(db) : asOf.nowMs;
 
   // 3. Pinned scoring model (Decision 11; position clarified in Decision 17,
   //    2026-09-21). Fails fast with SCORING_MODEL_UNAVAILABLE before the

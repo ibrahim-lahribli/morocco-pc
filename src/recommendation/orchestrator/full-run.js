@@ -56,6 +56,8 @@ const explanation = require('../explanation');
  *        `allow_unverified_seed_offers`), forwarded unchanged to the read
  *        wrapper and then to Stage 1. Omitted means default OFF, so existing
  *        callers keep byte-identical behaviour.
+ * Decision 38: options.asOf is optional ISO time with an explicit timezone;
+ * when supplied it pins scoring/offer freshness, otherwise the transaction clock remains.
  * @returns {Promise<object>} the frozen combined result (eleven fields, see
  *          above).
  */

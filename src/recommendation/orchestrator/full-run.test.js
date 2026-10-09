@@ -35,9 +35,9 @@ function stubStages({ snapshotResult, rankResult, selectResult, explainResult, c
     explain: explanation.explainSelection,
     commit: commit.runRecommendationCommit,
   };
-  snapshot.runRecommendationSnapshot = async function stub(client, queryId) {
+  snapshot.runRecommendationSnapshot = async function stub(client, queryId, options) {
     order.push('snapshot');
-    snapshotCalls.push({ client, queryId });
+    snapshotCalls.push({ client, queryId, options });
     return snapshotResult;
   };
   ranking.rankBuilds = function stub(args) {
@@ -372,4 +372,12 @@ test('full-run.js imports exactly the snapshot wrapper, the commit wrapper, the 
   const source = stripComments(fs.readFileSync(path.join(__dirname, 'full-run.js'), 'utf8'));
   const requires = [...source.matchAll(/require\('([^']+)'\)/g)].map((match) => match[1]).sort();
   assert.deepEqual(requires, ['../explanation', '../ranking', './commit', './snapshot']);
+});
+
+test("Decision 38: full-run forwards explicit asOf unchanged into the snapshot", async () => {
+  const options = Object.freeze({ asOf: "2026-10-08T20:00:00.000Z" });
+  await withStubbedStages(happyStubs(), async (stub) => {
+    await runRecommendationFullRun({ query() {} }, QUERY_ID, options);
+    assert.equal(stub.snapshotCalls[0].options, options);
+  });
 });

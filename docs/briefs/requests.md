@@ -9,6 +9,29 @@ series and cross-cutting coordination.
 
 ---
 
+## 2026-10-08 — Persist explicit run as_of (Decision 38 / OG-42)
+
+**Owner:** Platform. **Requested by:** Engine (E2-pre). **Status:** REQUEST ONLY; no migration applied.
+
+Engine now accepts optional `options.asOf` on the existing run/snapshot/full-run interfaces.
+Present pins assessment decay and offer eligibility/price decision metadata; absent preserves
+legacy transaction time. No restricted Platform-owned loader or persistence changes were needed.
+
+Please author a NEW sequential migration (choose the next free number, do not assume 019 is free)
+adding immutable `recommendation_query.as_of TIMESTAMPTZ NOT NULL`, defaulted once at insertion.
+Backfill from created_at only with an explicit approximation note: it is not the original run time.
+API code should load the persisted value and pass `options.asOf` to the engine. Do not expose
+unrestricted caller-selected historical times without an explicit serving/security policy.
+Define traceable result readback and enforce immutability; do not update as_of to refresh a query.
+
+**Acceptance:** same query/time/data/model gives identical ranks and scores; missing or malformed
+explicit times fail closed; offer freshness uses the same instant; legacy callers remain unchanged.
+Cache identity includes canonical as_of, model identity/configuration digest, engine version/options
+and a catalog-data revision (offers/assessments/compatibility too). Time pinning alone does not freeze
+mutable data or establish historical replay. Current purchase eligibility needs separate revalidation.
+No shared-DB apply is authorized by this request. No change to filtering/context-loader.js,
+candidates/loader.js or persistence/ is requested for the engine-only option.
+
 ## 2026-10-08 — Wire `listUseCases` into `apps/api/src/meta.js` (Decision 37 / OG-38)
 
 **Owner:** Platform. **Requested by:** Engine (E1b).

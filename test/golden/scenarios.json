@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "as_of": "2026-10-08T20:00:00.000Z",
   "current_epic": "E1",
   "note": "E0 golden scenarios (docs/briefs/engine.md). Data only: the assertion LOGIC lives in scripts/lib/scenario-eval.js; scenarios, thresholds and application rules live here so they can change without touching code. Every threshold is a HYPOTHESIS pending the PC-literate human review (H3) and carries a status field; changing one requires a test/golden/CHANGELOG.md entry naming the reviewer.",
   "thresholds": {
