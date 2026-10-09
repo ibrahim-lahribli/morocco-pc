@@ -90,9 +90,7 @@ Target: **18 ledger rows, 100 `Seed %` products, 101 offers, exactly ONE active 
    current harness preflight asserts **exactly one** active model and fails on two. Until the harness is pinned
    by name@version (Step-2 item 1, below), the differential run in §4 cannot execute on a two-active-model branch.
 2. **Step-2 item 1 (pin harnesses by name@version via CLI/env flag, default `seed-minimal-v1 1.0.0`) is NOT
-   implemented.** It is a prerequisite for §4 and is deliberately out of scope for the E0e change.
-3. **`docs/briefs/requests.md` (Platform note: the API must read an explicit scoring-model id from config, and
-   API DB tests must stay on a branch where only v1 is active) is NOT written.** Step-2 item 5, deferred.
+   implemented.** It is a prerequisite for §4 and is deliberately out of scope for the E0e change.3. **`docs/briefs/requests.md` DOES carry the Platform notes — corrected 2026-10-09; an earlier revision of this line claimed they were not written.** Filed: the `listUseCases` vocabulary swap (2026-10-08, E1b — the observable half of Step-2 item 5), the `recommendation_query.as_of` persistence request (Decision 38 / OG-42), and the seed-number reservation (seed 013 taken; 014+ reserved for Platform). Still UNFILED from Step-2 item 5: that the API read an explicit scoring-model id from config, and that its DB tests stay on a branch where only v1 is active.
 4. `node scripts/run-seeds.js` is **not** the tool for this step: it targets the shared `DATABASE_URL` and has no
    TEST-branch routing. Use `scripts/apply-seed.js`.
 
