@@ -4394,3 +4394,112 @@ Amends Decision 17's transaction-clock-only rule and Decision 7's run-current of
 ONLY when asOf is explicit. The no-option path remains unchanged. The E0d migration-first
 proposal in the engine brief is superseded by this engine-only input plus Platform persistence
 request; no historical migration or earlier dated verification is rewritten.
+
+## Decision 39 — retention is target-aware: a profile's `spend_targets` choose which candidates survive each role (E2)
+
+Status: RESOLVED 2026-10-09; IMPLEMENTED 2026-10-09 — the query loader carries `resolution` as a sibling of the Engine 2A input, a new pure `retention/targets.js` turns a profile's `spend_targets` + budget + resolution into per-role `{target, ceiling}`, and `retainTopKPerRole` accepts an optional `roleTargets` that switches a targeted role bucket from top-K to price-band retention while keeping the Decision 27 reservation, the K cap and the Rule 3/5 order. A model that declares no `use_case_profiles` passes `null` and stays byte-identical. The band constants are HYPOTHESES pending the H3 human review.
+
+Date: 2026-10-09. E2 of `docs/briefs/engine.md`. It closes nothing in the gap register and registers **OG-43** for its own residual (unvalidated band constants; E2 is unexercised on the shared DB and by the API). It IS an engine behaviour change (retention, the query loader, the orchestrator wiring) plus a second committed golden baseline. It is NOT a migration, NOT a seed change (seed 013 is E1's, and it is applied to the TEST branch only), NOT a scoring/assembly/ranking/persistence change, NOT an API change, and NOT E3 (assembly-side pair quota) or E4–E6.
+
+### Current situation
+
+Retention (`src/recommendation/retention/retain.js`, Decision 12) kept the top
+`candidate_caps.top_k_per_role` verdicts per role by Engine 4 candidate score, plus the
+Decision 27 reservation of one cheapest eligible candidate per role. Nothing in the stage
+read the query's budget or the model's spend policy, so retention was budget-BLIND above the
+reservation. Measured on the TEST branch against the 100-product seed catalog,
+`seed-minimal-v1` retains the IDENTICAL per-role set at 8000 / 12000 / 20000 / 30000 MAD
+(`scripts/measure-retention-bands.js`, GAMING 1080p: 1 distinct set), so a 30000 MAD pass can
+retain the same 3200 MAD GPU as an 8000 MAD pass while every GPU inside the target band loses
+on score. Engine 2A's input contract (`candidates/input.js`) carries no resolution field, and
+`loadQueryInput` did not select `resolution` at all (Decision 17.6).
+
+### Decision
+
+1. `loadQueryInput` selects `recommendation_query.resolution` and returns it VERBATIM as a
+   SIBLING of `input` (`{ query_id, scoring_model_id, input, resolution }`), never inside the
+   Engine 2A input: resolution is a retention input, not part of the Decision 10
+   candidate-selection contract. `priority` and the profile FK stay unselected (E4).
+2. A new pure module `src/recommendation/retention/targets.js` owns the arithmetic:
+   `computeRoleTargets({ spendTargets, budgetAmount, resolution })` returns a deep-frozen
+   `{ <role>: { target, ceiling } }` where `target = share x budget` and
+   `ceiling = target x BAND_CEILING_FACTOR`. Only GPU is scaled by resolution
+   (`RESOLUTION_MULTIPLIERS`: 1080p 1.0, 1440p 1.25, 2160p 1.5); null/absent resolution is
+   neutral (1.0), while an unmapped non-null string fails `INVALID_FIELD_VALUE` on `resolution`
+   rather than silently defaulting. Roles absent from `spendTargets` are absent from the map.
+   No DB access, no clock, no randomness, caller objects never mutated.
+3. `retainTopKPerRole({ ..., roleTargets })` gains an OPTIONAL argument. null/absent keeps the
+   pre-E2 rule byte-for-byte. When present, a role that has a target partitions its eligible
+   candidates into three price bands — below the target, at target
+   (`|price - target| <= BAND_TOLERANCE x target`), above target (strictly over the tolerance,
+   bounded by `ceiling`; a candidate priced above `ceiling` belongs to no band) — and retains
+   the highest-scoring candidate in each band it can fill, then tops back up to K.
+4. Both modes share ONE selection pipeline: the Decision 27 cheapest-per-role reservation, the
+   Rule 2 eligibility (PASS | UNKNOWN), the Rule 3/5 ordering (score DESC then
+   `compareCandidates`), the `min(K, eligible)` hard cap, and the Rule 3/5 output order. The
+   band pass fills the `K - 1` slots the reservation does not own; the reservation then adds the
+   cheapest eligible candidate and the top-up draws the remainder in Rule 3/5 order, so K can
+   never be exceeded nor under-filled. A bucket no larger than K is returned whole and consults
+   no price at all, in either mode.
+5. `RESOLUTION_MULTIPLIERS`, `BAND_TOLERANCE` (0.15) and `BAND_CEILING_FACTOR` (2.0) are frozen
+   code constants in `targets.js`, by the `MAX_PER_PAIR` / `TOP_N_PERSISTED` precedent: a
+   per-model override would be a new optional configuration key plus a new seed. They are
+   HYPOTHESES pending H3 (Decision 37 item 5), not measured facts.
+6. `orchestrator/run.js` resolves the ACTIVE model's
+   `use_case_profiles[input.use_case].spend_targets` and passes the map as `roleTargets`. A
+   model that declares no `use_case_profiles`, a profile without `spend_targets`, and a use case
+   the model does not declare all yield `null`, so that pass keeps the pre-E2 rule. A malformed
+   share, a non-positive budget or a bad resolution fails fast rather than defaulting.
+
+### Rejected alternatives
+
+- Putting `resolution` inside the Engine 2A input: that contract is the Decision 10
+  candidate-selection input owned by `candidates/input.js`, and no candidate-selection stage
+  reads resolution — an inside-the-input field would change a contract with no consumer.
+- A per-model `band_tolerance` / `ceiling_factor` / per-resolution multiplier configuration key:
+  the values are unvalidated hypotheses, so shipping them as a configuration surface would
+  invite a seed to encode a guess as policy before the H3 review. A code constant is the honest
+  place for a hypothesis.
+- Making the band pass REPLACE the Decision 27 reservation instead of sharing the pipeline: the
+  reservation is the cheapest-per-role guarantee that stopped a rich catalog starving cheap
+  builds (OG-26), and dropping it would regress that fix.
+- Filling K by rank inside the target band only (no below/above bands): a single band turns
+  retention into a budget filter that returns fewer candidates than K at small budgets, making
+  the retained pool depend on how the shares were chosen rather than on which candidates exist.
+- Normalising `spend_targets` to a partition before multiplying by the budget: Decision 37 item 6
+  declares them relative weights, and a partition would move every target as soon as a profile
+  declared only a subset of roles.
+
+### Verdict for this pass
+
+Unit: `npm run test:unit` = 994 pass / 0 fail / 0 cancelled (994 before the E2 test files were
+counted as 970 + 24 new) on both Node 24.21.0 and Node 22.23.3, the version CI pins;
+`npm run test:scripts` = 212 pass / 0 fail / 0 cancelled on both. The new pins are
+`retention/targets.test.js` (10), 10 `retention/retain.test.js` cases, and 4 across
+`orchestrator/run.test.js`, `retention/index.test.js` and `query/load-query-input.test.js`. They
+cover the multiplier table and the null-neutral rule, GPU-only scaling, ceiling derivation, role
+omission, freezing and purity, fail-fast inputs, the band partition, the shared pipeline (K cap,
+reservation kept, Rule 3/5 order preserved, K=1 and K=2 smaller than the band count), a
+profile-less model passing null, and `resolution` carried as a sibling.
+
+Acceptance (TEST branch, `launch-v2@1.0.0`, GAMING 1080p, `scripts/measure-retention-bands.js`):
+the retained sets at 8000 / 12000 / 20000 / 30000 MAD are 4 DISTINCT (RESULT: PASS), against
+`seed-minimal-v1@1.0.0`, where the same script reports 1 distinct set and `roleTargets: null`
+(RESULT: FAIL) — so the PASS is differential, not vacuous.
+
+Primary regression guard: the v1 golden baseline regenerated after E2 is BYTE-IDENTICAL to the
+committed `test/golden/baseline-2026-10.md` (`cmp` clean), 81 rows / 56 PASS / 22 EXPECTED-RED /
+3 UNKNOWN, exit 0. The `launch-v2` baseline moved on exactly the rows E2 changes and is committed
+as `test/golden/baseline-launch-v2-2026-10.md` (81 rows / 55 PASS / 23 EXPECTED-RED / 3 UNKNOWN,
+exit 0, no approved assertion failed): A1 S03/S10/S11 rise 1 -> 2 distinct (CPU, GPU) pairs, A3
+signature overlap S03 1 -> 0.36 and S04 1 -> 0, A2/A4/A5 totals move with the newly retained
+cooler and GPU, and A1 S19 (OFFICE, no resolution) falls 3 -> 2 pairs. No threshold was tuned and
+`test/golden/CHANGELOG.md` gains no row because no threshold changed.
+
+### Supersedes / superseded by
+
+Extends Decision 12 (retention) with a second mode; amends Decision 17.6's 'resolution is not
+selected' for the retention input ONLY (resolution is still not part of the Engine 2A input);
+consumes Decision 37's `use_case_profiles.spend_targets` while leaving its item 5 hypothesis list
+and the pending H3 review untouched; leaves Decision 27's reservation, the K cap and the Rule 3/5
+order intact. Registers OG-43. No historical document is rewritten.

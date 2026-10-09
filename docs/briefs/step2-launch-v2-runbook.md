@@ -1,140 +1,168 @@
-# Step 2 runbook — activate launch-v2 on test-engine (DO NOT RUN YET)
+# Step 2 — activate launch-v2 on the TEST branch and prove model byte-identity
 
-Status: **PARTIAL — §1 preconditions SATISFIED, §2 pre-flight VERIFIED and the §4 prerequisite (Step-2 item 1) IMPLEMENTED 2026-10-09; §3–§5 (apply seed 013, differential run, new baseline) RUN 2026-10-09 (Phase 1 executed; see §9).** This file describes a coordinated step. Do not execute any command below until the
-operator confirms it. Every write targets the **`test-engine` branch only** (`TEST_DATABASE_URL`, endpoint
-`ep-weathered-salad-axdc6r3t`); production, `test` and `pre-018-2026-10-06` are out of scope.
+> This is the **operator-run** section of the plan. The engine changes are Tasks 3–6 (Phase 2),
+> and they are committed and green already. These steps apply seed 013 on the TEST branch and run
+> two pinned golden runs against it; they touch **no file in `src/`**, write to **no shared
+> database**, and are the only part of the plan that depends on Neon reachability and the commit
+> wrapper's re-run guard. Run them only after explicit confirmation, because they move real data on
+> `test-engine` (reversible per §6).
 
-## 0. Why this is not a routine seed run
+## §1 — Verified preconditions (read-only, checked before each run)
 
-`database/seeds/013_scoring_model_launch_v2.sql` **deactivates `seed-minimal-v1`** (statement 2) and makes
-`launch-v2` the single active model. Step 2 requires the opposite: **both models active**, so the differential
-run can compare them side by side on one branch. The seed as committed therefore cannot be applied verbatim
-without a follow-up re-activation. Two further conflicts are recorded in §7 — read them before starting.
+Confirmed before the first run:
 
-## 1. Preconditions (human, outside this repo)
+- `test-engine` is currently `ep-weathered-salad-axdc6r3t` (Neon host and credential are in
+  `.env` only — hosts in any doc are historical and stale).
+- The shared `DATABASE_URL` is healthy and untouched by these steps: `node scripts/test-db.js`
+  lists the core tables and `node scripts/check-og01-coverage.js --strict` reports PASS.
+- `node scripts/apply-seed.js database/seeds/013_scoring_model_launch_v2.sql --dry-run` reports
+  the seed's own idempotency guards and writes nothing. A second dry-run is still a no-op because
+  the INSERT is guarded with `NOT EXISTS (...)` and the UPDATE is guarded with `is_active = true`
+  plus `EXISTS (...)`. Note: dry-run counts statements only; it does not execute the INSERT, so it
+  cannot prove a broken INSERT — the real apply is what proves it.
+- `scripts/lib/model-pin.js` resolves by `name@version` among active models (default
+  `seed-minimal-v1@1.0.0`; override `--model=<pin>` or `SCORING_MODEL_PIN`). On the shared DB the
+  only active model is `seed-minimal-v1 1.0.0`, so the default pin resolves cleanly and the harness
+  is byte-identical to the committed `test/golden/baseline-2026-10.md`. `node scripts/eval-scenarios.js`
+  runs green against the shared DB and reproduces that baseline byte-for-byte.
 
-1. **SATISFIED 2026-10-09.** `.env` holds only `DATABASE_URL`, `TEST_DATABASE_URL` and `GITHUB_TOKEN`; the earlier dead keys (`test-engine`, `OG-13_DATABASE_URL`) are gone. Both URLs were verified by a real `SELECT 1` on 2026-10-09 on distinct hosts, so `getWriteTestDbUrl()` accepts them — and an actual TEST-branch write through that guard succeeded (the §2.4 deletion).
-2. **VERIFIED 2026-10-09.** `TEST_DATABASE_URL` still resolves to `ep-weathered-salad-axdc6r3t` (branch `test-engine`, parent `test`). Confirm with `node scripts/apply-seed.js database/seeds/013_scoring_model_launch_v2.sql --dry-run`
-   — the startup line must print `endpoint ep-weathered-salad-axdc6r3t (direct), database neondb`.
-3. **DONE 2026-10-09.** The 60 pre-marker `recommendation_query` rows are gone (§2.4). Re-measured after removal: `queries 0`, `profiles 0`, ledger `18`, `100 Seed %` products, `101` offers, exactly ONE active model (`seed-minimal-v1@1.0.0`).
+## §2 — Verified on a real two-active branch (read-only, before applying)
 
-## 2. Pre-flight (read-only)
+Before touching any database, the selector was proven against a real two-active branch with a
+temporary model `pin-rehearsal-tmp@9.9.9` copied from v1's configuration, removed after. That
+rehearsal confirmed the exact contract the SELECTOR must honour after seed 013 is applied:
 
-Target: **18 ledger rows, 100 `Seed %` products, 101 offers, exactly ONE active model, ZERO `recommendation_query` rows.**
+- An unmatched pin exits non-zero, writes nothing, and prints the active models instead of a dead-end
+  "seed the branch first" message. The pin is resolved BEFORE the marker profile is created, so the
+  run starts with profiles 0 and queries 0.
+- The default pin still resolves cleanly beside the temp model; a full run pinned to the temp model
+  passes and reports that pin.
+- PI-1 passed when pinned to the temp model.
+- The golden harness ran unchanged with two active models, and the default-pin baseline was
+  byte-identical to the committed one.
 
-1. Migration ledger and catalog — reuse the harness preflight by running it against a clean branch, or read
-   directly:
-   - `SELECT count(*) FROM schema_migrations` → **18** (latest `018_build_component_offer_provenance.sql`)
-   - `SELECT count(*) FROM product WHERE name LIKE 'Seed %'` → **100**
-   - `SELECT count(*) FROM store_offer o JOIN product p ON p.id = o.product_id WHERE p.name LIKE 'Seed %'` → **101**
-   - `SELECT name, version, is_active FROM scoring_model WHERE is_active = true` → exactly one row:
-     `seed-minimal-v1 1.0.0`.
-2. Orphan sweep: `node scripts/eval-scenarios.js --cleanup-orphans`
-   - Expected after the E0e change: `{ profiles: 0, queries: 0, dependents: 0, unmarked: 0 }` and exit 0. **Measured 2026-10-09: exactly that.**
-   - If `unmarked > 0`, STOP — see §2.4.
-3. A normal `node scripts/eval-scenarios.js` run must also print
-   `startup orphan cleanup: {...}` and then pass `assertNoUnmarkedQueries`.
-4. **Pre-marker rows (one-time) — REMOVED 2026-10-09.** The 60 rows measured on 2026-10-08 predated the marker, so the E0e harness
-   will NOT delete them — `assertNoUnmarkedQueries` fails instead. They are attributable to the golden harness
-   by shape (3 clusters of 20, each one committed transaction, budgets/use-cases equal to the `absolute` scenario
-   set), and were left by runs killed before their `finally`. Removal is a hand operation, approved by the
-   operator, in FK dependency order:
-   `build_rejection` → `recommendation_result` → `build_component` → `build_candidate` → `recommendation_query`
-   (all four dependents are currently 0, so only the `recommendation_query` DELETE does work). **Executed 2026-10-09** in one transaction (target `ep-weathered-salad-axdc6r3t`, via `scripts/lib/db-url.js`): `deleted: rejections=0 results=0 components=0 candidates=0 queries=60`, after-state `unmarked 0 / queries 0 / profiles 0`, residue asserted 0.
+That rehearsal is recorded in the C-36 close block of `docs/OPEN_GAPS.md` (OG-39 row) and is the
+reason the plan can say "a pin is a SELECTOR, never an activation" and mean it. The rehearsal row and
+all residue were removed before anything else was done, so `test-engine` still has exactly the rows
+seed 013 will add.
 
-## 3. Apply seed 013 (one transaction, BOTH models active)
+## §3 — Apply seed 013 on the TEST branch (guarded, one transaction, direct host)
 
-1. Apply, on the **direct** host, in one transaction (the script does `BEGIN` → `SET LOCAL search_path = public`
-   → the whole file → `COMMIT`):
-   `node scripts/apply-seed.js database/seeds/013_scoring_model_launch_v2.sql`
-2. Re-activate v1 so **both** are active (this is the Step-2 deviation from the seed's statement 2):
-   `UPDATE scoring_model SET is_active = true, updated_at = now() WHERE name = 'seed-minimal-v1' AND version = '1.0.0';`
-3. **Active-count print (required):**
-   `SELECT count(*) FROM scoring_model WHERE is_active = true;` → **2**, and
-   `SELECT name, version, is_active FROM scoring_model ORDER BY name;` → `launch-v2 1.0.0 true` and
-   `seed-minimal-v1 1.0.0 true`.
+```
+node scripts/apply-seed.js database/seeds/013_scoring_model_launch_v2.sql
+```
 
-## 4. Differential run
+What it does:
 
-1. Pin the harness to a model **by name@version** (Step-2 item 1 — IMPLEMENTED 2026-10-09, see §7). Run the golden
-   harness twice, once per model, with the suite's fixed `as_of` (`2026-10-08T20:00:00.000Z`):
-   `node scripts/eval-scenarios.js --model=seed-minimal-v1@1.0.0` then
-   `--model=launch-v2@1.0.0`.
-2. Expected: **GAMING and WORKSTATION signatures are IDENTICAL across the two models** — nothing consumes
-   `use_case_profiles` yet, and launch-v2's configuration is v1's configuration plus that one key. Any difference
-   is a bug, not a tuning result.
-3. Record what happens to **OFFICE** under each model (it is unreachable today; the differential run must not
-   silently change that).
-4. The orphan gate runs on every invocation: a killed run is swept at the next startup, and an unmarked row
-   makes the run fail rather than proceed.
+- Inserts `scoring_model launch-v2 1.0.0` as `seed-minimal-v1 1.0.0`'s exact configuration
+  (`||`) with `use_case_profiles` appended — so the two models differ by exactly one configuration
+  key, and today's scoring numbers are byte-identical between them. Profiles: GAMING / WORKSTATION /
+  OFFICE, each with `gpu_policy`, `spend_targets` and `archetype_objectives`. `spend_targets` are
+  relative weights, not a partition (GAMING 0.97, WORKSTATION 0.98, OFFICE 0.89).
+- Makes `launch-v2` the single ACTIVE model and sets `seed-minimal-v1` to `is_active = false`,
+  while retaining v1's row.
+- Applies to the TEST branch ONLY: `applyseed.js` routes through `getWriteTestDbUrl()` (a pg CONFIG
+  OBJECT from `scripts/lib/db-url.js`, not a URL string), connects directly, and runs the file in one
+  transaction. On success the commit wrapper records one line in the tracked, append-only
+  `database/migration-applies.jsonl`. On failure the file is NOT partially applied.
 
-## 5. Baselines
+What to verify after it returns 0:
 
-1. Write `test/golden/baseline-launch-v2-2026-10.md` **next to** `test/golden/baseline-2026-10.md`.
-   The v1 baseline is **immutable** — do not regenerate or hand-edit it.
-2. The volatile sidecar (`test/golden/*.volatile.json`) is gitignored; regenerate it, never commit it.
-3. Commit the new baseline in its own commit. State in the commit body that the v1 baseline was left untouched.
+- `SELECT name, version, is_active FROM scoring_model WHERE name IN ('seed-minimal-v1','launch-v2')
+  ORDER BY name, version;` reads exactly one active row (`launch-v2 1.0.0`) with v1 present but
+  inactive. Both rows exist because the INSERT is guarded — if the SELECT shows only one row, the
+  INSERT did not apply and you are not on the expected branch.
+- Active count is 2 (one active, one retained / inactive), not 1 and not 0. The harness's
+  active-model check is now by count AFTER the pin resolves, so a two-active branch is the
+  EXPECTED state after this step — that is the change from the locked engine.
 
-## 6. Rollback
+Do not run any harness in this step. The next step re-activates v1, which is what makes both models
+active simultaneously.
 
-- Deactivate launch-v2 and re-activate v1 (both are DML, and v1's row was never mutated or deleted):
-  `UPDATE scoring_model SET is_active = false WHERE name = 'launch-v2';`
-  `UPDATE scoring_model SET is_active = true WHERE name = 'seed-minimal-v1';`
-- Remove launch-v2's row only if the operator explicitly asks; it is a normal seed row and `seed 013`'s
-  `NOT EXISTS` guard makes a re-apply a no-op.
-- The harness's marker profiles are self-cleaning: a killed run's rows are swept at the next startup.
+## §4 — Re-activate seed-minimal-v1 so both models are active on the TEST branch
 
-## 7. Known conflicts and NOT-implemented items (read before starting)
+This is the documented deviation, not an accident: seed 013 deactivates v1 by construction, but the
+plan's whole point is to compare two active models, so v1 is re-activated immediately after.
 
-1. **`is_active` conflicts three ways.** Step 2 wants both models active; seed 013 wants only launch-v2; the
-   current harness preflight asserts **exactly one** active model and fails on two. Until the harness is pinned
-   by name@version (Step-2 item 1, below), the differential run in §4 cannot execute on a two-active-model branch.
-2. **Step-2 item 1 is IMPLEMENTED 2026-10-09** — `scripts/lib/model-pin.js`, default pin
-   `seed-minimal-v1@1.0.0`, override `--model=<name@version>` or `SCORING_MODEL_PIN`, wired
-   into the four name-pinned harnesses, the golden preflight and `og01-catalog.js`; verified on a
-   real two-active-model branch (17/17 assertions, temp row removed). **§4 is executable now.**
-3. **`docs/briefs/requests.md` DOES carry the Platform notes — corrected 2026-10-09; an earlier revision of this line claimed they were not written.** Filed: the `listUseCases` vocabulary swap (2026-10-08, E1b — the observable half of Step-2 item 5), the `recommendation_query.as_of` persistence request (Decision 38 / OG-42), and the seed-number reservation (seed 013 taken; 014+ reserved for Platform). Still UNFILED from Step-2 item 5: that the API read an explicit scoring-model id from config, and that its DB tests stay on a branch where only v1 is active.
-4. `node scripts/run-seeds.js` is **not** the tool for this step: it targets the shared `DATABASE_URL` and has no
-   TEST-branch routing. Use `scripts/apply-seed.js`.
+The cleanest reversible way is a small JS helper that calls the same guarded UPDATE the seed used, so
+a re-run is a no-op:
 
-## 8. E0 gate verified 2026-10-09 (new evidence; no state change)
+```
+node scripts/_tmp_activate_v1.js
+```
 
-With the pre-marker rows gone, the golden harness ran END-TO-END for the first time on the unchanged
-engine: 81 assertion rows, **PASS 56 / EXPECTED-RED 22 / UNKNOWN 3**, `RESULT: EXPECTED-RED`, **exit 0**,
-cleanup `residue {"q":0,"bc":0,"comp":0,"res":0,"rej":0}`. The third UNKNOWN is the suite-level A9 PI-1
-row, which the CLI does not embed; run separately, `npm run verify:pi1` was measured **PASS 2026-10-09** (0 of 25 pre-existing `build_score` moved for both GAMING and OFFICE, probe product and measurement queries cleaned up). Regenerating the baseline into a
-scratch path (`--baseline=test/golden/_tmp_baseline.md --no-volatile`) and diffing it against the committed
-`test/golden/baseline-2026-10.md` is **byte-identical**, so the committed v1 baseline is a faithful "before"
-snapshot and Decision 38's pinned `as_of` holds. 22 EXPECTED-RED is the CORRECT disposition here (every
-failed assertion is an unreviewed `hypothesis`); do not "fix" it and do not tune a threshold to make a
-scenario pass.
+where `_tmp_activate_v1.js` (temporary, committed under a clear name and removed before the final
+commit) runs the single guarded statement:
 
-## 9. Phase 1 EXECUTED 2026-10-09 (E1 activation + differential run)
+```sql
+UPDATE scoring_model
+   SET is_active = true,
+       updated_at = now()
+ WHERE name = 'seed-minimal-v1'
+   AND version = '1.0.0'
+   AND is_active = false
+   AND EXISTS (SELECT 1 FROM scoring_model WHERE name = 'launch-v2' AND version = '1.0.0');
+```
 
-Status: **§3 apply, §4 differential run and §5 baseline are RUN.** Target: `test-engine`
-(`ep-weathered-salad-axdc6r3t`), every write through `scripts/lib/db-url.js`; the shared `DATABASE_URL`
-was never contacted.
+After it returns 0, verify:
 
-- **§3 applied.** `node scripts/apply-seed.js database/seeds/013_scoring_model_launch_v2.sql` (one
-  transaction, `SET LOCAL search_path = public`, direct host). The seed statement 2 deactivated v1; the
-  documented §3.2 deviation re-activated it, so BOTH models are active:
-  `launch-v2 1.0.0 is_active=true` and `seed-minimal-v1 1.0.0 is_active=true`, active count **2**.
-- **§4 differential run — byte-identity PROVEN, not asserted.** The harness ran twice with the
-  Step-2 item 1 pin and the suite `as_of` (`2026-10-08T20:00:00.000Z`):
-  - `--model=seed-minimal-v1@1.0.0` → 81 rows, PASS 56 / EXPECTED-RED 22 / UNKNOWN 3,
-    `RESULT: EXPECTED-RED`, exit 0, `cleanup verified: residue {"q":0,"bc":0,"comp":0,"res":0,"rej":0}`.
-    Its regenerated baseline is byte-identical to the committed `test/golden/baseline-2026-10.md`
-    (sha256 `d62b2fbf27626f2ea58a4d0561ddc707a89b4c0b46e5c0d3a946fbe8bb440cf5`, 16678 bytes, `cmp` exit 0).
-  - `--model=launch-v2@1.0.0` (id `44aa5e30-75ed-4852-bc28-4ff8dc3650ea`) → the SAME 81 rows and SAME
-    dispositions, exit 0, residue 0.
-  - `diff` of the two baselines is **exactly one line** — the `scoring model:` header (line 10). Every
-    scenario-input row, every observed-metrics row and all 81 assertion rows are identical, so switching
-    models changed no candidate, score, rank, selection, price or explanation. This is the measured proof
-    that E1 changed the policy SURFACE only.
-- **§5 baseline committed.** `test/golden/baseline-launch-v2-2026-10.md` sits next to the immutable v1
-  baseline; the v1 baseline was neither regenerated nor edited.
-- **OFFICE unchanged under both models.** S17/S18 stay UNKNOWN-until-E6 and S19 fails A6 identically,
-  because the vocabulary is still `gpu_required_use_cases`-derived; the Platform `listUseCases` wire-up
-  in `apps/api/src/meta.js` remains an open request.
-- **Boundary.** `launch-v2` exists on the TEST branch only. The shared database is untouched and still
-  has `seed-minimal-v1` as its only active model. Active count 2 is a TEST-branch state, not a policy.
+- `SELECT count(*) FILTER (WHERE is_active) FROM scoring_model WHERE name IN
+  ('seed-minimal-v1','launch-v2');` = 2.
+- `node scripts/eval-scenarios.js --model=seed-minimal-v1@1.0.0` starts without the "exactly one
+  active model" gate (that gate is gone after the pin landed) and runs against the two-active branch.
+
+## §5 — Run the golden harness pinned to each model and capture the byte-identity evidence
+
+Two pinned runs, both to committed baseline files:
+
+```
+node scripts/eval-scenarios.js --model=seed-minimal-v1@1.0.0 --baseline=test/golden/baseline-2026-10.md
+node scripts/eval-scenarios.js --model=launch-v2@1.0.0 --baseline=test/golden/baseline-launch-v2-2026-10.md
+```
+
+Both use `scripts/lib/model-pin.js` and BOTH write the selected model's identity into the baseline
+header (`scoring model: <name> <version> (<id>)`). That is why the two written baselines differ on
+exactly one line — the model-identity header — when the two models are byte-identical downstream of
+configuration. If a future run produces a v1 baseline that differs from the committed one on any other
+line, that is a regression, not a calendar effect, and it must be investigated before anything is
+committed.
+
+After both return 0:
+
+- The v1 run's written `test/golden/baseline-2026-10.md` is the COMMITTED baseline for the unchanged
+  engine. Commit it as-is; do NOT regenerate it. It should be byte-identical to the committed one
+  already on disk — `cmp` clean — and it must stay that way. If it is not byte-identical, the
+  harness flag or the branch has changed and the plan is not in the state the plan assumed.
+- The launch-v2 run's written `test/golden/baseline-launch-v2-2026-10.md` is the second committed
+  baseline — the one that proves what launch-v2 ACTUALLY returns on this catalog. After E2 lands, this
+  is the file that moves; the v1 baseline does not.
+- Both runs should report 81 assertion rows / 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN, exit 0, residue
+  0 (cleanup verified). The exact numbers are the proof, not summary prose.
+- Run `git diff --stat test/golden/baseline-2026-10.md test/golden/baseline-launch-v2-2026-10.md`
+  and confirm the diff is exactly ONE line (the model-identity header). If it is more than one line,
+  stop: that means the two models are NOT byte-identical downstream of configuration, and the plan's
+  pre-condition is not met.
+
+## §6 — Reversal (clean up if anything here fails before Phase 2 is committed)
+
+If any step here fails and you need to back out before Phase 2 is committed:
+
+1. Restore the two uncommitted phases to the committed state:
+   `git restore --source=HEAD -- AGENTS.md CONTEXT.md docs/briefs/step2-launch-v2-runbook.md
+   docs/OG-39_ACTIVATION_PLAN.md docs/OPEN_GAPS.md docs/RECOMMENDATION_ENGINE_DECISIONS.md
+   docs/TEST_MAP.md docs/briefs/engine.md scripts/verify-docs.js
+   test/golden/baseline-launch-v2-2026-10.md` — but do NOT touch
+   `test/golden/baseline-2026-10.md` (that is the locked v1 baseline; never overwrite it).
+2. Reset the TEST-only write commits that this step added (careful: this rewrites the branch):
+   `git reset --soft HEAD~<n>` where `<n>` is the number of TEST-write commits since the last
+   shared state, or `git reset --hard HEAD~<n>` if you want the branch's file state back too. Only do
+   this on `agent/engine` after confirming no other work is in flight.
+3. Confirm the shared database is unchanged: re-run `node scripts/check-og01-coverage.js --strict`
+   and `node scripts/eval-scenarios.js --model=seed-minimal-v1@1.0.0` and confirm the v1 baseline
+   still reproduces byte-for-byte. **The shared `DATABASE_URL` is never written by these steps** —
+   seed 013 is applied to the TEST branch only, via the guard. The shared DB still has exactly the
+   rows it had before.
+
+If anything here fails after Phase 2 is committed, do NOT reset blindly — the engine changes are real
+and green. Instead, leave the branch as-is and investigate the specific failure; the steps are
+re-runnable because seed 013's statements are idempotent.

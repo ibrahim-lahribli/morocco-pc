@@ -99,7 +99,7 @@ Assertions (all evaluated per scenario unless a cross-scenario pair is named)
 - **Baseline identities:** every observed-metrics row now includes rank-1 CPU, GPU and CPU cooler product names and their exact Stage 1 selected prices, plus total and GPU share. No-build rows show `-`, never an invented component or zero price. GPU names identify the product, not a variant label; canonical signatures still distinguish variants. Thresholds and engine behaviour are unchanged.
 - **UNKNOWN rule (accepted E0c, not a new engine Decision):** once a scenario's `expect_builds_after` epic has landed, ANY UNKNOWN assertion involving it is a hard FAIL, including non-empty build sets. Before the epic lands it remains UNKNOWN. The E0c full CLI's UNKNOWN count rose from 2 to 3 only because the suite-level A9 PI-1 check was not run; no scenario changed. S17/S18 remained no-build UNKNOWNs. The separate E0d PI-1 rerun PASSed, exit 0, no drift for GAMING/OFFICE and verified cleanup.
 - **OG-41 classification:** differing transaction-clock inputs, not random ranking/DFS nondeterminism. Fixed-clock repeated runs and reversed SQL rows were identical; reversing the build array preserved ranks. A 1 ms change across a half-cent score rounding boundary changed ranks 3/4 and 8/9 in S09 while preserving the DFS signatures. The raw deltas were about -3e-9, but rounded score DESC then price ASC changes which build wins. This can affect the diversity-selected set and is not necessarily presentation-only. No engine fix is implemented.
-- **E2 evidence, not E2 implementation:** S03 and S06 retain the same five candidates per role and fill the 25-build cap within one Ryzen 9 5950X/B550M PRO-VDH/8GB DDR4/RTX 4060/RM850e prefix. RTX 5060 and 5060 Ti variants exist and are eligible but lose score-driven slots; UNKNOWN dimensions do not exclude them. One RTX 5070 (GAMING TRIO, 9000 MAD) IS retained; the other 5070s lose on score. Four GPU slots are 9000–16490 MAD and the fifth is the 3200 MAD cheapest reservation, leaving the 4990–7999 MAD middle band absent. Price-band retention is justified for this coverage gap, but cannot by itself prove better builds or solve capped-DFS starvation. E2/E3 remain unstarted.
+- **E2 evidence, not E2 implementation:** S03 and S06 retain the same five candidates per role and fill the 25-build cap within one Ryzen 9 5950X/B550M PRO-VDH/8GB DDR4/RTX 4060/RM850e prefix. RTX 5060 and 5060 Ti variants exist and are eligible but lose score-driven slots; UNKNOWN dimensions do not exclude them. One RTX 5070 (GAMING TRIO, 9000 MAD) IS retained; the other 5070s lose on score. Four GPU slots are 9000–16490 MAD and the fifth is the 3200 MAD cheapest reservation, leaving the 4990–7999 MAD middle band absent. Price-band retention is justified for this coverage gap, but cannot by itself prove better builds or solve capped-DFS starvation. This paragraph is the PRE-E2 evidence that motivated the epic; E2 landed 2026-10-09 (Decision 39) and the coverage gap it names is tracked as OG-43 — the E3 capped-DFS starvation half remains unstarted.
 - **Activation plan corrected:** `docs/OG-39_ACTIVATION_PLAN.md` now describes two-active and single-active cases. Explicit name/version pins still require an active model. Dropping a preflight predicate does NOT make inactive v1 executable. The TEST schema has no single-active constraint; the shared database was not inspected.
 
 ### Clock inventory: actual inputs versus parsing/metadata
@@ -141,7 +141,7 @@ identities/totals stable. 22 EXPECTED-RED hypotheses and 3 UNKNOWNs remain (S17/
 unrun PI-1); no threshold tuned. Four full-run cases succeed and both cleanup vectors are
 q/bc/comp/res/rej = 0. OG-41's changing-time harness artifact is resolved for pinned runs;
 legacy unpinned runs remain intentionally clock-sensitive. OG-42 is implemented; persisting
-as_of is only a Platform request in `docs/briefs/requests.md`. E2/E3/seed activation unstarted.
+as_of is only a Platform request in `docs/briefs/requests.md`. E2 is now IMPLEMENTED 2026-10-09 (Decision 39, below); seed activation landed on the TEST branch 2026-10-09 (E1, below); E3 remains unstarted.
 
 ### Historical E0d proposal — query-pinned `as_of` (superseded by Decision 38)
 
@@ -186,9 +186,9 @@ residue 0). The harness then ran to completion for the first time on the unchang
 rows, **PASS 56 / EXPECTED-RED 22 / UNKNOWN 3**, exit 0, cleanup residue `{q:0,bc:0,comp:0,res:0,rej:0}`
 (the third UNKNOWN is the suite-level A9 PI-1 row the CLI does not embed). Regenerating the baseline into a
 scratch path and diffing it against the committed `test/golden/baseline-2026-10.md` is **byte-identical**,
-so the committed baseline is a faithful pre-change snapshot. E2–E8 remain unstarted; E1 activation is still
-blocked on Step-2 item 1 (pin a model by name@version), because the preflight asserts exactly one active
-scoring model. `docs/briefs/step2-launch-v2-runbook.md` §1–§2 record the verified preconditions.
+so the committed baseline is a faithful pre-change snapshot. **Since this verification:** Step-2 item 1 landed (the
+pin, below), E1 activation was EXECUTED on the TEST branch 2026-10-09, and E2 landed the same day
+(Decision 39) — see the E1/E2 section below; E3–E8 remain unstarted. `docs/briefs/step2-launch-v2-runbook.md` §1–§2 record the verified preconditions.
 
 ### Step-2 item 1 — the scoring-model pin (IMPLEMENTED 2026-10-09)
 
@@ -200,14 +200,39 @@ malformed, ambiguous, inactive or unmatched pin, and prints the active models wh
 a pin does not resolve. Verified on a REAL two-active-model branch (temporary
 `pin-rehearsal-tmp@9.9.9`, 17/17 assertions, temp row removed; default pin gives a
 byte-identical golden baseline; PI-1 PASS pinned to the temp model). This unblocks
-runbook §4. §3 (applying seed 013) is still NOT run, so `launch-v2` exists on no
-database and this is a SELECTOR, not an activation.
+runbook §4. **§3 and §4 then RAN on 2026-10-09:** seed 013 was applied on the TEST branch and v1 was re-activated, so
+BOTH models are active there and the two pinned golden baselines differ on exactly one line (the model
+header) — see the E1/E2 section below. The shared database is untouched. A pin is still a SELECTOR, never
+an activation.
+
+## E1/E2 executed (2026-10-09)
+
+**E1 — activation DONE.** `database/seeds/013_scoring_model_launch_v2.sql` was applied on the `test-engine`
+branch (guarded, direct host, one transaction); `seed-minimal-v1` was then re-activated per the documented
+deviation, so BOTH models are active there (active count 2) and the shared database is untouched. Evidence
+that the two models are byte-identical: golden runs pinned to each (`--model=name@version`) both report 81
+rows / 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN, exit 0, residue 0, and the two written baselines differ on
+exactly ONE line — the model-identity header. The v1 baseline was neither regenerated nor edited
+(byte-identical to the committed `test/golden/baseline-2026-10.md`);
+`test/golden/baseline-launch-v2-2026-10.md` is the second committed baseline. Runbook §3–§5 of
+`docs/briefs/step2-launch-v2-runbook.md`.
+
+**E2 — IMPLEMENTED (Decision 39).** `retainTopKPerRole` takes an optional `roleTargets` map (per-role
+`{target, ceiling}` from a profile’s `spend_targets` + budget + resolution, see `retention/targets.js`) and a
+targeted role bucket keeps the best scorer in each price band (below / at / above, the above band bounded by
+the ceiling) inside the unchanged K cap, with the Decision 27 reservation and the Rule 3/5 order shared by
+both modes. A model with no `use_case_profiles` passes `null` and is byte-identical. Measured with
+`scripts/measure-retention-bands.js` on the TEST branch: 4 DISTINCT retained sets across 8000/12000/20000/
+30000 MAD GAMING under `launch-v2`, against 1 under v1 — the differential that makes the PASS meaningful.
+Golden effect under `launch-v2` (81 rows / 55 PASS / 23 EXPECTED-RED / 3 UNKNOWN, exit 0): A1
+S03/S10/S11 1 -> 2 distinct pairs, A3 S03 overlap 1 -> 0.36 and S04 1 -> 0, A1 S19 3 -> 2. No threshold was
+tuned. Residual registered as **OG-43**.
 
 ## E1–E8 (after E0; one PR each)
 
 E1 scoring model "launch-v2" with use_case_profiles (gpu_policy, spend_targets by role, optional role_weights override); export listUseCases(configuration) from the scoring barrel; decouple the vocabulary from gpu_required_use_cases (Decision 37 supersedes 17.6). Keep seed-minimal-v1 for reproducibility; follow docs/RECIPES/add-a-scoring-model-version.md.
 
-E2 target-aware price-band retention (keep Decision 27 reservation + budget_floor).
+~~E2 target-aware price-band retention (keep Decision 27 reservation + budget_floor).~~ **DONE 2026-10-09 (Decision 39) — see the E1/E2 section above.**
 
 E3 max_builds_per_pair quota enforced at GPU depth inside the DFS.
 

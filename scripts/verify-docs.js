@@ -81,6 +81,7 @@ function readRepo(rel) {
 // 2026-10-08, scoring-model use_case_profiles) added one more => 41, with
 // global headings 34 -> 35 (global + 2 = 37 global decisions).
 // Decision 38 adds one heading/status => 36 headings, 42 Status lines.
+// Decision 39 (E2, 2026-10-09) adds one heading/status => 37 headings, 43 Status lines.
 const decisions = (function checkDecisions() {
   const raw = readRepo('docs/RECOMMENDATION_ENGINE_DECISIONS.md');
   // Line-ending tolerant: the log is stored CRLF, but a Linux checkout
@@ -97,9 +98,9 @@ const decisions = (function checkDecisions() {
     if (inEngine3 && /^### Decision \d+/.test(line)) nested += 1;
     if (/^Status:/.test(line)) status += 1;
   }
-  const ok = global === 36 && nested === 5 && status === 42;
+  const ok = global === 37 && nested === 5 && status === 43;
   if (!ok) {
-    fail('decisions-parse', 'global=' + global + ' (want 36), nested=' + nested + ' (want 5), Status:=' + status + ' (want 42)');
+    fail('decisions-parse', 'global=' + global + ' (want 37), nested=' + nested + ' (want 5), Status:=' + status + ' (want 43)');
     return null;
   }
   pass('decisions-parse', global + ' headings + ' + nested + ' nested = ' + (global + 2) + ' global, ' + status + ' Status: lines');
