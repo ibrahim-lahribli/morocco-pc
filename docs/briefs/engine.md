@@ -178,6 +178,18 @@ same time input. This is a proposal to amend Decisions 7/17, not a numbered/reso
    missing/bad timestamps fail closed; old results retain traceability. Coordinate Platform
    schema/API ownership and Engine loader/scoring ownership before implementation.
 
+## E0 gate verified end-to-end (2026-10-09)
+
+The 60 pre-marker `recommendation_query` rows that made `assertNoUnmarkedQueries` refuse to run were
+operator-approved and DELETED from the TEST branch (one transaction, `deleted queries=60`, dependents 0,
+residue 0). The harness then ran to completion for the first time on the unchanged engine: 81 assertion
+rows, **PASS 56 / EXPECTED-RED 22 / UNKNOWN 3**, exit 0, cleanup residue `{q:0,bc:0,comp:0,res:0,rej:0}`
+(the third UNKNOWN is the suite-level A9 PI-1 row the CLI does not embed). Regenerating the baseline into a
+scratch path and diffing it against the committed `test/golden/baseline-2026-10.md` is **byte-identical**,
+so the committed baseline is a faithful pre-change snapshot. E2–E8 remain unstarted; E1 activation is still
+blocked on Step-2 item 1 (pin a model by name@version), because the preflight asserts exactly one active
+scoring model. `docs/briefs/step2-launch-v2-runbook.md` §1–§2 record the verified preconditions.
+
 ## E1–E8 (after E0; one PR each)
 
 E1 scoring model "launch-v2" with use_case_profiles (gpu_policy, spend_targets by role, optional role_weights override); export listUseCases(configuration) from the scoring barrel; decouple the vocabulary from gpu_required_use_cases (Decision 37 supersedes 17.6). Keep seed-minimal-v1 for reproducibility; follow docs/RECIPES/add-a-scoring-model-version.md.

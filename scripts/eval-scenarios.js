@@ -644,13 +644,16 @@ async function main() {
     // unmarked (foreign or pre-marker) recommendation_query row exists.
     const orphanSweep = await cleanupOrphans(client);
     console.log('startup orphan cleanup: ' + JSON.stringify(orphanSweep));
-    await assertNoUnmarkedQueries(client);
     if (args.cleanupOrphans) {
+      // Runs the sweep ALONE, so it must NOT be gated by the run preflight below:
+      // otherwise the flag could never report on the very rows that gate exists
+      // to surface (it would just throw the run preflight instead).
       await client.end();
       console.log('RESULT: --cleanup-orphans only; no scenarios run'
         + (orphanSweep.unmarked > 0 ? ' - unmarked rows remain (see the runbook)' : ''));
       process.exit(orphanSweep.unmarked > 0 ? 1 : 0);
     }
+    await assertNoUnmarkedQueries(client);
     const runId = newRunId();
     runProfileId = await createHarnessProfile(client, orphans.harnessProfileName(runId));
     console.log('run marker: ' + orphans.harnessProfileName(runId) + ' (' + runProfileId + ')');

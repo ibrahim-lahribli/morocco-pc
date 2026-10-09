@@ -1,6 +1,6 @@
 # Step 2 runbook — activate launch-v2 on test-engine (DO NOT RUN YET)
 
-Status: **DRAFT / NOT RUN.** This file describes a coordinated step. Do not execute any command below until the
+Status: **PARTIAL — §1 preconditions SATISFIED and §2 pre-flight VERIFIED 2026-10-09; §3–§5 (apply seed 013, differential run, new baseline) NOT RUN.** This file describes a coordinated step. Do not execute any command below until the
 operator confirms it. Every write targets the **`test-engine` branch only** (`TEST_DATABASE_URL`, endpoint
 `ep-weathered-salad-axdc6r3t`); production, `test` and `pre-018-2026-10-06` are out of scope.
 
@@ -13,11 +13,10 @@ without a follow-up re-activation. Two further conflicts are recorded in §7 —
 
 ## 1. Preconditions (human, outside this repo)
 
-1. `.env` has been repointed and the database password rotated (the operator does this by hand).
-2. `TEST_DATABASE_URL` still resolves to `ep-weathered-salad-axdc6r3t` (branch `test-engine`, parent `test`).
-   Confirm with `node scripts/apply-seed.js database/seeds/013_scoring_model_launch_v2.sql --dry-run`
+1. **SATISFIED 2026-10-09.** `.env` holds only `DATABASE_URL`, `TEST_DATABASE_URL` and `GITHUB_TOKEN`; the earlier dead keys (`test-engine`, `OG-13_DATABASE_URL`) are gone. Both URLs were verified by a real `SELECT 1` on 2026-10-09 on distinct hosts, so `getWriteTestDbUrl()` accepts them — and an actual TEST-branch write through that guard succeeded (the §2.4 deletion).
+2. **VERIFIED 2026-10-09.** `TEST_DATABASE_URL` still resolves to `ep-weathered-salad-axdc6r3t` (branch `test-engine`, parent `test`). Confirm with `node scripts/apply-seed.js database/seeds/013_scoring_model_launch_v2.sql --dry-run`
    — the startup line must print `endpoint ep-weathered-salad-axdc6r3t (direct), database neondb`.
-3. The 60 pre-marker `recommendation_query` rows are gone (see §2.4).
+3. **DONE 2026-10-09.** The 60 pre-marker `recommendation_query` rows are gone (§2.4). Re-measured after removal: `queries 0`, `profiles 0`, ledger `18`, `100 Seed %` products, `101` offers, exactly ONE active model (`seed-minimal-v1@1.0.0`).
 
 ## 2. Pre-flight (read-only)
 
@@ -31,17 +30,17 @@ Target: **18 ledger rows, 100 `Seed %` products, 101 offers, exactly ONE active 
    - `SELECT name, version, is_active FROM scoring_model WHERE is_active = true` → exactly one row:
      `seed-minimal-v1 1.0.0`.
 2. Orphan sweep: `node scripts/eval-scenarios.js --cleanup-orphans`
-   - Expected after the E0e change: `{ profiles: 0, queries: 0, dependents: 0, unmarked: 0 }` and exit 0.
+   - Expected after the E0e change: `{ profiles: 0, queries: 0, dependents: 0, unmarked: 0 }` and exit 0. **Measured 2026-10-09: exactly that.**
    - If `unmarked > 0`, STOP — see §2.4.
 3. A normal `node scripts/eval-scenarios.js` run must also print
    `startup orphan cleanup: {...}` and then pass `assertNoUnmarkedQueries`.
-4. **Pre-marker rows (one-time).** The 60 rows measured on 2026-10-08 predate the marker, so the E0e harness
+4. **Pre-marker rows (one-time) — REMOVED 2026-10-09.** The 60 rows measured on 2026-10-08 predated the marker, so the E0e harness
    will NOT delete them — `assertNoUnmarkedQueries` fails instead. They are attributable to the golden harness
    by shape (3 clusters of 20, each one committed transaction, budgets/use-cases equal to the `absolute` scenario
    set), and were left by runs killed before their `finally`. Removal is a hand operation, approved by the
    operator, in FK dependency order:
    `build_rejection` → `recommendation_result` → `build_component` → `build_candidate` → `recommendation_query`
-   (all four dependents are currently 0, so only the `recommendation_query` DELETE does work).
+   (all four dependents are currently 0, so only the `recommendation_query` DELETE does work). **Executed 2026-10-09** in one transaction (target `ep-weathered-salad-axdc6r3t`, via `scripts/lib/db-url.js`): `deleted: rejections=0 results=0 components=0 candidates=0 queries=60`, after-state `unmarked 0 / queries 0 / profiles 0`, residue asserted 0.
 
 ## 3. Apply seed 013 (one transaction, BOTH models active)
 
@@ -96,3 +95,18 @@ Target: **18 ledger rows, 100 `Seed %` products, 101 offers, exactly ONE active 
    API DB tests must stay on a branch where only v1 is active) is NOT written.** Step-2 item 5, deferred.
 4. `node scripts/run-seeds.js` is **not** the tool for this step: it targets the shared `DATABASE_URL` and has no
    TEST-branch routing. Use `scripts/apply-seed.js`.
+
+## 8. E0 gate verified 2026-10-09 (new evidence; no state change)
+
+With the pre-marker rows gone, the golden harness ran END-TO-END for the first time on the unchanged
+engine: 81 assertion rows, **PASS 56 / EXPECTED-RED 22 / UNKNOWN 3**, `RESULT: EXPECTED-RED`, **exit 0**,
+cleanup `residue {"q":0,"bc":0,"comp":0,"res":0,"rej":0}`. The third UNKNOWN is the suite-level A9 PI-1
+row, which the CLI does not embed — run `npm run verify:pi1` separately. Regenerating the baseline into a
+scratch path (`--baseline=test/golden/_tmp_baseline.md --no-volatile`) and diffing it against the committed
+`test/golden/baseline-2026-10.md` is **byte-identical**, so the committed v1 baseline is a faithful "before"
+snapshot and Decision 38's pinned `as_of` holds. 22 EXPECTED-RED is the CORRECT disposition here (every
+failed assertion is an unreviewed `hypothesis`); do not "fix" it and do not tune a threshold to make a
+scenario pass.
+
+§3–§5 remain unexecuted, and §4 still cannot run: it needs Step-2 item 1 (pin the harness by name@version),
+because the preflight asserts exactly one active `scoring_model` while §3 creates two.
