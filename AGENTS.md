@@ -200,6 +200,7 @@ Command gotchas (verified 2026-09-28):
   as every line changed. Check first with `grep -qU $'\r' <file>`; if it is already CRLF, append the
   new text with `split('\n').join('\r\n')` and `fs.appendFileSync` only. `docs/RECOMMENDATION_ENGINE_DECISIONS.md`
   also carries a UTF-8 BOM; rewriting it as utf8 drops the BOM and adds a spurious first-line diff.
+- **`str_replace`'s matcher ignores whitespace, so an anchor that spans a line WRAP in a CRLF doc still matches - and the replacement silently JOINS the two lines.** Anchor wholly inside one physical line, or edit through an exact `split(from).join(to)` script; wrapped prose in `docs/**` is the usual victim (three repairs needed in one session: AGENTS.md, runbook SS1 and SS7).
 - `python` is not installed in this shell (Windows alias stub); use `node -e` for file surgery.
   A bare `TEST_DATABASE_URL="$TEST_DATABASE_URL" node -e ...` prefix is a trap — the outer shell has
   no such var, so it exports an EMPTY value that shadows the one `dotenv` just loaded, and the
