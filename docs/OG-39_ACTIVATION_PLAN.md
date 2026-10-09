@@ -1,13 +1,15 @@
 # OG-39 — scoring-model activation plan
 
-**Status: PARTIALLY IMPLEMENTED (Step-2 item 1, 2026-10-09).** The HARNESS
+**Status: ACTIVATED ON THE TEST BRANCH 2026-10-09 (Step-2 items 1-2 done).** The HARNESS
 SELECTOR is implemented: `scripts/lib/model-pin.js` resolves a model by
 `name@version` among active rows (default `seed-minimal-v1@1.0.0`; override
 `--model=<pin>` or `SCORING_MODEL_PIN`) and every comparison harness plus the
-golden preflight uses it, so a TWO-ACTIVE-model branch is measurable. **No seed,
-model activation or engine eligibility change has been made by this document:**
-seed 013 is still unapplied, `launch-v2` exists on no database, and
-`seed-minimal-v1@1.0.0` remains the only active model. Audience: Engine and
+golden preflight uses it, so a TWO-ACTIVE-model branch is measurable. **Case (a) was
+executed 2026-10-09:** seed 013 was applied on `test-engine` and v1 was then re-activated,
+so BOTH models are active there (active count 2) and a launch-v2 baseline is committed
+(`test/golden/baseline-launch-v2-2026-10.md`) - identical to v1's except the model
+header, proven by a real differential run (see the runbook section 9). The SHARED database
+remains untouched, with `seed-minimal-v1@1.0.0` as its only active model. Audience: Engine and
 Platform maintainers coordinating a TEST-first activation.
 Scope: model selection and reproducible comparison, not E2/E3 or shared-DB changes.
 

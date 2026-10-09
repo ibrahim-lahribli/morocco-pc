@@ -1,6 +1,6 @@
 # Step 2 runbook — activate launch-v2 on test-engine (DO NOT RUN YET)
 
-Status: **PARTIAL — §1 preconditions SATISFIED, §2 pre-flight VERIFIED and the §4 prerequisite (Step-2 item 1) IMPLEMENTED 2026-10-09; §3–§5 (apply seed 013, differential run, new baseline) NOT RUN.** This file describes a coordinated step. Do not execute any command below until the
+Status: **PARTIAL — §1 preconditions SATISFIED, §2 pre-flight VERIFIED and the §4 prerequisite (Step-2 item 1) IMPLEMENTED 2026-10-09; §3–§5 (apply seed 013, differential run, new baseline) RUN 2026-10-09 (Phase 1 executed; see §9).** This file describes a coordinated step. Do not execute any command below until the
 operator confirms it. Every write targets the **`test-engine` branch only** (`TEST_DATABASE_URL`, endpoint
 `ep-weathered-salad-axdc6r3t`); production, `test` and `pre-018-2026-10-06` are out of scope.
 
@@ -109,5 +109,32 @@ snapshot and Decision 38's pinned `as_of` holds. 22 EXPECTED-RED is the CORRECT 
 failed assertion is an unreviewed `hypothesis`); do not "fix" it and do not tune a threshold to make a
 scenario pass.
 
-§3–§5 remain unexecuted, and §4 still cannot run: it needs Step-2 item 1 (pin the harness by name@version),
-because the preflight asserts exactly one active `scoring_model` while §3 creates two.
+## 9. Phase 1 EXECUTED 2026-10-09 (E1 activation + differential run)
+
+Status: **§3 apply, §4 differential run and §5 baseline are RUN.** Target: `test-engine`
+(`ep-weathered-salad-axdc6r3t`), every write through `scripts/lib/db-url.js`; the shared `DATABASE_URL`
+was never contacted.
+
+- **§3 applied.** `node scripts/apply-seed.js database/seeds/013_scoring_model_launch_v2.sql` (one
+  transaction, `SET LOCAL search_path = public`, direct host). The seed statement 2 deactivated v1; the
+  documented §3.2 deviation re-activated it, so BOTH models are active:
+  `launch-v2 1.0.0 is_active=true` and `seed-minimal-v1 1.0.0 is_active=true`, active count **2**.
+- **§4 differential run — byte-identity PROVEN, not asserted.** The harness ran twice with the
+  Step-2 item 1 pin and the suite `as_of` (`2026-10-08T20:00:00.000Z`):
+  - `--model=seed-minimal-v1@1.0.0` → 81 rows, PASS 56 / EXPECTED-RED 22 / UNKNOWN 3,
+    `RESULT: EXPECTED-RED`, exit 0, `cleanup verified: residue {"q":0,"bc":0,"comp":0,"res":0,"rej":0}`.
+    Its regenerated baseline is byte-identical to the committed `test/golden/baseline-2026-10.md`
+    (sha256 `d62b2fbf27626f2ea58a4d0561ddc707a89b4c0b46e5c0d3a946fbe8bb440cf5`, 16678 bytes, `cmp` exit 0).
+  - `--model=launch-v2@1.0.0` (id `44aa5e30-75ed-4852-bc28-4ff8dc3650ea`) → the SAME 81 rows and SAME
+    dispositions, exit 0, residue 0.
+  - `diff` of the two baselines is **exactly one line** — the `scoring model:` header (line 10). Every
+    scenario-input row, every observed-metrics row and all 81 assertion rows are identical, so switching
+    models changed no candidate, score, rank, selection, price or explanation. This is the measured proof
+    that E1 changed the policy SURFACE only.
+- **§5 baseline committed.** `test/golden/baseline-launch-v2-2026-10.md` sits next to the immutable v1
+  baseline; the v1 baseline was neither regenerated nor edited.
+- **OFFICE unchanged under both models.** S17/S18 stay UNKNOWN-until-E6 and S19 fails A6 identically,
+  because the vocabulary is still `gpu_required_use_cases`-derived; the Platform `listUseCases` wire-up
+  in `apps/api/src/meta.js` remains an open request.
+- **Boundary.** `launch-v2` exists on the TEST branch only. The shared database is untouched and still
+  has `seed-minimal-v1` as its only active model. Active count 2 is a TEST-branch state, not a policy.
