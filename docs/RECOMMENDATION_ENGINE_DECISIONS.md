@@ -4503,3 +4503,104 @@ selected' for the retention input ONLY (resolution is still not part of the Engi
 consumes Decision 37's `use_case_profiles.spend_targets` while leaving its item 5 hypothesis list
 and the pending H3 review untouched; leaves Decision 27's reservation, the K cap and the Rule 3/5
 order intact. Registers OG-43. No historical document is rewritten.
+
+## Decision 40 — the Engine 3 walk enforces the optional per-pair quota candidate_caps.max_builds_per_pair (E3)
+
+Status: RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 — `validateScoringModelConfiguration` accepts the OPTIONAL
+`candidate_caps.max_builds_per_pair` (valid iff a positive integer or absent; a DECLARED malformed value fails the
+nested path in both validators, never silently defaults), `validateEngine3Input` accepts and carries it, and
+`assembleBuilds` skips a GPU branch once its (CPU, GPU) pair already holds the quota and never emits a path whose
+pair is full, so the `max_builds_per_query` halt is no longer spent on one pair. A model that declares no
+`max_builds_per_pair` keeps the pre-E3 walk byte-identical.
+
+Date: 2026-10-10. E3 of `docs/briefs/engine.md`. It answers Decision 25's cap-starvation diagnosis inside Engine 3
+and consumes OG-43's "remaining work is E3" re-check trigger. It IS an engine behaviour change (the assembly walk
+and both validators) plus golden runs against both model pins. It is NOT a migration, and NOT a shared-DB change:
+seeds 014 / 015 / 016 (launch-v2 1.1.0 / 1.2.0 / 1.3.0) are TEST-branch only. It is NOT a scoring / retention /
+ranking / persistence change, NOT an API change, and NOT E4.
+
+### Current situation
+
+Engine 3's DFS halted once `candidate_caps.max_builds_per_query` builds were held, with no pair dimension, so the
+global cap bought pair diversity nothing: Decision 25 measured the walk spending its halt on one (CPU, GPU) pair
+and concluded no MAX_PER_PAIR value could help while the halt stayed pair-blind. `candidate_caps` was a closed
+two-key contract (`top_k_per_role`, `max_builds_per_query`), so a model configuration could not even state a
+per-pair cap. After E1/E2, golden A1 (at least 3 distinct (CPU, GPU) pairs in the selected set) still had red rows
+on `launch-v2` 1.0.0: the committed `baseline-launch-v2-2026-10.md` measures 23 EXPECTED-RED (55 PASS / 3 UNKNOWN)
+and reports one distinct pair at S03/S05/S07 (OG-43).
+
+### Problem
+
+The diversity objective that E0 pins (A1) cannot be met by retention or scoring: it is the `assembleBuilds` walk
+itself that stops after few pairs. Any fix at a later stage sees a smaller input pool, and lifting
+`max_builds_per_query` alone trades the OG-26 starvation history for a latency regression the Platform has not
+budgeted.
+
+### Decision
+
+1. `candidate_caps` stays a CLOSED contract but is declared with an OPTIONAL third key `max_builds_per_pair`:
+   valid iff a positive integer, or absent. A DECLARED non-positive / non-integer value (including `null`) fails
+   `INVALID_FIELD_VALUE` at the nested path in BOTH validators (`scoring/configuration.js`, `assembly/input.js`);
+   absence is the default and adds no key to the validated output (the declared-absent contract).
+2. Quota identity is the (CPU, GPU) product/variant pair, exactly the key the diverse-top selection pairs by, so
+   the two stages cannot disagree about what "one pair" means.
+3. `assembleBuilds` enforces the quota at GPU DEPTH: a GPU branch whose pair already holds the quota is skipped,
+   and a path whose pair is full is never emitted, so the pair counts and the global `max_builds_per_query` halt
+   both count EMITTED builds only. GPU branches are consumed in eligible-set order with no re-sort; the fixed
+   code-unit tie-breaks are untouched, so determinism and reproducibility are unchanged in kind.
+4. Below the quota, and when the key is absent, the walk is byte-identical to the pre-E3 rule (pinned
+   fixture-level, and re-proven on the real 20-scenario harness: see the verdict).
+5. The quota VALUE is a model decision, not an engine decision: seeds 014 / 015 / 016 add `launch-v2` 1.1.0 /
+   1.2.0 / 1.3.0 (quota 2 / 3 / 1) ACTIVE on the TEST branch beside 1.0.0 (`seed-minimal-v1` and 1.0.0 untouched,
+   shared DB untouched), each diverging from 1.0.0 only in the quota, so the name@version model pin (OG-39)
+   selects which version a run measures. The measured hypotheses: quota 2 reaches 4-6 pairs at S03..S09; quota 1
+   reaches 6+ at the halt of 25; quota 3 sits between. All three pins are HYPOTHESES pending the H3 review,
+   recorded as the same class of unvalidated constant as OG-43.
+
+### Rejected alternatives
+
+- Raising `max_builds_per_query` instead of adding a pair dimension: changes a global budget the Platform sized
+  from real measurements, buys diversity only where the DFS happens to wander, and re-exposes OG-26 starvation
+  dynamics under a bigger cap. Rejected on the Decision 25 diagnosis itself.
+- Making `max_builds_per_pair` REQUIRED: a required third key breaks every stored configuration that predates
+  this decision (`seed-minimal-v1`, launch-v2 1.0.0) the moment a validator re-reads them; an OPTIONAL key keeps
+  the reproducibility guarantee that pinned models replay unchanged.
+- Enforcing the quota in ranking or selection instead of the walk: those stages see the assembled builds whose
+  composition was already fixed; the pair spread must be decided while the DFS still has GPU branches to visit,
+  which is Decision 25's original point.
+- Freezing one quota value in code (the MAX_PER_PAIR enum precedent) rather than in a model key: the whole
+  objective is that different use cases/models may want different diversity-vs-latency trades, so the value
+  has to live next to the other candidate caps the model already declares.
+
+### Verdict for this pass
+
+Unit: `npm run test:unit` = 1002 pass / 0 fail / 0 cancelled on Node 24.21.0; the changed files re-run green on
+Node 22.23.3 (CI parity, 149/149 with 0 cancelled). `npm run test:scripts` = 212/212; `npm run test:api` = 38/38;
+`gen-decision-index --check` and `verify-docs --offline` clean. New pins: 5 assembly cases (absent = pre-E3 walk
+under the same halt; quota 1 reaches 6 distinct pairs under the same halt; quota 2 caps every pair at 2 with 5
+distinct pairs; deterministic Rule order per pair preserved; nested-path validation for 0 / -1 / 1.5 / "2" /
+null), one input-contract pin, two configuration pins.
+
+Golden (TEST branch, 20 scenarios): pinned `launch-v2@1.0.0`, the E3 engine reproduces the committed
+`test/golden/baseline-launch-v2-2026-10.md` BYTE-IDENTICALLY (`cmp` clean after the two normalized timestamp
+lines), proving the declared-absent contract on the real harness. Pinned `@1.1.0` (quota 2): 68 PASS / 10
+EXPECTED-RED / 3 UNKNOWN, exit 0 — A1 green across S03..S09 (S03 5, S04 6, S05 6, S06 4, S07 6, S08 6, S09 6
+pairs), so E3's A1 acceptance ("at least 3 distinct pairs at >= 12k MAD") is MET differentially, not vacuously.
+The remaining 10 EXPECTED-RED rows are exactly E4-E7 epics (A3 workstation signature, A4 VRAM floor, A5
+price-vs-performance archetypes, A6-S19 OFFICE/iGPU) and are not tuned. The measured scratch runs are committed
+as `test/golden/_scratch-v1..v6.md` (v1 seed-minimal-v1 RED -> v2 launch-v2 1.0.0 RED -> v3/v4/v5 quota 2/3/1
+GREEN -> v6 deterministic repro).
+
+Migrations: `verify:replay --reference=test` = 0 drift (18 files, 362/362 columns, 78/78 checks, 60/60 FKs,
+99/99 indexes). Pool independence: `verify:pi1` = PASS (GAMING 0/25 and OFFICE 0/25 pre-existing `build_score`
+moved; one earlier same-session run reported a single 54.79 -> 54.78 false drift, the gate's known intermittent
+mode; the paired re-run is the verdict). Seed idempotency: a real re-run of 014 / 015 / 016 through
+`scripts/apply-seed.js` is a no-op with byte-identical stored configurations.
+
+### Supersedes / superseded by
+
+Answers Decision 25 (the pair-blind halt) without rewriting it; amends Decision 37's `candidate_caps` closed
+shape with an OPTIONAL key and consumes OG-39's model pin; leaves Decision 27's reservation, Decision 39's
+retention bands, and every scoring weight untouched. Registers **OG-44** (the quota values 1 / 2 / 3 are
+unvalidated hypotheses, pending the same H3 review as OG-43's band constants; E3 is unexercised on the shared
+DB and by the API). No historical document is rewritten.
