@@ -39,6 +39,7 @@ function queryRow(overrides = {}) {
     use_case: 'GAMING',
     scoring_model_id: MODEL_ID,
     resolution: null,
+    priority: 3,
     ...overrides,
   };
 }
@@ -72,7 +73,7 @@ async function rejectionOf(promise) {
 // ---------------------------------------------------------------------------
 
 const EXPECTED_SQL =
-  'SELECT id, budget_amount, currency, use_case, scoring_model_id, resolution ' +
+  'SELECT id, budget_amount, currency, use_case, scoring_model_id, resolution, priority ' +
   'FROM recommendation_query WHERE id = $1';
 
 test('the loader issues exactly the Decision 10/17.1 query', () => {
@@ -84,12 +85,13 @@ test('the loader issues exactly the Decision 10/17.1 query', () => {
 
 test('the SQL selects only contract columns and ignores v1-ignored fields', () => {
   const lowered = SELECT_QUERY_INPUT_SQL.toLowerCase();
-  for (const col of ['id', 'budget_amount', 'currency', 'use_case', 'scoring_model_id', 'resolution']) {
+  // E2/E4 (Decision 39 / 41): `resolution` and `priority` are now carried as
+  // VERBATIM SIBLINGS of the Engine 2A input (never inside it); only the
+  // profile-FK column stays unselected.
+  for (const col of ['id', 'budget_amount', 'currency', 'use_case', 'scoring_model_id', 'resolution', 'priority']) {
     assert.ok(lowered.includes(col), `SQL must select ${col}`);
   }
-  for (const ignored of ['priority', 'recommendation_profile_id']) {
-    assert.ok(!lowered.includes(ignored), `SQL must not select ${ignored}`);
-  }
+  assert.ok(!lowered.includes('recommendation_profile_id'), 'SQL must not select recommendation_profile_id');
 });
 
 test('the SQL issues no transaction or clock statements', () => {
@@ -115,7 +117,9 @@ test('happy path returns the frozen { query_id, scoring_model_id, input } shape'
   assert.equal(db.calls.length, 1);
   assert.equal(db.calls[0].sql, SELECT_QUERY_INPUT_SQL);
   assert.deepEqual(db.calls[0].params, [QUERY_ID]);
-  assert.deepEqual(Object.keys(out).sort(), ['input', 'query_id', 'resolution', 'scoring_model_id']);
+  // E4: `priority` is now a carried sibling (verbatim row value), like `resolution`.
+  assert.deepEqual(Object.keys(out).sort(), ['input', 'priority', 'query_id', 'resolution', 'scoring_model_id']);
+  assert.equal(out.priority, 3);
   assert.equal(out.query_id, QUERY_ID);
   assert.equal(out.scoring_model_id, MODEL_ID);
   assert.deepEqual(out.input, {
@@ -222,10 +226,12 @@ test('extra row columns are ignored and never leak into the result', async () =>
   };
   const db = makeDb([row]);
   const out = await loadQueryInput(QUERY_ID, db);
-  assert.deepEqual(Object.keys(out).sort(), ['input', 'query_id', 'resolution', 'scoring_model_id']);
+  assert.deepEqual(Object.keys(out).sort(), ['input', 'priority', 'query_id', 'resolution', 'scoring_model_id']);
   assert.deepEqual(Object.keys(out.input).sort(), ['budget_amount', 'currency', 'required_roles', 'use_case']);
   assert.equal(out.resolution, '1440p');
-  assert.ok(!('priority' in out), 'priority must stay unselected');
+  assert.equal(out.priority, 2);
+  assert.ok(!('priority' in out.input), 'priority must stay OUTSIDE the Engine 2A input');
+  assert.ok(!('recommendation_profile_id' in out), 'the profile-FK column stays unselected');
 });
 
 test('invalid queryId and db are rejected; bad queryId never queries', async () => {

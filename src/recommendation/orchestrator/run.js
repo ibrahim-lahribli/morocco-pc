@@ -410,6 +410,9 @@ async function runRecommendation(args) {
     builds: Object.freeze(builds),
     budget_amount: queryInput.input.budget_amount,
     currency: queryInput.input.currency,
+    // E4 (Decision 41): carried VERBATIM as a sibling (same pattern as E2's
+    // resolution); only the archetype selection reads it.
+    priority: queryInput.priority,
     build_contributions: buildContributions.contributions,
     // Decision 27: last, so the two index-aligned fields stay adjacent.
     budget_floor: budgetFloor,

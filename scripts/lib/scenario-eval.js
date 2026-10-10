@@ -255,12 +255,15 @@ function projectEntry(entry, maps) {
  * @param {string} id scenario id
  * @param {object} snapshot the frozen runRecommendation result
  * @param {object} rankedResult rankBuilds({ builds }) result
- * @param {object} selection selectDiverseTop({ ranked, limit, maxPerPair }) result
+ * @param {object} selection selectArchetypes({ ranked, budget, priority }) result (E4)
  * @param {object} maps { vramByVariant: Map, igpuByCpu: Map }
  */
 function projectArtifact(id, snapshot, rankedResult, selection, maps) {
   const ranked = rankedResult.ranked;
-  const selected = selection.selected;
+  // E4: `selection.selected` (the old DiverseTop key) is replaced by the
+  // archetypes array. `best` stays the RANK-1 build: every A-assertion that
+  // reads `best` ranks the whole space, which the archetypes do not change.
+  const selected = selection.archetypes;
   const best = ranked.length > 0 ? ranked[0] : null;
   const bestProjected = best === null ? null : projectEntry(best, maps);
   const selectedProjected = selected.map((entry) => projectEntry(entry, maps));
@@ -312,6 +315,10 @@ function projectArtifact(id, snapshot, rankedResult, selection, maps) {
     best: bestProjected,
     selected: selectedProjected,
     selected_pair_count: pairSet.size,
+    // E4: the strategies the selection actually returned (output order) and
+    // its degradation codes, for the A10 archetype assertions.
+    archetype_strategies: selected.map((archetype) => archetype.strategy_key),
+    archetype_reason_codes: Array.isArray(selection.reason_codes) ? selection.reason_codes : [],
     selected_has_reject: selectedProjected.some((entry) => entry.compatibility_status === 'REJECT'),
     best_gpu_price_share: bestGpuShare,
     best_cpu_ram_share: bestCpuRamShare,
@@ -804,6 +811,46 @@ function summarize(results) {
 }
 
 /**
+ * A10 - E4 archetypes: exactly the expected strategy triple in expected order;
+ * optional max_answerable check (archetype count) and reason-code sanity.
+ * Pure.
+ */
+function a10(assertion, get) {
+  const rows = [];
+  for (const scenario of assertion.scenarios) {
+    const sid = scenario.id;
+    const a = get(sid);
+    const expected = 'archetype strategies exactly ' + JSON.stringify(scenario.expected_strategies)
+      + ' in output order, distinct pairs, and no UNKNOWN degradation codes';
+    if (a === null) {
+      rows.push(row('A10', STATUSES.UNKNOWN, [sid], null, expected, 'artifact missing'));
+      continue;
+    }
+    const measured = a.archetype_strategies;
+    const orderOk = JSON.stringify(measured) === JSON.stringify(scenario.expected_strategies);
+    // Archetypes must be pairwise pair-distinct (the E4 contract).
+    const pairKeys = a.selected.map((entry) => entry.pair_key).filter((k) => k !== null);
+    const distinctOk = new Set(pairKeys).size === pairKeys.length;
+    // Reason codes present but EMPTY_RANKED means the scenario has nothing,
+    // else every degradation code must be one of NO_* (the honest shortfall).
+    const codesOk = a.archetype_reason_codes.every((code) => code === 'EMPTY_RANKED' || /^NO_[A-Z]+$/.test(code));
+    rows.push(row(
+      'A10',
+      orderOk && distinctOk && codesOk ? STATUSES.PASS : STATUSES.FAIL,
+      [sid],
+      {
+        strategies: measured,
+        reason_codes: a.archetype_reason_codes,
+        distinct_pairs: new Set(pairKeys).size,
+      },
+      expected,
+      'E4 selectArchetypes output'
+    ));
+  }
+  return rows;
+}
+
+/**
  * Evaluate the whole suite. Pure.
  *
  * @param {object} suite { scenarios, thresholds, assertions }
@@ -868,6 +915,9 @@ function evaluateSuite({ suite, artifacts, artifactsSecond, pi1 }) {
         break;
       case 'safety':
         results.push(...a9(assertion, get, pi1));
+        break;
+      case 'archetype_strategies':
+        results.push(...a10(assertion, get));
         break;
       default:
         throw new Error('scenario-eval: unknown assertion type "' + assertion.type + '"');

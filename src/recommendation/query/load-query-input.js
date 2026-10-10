@@ -93,11 +93,13 @@ const REQUIRED_ROLES = Object.freeze([
 
 /**
  * Single Decision 10/17.1 query. Parameterized only ($1 = query id).
- * Exactly the five contract columns -- `resolution`, `priority`, and
- * the profile-FK column are deliberately absent (Decision 17.6).
+ * Exactly the six contract columns -- the profile-FK column remains
+ * deliberately absent (Decision 17.6 as amended: `resolution` carried as an
+ * E2 sibling, `priority` carried as an E4 sibling; neither is part of the
+ * Engine 2A input contract).
  */
 const SELECT_QUERY_INPUT_SQL = [
-  'SELECT id, budget_amount, currency, use_case, scoring_model_id, resolution',
+  'SELECT id, budget_amount, currency, use_case, scoring_model_id, resolution, priority',
   'FROM recommendation_query',
   'WHERE id = $1',
 ].join(' ');
@@ -226,6 +228,7 @@ async function loadQueryInput(queryId, db) {
     scoring_model_id: row.scoring_model_id,
     input,
     resolution: row.resolution,
+    priority: row.priority,
   });
 }
 

@@ -17,14 +17,25 @@
  *   TOP_N_PERSISTED        -> 10 (persistable top-N, Decision 18.4)
  *   selectDiverseTop({ ranked, limit, maxPerPair }) -> deeply frozen { selected, dropped_count }
  *   MAX_PER_PAIR           -> 3 (per-pair cap, Decision 20 section 3)
+ *   selectArchetypes({ ranked, budget, priority }) -> deeply frozen { archetypes, reason_codes }
+ *                            (E4 / Decision 41; strategy_key persistence is
+ *                            DEFERRED to Platform migration 019)
+ *   PERFORMANCE_FLOOR      -> 0.85 (E4 spend threshold, Decision 41)
+ *   STRATEGIES             -> frozen ['PERFORMANCE','BALANCED','VALUE']
+ *   REASON_CODES           -> frozen E4 degradation vocabulary
  */
 
 const { rankBuilds, TOP_N_PERSISTED } = require('./rank');
 const { selectDiverseTop, MAX_PER_PAIR } = require('./select-diverse');
+const { selectArchetypes, PERFORMANCE_FLOOR, STRATEGIES, REASON_CODES } = require('./select-archetypes');
 
 module.exports = {
   rankBuilds,
   TOP_N_PERSISTED,
   selectDiverseTop,
   MAX_PER_PAIR,
+  selectArchetypes,
+  PERFORMANCE_FLOOR,
+  STRATEGIES,
+  REASON_CODES,
 };

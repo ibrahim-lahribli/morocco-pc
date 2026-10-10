@@ -718,12 +718,19 @@ async function main() {
         const first = await orchestrator.runRecommendationSnapshot(client, queryId, engineOptions);
         const second = await orchestrator.runRecommendationSnapshot(client, queryId, engineOptions);
         const rankedFirst = ranking.rankBuilds({ builds: first.builds });
-        const selectedFirst = ranking.selectDiverseTop({
-          ranked: rankedFirst.ranked, limit: ranking.TOP_N_PERSISTED, maxPerPair: ranking.MAX_PER_PAIR,
+        // E4 (Decision 41): the archetype selection replaces the DiverseTop walk
+        // as the pre-persistence showcase; both pins get the same E4 arguments
+        // the full-run wiring passes.
+        const selectedFirst = ranking.selectArchetypes({
+          ranked: rankedFirst.ranked,
+          budget: { amount: first.budget_amount, currency: first.currency },
+          priority: first.priority,
         });
         const rankedSecond = ranking.rankBuilds({ builds: second.builds });
-        const selectedSecond = ranking.selectDiverseTop({
-          ranked: rankedSecond.ranked, limit: ranking.TOP_N_PERSISTED, maxPerPair: ranking.MAX_PER_PAIR,
+        const selectedSecond = ranking.selectArchetypes({
+          ranked: rankedSecond.ranked,
+          budget: { amount: second.budget_amount, currency: second.currency },
+          priority: second.priority,
         });
         artifacts.set(scenario.id, scenarioEval.projectArtifact(scenario.id, first, rankedFirst, selectedFirst, maps));
         artifactsSecond.set(scenario.id, scenarioEval.projectArtifact(scenario.id, second, rankedSecond, selectedSecond, maps));

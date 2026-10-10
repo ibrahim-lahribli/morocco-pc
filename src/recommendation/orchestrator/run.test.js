@@ -367,6 +367,9 @@ test('runRecommendation: one pass returns the frozen Decision 17.2 shape', async
     'builds',
     'budget_amount',
     'currency',
+    // E4 (Decision 41): carried VERBATIM as a sibling, same pattern as the
+    // E2 resolution sibling that follows the same loader contract.
+    'priority',
     'build_contributions',
     // Decision 27: last, so the two index-aligned fields stay adjacent.
     'budget_floor',

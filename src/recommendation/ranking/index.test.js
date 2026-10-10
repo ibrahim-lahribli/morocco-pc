@@ -20,10 +20,13 @@ const ranking = require('./index');
 const rank = require('./rank');
 const selectDiverse = require('./select-diverse');
 
-test('ranking barrel exposes exactly the four-export public API, in order', () => {
+test('ranking barrel exposes exactly the E4 eight-export public API, in order', () => {
   assert.deepEqual(
     Object.keys(ranking),
-    ['rankBuilds', 'TOP_N_PERSISTED', 'selectDiverseTop', 'MAX_PER_PAIR']
+    [
+      'rankBuilds', 'TOP_N_PERSISTED', 'selectDiverseTop', 'MAX_PER_PAIR',
+      'selectArchetypes', 'PERFORMANCE_FLOOR', 'STRATEGIES', 'REASON_CODES',
+    ]
   );
   assert.equal(typeof ranking.rankBuilds, 'function');
   assert.equal(ranking.rankBuilds.length, 1); // { builds }
@@ -32,6 +35,12 @@ test('ranking barrel exposes exactly the four-export public API, in order', () =
   // selectDiverseTop has a default parameter, so length is 0
   assert.ok(ranking.selectDiverseTop.length === 0 || ranking.selectDiverseTop.length === 1);
   assert.equal(ranking.MAX_PER_PAIR, 3);
+  // E4 (Decision 41).
+  assert.equal(typeof ranking.selectArchetypes, 'function');
+  assert.equal(ranking.selectArchetypes.length, 0); // all args optional/destructured
+  assert.equal(ranking.PERFORMANCE_FLOOR, 0.85);
+  assert.deepEqual(ranking.STRATEGIES, ['PERFORMANCE', 'BALANCED', 'VALUE']);
+  assert.deepEqual(Object.keys(ranking.REASON_CODES).sort(), ['EMPTY_RANKED', 'NO_PERFORMANCE_CANDIDATE', 'NO_VALUE_CANDIDATE']);
 });
 
 test('ranking barrel re-exports by identity - no wrapper, no copy', () => {
@@ -39,6 +48,11 @@ test('ranking barrel re-exports by identity - no wrapper, no copy', () => {
   assert.strictEqual(ranking.TOP_N_PERSISTED, rank.TOP_N_PERSISTED);
   assert.strictEqual(ranking.selectDiverseTop, selectDiverse.selectDiverseTop);
   assert.strictEqual(ranking.MAX_PER_PAIR, selectDiverse.MAX_PER_PAIR);
+  const archetypes = require('./select-archetypes');
+  assert.strictEqual(ranking.selectArchetypes, archetypes.selectArchetypes);
+  assert.strictEqual(ranking.PERFORMANCE_FLOOR, archetypes.PERFORMANCE_FLOOR);
+  assert.strictEqual(ranking.STRATEGIES, archetypes.STRATEGIES);
+  assert.strictEqual(ranking.REASON_CODES, archetypes.REASON_CODES);
 });
 
 test('TOP_N_PERSISTED is a frozen code constant (Decision 18.4)', () => {
@@ -59,11 +73,11 @@ test('ranking is a boundary only: no logic, no extra imports, no DB/persistence'
     assert.ok(!source.includes(token), `index.js must not contain ${token}`);
   }
 
-  // Exactly one require: the rank module. No pg / fs / dotenv / scripts /
+  // Exactly the three rank-stage siblings. No pg / fs / dotenv / scripts /
   // orchestrator / persistence / query / offers / filtering / retention /
   // scoring / candidates access.
   const requires = [...source.matchAll(/require\('([^']+)'\)/g)].map((match) => match[1]);
-  assert.deepEqual(requires, ['./rank', './select-diverse']);
+  assert.deepEqual(requires, ['./rank', './select-diverse', './select-archetypes']);
 
   const banned = [
     "require('pg')",
