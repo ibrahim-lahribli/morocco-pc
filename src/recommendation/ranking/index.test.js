@@ -40,7 +40,7 @@ test('ranking barrel exposes exactly the E4 eight-export public API, in order', 
   assert.equal(ranking.selectArchetypes.length, 0); // all args optional/destructured
   assert.equal(ranking.PERFORMANCE_FLOOR, 0.85);
   assert.deepEqual(ranking.STRATEGIES, ['PERFORMANCE', 'BALANCED', 'VALUE']);
-  assert.deepEqual(Object.keys(ranking.REASON_CODES).sort(), ['EMPTY_RANKED', 'NO_PERFORMANCE_CANDIDATE', 'NO_VALUE_CANDIDATE']);
+  assert.deepEqual(Object.keys(ranking.REASON_CODES).sort(), ['EMPTY_RANKED', 'NO_BALANCED_CANDIDATE', 'NO_PERFORMANCE_CANDIDATE', 'NO_VALUE_CANDIDATE']);
 });
 
 test('ranking barrel re-exports by identity - no wrapper, no copy', () => {

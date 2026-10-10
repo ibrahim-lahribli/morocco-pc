@@ -98,6 +98,13 @@ test('E4: priority 1-2 orders VALUE first, 3 balanced, 4-5 performance first', (
   // p2: value first - VALUE prefers cheAper at equal ratio: 80/9500 < 90/9200, so entry 0 (80) wins VALUE.
   const p2 = selectArchetypes({ ranked, budget: BUDGET, priority: 2 }).archetypes.map((a) => a.strategy_key);
   assert.deepEqual(p2, ['VALUE', 'PERFORMANCE']);
+  // p2 leaves BALANCED nothing (both pairs claimed): its reason code must be
+  // the defined REASON_CODES.NO_BALANCED_CANDIDATE string - never undefined,
+  // which is what an unlisted NO_<strategy>_CANDIDATE lookup used to push.
+  assert.deepEqual(
+    selectArchetypes({ ranked, budget: BUDGET, priority: 2 }).reason_codes,
+    [REASON_CODES.NO_BALANCED_CANDIDATE]
+  );
   const p3 = selectArchetypes({ ranked, budget: BUDGET, priority: 3 }).archetypes.map((a) => a.strategy_key);
   assert.deepEqual(p3, ['BALANCED', 'PERFORMANCE']);
   assert.equal(selectArchetypes({ ranked, budget: BUDGET, priority: 3 }).reason_codes.length, 1);
@@ -184,6 +191,31 @@ test('E4: GPU-omitted entries are distinct from any GPU-present pair (iGPU path)
   assert.equal(result.archetypes[1].strategy_key, 'PERFORMANCE');
   assert.equal(result.archetypes[1].build_score, 90);
   assert.equal(result.reason_codes.length, 1); // VALUE degraded (only two pairs exist)
+});
+
+test('E4: persisted_rank is contiguous 1..N in OUTPUT order even when a strategy degrades', () => {
+  const ranked = [
+    rankedEntry(0, { build_score: 80, total_price: 9500, cpu: 'cpu-a', gpu: 'gpu-a' }),
+    rankedEntry(1, { build_score: 90, total_price: 9200, cpu: 'cpu-b', gpu: 'gpu-b' }),
+  ];
+  const result = selectArchetypes({ ranked, budget: BUDGET, priority: 2 });
+  // p2: VALUE + PERFORMANCE claim the two pairs, BALANCED degrades. The two
+  // returned entries must still carry ranks 1,2 with NO GAP - Engine 6
+  // (explain.js validateEntry) and Engine 5b (validate-selected.js) both
+  // reject a null or non-contiguous rank, so a "rank assigned later" shape
+  // broke runRecommendationFullRun on every non-empty selection.
+  assert.deepEqual(result.archetypes.map((a) => a.strategy_key), ['VALUE', 'PERFORMANCE']);
+  assert.deepEqual(result.archetypes.map((a) => a.persisted_rank), [1, 2]);
+  const full = selectArchetypes({
+    ranked: [
+      rankedEntry(0, { build_score: 90, total_price: 5000, cpu: 'cpu-b', gpu: 'gpu-b' }),
+      rankedEntry(1, { build_score: 80, total_price: 9500, cpu: 'cpu-a', gpu: 'gpu-a' }),
+      rankedEntry(2, { build_score: 70, total_price: 9000, cpu: 'cpu-c', gpu: 'gpu-c' }),
+    ],
+    budget: BUDGET,
+    priority: 3,
+  });
+  assert.deepEqual(full.archetypes.map((a) => a.persisted_rank), [1, 2, 3]);
 });
 
 test('E4: constant surfaces - PERFORMANCE_FLOOR is exactly 0.85 and STRATEGIES frozen', () => {

@@ -203,6 +203,11 @@ function shareOf(numerator, total, label, scenarioId) {
 }
 
 /** Project one ranked/selected entry (they share the same entry shape). */
+/** Project one run entry into the shared artifact shape (E4: archetypes, legacy selectDiverseTop: selected[]). */
+function projectArtifactEntry(entry, maps) {
+  return projectEntry(entry, maps);
+}
+
 function projectEntry(entry, maps) {
   const build = entry.build;
   const byRole = roleMap(build);
@@ -260,13 +265,18 @@ function projectEntry(entry, maps) {
  */
 function projectArtifact(id, snapshot, rankedResult, selection, maps) {
   const ranked = rankedResult.ranked;
-  // E4: `selection.selected` (the old DiverseTop key) is replaced by the
-  // archetypes array. `best` stays the RANK-1 build: every A-assertion that
-  // reads `best` ranks the whole space, which the archetypes do not change.
-  const selected = selection.archetypes;
+  // E4 (Decision 41): `selection.archetypes` is the new pre-persistence
+  // showcase. Its entries already carry every component price/role, so the
+  // A3 A4 A5 and pair assertions can read `selected` straight off the
+  // archetypes (this function is shared by the old selectDiverseTop path,
+  // which still emits `{ selected: [...] }` — selection.selected stays
+  // consumable here without duplicating the projector).
+  const selected = Array.isArray(selection.archetypes)
+    ? selection.archetypes
+    : (selection.selected || []);
   const best = ranked.length > 0 ? ranked[0] : null;
   const bestProjected = best === null ? null : projectEntry(best, maps);
-  const selectedProjected = selected.map((entry) => projectEntry(entry, maps));
+  const selectedProjected = selected.map((entry) => projectArtifactEntry(entry, maps));
 
   const pairSet = new Set();
   for (const entry of selectedProjected) {

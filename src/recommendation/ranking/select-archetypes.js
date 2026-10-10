@@ -20,11 +20,15 @@ const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors')
  * reason code instead of padding.
  *
  * RETURN SHAPE: frozen { archetypes, reason_codes } where each element of
- * `archetypes` is a frozen { strategy_key, persisted_rank (assigned later, by
- * Engine 5b - always null here), build_score, total_price, signature,
- * explanation (null - Engine 6 fills later), build } entry and reason_codes is
- * a frozen array of strings from REASON_CODES in output order (empty when all
- * three archetypes were found).
+ * `archetypes` is a frozen { strategy_key, persisted_rank, build_score,
+ * total_price, compatibility_status, signature, explanation (null - Engine 6
+ * fills later), build } entry and reason_codes is a frozen array of strings
+ * from REASON_CODES in output order (empty when all three archetypes were
+ * found). `persisted_rank` is contiguous 1..N in OUTPUT order - the same
+ * Decision 20 contract selectDiverseTop established, because Engine 6
+ * (explain.js validateEntry) and Engine 5b (validate-selected.js) BOTH
+ * require the final ranks before they read or validate; a degraded strategy
+ * leaves no gap in the sequence.
  *
  * Persistence note: Engine 5b writes recommendation_result rows from the
  * explained array; strategy_key persistence needs Platform migration 019
@@ -40,6 +44,7 @@ const STRATEGIES = Object.freeze(['PERFORMANCE', 'BALANCED', 'VALUE']);
 const REASON_CODES = Object.freeze({
   EMPTY_RANKED: 'EMPTY_RANKED',
   NO_PERFORMANCE_CANDIDATE: 'NO_PERFORMANCE_CANDIDATE',
+  NO_BALANCED_CANDIDATE: 'NO_BALANCED_CANDIDATE',
   NO_VALUE_CANDIDATE: 'NO_VALUE_CANDIDATE',
 });
 
@@ -213,7 +218,9 @@ function selectArchetypes({ ranked, budget, priority } = {}) {
     claimedPairs.add(pairKey(pick));
     archetypes.push({
       strategy_key: strategy,
-      persisted_rank: null,
+      // Contiguous 1..N in output order (see RETURN SHAPE): Engine 6 refuses
+      // a null rank, so the rank cannot be "assigned later" past the seam.
+      persisted_rank: archetypes.length + 1,
       build_score: pick.build_score,
       total_price: pick.total_price,
       compatibility_status: pick.compatibility_status,

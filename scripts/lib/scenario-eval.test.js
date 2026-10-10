@@ -115,7 +115,7 @@ test('projectArtifact derives shares, pair count, vram and iGPU from the run', (
     'S03',
     { builds: [BUILD], budget_floor: { cheapest_total: 4477, within_budget: true }, budget_amount: 12000, currency: 'MAD' },
     { ranked: [ENTRY] },
-    { selected: [ENTRY] },
+    { archetypes: [ENTRY], reason_codes: [] },
     MAPS
   );
   assert.equal(artifact.selected_pair_count, 1);
@@ -124,6 +124,19 @@ test('projectArtifact derives shares, pair count, vram and iGPU from the run', (
   assert.equal(artifact.best.gpu_vram_gb, 12);
   assert.equal(artifact.best.cpu_integrated_gpu_present, true);
   assert.equal(artifact.selected_has_reject, false);
+
+  // The legacy selectDiverseTop shape ({ selected }) must stay consumable:
+  // the fallback reads selection.selected (it once read a non-existent
+  // `project` key and silently projected an EMPTY selection).
+  const legacy = projectArtifact(
+    'S03',
+    { builds: [BUILD], budget_amount: 12000 },
+    { ranked: [ENTRY] },
+    { selected: [ENTRY] },
+    MAPS
+  );
+  assert.equal(legacy.selected.length, 1);
+  assert.equal(legacy.selected_pair_count, 1);
 });
 
 test('projectArtifact carries rank-1 component names and exact selected prices, with explicit absence', () => {

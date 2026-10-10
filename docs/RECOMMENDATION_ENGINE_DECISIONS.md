@@ -4604,3 +4604,52 @@ shape with an OPTIONAL key and consumes OG-39's model pin; leaves Decision 27's 
 retention bands, and every scoring weight untouched. Registers **OG-44** (the quota values 1 / 2 / 3 are
 unvalidated hypotheses, pending the same H3 review as OG-43's band constants; E3 is unexercised on the shared
 DB and by the API). No historical document is rewritten.
+
+## Decision 41 — archetype selection (selectArchetypes) replaces selectDiverseTop as the pre-persistence showcase (E4)
+
+Status: RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 — pure, DB-free `selectArchetypes({ ranked, budget, priority })` returns up to THREE pair-distinct showcase builds (PERFORMANCE / BALANCED / VALUE, output order set by the query `priority`, `persisted_rank` contiguous 1..N in output order) and degrades honestly with `NO_*` reason codes instead of padding; `strategy_key` is RETURNED but not persisted (Platform migration 019 absent) and `archetype_objectives` remain unconsumed hypotheses.
+
+Date: 2026-10-10. Scope: implements E4 of `docs/briefs/engine.md` and settles what the Decision 21 showcase selection is. Amends Decision 21's stage wiring without rewriting Decision 20 (pair identity) or Decision 25 (the halt diagnosis); Decision 40's per-pair quota is the assembly-side answer to Decision 25, this is the selection-side answer. NOT included: no migration (019 does not exist — `database/migrations/` ends at 018), no seed, no scoring change, no API change, no persistence change.
+
+### Current situation
+
+- The showcase set between `rankBuilds` and `explainSelection` was `selectDiverseTop` (Decision 20): a pair-capped walk (`MAX_PER_PAIR = 3`) over the FULL ranked list, whose spread is a function of the `max_builds_per_query` halt (Decision 25), not of any product notion of which builds to show. The API persists `priority` and no stage consumed it (OG-38's behavioral side).
+- Engine 6 runs BEFORE Engine 5b in the full run, and both require final entry values: `explanation/explain.js` `validateEntry` requires `persisted_rank` to be a positive integer, and `persistence/validate-selected.js` requires it contiguous 1..N (the Decision 19/21 selected shape). `selectDiverseTop` assigned the ranks at selection time; Engine 5b only validates and reads them.
+- Decision 37 authored the optional `archetype_objectives` profile key for later epics (E4 named explicitly); nothing consumed it at the start of this epic.
+- The golden harness projects the selection into its A-assertions as `selected`; E0's A1 reads the (CPU, GPU) pair count of that set.
+
+### Problem
+
+A showcase set driven by a latency halt cannot express product intent (show the performance option, the balanced option, the value option), its diversity depends on how fast the walk filled its quota, and `priority` — one of the three fields the API accepts and persists — has no voice anywhere in the pipeline. Without a decided selection contract, each caller invents its own "which builds to show" heuristic and the persisted showcase stays an artifact of caps.
+
+### Decision
+
+1. `selectArchetypes({ ranked, budget, priority })` (`src/recommendation/ranking/select-archetypes.js`, exported from the ranking barrel beside `selectDiverseTop`) is THE showcase selection of the full run. `selectDiverseTop` is RETAINED unchanged (reproducibility, `measure-api-pass-phases.js`); no production code calls it anymore.
+2. Strategies (frozen `STRATEGIES`): PERFORMANCE — highest `build_score` among entries with `total_price / budget.amount >= PERFORMANCE_FLOOR` (0.85, frozen code constant); BALANCED — highest `build_score` overall; VALUE — best `build_score / total_price`, ties to the CHEAPER build, then `signature` ASC. Within one strategy the scan is ranked order and ties keep the first match — deterministic, no clock, no randomness.
+3. Output order by `priority`: 1–2 -> [VALUE, PERFORMANCE, BALANCED]; 3, `null`, `undefined` -> [BALANCED, PERFORMANCE, VALUE]; 4–5 -> [PERFORMANCE, BALANCED, VALUE]. A priority outside 1..5 is `INVALID_FIELD_VALUE` — never silently defaulted.
+4. Pair-distinct across archetypes using the Decision 20 pair key (`cpu product_id | gpu variant-or-OMITTED`, the `select-diverse.js` identity): a claimed pair is never re-used, and fewer than three distinct pairs returns FEWER archetypes — never padding.
+5. `reason_codes` is a frozen array of strings from `REASON_CODES` in output order — `EMPTY_RANKED` (the single code for an empty ranked list, not three) or `NO_PERFORMANCE_CANDIDATE` / `NO_BALANCED_CANDIDATE` / `NO_VALUE_CANDIDATE` for each degraded strategy — empty when all three archetypes are found. Every strategy has a listed member: a first draft omitted `NO_BALANCED_CANDIDATE` and pushed `undefined` (fixed in the review pass, see Verdict).
+6. `persisted_rank` is contiguous 1..N in OUTPUT order (the Decision 20 contract), assigned BY THE SELECTION: Engine 6 validates it before the seam and Engine 5b re-validates it at the write, so it cannot be "assigned later" past either. A degraded strategy leaves no gap in the sequence.
+7. `strategy_key` is RETURNED on every archetype and deliberately NOT persisted: `recommendation_result.strategy_key` requires Platform migration 019, which is not in the tree. Deferred with a binding re-check trigger — registered as **OG-45**.
+8. The three strategy definitions, `PERFORMANCE_FLOOR = 0.85`, and Decision 37's `archetype_objectives` (which remains UNCONSUMED — the strategies are code constants, not profile-weighted) are HYPOTHESES pending the same H3 human review as OG-43 / OG-44; the golden manifest declares no A10 `archetype_strategies` assertion yet, so the harness never judges archetype output end-to-end. Registered as **OG-46**.
+9. Full-run composition (Decision 21 amended at the stage level only): `runRecommendationFullRun` wires rankBuilds -> selectArchetypes -> explainSelection -> runRecommendationCommit; the returned `selected` is the explained E4 array, and the result also carries `archetypes` + `archetype_reason_codes` for pre-persistence observation. The golden harness consumes the same shape (`scripts/lib/scenario-eval.js` projects `selection.archetypes`, falling back to the legacy `selected` key), so A1's pair count is now measured over the archetypes (<= 3 by construction).
+
+### Rejected alternatives
+
+- Keeping `selectDiverseTop` as the showcase: its pair spread is halt-dependent (Decision 25's diagnosis), it has no strategy semantics, and `priority` has no voice; different caps cannot express "performance vs value".
+- Leaving `persisted_rank: null` in the selection output "for Engine 5b to assign" (the E4 first draft): impossible as written — Engine 6 runs BEFORE Engine 5b and refuses a null rank, so every non-empty full run threw (proved in the review pass), and Engine 5b's contract is validate-and-read, never assign.
+- Assigning the ranks by seam-mapping in `full-run.js` instead: leaves every other consumer of the selection holding unusable ranks and re-creates the defect at the next caller; the selection owns its output order (the Decision 20 precedent assigns at selection).
+- Profile-weighted PERFORMANCE (`archetype_objectives`) now: no measured basis exists (Decision 37 validated the key structurally only); inventing weights would turn a hypothesis into shipped behavior. Deferred with the H3 review (OG-46).
+
+### Verdict for this pass
+
+Three seam defects were found and fixed while recording this decision (2026-10-10 adversarial review of the E4 wiring; each fix is pinned):
+1. `REASON_CODES` lacked `NO_BALANCED_CANDIDATE`, so a degraded BALANCED pushed `undefined` into the documented "frozen array of strings" (probe: a two-entry priority-2 run returned `reason_codes: [null]` in JSON). Fixed at the vocabulary; barrel key-set pin extended; a degradation pin added.
+2. The golden projection (`scripts/lib/scenario-eval.js`) fell back to a non-existent `selection.project` key for legacy `selectDiverseTop` results (`{ selected, dropped_count }` is the real shape) and silently projected an EMPTY selection, degrading A-assertions to UNKNOWN instead of measuring. Fixed to `selection.selected`; pinned.
+3. `persisted_rank: null` on the archetypes broke `runRecommendationFullRun` on EVERY non-empty selection (probe: `explainSelection` throws `INVALID_FIELD_VALUE "selected[0].persisted_rank" must be a positive integer`; `full-run.test.js` hid it by stubbing Engine 6 with rank-carrying fixtures). This was LIVE IN THE API WRITE PATH (`apps/api/src/engine.js` calls the function). Fixed at the producer (item 6); pinned.
+
+Tests: `npm run test:unit` = 1015 pass / 0 fail on Node 24.21.0 and on Node 22 (CI parity leg, 0 cancelled); `npm run test:scripts` = 212 pass / 0 fail. `scripts/test-orchestrator-full-run.js` on the TEST branch = 24 pass / 0 fail — the real snapshot -> rank -> selectArchetypes -> explain -> commit path: persisted rows land, the stored explanation matches Engine 6 text, the re-run guard refuses a second pass, cleanup residue 0. Golden harness (`--filter=S03`, TEST branch) exit 0 with cleanup residue 0. NOT run this pass (earlier recorded evidence stands, unrefreshed): the full 20-scenario golden sweep, `verify:pi1`, `verify:replay`, `test:api`.
+
+### Supersedes / superseded by
+
+Amends Decision 21's stage list (the showcase stage is `selectArchetypes`; the returned `selected` is the explained E4 array) without rewriting it; keeps Decision 20's pair identity and the `selectDiverseTop` module untouched; answers Decision 25 on the selection side (Decision 40 answers it on the assembly side). Registers **OG-45** (strategy_key persistence deferred pending Platform migration 019) and **OG-46** (no golden A10 coverage; archetype hypotheses pending H3). No historical document is rewritten.
