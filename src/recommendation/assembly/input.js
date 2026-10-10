@@ -81,6 +81,9 @@ const CANDIDATE_CAPS_FIELDS = Object.freeze([
   'max_builds_per_query',
 ]);
 
+/** Decision 40 (E3): optional quota key; absent = no per-pair quota. */
+const CANDIDATE_CAPS_OPTIONAL_FIELDS = Object.freeze(['max_builds_per_pair']);
+
 function fail(code, field, message) {
   throw new CandidateSelectionError(code, message, field);
 }
@@ -258,7 +261,7 @@ function validateEngine3Input(raw) {
     );
   }
   for (const key of Object.keys(candidate_caps)) {
-    if (!CANDIDATE_CAPS_FIELDS.includes(key)) {
+    if (!CANDIDATE_CAPS_FIELDS.includes(key) && !CANDIDATE_CAPS_OPTIONAL_FIELDS.includes(key)) {
       fail(
         ERROR_CODES.INVALID_FIELD_VALUE,
         `candidate_caps.${key}`,
@@ -266,13 +269,16 @@ function validateEngine3Input(raw) {
       );
     }
   }
-  for (const key of CANDIDATE_CAPS_FIELDS) {
+  for (const key of [...CANDIDATE_CAPS_FIELDS, ...CANDIDATE_CAPS_OPTIONAL_FIELDS]) {
     if (!Object.prototype.hasOwnProperty.call(candidate_caps, key)) {
-      fail(
-        ERROR_CODES.MISSING_REQUIRED_FIELD,
-        `candidate_caps.${key}`,
-        `"candidate_caps" requires "${key}"`
-      );
+      if (CANDIDATE_CAPS_FIELDS.includes(key)) {
+        fail(
+          ERROR_CODES.MISSING_REQUIRED_FIELD,
+          `candidate_caps.${key}`,
+          `"candidate_caps" requires "${key}"`
+        );
+      }
+      continue;
     }
     const value = candidate_caps[key];
     if (
@@ -324,10 +330,18 @@ function validateEngine3Input(raw) {
     use_case,
     gpu_required_use_cases: Object.freeze([...gpu_required_use_cases]),
     integrated_gpu_present: Object.freeze({ ...integrated_gpu_present }),
-    candidate_caps: Object.freeze({
-      top_k_per_role: candidate_caps.top_k_per_role,
-      max_builds_per_query: candidate_caps.max_builds_per_query,
-    }),
+    candidate_caps: Object.freeze(
+      Object.prototype.hasOwnProperty.call(candidate_caps, 'max_builds_per_pair')
+        ? {
+          top_k_per_role: candidate_caps.top_k_per_role,
+          max_builds_per_query: candidate_caps.max_builds_per_query,
+          max_builds_per_pair: candidate_caps.max_builds_per_pair,
+        }
+        : {
+          top_k_per_role: candidate_caps.top_k_per_role,
+          max_builds_per_query: candidate_caps.max_builds_per_query,
+        }
+    ),
     prices,
     filtering_context,
   });

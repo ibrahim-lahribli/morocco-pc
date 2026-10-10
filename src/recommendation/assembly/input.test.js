@@ -737,3 +737,12 @@ test('input.js is a pure structural gate with no I/O or async surface', () => {
   );
   assert.deepEqual(exports_, ['validateEngine3Input']);
 });
+
+test('E3: validateEngine3Input carries an optional max_builds_per_pair and rejects a bad one', () => {
+  const input = validateEngine3Input(makeInput({ candidate_caps: makeCaps({ max_builds_per_pair: 2 }) }));
+  assert.deepEqual(input.candidate_caps, { top_k_per_role: 5, max_builds_per_query: 10, max_builds_per_pair: 2 });
+  assert.throws(
+    () => validateEngine3Input(makeInput({ candidate_caps: makeCaps({ max_builds_per_pair: 0 }) })),
+    expectError(ERROR_CODES.INVALID_FIELD_VALUE, 'candidate_caps.max_builds_per_pair')
+  );
+});

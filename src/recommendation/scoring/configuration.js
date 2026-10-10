@@ -79,6 +79,9 @@ const CANDIDATE_CAPS_FIELDS = Object.freeze([
   'max_builds_per_query',
 ]);
 
+/** OPTIONAL `candidate_caps` key (Decision 40, E3): absent = no per-pair quota. */
+const CANDIDATE_CAPS_OPTIONAL_FIELDS = Object.freeze(['max_builds_per_pair']);
+
 /** `staleness` is a strict closed two-key contract (Decision 3(a)). */
 const STALENESS_FIELDS = Object.freeze([
   'max_age_days',
@@ -250,7 +253,8 @@ function validateStaleness(staleness) {
 }
 
 /**
- * `candidate_caps`: strict closed { top_k_per_role, max_builds_per_query }.
+ * `candidate_caps`: strict closed { top_k_per_role, max_builds_per_query } plus
+ * the OPTIONAL max_builds_per_pair (Decision 40), which is absent by default.
  * Validated and preserved only -- never applied here (Decision 11 Rule 7).
  */
 function validateCandidateCaps(candidate_caps) {
@@ -262,7 +266,7 @@ function validateCandidateCaps(candidate_caps) {
     );
   }
   for (const key of Object.keys(candidate_caps)) {
-    if (!CANDIDATE_CAPS_FIELDS.includes(key)) {
+    if (!CANDIDATE_CAPS_FIELDS.includes(key) && !CANDIDATE_CAPS_OPTIONAL_FIELDS.includes(key)) {
       fail(
         ERROR_CODES.INVALID_FIELD_VALUE,
         `candidate_caps.${key}`,
@@ -270,9 +274,12 @@ function validateCandidateCaps(candidate_caps) {
       );
     }
   }
-  for (const key of CANDIDATE_CAPS_FIELDS) {
+  for (const key of [...CANDIDATE_CAPS_FIELDS, ...CANDIDATE_CAPS_OPTIONAL_FIELDS]) {
     if (!Object.prototype.hasOwnProperty.call(candidate_caps, key)) {
-      fail(ERROR_CODES.MISSING_REQUIRED_FIELD, `candidate_caps.${key}`, `"candidate_caps" requires "${key}"`);
+      if (CANDIDATE_CAPS_FIELDS.includes(key)) {
+        fail(ERROR_CODES.MISSING_REQUIRED_FIELD, `candidate_caps.${key}`, `"candidate_caps" requires "${key}"`);
+      }
+      continue;
     }
     const value = candidate_caps[key];
     if (
@@ -288,10 +295,14 @@ function validateCandidateCaps(candidate_caps) {
       );
     }
   }
-  return {
+  const caps = {
     top_k_per_role: candidate_caps.top_k_per_role,
     max_builds_per_query: candidate_caps.max_builds_per_query,
   };
+  if (Object.prototype.hasOwnProperty.call(candidate_caps, 'max_builds_per_pair')) {
+    caps.max_builds_per_pair = candidate_caps.max_builds_per_pair;
+  }
+  return caps;
 }
 
 /**

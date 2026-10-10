@@ -15,6 +15,12 @@
  * every eligible GPU verdict in incoming order with no omit path, while
  * OPTIONAL walks every eligible GPU verdict first and then one omit path.
  *
+ * Decision 40 (E3): when candidate_caps.max_builds_per_pair is declared, a GPU
+ * branch whose (CPU, GPU) pair already holds that many builds is skipped at GPU
+ * depth, and a path whose pair is full is never emitted. The quota is enforced
+ * inside the walk, so the max_builds_per_query halt is not spent on one pair.
+ * Declared-absent keeps the pre-E3 walk exactly.
+ *
  * A path ends as soon as its running total moves past budget_amount; an
  * exact match walks on. Traversal halts once max_builds_per_query builds
  * are held. The per-role cap from the input contract is left alone here.
@@ -115,6 +121,18 @@ const VERDICT_FIELDS = Object.freeze([
 
 const PARTICIPATING_ROLES = new Set(EXPANSION_ORDER);
 
+/**
+ * Decision 40 (E3): the (CPU, GPU) identity a per-pair quota counts. Same
+ * identity as the select-diverse pair key: product and variant of both sides.
+ */
+function pairKey(cpu, gpu) {
+  return JSON.stringify([cpu.product_id, cpu.product_variant_id, gpu.product_id, gpu.product_variant_id]);
+}
+
+function pairIsFull(pairCounts, cpu, gpu, maxPerPair) {
+  return (pairCounts.get(pairKey(cpu, gpu)) || 0) >= maxPerPair;
+}
+
 function fail(code, field, message) {
   throw new CandidateSelectionError(code, message, field);
 }
@@ -197,6 +215,20 @@ function readTraversalInputs(engine3Input) {
       '"candidate_caps.max_builds_per_query" must be a positive integer'
     );
   }
+  // Decision 40 (E3): optional per-pair quota. Absent = no quota (pre-E3).
+  // A DECLARED null is a malformed quota, never an absent one, so it is validated.
+  const quotaDeclared = Object.prototype.hasOwnProperty.call(candidate_caps, 'max_builds_per_pair');
+  const maxPerPair = quotaDeclared ? candidate_caps.max_builds_per_pair : null;
+  if (
+    quotaDeclared &&
+    (typeof maxPerPair !== 'number' || !Number.isInteger(maxPerPair) || maxPerPair <= 0)
+  ) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'candidate_caps.max_builds_per_pair',
+      '"candidate_caps.max_builds_per_pair" must be a positive integer'
+    );
+  }
   if (prices === null || typeof prices !== 'object' || Array.isArray(prices)) {
     fail(ERROR_CODES.INVALID_INPUT, 'prices', '"prices" must be an object');
   }
@@ -219,6 +251,7 @@ function readTraversalInputs(engine3Input) {
     gpu_required_use_cases,
     integrated_gpu_present,
     maxBuilds,
+    maxPerPair,
     prices,
     filteringContext: filtering_context,
   };
@@ -546,9 +579,18 @@ function assembleBuilds(engine3Input) {
   const traversal = readTraversalInputs(engine3Input);
   const buckets = groupEligible(traversal.results);
   const builds = [];
+  const pairCounts = new Map();
   let halted = false;
 
   function finishPath(picked, runningTotal) {
+    // Decision 40 (E3): a path whose pair is already full is not emitted; only
+    // emitted builds count toward the pair quota and the max_builds_per_query halt.
+    const pair = traversal.maxPerPair !== null && picked[GPU_ROLE] !== undefined
+      ? pairKey(picked[EXPANSION_ORDER[0]], picked[GPU_ROLE])
+      : null;
+    if (pair !== null && (pairCounts.get(pair) || 0) >= traversal.maxPerPair) {
+      return;
+    }
     const components = [];
     let total = 0;
     for (const role of EXPANSION_ORDER) {
@@ -587,6 +629,9 @@ function assembleBuilds(engine3Input) {
     };
     deepFreeze(build);
     builds.push(build);
+    if (pair !== null) {
+      pairCounts.set(pair, (pairCounts.get(pair) || 0) + 1);
+    }
     if (builds.length >= traversal.maxBuilds) {
       halted = true;
     }
@@ -614,6 +659,10 @@ function assembleBuilds(engine3Input) {
         const price = lookupPrice(traversal.prices, verdict);
         const nextTotal = runningTotal + price.selected_price;
         if (nextTotal > traversal.budget_amount) {
+          continue;
+        }
+        // Decision 40 (E3): skip a GPU branch whose pair is already full.
+        if (traversal.maxPerPair !== null && pairIsFull(pairCounts, cpuChoice, verdict, traversal.maxPerPair)) {
           continue;
         }
         picked[GPU_ROLE] = verdict;

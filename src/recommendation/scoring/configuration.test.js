@@ -453,3 +453,25 @@ test('configuration.js is a pure validator with no database dependency', () => {
     assert.ok(!source.includes(token), `configuration.js must not contain ${token}`);
   }
 });
+test('E3: candidate_caps accepts the optional max_builds_per_pair and preserves it', () => {
+  const validated = validateScoringModelConfiguration(
+    makeConfiguration({ candidate_caps: { top_k_per_role: 5, max_builds_per_query: 25, max_builds_per_pair: 2 } })
+  );
+  assert.deepEqual(validated.candidate_caps, { top_k_per_role: 5, max_builds_per_query: 25, max_builds_per_pair: 2 });
+});
+
+test('E3: a declared max_builds_per_pair must be a positive integer; absence stays valid', () => {
+  for (const bad of [0, -1, 1.5, '2', null]) {
+    assert.throws(
+      () => validateScoringModelConfiguration(
+        makeConfiguration({ candidate_caps: { top_k_per_role: 5, max_builds_per_query: 25, max_builds_per_pair: bad } })
+      ),
+      (error) => error.field === 'candidate_caps.max_builds_per_pair',
+      'expected a nested-path failure for max_builds_per_pair=' + String(bad)
+    );
+  }
+  assert.deepEqual(
+    validateScoringModelConfiguration(makeConfiguration({ candidate_caps: { top_k_per_role: 5, max_builds_per_query: 25 } })).candidate_caps,
+    { top_k_per_role: 5, max_builds_per_query: 25 }
+  );
+});

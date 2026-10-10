@@ -1833,3 +1833,97 @@ test('full pipeline determinism: repeated composition from identical input is de
 
 
 
+
+// ---------------------------------------------------------------------------
+// E3 (Decision 40): optional candidate_caps.max_builds_per_pair quota.
+// ---------------------------------------------------------------------------
+
+/** Six GPUs, two PSUs and two coolers: an uncapped walk spends its halt on the first GPUs. */
+function quotaFixture() {
+  return [
+    verdict('CPU', 'c1'),
+    verdict('MOTHERBOARD', 'm1'),
+    verdict('RAM', 'r1'),
+    verdict('GPU', 'g1'),
+    verdict('GPU', 'g2'),
+    verdict('GPU', 'g3'),
+    verdict('GPU', 'g4'),
+    verdict('GPU', 'g5'),
+    verdict('GPU', 'g6'),
+    verdict('PSU', 'psu1'),
+    verdict('PSU', 'psu2'),
+    verdict('CASE', 'case1'),
+    verdict('CPU_COOLER', 'cool1'),
+    verdict('CPU_COOLER', 'cool2'),
+    verdict('SSD_BOOT', 'ssd1'),
+  ];
+}
+
+function assembleWithQuota(maxBuildsPerPair, maxBuilds = 10) {
+  const input = engineInput({
+    results: quotaFixture(),
+    useCase: 'office',
+    gpuRequired: ['office'],
+    maxBuilds,
+  });
+  if (maxBuildsPerPair !== undefined) {
+    input.candidate_caps = { ...input.candidate_caps, max_builds_per_pair: maxBuildsPerPair };
+  }
+  return assembleBuilds(input).builds;
+}
+
+function pairSignature(build) {
+  return build.components
+    .filter((c) => c.component_role === 'CPU' || c.component_role === 'GPU')
+    .map((c) => c.product_id)
+    .join('|');
+}
+
+function distinctPairCount(builds) {
+  return new Set(builds.map(pairSignature)).size;
+}
+
+test('E3: absent quota keeps the pre-E3 walk - the halt is spent on the first GPUs', () => {
+  const builds = assembleWithQuota(undefined);
+  assert.equal(builds.length, 10);
+  assert.equal(distinctPairCount(builds), 3);
+});
+
+test('E3: max_builds_per_pair = 1 reaches six distinct pairs under the same halt', () => {
+  const builds = assembleWithQuota(1);
+  assert.equal(builds.length, 6);
+  assert.equal(distinctPairCount(builds), 6);
+});
+
+test('E3: max_builds_per_pair = 2 caps every pair at two builds', () => {
+  const builds = assembleWithQuota(2);
+  assert.equal(builds.length, 10);
+  const perPair = new Map();
+  for (const build of builds) {
+    const key = pairSignature(build);
+    perPair.set(key, (perPair.get(key) || 0) + 1);
+  }
+  for (const count of perPair.values()) {
+    assert.ok(count <= 2, 'a pair exceeded its quota: ' + count);
+  }
+  assert.equal(distinctPairCount(builds), 5);
+});
+
+test('E3: the quota walk is deterministic and preserves Rule order within each pair', () => {
+  const first = assembleWithQuota(1);
+  const second = assembleWithQuota(1);
+  assert.deepEqual(first, second);
+  assert.deepEqual(first.map(pairSignature), ['c1|g1', 'c1|g2', 'c1|g3', 'c1|g4', 'c1|g5', 'c1|g6']);
+});
+
+test('E3: a non-positive or non-integer quota fails with the nested path', () => {
+  for (const bad of [0, -1, 1.5, '2', null]) {
+    assert.throws(
+      () => assembleWithQuota(bad),
+      (error) => error instanceof CandidateSelectionError
+        && error.code === ERROR_CODES.INVALID_FIELD_VALUE
+        && error.field === 'candidate_caps.max_builds_per_pair',
+      'expected INVALID_FIELD_VALUE for max_builds_per_pair=' + String(bad)
+    );
+  }
+});
