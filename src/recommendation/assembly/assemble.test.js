@@ -1927,3 +1927,108 @@ test('E3: a non-positive or non-integer quota fails with the nested path', () =>
     );
   }
 });
+// ---------------------------------------------------------------------------
+// E5 (Decision 42): optional resolution VRAM floor at GPU depth.
+// ---------------------------------------------------------------------------
+/** Filtering context whose GPU variant specs carry VRAM (and nothing else). */
+function vramContext(vramByVariant) {
+  const specs = {};
+  for (const variant of Object.keys(vramByVariant)) {
+    specs['v:' + variant] = { vram_capacity_gb: vramByVariant[variant] };
+  }
+  return { candidates: {}, specs, platform_by_socket: {}, compat: {} };
+}
+
+/** One CPU/MB/RAM/PSU/CASE/SSD + the given GPUs; GPU REQUIRED (no omit path). */
+function vramFixture(gpuIds) {
+  const results = [
+    verdict('CPU', 'c1'),
+    verdict('MOTHERBOARD', 'm1'),
+    verdict('RAM', 'r1'),
+    verdict('PSU', 'psu1'),
+    verdict('CASE', 'case1'),
+    verdict('CPU_COOLER', 'cool1'),
+    verdict('SSD_BOOT', 'ssd1'),
+  ];
+  for (const id of gpuIds) results.push(verdict('GPU', id));
+  return results;
+}
+
+function assembleWithVramFloor({ gpuIds, vramByVariant, floor }) {
+  const input = engineInput({
+    results: vramFixture(gpuIds),
+    useCase: 'GAMING',
+    gpuRequired: ['GAMING'],
+    maxBuilds: 10,
+    filteringContext: vramContext(vramByVariant),
+  });
+  if (floor !== undefined) {
+    input.vram_floor_gb = floor;
+  }
+  return assembleBuilds(input).builds;
+}
+
+function gpuProductIds(builds) {
+  const ids = new Set();
+  for (const build of builds) {
+    for (const component of build.components) {
+      if (component.component_role === 'GPU') ids.add(component.product_id);
+    }
+  }
+  return [...ids].sort();
+}
+
+test('E5: the VRAM floor FIRES - a known below-floor GPU never reaches a build', () => {
+  const builds = assembleWithVramFloor({
+    gpuIds: ['g-small', 'g-big'],
+    vramByVariant: { 'g-small-var': 8, 'g-big-var': 12 },
+    floor: 10,
+  });
+  assert.ok(builds.length > 0, 'expected builds from the above-floor GPU');
+  assert.deepEqual(gpuProductIds(builds), ['g-big']);
+});
+
+test('E5: a GPU exactly at the floor is eligible (the floor is inclusive)', () => {
+  const builds = assembleWithVramFloor({
+    gpuIds: ['g-at', 'g-under'],
+    vramByVariant: { 'g-at-var': 12, 'g-under-var': 11 },
+    floor: 12,
+  });
+  assert.deepEqual(gpuProductIds(builds), ['g-at']);
+});
+
+test('E5: UNKNOWN VRAM (NULL or missing spec) is never below-floor - stays eligible', () => {
+  const builds = assembleWithVramFloor({
+    gpuIds: ['g-null', 'g-nospec'],
+    vramByVariant: { 'g-null-var': null },
+    floor: 16,
+  });
+  assert.deepEqual(gpuProductIds(builds), ['g-nospec', 'g-null']);
+});
+
+test('E5: absent floor keeps the pre-E5 walk - the below-floor GPU still assembles', () => {
+  const builds = assembleWithVramFloor({
+    gpuIds: ['g-small', 'g-big'],
+    vramByVariant: { 'g-small-var': 8, 'g-big-var': 12 },
+  });
+  assert.deepEqual(gpuProductIds(builds), ['g-big', 'g-small']);
+});
+
+test('E5: a DECLARED vram_floor_gb must be an integer >= 1 (declared null is malformed)', () => {
+  for (const bad of [null, 0, 1.5, '8']) {
+    const input = engineInput({
+      results: vramFixture(['g1']),
+      useCase: 'GAMING',
+      gpuRequired: ['GAMING'],
+      maxBuilds: 10,
+    });
+    input.vram_floor_gb = bad;
+    assert.throws(
+      () => assembleBuilds(input),
+      (error) => error instanceof CandidateSelectionError
+        && error.code === ERROR_CODES.INVALID_FIELD_VALUE
+        && error.field === 'vram_floor_gb',
+      'expected INVALID_FIELD_VALUE for vram_floor_gb=' + String(bad)
+    );
+  }
+});

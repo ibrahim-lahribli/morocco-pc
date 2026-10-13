@@ -475,3 +475,51 @@ test('E3: a declared max_builds_per_pair must be a positive integer; absence sta
     { top_k_per_role: 5, max_builds_per_query: 25 }
   );
 });
+// ---------------------------------------------------------------------------
+// E5 (Decision 42): OPTIONAL `resolution_profiles` (per-resolution VRAM floor).
+// ---------------------------------------------------------------------------
+
+test('Decision 42: resolution_profiles validates and copies when well-formed', () => {
+  const configuration = validateScoringModelConfiguration(makeConfiguration({
+    resolution_profiles: {
+      '1080p': { vram_floor_gb: 8 },
+      '1440p': { vram_floor_gb: 12 },
+      '2160p': { vram_floor_gb: 16 },
+    },
+  }));
+  assert.deepEqual(configuration.resolution_profiles, {
+    '1080p': { vram_floor_gb: 8 },
+    '1440p': { vram_floor_gb: 12 },
+    '2160p': { vram_floor_gb: 16 },
+  });
+  assert.ok(Object.isFrozen(configuration.resolution_profiles));
+});
+
+test('Decision 42: a model without resolution_profiles keeps its exact old shape', () => {
+  const configuration = validateScoringModelConfiguration(makeConfiguration());
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(configuration, 'resolution_profiles'),
+    false
+  );
+});
+
+test('Decision 42: resolution_profiles fails fast on every shape violation', () => {
+  const bads = [
+    ['not an object', 'x', ERROR_CODES.INVALID_INPUT, 'resolution_profiles'],
+    ['blank resolution key', { ' ': { vram_floor_gb: 8 } }, ERROR_CODES.INVALID_FIELD_VALUE, 'resolution_profiles'],
+    ['non-object profile', { '1080p': 8 }, ERROR_CODES.INVALID_INPUT, 'resolution_profiles.1080p'],
+    ['unknown profile field', { '1080p': { vram_floor_gb: 8, gpu_share: 0.4 } }, ERROR_CODES.INVALID_FIELD_VALUE, 'resolution_profiles.1080p.gpu_share'],
+    ['missing vram_floor_gb', { '1080p': {} }, ERROR_CODES.MISSING_REQUIRED_FIELD, 'resolution_profiles.1080p.vram_floor_gb'],
+    ['zero floor', { '1080p': { vram_floor_gb: 0 } }, ERROR_CODES.INVALID_FIELD_VALUE, 'resolution_profiles.1080p.vram_floor_gb'],
+    ['fractional floor', { '1080p': { vram_floor_gb: 1.5 } }, ERROR_CODES.INVALID_FIELD_VALUE, 'resolution_profiles.1080p.vram_floor_gb'],
+    ['string floor', { '1080p': { vram_floor_gb: '8' } }, ERROR_CODES.INVALID_FIELD_VALUE, 'resolution_profiles.1080p.vram_floor_gb'],
+    ['declared null floor', { '1080p': { vram_floor_gb: null } }, ERROR_CODES.INVALID_FIELD_VALUE, 'resolution_profiles.1080p.vram_floor_gb'],
+  ];
+  for (const [label, value, code, field] of bads) {
+    assert.throws(
+      () => validateScoringModelConfiguration(makeConfiguration({ resolution_profiles: value })),
+      (error) => error instanceof CandidateSelectionError && error.code === code && error.field === field,
+      'expected ' + code + ' on ' + field + ' for: ' + label
+    );
+  }
+});

@@ -133,6 +133,8 @@ function singleOfEachRoutes() {
   routes.GPU = [{
     product_variant_id: V(1), board_tgp_watts: 250, length_mm: 300, width_slots: '2.50',
     required_power_connectors: { pcie_8pin: 2 }, recommended_psu_watts: 750,
+    // E5 (Decision 42): real VRAM data on the fixture row, never a bare field.
+    vram_capacity_gb: 12,
   }];
   routes.PSU = [{
     product_id: U(5), rated_wattage: 850, connector_24pin_atx: true,
@@ -199,6 +201,7 @@ test('specs keys use p:/v: prefixes and SQL rows are normalized', async () => {
   assert.deepEqual(context.specs['v:' + V(1)], {
     board_tgp_watts: 250, length_mm: 300, width_slots: 2.5,
     required_power_connectors: { pcie_8pin: 2 }, recommended_psu_watts: 750,
+    vram_capacity_gb: 12,
   });
   // JSONB blob stays structured (never stringified).
   assert.equal(typeof context.specs['v:' + V(1)].required_power_connectors, 'object');
@@ -222,6 +225,8 @@ test('gpu specs: board_tgp_watts is projected and a missing value stays null', a
   }];
   const { context } = await fullContext(routes);
   assert.equal(context.specs['v:' + V(1)].board_tgp_watts, null);
+  // E5 (Decision 42): a missing VRAM stays NULL (UNKNOWN), never 0.
+  assert.equal(context.specs['v:' + V(1)].vram_capacity_gb, null);
 });
 
 test('cpu specs: integrated_gpu_present tri-state is preserved exactly', async () => {

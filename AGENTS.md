@@ -25,7 +25,7 @@ and `apps/api/src/server.js`.
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–41). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–42). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
    To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
@@ -207,7 +207,7 @@ Command gotchas (verified 2026-09-28):
   no such var, so it exports an EMPTY value that shadows the one `dotenv` just loaded, and the
   failure surfaces as a bare `ERR` with an empty message.
 - Adding a decision to the log **breaks `verify-docs` by design**: `scripts/verify-docs.js` hardcodes
-  the expected heading and `Status:` counts (now 39 / 45) and derives AGENTS.md's required
+  the expected heading and `Status:` counts (now 40 / 46) and derives AGENTS.md's required
   "Decisions 1-N" from that parse. Bump both counts when you add Decision N+1, and update the
   `database/migrations/` range cited in AGENTS.md §4 or `migrations-range-documented` warns.
 - Writing a spec-data seed: put the guard in the DML, not only the header comment. `UPDATE..FROM

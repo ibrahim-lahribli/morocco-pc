@@ -3,7 +3,7 @@
 **GENERATED FILE — do not edit by hand.** Regenerate with `node scripts/gen-decision-index.js`
 (or `npm run gen:decisions`) after any change to `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 `node scripts/gen-decision-index.js --check` exits non-zero when this file is stale.
-Generated 2026-10-10 from RECOMMENDATION_ENGINE_DECISIONS.md (4656 lines).
+Generated 2026-10-13 from RECOMMENDATION_ENGINE_DECISIONS.md (4695 lines).
 
 Generated for audit finding **D5** (decision-log navigability): one row per decision with number,
 title, status, date and line anchor. Every status comes from the normalized `Status:` line at the
@@ -17,9 +17,9 @@ section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` a
 
 ## Open decisions
 
-None. All 41 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-10.
+None. All 42 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-13.
 
-## Global decisions (39 `## Decision` headings + 2 nested 4/5 aliases = 41)
+## Global decisions (40 `## Decision` headings + 2 nested 4/5 aliases = 42)
 
 | # | Title | Status | Date | DECISIONS.md line |
 |---|---|---|---|---|
@@ -62,6 +62,7 @@ None. All 41 global decisions (including the two nested 4/5 aliases) and all 5 E
 | 39 | retention is target-aware: a profile's `spend_targets` choose which candidates survive each role (E2) | RESOLVED 2026-10-09; IMPLEMENTED 2026-10-09 — the query loader carries `resolution` as a sibling of the Engine 2A input, a new pure `retention/targets.js` turns a profile's `spend_targets` + budget + resolution into per-role `{target, ceiling}`, and `retainTopKPerRole` accepts an optional `roleTargets` that switches a targeted role bucket from top-K to price-band retention while keeping the Decision 27 reservation, the K cap and the Rule 3/5 order. A model that declares no `use_case_profiles` passes `null` and stays byte-identical. The band constants are HYPOTHESES pending the H3 human review. | 2026-10-09 | 4398 |
 | 40 | the Engine 3 walk enforces the optional per-pair quota candidate_caps.max_builds_per_pair (E3) | RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 — `validateScoringModelConfiguration` accepts the OPTIONAL | 2026-10-10 | 4507 |
 | 41 | archetype selection (selectArchetypes) replaces selectDiverseTop as the pre-persistence showcase (E4) | RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 — pure, DB-free `selectArchetypes({ ranked, budget, priority })` returns up to THREE pair-distinct showcase builds (PERFORMANCE / BALANCED / VALUE, output order set by the query `priority`, `persisted_rank` contiguous 1..N in output order) and degrades honestly with `NO_*` reason codes instead of padding; `strategy_key` is RETURNED but not persisted (Platform migration 019 absent) and `archetype_objectives` remain unconsumed hypotheses. | 2026-10-10 | 4608 |
+| 42 | the engine enforces the OPTIONAL per-resolution VRAM floor resolution_profiles.<resolution>.vram_floor_gb at Engine 3 GPU depth (E5) | RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 (recorded 2026-10-13, after the docs-repair pass restored this log and the gap register) — a GPU candidate whose KNOWN chipset VRAM is below the active model's declared floor for the query's resolution is skipped at GPU depth; UNKNOWN VRAM or an undeclared resolution keeps the floor off entirely. | 2026-10-10 | 4657 |
 
 ## Engine 3 contract decisions (Engine-3-local numbering; local 4–5 ARE global Decisions 4–5)
 
@@ -75,9 +76,9 @@ None. All 41 global decisions (including the two nested 4/5 aliases) and all 5 E
 
 ## Reconciliation
 
-- Global decisions: 41 = 39 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
+- Global decisions: 42 = 40 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
 - Engine-3-local contracts: 5 (`### Decision 1–5` under "Engine 3 contract decisions"; local 1–3 are NOT global 1–3, local 4/5 ARE global 4/5 — AGENTS.md §2).
-- Parsed headings: 39 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
+- Parsed headings: 40 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
 - Status source: each entry’s normalized `Status:` line (first content line). The generator exits
   non-zero if a decision is added without one, so this table cannot go stale silently.
 - Open decisions: none.

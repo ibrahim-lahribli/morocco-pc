@@ -192,6 +192,7 @@ function routes(cpuRows) {
       length_mm: 300,
       width_slots: 2,
       required_power_connectors: null,
+      vram_capacity_gb: 4,
       recommended_psu_watts: 550,
     }],
     PSU: [{
@@ -762,4 +763,20 @@ test('public surface is exactly assembleBuildsForRecommendation', () => {
   assert.deepEqual(Object.keys(api), ['assembleBuildsForRecommendation']);
   assert.equal(typeof assembleBuildsForRecommendation, 'function');
   assert.equal(assembleBuildsForRecommendation.length, 1);
+});
+// ---------------------------------------------------------------------------
+// E5 (Decision 42): the pipeline carries the VRAM floor to the GPU depth.
+// ---------------------------------------------------------------------------
+
+test('E5: vramFloorGb passes through the pipeline - a below-floor GPU never assembles', async () => {
+  const run = await runPipeline();
+  const hasGpu = (build) => build.components.some((c) => c.component_role === 'GPU');
+  const baseline = run.assembled.builds.filter(hasGpu);
+  assert.ok(baseline.length > 0, 'baseline fixture assembles GPU builds (GPU-omit walk first)');
+  const floored = assembleBuildsForRecommendation({ ...validSources(run), vramFloorGb: 16 });
+  // The fixture GPU carries 4 GB (real fixture data), so floor 16 excludes it
+  // and the OPTIONAL walk falls back to the iGPU omit path. The omission is
+  // what proves the floor reached the DFS through this seam.
+  assert.equal(floored.builds.filter(hasGpu).length, 0);
+  assert.ok(floored.builds.length > 0, 'the iGPU omit path still assembles');
 });

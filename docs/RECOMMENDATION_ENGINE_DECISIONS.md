@@ -4653,3 +4653,42 @@ Tests: `npm run test:unit` = 1015 pass / 0 fail on Node 24.21.0 and on Node 22 (
 ### Supersedes / superseded by
 
 Amends Decision 21's stage list (the showcase stage is `selectArchetypes`; the returned `selected` is the explained E4 array) without rewriting it; keeps Decision 20's pair identity and the `selectDiverseTop` module untouched; answers Decision 25 on the selection side (Decision 40 answers it on the assembly side). Registers **OG-45** (strategy_key persistence deferred pending Platform migration 019) and **OG-46** (no golden A10 coverage; archetype hypotheses pending H3). No historical document is rewritten.
+
+## Decision 42 — the engine enforces the OPTIONAL per-resolution VRAM floor resolution_profiles.<resolution>.vram_floor_gb at Engine 3 GPU depth (E5)
+
+Status: RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 (recorded 2026-10-13, after the docs-repair pass restored this log and the gap register) — a GPU candidate whose KNOWN chipset VRAM is below the active model's declared floor for the query's resolution is skipped at GPU depth; UNKNOWN VRAM or an undeclared resolution keeps the floor off entirely.
+
+Date: 2026-10-10 implementation (the E5 session), recorded 2026-10-13. E5 Phase A of `docs/briefs/engine.md`: the roadmap clause "resolution ... enforces a configurable VRAM floor from `gpu_chipset.vram_capacity_gb`" (hypothesis values 1080p 8 / 1440p 12 / 2160p 16 GB, H3 review pending). Prompted by OG-38 — use_case / resolution / priority had no runtime effect — and it gives Decision 39's `resolution` sibling (carried by the query loader, never part of the Engine 2A input) its first engine effect. It extends Decision 40's OPTIONAL contract family to a second Engine 3 input field. NOT a migration, no seed, no compatibility-verdict change: the floor is a RECOMMENDATION-policy walk constraint, never a hardware compatibility verdict.
+
+### Current situation
+
+- `gpu_chipset.vram_capacity_gb` is INTEGER and nullable (`database/migrations/004_hardware_tables.sql` and the column re-declared with `CHECK (vram_capacity_gb > 0)` in `005_hardware_schema_corrections.sql`), reached via `gpu_board_spec.gpu_chipset_id` (NOT NULL). The Engine 3 input therefore never sees 0 for an unknown: `filtering/context-loader.js` `GPU_VARIANT_SPEC_SQL` LEFT JOINs `gpu_chipset` and `normalizeGpuSpec` carries `vram_capacity_gb ?? null`.
+- No ACTIVE model declares `resolution_profiles` today (`seed-minimal-v1@1.0.0` and `launch-v2@1.0.0` on the TEST branch), so the shipped state is provably inert: every pass takes the pre-E5 walk.
+
+### Problem
+
+OG-38 stands: the API-persisted fields `use_case`, `resolution`, `priority` were inert (Decision 17.6, Decision 36 item 8), and the resolution dimension had no engine consumer at all. Implementing the E5 floor without a recorded contract would leave the boundary semantics — inclusive or strict, UNKNOWN handling, single owner — invented per caller; the same contract family Decision 40 had to pin for the pair quota.
+
+### Decision
+
+1. `resolution_profiles` is an OPTIONAL top-level scoring-model configuration key: a JSON object whose keys are non-blank resolution strings and whose values are CLOSED one-field profiles `{ vram_floor_gb: integer >= 1 }`. Validated in `scoring/configuration.js` (`validateResolutionProfiles`); a model without the key keeps its exact old shape; blank keys, unknown profile fields, a missing field or a non-integer / < 1 field fail fast. A DECLARED null profile is malformed, never a synonym for absent (Decision 40's quota semantics: declared means valid).
+2. `vram_floor_gb` is an OPTIONAL Engine 3 top-level input field, present iff declared; a declared value must be an integer >= 1 and a DECLARED null is malformed. Validated in `assembly/input.js` and re-defended in `assembly/assemble.js` `readTraversalInputs` (the traversal entry can be reached directly).
+3. `assembly/pipeline.js` receives the orchestrator-resolved floor and passes it as that OPTIONAL field; null or absent resolves to the field ABSENT, never to an explicit null.
+4. Enforcement lives ONLY at Engine 3 GPU depth (`assembly/assemble.js` `belowVramFloor`, inside the DFS between the budget continue and Decision 40's pair-quota continue): a candidate is below-floor iff the filtering-context spec keyed `v:<product_variant_id>` exists AND `vram_capacity_gb` is a finite number strictly below the floor. A missing spec row or a NULL VRAM is UNKNOWN and NEVER excluded (Decision 12 Rule 2: PASS / UNKNOWN eligible, only a verified deficit excludes). The boundary is inclusive: a GPU exactly at the floor is eligible.
+5. The floor is RECOMMENDATION policy, not a compatibility verdict: no candidate REJECT, no `build_rejection` row, no reason code; below-floor GPU branches are skipped in the walk.
+6. `orchestrator/run.js` `resolveVramFloorGb(configuration, queryInput)` routes `configuration.resolution_profiles[queryInput.resolution]`; an absent profiles object, an undeclared resolution, a non-conforming profile or a NULL query resolution yields null, which is the pre-E5 walk byte-identically. The shape checks here re-load-defend what `validateScoringModelConfiguration` already guarantees.
+7. Determinism: no clock read, no randomness, no input mutation; identical DB state + query + model version yield identical walk sets. A model that declares nothing reproduces the pinned pre-E5 baseline byte-for-byte.
+
+### Rejected alternatives
+
+- Enforce it as a Layer-2 compatibility rule (an Engine 2 REJECT): a below-floor GPU is not incompatible — it assembles; this is query policy. It would also change the pinned verdict baseline (87 PASS / 12 UNKNOWN / 2 REJECT) without vendor-side evidence, contradicting Decision 12's verified-deficit-only exclusion.
+- Hardcode per-resolution floors in engine code when the profile is absent: policy belongs to the model's declared vocabulary (Decision 37 family — the model owns its use-case and resolution vocabularies); a code default would silently bind every future model.
+- Filter the GPU role in retention before assembly: it would give one constraint two owners and would re-excite the Decision 27 cheapest-per-role reservation against a filtered pool. The walk already disposes of partial paths cheaply.
+
+### Verdict for this pass
+
+Unit: 11 new pins — the assembly FIRE case, the inclusive boundary, UNKNOWN-is-never-below (NULL and missing spec), the absent-floor parity, the declared-null malformed input, the present-iff-declared round trip, and the `resolution_profiles` shape matrix (valid copy, absent-key preservation, 9 violations). `npm run test:unit` = 1026 pass / 0 fail on Node 24.21.0 and re-verified on Node 22 (CI parity, 0 cancelled) 2026-10-13. End-to-end (implementing session): the pinned `seed-minimal-v1@1.0.0` golden run reproduced the committed baseline byte-for-byte except the `as_of:` line (56 PASS / 22 EXPECTED-RED / 3 UNKNOWN, exit 0), plus `--filter=S06,S07,S09 --model=launch-v2@1.0.0` and a 24/24 real-DB full-run for the loader SQL. Re-verified this session: a fresh TEST-branch filtered golden run (S06/S09) exit 0, EXPECTED-RED only, cleanup residue 0. NOT run this pass (earlier recorded evidence stands, unrefreshed): `verify:pi1`, `verify:replay`, `test:api`, the full 20-scenario sweep. Registers **OG-47** (the rule is inert until a model declares `resolution_profiles`; the A4 floor values are hypotheses pending H3).
+
+### Supersedes / superseded by
+
+Amends Decision 39 (which records `resolution` as a query-loader sibling with no engine effect — E5 Phase A is that effect) and extends Decision 40's OPTIONAL-input pattern; Decision 37's `use_case_profiles` OPTIONAL-key validation is the shape precedent and is NOT modified. No historical document is rewritten.

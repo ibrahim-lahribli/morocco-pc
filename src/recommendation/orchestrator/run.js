@@ -360,6 +360,9 @@ async function runRecommendation(args) {
     filterResult: retentionResult,
     scoringModel,
     prices: offerResult.prices,
+    // E5 (Decision 42): the resolved VRAM floor (integer) or null; Engine 3
+    // receives the floor as policy input and owns the GPU-depth enforcement.
+    vramFloorGb: resolveVramFloorGb(configuration, queryInput),
   });
 
   // 13. Engine 4 STEP 3 (index-aligned with the builds in discovery order; the
@@ -452,6 +455,32 @@ function resolveRoleTargets(configuration, queryInput) {
     budgetAmount: queryInput.input.budget_amount,
     resolution: queryInput.resolution,
   });
+}
+
+/**
+ * E5 (Decision 42): the resolution VRAM floor for this pass, or null.
+ *
+ * Reads the ACTIVE model's `resolution_profiles[queryInput.resolution]`
+ * (Decision 42; the Decision 37 optional-key family). `resolution_profiles` is
+ * OPTIONAL and a model may declare only some resolutions, so a missing key -
+ * or a resolution the model does not declare - yields null and the GPU-depth
+ * floor check stays off (pre-E5 behaviour, byte-identical). The profile shape
+ * is already validated by validateScoringModelConfiguration at load time; this
+ * only routes it. An absent/NULL query resolution yields null (no floor).
+ */
+function resolveVramFloorGb(configuration, queryInput) {
+  const profiles = configuration === null || typeof configuration !== 'object'
+    ? undefined
+    : configuration.resolution_profiles;
+  if (profiles === null || typeof profiles !== 'object' || Array.isArray(profiles)) {
+    return null;
+  }
+  const profile = profiles[queryInput.resolution];
+  if (profile === null || typeof profile !== 'object') {
+    return null;
+  }
+  const floor = profile.vram_floor_gb;
+  return typeof floor === 'number' && Number.isInteger(floor) && floor >= 1 ? floor : null;
 }
 
 module.exports = { runRecommendation, SELECT_NOW_SQL };

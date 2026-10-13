@@ -73,7 +73,15 @@ const ENGINE3_INPUT_FIELDS = Object.freeze([
   'candidate_caps',
   'prices',
   'filtering_context',
+  'vram_floor_gb',
 ]);
+
+/**
+ * E5 (Decision 42): the contract's first OPTIONAL top-level field - present
+ * iff declared; absent means "no VRAM floor", and a DECLARED null is malformed
+ * (the Decision 40 quota semantics: declared means valid, never absent-by-null).
+ */
+const OPTIONAL_ENGINE3_INPUT_FIELDS = Object.freeze(['vram_floor_gb']);
 
 /** `candidate_caps` is a strict two-field contract. */
 const CANDIDATE_CAPS_FIELDS = Object.freeze([
@@ -113,8 +121,12 @@ function validateEngine3Input(raw) {
     }
   }
 
-  // --- presence of all ten fields (own property, never truthiness) -------
+  // --- presence of every required field (own property, never truthiness) --
+  // OPTIONAL fields (Decision 42: vram_floor_gb) are present iff declared.
   for (const field of ENGINE3_INPUT_FIELDS) {
+    if (OPTIONAL_ENGINE3_INPUT_FIELDS.includes(field)) {
+      continue;
+    }
     if (!Object.prototype.hasOwnProperty.call(raw, field)) {
       fail(ERROR_CODES.MISSING_REQUIRED_FIELD, field, `Engine 3 input requires "${field}"`);
     }
@@ -318,6 +330,22 @@ function validateEngine3Input(raw) {
     );
   }
 
+  // --- vram_floor_gb (OPTIONAL, Decision 42 / E5) -------------------------
+  // Absent = no floor. A DECLARED value must be an integer >= 1; a declared
+  // null is malformed, never a synonym for absent (Decision 40 quota semantics).
+  if (
+    Object.prototype.hasOwnProperty.call(raw, 'vram_floor_gb') &&
+    (typeof raw.vram_floor_gb !== 'number' ||
+      !Number.isInteger(raw.vram_floor_gb) ||
+      raw.vram_floor_gb < 1)
+  ) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'vram_floor_gb',
+      '"vram_floor_gb" must be an integer >= 1 when declared'
+    );
+  }
+
   // --- frozen result -------------------------------------------------------
   // Shallow copies keep caller-owned objects untouched while guaranteeing the
   // returned structure is immutable. `results` entries and `prices` entries are
@@ -344,6 +372,10 @@ function validateEngine3Input(raw) {
     ),
     prices,
     filtering_context,
+    // E5 (Decision 42): present iff declared (the field is OPTIONAL).
+    ...(Object.prototype.hasOwnProperty.call(raw, 'vram_floor_gb')
+      ? { vram_floor_gb: raw.vram_floor_gb }
+      : {}),
   });
 }
 

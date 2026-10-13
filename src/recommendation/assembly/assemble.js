@@ -161,6 +161,7 @@ function readTraversalInputs(engine3Input) {
     candidate_caps,
     prices,
     filtering_context,
+    vram_floor_gb,
   } = engine3Input;
   if (!Array.isArray(results)) {
     fail(ERROR_CODES.INVALID_FIELD_VALUE, 'results', '"results" must be an array');
@@ -243,6 +244,20 @@ function readTraversalInputs(engine3Input) {
       '"filtering_context" must be an object'
     );
   }
+  // E5 (Decision 42): optional resolution VRAM floor. Absent = no floor; a
+  // DECLARED null is malformed (Decision 40 quota semantics).
+  const vramFloorDeclared = Object.prototype.hasOwnProperty.call(engine3Input, 'vram_floor_gb');
+  const vramFloorGb = vramFloorDeclared ? vram_floor_gb : null;
+  if (
+    vramFloorDeclared &&
+    (typeof vramFloorGb !== 'number' || !Number.isInteger(vramFloorGb) || vramFloorGb < 1)
+  ) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'vram_floor_gb',
+      '"vram_floor_gb" must be an integer >= 1 when declared'
+    );
+  }
   return {
     results,
     budget_amount,
@@ -252,6 +267,7 @@ function readTraversalInputs(engine3Input) {
     integrated_gpu_present,
     maxBuilds,
     maxPerPair,
+    vramFloorGb,
     prices,
     filteringContext: filtering_context,
   };
@@ -568,6 +584,24 @@ function narrowCompatibilityNotes(picked, verdict) {
 }
 
 /**
+ * E5 (Decision 42): true only when this GPU's VRAM is KNOWN and below the
+ * floor. A missing spec entry or a NULL `vram_capacity_gb` is UNKNOWN, and
+ * UNKNOWN is never FAIL - such a candidate stays eligible (the Decision 12
+ * Rule 2 semantics: PASS/UNKNOWN eligible, only a verified deficit excludes).
+ * The floor itself is a RECOMMENDATION policy, not a compatibility verdict.
+ */
+function belowVramFloor(filteringContext, verdict, floorGb) {
+  const specs = filteringContext !== null && typeof filteringContext === 'object'
+    ? filteringContext.specs
+    : null;
+  const spec = specs !== null && typeof specs === 'object'
+    ? specs['v:' + verdict.product_variant_id]
+    : undefined;
+  const vram = spec !== undefined && spec !== null ? spec.vram_capacity_gb : null;
+  return typeof vram === 'number' && Number.isFinite(vram) && vram < floorGb;
+}
+
+/**
  * Walk EXPANSION_ORDER depth-first and return complete builds in discovery
  * order. Every choice adds its selected_price at once and stops that path
  * past the limit. The build cap halts the walk itself; later paths stay
@@ -659,6 +693,11 @@ function assembleBuilds(engine3Input) {
         const price = lookupPrice(traversal.prices, verdict);
         const nextTotal = runningTotal + price.selected_price;
         if (nextTotal > traversal.budget_amount) {
+          continue;
+        }
+        // E5 (Decision 42): skip a GPU branch below the resolution VRAM floor.
+        // UNKNOWN VRAM (NULL / missing spec) is never below-floor.
+        if (traversal.vramFloorGb !== null && belowVramFloor(traversal.filteringContext, verdict, traversal.vramFloorGb)) {
           continue;
         }
         // Decision 40 (E3): skip a GPU branch whose pair is already full.

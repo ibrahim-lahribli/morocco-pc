@@ -746,3 +746,28 @@ test('E3: validateEngine3Input carries an optional max_builds_per_pair and rejec
     expectError(ERROR_CODES.INVALID_FIELD_VALUE, 'candidate_caps.max_builds_per_pair')
   );
 });
+// ---------------------------------------------------------------------------
+// E5 (Decision 42): optional top-level `vram_floor_gb`.
+// ---------------------------------------------------------------------------
+
+test('E5: vram_floor_gb is present iff declared and passes through unchanged', () => {
+  const declared = validateEngine3Input(makeInput({ vram_floor_gb: 8 }));
+  assert.equal(declared.vram_floor_gb, 8);
+  const absent = validateEngine3Input(makeInput());
+  assert.equal(Object.prototype.hasOwnProperty.call(absent, 'vram_floor_gb'), false);
+  // The ten required fields keep the exact contract shape; the optional field
+  // is purely additive.
+  assert.deepEqual(Object.keys(absent), CONTRACT_FIELDS);
+});
+
+test('E5: a DECLARED vram_floor_gb must be an integer >= 1; declared null is malformed', () => {
+  for (const bad of [null, 0, -1, 1.5, '8', true]) {
+    assert.throws(
+      () => validateEngine3Input(makeInput({ vram_floor_gb: bad })),
+      (error) => error instanceof CandidateSelectionError
+        && error.code === ERROR_CODES.INVALID_FIELD_VALUE
+        && error.field === 'vram_floor_gb',
+      'expected INVALID_FIELD_VALUE for vram_floor_gb=' + String(bad)
+    );
+  }
+});

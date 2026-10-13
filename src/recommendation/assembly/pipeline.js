@@ -127,6 +127,12 @@ function assembleBuildsForRecommendation(sources) {
   }
 
   const { candidatePoolResult, filteringContext, filterResult, scoringModel, prices } = sources;
+  // E5 (Decision 42): the boundary-resolved resolution VRAM floor (integer or
+  // null). Null/absent means no floor; the Engine 3 input field is OPTIONAL
+  // (present iff declared), so it is omitted rather than passed as null.
+  const vramFloorGb = sources.vramFloorGb === undefined || sources.vramFloorGb === null
+    ? null
+    : sources.vramFloorGb;
 
   // --- required sources (fail fast, before any work) -----------------------
   for (const [field, value] of [
@@ -175,6 +181,7 @@ function assembleBuildsForRecommendation(sources) {
     candidate_caps: scoringModel.configuration.candidate_caps,
     prices,
     filtering_context: filteringContext,
+    ...(vramFloorGb === null ? {} : { vram_floor_gb: vramFloorGb }),
   };
 
   // --- Steps 1, 2, 4 (unchanged modules; no logic duplicated here) ---------
