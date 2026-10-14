@@ -163,6 +163,8 @@ Rejected alternative: a new insert-only `recommendation_diagnostic` table. Reaso
 - No DB in this sprint; schema not yet created.
 - **Known transition hazard — record it here, do not discover it from a red job.** `full-run.js` supplies `passFacts` unconditionally, so from Sprint 2 until 019 lands `persistPassFacts` runs on EVERY pass and fails `42703` against a schema without the three columns (measured 2026-10-14: 0 of 3 present on the shared DB AND on the TEST branch). Every DB-backed write gate is therefore RED on this branch — `test-orchestrator-full-run.js`, `measure-orchestrator.js`, `eval:scenarios`, `verify:pi1`, `test:api:db` — and the nightly `recurring-gates` job would fail at `test:api:db`. Accepted only as a pre-merge branch state on the assumption that Sprint 3 lands 019 immediately; if Sprint 3 is deferred, land 019 alone first.
 
+**RESOLVED ON THE TEST BRANCH 2026-10-14 (Sprint 3, 019 only).** `019_recommendation_pass_facts.sql` is authored, applied with `--test-db` and replay-verified 0 drift, and all five named gates were re-verified green on the branch: `test-orchestrator-full-run.js` 36/0, `measure-orchestrator.js` exit 0, `eval:scenarios` exit 0 at 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN, `verify:pi1` PASS with 0 drift, `test:api:db` 1/0. **This hazard is NOT closed for the SHARED database:** 019 is applied on the branch only, so the shared schema still lacks all three columns and any write against shared still fails `42703`. The shared apply is the Sprint 5 decision. See "Sprint 3 execution record — 019" below.
+
 ### Definition of done
 
 - `full-run.js` threads a real `passFacts`.
@@ -173,6 +175,10 @@ Rejected alternative: a new insert-only `recommendation_diagnostic` table. Reaso
 ---
 
 ## Sprint 3 — author 019 and 020, review against the recipe, branch-apply and replay (60 min)
+
+**Status 2026-10-14: 019 DONE, 020 NOT STARTED.** This pass was scoped to 019 alone,
+because 019 is what unblocks the red write gates; 020 and the 20-migration replay tail
+are still open. Evidence in "Sprint 3 execution record — 019" below.
 
 **Date:** 2026-10-14  
 **Purpose:** write the two migrations, review them against the migration recipe, and apply + replay them on the TEST branch. **Do not** run `gen:schema` in this sprint — that runs against the shared DB and would desync the generated docs from the digest gate target.
@@ -197,6 +203,37 @@ ALTER TABLE recommendation_result
 
 - CRLF. `IF NOT EXISTS` on every column. All three nullable, no default, no backfill. No CHECK that would block a later archetype: `strategy_key` and `engine_version` are TEXT.
 - No `schema_migrations` mutation; no destructive ALTER; no enum change; ledger-applied only.
+
+### Sprint 3 execution record — 019 (2026-10-14)
+
+Authored `database/migrations/019_recommendation_pass_facts.sql` (CRLF) in exactly the three-statement shape above, plus a header recording why each choice was made: JSONB for the nested diagnostic, TEXT for the two growable vocabularies, nullable with no backfill because NULL is UNKNOWN in this schema, and no GRANT because privileges are not schema and the replay harness builds an empty database with no role to grant to.
+
+Measured before authoring, on both databases: `recommendation_query` 0 rows, `recommendation_result` 0 rows, `build_candidate` 0 rows, `build_component` 0 rows, and `uq_recommendation_result_query_rank` already present — so the ALTERs rewrite nothing and `persistPassFacts`' `AND rank = $4` match needs no new index.
+
+Verified, each on its own exit status:
+
+| Check | Result |
+|---|---|
+| `run-migrations.js --dry-run` | lists 019 as the only pending file |
+| `run-migrations.js --test-db` | MIGRATED 019; ledger 18 → 19 |
+| column shape on the branch | `budget_floor` jsonb, `engine_version` text, `strategy_key` text — all nullable, no default |
+| raw file re-executed by hand | no error, shape byte-identical, so the no-`ADD CONSTRAINT` re-runnability claim holds |
+| `run-migrations.js --test-db --check` | No pending migrations |
+| `verify:replay --test-db --reference=test` | 19 files replayed, **0 drift** (columns 365/365, checks 78/78, fks 60/60, indexes 99/99) |
+| `test-orchestrator-full-run.js` | **36 pass / 0 fail** (24 pre-existing + 12 new pass-fact assertions) |
+| `test-orchestrator-commit.js` | 51 pass / 0 fail |
+| `measure-orchestrator.js` | exit 0, Decision 23 criteria 1–2 MET for GAMING and OFFICE |
+| `eval:scenarios --no-baseline --no-volatile` | exit 0, 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN (the documented unchanged-engine baseline) |
+| `verify:pi1` | PASS, 0 drifted of 25 in both use cases, cleanup verified |
+| `test:api:db` | 1 passed / 0 failed, no residue |
+| `test:unit` / `test:scripts` / `test:api` | 1149/0/0 (Node 24 **and** the Node 22 CI leg, `# cancelled 0`) / 212/0 / 38/0 |
+| `verify:docs --offline`, `gen-decision-index --check` | OK |
+
+**The write gate now reads the columns it was blind to.** `test-orchestrator-full-run.js` asserted nothing about `budget_floor`, `engine_version` or `strategy_key`, so its earlier green proved only that the writer no longer raised `42703` — not that any fact landed, because `persistPassFacts` is UPDATE-only and a statement that matches no row still exits 0. It now reads the rows back across two passes: the default pass (no options) must show the Decision 27 floor present and `engine_version` **NULL**, and a second pass given `{ engineVersion }` must show that value on **every** result row. That pair is what makes "silently wrote nothing" impossible to pass.
+
+One comparator trap worth keeping: the floor cannot be compared with `util.isDeepStrictEqual`. `jsonb` does not preserve key order, and the engine's `cheapest_by_role` is a deliberately **null-prototype** object (`retention/budget-floor.js` uses `Object.create(null)`), which `isDeepStrictEqual` rejects against the driver-parsed plain object. The gate compares key-sorted JSON content instead.
+
+Deliberately NOT done in this pass: `gen:schema` (this sprint forbids it — it targets the shared DB and would desync the digest gate before 019 is applied there), `020`, and the shared apply (Sprint 5). Because 019 is applied only on the branch, the SHARED database still lacks the three columns, so a write against shared still fails `42703`: the transition hazard above is closed for the branch, not for shared.
 
 ### Migration 020 shape
 

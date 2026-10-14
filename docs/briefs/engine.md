@@ -236,7 +236,7 @@ E1 scoring model "launch-v2" with use_case_profiles (gpu_policy, spend_targets b
 
 E3 max_builds_per_pair quota enforced at GPU depth inside the DFS.
 
-E4 selectArchetypes (PERFORMANCE / BALANCED / VALUE; priority sets the order; fewer than 3 distinct builds is returned honestly with a reason code). Needs recommendation_result.strategy_key from Platform migration 019.
+E4 selectArchetypes (PERFORMANCE / BALANCED / VALUE; priority sets the order; fewer than 3 distinct builds is returned honestly with a reason code). ~~Needs recommendation_result.strategy_key from Platform migration 019.~~ **LANDED 2026-10-14 (Decision 46):** `019_recommendation_pass_facts.sql` adds the column (TEST branch) and `persistence/persist-pass-facts.js` writes each key onto the rank it nominated; the read path that would surface it is still Sprint 4 of `PLAN_PLATFORM_P0.md`.
 
 E5 resolution: GPU spend-share multiplier + VRAM floor from gpu_chipset.vram_capacity_gb. No per-game FPS claims.
 

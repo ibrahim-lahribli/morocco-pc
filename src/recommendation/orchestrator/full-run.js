@@ -73,9 +73,11 @@ async function runRecommendationFullRun(client, queryId, options) {
   const rankedResult = ranking.rankBuilds({ builds: snap.builds });
   // E4 (Decision 41): the archetype selection REPLACES the selectDiverseTop
   // walk as the pre-persistence showcase. Priority comes from the snapshot
-  // query row; strategy_key persistence is DEFERRED until Platform migration
-  // 019 adds recommendation_result.strategy_key - the archetypes' strategy
-  // keys are RETURNED here, not written.
+  // query row. Since Platform migration 019 added
+  // recommendation_result.strategy_key, the archetypes' keys are no longer
+  // merely returned: this function threads them to the commit as
+  // `passFacts.strategyKeys` and persistPassFacts writes each key onto the rank
+  // it nominated (Decision 46).
   const selection = ranking.selectArchetypes({
     ranked: rankedResult.ranked,
     budget: { amount: snap.budget_amount, currency: snap.currency },

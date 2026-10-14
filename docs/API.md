@@ -286,11 +286,13 @@ Two fields have no column to read back and are **pass-only facts**:
 answered the request, on both verbs.
 
 **Why:** `budget_floor` is computed inside the pass (Decision 27) and
-`engine_version` has no column (OG-18). Persisting them needs a schema change —
-proposed as **migration 019** (design only, no file written): an `engine_version`
-column on `recommendation_result` and a query-level `budget_floor`. Until then,
-neither GET nor the API ever recomputes a floor; a null means "not recorded",
-never "zero".
+`engine_version` had no column (OG-18). Persisting them needed a schema change, and
+**migration 019** now provides it (`019_recommendation_pass_facts.sql`, applied on the
+TEST branch 2026-10-14): a query-level `budget_floor` on `recommendation_query`, plus
+`engine_version` and `strategy_key` on `recommendation_result`. This read path does not
+consume them yet (Sprint 4 of `PLAN_PLATFORM_P0.md`), so both fields above still read
+`null` here. Neither GET nor the API ever recomputes a floor; a null means "not
+recorded", never "zero".
 
 ### `price_status`
 
