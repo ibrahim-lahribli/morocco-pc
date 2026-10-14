@@ -130,8 +130,19 @@ const VERDICT_FIELDS = Object.freeze([
 const PARTICIPATING_ROLES = new Set(EXPANSION_ORDER);
 
 /**
- * Decision 40 (E3): the (CPU, GPU) identity a per-pair quota counts. Same
- * identity as the select-diverse pair key: product and variant of both sides.
+ * Decision 40 (E3): the (CPU, GPU) identity a per-pair quota counts - product
+ * and variant of BOTH sides.
+ *
+ * This is NOT the same string as the pre-persistence selection pair key
+ * (select-diverse.js and select-archetypes.js), which is
+ * `${CPU product_id}|${GPU product_variant_id or ''}` and deliberately drops the
+ * GPU product_id and the CPU variant. The two keys induce the SAME partition
+ * only because offers/select.js enforceVariantIdentity guarantees a GPU
+ * candidate carries a non-null product_variant_id and every other role carries
+ * null - which is what makes the CPU variant always null here and the GPU
+ * product_id always implied by the variant there. Same-fixture agreement is
+ * pinned in assemble.test.js (E3/E4 pair-identity test); do not "simplify"
+ * either key without re-pinning that test.
  */
 function pairKey(cpu, gpu) {
   return JSON.stringify([cpu.product_id, cpu.product_variant_id, gpu.product_id, gpu.product_variant_id]);
@@ -265,6 +276,24 @@ function readTraversalInputs(engine3Input) {
       ERROR_CODES.INVALID_FIELD_VALUE,
       'vram_floor_gb',
       '"vram_floor_gb" must be an integer >= 1 when declared'
+    );
+  }
+  // E5 (Decision 42) hardening: a DECLARED floor makes `specs` load-bearing, so
+  // a malformed context fails fast here instead of silently turning the floor
+  // into a no-op. Only the SHAPE is checked - an INDIVIDUAL absent spec row, or
+  // a NULL `vram_capacity_gb`, stays the legitimate UNKNOWN that belowVramFloor
+  // and Decision 12 Rule 2 require. With no floor declared, `specs` is not read
+  // by this walk, so the pre-E5 contract is unchanged.
+  if (
+    vramFloorGb !== null &&
+    (filtering_context.specs === null ||
+      typeof filtering_context.specs !== 'object' ||
+      Array.isArray(filtering_context.specs))
+  ) {
+    fail(
+      ERROR_CODES.INVALID_INPUT,
+      'filtering_context.specs',
+      '"filtering_context.specs" must be an object when "vram_floor_gb" is declared'
     );
   }
 
@@ -636,14 +665,13 @@ function narrowCompatibilityNotes(picked, verdict) {
  * UNKNOWN is never FAIL - such a candidate stays eligible (the Decision 12
  * Rule 2 semantics: PASS/UNKNOWN eligible, only a verified deficit excludes).
  * The floor itself is a RECOMMENDATION policy, not a compatibility verdict.
+ *
+ * `filteringContext.specs` is guaranteed to be an object by the time this runs:
+ * readTraversalInputs rejects a malformed `specs` whenever a floor is declared
+ * (and this function is only called when one is).
  */
 function belowVramFloor(filteringContext, verdict, floorGb) {
-  const specs = filteringContext !== null && typeof filteringContext === 'object'
-    ? filteringContext.specs
-    : null;
-  const spec = specs !== null && typeof specs === 'object'
-    ? specs['v:' + verdict.product_variant_id]
-    : undefined;
+  const spec = filteringContext.specs['v:' + verdict.product_variant_id];
   const vram = spec !== undefined && spec !== null ? spec.vram_capacity_gb : null;
   return typeof vram === 'number' && Number.isFinite(vram) && vram < floorGb;
 }

@@ -89,9 +89,19 @@ function strategyOrder(priority) {
 }
 
 /**
- * The (CPU, GPU) pair key, same identity as select-diverse's pairKey so the
- * two stages cannot disagree about what "one pair" means. GPU omission
- * (iGPU path) is the literal 'OMITTED'.
+ * The (CPU, GPU) pair key. This file and select-diverse.js are deliberately two
+ * COPIES of the same key, so the two stages cannot disagree about what "one
+ * pair" means - pinned by a test in select-archetypes.test.js. The identity is
+ * (CPU product_id, GPU product_variant_id-or-''), with GPU omission (iGPU path)
+ * as the literal 'OMITTED'.
+ *
+ * Engine 3's per-pair quota (assembly/assemble.js pairKey) keys a 4-tuple that
+ * also carries the GPU product_id. The two induce the SAME partition only
+ * because offers/select.js enforceVariantIdentity guarantees that a GPU
+ * candidate carries a non-null product_variant_id and every other role carries
+ * null: a loader that bypassed that selector could split a pair here that
+ * selection merges there (or vice versa), which is why the rule is pinned at
+ * its owner (assembly/assemble.test.js) as well as here.
  */
 function pairKey(entry) {
   const components = entry.build.components;
@@ -184,13 +194,15 @@ function selectArchetypes({ ranked, budget, priority } = {}) {
     fail(ERROR_CODES.INVALID_FIELD_VALUE, 'priority', '"priority" must be 1..5 or null');
   }
 
-  // Entries with a zero/negative price make VALUE division undefined; the
-  // ranked list is Engine 5a output so this should never occur, but the check
-  // makes the arithmetic contract explicit.
-  const entries = ranked.map((entry, index) => ({
+  // Annotate every ranked entry with the pinned query budget; pickForStrategy
+  // reads it for the PERFORMANCE spend-share test. Engine 5a ranks Engine 3
+  // builds whose total_price is the sum of strictly positive selected_price
+  // values (assembly/prices.js rejects a selected_price <= 0), so the VALUE
+  // ratio used below is always well-defined. This module adds no price guard
+  // of its own, deliberately.
+  const entries = ranked.map((entry) => ({
     ...entry,
     budget_amount: budget.amount,
-    _rank: index,
   }));
 
   const reasonCodes = [];
@@ -205,10 +217,6 @@ function selectArchetypes({ ranked, budget, priority } = {}) {
   const archetypes = [];
 
   for (const strategy of order) {
-    if (entries.length === 0) {
-      reasonCodes.push(REASON_CODES[`NO_${strategy}_CANDIDATE`]);
-      continue;
-    }
     const pick = pickForStrategy(strategy, entries, claimedPairs);
     if (pick === null) {
       // No pair-distinct entry for THIS strategy - honest degradation: skip it.

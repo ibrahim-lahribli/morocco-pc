@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const { assembleBuilds, EXPANSION_ORDER } = require('./assemble');
 const { priceKey, validatePrices } = require('./prices');
+const { selectDiverseTop } = require('../ranking/select-diverse');
 const { validateEngine3Input } = require('./input');
 const { ROLE_CATEGORIES, COMPONENT_ROLES } = require('../candidates/roles');
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
@@ -1929,6 +1930,34 @@ test('E3: a non-positive or non-integer quota fails with the nested path', () =>
     );
   }
 });
+
+test('E3/E4: the quota partition and the ranking pair key agree on the same builds', () => {
+  // Engine 3's quota keys a 4-tuple (product AND variant of both sides); the
+  // ranking pair key (select-diverse / select-archetypes) is
+  // `${CPU product_id}|${GPU variant or ''}` and drops the GPU product_id. The
+  // two agree only under the offers/select.js variant-identity rule, and nothing
+  // pinned that agreement. So drive the real quota walk and re-project ITS OWN
+  // emitted builds through the ranking selector: if either key drifted, the
+  // ranking selector would drop a build the quota already bounded.
+  const builds = assembleWithQuota(2);
+  assert.equal(builds.length, 10);
+  const ranked = builds.map((build, index) => ({
+    build,
+    build_score: 100 - index,
+    total_price: build.total_price,
+    compatibility_status: 'PASS',
+    signature: 'sig-' + index,
+    explanation: null,
+  }));
+  const projected = selectDiverseTop({ ranked, limit: 10, maxPerPair: 2 });
+  assert.equal(
+    projected.dropped_count,
+    0,
+    'the ranking pair key grouped builds differently from the quota'
+  );
+  assert.equal(projected.selected.length, 10);
+});
+
 // ---------------------------------------------------------------------------
 // E5 (Decision 42): optional resolution VRAM floor at GPU depth.
 // ---------------------------------------------------------------------------
@@ -2033,6 +2062,44 @@ test('E5: a DECLARED vram_floor_gb must be an integer >= 1 (declared null is mal
       'expected INVALID_FIELD_VALUE for vram_floor_gb=' + String(bad)
     );
   }
+});
+
+test('E5: a declared floor with a malformed specs map fails fast (no silent no-op)', () => {
+  // belowVramFloor reads filteringContext.specs only when a floor is declared, so
+  // a context missing that map used to turn the floor into a silent no-op. The
+  // SHAPE is now checked at the boundary; an individual absent spec row stays the
+  // legitimate UNKNOWN pinned by the test above.
+  const malformed = {
+    candidates: {},
+    platform_by_socket: {},
+    compat: {},
+  };
+  const withFloor = engineInput({
+    results: vramFixture(['g1']),
+    useCase: 'GAMING',
+    gpuRequired: ['GAMING'],
+    maxBuilds: 10,
+    filteringContext: malformed,
+  });
+  withFloor.vram_floor_gb = 8;
+  assert.throws(
+    () => assembleBuilds(withFloor),
+    (error) => error instanceof CandidateSelectionError
+      && error.code === ERROR_CODES.INVALID_INPUT
+      && error.field === 'filtering_context.specs'
+  );
+
+  // Differential: the SAME malformed context with NO declared floor still walks,
+  // so the guard is scoped to a declared floor and no other path changed.
+  const withoutFloor = engineInput({
+    results: vramFixture(['g1']),
+    useCase: 'GAMING',
+    gpuRequired: ['GAMING'],
+    maxBuilds: 10,
+    filteringContext: malformed,
+  });
+  assert.equal(Object.prototype.hasOwnProperty.call(withoutFloor, 'vram_floor_gb'), false);
+  assert.equal(assembleBuilds(withoutFloor).builds.length, 1);
 });
 // ---------------------------------------------------------------------------
 // E6 (Decision 43): a declared IGPU_ALLOWED policy makes the iGPU path the

@@ -10,6 +10,7 @@ const {
   REASON_CODES,
 } = require('./select-archetypes');
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const { selectDiverseTop } = require('./select-diverse');
 
 /** A ranked entry shaped like rankBuilds output (fresh object each call). */
 function rankedEntry(index, overrides) {
@@ -222,4 +223,34 @@ test('E4: constant surfaces - PERFORMANCE_FLOOR is exactly 0.85 and STRATEGIES f
   assert.equal(PERFORMANCE_FLOOR, 0.85);
   assert.ok(Object.isFrozen(STRATEGIES));
   assert.ok(Object.isFrozen(REASON_CODES));
+});
+
+test('E4/E3: the pair key agrees with select-diverse across GPU variants and the iGPU omission', () => {
+  // Two builds on the SAME GPU product_id but DIFFERENT variants, plus an iGPU
+  // (GPU-less) build: three distinct pairs. selectArchetypes and selectDiverseTop
+  // keep SEPARATE copies of the pair key, so this pins the copies together - if
+  // either drifts, one selector merges or splits a pair the other does not, and
+  // the two stages would disagree about what "one pair" means.
+  const ranked = [
+    rankedEntry(0, { build_score: 90, total_price: 9900, cpu: 'cpu-a', gpu: 'gpu-1', gpuVariant: 'gpu-1-varA' }),
+    rankedEntry(1, { build_score: 80, total_price: 9500, cpu: 'cpu-a', gpu: 'gpu-1', gpuVariant: 'gpu-1-varB' }),
+    rankedEntry(2, { build_score: 70, total_price: 9000, cpu: 'cpu-a' }),
+  ];
+  // rankedEntry always emits a GPU component; strip it for the omission case.
+  ranked[2].build.components = ranked[2].build.components.filter(
+    (c) => c.component_role !== 'GPU'
+  );
+
+  // One build per pair is all either selector keeps at maxPerPair = 1.
+  const diverse = selectDiverseTop({ ranked, limit: 10, maxPerPair: 1 });
+  assert.equal(diverse.selected.length, 3);
+  assert.equal(diverse.dropped_count, 0);
+
+  const archetypes = selectArchetypes({ ranked, budget: BUDGET, priority: 3 });
+  assert.equal(archetypes.archetypes.length, 3);
+  assert.deepEqual(archetypes.reason_codes, []);
+
+  // Same partition, expressed through the shared entry field both modules emit.
+  const signatures = (entries) => entries.map((e) => e.signature).sort();
+  assert.deepEqual(signatures(diverse.selected), signatures(archetypes.archetypes));
 });

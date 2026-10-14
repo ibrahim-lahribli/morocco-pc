@@ -44,6 +44,13 @@ function validateArgs({ ranked, limit, maxPerPair }) {
  * (iGPU path) is represented by the string 'OMITTED' as the GPU part of the key,
  * making it a distinct pair value from any actual GPU variant.
  *
+ * This is a deliberate COPY of ranking/select-archetypes.js pairKey (identical
+ * string, so the two stages cannot disagree about "one pair"); the two are
+ * pinned together by a test in select-archetypes.test.js. Engine 3's quota keys
+ * a 4-tuple that also carries the GPU product_id (assembly/assemble.js pairKey)
+ * and induces the same partition only under the offers/select.js
+ * enforceVariantIdentity rule (GPU => non-null variant, every other role => null).
+ *
  * Throws MISSING_REQUIRED_FIELD if the build has no CPU component - contract violation.
  */
 function pairKey(entry) {
