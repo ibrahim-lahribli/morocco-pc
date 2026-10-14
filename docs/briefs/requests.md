@@ -9,6 +9,16 @@ series and cross-cutting coordination.
 
 ---
 
+## 2026-10-14 — Engine widened `filtering/context-loader.js` for E8, and a shared-DB fixture leak needs an owner
+
+**Owner:** Platform (the loader file, and the shared-DB cleanup). **Requested by:** Engine (E8). **Status:** the loader change is DONE by Engine and disclosed here; the fixture cleanup is a REQUEST.
+
+This brief lists `filtering/context-loader.js` as do-not-edit, and Engine edited it under Decision 45 (E8). Disclosing that rather than leaving it silent: six spec columns were added to four existing SELECTs (`cpu_spec.tdp_watts`; `cooler_spec.max_tdp_watts`; `motherboard_spec.dimm_slots` and `max_memory_capacity_gb`; `ram_spec.module_count` and `capacity_per_module_gb`), each projected through the existing `normalizeSpecForRole` shape with a null fallback. The change is purely additive — no existing key moved, `normalizeSpecForRole` itself is untouched, nothing else in the loader changed, and the full 20-scenario golden suite is byte-identical to the pre-E8 reference except the `as_of:` line. The same file was widened twice before for the same class of change (Decision 30 for cooler `height_mm` plus case clearance, Decision 42 for `vram_capacity_gb`), which is the precedent Decision 45 follows. A HARD rule cannot be enforced from a column its loader does not select, so if the do-not-edit list is meant to hold for this file, please say so explicitly in the brief.
+
+**The request.** Four `TestCompat*` fixture products persist in the SHARED database: `TestCompatCPU`, `TestCompatCase`, `TestCompatCooler`, `TestCompatMotherboard`. Measured 2026-10-14: each has 0 `component_assessment` rows and 0 `store_offer` rows, so nothing reads them as candidates — but `TestCompatMotherboard` carries NULL `dimm_slots` AND NULL `max_memory_capacity_gb`, which is the only reason `scripts/check-deferred-rules.js` reports a coverage denominator of 8 motherboards instead of the 7 real ones, making the gate's coverage figure under-state real coverage and read as a missing datum. The writer is `scripts/test-compatibility.js` (AGENTS section 6 still lists it as a normal command), which creates the fixtures against the unguarded `DATABASE_URL` and never removes them. Registered as **OG-51**, same defect family as the accumulating fixtures AGENTS section 10 already records for `scripts/verify-hardware-schema.js`.
+
+**Acceptance:** the four fixture rows are removed from the shared DB and `scripts/test-compatibility.js` either cleans up exactly what it created in a `finally` (spec rows before `product` before `product_family` — spec tables are ON DELETE NO ACTION, AGENTS section 7 item 11) or moves behind the `TEST_DATABASE_URL` guard like the other write-capable scripts; and `scripts/check-deferred-rules.js` then reports 7 of 7 real motherboards. No shared-DB DELETE is authorized by this request — it asks the owner to perform one.
+
 ## 2026-10-08 — Persist explicit run as_of (Decision 38 / OG-42)
 
 **Owner:** Platform. **Requested by:** Engine (E2-pre). **Status:** REQUEST ONLY; no migration applied.

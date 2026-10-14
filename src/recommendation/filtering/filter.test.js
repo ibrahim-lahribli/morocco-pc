@@ -63,7 +63,13 @@ function makeCandidate(role, productId, variantId = null) {
 }
 
 function cpuSpec(overrides = {}) {
-  return { socket_id: SOCKET_ID, product_family_id: FAMILY_ID, ...overrides };
+  return {
+    socket_id: SOCKET_ID,
+    product_family_id: FAMILY_ID,
+    // E8 (Decision 45): the CPU side of the SOFT OG-09 cooler-TDP rule.
+    tdp_watts: 125,
+    ...overrides,
+  };
 }
 
 function motherboardSpec(overrides = {}) {
@@ -71,12 +77,22 @@ function motherboardSpec(overrides = {}) {
     socket_id: SOCKET_ID,
     form_factor: 'ATX',
     memory_type_id: RAM_MEMORY_TYPE_ID,
+    // E8 (Decision 45): the board operands of HARD OG-11 / OG-12.
+    dimm_slots: 4,
+    max_memory_capacity_gb: 128,
     ...overrides,
   };
 }
 
 function ramSpec(overrides = {}) {
-  return { memory_type_id: RAM_MEMORY_TYPE_ID, ...overrides };
+  // E8 (Decision 45): the kit operands of HARD OG-11 / OG-12 (2 x 8 GB fits
+  // 4 slots and is far below the 128 GB board ceiling).
+  return {
+    memory_type_id: RAM_MEMORY_TYPE_ID,
+    module_count: 2,
+    capacity_per_module_gb: 8,
+    ...overrides,
+  };
 }
 
 function coolerSpec(overrides = {}) {
@@ -90,6 +106,9 @@ function coolerSpec(overrides = {}) {
     // this null the rule would return UNKNOWN, which is correct but is not
     // what an "everything passes" fixture should be exercising.
     height_mm: 155,
+    // E8 (Decision 45): the cooler side of the SOFT OG-09 rule. 250 W is
+    // above the fixture CPU's 125 W, so the golden pool stays all-PASS.
+    max_tdp_watts: 250,
     ...overrides,
   };
 }
@@ -281,6 +300,7 @@ test('B2-D: all-PASS candidate - fully compatible pool passes every relationship
     cpu_motherboard: FINAL_STATUSES.PASS,
     cooler_socket: FINAL_STATUSES.PASS,
     platform_memory: FINAL_STATUSES.PASS,
+    cooler_tdp: FINAL_STATUSES.PASS,
   });
 
   // SSD roles participate in no relationship: vacuously PASS.
@@ -304,6 +324,7 @@ test('B2-D: UNKNOWN caused by absent partner role - zero partners is never a FAI
       cpu_motherboard: FINAL_STATUSES.UNKNOWN, // no MOTHERBOARD candidates
       cooler_socket: FINAL_STATUSES.UNKNOWN, // no CPU_COOLER candidates
       platform_memory: FINAL_STATUSES.PASS, // RAM partner present and supported
+      cooler_tdp: FINAL_STATUSES.UNKNOWN, // no CPU_COOLER candidates
     },
   });
 
@@ -1112,4 +1133,113 @@ test('B2-D: contract validation reuses the Engine 2 error vocabulary', () => {
     }),
     (err) => err.name === 'CandidateSelectionError' && err.code === 'INVALID_CANDIDATE'
   );
+});
+// ---------------------------------------------------------------------------
+// E8 / Decision 45: the three former Decision 26 item B rules, FIRED through
+// Engine 2D. A rule with zero live violations is indistinguishable from a rule
+// that never runs, so each one is forced to violate here and asserted; the
+// unforced golden pool is asserted all-PASS in the suite above.
+// ---------------------------------------------------------------------------
+
+test('E8: OG-11 FIRES - a 4-module kit on a 2-slot board REJECTs the RAM candidate', () => {
+  const specs = goldenSpecs();
+  specs['p:' + MB_ID] = motherboardSpec({ dimm_slots: 2 });
+  specs['p:' + RAM_ID] = ramSpec({ module_count: 4 });
+  const context = buildContext({
+    pool: goldenPool(),
+    specs,
+    platform_by_socket: goldenPlatformBySocket(),
+    compat: goldenCompat(),
+  });
+  const result = filterCandidates(context);
+
+  const ram = findResult(result, 'RAM', RAM_ID);
+  assert.equal(ram.status, CANDIDATE_STATUSES.REJECT);
+  assert.equal(ram.reason, REASON_CODES.RAM_SLOTS_EXCEEDED);
+  assert.equal(ram.relationships.mb_memory_slots, FINAL_STATUSES.FAIL);
+  assert.equal(ram.partner_product_id, MB_ID);
+
+  // The board sees the same pair from its own side (symmetric relationship).
+  const mb = findResult(result, 'MOTHERBOARD', MB_ID);
+  assert.equal(mb.status, CANDIDATE_STATUSES.REJECT);
+  assert.equal(mb.relationships.mb_memory_slots, FINAL_STATUSES.FAIL);
+});
+
+test('E8: OG-12 FIRES - a 4 x 16 GB kit over a 32 GB board REJECTs the RAM candidate', () => {
+  const specs = goldenSpecs();
+  specs['p:' + MB_ID] = motherboardSpec({ max_memory_capacity_gb: 32 });
+  specs['p:' + RAM_ID] = ramSpec({ module_count: 4, capacity_per_module_gb: 16 });
+  const context = buildContext({
+    pool: goldenPool(),
+    specs,
+    platform_by_socket: goldenPlatformBySocket(),
+    compat: goldenCompat(),
+  });
+  const result = filterCandidates(context);
+
+  const ram = findResult(result, 'RAM', RAM_ID);
+  // The slots rule still passes (4 modules in 4 slots), so the capacity rule
+  // is what fires - the two rules are independent.
+  assert.equal(ram.relationships.mb_memory_slots, FINAL_STATUSES.PASS);
+  assert.equal(ram.status, CANDIDATE_STATUSES.REJECT);
+  assert.equal(ram.reason, REASON_CODES.RAM_CAPACITY_EXCEEDED);
+  assert.equal(ram.relationships.mb_memory_capacity, FINAL_STATUSES.FAIL);
+});
+
+test('E8: OG-11 and OG-12 boundaries PASS - a full kit exactly at both limits is fine', () => {
+  const specs = goldenSpecs();
+  specs['p:' + MB_ID] = motherboardSpec({ dimm_slots: 2, max_memory_capacity_gb: 16 });
+  specs['p:' + RAM_ID] = ramSpec({ module_count: 2, capacity_per_module_gb: 8 });
+  const context = buildContext({
+    pool: goldenPool(),
+    specs,
+    platform_by_socket: goldenPlatformBySocket(),
+    compat: goldenCompat(),
+  });
+  const result = filterCandidates(context);
+  const ram = findResult(result, 'RAM', RAM_ID);
+  assert.deepEqual(ram.relationships, {
+    motherboard_memory: FINAL_STATUSES.PASS,
+    platform_memory: FINAL_STATUSES.PASS,
+    mb_memory_slots: FINAL_STATUSES.PASS,
+    mb_memory_capacity: FINAL_STATUSES.PASS,
+  });
+  assert.equal(ram.status, CANDIDATE_STATUSES.PASS);
+});
+
+test('E8: OG-09 is SOFT - an under-spec cooler is UNKNOWN and never REJECTs', () => {
+  const specs = goldenSpecs();
+  specs['p:' + COOLER_ID] = coolerSpec({ max_tdp_watts: 65 });
+  const context = buildContext({
+    pool: goldenPool(),
+    specs,
+    platform_by_socket: goldenPlatformBySocket(),
+    compat: goldenCompat(),
+  });
+  const result = filterCandidates(context);
+
+  // The cooler itself: UNKNOWN, not REJECT, and still eligible for assembly.
+  const cooler = findResult(result, 'CPU_COOLER', COOLER_ID);
+  assert.equal(cooler.relationships.cooler_tdp, FINAL_STATUSES.UNKNOWN);
+  assert.equal(cooler.status, CANDIDATE_STATUSES.UNKNOWN);
+  assert.equal(cooler.reason, REASON_CODES.COOLER_TDP_INSUFFICIENT);
+
+  // The CPU sees the same pair and is likewise never rejected by it.
+  const cpu = findResult(result, 'CPU', CPU_ID);
+  assert.equal(cpu.relationships.cooler_tdp, FINAL_STATUSES.UNKNOWN);
+  assert.notEqual(cpu.status, CANDIDATE_STATUSES.REJECT);
+});
+
+test('E8: OG-09 boundary - a cooler exactly at the CPU TDP PASSes through the filter', () => {
+  const specs = goldenSpecs();
+  specs['p:' + COOLER_ID] = coolerSpec({ max_tdp_watts: 125 });
+  const context = buildContext({
+    pool: goldenPool(),
+    specs,
+    platform_by_socket: goldenPlatformBySocket(),
+    compat: goldenCompat(),
+  });
+  const result = filterCandidates(context);
+  assert.equal(findResult(result, 'CPU', CPU_ID).relationships.cooler_tdp, FINAL_STATUSES.PASS);
+  assert.equal(findResult(result, 'CPU_COOLER', COOLER_ID).status, CANDIDATE_STATUSES.PASS);
 });

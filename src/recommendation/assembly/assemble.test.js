@@ -1009,12 +1009,12 @@ function o2MixedContext() {
   return Object.freeze({
     candidates: Object.freeze({}),
     specs: Object.freeze({
-      'p:cpu-1': { socket_id: 'am5' },
-      'p:mb-1': { socket_id: 'am5', memory_type_id: 'ddr5', form_factor: 'ATX' },
-      'p:ram-1': { memory_type_id: 'ddr5' },
+      'p:cpu-1': { socket_id: 'am5', tdp_watts: 125 },
+      'p:mb-1': { socket_id: 'am5', memory_type_id: 'ddr5', form_factor: 'ATX', dimm_slots: 4, max_memory_capacity_gb: 128 },
+      'p:ram-1': { memory_type_id: 'ddr5', module_count: 2, capacity_per_module_gb: 8 },
       'p:psu-1': { rated_wattage: 650 },
       'p:case-1': { max_gpu_length_mm: 350, max_gpu_thickness_slots: 4, max_cpu_cooler_height_mm: 170 },
-      'p:cooler-1': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155 },
+      'p:cooler-1': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155, max_tdp_watts: 250 },
     }),
     platform_by_socket: Object.freeze({}),
     compat: Object.freeze({
@@ -1123,12 +1123,12 @@ test('Decision 23 O2: each co-occurring pair is counted once', () => {
   const filteringContext = Object.freeze({
     candidates: Object.freeze({}),
     specs: Object.freeze({
-      'p:cpu-1': { socket_id: 'am5' },
-      'p:mb-1': { socket_id: 'am5', memory_type_id: 'ddr5', form_factor: 'ATX' },
-      'p:ram-1': { memory_type_id: 'ddr5' },
+      'p:cpu-1': { socket_id: 'am5', tdp_watts: 125 },
+      'p:mb-1': { socket_id: 'am5', memory_type_id: 'ddr5', form_factor: 'ATX', dimm_slots: 4, max_memory_capacity_gb: 128 },
+      'p:ram-1': { memory_type_id: 'ddr5', module_count: 2, capacity_per_module_gb: 8 },
       'p:psu-1': { rated_wattage: 650 },
       'p:case-1': { max_gpu_length_mm: 350, max_gpu_thickness_slots: 4, max_cpu_cooler_height_mm: 170 },
-      'p:cooler-1': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155 },
+      'p:cooler-1': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155, max_tdp_watts: 250 },
     }),
     platform_by_socket: Object.freeze({ am5: 'plat-am5' }),
     compat: Object.freeze({
@@ -1456,15 +1456,17 @@ test('Decision 16: a pairwise FAIL with an already-picked partner abandons the b
   );
   assert.equal(ungated.builds.length, 8);
 
-  // Decision 23 O2: the count is the build-local re-evaluation (8 slots with
-  // a GPU, 6 on the omit path). Derivation: cpu-1/mb-budget and both
-  // cpus x mb-tier match sockets with no support row (cpu specs carry no
-  // product_family_id, so the family lookup cannot match) -> UNKNOWN; the
-  // context carries no memory/platform/form-factor/cooler/GPU/radiator
-  // data, so the other slots are UNKNOWN too; none is FAIL (a FAIL pair
-  // would have abandoned the branch before descent).
+  // Decision 23 O2: the count is the build-local re-evaluation (11 slots with
+  // a GPU, 9 on the omit path - E8/Decision 45 added cooler_tdp,
+  // mb_memory_slots and mb_memory_capacity to PAIRWISE_CHECKS). Derivation:
+  // cpu-1/mb-budget and both cpus x mb-tier match sockets with no support
+  // row (cpu specs carry no product_family_id, so the family lookup cannot
+  // match) -> UNKNOWN; the context carries no memory/platform/form-factor/
+  // cooler/GPU/radiator/TDP/capacity data, so the other slots are UNKNOWN
+  // too; none is FAIL (a FAIL pair would have abandoned the branch before
+  // descent).
   for (const b of out.builds) {
-    assert.equal(b.unknown_pairwise_count, idsOf(b).GPU ? 8 : 6);
+    assert.equal(b.unknown_pairwise_count, idsOf(b).GPU ? 11 : 9);
   }
 });
 
@@ -2136,4 +2138,67 @@ test('E6: the assemble re-defense rejects a malformed declared gpu_policy', () =
       'expected INVALID_FIELD_VALUE for gpu_policy=' + String(bad)
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// E8 / Decision 45: the three former Decision 26 item B rules inside the
+// walk. Registered in PAIRWISE_CHECKS as well as PAIR_EVALUATORS, so the
+// candidate filter and the DFS cannot diverge. The HARD pair prunes; the
+// SOFT pair only adds UNKNOWN.
+// ---------------------------------------------------------------------------
+
+/** E8 fixture: a clean am5 box whose RAM fits 2 slots / 16 GB. */
+function e8Context(specOverrides = {}) {
+  return pairSpecContext({
+    'p:p-cpu': { socket_id: 'am5', tdp_watts: 125 },
+    'p:p-mb': { socket_id: 'am5', dimm_slots: 2, max_memory_capacity_gb: 16 },
+    'p:p-ram': { module_count: 2, capacity_per_module_gb: 8 },
+    'p:p-psu': { rated_wattage: 650 },
+    'p:p-case': { max_gpu_length_mm: 350, max_gpu_thickness_slots: 4, max_cpu_cooler_height_mm: 170 },
+    'p:p-cooler': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155, max_tdp_watts: 250 },
+    ...specOverrides,
+  });
+}
+
+test('E8: OG-11 is HARD in the walk - an over-slot kit is never emitted', () => {
+  const results = [...fullSet(), verdict('RAM', 'p-ram-big')];
+  const context = e8Context({ 'p:p-ram-big': { module_count: 4, capacity_per_module_gb: 8 } });
+  const out = assembleBuilds(engineInput({ results, filteringContext: context }));
+
+  // Both kits are individually eligible verdicts, but the board has 2 slots:
+  // the 4-module kit fails the pair at RAM depth, so only the fitting kit is
+  // ever emitted. A rule that is merely *present* would emit both.
+  assert.equal(out.builds.length, 1);
+  assert.equal(idsOf(out.builds[0]).RAM, 'p-ram');
+});
+
+test('E8: OG-12 is HARD in the walk - an over-capacity kit is never emitted', () => {
+  const results = [...fullSet(), verdict('RAM', 'p-ram-big')];
+  const context = e8Context({ 'p:p-ram-big': { module_count: 2, capacity_per_module_gb: 32 } });
+  const out = assembleBuilds(engineInput({ results, filteringContext: context }));
+
+  // 2 x 32 GB = 64 GB over a 16 GB board: slots fit, capacity does not.
+  assert.equal(out.builds.length, 1);
+  assert.equal(idsOf(out.builds[0]).RAM, 'p-ram');
+});
+
+test('E8: OG-09 is SOFT in the walk - an under-spec cooler adds one UNKNOWN and prunes nothing', () => {
+  const results = fullSet();
+  const control = assembleBuilds(engineInput({ results, filteringContext: e8Context() }));
+  const soft = assembleBuilds(
+    engineInput({
+      results,
+      filteringContext: e8Context({ 'p:p-cooler': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155, max_tdp_watts: 65 } }),
+    })
+  );
+
+  // Both assemble: the soft rule never abandons a branch. The under-spec
+  // cooler adds exactly one build-local UNKNOWN - the cooler_tdp pair - which
+  // is the differential proof that the walk really evaluates it.
+  assert.equal(control.builds.length, 1);
+  assert.equal(soft.builds.length, 1);
+  assert.equal(
+    soft.builds[0].unknown_pairwise_count,
+    control.builds[0].unknown_pairwise_count + 1
+  );
 });

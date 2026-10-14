@@ -188,7 +188,7 @@ rows, **PASS 56 / EXPECTED-RED 22 / UNKNOWN 3**, exit 0, cleanup residue `{q:0,b
 scratch path and diffing it against the committed `test/golden/baseline-2026-10.md` is **byte-identical**,
 so the committed baseline is a faithful pre-change snapshot. **Since this verification:** Step-2 item 1 landed (the
 pin, below), E1 activation was EXECUTED on the TEST branch 2026-10-09, and E2 landed the same day
-(Decision 39) — see the E1/E2 section below. **Updated 2026-10-14:** E3 (Decision 40), E4 (Decision 41), E5 (Decision 42, inert), E6 (Decision 43, acceptance unmet — OG-49) and E7 (Decision 44) are IMPLEMENTED; E8 remains unstarted. `docs/briefs/step2-launch-v2-runbook.md` §1–§2 record the verified preconditions.
+(Decision 39) — see the E1/E2 section below. **Updated 2026-10-14:** E3 (Decision 40), E4 (Decision 41), E5 (Decision 42, inert), E6 (Decision 43, acceptance unmet — OG-49) and E7 (Decision 44) are IMPLEMENTED. **E8 (Decision 45, 2026-10-14) is now IMPLEMENTED too, so E0—E8 are COMPLETE** — the last three Decision 26 item B rules are enforced and OG-09 / OG-11 / OG-12 are closed (C-38). `docs/briefs/step2-launch-v2-runbook.md` §1–§2 record the verified preconditions.
 
 ### Step-2 item 1 — the scoring-model pin (IMPLEMENTED 2026-10-09)
 
@@ -244,7 +244,7 @@ E5 resolution: GPU spend-share multiplier + VRAM floor from gpu_chipset.vram_cap
 
 ~~E7 pure deriveReasons() emitting reason codes (no new JSONB column).~~ **DONE 2026-10-14** - `explanation/reasons.js` (`deriveReasons` + `REASON_CODES` / `REASON_ORDER`) plus the extracted `explanation/build-facts.js`, exported through the Engine 6 barrel; additive / pure / DB-free / deterministic / unwired, with the persisted shape and the existing `explanation` string byte-identical (the unmodified 13 `explain.test.js` pins are the proof). Decision record: **Decision 44**, written 2026-10-14 in the same pass as E6's **Decision 43** (both were missing while `src/` cited 43 throughout - that hole was OG-48, now CLOSED as C-37).
 
-E8 enforce OG-11 and OG-12 as HARD rules, OG-09 as a soft/CONDITIONAL rule.
+~~E8 enforce OG-11 and OG-12 as HARD rules, OG-09 as a soft/CONDITIONAL rule.~~ **DONE 2026-10-14 (Decision 45)** — `compatibility/cooler-tdp.js`, `memory-slots.js` and `memory-capacity.js`. OG-11 (`ram_spec.module_count` > `motherboard_spec.dimm_slots`) FAILs `RAM_SLOTS_EXCEEDED` and OG-12 (`module_count * capacity_per_module_gb` > `max_memory_capacity_gb`) FAILs `RAM_CAPACITY_EXCEEDED`; both map to candidate REJECT. OG-09 (cooler `max_tdp_watts` < CPU `tdp_watts`) is SOFT and resolves UNKNOWN `COOLER_TDP_INSUFFICIENT`, never a reject — UNKNOWN rather than CONDITIONAL, because `compatibility/statuses.js` (Decision 3b) admits only PASS / FAIL / UNKNOWN as final statuses. Six spec columns were added to four existing loader SELECTs and the three pairs are registered in BOTH topology sites (11 relationships, appended so no pre-E8 precedence moved); `check-deferred-rules.js` now guards four ENFORCED rules and calls none latent. Unit 1121/0 on Node 24 and the Node 22 leg (0 cancelled), replay 0 drift, PI-1 PASS, and the 20-scenario golden suite moves NO row at either pin. **Closes OG-09 / OG-11 / OG-12 (C-38)**; residuals registered as **OG-50** (the one NULL cooler TDP, whose pair correctly reads UNKNOWN) and **OG-51** (four `TestCompat*` fixtures persisting on the shared DB, which is why the gate's coverage line read 8 motherboards rather than 7). **This is the last engine epic in the M2 roadmap.**
 
 ## Working rules
 

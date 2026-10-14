@@ -1,8 +1,9 @@
 /**
  * Engine 6 - explanation generation (Decision 22 items 2 + 4).
  *
- * Pure, framework-free, DB-free: the composer hands in the selectDiverseTop
- * selection, the snapshot builds, the item-1 contribution lists (the Engine 4
+ * Pure, framework-free, DB-free: the composer hands in the pre-persistence
+ * showcase selection (Decision 41 replaced the `selectDiverseTop` walk with
+ * `selectArchetypes`; the `selected` array shape is unchanged), the snapshot builds, the item-1 contribution lists (the Engine 4
  * STEP 1 / STEP 3 inputs that produced each build_score) and the pinned query
  * budget; this module returns a NEW explained array. Copies only - the frozen
  * selection is never mutated. No DB, no SQL, no I/O, no clock, no randomness,
@@ -192,7 +193,8 @@ function composeExplanation({ entry, contributions, budget }) {
  * Fill the pre-write seam with real explanation strings (Decision 22 item 3).
  *
  * @param {object} args { selected, builds, contributions, budget }
- * @param {Array} args.selected      frozen selectDiverseTop().selected array
+ * @param {Array} args.selected      frozen selection array (selectArchetypes().selected
+ *                                   since Decision 41; the shape is unchanged)
  * @param {Array} args.builds        the snapshot builds, index-aligned with contributions
  * @param {Array} args.contributions item-1 contribution lists, index-aligned with builds
  * @param {object} args.budget       { amount, currency } from the pinned query row

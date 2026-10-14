@@ -3,7 +3,7 @@
 **GENERATED FILE — do not edit by hand.** Regenerate with `node scripts/gen-decision-index.js`
 (or `npm run gen:decisions`) after any change to `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 `node scripts/gen-decision-index.js --check` exits non-zero when this file is stale.
-Generated 2026-10-14 from RECOMMENDATION_ENGINE_DECISIONS.md (4783 lines).
+Generated 2026-10-14 from RECOMMENDATION_ENGINE_DECISIONS.md (4838 lines).
 
 Generated for audit finding **D5** (decision-log navigability): one row per decision with number,
 title, status, date and line anchor. Every status comes from the normalized `Status:` line at the
@@ -17,9 +17,9 @@ section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` a
 
 ## Open decisions
 
-None. All 44 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-14.
+None. All 45 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-14.
 
-## Global decisions (42 `## Decision` headings + 2 nested 4/5 aliases = 44)
+## Global decisions (43 `## Decision` headings + 2 nested 4/5 aliases = 45)
 
 | # | Title | Status | Date | DECISIONS.md line |
 |---|---|---|---|---|
@@ -65,6 +65,7 @@ None. All 44 global decisions (including the two nested 4/5 aliases) and all 5 E
 | 42 | the engine enforces the OPTIONAL per-resolution VRAM floor resolution_profiles.<resolution>.vram_floor_gb at Engine 3 GPU depth (E5) | RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 (recorded 2026-10-13, after the docs-repair pass restored this log and the gap register) — a GPU candidate whose KNOWN chipset VRAM is below the active model's declared floor for the query's resolution is skipped at GPU depth; UNKNOWN VRAM or an undeclared resolution keeps the floor off entirely. | 2026-10-10 | 4657 |
 | 43 | the Engine 3 walk honours a DECLARED per-use-case GPU policy (`gpu_policy`) at GPU depth (E6) | RESOLVED 2026-10-14; IMPLEMENTED 2026-10-14 (recorded 2026-10-14, after the code landed — it cited this number before the record existed, OG-48) — a scoring model whose `use_case_profiles[use_case].gpu_policy` is `IGPU_ALLOWED` makes the iGPU the GPU for that use case, so an iGPU CPU takes the omit path exclusively; `REQUIRED` forces the discrete GPU; a model that declares no profile keeps the legacy `gpu_required_use_cases` rule byte-identically. **The rule is UNREACHABLE on today's catalog**: its acceptance (A6) is not met and the OFFICE rank-1 CPU has no integrated GPU, so the declared policy correctly resolves to `REQUIRED`. | 2026-10-14 | 4696 |
 | 44 | Engine 6 exposes STRUCTURED reason codes (`deriveReasons`) alongside the explanation string (E7) | RESOLVED 2026-10-14; IMPLEMENTED 2026-10-14 — Engine 6 gains a second, ADDITIVE, machine-readable output: a pure `deriveReasons(...)` returning frozen `{ code, value }` records in a fixed `REASON_ORDER`, sharing ONE owner (`explanation/build-facts.js`) with the string formatter; the committed `explanation` string, the persisted shape and the orchestrator seam are unchanged, and there is NO new column and NO JSONB. | 2026-10-14 | 4737 |
+| 45 | the last three Decision 26 item B rules are ENFORCED: OG-11 and OG-12 REJECT, OG-09 flags UNKNOWN (E8) | RESOLVED 2026-10-14; IMPLEMENTED 2026-10-14 — the three remaining DEFERRED Decision 26 item B rules leave DEFERRED: RAM `module_count` vs motherboard `dimm_slots` (OG-11) and RAM total capacity vs `max_memory_capacity_gb` (OG-12) resolve FAIL and REJECT the candidate, while cooler `max_tdp_watts` vs CPU `tdp_watts` (OG-09) resolves UNKNOWN and NEVER REJECTs; all five operands are now carried by the Engine 2D filtering context and BOTH topology sites register the new pairs, so the candidate filter and the assembly walk cannot diverge. | 2026-10-14 | 4784 |
 
 ## Engine 3 contract decisions (Engine-3-local numbering; local 4–5 ARE global Decisions 4–5)
 
@@ -78,9 +79,9 @@ None. All 44 global decisions (including the two nested 4/5 aliases) and all 5 E
 
 ## Reconciliation
 
-- Global decisions: 44 = 42 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
+- Global decisions: 45 = 43 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
 - Engine-3-local contracts: 5 (`### Decision 1–5` under "Engine 3 contract decisions"; local 1–3 are NOT global 1–3, local 4/5 ARE global 4/5 — AGENTS.md §2).
-- Parsed headings: 42 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
+- Parsed headings: 43 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
 - Status source: each entry’s normalized `Status:` line (first content line). The generator exits
   non-zero if a decision is added without one, so this table cannot go stale silently.
 - Open decisions: none.

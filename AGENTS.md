@@ -25,7 +25,7 @@ and `apps/api/src/server.js`.
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–44). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–45). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
    To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
@@ -134,13 +134,13 @@ deliberately not duplicated here.
 | `npm run verify:pi1` | Decision 23 criterion 3 (PI-1) **pool independence**: inserts a probe PSU (own `product_family`, 100 kW, NULL connectors) into the TEST branch, re-runs GAMING + OFFICE, asserts no pre-existing `build_score` moved. Writes to the TEST branch, so it is not read-only; the probe is removed in a `finally` and a cleanup failure exits non-zero. Delete `psu_spec` before `product`, and `product` before `product_family` — see §7 item 11. Give any anchor row lookup an explicit `ORDER BY`: a `LIMIT 1` without one made this gate report intermittent false drift |
 | `npm run eval:scenarios` | E0 golden harness (`scripts/eval-scenarios.js`): the 20-scenario matrix x assertions A1-A9 on the TEST branch, printing a table and optionally writing `test/golden/baseline-2026-10.md`. GREEN means "no APPROVED assertion failed", NOT "every row PASS": the unchanged engine is 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN and exits 0. `--no-baseline --no-volatile` writes no files; `--filter=S03,S07`, `--with-pi1`, `--cleanup-orphans` narrow it |
 | `node scripts/check-offer-freshness.js --fail-days=14` | OG-30 offer-freshness gate: offers at/inside their blackout window. **Equals form is mandatory** — `--fail-days=N`; the space form `--fail-days 14` prints usage and exits 2. CI uses 14, not the default 7, so a nightly run warns with two weeks' lead time |
-| `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance fixtures |
+| `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance fixtures. **Unguarded: reads and writes the shared `DATABASE_URL`, and does NOT remove what it creates** — four `TestCompat*` product rows persist in the shared catalog today, one of them (`TestCompatMotherboard`, NULL `dimm_slots` and NULL `max_memory_capacity_gb`) is the reason `check-deferred-rules.js` reports a coverage denominator of 8 motherboards instead of the 7 real ones. Registered as OG-51 with a Platform request to clean up or move the script behind the `TEST_DATABASE_URL` guard. Do not re-run it against shared until then. |
 | `node scripts/test-layer3.js --verify --functional` | Layer 3 schema (flags required; needs ALL THREE Layer 3 tables empty — `store` too; non-empty on shared DB AND on the test branch as of 2026-09-28, so it cannot pass in either environment today) |
 | `node scripts/test-layer4.js` | Layer 4 canonical schema (unguarded: reads `DATABASE_URL`; writes `TestL4%` fixtures inside one transaction with final ROLLBACK; does NOT require empty Layer 4 tables) |
 | `node scripts/verify-schema.js` / `verify-constraints.js` / `verify-fks.js` | Read-only catalog checks |
 | `node scripts/test-orchestrator-commit.js` / `test-orchestrator-full-run.js` | Write-path tests (TEST_DATABASE_URL only) |
 | `node scripts/check-og01-coverage.js` | OG-01 assessment-coverage gate (read-only; needs `DATABASE_URL`; exits 1 while any active product has no assessment rows; `--strict` also fails REAL (non-fixture) partial coverage) |
-| `node scripts/check-deferred-rules.js` | Decision 26 item B violation gate (read-only; needs `DATABASE_URL`; the four DEFERRED HARD rules OG-09…OG-12 measured in catalog AND compatibility-reachable scope; exits 1 while any violating pair exists — this is the binding pre-merge re-check for any CPU/cooler/case/RAM/motherboard seed, per `docs/RECIPES/add-a-seed.md` step 3) |
+| `node scripts/check-deferred-rules.js` | Decision 26 item B violation gate (read-only; needs `DATABASE_URL`; all four rules OG-09…OG-12 — ENFORCED since Decision 45 (E8, 2026-10-14): OG-09 soft/UNKNOWN, OG-10/OG-11/OG-12 HARD/REJECT — measured in catalog AND compatibility-reachable scope; exits 1 while any violating pair exists — this is the binding pre-merge re-check for any CPU/cooler/case/RAM/motherboard seed, per `docs/RECIPES/add-a-seed.md` step 3) |
 | `node scripts/og01-research-checklist.js [--csv] [--out <file>]` | OG-01 batch-2 research worksheet from live DB (read-only; 56 target products / 168 rows, seed 001 no-evidence + partial fixtures excluded; `docs/OG01_BATCH2_RESEARCH_CHECKLIST.md` is its committed output — regenerate, never hand-edit) |
 | `node scripts/measure-og01-reach.js [--budget N] [--use-case U]` | OG-01 reach measurement, read-only pipeline replication of orchestrator stages 4-11 against `DATABASE_URL` (Decision 17-safe: no writes; use `measure-orchestrator.js` instead when the full Decision-20 write-path acceptance is needed) |
 | `scripts/lib/og01-catalog.js` | Shared OG-01 derivation (category from spec-table presence, required types from `role_weights`, fixtures). The single script-side owner — the gate, checklist, and reach scripts all consume it; do not re-copy the SQL maps. `DELIBERATE_NO_EVIDENCE` (products with no assessment rows) and `DELIBERATE_PARTIAL` (products missing only SOME required types, keeping Decision 13 STEP 1's missing-type branch live) are deliberate seed-001 fixtures — never research targets |
@@ -428,17 +428,20 @@ Do not silently pick a side: if prose and code disagree, follow the code and rep
   records that its stage table and stage-9 ranking wording are superseded with the doc refresh
   "deferred", so its §2/§13 rank ordering and its "templates versioned with the scoring model"
   claim contradict shipped code. It is a design baseline, not current behaviour.
-- **Three HARD rules in `ARCHITECTURE.md` §5.3/§6 are still DEFERRED and UNENFORCED**: cooler
-  `max_tdp_watts` vs CPU TDP, RAM `module_count` vs `dimm_slots`, and total RAM capacity vs
-  `max_memory_capacity_gb`. Those columns exist and no non-test code reads them — do not assume
-  these constraints are enforced. **Decision 26 (2026-09-28) deferred all four; Decision 30
-  (2026-10-05) UN-deferred ONE of them** — air-cooler `height_mm` vs
-  `case_spec.max_cpu_cooler_height_mm` is now IMPLEMENTED in
-  `compatibility/cooler-height.js` and ENFORCED, so it is no longer in this list. The binding
-  trigger is unchanged: re-run `node scripts/check-deferred-rules.js` before merging any
-  cooler/RAM/case/motherboard seed. **That gate reports "0 violations" for all four, which is NOT
-  evidence that a column's stored value is correct** — it only compares stored values to each
-  other, so an unsourced literal passes it silently (OG-36).
+- **All four Decision 26 item B rules are ENFORCED — none is deferred any more.** Decision 26
+  (2026-09-28) deferred all four; **Decision 30 (2026-10-05) UN-deferred air-cooler `height_mm`
+  vs `case_spec.max_cpu_cooler_height_mm`** (IMPLEMENTED in `compatibility/cooler-height.js`), and
+  **Decision 45 (E8, 2026-10-14) UN-deferred the remaining three**: cooler `max_tdp_watts` vs CPU
+  `tdp_watts` (OG-09, SOFT — an apparent shortfall resolves UNKNOWN `COOLER_TDP_INSUFFICIENT` and
+  never rejects), and RAM `module_count` vs `motherboard_spec.dimm_slots` (OG-11) and RAM
+  `module_count * capacity_per_module_gb` vs `max_memory_capacity_gb` (OG-12), both HARD and
+  REJECTing the candidate. The six operands are carried by `filtering/context-loader.js` and each
+  pair is registered in BOTH `filtering/filter.js` and `assembly/assemble.js`. The binding trigger
+  is unchanged and now guards enforced rules: re-run `node scripts/check-deferred-rules.js` before
+  merging any CPU/cooler/case/RAM/motherboard seed — a non-zero count is a LIVE DATA DEFECT,
+  not a latent risk. **That gate reports "0 violations", which is NOT evidence that a column's
+  stored value is correct** — it only compares stored values to each other, so an unsourced
+  literal passes it silently (OG-36).
 - **GPU/PSU high-TGP connector escalation IS implemented (Decision 26, 2026-09-28).** `gpu.js`
   Rule 11 returns FAIL `GPU_PSU_CONNECTOR_NULL_HIGH_TGP` when a required, KNOWN connector's PSU
   availability is NULL and `gpu_board_spec.board_tgp_watts >= 200` (inclusive, finite); the

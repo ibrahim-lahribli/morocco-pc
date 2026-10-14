@@ -86,6 +86,10 @@ const {
   evaluateCaseRadiatorPair,
   evaluateGpuCasePair,
   evaluateGpuPsuPair,
+  // E8 (Decision 45): the three previously-DEFERRED Decision 26 item B rules.
+  evaluateCoolerTdpPair,
+  evaluateMotherboardMemorySlotsPair,
+  evaluateMotherboardMemoryCapacityPair,
   aggregateCompatibilityResults,
   FINAL_STATUSES,
 } = require('../filtering/filter');
@@ -465,6 +469,20 @@ const PAIRWISE_CHECKS = Object.freeze({
       leftIsNew: false,
       evaluator: evaluatePlatformMemoryPair,
     }),
+    // E8 (Decision 45): OG-11 / OG-12. The canonical left role is
+    // MOTHERBOARD, already picked, so leftIsNew stays false.
+    Object.freeze({
+      key: 'mb_memory_slots',
+      partnerRole: 'MOTHERBOARD',
+      leftIsNew: false,
+      evaluator: evaluateMotherboardMemorySlotsPair,
+    }),
+    Object.freeze({
+      key: 'mb_memory_capacity',
+      partnerRole: 'MOTHERBOARD',
+      leftIsNew: false,
+      evaluator: evaluateMotherboardMemoryCapacityPair,
+    }),
   ]),
   PSU: Object.freeze([
     Object.freeze({
@@ -500,6 +518,16 @@ const PAIRWISE_CHECKS = Object.freeze({
       partnerRole: 'CASE',
       leftIsNew: true,
       evaluator: evaluateCaseRadiatorPair,
+    }),
+    // E8 (Decision 45): OG-09, SOFT. The canonical left role is CPU and the
+    // CPU is already picked, so leftIsNew stays false. This pair only ever
+    // adds UNKNOWN (never FAIL) to the walk, because the resolver returns
+    // UNKNOWN for an under-spec or unmeasured cooler.
+    Object.freeze({
+      key: 'cooler_tdp',
+      partnerRole: 'CPU',
+      leftIsNew: false,
+      evaluator: evaluateCoolerTdpPair,
     }),
   ]),
 });

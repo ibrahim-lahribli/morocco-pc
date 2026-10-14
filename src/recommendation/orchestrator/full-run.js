@@ -10,9 +10,9 @@
  *     its own transaction without writing
  *     -> rankBuilds({ builds })                  - Engine 5a, pure, full
  *        ranked list plus the top_n slice
- *     -> selectDiverseTop({ ranked })            - Decision 20, walks the
- *        FULL ranked list (never the top_n slice), capped by the ranking
- *        barrel constants
+ *     -> ranking.selectArchetypes({ ranked, budget, priority }) - E4 / Decision
+ *        41, which REPLACED the Decision 20 selectDiverseTop walk here; up to
+ *        three pair-distinct archetypes, output-ordered by priority
  *     -> explainSelection({ selected, builds, contributions, budget }) - Engine
  *        6, Decision 22 item 3, pure/DB-free; produces the EXPLAINED array
  *     -> runRecommendationCommit(client, queryId, explained, verdicts) - separate

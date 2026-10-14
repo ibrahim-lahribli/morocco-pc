@@ -16,6 +16,8 @@
  *   rankBuilds({ builds })  -> deeply frozen { ranked, top_n }
  *   TOP_N_PERSISTED        -> 10 (persistable top-N, Decision 18.4)
  *   selectDiverseTop({ ranked, limit, maxPerPair }) -> deeply frozen { selected, dropped_count }
+ *                            (LEGACY walk since E4 / Decision 41: still exported and
+ *                            still the Decision 20 contract, no longer the showcase)
  *   MAX_PER_PAIR           -> 3 (per-pair cap, Decision 20 section 3)
  *   selectArchetypes({ ranked, budget, priority }) -> deeply frozen { archetypes, reason_codes }
  *                            (E4 / Decision 41; strategy_key persistence is

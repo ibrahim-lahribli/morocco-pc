@@ -4,14 +4,19 @@
  * Decision 26 item B violation gate — the four HARD rules of architecture
  * §5.3/§6 (OG-09, OG-10, OG-11, OG-12). Read-only; shared-DB safe.
  *
- * SCOPE CHANGED 2026-10-05 (Decision 30). OG-10 (AIR cooler `height_mm` vs
- * case `max_cpu_cooler_height_mm`) was UN-deferred and is now IMPLEMENTED and
- * ENFORCED by `compatibility/cooler-height.js`. OG-09, OG-11 and OG-12 remain
- * EXPLICITLY DEFERRED and UNENFORCED. This gate still measures all four: for
- * the three deferred rules a violation is latent risk one seed away, and for
- * OG-10 it now reports pairs the engine is ALREADY rejecting, so a non-zero
- * count there is a live data defect rather than a theoretical one. The trigger
- * below is unchanged and still binding.
+ * SCOPE CHANGED 2026-10-05 (Decision 30) and again 2026-10-14 (Decision 45).
+ * ALL FOUR rules are now IMPLEMENTED and ENFORCED: OG-10 (AIR cooler `height_mm`
+ * vs case `max_cpu_cooler_height_mm`) since Decision 30, and the three former
+ * Decision 26 item B deferrals since Decision 45 - OG-11 (RAM `module_count` vs
+ * `dimm_slots`) and OG-12 (RAM capacity vs the board maximum) as HARD REJECTs in
+ * `compatibility/memory-slots.js` / `compatibility/memory-capacity.js`, and OG-09
+ * (cooler `max_tdp_watts` vs CPU `tdp_watts`) as a SOFT rule in
+ * `compatibility/cooler-tdp.js` that resolves UNKNOWN rather than REJECTing.
+ * This gate therefore no longer reports LATENT risk for any of the four: a
+ * non-zero violation count is a LIVE DATA DEFECT. For OG-10/OG-11/OG-12 the
+ * engine already rejects those pairs; for OG-09 it surfaces them as UNKNOWN, so
+ * an under-spec cooler is flagged but never rejects a build. The trigger below
+ * is unchanged and still binding.
  *
  * Why this exists: architecture §5.3/§6 specify four HARD rules. As of
  * 2026-09-28 no non-test module in `src/` implemented any of them — nothing
@@ -20,6 +25,9 @@
  * recorded them as EXPLICITLY DEFERRED and UNENFORCED, which is only safe
  * while the catalog violates none of them (0 live violations measured
  * 2026-09-28, hence the "IMPORTANT (latent)" class in `docs/OPEN_GAPS.md`).
+ * **UPDATE 2026-10-14 (Decision 45):** all four are enforced now - OG-09/OG-11/
+ * OG-12 left DEFERRED in this file until then - so the register rows closed and
+ * nothing below describes a latent rule any more.
  *
  * Decision 26 item 11 makes the re-check BINDING: "Any future seed that
  * adds or edits a CPU, cooler, case, motherboard or RAM row MUST re-run
@@ -356,12 +364,12 @@ async function main() {
 
     console.log('Decision 26 item B violation gate (read-only, DATABASE_URL)');
     console.log(
-      'Architecture 5.3/6 defines four HARD rules. OG-10 (AIR cooler height vs case ' +
-        'clearance) was UN-deferred and is now IMPLEMENTED and ENFORCED (Decision 30); ' +
-        'OG-09, OG-11 and OG-12 remain EXPLICITLY DEFERRED and UNENFORCED in src/. ' +
-        'This gate still measures all four and is still the binding pre-merge re-check ' +
-        '(Decision 26 item 11) - for OG-10 it now guards an ENFORCED rule, so a non-zero ' +
-        'violation count there is a live data defect, not merely latent risk.'
+      'Architecture 5.3/6 defines four HARD rules, and since Decision 45 all four are ' +
+        'IMPLEMENTED and ENFORCED (OG-10 by Decision 30; OG-09, OG-11 and OG-12 by ' +
+        'Decision 45). This gate is still the binding pre-merge re-check (Decision 26 ' +
+        'item 11), and it no longer reports latent risk: a non-zero violation count is ' +
+        'a LIVE DATA DEFECT - a pair the engine already rejects (OG-10/OG-11/OG-12) or ' +
+        'surfaces as UNKNOWN (OG-09, the SOFT rule).'
     );
 
     const coverage = (await client.query(COVERAGE_SQL)).rows[0];
@@ -421,11 +429,11 @@ async function main() {
     console.log('');
     console.log(
       totalViolations === 0
-        ? 'RESULT: PASS - 0 violations in every scope; OG-09/OG-11/OG-12 stay LATENT, OG-10 is ENFORCED and agrees'
+        ? 'RESULT: PASS - 0 violations in every scope; all four rules are ENFORCED and agree'
         : 'RESULT: FAIL - ' +
             totalViolations +
-            ' violating pair(s) exist: for the DEFERRED rules an unsafe build is one seed away, ' +
-            'and for the ENFORCED OG-10 these are pairs the engine is already rejecting (a data defect)'
+            ' violating pair(s) exist: the engine rejects an OG-10/OG-11/OG-12 pair and flags ' +
+            'an OG-09 pair UNKNOWN, so this is a live data defect, not theoretical risk'
     );
     process.exitCode = totalViolations === 0 ? 0 : 1;
     await client.end();
