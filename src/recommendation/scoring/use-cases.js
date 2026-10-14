@@ -98,7 +98,20 @@ function requireKeyName(key, path, message) {
   }
 }
 
-/** A budget share: finite number in [0, 1]. */
+/**
+ * A budget share: finite number in [0, 1].
+ *
+ * A declared 0 is admitted on purpose and means "no price target for this
+ * role" - NOT "free", and NOT "omit the role from the map": the consumer
+ * (retention/targets.js `computeRoleTargets`) emits `{ target: 0, ceiling: 0 }`
+ * for it, and retain.js then keeps exactly the set the no-target rule keeps -
+ * every positive price sits above a 0 ceiling, so no price band is claimed and
+ * the shared Decision 27 reservation plus Rule 3/5 top-up rebuild the pre-E2
+ * set. Use 0 to say "do not price-target this role"; the only constraint is
+ * that the profile's shares still SUM to > 0 (validateSpendTargets). Pinned by
+ * a retain.test.js test, because that equivalence is emergent rather than an
+ * explicit branch.
+ */
 function requireShare(value, path) {
   if (!isFiniteNumber(value)) {
     fail(ERROR_CODES.INVALID_FIELD_VALUE, path, `"${path}" must be a finite number`);

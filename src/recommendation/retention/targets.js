@@ -105,6 +105,15 @@ function resolutionMultiplier(resolution) {
 /**
  * Per-role price targets for one pass.
  *
+ * A share of 0 is EMITTED, not skipped: that role gets `{ target: 0, ceiling: 0 }`.
+ * Downstream that is exactly "no target for this role" - retain.js's `bandOf`
+ * puts every positive price above a 0 ceiling, so no band is claimed and the
+ * pre-E2 set is rebuilt by the shared Decision 27 reservation + Rule 3/5 top-up
+ * (pinned in retain.test.js). A role OMITTED from `spendTargets` is a different
+ * shape: it is absent from the result entirely, which retain.js also reads as
+ * "no target". The two agree in effect; only the 0 case reaches it through the
+ * band logic rather than by being skipped.
+ *
  * @param {object} sources single argument object carrying:
  *        - spendTargets: a profile's `spend_targets` (relative weights)
  *        - budgetAmount: the query's budget_amount, a finite number > 0

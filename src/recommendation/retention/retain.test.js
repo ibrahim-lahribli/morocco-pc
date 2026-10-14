@@ -17,6 +17,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { retainTopKPerRole } = require('./retain');
+const { computeRoleTargets } = require('./targets');
 const { CANDIDATE_STATUSES } = require('../filtering/filter');
 const { ROLE_CATEGORIES } = require('../candidates/roles');
 const { createCandidate } = require('../candidates');
@@ -902,6 +903,50 @@ test('E2: roleTargets null or without the role keeps the pre-E2 rule byte-identi
     const out = retainTopKPerRole({ ...base, topKPerRole: 2, roleTargets });
     assert.deepEqual(out, legacy, JSON.stringify(roleTargets));
   }
+});
+
+test('E2: a declared share of 0 yields a {0,0} target that retains exactly the no-target set', () => {
+  // use-cases.js admits a share of 0 (only the SUM of a profile's shares must be
+  // positive), and it is NOT a synonym for omitting the role: computeRoleTargets
+  // emits { target: 0, ceiling: 0 }. Every positive price then sits above a 0
+  // ceiling, bandOf returns null for all of them, bandPicks selects nothing, and
+  // the shared Decision 27 reservation + Rule 3/5 top-up reproduce the pre-E2
+  // set exactly. Pinned because that equivalence is EMERGENT, not a branch: a
+  // change to bandOf's ceiling comparison would silently turn a 0 share into a
+  // one-candidate retention rule.
+  const rows = [
+    ['cpu-a', 90, 5000],
+    ['cpu-b', 80, 1000],
+    ['cpu-c', 70, 3000],
+    ['cpu-d', 60, 800],
+    ['cpu-e', 50, 2000],
+    ['cpu-f', 40, 600],
+  ];
+  const base = cpuCase(rows);
+  const legacy = retainTopKPerRole({ ...base, topKPerRole: 3 });
+  // A real profile needs a positive sum, so the 0 share rides beside a real one.
+  const zeroShare = computeRoleTargets({
+    spendTargets: { CPU: 0, SSD_BOOT: 0.2 },
+    budgetAmount: 12000,
+    resolution: null,
+  });
+  assert.deepEqual(zeroShare.CPU, { target: 0, ceiling: 0 });
+  assert.deepEqual(
+    retainTopKPerRole({ ...base, topKPerRole: 3, roleTargets: zeroShare }),
+    legacy
+  );
+
+  // Control: the same fixture with a REAL CPU share DOES move membership, so the
+  // equality above is an equivalence and not a vacuous fixture.
+  const realShare = computeRoleTargets({
+    spendTargets: { CPU: 0.1, SSD_BOOT: 0.2 },
+    budgetAmount: 12000,
+    resolution: null,
+  });
+  assert.notDeepEqual(
+    retainTopKPerRole({ ...base, topKPerRole: 3, roleTargets: realShare }),
+    legacy
+  );
 });
 
 test('E2: band retention keeps the best scorer below, at and above target', () => {
