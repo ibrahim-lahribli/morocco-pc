@@ -55,9 +55,9 @@ function stubStages({ snapshotResult, rankResult, selectResult, explainResult, c
     explainCalls.push(args);
     return explainResult;
   };
-  commit.runRecommendationCommit = async function stub(client, queryId, selected) {
+  commit.runRecommendationCommit = async function stub(client, queryId, selected, rejections, passFacts) {
     order.push('commit');
-    commitCalls.push({ client, queryId, selected });
+    commitCalls.push({ client, queryId, selected, rejections, passFacts });
     return commitResult;
   };
   return {
@@ -121,6 +121,7 @@ function happyStubs() {
       currency: 'MAD',
       priority: null,
       build_contributions: buildContributions,
+      filter_verdicts: Object.freeze([]),
       budget_floor: Object.freeze({
         cheapest_total: 7693,
         currency: 'MAD',
@@ -398,3 +399,273 @@ test("Decision 38: full-run forwards explicit asOf unchanged into the snapshot",
     assert.equal(stub.snapshotCalls[0].options, options);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Decision 46: the pass-facts seam.
+//
+// Two levels of proof here, deliberately. The forwarding tests use the stubbed
+// commit of the composition section above and show WHAT is threaded; the
+// real-writer tests below stub only the four read-side stages and leave
+// ./commit, persistence/persist-ranked and persistence/persist-pass-facts real
+// against a recording fake client, which is what shows the facts actually LAND
+// on the rows the pass persisted (the plan's Sprint 2 acceptance).
+// ---------------------------------------------------------------------------
+
+const {
+  UPDATE_RECOMMENDATION_QUERY_FLOOR_SQL,
+  UPDATE_RECOMMENDATION_RESULT_FACTS_SQL,
+} = require('../persistence/persist-pass-facts');
+
+const OFFER_ID = '00000000-0000-4000-8000-0000000000ff';
+
+/** A `selected` entry that satisfies persistence/validate-selected.js. */
+function validExplainedEntry(rank, strategyKey) {
+  return Object.freeze({
+    persisted_rank: rank,
+    strategy_key: strategyKey,
+    build_score: 88.5,
+    total_price: 12000 + rank,
+    compatibility_status: 'PASS',
+    explanation: 'stub-explanation',
+    build: Object.freeze({
+      currency: 'MAD',
+      components: Object.freeze([
+        Object.freeze({
+          product_id: 'p-cpu-1',
+          product_variant_id: null,
+          component_role: 'CPU',
+          status: 'PASS',
+          price: Object.freeze({
+            selected_price: 12000 + rank,
+            currency: 'MAD',
+            store_id: null,
+            price_checked_at: null,
+            offer_id: OFFER_ID,
+            offer_class: 'SEED_UNVERIFIED',
+          }),
+        }),
+      ]),
+    }),
+  });
+}
+
+/** Recording fake connection: guard 1 finds the query row, everything else is a no-op. */
+function recordingClient() {
+  const calls = [];
+  return {
+    calls,
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (sql === commit.LOCK_RECOMMENDATION_QUERY_SQL) return { rows: [{ id: QUERY_ID }] };
+      return { rows: [] };
+    },
+  };
+}
+
+/** Stub ONLY the read-side stages, so ./commit and both writers stay real. */
+function stubReadStages(stubs) {
+  const originals = {
+    snapshot: snapshot.runRecommendationSnapshot,
+    rank: ranking.rankBuilds,
+    select: ranking.selectArchetypes,
+    explain: explanation.explainSelection,
+  };
+  snapshot.runRecommendationSnapshot = async () => stubs.snapshotResult;
+  ranking.rankBuilds = () => stubs.rankResult;
+  ranking.selectArchetypes = () => stubs.selectResult;
+  explanation.explainSelection = () => stubs.explainResult;
+  return {
+    restore() {
+      snapshot.runRecommendationSnapshot = originals.snapshot;
+      ranking.rankBuilds = originals.rank;
+      ranking.selectArchetypes = originals.select;
+      explanation.explainSelection = originals.explain;
+    },
+  };
+}
+
+async function withStubbedReadStages(stubs, body) {
+  const stub = stubReadStages(stubs);
+  try {
+    return await body();
+  } finally {
+    stub.restore();
+  }
+}
+
+const SEAM_FLOOR = Object.freeze({
+  cheapest_total: 7693,
+  currency: 'MAD',
+  budget_amount: 12000,
+  within_budget: true,
+  cheapest_by_role: Object.freeze(Object.assign(Object.create(null), { CPU: 2699 })),
+  missing_roles: Object.freeze([]),
+});
+
+/** Read-side fixture: N archetypes, N explained rows, one shared floor. */
+function seamStubs({ strategyKeys, explained, floor }) {
+  return {
+    snapshotResult: Object.freeze({
+      query_id: QUERY_ID,
+      scoring_model_id: 'model-1',
+      builds: Object.freeze([]),
+      budget_amount: 12000,
+      currency: 'MAD',
+      priority: 3,
+      build_contributions: Object.freeze([]),
+      budget_floor: floor,
+      filter_verdicts: Object.freeze([]),
+    }),
+    rankResult: Object.freeze({ ranked: Object.freeze([]), top_n: Object.freeze([]) }),
+    selectResult: Object.freeze({
+      archetypes: Object.freeze(
+        strategyKeys.map((key, index) =>
+          Object.freeze({ strategy_key: key, persisted_rank: index + 1 })
+        )
+      ),
+      reason_codes: Object.freeze([]),
+    }),
+    explainResult: explained,
+  };
+}
+
+test('full-run: the 5th argument is the pass facts; the 4th stays the verdicts', async () => {
+  const fx = happyStubs();
+  await withStubbedStages(fx, async (stub) => {
+    await runRecommendationFullRun({ query() {} }, QUERY_ID);
+    const call = stub.commitCalls[0];
+    assert.equal(call.selected, fx.explained);
+    assert.equal(call.rejections, fx.snapshotResult.filter_verdicts);
+    assert.deepEqual(Object.keys(call.passFacts), ['budgetFloor', 'engineVersion', 'strategyKeys']);
+    // The floor is the snapshot's own object, not a copy (Decision 27 pass-through).
+    assert.equal(call.passFacts.budgetFloor, fx.snapshotResult.budget_floor);
+    // One key per archetype, in archetype order.
+    assert.deepEqual(call.passFacts.strategyKeys, ['BALANCED']);
+    assert.ok(Object.isFrozen(call.passFacts));
+    assert.ok(Object.isFrozen(call.passFacts.strategyKeys));
+  });
+});
+
+test('full-run: engineVersion comes from the caller option, and ABSENT means NULL, never a guess', async () => {
+  const fx = happyStubs();
+
+  await withStubbedStages(fx, async (stub) => {
+    await runRecommendationFullRun({ query() {} }, QUERY_ID);
+    assert.equal(stub.commitCalls[0].passFacts.engineVersion, null);
+  });
+
+  await withStubbedStages(fx, async (stub) => {
+    await runRecommendationFullRun({ query() {} }, QUERY_ID, { engineVersion: 'launch-v2@1.1.0' });
+    assert.equal(stub.commitCalls[0].passFacts.engineVersion, 'launch-v2@1.1.0');
+  });
+
+  // A non-string is FORWARDED, not silently flattened to null: the writer owns
+  // value validation and refuses it with INVALID_FIELD_VALUE, which rolls the
+  // whole pass back rather than persisting a plausible-looking lie.
+  await withStubbedStages(fx, async (stub) => {
+    await runRecommendationFullRun({ query() {} }, QUERY_ID, { engineVersion: 42 });
+    assert.equal(stub.commitCalls[0].passFacts.engineVersion, 42);
+  });
+
+  // A caller that passes options WITHOUT the key is the same as passing none.
+  await withStubbedStages(fx, async (stub) => {
+    await runRecommendationFullRun({ query() {} }, QUERY_ID, { allow_unverified_seed_offers: true });
+    assert.equal(stub.commitCalls[0].passFacts.engineVersion, null);
+  });
+});
+
+test('full-run + REAL writers: the floor and every rank get their facts inside the one transaction', async () => {
+  const floor = SEAM_FLOOR;
+  const explained = Object.freeze([
+    validExplainedEntry(1, 'BALANCED'),
+    validExplainedEntry(2, 'PERFORMANCE'),
+  ]);
+  const stubs = seamStubs({
+    strategyKeys: ['BALANCED', 'PERFORMANCE'],
+    explained,
+    floor,
+  });
+  const client = recordingClient();
+
+  const out = await withStubbedReadStages(stubs, () =>
+    runRecommendationFullRun(client, QUERY_ID, { engineVersion: 'launch-v2@1.1.0' })
+  );
+
+  const sqls = client.calls.map((call) => call.sql);
+  const factCalls = client.calls.filter(
+    (call) =>
+      call.sql === UPDATE_RECOMMENDATION_QUERY_FLOOR_SQL
+      || call.sql === UPDATE_RECOMMENDATION_RESULT_FACTS_SQL
+  );
+  assert.equal(factCalls.length, 3, 'one floor UPDATE plus one per persisted rank');
+  assert.deepEqual(factCalls[0].params, [QUERY_ID, floor]);
+  // rank = index + 1, and the key is the ARCHETYPE's - the content half of the
+  // alignment the writer cannot check.
+  assert.deepEqual(factCalls[1].params, ['launch-v2@1.1.0', 'BALANCED', QUERY_ID, 1]);
+  assert.deepEqual(factCalls[2].params, ['launch-v2@1.1.0', 'PERFORMANCE', QUERY_ID, 2]);
+
+  // Ordering: after the rows they describe exist, and inside the transaction.
+  const firstResultInsert = sqls.findIndex((sql) => sql.startsWith('INSERT INTO recommendation_result'));
+  const floorAt = sqls.indexOf(UPDATE_RECOMMENDATION_QUERY_FLOOR_SQL);
+  const commitAt = sqls.indexOf(commit.COMMIT_SQL);
+  assert.ok(firstResultInsert !== -1 && floorAt !== -1 && commitAt !== -1);
+  assert.ok(firstResultInsert < floorAt, 'the facts must follow the rows they describe');
+  assert.ok(floorAt < commitAt, 'the facts must be inside the transaction');
+  assert.deepEqual(sqls.slice(floorAt, commitAt), [
+    UPDATE_RECOMMENDATION_QUERY_FLOOR_SQL,
+    UPDATE_RECOMMENDATION_RESULT_FACTS_SQL,
+    UPDATE_RECOMMENDATION_RESULT_FACTS_SQL,
+    'DELETE FROM build_rejection WHERE recommendation_query_id = $1',
+  ]);
+
+  // And the pass itself really persisted its two ranks.
+  assert.deepEqual(out.persisted_ranks, [1, 2]);
+  assert.equal(out.persisted_ranks.length, sqls.filter((s) => s.startsWith('INSERT INTO recommendation_result')).length);
+});
+
+test('full-run + REAL writers: a ZERO-BUILD pass still records its floor, and writes no result row', async () => {
+  // This is the A1/A3 gap: a 200 reply that carries a floor diagnostic on a
+  // pass that assembled nothing. Before Decision 46 the floor never reached the
+  // query row, so a later GET could not reproduce it.
+  const floor = Object.freeze({
+    cheapest_total: null,
+    currency: 'MAD',
+    budget_amount: 12000,
+    within_budget: null,
+    cheapest_by_role: Object.freeze(Object.create(null)),
+    missing_roles: Object.freeze(['CPU', 'GPU']),
+  });
+  const stubs = seamStubs({ strategyKeys: [], explained: Object.freeze([]), floor });
+  const client = recordingClient();
+
+  const out = await withStubbedReadStages(stubs, () =>
+    runRecommendationFullRun(client, QUERY_ID, { engineVersion: 'launch-v2@1.1.0' })
+  );
+
+  const sqls = client.calls.map((call) => call.sql);
+  assert.equal(
+    sqls.filter((sql) => sql === UPDATE_RECOMMENDATION_RESULT_FACTS_SQL).length,
+    0,
+    'no result row exists, so no rank is written'
+  );
+  assert.equal(
+    sqls.filter((sql) => sql === UPDATE_RECOMMENDATION_QUERY_FLOOR_SQL).length,
+    1,
+    'the floor is written even though the pass assembled nothing'
+  );
+  assert.deepEqual(out.persisted_ranks, []);
+  assert.equal(out.budget_floor, floor);
+});
+
+test('Decision 46: full-run reads no environment and hardcodes no engine version', () => {
+  const source = stripComments(fs.readFileSync(path.join(__dirname, 'full-run.js'), 'utf8'));
+  // The handoff is an OPTION. An engine-owned constant would be a second,
+  // hand-maintained version that drifts from the deploy, and reading process.env
+  // here would put an impure edge inside a pure module. Both are refused by
+  // construction, not by convention.
+  assert.ok(!source.includes('process.env'), 'full-run.js must not read process.env');
+  assert.ok(!/ENGINE_VERSION/.test(source), 'full-run.js must not hardcode a version');
+  assert.ok(source.includes('options.engineVersion'));
+  assert.ok(source.includes('passFacts'));
+});
+

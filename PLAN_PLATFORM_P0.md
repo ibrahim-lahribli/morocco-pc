@@ -161,6 +161,7 @@ Rejected alternative: a new insert-only `recommendation_diagnostic` table. Reaso
 - `node --test "src/recommendation/orchestrator/full-run.test.js"` (and the surrounding full-run suite) on its own exit; no pager.
 - `npm run test:unit` still 0 fail / 0 cancelled.
 - No DB in this sprint; schema not yet created.
+- **Known transition hazard — record it here, do not discover it from a red job.** `full-run.js` supplies `passFacts` unconditionally, so from Sprint 2 until 019 lands `persistPassFacts` runs on EVERY pass and fails `42703` against a schema without the three columns (measured 2026-10-14: 0 of 3 present on the shared DB AND on the TEST branch). Every DB-backed write gate is therefore RED on this branch — `test-orchestrator-full-run.js`, `measure-orchestrator.js`, `eval:scenarios`, `verify:pi1`, `test:api:db` — and the nightly `recurring-gates` job would fail at `test:api:db`. Accepted only as a pre-merge branch state on the assumption that Sprint 3 lands 019 immediately; if Sprint 3 is deferred, land 019 alone first.
 
 ### Definition of done
 
