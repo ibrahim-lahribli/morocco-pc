@@ -1,6 +1,6 @@
 # Engine brief (authoritative for E0–E8)
 
-You own the recommendation engine only. Read AGENTS.md §§1–9 first, then docs/ENGINE_BEHAVIOR_FINDINGS_2026-10.md. Branch: agent/engine. Neon branch: test-engine (never the shared DB). Decisions 37–42, gaps OG-39–OG-49. Do NOT edit apps/api/, database/migrations/, orchestrator/commit.js, persistence/, filtering/context-loader.js, candidates/loader.js. Need a schema change? Ask the Platform agent via a note in docs/briefs/requests.md.
+You own the recommendation engine only. Read AGENTS.md §§1–9 first, then docs/ENGINE_BEHAVIOR_FINDINGS_2026-10.md. Branch: agent/engine. Neon branch: test-engine (never the shared DB). Decisions 37–44, gaps OG-39–OG-49. Do NOT edit apps/api/, database/migrations/, orchestrator/commit.js, persistence/, filtering/context-loader.js, candidates/loader.js. Need a schema change? Ask the Platform agent via a note in docs/briefs/requests.md.
 
 ## Problem (measured, see findings doc)
 
@@ -188,7 +188,7 @@ rows, **PASS 56 / EXPECTED-RED 22 / UNKNOWN 3**, exit 0, cleanup residue `{q:0,b
 scratch path and diffing it against the committed `test/golden/baseline-2026-10.md` is **byte-identical**,
 so the committed baseline is a faithful pre-change snapshot. **Since this verification:** Step-2 item 1 landed (the
 pin, below), E1 activation was EXECUTED on the TEST branch 2026-10-09, and E2 landed the same day
-(Decision 39) — see the E1/E2 section below; E3–E8 remain unstarted. `docs/briefs/step2-launch-v2-runbook.md` §1–§2 record the verified preconditions.
+(Decision 39) — see the E1/E2 section below. **Updated 2026-10-14:** E3 (Decision 40), E4 (Decision 41), E5 (Decision 42, inert), E6 (Decision 43, acceptance unmet — OG-49) and E7 (Decision 44) are IMPLEMENTED; E8 remains unstarted. `docs/briefs/step2-launch-v2-runbook.md` §1–§2 record the verified preconditions.
 
 ### Step-2 item 1 — the scoring-model pin (IMPLEMENTED 2026-10-09)
 
@@ -240,9 +240,9 @@ E4 selectArchetypes (PERFORMANCE / BALANCED / VALUE; priority sets the order; fe
 
 E5 resolution: GPU spend-share multiplier + VRAM floor from gpu_chipset.vram_capacity_gb. No per-game FPS claims.
 
-E6 OFFICE: GPU OPTIONAL with an iGPU CPU, low spend targets.
+~~E6 OFFICE: GPU OPTIONAL with an iGPU CPU, low spend targets.~~ **IMPLEMENTED 2026-10-14 (Decision 43)** - `gpu_policy` is an OPTIONAL Engine 3 input, Rule 0 lives in `assembly/gpu-policy.js` and a declared `IGPU_ALLOWED` hard-skips the discrete branches at GPU depth; seed 013 declares OFFICE `IGPU_ALLOWED` (TEST branch). **The ACCEPTANCE is NOT met:** no GPU-less OFFICE build exists on the catalog (A6 never green; S17/S18 give 0 ranked builds under both pins) because the OFFICE rank-1 CPU has no integrated GPU, so the declared policy resolves to `REQUIRED` and the skip is unreachable - see **OG-49** before advancing `current_epic`.
 
-E7 pure deriveReasons() emitting reason codes (no new JSONB column).
+~~E7 pure deriveReasons() emitting reason codes (no new JSONB column).~~ **DONE 2026-10-14** - `explanation/reasons.js` (`deriveReasons` + `REASON_CODES` / `REASON_ORDER`) plus the extracted `explanation/build-facts.js`, exported through the Engine 6 barrel; additive / pure / DB-free / deterministic / unwired, with the persisted shape and the existing `explanation` string byte-identical (the unmodified 13 `explain.test.js` pins are the proof). Decision record: **Decision 44**, written 2026-10-14 in the same pass as E6's **Decision 43** (both were missing while `src/` cited 43 throughout - that hole was OG-48, now CLOSED as C-37).
 
 E8 enforce OG-11 and OG-12 as HARD rules, OG-09 as a soft/CONDITIONAL rule.
 

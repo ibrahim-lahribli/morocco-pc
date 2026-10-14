@@ -44,17 +44,20 @@
  */
 'use strict';
 
-const { EXPANSION_ORDER } = require('../assembly');
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+// Bindings (c), (d) and (e) below are the SAME facts the structured reason
+// codes need (./reasons.js), so both entry points consume one owner
+// (./build-facts.js) rather than keeping private copies that could drift.
+const {
+  STATUS_VALUES,
+  componentsByRole,
+  dominantContribution,
+  biosRequirements,
+  unknownRoles,
+} = require('./build-facts');
 
 /** 3-letter uppercase currency code (mirrors assembly/prices.js). */
 const CURRENCY_RE = /^[A-Z]{3}$/;
-
-/** The only two statuses a persisted build / component may carry. */
-const STATUS_VALUES = Object.freeze(['PASS', 'UNKNOWN']);
-
-/** The Engine 1 evidence status that produces a BIOS condition clause (item 4(d)). */
-const CONDITIONAL_SOURCE_STATUS = 'CONDITIONAL';
 
 function fail(code, field, message) {
   throw new CandidateSelectionError(code, message, field);
@@ -159,93 +162,10 @@ function validateEntry(entry, where) {
   }
 }
 
-/** One component per role (Engine 3 v1); iterate EXPANSION_ORDER to stay deterministic. */
-function componentsByRole(build, where) {
-  const byRole = new Map();
-  for (let index = 0; index < build.components.length; index += 1) {
-    const component = build.components[index];
-    const cwhere = where + '.build.components[' + index + ']';
-    if (component === null || typeof component !== 'object' || Array.isArray(component)) {
-      fail(ERROR_CODES.INVALID_FIELD_VALUE, cwhere, '"' + cwhere + '" must be a component object');
-    }
-    if (typeof component.component_role !== 'string' || component.component_role.length === 0) {
-      fail(
-        ERROR_CODES.INVALID_FIELD_VALUE,
-        cwhere + '.component_role',
-        '"' + cwhere + '.component_role" must be a non-empty string'
-      );
-    }
-    if (!STATUS_VALUES.includes(component.status)) {
-      fail(
-        ERROR_CODES.INVALID_FIELD_VALUE,
-        cwhere + '.status',
-        '"' + cwhere + '.status" must be exactly "PASS" or "UNKNOWN"'
-      );
-    }
-    if (!byRole.has(component.component_role)) {
-      byRole.set(component.component_role, component);
-    }
-  }
-  return byRole;
-}
-
-/** Item 4(c): strict > keeps the first maximum, i.e. the fixed contribution order. */
-function dominantContribution(contributions) {
-  let best = null;
-  let bestProduct = 0;
-  for (const item of contributions) {
-    const product = item.weight * item.effective_score;
-    if (best === null || product > bestProduct) {
-      best = item;
-      bestProduct = product;
-    }
-  }
-  return best;
-}
-
-/** Item 4(d): verbatim min_bios_version texts, first-seen, de-duplicated. */
-function biosRequirements(byRole) {
-  const versions = [];
-  for (const role of EXPANSION_ORDER) {
-    const component = byRole.get(role);
-    if (component === undefined || !Array.isArray(component.compatibility_notes)) {
-      continue;
-    }
-    for (const note of component.compatibility_notes) {
-      if (note === null || typeof note !== 'object' || Array.isArray(note)) {
-        continue;
-      }
-      if (note.source_status !== CONDITIONAL_SOURCE_STATUS) {
-        continue;
-      }
-      const version = note.min_bios_version;
-      if (typeof version !== 'string' || version.length === 0) {
-        continue;
-      }
-      if (!versions.includes(version)) {
-        versions.push(version);
-      }
-    }
-  }
-  return versions;
-}
-
-/** Item 4(e): UNKNOWN component roles, in EXPANSION_ORDER. */
-function unknownRoles(byRole) {
-  const roles = [];
-  for (const role of EXPANSION_ORDER) {
-    const component = byRole.get(role);
-    if (component !== undefined && component.status === 'UNKNOWN') {
-      roles.push(role);
-    }
-  }
-  return roles;
-}
-
 /** Compose the fixed template for ONE selected entry (never mutates it). */
 function composeExplanation({ entry, contributions, budget }) {
   const build = entry.build;
-  const byRole = componentsByRole(build, 'selected[' + entry.persisted_rank + ']');
+  const byRole = componentsByRole(build, 'selected[' + entry.persisted_rank + '].build');
 
   const parts = [
     'Ranked ' + entry.persisted_rank + ': best weighted score ' + entry.build_score,
