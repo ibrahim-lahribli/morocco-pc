@@ -363,6 +363,11 @@ async function runRecommendation(args) {
     // E5 (Decision 42): the resolved VRAM floor (integer) or null; Engine 3
     // receives the floor as policy input and owns the GPU-depth enforcement.
     vramFloorGb: resolveVramFloorGb(configuration, queryInput),
+    // E6 (Decision 43): the per-use-case GPU policy (REQUIRED |
+    // IGPU_ALLOWED) or null; Engine 3 receives it as policy input and owns
+    // the Step 3 decision. The declared profile wins over the legacy
+    // gpu_required_use_cases list for the query's use case.
+    gpuPolicy: resolveGpuPolicy(configuration, queryInput),
   });
 
   // 13. Engine 4 STEP 3 (index-aligned with the builds in discovery order; the
@@ -426,6 +431,28 @@ async function runRecommendation(args) {
     // no existing consumer reads this one yet.
     filter_verdicts: filterResult.results,
   });
+}
+
+/**
+ * E6 (Decision 43): the per-use-case GPU policy for this pass, or null.
+ * Reads the ACTIVE model's `use_case_profiles[queryInput.input.use_case]`
+ * (Decision 37; the same shape-guard pattern as resolveVramFloorGb below) - a model
+ * that declares no profile for the use case yields null and Step 3 keeps
+ * the legacy gpu_required_use_cases rule byte-identically (pre-E6).
+ */
+function resolveGpuPolicy(configuration, queryInput) {
+  const profiles = configuration === null || typeof configuration !== 'object'
+    ? undefined
+    : configuration.use_case_profiles;
+  if (profiles === null || typeof profiles !== 'object' || Array.isArray(profiles)) {
+    return null;
+  }
+  const profile = profiles[queryInput.input.use_case];
+  if (profile === null || typeof profile !== 'object') {
+    return null;
+  }
+  const policy = profile.gpu_policy;
+  return policy === 'REQUIRED' || policy === 'IGPU_ALLOWED' ? policy : null;
 }
 
 /**

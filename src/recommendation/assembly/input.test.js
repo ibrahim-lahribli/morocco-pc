@@ -771,3 +771,28 @@ test('E5: a DECLARED vram_floor_gb must be an integer >= 1; declared null is mal
     );
   }
 });
+// ---------------------------------------------------------------------------
+// E6 (Decision 43): optional gpu_policy, present iff declared.
+// ---------------------------------------------------------------------------
+
+test('E6: gpu_policy is present iff declared and passes through unchanged', () => {
+  const declared = validateEngine3Input(makeInput({ gpu_policy: 'IGPU_ALLOWED' }));
+  assert.equal(declared.gpu_policy, 'IGPU_ALLOWED');
+  const absent = validateEngine3Input(makeInput());
+  assert.equal(Object.prototype.hasOwnProperty.call(absent, 'gpu_policy'), false);
+  // The eleven required fields keep the exact contract shape; the optional
+  // field is purely additive (the E5 floor semantics).
+  assert.deepEqual(Object.keys(absent), CONTRACT_FIELDS);
+});
+
+test('E6: a DECLARED gpu_policy must be an exact Decision 37 policy string', () => {
+  for (const bad of [null, 'OPTIONAL', 'optional', '', 1, true]) {
+    assert.throws(
+      () => validateEngine3Input(makeInput({ gpu_policy: bad })),
+      expectError(ERROR_CODES.INVALID_FIELD_VALUE, 'gpu_policy'),
+      'expected INVALID_FIELD_VALUE for gpu_policy=' + String(bad)
+    );
+  }
+  assert.doesNotThrow(() => validateEngine3Input(makeInput({ gpu_policy: 'REQUIRED' })));
+  assert.doesNotThrow(() => validateEngine3Input(makeInput({ gpu_policy: 'IGPU_ALLOWED' })));
+});

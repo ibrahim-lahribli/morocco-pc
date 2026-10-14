@@ -220,7 +220,7 @@ function validateUseCaseProfiles(use_case_profiles) {
         fail(ERROR_CODES.MISSING_REQUIRED_FIELD, `${path}.${key}`, `"${path}" requires "${key}"`);
       }
     }
-    if (!GPU_POLICIES.includes(profile.gpu_policy)) {
+    if (typeof profile.gpu_policy !== 'string' || !GPU_POLICIES.includes(profile.gpu_policy)) {
       fail(
         ERROR_CODES.INVALID_FIELD_VALUE,
         `${path}.gpu_policy`,

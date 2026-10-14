@@ -60,6 +60,11 @@
 
 const { isValidComponentRole } = require('../candidates/roles');
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+// E6 (Decision 43): staged, boundary-local copy of the Decision 37
+// GPU-policy vocabulary. The one owner is ../scoring/use-cases.js
+// (GPU_POLICIES); this stage imports nothing from ../scoring (boundary
+// pin), so the parity of the copy is pinned by input tests.
+const GPU_POLICY_VALUES = Object.freeze(['REQUIRED', 'IGPU_ALLOWED']);
 
 /** The frozen Engine 3 top-level contract vocabulary, in documented order. */
 const ENGINE3_INPUT_FIELDS = Object.freeze([
@@ -70,6 +75,9 @@ const ENGINE3_INPUT_FIELDS = Object.freeze([
   'use_case',
   'gpu_required_use_cases',
   'integrated_gpu_present',
+  // E6 (Decision 43): OPTIONAL - present iff the model declares a profile
+  // for the query's use case with a gpu_policy ('REQUIRED' | 'IGPU_ALLOWED').
+  'gpu_policy',
   'candidate_caps',
   'prices',
   'filtering_context',
@@ -77,11 +85,18 @@ const ENGINE3_INPUT_FIELDS = Object.freeze([
 ]);
 
 /**
- * E5 (Decision 42): the contract's first OPTIONAL top-level field - present
- * iff declared; absent means "no VRAM floor", and a DECLARED null is malformed
- * (the Decision 40 quota semantics: declared means valid, never absent-by-null).
+ * The OPTIONAL top-level fields - present iff declared; absent means "no
+ * override" (no VRAM floor / the legacy GPU rule), and a DECLARED null is
+ * malformed (the Decision 40 quota semantics: declared means valid, never
+ * absent-by-null).
  */
-const OPTIONAL_ENGINE3_INPUT_FIELDS = Object.freeze(['vram_floor_gb']);
+const OPTIONAL_ENGINE3_INPUT_FIELDS = Object.freeze([
+  // E6 (Decision 43): the per-use-case GPU policy; absent keeps the legacy
+  // gpu_required_use_cases rule.
+  'gpu_policy',
+  // E5 (Decision 42): absent = no VRAM floor.
+  'vram_floor_gb',
+]);
 
 /** `candidate_caps` is a strict two-field contract. */
 const CANDIDATE_CAPS_FIELDS = Object.freeze([
@@ -211,6 +226,10 @@ function validateEngine3Input(raw) {
   // --- gpu_required_use_cases ---------------------------------------------
   // Strictly an array and never defaulted; entries are preserved byte-for-byte
   // because policy matching is a strict (untrimmed) comparison.
+  // E6 (Decision 43): when gpu_policy is present, gpu_required_use_cases is
+  // still validated but no longer consulted by this layer's Step 4 entry point;
+  // the per-use-case gpu_policy route is the active policy path, and the
+  // legacy gpu_required_use_cases route is kept for the v1 golden shapes.
   if (!Array.isArray(gpu_required_use_cases)) {
     fail(
       ERROR_CODES.INVALID_FIELD_VALUE,
@@ -346,6 +365,19 @@ function validateEngine3Input(raw) {
     );
   }
 
+  // --- gpu_policy (OPTIONAL, Decision 43 / E6) ---------------------------
+  // Absent = the legacy gpu_required_use_cases rule (unchanged). A DECLARED
+  // value must be an exact Decision 37 policy string; a declared null is
+  // malformed, never a synonym for absent.
+  if (Object.prototype.hasOwnProperty.call(raw, 'gpu_policy') &&
+      (typeof raw.gpu_policy !== 'string' || !GPU_POLICY_VALUES.includes(raw.gpu_policy))) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'gpu_policy',
+      '"gpu_policy" must be one of ' + GPU_POLICY_VALUES.join(', ') + ' when declared'
+    );
+  }
+
   // --- frozen result -------------------------------------------------------
   // Shallow copies keep caller-owned objects untouched while guaranteeing the
   // returned structure is immutable. `results` entries and `prices` entries are
@@ -372,9 +404,13 @@ function validateEngine3Input(raw) {
     ),
     prices,
     filtering_context,
-    // E5 (Decision 42): present iff declared (the field is OPTIONAL).
+    // E5 (Decision 42) / E6 (Decision 43): the two OPTIONAL fields are attached
+    // iff declared; a declared null was rejected above.
     ...(Object.prototype.hasOwnProperty.call(raw, 'vram_floor_gb')
       ? { vram_floor_gb: raw.vram_floor_gb }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(raw, 'gpu_policy')
+      ? { gpu_policy: raw.gpu_policy }
       : {}),
   });
 }

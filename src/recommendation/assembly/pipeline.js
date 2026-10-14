@@ -5,6 +5,13 @@
  * over the already-loaded Engine 2 sources. It owns no logic of its own: no
  * validation beyond what the steps perform, no policy, no traversal, no SQL.
  *
+ * Pipeline-level notes
+ *   * Selection contracts, required roles and input validation live in input.js.
+ *   * The E5 VRAM floor and the E6 GPU policy are resolved at the ORCHESTRATOR
+ *     boundary (orchestrator/run.js `resolveVramFloorGb` / `resolveGpuPolicy`) and
+ *     arrive here as OPTIONAL sources; this file only forwards them to Step 4,
+ *     which owns the admissibility decision.
+ *
  *   Engine 2C / Stage 1 result ({ input, pool[, prices] })
  *   Engine 2D filtering context + filter result ({ results })
  *   validated scoring model (Decision 11 loader)
@@ -104,6 +111,14 @@ function isPlainObject(value) {
  * @param {object} sources.prices Engine 2 Stage 1 price carrier (raw
  *        null-prototype carrier or an already-validated frozen carrier; the
  *        Step 2 re-validation is idempotent).
+ * @param {string} [sources.gpuPolicy] OPTIONAL (E6 / Decision 43): the
+ *        per-use-case GPU policy resolved from the active model profile;
+ *        absent or null keeps the legacy gpu_required_use_cases Step 3 rule
+ *        (pre-E6).
+ * @param {number} [sources.vramFloorGb] OPTIONAL (E5 / Decision 42): the
+ *        boundary-resolved per-resolution VRAM floor in GB; absent or null
+ *        means no floor. This is the same field the v1 golden data already
+ *        passes as null, so the field is truly optional.
  * @returns {object} frozen { builds } - complete v1 builds in discovery order,
  *        each component carrying its exact frozen Step 2 price carrier entry.
  * @throws {CandidateSelectionError} fail-fast on a missing/malformed source, on
@@ -133,6 +148,13 @@ function assembleBuildsForRecommendation(sources) {
   const vramFloorGb = sources.vramFloorGb === undefined || sources.vramFloorGb === null
     ? null
     : sources.vramFloorGb;
+  // E6 (Decision 43): the orchestrator-resolved per-use-case GPU policy
+  // ('REQUIRED' | 'IGPU_ALLOWED') or null - the same OPTIONAL-field pattern as
+  // the floor: null/absent is omitted, never passed as an explicit null, so an
+  // undeclared policy keeps Step 3's legacy gpu_required_use_cases rule.
+  const gpuPolicy = sources.gpuPolicy === undefined || sources.gpuPolicy === null
+    ? null
+    : sources.gpuPolicy;
 
   // --- required sources (fail fast, before any work) -----------------------
   for (const [field, value] of [
@@ -182,6 +204,7 @@ function assembleBuildsForRecommendation(sources) {
     prices,
     filtering_context: filteringContext,
     ...(vramFloorGb === null ? {} : { vram_floor_gb: vramFloorGb }),
+    ...(gpuPolicy === null ? {} : { gpu_policy: gpuPolicy }),
   };
 
   // --- Steps 1, 2, 4 (unchanged modules; no logic duplicated here) ---------

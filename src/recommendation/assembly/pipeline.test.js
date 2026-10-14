@@ -780,3 +780,16 @@ test('E5: vramFloorGb passes through the pipeline - a below-floor GPU never asse
   assert.equal(floored.builds.filter(hasGpu).length, 0);
   assert.ok(floored.builds.length > 0, 'the iGPU omit path still assembles');
 });
+// ---------------------------------------------------------------------------
+// E6 (Decision 43): the pipeline carries the per-use-case GPU policy to Step 3.
+// ---------------------------------------------------------------------------
+
+test('E6: gpuPolicy passes through the pipeline - a declared IGPU_ALLOWED policy skips every dGPU branch on an iGPU CPU', async () => {
+  const run = await runPipeline();
+  const hasGpu = (build) => build.components.some((c) => c.component_role === 'GPU');
+  const baseline = assembleBuildsForRecommendation(validSources(run));
+  assert.ok(baseline.builds.filter(hasGpu).length > 0, 'baseline fixture assembles GPU builds (pre-E6 walk)');
+  const igpuOnly = assembleBuildsForRecommendation({ ...validSources(run), gpuPolicy: 'IGPU_ALLOWED' });
+  assert.equal(igpuOnly.builds.filter(hasGpu).length, 0, 'the declared policy reached the DFS through this seam');
+  assert.ok(igpuOnly.builds.length > 0, 'the iGPU omit path still assembles');
+});

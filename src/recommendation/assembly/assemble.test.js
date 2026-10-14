@@ -2032,3 +2032,65 @@ test('E5: a DECLARED vram_floor_gb must be an integer >= 1 (declared null is mal
     );
   }
 });
+// ---------------------------------------------------------------------------
+// E6 (Decision 43): a declared IGPU_ALLOWED policy makes the iGPU path the
+// ONLY path on an iGPU CPU; the legacy rule-2 OPTIONAL keeps the pre-E6 walk.
+// ---------------------------------------------------------------------------
+
+function assembleWithGpuPolicy({ gpuIds, gpuPolicy, integrated }) {
+  const input = engineInput({
+    results: vramFixture(gpuIds),
+    useCase: 'OFFICE',
+    gpuRequired: ['GAMING'], // OFFICE is not in the legacy list: rule 2 fires
+    maxBuilds: 10,
+  });
+  if (integrated !== undefined) input.integrated_gpu_present = integrated;
+  if (gpuPolicy !== undefined) input.gpu_policy = gpuPolicy;
+  return assembleBuilds(input).builds;
+}
+
+test('E6: a declared IGPU_ALLOWED policy skips every dGPU branch on an iGPU CPU', () => {
+  const builds = assembleWithGpuPolicy({ gpuIds: ['g1', 'g2'], gpuPolicy: 'IGPU_ALLOWED' });
+  assert.ok(builds.length > 0, 'the iGPU omit path still assembles');
+  assert.deepEqual(gpuProductIds(builds), [], 'no discrete GPU reaches a build');
+});
+
+test('E6: the LEGACY rule-2 OPTIONAL (no declared policy) still walks every GPU verdict', () => {
+  const builds = assembleWithGpuPolicy({ gpuIds: ['g1', 'g2'] });
+  assert.ok(builds.length > 0, 'pre-E6 behaviour: GPU branches assemble');
+  assert.deepEqual(gpuProductIds(builds), ['g1', 'g2']);
+});
+
+test('E6: a declared IGPU_ALLOWED policy on a non-iGPU CPU keeps the GPU REQUIRED', () => {
+  const builds = assembleWithGpuPolicy({ gpuIds: ['g1'], gpuPolicy: 'IGPU_ALLOWED', integrated: { 'c1': false } });
+  assert.ok(builds.length > 0, 'the GPU walks assemble on a dGPU-only CPU');
+  assert.deepEqual(gpuProductIds(builds), ['g1']);
+});
+
+test('E6: a declared REQUIRED policy reaches the DFS - no omit path even on an iGPU CPU', () => {
+  const builds = assembleWithGpuPolicy({ gpuIds: ['g1'], gpuPolicy: 'REQUIRED' });
+  assert.ok(builds.length > 0, 'the discrete-GPU walk assembles');
+  assert.ok(
+    builds.every((build) => build.components.some((component) => component.component_role === 'GPU')),
+    'a declared REQUIRED policy forbids the GPU-omit path'
+  );
+});
+
+test('E6: the assemble re-defense rejects a malformed declared gpu_policy', () => {
+  for (const bad of ['OPTIONAL', '', null, 1]) {
+    const input = engineInput({
+      results: vramFixture(['g1']),
+      useCase: 'OFFICE',
+      gpuRequired: ['GAMING'],
+      maxBuilds: 10,
+    });
+    input.gpu_policy = bad;
+    assert.throws(
+      () => assembleBuilds(input),
+      (error) => error instanceof CandidateSelectionError
+        && error.code === ERROR_CODES.INVALID_FIELD_VALUE
+        && error.field === 'gpu_policy',
+      'expected INVALID_FIELD_VALUE for gpu_policy=' + String(bad)
+    );
+  }
+});

@@ -71,6 +71,10 @@ const {
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
 const { lookupPrice } = require('./prices');
 const { resolveGpuRequirement } = require('./gpu-policy');
+// E6 (Decision 43): staged, boundary-local copy of the Decision 37
+// GPU-policy vocabulary (one owner: ../scoring/use-cases.js GPU_POLICIES);
+// this stage must not import ../scoring (boundary pin).
+const GPU_POLICY_VALUES = Object.freeze(['REQUIRED', 'IGPU_ALLOWED']);
 // Decision 16: the pairwise gate reuses Engine 2D's own pair evaluators and
 // Engine 1's aggregation - never a second implementation of either.
 const {
@@ -158,6 +162,7 @@ function readTraversalInputs(engine3Input) {
     use_case,
     gpu_required_use_cases,
     integrated_gpu_present,
+    gpu_policy,
     candidate_caps,
     prices,
     filtering_context,
@@ -258,6 +263,19 @@ function readTraversalInputs(engine3Input) {
       '"vram_floor_gb" must be an integer >= 1 when declared'
     );
   }
+
+  // E6 (Decision 43): optional per-use-case GPU policy. Absent = the legacy
+  // gpu_required_use_cases rule; a DECLARED value must be an exact Decision
+  // 37 policy string (a declared null is malformed).
+  const gpuPolicyDeclared = Object.prototype.hasOwnProperty.call(engine3Input, 'gpu_policy');
+  const gpuPolicy = gpuPolicyDeclared ? gpu_policy : null;
+  if (gpuPolicyDeclared && (typeof gpuPolicy !== 'string' || !GPU_POLICY_VALUES.includes(gpuPolicy))) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'gpu_policy',
+      '"gpu_policy" must be one of ' + GPU_POLICY_VALUES.join(', ') + ' when declared'
+    );
+  }
   return {
     results,
     budget_amount,
@@ -268,6 +286,7 @@ function readTraversalInputs(engine3Input) {
     maxBuilds,
     maxPerPair,
     vramFloorGb,
+    gpuPolicy,
     prices,
     filteringContext: filtering_context,
   };
@@ -687,30 +706,43 @@ function assembleBuilds(engine3Input) {
         gpu_required_use_cases: traversal.gpu_required_use_cases,
         integrated_gpu_present: traversal.integrated_gpu_present,
         selectedCpuProductId: cpuChoice.product_id,
+        // E6 (Decision 43): the DECLARED per-use-case policy must reach Rule 0,
+        // or a declared REQUIRED could still be dropped and a declared
+        // IGPU_ALLOWED could not authorize the omit path. null when absent.
+        gpuPolicy: traversal.gpuPolicy,
       });
       const options = buckets[GPU_ROLE];
-      for (const verdict of options) {
-        const price = lookupPrice(traversal.prices, verdict);
-        const nextTotal = runningTotal + price.selected_price;
-        if (nextTotal > traversal.budget_amount) {
-          continue;
-        }
-        // E5 (Decision 42): skip a GPU branch below the resolution VRAM floor.
-        // UNKNOWN VRAM (NULL / missing spec) is never below-floor.
-        if (traversal.vramFloorGb !== null && belowVramFloor(traversal.filteringContext, verdict, traversal.vramFloorGb)) {
-          continue;
-        }
-        // Decision 40 (E3): skip a GPU branch whose pair is already full.
-        if (traversal.maxPerPair !== null && pairIsFull(pairCounts, cpuChoice, verdict, traversal.maxPerPair)) {
-          continue;
-        }
-        picked[GPU_ROLE] = verdict;
-        // GPU has no partner role earlier in EXPANSION_ORDER; its pair
-        // checks run when PSU / CASE are picked (see PAIRWISE_CHECKS).
-        descend(depth + 1, picked, nextTotal);
-        delete picked[GPU_ROLE];
-        if (halted) {
-          return;
+      // E6 (Decision 43): a DECLARED IGPU_ALLOWED policy makes the iGPU
+      // omit path the ONLY path on an iGPU CPU - the discrete-GPU branches
+      // are skipped entirely. The LEGACY rule-2 OPTIONAL (no declared
+      // policy) keeps walking every eligible GPU verdict (pre-E6
+      // behaviour, byte-identical).
+      const skipDiscreteGpu = traversal.gpuPolicy === 'IGPU_ALLOWED' &&
+        traversal.integrated_gpu_present[cpuChoice.product_id] === true;
+      if (!skipDiscreteGpu) {
+        for (const verdict of options) {
+          const price = lookupPrice(traversal.prices, verdict);
+          const nextTotal = runningTotal + price.selected_price;
+          if (nextTotal > traversal.budget_amount) {
+            continue;
+          }
+          // E5 (Decision 42): skip a GPU branch below the resolution VRAM floor.
+          // UNKNOWN VRAM (NULL / missing spec) is never below-floor.
+          if (traversal.vramFloorGb !== null && belowVramFloor(traversal.filteringContext, verdict, traversal.vramFloorGb)) {
+            continue;
+          }
+          // Decision 40 (E3): skip a GPU branch whose pair is already full.
+          if (traversal.maxPerPair !== null && pairIsFull(pairCounts, cpuChoice, verdict, traversal.maxPerPair)) {
+            continue;
+          }
+          picked[GPU_ROLE] = verdict;
+          // GPU has no partner role earlier in EXPANSION_ORDER; its pair
+          // checks run when PSU / CASE are picked (see PAIRWISE_CHECKS).
+          descend(depth + 1, picked, nextTotal);
+          delete picked[GPU_ROLE];
+          if (halted) {
+            return;
+          }
         }
       }
       if (decision !== 'REQUIRED') {
