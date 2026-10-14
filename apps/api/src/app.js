@@ -102,7 +102,11 @@ function buildApp(options) {
       info: {
         title: 'morocco-pc API',
         description: 'Recommendation API over the morocco-pc engine. Prices are indicative.',
-        version: '1.0.0',
+        // 1.1.0 (2026-10-14): the response surfaces the persisted pass facts
+        // (budget_floor, engine_version, strategy_key) instead of serving two
+        // of them as null on GET. Pinned byte-for-byte by
+        // apps/api/test/unit/openapi-snapshot.test.js.
+        version: '1.1.0',
       },
     },
   });

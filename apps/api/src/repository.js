@@ -12,10 +12,16 @@
  * build its response from the engine's in-memory result. It re-reads the
  * PERSISTED rows through the very same statement GET uses, so POST and GET are
  * identical on every persisted field by construction rather than by discipline
- * - and the API cannot accidentally expose a value that was never stored. The
- * engine result is used for exactly one additive thing: `budget_floor`, which
- * is a pass diagnostic and has no column to read back (migration 019, proposed
- * in Decision 36, would change that).
+ * - and the API cannot accidentally expose a value that was never stored.
+ *
+ * That property is now TOTAL. Until migration 019 there was exactly one
+ * exception: `budget_floor`, a pass diagnostic with no column to read back, so
+ * POST served the engine's in-memory copy and GET served null. 019 added the
+ * column (`recommendation_query.budget_floor`) plus the two per-result
+ * provenance fields (`engine_version`, `strategy_key`), and the two statements
+ * below read all three back - so the engine's in-memory result no longer feeds
+ * the response at all, and a zero-build pass still carries its floor because
+ * `persistPassFacts` writes it unconditionally.
  *
  * Reads are parameterized only; nothing is interpolated. NUMERIC columns come
  * back from pg as strings and are converted by the presenter, not here, so the
@@ -66,9 +72,17 @@ const INSERT_QUERY_SQL = [
   'RETURNING id',
 ].join(' ');
 
-/** The query resource itself: presence decides 404, created_at backs generated_at. */
+/**
+ * The query resource itself: presence decides 404, created_at backs
+ * generated_at.
+ *
+ * `budget_floor` is the Decision 27 diagnostic, persisted by Decision 46's
+ * `persistPassFacts` (migration 019). pg parses a jsonb column into a JS value
+ * already, so this row field is an OBJECT here, not a string - the presenter's
+ * `parseFloor` handles the string case only for safety.
+ */
 const SELECT_QUERY_SQL = [
-  'SELECT id, budget_amount, currency, use_case, created_at',
+  'SELECT id, budget_amount, currency, use_case, created_at, budget_floor',
   'FROM recommendation_query',
   'WHERE id = $1',
 ].join(' ');
@@ -84,11 +98,19 @@ const SELECT_QUERY_SQL = [
  * component rows. `product_id`/`product_variant_id` are carried so the response
  * can name the component (the engine's in-memory build carries no product name;
  * product_variant has no name column at all - only `sku`).
+ *
+ * `r.engine_version` / `r.strategy_key` are the Decision 46 provenance facts:
+ * which deploy produced this rank, and which E4 archetype nominated it. Both
+ * are TEXT and nullable, so a pre-019 row (or a pass that ran without an
+ * engine version) reads back null rather than an invented value - NULL means
+ * UNKNOWN in this schema, and the presenter passes it through.
  */
 const SELECT_BUILDS_SQL = [
   'SELECT',
   '  r.rank,',
   '  r.explanation,',
+  '  r.engine_version,',
+  '  r.strategy_key,',
   '  r.created_at AS result_created_at,',
   '  b.id AS build_candidate_id,',
   '  b.total_price,',

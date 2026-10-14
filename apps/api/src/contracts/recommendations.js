@@ -6,11 +6,12 @@
  * These schemas are the published wire contract (Decision 36 item 4). Two
  * properties are load-bearing and easy to get wrong:
  *
- *   1. Nullability mirrors the DATABASE, not the happy path. `budget_floor` and
- *      `engine_version` are nullable because GET serves them as null - they
- *      only exist on the POST that produced them (migration 019, proposed in
- *      Decision 36, would persist them). A schema that demanded a value would
- *      make GET unserializable against real data.
+ *   1. Nullability mirrors the DATABASE, not the happy path. `budget_floor`,
+ *      `engine_version` and `strategy_key` are all nullable because their
+ *      columns are (migration 019), and NULL means "not recorded" - a pre-019
+ *      row, or a pass that ran without an engine version. A schema that
+ *      demanded a value would make GET unserializable against real data, and
+ *      would also assert a fact the schema itself declares unknowable.
  *   2. `price_status` is DERIVED, never stored: 'verified' only when EVERY
  *      component's persisted `offer_class` is VERIFIED, 'indicative' otherwise.
  *      The disclaimer text is what makes an indicative price honest.
@@ -46,6 +47,10 @@ const BuildComponentSchema = Type.Object({
 
 const BuildSchema = Type.Object({
   rank: Type.Integer(),
+  /** The deploy that produced this rank (Decision 46), or null if unrecorded. */
+  engine_version: Type.Union([Type.String(), Type.Null()]),
+  /** The E4 archetype (Decision 41) that nominated this rank, or null. */
+  strategy_key: Type.Union([Type.String(), Type.Null()]),
   total_price: Type.Union([Type.Number(), Type.Null()]),
   build_score: Type.Union([Type.Number(), Type.Null()]),
   compatibility_status: Type.String(),

@@ -5,9 +5,14 @@ specified by **Decision 36**, and owns **no engine logic**: every route calls th
 engine through its public barrels and reads or writes Layer 4 rows through one
 repository module.
 
-Status at 2026-10-07: **implemented and running against the TEST branch.** The
+Status at 2026-10-14: **implemented and running against the TEST branch.** The
 DB-free suite runs on every push/PR; the DB-backed suite is wired into the
 recurring CI job and has been verified locally, but **not yet by a CI run**.
+
+**Contract v1.1 (2026-10-14):** the response now surfaces the persisted pass
+facts. `budget_floor`, `engine_version` and each build's `strategy_key` are
+columns as of migration `019_recommendation_pass_facts.sql` (Decision 46), so
+POST and GET no longer differ on any persisted field. See *Response shape*.
 
 ## What it is not
 
@@ -33,7 +38,7 @@ Environment variables (see `apps/api/.env.example` for the full list):
 | `PORT`, `HOST` | Listener. Defaults `3000` / `0.0.0.0`. |
 | `ALLOWED_ORIGINS` | Comma-separated CORS allow-list. **Empty means CORS is disabled entirely** — no `Access-Control-Allow-Origin` header is sent. |
 | `LOG_LEVEL`, `LOG_PRETTY` | pino level; `LOG_PRETTY=1` uses `pino-pretty` (a devDependency, feature-detected — production installs log JSON). |
-| `ENGINE_VERSION` | The value reported as `engine_version` / `served_by.engine_version`. Intended to be the git short SHA; defaults to `dev`. |
+| `ENGINE_VERSION` | The value reported as `served_by.engine_version` and, since Decision 46, PERSISTED per result row as the pass's `engine_version` — the API hands it to the engine, so a stored build names the deploy that produced it. Intended to be the git short SHA; defaults to `dev`. |
 | `DATABASE_URL`, `TEST_DATABASE_URL` | Both required. The guard compares their hostnames to prove they differ. |
 | `API_ALLOW_SHARED` | Must be exactly `1` to target `DATABASE_URL`. |
 
@@ -87,14 +92,21 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO morocco_pc_api;
 GRANT INSERT ON recommendation_profile, recommendation_query, build_candidate,
   build_component, recommendation_result, build_rejection TO morocco_pc_api;
 GRANT DELETE ON build_rejection TO morocco_pc_api;
+-- Decision 46: the pass-facts writer UPDATEs exactly three columns. Granted PER
+-- COLUMN, never per table, so the table-level UPDATE answers stay 'f' (see the
+-- self-check below) and the role cannot rewrite a row it merely inserted.
+GRANT UPDATE (budget_floor) ON recommendation_query TO morocco_pc_api;
+GRANT UPDATE (engine_version, strategy_key) ON recommendation_result TO morocco_pc_api;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO morocco_pc_api;
 ```
 
 Catalog tables (Layers 1–3, `store_offer` included) and `scoring_model` are
-read-only for this role. There is no UPDATE anywhere in the API or engine write
-path, and no sequence to grant (every id is an app-generated UUID). A
-`check_function_bodies` lock-down was considered and dropped: the API issues no
-functions, so the setting guards nothing here.
+read-only for this role, and there is no sequence to grant (every id is an
+app-generated UUID). The write path contains exactly THREE UPDATEs — the
+pass-facts writer (Decision 46, `persistence/persist-pass-facts.js`) — and they
+are granted per column so the "no row-wide UPDATE" invariant stays provable
+rather than merely intended. A `check_function_bodies` lock-down was considered
+and dropped: the API issues no functions, so the setting guards nothing here.
 
 Self-check (run after applying; every expected value is in the comment):
 
@@ -115,6 +127,12 @@ SELECT has_table_privilege('morocco_pc_api','build_candidate','INSERT'),    -- t
        has_table_privilege('morocco_pc_api','recommendation_query','INSERT'),  -- t
        has_table_privilege('morocco_pc_api','build_component','DELETE'),    -- f
        has_table_privilege('morocco_pc_api','build_rejection','DELETE');    -- t
+-- Decision 46: no ROW-WIDE update, but exactly three COLUMN-scoped ones.
+SELECT has_table_privilege('morocco_pc_api','recommendation_query','UPDATE'),   -- f
+       has_table_privilege('morocco_pc_api','recommendation_result','UPDATE');  -- f
+SELECT has_column_privilege('morocco_pc_api','recommendation_query','budget_floor','UPDATE'),     -- t
+       has_column_privilege('morocco_pc_api','recommendation_result','engine_version','UPDATE'),  -- t
+       has_column_privilege('morocco_pc_api','recommendation_result','strategy_key','UPDATE');    -- t
 ```
 
 **TEST-branch rehearsal plan** (proves the commit path runs under the role
@@ -247,6 +265,8 @@ Status codes:
   "builds": [
     {
       "rank": 1,
+      "engine_version": "a1b2c3d",
+      "strategy_key": "PERFORMANCE",
       "total_price": 12000.00,
       "build_score": 77.5,
       "compatibility_status": "PASS",
@@ -268,31 +288,38 @@ Status codes:
 }
 ```
 
-### POST and GET differ in exactly two fields
+### POST and GET differ in no persisted field
 
 POST and GET present the response through the **same** function over the **same**
 read: POST re-reads the rows it just committed instead of trusting the engine's
 in-memory result. They therefore cannot drift on any persisted field — not by
 discipline, but because there is only one code path.
 
-Two fields have no column to read back and are **pass-only facts**:
+That sentence is now **total**. Before migration 019 it carried an exception:
+`budget_floor` had no column, so POST served the engine's in-memory copy and GET
+served `null` — as did `engine_version`. Decision 46 persists all of them
+(`recommendation_query.budget_floor`, and `recommendation_result.engine_version`
+plus `.strategy_key`), so the engine's in-memory result no longer feeds the
+response at all: a later GET of a query reproduces the POST reply byte for byte,
+nested JSONB floor included. Neither GET nor the API ever recomputes a floor — a
+null means "not recorded", never "zero".
 
-| Field | POST | GET |
+Two fields name a deploy, and they answer different questions:
+
+| Field | Means | Source |
 |---|---|---|
-| `budget_floor` | the pass diagnostic | `null` |
-| `engine_version` | the deploy that produced it | `null` |
+| `engine_version` | the deploy that **ran the pass** | read back from the persisted result rows |
+| `served_by.engine_version` | the deploy that **answered this request** | `ENGINE_VERSION` of the process |
 
-`served_by.engine_version` is always populated and always names the deploy that
-answered the request, on both verbs.
+`served_by.engine_version` is always populated, on both verbs. `engine_version` is
+`null` when nothing recorded it: a pass with **zero builds** persists no result
+row, and so has no pass engine version to report — its `budget_floor` is still
+recorded, because that lives on the query row. The API will not attribute a pass
+to a deploy the database does not name.
 
-**Why:** `budget_floor` is computed inside the pass (Decision 27) and
-`engine_version` had no column (OG-18). Persisting them needed a schema change, and
-**migration 019** now provides it (`019_recommendation_pass_facts.sql`, applied on the
-TEST branch 2026-10-14): a query-level `budget_floor` on `recommendation_query`, plus
-`engine_version` and `strategy_key` on `recommendation_result`. This read path does not
-consume them yet (Sprint 4 of `PLAN_PLATFORM_P0.md`), so both fields above still read
-`null` here. Neither GET nor the API ever recomputes a floor; a null means "not
-recorded", never "zero".
+Each build also carries its own `engine_version` and `strategy_key`: which E4
+archetype (Decision 41) nominated that rank. Both are read per result row, so two
+ranks in one reply can legitimately carry different strategies.
 
 ### `price_status`
 
@@ -309,7 +336,10 @@ historical build.
 
 `name` comes from `product.name` and `variant` from `product_variant.sku` (that
 table has no name column) — read back from the persisted join, which is also why
-POST and GET agree.
+POST and GET agree. **The `Seed ` prefix still reaches clients:** the catalog is
+seed data, and the `display_name` / `slug` columns that would replace it are
+migration `020_product_identity_and_media.sql`, which is not in the tree yet.
+Until it lands, treat `components[].name` as internal vocabulary.
 
 ## Option vocabulary
 
@@ -388,3 +418,5 @@ profile id is captured before the query is deleted).
 - **No 202/polling path.** A POST is synchronous; measure before adding
   asynchronous job handling.
 - **`resolution`/`priority` are accepted but inert** (see *Option vocabulary*).
+- **`components[].name` still shows the `Seed ` prefix.** The whole catalog is seed data and migration `020_product_identity_and_media.sql` (its `display_name` / `slug` columns) is not in the tree, so the API has nothing else to name a product with. Do not present it to end users as a product name.
+- **`strategy_key` / `engine_version` are recorded but not yet consumed.** They are persisted and served; no client reads them back yet, and their golden-harness coverage (A10) is still owed (OG-45, OG-46).

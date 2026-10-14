@@ -327,6 +327,15 @@ CREATE UNIQUE INDEX uq_product_slug ON product (slug);
 
 ## Sprint 4 — API read/wire + presenter + contract v1.1 + tests (60 min)
 
+**Status 2026-10-14: the PASS-FACTS half is DONE; the product-identity half is BLOCKED on 020.**
+`budget_floor`, `engine_version` and `strategy_key` are read back and served on both
+verbs, the contract is v1.1 with a committed OpenAPI snapshot, and the read path is
+proven on the branch. Everything this sprint says about `p.slug`,
+`COALESCE(p.display_name, p.name)`, `components[].slug` and the "no `Seed ` prefix"
+guard is **not done and cannot be** — those columns are migration
+`020_product_identity_and_media.sql`, which is not in the tree. Evidence in
+"Sprint 4 execution record — pass facts" below.
+
 **Date:** 2026-10-14  
 **Purpose:** make the read path and the presenter surface the new columns on both POST and GET, so the two verbs agree on persisted fields, the user sees human-readable names and slugs, and the contract moves to v1.1.
 
@@ -381,6 +390,72 @@ CREATE UNIQUE INDEX uq_product_slug ON product (slug);
 - `test:api`, `test:api:db`, `test:unit` all 0 fail.
 
 ---
+
+### Sprint 4 execution record — pass facts (2026-10-14)
+
+The engine's in-memory result no longer feeds the response AT ALL. Before migration 019
+the presenter took `budgetFloor` and `engineVersion` as parameters from the POST path's
+engine call and served `null` for both on GET; both are now read back from the
+committed rows, so `presentRecommendationResult` is fed only by persisted data and the
+"one read path" rule has no exception left. `POST and GET differ in exactly two fields`
+became `POST and GET differ in no persisted field`, and the DB test's GET assertion is
+a full-body `deepEqual` with no subtraction list.
+
+Changed: `repository.js` (`SELECT_QUERY_SQL` reads `budget_floor`; `SELECT_BUILDS_SQL`
+reads `r.engine_version` + `r.strategy_key`), `routes/recommendations.js` (a `parseFloor`
+helper, per-build provenance, and the presenter's new source contract),
+`contracts/recommendations.js` (`BuildSchema` gains both nullable fields), `engine.js`
+(`runFullRun(client, queryId, engineVersion)` via a new `engineOptionsFor`, which is the
+API half of the Sprint 2 handoff), `app.js` (OpenAPI `info.version` 1.1.0), `stub.js`,
+`contract.test.js`, `errors.test.js`, the DB suite, and `docs/API.md`.
+
+**A trap worth keeping: the engine result did not reach the wire even after the SQL was
+right.** `groupBuilds` builds each build, and the presenter then REBUILDS it from an
+explicit field list; adding the two fields to the first and not the second produced a
+500 — `"engine_version" is required!` from fast-json-stringify, not a silent null,
+because the response schema declares the property. A schema change and a presenter
+change are two halves of one edit.
+
+**Another: `parseFloor` must not `JSON.parse` unconditionally.** pg parses a jsonb
+column into a JS value before the presenter sees it, so the ordinary path is an object
+and `JSON.parse(object)` throws `Unexpected token o`. The helper treats a string as the
+fallback case, not the normal one — and the stub fixture now stores the floor as an
+OBJECT for exactly that reason.
+
+`errors.test.js` needed a FIXTURE correction, not an assertion change: its
+EMPTY_CANDIDATE_POOL case asserted `budget_floor === null`, which was true when the
+presenter hardcoded null and is still true now — but only if the stub's query row says
+the column is NULL, which is what actually happens when a pass throws in Stage 1 before
+Decision 27's stage 11b. The assertion kept its meaning and gained a companion for
+`engine_version`.
+
+The DB suite now also proves the COLUMN holds the value, not just the reply: the
+per-rank `engine_version` / `strategy_key` are compared against a direct SELECT over
+`recommendation_result`, and the zero-build pass's floor is read out of
+`recommendation_query`. Its engine spy had to start forwarding the third argument — a
+spy that swallowed `engineVersion` would leave the column NULL and make a READ-path test
+fail for a reason unrelated to the read path.
+
+Contract v1.1 is pinned by a committed `apps/api/test/unit/openapi-v1.1.json`
+(11 491 bytes, byte-for-byte, deterministic across app instances) plus a second test that
+names what the snapshot is for. `@fastify/swagger` renders TypeBox's
+`Union([Type.String(), Type.Null()])` as OpenAPI 3.0 `nullable: true`, not `anyOf` —
+worth knowing before writing an assertion against it.
+
+Verified, each on its own exit status:
+
+| Check | Result |
+|---|---|
+| `npm run test:api` | **40 pass / 0 fail** (38 pre-existing + 2 snapshot tests) |
+| `npm run test:api:db` | **1 passed / 0 failed**, residue 0 |
+| `npm run test:unit` / `test:scripts` | 1149/0/0 and 212/0 |
+| `verify:docs --offline` | PASS (all checks) |
+| `node scripts/run-migrations.js --test-db --check` | no pending migrations |
+
+**Deliberately NOT done:** `slug` / `display_name` / the `Seed ` guard (needs 020); the
+`GRANT` statements themselves (an operator step, recorded in `docs/API.md`'s role script
+and self-checks rather than executed against a shared database); the A10 golden coverage
+for `strategy_key` (OG-46, a separate gap).
 
 ## Sprint 5 — shared-apply gate, generated-doc refresh, and P1–P4 carried-as-planned review (60 min)
 

@@ -42,8 +42,16 @@ test('POST returns 201 and a body that matches the published response contract',
   assert.equal(body.builds.length, 2);
 });
 
-test('POST and GET agree on every persisted field and differ only on the pass-only fields', async () => {
-  const engine = stub.createEngineStub();
+test('POST and GET differ in NO persisted field - the read path has no exceptions', async () => {
+  // The engine stub returns a floor that is NOT the persisted one, so a
+  // presenter still serving the engine's in-memory result would be caught here
+  // rather than passing by coincidence.
+  const engine = stub.createEngineStub(async () => ({
+    budget_floor: Object.assign({}, stub.SAMPLE_BUDGET_FLOOR, {
+      cheapest_total: 12345,
+      within_budget: true,
+    }),
+  }));
   const app = stub.createTestApp({ engine });
 
   const post = (await createRecommendation(app)).json();
@@ -53,23 +61,74 @@ test('POST and GET agree on every persisted field and differ only on the pass-on
   assert.equal(fetched.statusCode, 200);
   const get = fetched.json();
 
-  // The whole point: one read path, so these cannot drift.
+  // The whole point: one read path, so these cannot drift. Fully deep-equal is
+  // now the right assertion - before migration 019 the two verbs legitimately
+  // differed on two pass-only facts, and there is no such fact left.
+  assert.deepEqual(get, post, 'GET equals POST on every field');
   assert.deepEqual(get.builds, post.builds);
-  assert.equal(get.generated_at, post.generated_at);
-  assert.equal(get.budget_amount, post.budget_amount);
-  assert.equal(get.currency, post.currency);
-  assert.equal(get.use_case, post.use_case);
   assert.equal(get.id, post.id);
   assert.deepEqual(contractErrors(contracts.RecommendationResponseSchema, get), []);
 
-  // Pass-only facts: present on POST, explicitly null on GET.
-  assert.equal(post.budget_floor.cheapest_total, 4477);
+  // The PERSISTED floor is what both verbs serve - never the engine's copy.
+  assert.equal(post.budget_floor.cheapest_total, stub.SAMPLE_BUDGET_FLOOR.cheapest_total);
+  assert.notEqual(post.budget_floor.cheapest_total, 12345, 'the engine result never reaches the wire');
+  assert.equal(get.budget_floor.cheapest_total, post.budget_floor.cheapest_total);
+
+  // engine_version is the deploy recorded on the persisted result rows, and
+  // served_by is the deploy that answered - distinct questions, one answer here.
   assert.equal(post.engine_version, stub.TEST_ENGINE_VERSION);
-  assert.equal(get.budget_floor, null);
-  assert.equal(get.engine_version, null);
+  assert.equal(get.engine_version, stub.TEST_ENGINE_VERSION);
   assert.equal(get.served_by.engine_version, stub.TEST_ENGINE_VERSION);
 
   assert.equal(engine.calls.length, engineCallsAfterPost, 'GET must never re-run the engine');
+});
+
+test('every build carries its OWN persisted engine version and nominating archetype', async () => {
+  const app = stub.createTestApp();
+  const body = (await createRecommendation(app)).json();
+
+  assert.deepEqual(contractErrors(contracts.RecommendationResponseSchema, body), []);
+  assert.deepEqual(
+    body.builds.map((build) => build.engine_version),
+    [stub.TEST_ENGINE_VERSION, stub.TEST_ENGINE_VERSION],
+    'the engine version is read per result row'
+  );
+  assert.deepEqual(
+    body.builds.map((build) => build.strategy_key),
+    ['PERFORMANCE', 'VALUE'],
+    'each rank carries its own archetype - a presenter that read one row for all builds fails here'
+  );
+  assert.equal(body.engine_version, stub.TEST_ENGINE_VERSION, 'the query-level value is the persisted one');
+});
+
+test('a NOT-RECORDED pass fact is served as null, never as the answering deploy', async () => {
+  // A row written before migration 019, or by a pass with no engine version:
+  // the columns are genuinely NULL, and NULL means UNKNOWN here.
+  const repository = stub.createRepositoryStub({
+    async readRecommendationResult() {
+      return {
+        found: true,
+        query: Object.assign({}, stub.QUERY_ROW, { budget_floor: null }),
+        rows: stub.SAMPLE_ROWS.map((row) => Object.assign({}, row, {
+          engine_version: null,
+          strategy_key: null,
+        })),
+      };
+    },
+  });
+  const app = stub.createTestApp({ repository });
+  const body = (await createRecommendation(app)).json();
+
+  assert.deepEqual(contractErrors(contracts.RecommendationResponseSchema, body), []);
+  assert.equal(body.budget_floor, null, 'no floor was recorded, and none is invented');
+  assert.equal(body.engine_version, null);
+  assert.deepEqual(body.builds.map((build) => build.strategy_key), [null, null]);
+  assert.equal(body.builds.length, 2, 'the builds still serialize with null provenance');
+  assert.equal(
+    body.served_by.engine_version,
+    stub.TEST_ENGINE_VERSION,
+    'served_by is a different question and is always answered'
+  );
 });
 
 test('NUMERIC columns are served as numbers, never as the strings pg returns', async () => {
@@ -114,26 +173,35 @@ test('components are labelled from the persisted join and price_status is derive
   assert.equal(body.generated_at, '2026-10-07T09:00:06.000Z', 'generated_at is the newest persisted result time');
 });
 
-test('a query with zero builds is a 200 with an empty list and a budget floor', async () => {
+test('a zero-build pass is a 200 with an empty list and its PERSISTED floor', async () => {
+  // Decision 27 computes the floor unconditionally and Decision 46 writes it
+  // unconditionally, so a pass that assembled nothing still explains why - and
+  // that explanation survives to a later GET. Only the query row carries it:
+  // there is no result row to hold a pass engine version.
+  const persistedFloor = Object.assign({}, stub.SAMPLE_BUDGET_FLOOR, {
+    cheapest_total: 99999,
+    within_budget: false,
+  });
   const repository = stub.createRepositoryStub({
     async readRecommendationResult() {
-      return { found: true, query: stub.QUERY_ROW, rows: [] };
+      return {
+        found: true,
+        query: Object.assign({}, stub.QUERY_ROW, { budget_floor: persistedFloor }),
+        rows: [],
+      };
     },
   });
-  const engine = stub.createEngineStub(async () => ({
-    budget_floor: Object.assign({}, stub.SAMPLE_BUDGET_FLOOR, {
-      cheapest_total: 99999,
-      within_budget: false,
-    }),
-  }));
-  const app = stub.createTestApp({ repository, engine });
+  const app = stub.createTestApp({ repository });
 
   const response = await createRecommendation(app);
   assert.equal(response.statusCode, 200, 'zero builds is a valid answer, not an error');
   const body = response.json();
   assert.deepEqual(contractErrors(contracts.RecommendationResponseSchema, body), []);
   assert.deepEqual(body.builds, []);
+  assert.equal(body.budget_floor.cheapest_total, 99999);
   assert.equal(body.budget_floor.within_budget, false);
+  assert.equal(body.engine_version, null, 'no result row was written, so no pass engine version was recorded');
+  assert.equal(body.served_by.engine_version, stub.TEST_ENGINE_VERSION);
   assert.equal(body.reason, null);
   assert.equal(body.generated_at, '2026-10-07T09:00:00.000Z', 'falls back to the query created_at');
 });
@@ -171,6 +239,7 @@ test('the OpenAPI document is served as JSON at /v1/docs/json', async () => {
   const document = response.json();
   assert.equal(document.openapi, '3.0.3');
   assert.equal(document.info.title, 'morocco-pc API');
+  assert.equal(document.info.version, '1.1.0', 'the contract version names the pass-facts surface');
   assert.ok(document.paths['/v1/recommendations'], 'the recommendation path is documented');
   assert.ok(document.paths['/v1/recommendations/{id}'], 'the read path is documented');
 });

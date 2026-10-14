@@ -43,6 +43,16 @@ const retention = require('../src/recommendation/retention');
 const assembly = require('../src/recommendation/assembly');
 const repository = require('../apps/api/src/repository');
 
+/**
+ * Decision 46: the `engine_version` this harness stamps onto the rows it writes.
+ *
+ * It is deliberately NOT the API's `ENGINE_VERSION` and not a deploy SHA: this
+ * script is not a deploy, and recording one would make a measurement row look
+ * like production output. Naming the tool keeps the provenance true and
+ * traceable, which is the whole reason the column exists.
+ */
+const MEASUREMENT_ENGINE_VERSION = 'measure-api-pass-phases';
+
 function parseArgs(argv) {
   const args = { budget: 20000, useCase: 'GAMING' };
   for (let i = 2; i < argv.length; i += 1) {
@@ -299,7 +309,13 @@ async function main() {
     ids.queryId = created.queryId;
     ids.profileId = created.profileId;
 
-    const runResult = await require('../apps/api/src/engine').runFullRun(client, created.queryId);
+    // Decision 46: this harness is not a deploy, but it still writes real rows,
+    // so it names ITSELF as the engine version rather than claiming a deploy's
+    // identity or leaving the column NULL with no way to tell which tool wrote
+    // it. Without this, `recommendation_result.engine_version` reads NULL for
+    // every row this script creates and the provenance is unrecoverable.
+    const runResult = await require('../apps/api/src/engine')
+      .runFullRun(client, created.queryId, MEASUREMENT_ENGINE_VERSION);
     const snapshot = await repository.readRecommendationResult(client, created.queryId);
     const wallMs = Number(process.hrtime.bigint() - runStarted) / 1e6;
 

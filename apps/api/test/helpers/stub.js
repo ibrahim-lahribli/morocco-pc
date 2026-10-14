@@ -18,13 +18,7 @@ const ACTIVE_MODEL = Object.freeze({
   configuration: Object.freeze({ gpu_required_use_cases: ['GAMING', 'WORKSTATION'] }),
 });
 
-const QUERY_ROW = Object.freeze({
-  id: '11111111-1111-4111-8111-111111111111',
-  budget_amount: '20000',
-  currency: 'MAD',
-  use_case: 'GAMING',
-  created_at: new Date('2026-10-07T09:00:00.000Z'),
-});
+const TEST_ENGINE_VERSION = 'test-sha';
 
 const SAMPLE_BUDGET_FLOOR = Object.freeze({
   cheapest_total: 4477,
@@ -37,7 +31,29 @@ const SAMPLE_BUDGET_FLOOR = Object.freeze({
   missing_roles: Object.freeze([]),
 });
 
-/** Two builds: b-1 all-SEED_UNVERIFIED, b-2 all-VERIFIED, plus a null component row. */
+/**
+ * The query row as SELECT_QUERY_SQL returns it.
+ *
+ * `budget_floor` is an OBJECT, not a JSON string, because pg parses a jsonb
+ * column before the presenter ever sees it - the same wire-shape discipline the
+ * NUMERIC fixtures below follow in reverse. A string here would have let a
+ * JSON.parse-on-an-object bug pass every test.
+ */
+const QUERY_ROW = Object.freeze({
+  id: '11111111-1111-4111-8111-111111111111',
+  budget_amount: '20000',
+  currency: 'MAD',
+  use_case: 'GAMING',
+  created_at: new Date('2026-10-07T09:00:00.000Z'),
+  budget_floor: SAMPLE_BUDGET_FLOOR,
+});
+
+/**
+ * Two builds: b-1 all-SEED_UNVERIFIED, b-2 all-VERIFIED, plus a null component
+ * row. The per-result provenance facts (Decision 46) carry TEST_ENGINE_VERSION
+ * and a DIFFERENT strategy key per rank, so a presenter that read one value for
+ * both builds - or read the wrong row - cannot pass.
+ */
 const SAMPLE_ROWS = [
   {
     rank: 1,
@@ -47,6 +63,8 @@ const SAMPLE_ROWS = [
     total_price: '12000.00',
     build_score: '77.5',
     compatibility_status: 'PASS',
+    engine_version: TEST_ENGINE_VERSION,
+    strategy_key: 'PERFORMANCE',
     component_id: 'c-1a',
     role: 'CPU',
     product_id: 'p-cpu',
@@ -65,6 +83,8 @@ const SAMPLE_ROWS = [
     total_price: '12000.00',
     build_score: '77.5',
     compatibility_status: 'PASS',
+    engine_version: TEST_ENGINE_VERSION,
+    strategy_key: 'PERFORMANCE',
     component_id: 'c-1b',
     role: 'GPU',
     product_id: 'p-gpu',
@@ -83,6 +103,8 @@ const SAMPLE_ROWS = [
     total_price: '9800.50',
     build_score: '70',
     compatibility_status: 'PASS',
+    engine_version: TEST_ENGINE_VERSION,
+    strategy_key: 'VALUE',
     component_id: 'c-2a',
     role: 'CPU',
     product_id: 'p-cpu-2',
@@ -102,6 +124,8 @@ const SAMPLE_ROWS = [
     total_price: '9800.50',
     build_score: '70',
     compatibility_status: 'PASS',
+    engine_version: TEST_ENGINE_VERSION,
+    strategy_key: 'VALUE',
     component_id: null,
     role: null,
     product_id: null,
@@ -113,8 +137,6 @@ const SAMPLE_ROWS = [
     variant_sku: null,
   },
 ];
-
-const TEST_ENGINE_VERSION = 'test-sha';
 
 function createRepositoryStub(overrides) {
   const state = { createCalls: [], readCalls: [] };
@@ -139,10 +161,14 @@ function createEngineStub(runFullRun) {
   const calls = [];
   return {
     calls,
-    async runFullRun(client, queryId) {
+    // The third argument is FORWARDED, not swallowed: it is the deploy the
+    // engine records on each result row (Decision 46), so a stub that dropped
+    // it would make a test that inspects `engine_version` fail for a reason
+    // that has nothing to do with the code under test.
+    async runFullRun(client, queryId, engineVersion) {
       calls.push(queryId);
       if (typeof runFullRun === 'function') {
-        return runFullRun(client, queryId);
+        return runFullRun(client, queryId, engineVersion);
       }
       return { budget_floor: SAMPLE_BUDGET_FLOOR };
     },

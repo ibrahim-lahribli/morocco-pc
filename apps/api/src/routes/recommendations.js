@@ -13,9 +13,16 @@
  * committed rows instead of trusting the engine's in-memory result, so the two
  * endpoints cannot disagree about a persisted field - not because someone
  * remembered to keep them in step, but because there is only one code path.
- * `budget_floor` and `engine_version` are the deliberate exceptions: they are
- * pass-only facts with no column to read back, so GET serves them as null and
- * `served_by.engine_version` always names the deploy that answered.
+ *
+ * As of migration 019 that property has NO exception. `budget_floor` and the
+ * per-build `engine_version` / `strategy_key` used to be pass-only facts served
+ * from the engine's in-memory result on POST and as null on GET; they are now
+ * columns (Decision 46), and this presenter reads them back like every other
+ * field. The engine result is no longer consulted for the response at all - its
+ * only remaining role is to decide the status code, via whether builds exist.
+ * `served_by.engine_version` stays what it always was: the deploy that ANSWERED
+ * this request, which is a different question from the deploy that RAN the pass
+ * (`engine_version`).
  *
  * Status codes:
  *   201  a recommendation with at least one build
@@ -65,9 +72,45 @@ function toIsoOrNull(value) {
 }
 
 /**
+ * The persisted Decision 27 diagnostic, or null when none was recorded.
+ *
+ * pg parses a `jsonb` column into a JS value already, so the ordinary path here
+ * is an OBJECT and the string branch exists only for safety. Calling
+ * JSON.parse unconditionally - the obvious reading of "read a JSON column" -
+ * would throw `Unexpected token o` on the object the driver actually returns,
+ * and a fixture that stored the floor as a JSON string would have hidden that
+ * behind a passing test.
+ */
+function parseFloor(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    if (value.length === 0) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(value);
+      return parsed === null ? null : parsed;
+    } catch (_error) {
+      return null;
+    }
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value;
+  }
+  return null;
+}
+
+/**
  * Group the flattened rows into builds, preserving the statement's ORDER BY.
  * A build_candidate with no component rows still appears (its `components` is
  * empty) because the candidate row is the unit of existence.
+ *
+ * `engine_version` and `strategy_key` are per-RESULT-row facts, so they are
+ * read once per build from its first row (every row of one build shares the
+ * result row). NULL is passed through untouched: a pre-019 row genuinely does
+ * not record which deploy produced it.
  */
 function groupBuilds(rows) {
   const order = [];
@@ -78,6 +121,8 @@ function groupBuilds(rows) {
     if (build === undefined) {
       build = {
         rank: toNumberOrNull(row.rank),
+        engine_version: row.engine_version === undefined ? null : row.engine_version,
+        strategy_key: row.strategy_key === undefined ? null : row.strategy_key,
         total_price: toNumberOrNull(row.total_price),
         build_score: toNumberOrNull(row.build_score),
         compatibility_status: row.compatibility_status === undefined ? null : row.compatibility_status,
@@ -118,16 +163,24 @@ function priceStatusFor(components) {
 }
 
 /**
- * Present one persisted result as the wire contract. Pure.
+ * Present one persisted result as the wire contract. Pure, and fed ONLY by
+ * persisted rows - the engine's in-memory result is not a parameter, which is
+ * what makes the two verbs agree by construction rather than by discipline.
  *
- * @param {object} source { snapshot, budgetFloor, engineVersion, reason,
- *        deployVersion }
+ * @param {object} source { snapshot, reason, deployVersion }
  * @returns {object} the response body
  */
 function presentRecommendationResult(source) {
-  const { snapshot, budgetFloor, engineVersion, reason, deployVersion } = source;
+  const { snapshot, reason, deployVersion } = source;
   const query = snapshot.query || {};
   const grouped = groupBuilds(snapshot.rows || []);
+  // The top-level engine_version is the one recorded on the persisted result
+  // rows. Every rank of a single pass carries the same value (full-run derives
+  // ONE engineVersion and threads it to every rank), so the first row in
+  // statement order speaks for all of them. A zero-build pass persisted no
+  // result row and therefore records no pass engine version: null, which is why
+  // `served_by.engine_version` exists as a separate, always-answered field.
+  const persistedEngineVersion = grouped.length > 0 ? grouped[0].engine_version : null;
 
   let generatedAt = toIsoOrNull(query.created_at);
   const builds = grouped.map((build) => {
@@ -137,6 +190,12 @@ function presentRecommendationResult(source) {
     }
     return {
       rank: build.rank,
+      // Decision 46 provenance, read from THIS build's result row. Omitting
+      // either here is a 500, not a silent null: the response schema declares
+      // them, and fast-json-stringify refuses to serialize a declared property
+      // that the payload does not carry.
+      engine_version: build.engine_version,
+      strategy_key: build.strategy_key,
       total_price: build.total_price,
       build_score: build.build_score,
       compatibility_status: build.compatibility_status,
@@ -152,8 +211,10 @@ function presentRecommendationResult(source) {
     currency: query.currency === undefined ? null : query.currency,
     use_case: query.use_case === undefined ? null : query.use_case,
     generated_at: generatedAt,
-    budget_floor: budgetFloor === undefined ? null : budgetFloor,
-    engine_version: engineVersion === undefined ? null : engineVersion,
+    // Read back from recommendation_query, never recomputed here: the API has no
+    // Stage 1..11 to derive a floor from, and Decision 27 forbids inventing one.
+    budget_floor: parseFloor(query.budget_floor),
+    engine_version: persistedEngineVersion,
     reason: reason === undefined ? null : reason,
     disclaimer: DISCLAIMER,
     served_by: { engine_version: deployVersion },
@@ -229,10 +290,12 @@ function registerRecommendationRoutes(app) {
       });
 
       let reason = null;
-      let budgetFloor = null;
       try {
-        const run = await app.engine.runFullRun(client, created.queryId);
-        budgetFloor = run.budget_floor;
+        // `app.engineVersion` is handed to the engine so the pass records which
+        // deploy produced it (Decision 46). The engine result is deliberately
+        // NOT read here: every field of the response comes from the re-read
+        // below, which is what keeps POST and GET on one code path.
+        await app.engine.runFullRun(client, created.queryId, app.engineVersion);
       } catch (error) {
         if (error && error.code === 'EMPTY_CANDIDATE_POOL') {
           reason = 'EMPTY_CANDIDATE_POOL';
@@ -251,8 +314,6 @@ function registerRecommendationRoutes(app) {
 
       const payload = presentRecommendationResult({
         snapshot,
-        budgetFloor,
-        engineVersion: app.engineVersion,
         reason,
         deployVersion: app.engineVersion,
       });
@@ -285,10 +346,9 @@ function registerRecommendationRoutes(app) {
 
     return reply.code(200).send(presentRecommendationResult({
       snapshot,
-      // Pass-only facts: GET never re-runs the engine and never recomputes a
-      // floor (Decision 36 item 4), so both are explicitly null here.
-      budgetFloor: null,
-      engineVersion: null,
+      // GET never re-runs the engine and never recomputes a floor (Decision 36
+      // item 4). It no longer needs to declare anything null either: the
+      // pass facts are columns now, so the same presenter reads them back.
       reason: null,
       deployVersion: app.engineVersion,
     }));
@@ -299,6 +359,7 @@ module.exports = {
   registerRecommendationRoutes,
   presentRecommendationResult,
   groupBuilds,
+  parseFloor,
   priceStatusFor,
   toNumberOrNull,
   toIsoOrNull,

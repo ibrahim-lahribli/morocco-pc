@@ -169,13 +169,47 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
     }
     assert.ok(post.builds.every((build) => build.price_status === 'indicative'));
 
+    // ---- 1b. the pass facts came back from the ROWS, so the engine_version
+    // the API reports is the one it pushed DOWN to the engine (the Sprint 2
+    // handoff), not a value served from the engine's in-memory result.
+    for (const build of post.builds) {
+      assert.equal(build.engine_version, ENGINE_VERSION, 'each build records the deploy that produced it');
+      assert.ok(
+        ['PERFORMANCE', 'BALANCED', 'VALUE'].includes(build.strategy_key),
+        'each build records the E4 archetype that nominated it: ' + build.strategy_key
+      );
+    }
+    const provenanceRows = (await pool.query(
+      'SELECT r.rank, r.engine_version, r.strategy_key FROM recommendation_result r'
+      + ' WHERE r.recommendation_query_id = $1 ORDER BY r.rank',
+      [post.id]
+    )).rows;
+    assert.deepEqual(
+      provenanceRows.map((row) => row.engine_version),
+      post.builds.map(() => ENGINE_VERSION),
+      'every persisted result row names the deploy, so the read-back is not a coincidence'
+    );
+    assert.deepEqual(
+      provenanceRows.map((row) => row.strategy_key),
+      post.builds.map((build) => build.strategy_key),
+      'the served strategy_key is exactly the persisted one, rank for rank'
+    );
+    assert.ok(
+      post.budget_floor.cheapest_total !== null && post.budget_floor.within_budget !== null,
+      'the persisted floor is the real diagnostic'
+    );
+
     // ---- 2. GET is identical on persisted fields and never re-runs the engine
     let engineCalls = 0;
     const spyApp = createApp(pool, {
       engine: {
-        async runFullRun(client, queryId) {
+        // The third argument MUST be forwarded: engineVersion is what Decision
+        // 46 persists onto each result row, and a spy that swallowed it would
+        // leave the column NULL and make a read-path test fail for a reason
+        // that has nothing to do with the read path.
+        async runFullRun(client, queryId, engineVersion) {
           engineCalls += 1;
-          return engine.runFullRun(client, queryId);
+          return engine.runFullRun(client, queryId, engineVersion);
         },
       },
     });
@@ -190,17 +224,19 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
     assert.equal(get.budget_amount, post.budget_amount);
     assert.equal(get.use_case, post.use_case);
     assert.equal(get.currency, post.currency);
-    assert.equal(get.budget_floor, null);
-    assert.equal(get.engine_version, null);
     assert.equal(get.served_by.engine_version, ENGINE_VERSION);
-    // Full-body deep equality: GET must equal POST on EVERY field except the
-    // two pass-only facts, which GET serves as null by contract. A field-by-
-    // field comparison would silently pass on a field one path forgets.
-    assert.deepEqual(
-      get,
-      Object.assign({}, post, { budget_floor: null, engine_version: null }),
-      'GET is POST minus the two pass-only facts, deep-equal on everything else'
-    );
+    // Full-body deep equality with NO exception list. Before migration 019 this
+    // had to subtract the two pass-only facts (`budget_floor`, `engine_version`),
+    // which GET served as null by contract; they are columns now, so a later GET
+    // reproduces the POST reply exactly - including the nested JSONB floor.
+    assert.deepEqual(get, post, 'GET equals POST on every field, with no pass-only exception');
+
+    // A SECOND read of the same rows must be byte-identical to the first: the
+    // read path is idempotent, and jsonb key order is normalized by the column
+    // type rather than by luck of the insert.
+    const refetched = await app.inject({ method: 'GET', url: '/v1/recommendations/' + post.id });
+    assert.equal(refetched.statusCode, 200);
+    assert.deepEqual(refetched.json(), get, 'a second GET reads back byte-identical rows');
 
     // ---- 2b. residue exists BEFORE cleanup, with the expected shape ---------
     // (asserting zero AFTER cleanup only proves something if cleanup had real
@@ -275,6 +311,25 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
     assert.equal(emptyBody.budget_floor.within_budget, false);
     assert.equal(emptyBody.budget_floor.budget_amount, 1000);
     assert.equal(emptyBody.reason, null);
+    // The floor is PERSISTED for a zero-build pass too (Decision 27 computes it
+    // unconditionally and Decision 46 writes it unconditionally), so a later GET
+    // can still explain the emptiness. A floor that existed only in the POST
+    // reply would be exactly the A1/A3 gap migration 019 closed.
+    assert.equal(emptyBody.engine_version, null, 'no result row exists, so no pass engine version was recorded');
+    assert.equal(emptyBody.served_by.engine_version, ENGINE_VERSION);
+    const emptyRow = (await pool.query(
+      'SELECT budget_floor FROM recommendation_query WHERE id = $1',
+      [emptyBody.id]
+    )).rows[0];
+    assert.ok(emptyRow.budget_floor !== null, 'the zero-build floor is in the COLUMN, not just the reply');
+    assert.equal(emptyRow.budget_floor.within_budget, false);
+    const emptyRefetch = await app.inject({ method: 'GET', url: '/v1/recommendations/' + emptyBody.id });
+    assert.deepEqual(
+      emptyRefetch.json().budget_floor,
+      emptyBody.budget_floor,
+      'a GET of the empty pass reproduces the floor POST reported'
+    );
+    assert.equal(emptyRefetch.json().engine_version, null);
 
     // ---- 4. vocabulary derived from the REAL model -------------------------
     const pre422 = await countAll(pool);
