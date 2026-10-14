@@ -12,8 +12,11 @@
  *
  * Scope: the COMPLETE Decision 3(a) contract -- not merely the Engine 3 subset
  * (`candidate_caps`, `gpu_required_use_cases`) that has a consumer today. Every
- * key is REQUIRED; there are no silent defaults, no partial acceptance, no
- * normalization, and no acceptance of NULL.
+ * key in `SCORING_MODEL_CONFIGURATION_KEYS` is REQUIRED; there are no silent
+ * defaults, no partial acceptance, no normalization, and no acceptance of NULL.
+ * `OPTIONAL_CONFIGURATION_KEYS` (Decision 37: `use_case_profiles`) are accepted
+ * when DECLARED and omitted otherwise, so a model that predates the key stays
+ * valid byte-for-byte.
  *
  * Decision 11 Rule 3 + Rule 4 failure semantics (existing error vocabulary, no
  * new code): configuration NULL/absent -> MISSING_REQUIRED_FIELD
@@ -46,6 +49,7 @@
 'use strict';
 
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const { validateUseCaseProfiles, USE_CASE_PROFILES_KEY } = require('./use-cases');
 
 /** The frozen Decision 3(a) top-level vocabulary, in documented order. */
 const SCORING_MODEL_CONFIGURATION_KEYS = Object.freeze([
@@ -61,11 +65,31 @@ const SCORING_MODEL_CONFIGURATION_KEYS = Object.freeze([
   'gpu_required_use_cases',
 ]);
 
+/**
+ * OPTIONAL top-level keys (Decision 37). Declaring one is allowed and validated
+ * strictly; omitting it keeps a model valid byte-for-byte. `use_case_profiles`
+ * lives here so the retained `seed-minimal-v1` still validates unchanged while a
+ * launch-v2 model can own its use-case policy and vocabulary.
+ */
+/** OPTIONAL top-level key (Decision 42, E5): per-resolution policy profiles. */
+const RESOLUTION_PROFILES_KEY = 'resolution_profiles';
+
+const OPTIONAL_CONFIGURATION_KEYS = Object.freeze([
+  USE_CASE_PROFILES_KEY,
+  RESOLUTION_PROFILES_KEY,
+]);
+
+/** `resolution_profiles.<resolution>` is a strict closed one-field contract. */
+const RESOLUTION_PROFILE_FIELDS = Object.freeze(['vram_floor_gb']);
+
 /** `candidate_caps` is a strict closed two-key contract (Decision 11 Rule 7). */
 const CANDIDATE_CAPS_FIELDS = Object.freeze([
   'top_k_per_role',
   'max_builds_per_query',
 ]);
+
+/** OPTIONAL `candidate_caps` key (Decision 40, E3): absent = no per-pair quota. */
+const CANDIDATE_CAPS_OPTIONAL_FIELDS = Object.freeze(['max_builds_per_pair']);
 
 /** `staleness` is a strict closed two-key contract (Decision 3(a)). */
 const STALENESS_FIELDS = Object.freeze([
@@ -238,7 +262,8 @@ function validateStaleness(staleness) {
 }
 
 /**
- * `candidate_caps`: strict closed { top_k_per_role, max_builds_per_query }.
+ * `candidate_caps`: strict closed { top_k_per_role, max_builds_per_query } plus
+ * the OPTIONAL max_builds_per_pair (Decision 40), which is absent by default.
  * Validated and preserved only -- never applied here (Decision 11 Rule 7).
  */
 function validateCandidateCaps(candidate_caps) {
@@ -250,7 +275,7 @@ function validateCandidateCaps(candidate_caps) {
     );
   }
   for (const key of Object.keys(candidate_caps)) {
-    if (!CANDIDATE_CAPS_FIELDS.includes(key)) {
+    if (!CANDIDATE_CAPS_FIELDS.includes(key) && !CANDIDATE_CAPS_OPTIONAL_FIELDS.includes(key)) {
       fail(
         ERROR_CODES.INVALID_FIELD_VALUE,
         `candidate_caps.${key}`,
@@ -258,9 +283,12 @@ function validateCandidateCaps(candidate_caps) {
       );
     }
   }
-  for (const key of CANDIDATE_CAPS_FIELDS) {
+  for (const key of [...CANDIDATE_CAPS_FIELDS, ...CANDIDATE_CAPS_OPTIONAL_FIELDS]) {
     if (!Object.prototype.hasOwnProperty.call(candidate_caps, key)) {
-      fail(ERROR_CODES.MISSING_REQUIRED_FIELD, `candidate_caps.${key}`, `"candidate_caps" requires "${key}"`);
+      if (CANDIDATE_CAPS_FIELDS.includes(key)) {
+        fail(ERROR_CODES.MISSING_REQUIRED_FIELD, `candidate_caps.${key}`, `"candidate_caps" requires "${key}"`);
+      }
+      continue;
     }
     const value = candidate_caps[key];
     if (
@@ -276,10 +304,14 @@ function validateCandidateCaps(candidate_caps) {
       );
     }
   }
-  return {
+  const caps = {
     top_k_per_role: candidate_caps.top_k_per_role,
     max_builds_per_query: candidate_caps.max_builds_per_query,
   };
+  if (Object.prototype.hasOwnProperty.call(candidate_caps, 'max_builds_per_pair')) {
+    caps.max_builds_per_pair = candidate_caps.max_builds_per_pair;
+  }
+  return caps;
 }
 
 /**
@@ -289,6 +321,64 @@ function validateCandidateCaps(candidate_caps) {
  * out-of-vocabulary values are accepted; the canonical vocabulary is never
  * enforced at runtime.
  */
+/**
+ * OPTIONAL `resolution_profiles` (Decision 42, E5): a map of resolution string
+ * -> closed one-field profile { vram_floor_gb: integer >= 1 }. The resolution
+ * keys are the MODEL's vocabulary (the Decision 37 family: the model owns its
+ * use-case and resolution vocabularies); the engine routes declared keys and
+ * treats everything else as "no floor". Absent = no VRAM floor anywhere.
+ */
+function validateResolutionProfiles(resolution_profiles) {
+  if (!isJsonObject(resolution_profiles)) {
+    fail(
+      ERROR_CODES.INVALID_INPUT,
+      'resolution_profiles',
+      '"resolution_profiles" must be a JSON object keyed by resolution'
+    );
+  }
+  const validated = {};
+  for (const resolution of Object.keys(resolution_profiles)) {
+    if (typeof resolution !== 'string' || resolution.trim().length === 0) {
+      fail(
+        ERROR_CODES.INVALID_FIELD_VALUE,
+        'resolution_profiles',
+        '"resolution_profiles" keys must be non-blank resolution strings'
+      );
+    }
+    const basePath = `resolution_profiles.${resolution}`;
+    const profile = resolution_profiles[resolution];
+    if (!isJsonObject(profile)) {
+      fail(ERROR_CODES.INVALID_INPUT, basePath, `"${basePath}" must be a JSON object`);
+    }
+    for (const key of Object.keys(profile)) {
+      if (!RESOLUTION_PROFILE_FIELDS.includes(key)) {
+        fail(
+          ERROR_CODES.INVALID_FIELD_VALUE,
+          `${basePath}.${key}`,
+          `Unknown resolution profile field "${key}"`
+        );
+      }
+    }
+    if (!Object.prototype.hasOwnProperty.call(profile, 'vram_floor_gb')) {
+      fail(
+        ERROR_CODES.MISSING_REQUIRED_FIELD,
+        `${basePath}.vram_floor_gb`,
+        `"${basePath}" requires "vram_floor_gb"`
+      );
+    }
+    const floor = profile.vram_floor_gb;
+    if (typeof floor !== 'number' || !Number.isInteger(floor) || floor < 1) {
+      fail(
+        ERROR_CODES.INVALID_FIELD_VALUE,
+        `${basePath}.vram_floor_gb`,
+        `"${basePath}.vram_floor_gb" must be an integer >= 1`
+      );
+    }
+    validated[resolution] = { vram_floor_gb: floor };
+  }
+  return validated;
+}
+
 function validateGpuRequiredUseCases(gpu_required_use_cases) {
   if (!Array.isArray(gpu_required_use_cases)) {
     fail(
@@ -340,9 +430,12 @@ function validateScoringModelConfiguration(configuration) {
     );
   }
 
-  // --- unknown top-level keys ---------------------------------------------
+  // --- unknown top-level keys (required OR optional vocabulary) -----------
   for (const key of Object.keys(configuration)) {
-    if (!SCORING_MODEL_CONFIGURATION_KEYS.includes(key)) {
+    if (
+      !SCORING_MODEL_CONFIGURATION_KEYS.includes(key) &&
+      !OPTIONAL_CONFIGURATION_KEYS.includes(key)
+    ) {
       fail(
         ERROR_CODES.INVALID_FIELD_VALUE,
         key,
@@ -389,7 +482,7 @@ function validateScoringModelConfiguration(configuration) {
   );
 
   // Fresh nested copies are frozen; the caller's JSONB object is untouched.
-  return deepFreeze({
+  const validated = {
     version_note: configuration.version_note,
     role_weights,
     type_weights,
@@ -400,10 +493,29 @@ function validateScoringModelConfiguration(configuration) {
     staleness,
     candidate_caps,
     gpu_required_use_cases,
-  });
+  };
+  // Optional (Decision 37): present iff declared, so a legacy model's validated
+  // object keeps exactly its old shape and remains byte-identical.
+  if (Object.prototype.hasOwnProperty.call(configuration, USE_CASE_PROFILES_KEY)) {
+    validated[USE_CASE_PROFILES_KEY] = validateUseCaseProfiles(
+      configuration[USE_CASE_PROFILES_KEY]
+    );
+  }
+  // Optional (Decision 42, E5): present iff declared - same pattern as above,
+  // so a model without `resolution_profiles` validates byte-identically.
+  if (Object.prototype.hasOwnProperty.call(configuration, RESOLUTION_PROFILES_KEY)) {
+    validated[RESOLUTION_PROFILES_KEY] = validateResolutionProfiles(
+      configuration[RESOLUTION_PROFILES_KEY]
+    );
+  }
+
+  return deepFreeze(validated);
 }
 
 module.exports = {
   validateScoringModelConfiguration,
   SCORING_MODEL_CONFIGURATION_KEYS,
+  OPTIONAL_CONFIGURATION_KEYS,
+  RESOLUTION_PROFILES_KEY,
+  validateResolutionProfiles,
 };

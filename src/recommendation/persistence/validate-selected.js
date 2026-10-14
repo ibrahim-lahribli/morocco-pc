@@ -1,6 +1,8 @@
 /**
  * Engine 5b - persistence input validation (Decision 19/20, validation only).
- * Validates the `selected` array from selectDiverseTop before persistence.
+ * Validates the `selected` array from the pre-persistence showcase before
+ * persistence (`selectArchetypes().selected` since Decision 41; the array
+ * shape is unchanged from the `selectDiverseTop` walk it replaced).
  * Pure: no DB, no I/O, no clock, no randomness, no mutation.
  * Category and build.currency are never read (Decision 19).
  * Decision 22 item 5: entry.explanation is REQUIRED non-empty string.

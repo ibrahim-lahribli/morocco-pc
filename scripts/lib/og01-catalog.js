@@ -1,5 +1,7 @@
 'use strict';
 
+const modelPin = require('./model-pin');
+
 /**
  * scripts/lib/og01-catalog.js — single owner of the OG-01 catalog-derivation
  * policy (read-only).
@@ -125,6 +127,13 @@ const SCORING_MODELS_SQL = `SELECT id::text AS id, name, version,
  WHERE is_active = true
  ORDER BY id ASC;`;
 
+/** The same projection, but for ONE pinned active model (Step-2 item 1 / OG-39). */
+const PINNED_SCORING_MODEL_SQL = `SELECT id::text AS id, name, version,
+       configuration->'role_weights' AS role_weights
+  FROM scoring_model
+ WHERE is_active = true AND name = $1 AND version = $2
+ ORDER BY id ASC;`;
+
 const OFFERS_SQL = `SELECT o.product_id, min(o.price) AS min_price, max(o.price) AS max_price,
        count(*)::int AS offer_count
   FROM store_offer o
@@ -156,6 +165,9 @@ function requiredTypesByCategory(roleWeights) {
  * Derive the OG-01 catalog view from the live DB.
  *
  * @param {object} db pg-compatible client exposing query(sql)
+ * @param {object} [options]
+ * @param {string} [options.pin] `name@version` of the active model whose
+ *   `role_weights` define coverage; defaults to SCORING_MODEL_PIN when set.
  * @returns {Promise<{model: {id,name,version}, requiredByCategory: Map,
  *   products: Array<{id,name,category,coveredTypes:Set,minPrice,maxPrice,offerCount}>,
  *   fixtures: Set<string>, partialFixtures: Set<string>}>}
@@ -164,17 +176,33 @@ function requiredTypesByCategory(roleWeights) {
  *   numbers in offer currency (MAD today) or null when the product has no
  *   active offer.
  */
-async function loadOg01Catalog(db) {
+async function loadOg01Catalog(db, options = {}) {
   if (db === null || typeof db !== 'object' || typeof db.query !== 'function') {
     throw new Error('loadOg01Catalog requires a database client exposing query()');
   }
 
-  const models = await db.query(SCORING_MODELS_SQL);
+  // Step-2 item 1 (OG-39): coverage follows ONE active model's role_weights. A
+  // pin (explicit here, else SCORING_MODEL_PIN) selects it by name@version, so
+  // this stays unambiguous on a two-active-model branch. With NO pin the old
+  // exactly-ONE-active check stands unchanged - and stays LOUD rather than
+  // silently deriving coverage from whichever row happened to sort first.
+  const rawPin = options.pin !== undefined && options.pin !== null
+    ? options.pin
+    : modelPin.modelPinFromEnv();
+  const pinned = rawPin === null ? null : modelPin.parseModelPin(rawPin, 'OG-01 coverage model pin');
+  const models = pinned === null
+    ? await db.query(SCORING_MODELS_SQL)
+    : await db.query(PINNED_SCORING_MODEL_SQL, [pinned.name, pinned.version]);
   if (models.rows.length !== 1) {
     throw new Error(
-      'expected exactly ONE active scoring_model row, found ' +
-        models.rows.length +
-        ' (coverage cannot be derived unambiguously)'
+      pinned === null
+        ? 'expected exactly ONE active scoring_model row, found ' +
+            models.rows.length +
+            ' (coverage cannot be derived unambiguously; set ' +
+            modelPin.MODEL_PIN_ENV +
+            '=<name@version> to choose one)'
+        : 'scoring-model pin ' + rawPin + ' matched ' + models.rows.length +
+            ' active row(s); coverage cannot be derived unambiguously'
     );
   }
   const model = models.rows[0];

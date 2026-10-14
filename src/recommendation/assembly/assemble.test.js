@@ -7,6 +7,7 @@ const path = require('node:path');
 
 const { assembleBuilds, EXPANSION_ORDER } = require('./assemble');
 const { priceKey, validatePrices } = require('./prices');
+const { selectDiverseTop } = require('../ranking/select-diverse');
 const { validateEngine3Input } = require('./input');
 const { ROLE_CATEGORIES, COMPONENT_ROLES } = require('../candidates/roles');
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
@@ -1009,12 +1010,12 @@ function o2MixedContext() {
   return Object.freeze({
     candidates: Object.freeze({}),
     specs: Object.freeze({
-      'p:cpu-1': { socket_id: 'am5' },
-      'p:mb-1': { socket_id: 'am5', memory_type_id: 'ddr5', form_factor: 'ATX' },
-      'p:ram-1': { memory_type_id: 'ddr5' },
+      'p:cpu-1': { socket_id: 'am5', tdp_watts: 125 },
+      'p:mb-1': { socket_id: 'am5', memory_type_id: 'ddr5', form_factor: 'ATX', dimm_slots: 4, max_memory_capacity_gb: 128 },
+      'p:ram-1': { memory_type_id: 'ddr5', module_count: 2, capacity_per_module_gb: 8 },
       'p:psu-1': { rated_wattage: 650 },
       'p:case-1': { max_gpu_length_mm: 350, max_gpu_thickness_slots: 4, max_cpu_cooler_height_mm: 170 },
-      'p:cooler-1': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155 },
+      'p:cooler-1': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155, max_tdp_watts: 250 },
     }),
     platform_by_socket: Object.freeze({}),
     compat: Object.freeze({
@@ -1123,12 +1124,12 @@ test('Decision 23 O2: each co-occurring pair is counted once', () => {
   const filteringContext = Object.freeze({
     candidates: Object.freeze({}),
     specs: Object.freeze({
-      'p:cpu-1': { socket_id: 'am5' },
-      'p:mb-1': { socket_id: 'am5', memory_type_id: 'ddr5', form_factor: 'ATX' },
-      'p:ram-1': { memory_type_id: 'ddr5' },
+      'p:cpu-1': { socket_id: 'am5', tdp_watts: 125 },
+      'p:mb-1': { socket_id: 'am5', memory_type_id: 'ddr5', form_factor: 'ATX', dimm_slots: 4, max_memory_capacity_gb: 128 },
+      'p:ram-1': { memory_type_id: 'ddr5', module_count: 2, capacity_per_module_gb: 8 },
       'p:psu-1': { rated_wattage: 650 },
       'p:case-1': { max_gpu_length_mm: 350, max_gpu_thickness_slots: 4, max_cpu_cooler_height_mm: 170 },
-      'p:cooler-1': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155 },
+      'p:cooler-1': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155, max_tdp_watts: 250 },
     }),
     platform_by_socket: Object.freeze({ am5: 'plat-am5' }),
     compat: Object.freeze({
@@ -1456,15 +1457,17 @@ test('Decision 16: a pairwise FAIL with an already-picked partner abandons the b
   );
   assert.equal(ungated.builds.length, 8);
 
-  // Decision 23 O2: the count is the build-local re-evaluation (8 slots with
-  // a GPU, 6 on the omit path). Derivation: cpu-1/mb-budget and both
-  // cpus x mb-tier match sockets with no support row (cpu specs carry no
-  // product_family_id, so the family lookup cannot match) -> UNKNOWN; the
-  // context carries no memory/platform/form-factor/cooler/GPU/radiator
-  // data, so the other slots are UNKNOWN too; none is FAIL (a FAIL pair
-  // would have abandoned the branch before descent).
+  // Decision 23 O2: the count is the build-local re-evaluation (11 slots with
+  // a GPU, 9 on the omit path - E8/Decision 45 added cooler_tdp,
+  // mb_memory_slots and mb_memory_capacity to PAIRWISE_CHECKS). Derivation:
+  // cpu-1/mb-budget and both cpus x mb-tier match sockets with no support
+  // row (cpu specs carry no product_family_id, so the family lookup cannot
+  // match) -> UNKNOWN; the context carries no memory/platform/form-factor/
+  // cooler/GPU/radiator/TDP/capacity data, so the other slots are UNKNOWN
+  // too; none is FAIL (a FAIL pair would have abandoned the branch before
+  // descent).
   for (const b of out.builds) {
-    assert.equal(b.unknown_pairwise_count, idsOf(b).GPU ? 8 : 6);
+    assert.equal(b.unknown_pairwise_count, idsOf(b).GPU ? 11 : 9);
   }
 });
 
@@ -1833,3 +1836,436 @@ test('full pipeline determinism: repeated composition from identical input is de
 
 
 
+
+// ---------------------------------------------------------------------------
+// E3 (Decision 40): optional candidate_caps.max_builds_per_pair quota.
+// ---------------------------------------------------------------------------
+
+/** Six GPUs, two PSUs and two coolers: an uncapped walk spends its halt on the first GPUs. */
+function quotaFixture() {
+  return [
+    verdict('CPU', 'c1'),
+    verdict('MOTHERBOARD', 'm1'),
+    verdict('RAM', 'r1'),
+    verdict('GPU', 'g1'),
+    verdict('GPU', 'g2'),
+    verdict('GPU', 'g3'),
+    verdict('GPU', 'g4'),
+    verdict('GPU', 'g5'),
+    verdict('GPU', 'g6'),
+    verdict('PSU', 'psu1'),
+    verdict('PSU', 'psu2'),
+    verdict('CASE', 'case1'),
+    verdict('CPU_COOLER', 'cool1'),
+    verdict('CPU_COOLER', 'cool2'),
+    verdict('SSD_BOOT', 'ssd1'),
+  ];
+}
+
+function assembleWithQuota(maxBuildsPerPair, maxBuilds = 10) {
+  const input = engineInput({
+    results: quotaFixture(),
+    useCase: 'office',
+    gpuRequired: ['office'],
+    maxBuilds,
+  });
+  if (maxBuildsPerPair !== undefined) {
+    input.candidate_caps = { ...input.candidate_caps, max_builds_per_pair: maxBuildsPerPair };
+  }
+  return assembleBuilds(input).builds;
+}
+
+function pairSignature(build) {
+  return build.components
+    .filter((c) => c.component_role === 'CPU' || c.component_role === 'GPU')
+    .map((c) => c.product_id)
+    .join('|');
+}
+
+function distinctPairCount(builds) {
+  return new Set(builds.map(pairSignature)).size;
+}
+
+test('E3: absent quota keeps the pre-E3 walk - the halt is spent on the first GPUs', () => {
+  const builds = assembleWithQuota(undefined);
+  assert.equal(builds.length, 10);
+  assert.equal(distinctPairCount(builds), 3);
+});
+
+test('E3: max_builds_per_pair = 1 reaches six distinct pairs under the same halt', () => {
+  const builds = assembleWithQuota(1);
+  assert.equal(builds.length, 6);
+  assert.equal(distinctPairCount(builds), 6);
+});
+
+test('E3: max_builds_per_pair = 2 caps every pair at two builds', () => {
+  const builds = assembleWithQuota(2);
+  assert.equal(builds.length, 10);
+  const perPair = new Map();
+  for (const build of builds) {
+    const key = pairSignature(build);
+    perPair.set(key, (perPair.get(key) || 0) + 1);
+  }
+  for (const count of perPair.values()) {
+    assert.ok(count <= 2, 'a pair exceeded its quota: ' + count);
+  }
+  assert.equal(distinctPairCount(builds), 5);
+});
+
+test('E3: the quota walk is deterministic and preserves Rule order within each pair', () => {
+  const first = assembleWithQuota(1);
+  const second = assembleWithQuota(1);
+  assert.deepEqual(first, second);
+  assert.deepEqual(first.map(pairSignature), ['c1|g1', 'c1|g2', 'c1|g3', 'c1|g4', 'c1|g5', 'c1|g6']);
+});
+
+test('E3: a non-positive or non-integer quota fails with the nested path', () => {
+  for (const bad of [0, -1, 1.5, '2', null]) {
+    assert.throws(
+      () => assembleWithQuota(bad),
+      (error) => error instanceof CandidateSelectionError
+        && error.code === ERROR_CODES.INVALID_FIELD_VALUE
+        && error.field === 'candidate_caps.max_builds_per_pair',
+      'expected INVALID_FIELD_VALUE for max_builds_per_pair=' + String(bad)
+    );
+  }
+});
+
+test('E3/E4: the quota partition and the ranking pair key agree on the same builds', () => {
+  // Engine 3's quota keys a 4-tuple (product AND variant of both sides); the
+  // ranking pair key (select-diverse / select-archetypes) is
+  // `${CPU product_id}|${GPU variant or ''}` and drops the GPU product_id. The
+  // two agree only under the offers/select.js variant-identity rule, and nothing
+  // pinned that agreement. So drive the real quota walk and re-project ITS OWN
+  // emitted builds through the ranking selector: if either key drifted, the
+  // ranking selector would drop a build the quota already bounded.
+  const builds = assembleWithQuota(2);
+  assert.equal(builds.length, 10);
+  const ranked = builds.map((build, index) => ({
+    build,
+    build_score: 100 - index,
+    total_price: build.total_price,
+    compatibility_status: 'PASS',
+    signature: 'sig-' + index,
+    explanation: null,
+  }));
+  const projected = selectDiverseTop({ ranked, limit: 10, maxPerPair: 2 });
+  assert.equal(
+    projected.dropped_count,
+    0,
+    'the ranking pair key grouped builds differently from the quota'
+  );
+  assert.equal(projected.selected.length, 10);
+});
+
+// ---------------------------------------------------------------------------
+// E5 (Decision 42): optional resolution VRAM floor at GPU depth.
+// ---------------------------------------------------------------------------
+/** Filtering context whose GPU variant specs carry VRAM (and nothing else). */
+function vramContext(vramByVariant) {
+  const specs = {};
+  for (const variant of Object.keys(vramByVariant)) {
+    specs['v:' + variant] = { vram_capacity_gb: vramByVariant[variant] };
+  }
+  return { candidates: {}, specs, platform_by_socket: {}, compat: {} };
+}
+
+/** One CPU/MB/RAM/PSU/CASE/SSD + the given GPUs; GPU REQUIRED (no omit path). */
+function vramFixture(gpuIds) {
+  const results = [
+    verdict('CPU', 'c1'),
+    verdict('MOTHERBOARD', 'm1'),
+    verdict('RAM', 'r1'),
+    verdict('PSU', 'psu1'),
+    verdict('CASE', 'case1'),
+    verdict('CPU_COOLER', 'cool1'),
+    verdict('SSD_BOOT', 'ssd1'),
+  ];
+  for (const id of gpuIds) results.push(verdict('GPU', id));
+  return results;
+}
+
+function assembleWithVramFloor({ gpuIds, vramByVariant, floor }) {
+  const input = engineInput({
+    results: vramFixture(gpuIds),
+    useCase: 'GAMING',
+    gpuRequired: ['GAMING'],
+    maxBuilds: 10,
+    filteringContext: vramContext(vramByVariant),
+  });
+  if (floor !== undefined) {
+    input.vram_floor_gb = floor;
+  }
+  return assembleBuilds(input).builds;
+}
+
+function gpuProductIds(builds) {
+  const ids = new Set();
+  for (const build of builds) {
+    for (const component of build.components) {
+      if (component.component_role === 'GPU') ids.add(component.product_id);
+    }
+  }
+  return [...ids].sort();
+}
+
+test('E5: the VRAM floor FIRES - a known below-floor GPU never reaches a build', () => {
+  const builds = assembleWithVramFloor({
+    gpuIds: ['g-small', 'g-big'],
+    vramByVariant: { 'g-small-var': 8, 'g-big-var': 12 },
+    floor: 10,
+  });
+  assert.ok(builds.length > 0, 'expected builds from the above-floor GPU');
+  assert.deepEqual(gpuProductIds(builds), ['g-big']);
+});
+
+test('E5: a GPU exactly at the floor is eligible (the floor is inclusive)', () => {
+  const builds = assembleWithVramFloor({
+    gpuIds: ['g-at', 'g-under'],
+    vramByVariant: { 'g-at-var': 12, 'g-under-var': 11 },
+    floor: 12,
+  });
+  assert.deepEqual(gpuProductIds(builds), ['g-at']);
+});
+
+test('E5: UNKNOWN VRAM (NULL or missing spec) is never below-floor - stays eligible', () => {
+  const builds = assembleWithVramFloor({
+    gpuIds: ['g-null', 'g-nospec'],
+    vramByVariant: { 'g-null-var': null },
+    floor: 16,
+  });
+  assert.deepEqual(gpuProductIds(builds), ['g-nospec', 'g-null']);
+});
+
+test('E5: absent floor keeps the pre-E5 walk - the below-floor GPU still assembles', () => {
+  const builds = assembleWithVramFloor({
+    gpuIds: ['g-small', 'g-big'],
+    vramByVariant: { 'g-small-var': 8, 'g-big-var': 12 },
+  });
+  assert.deepEqual(gpuProductIds(builds), ['g-big', 'g-small']);
+});
+
+test('E5: a DECLARED vram_floor_gb must be an integer >= 1 (declared null is malformed)', () => {
+  for (const bad of [null, 0, 1.5, '8']) {
+    const input = engineInput({
+      results: vramFixture(['g1']),
+      useCase: 'GAMING',
+      gpuRequired: ['GAMING'],
+      maxBuilds: 10,
+    });
+    input.vram_floor_gb = bad;
+    assert.throws(
+      () => assembleBuilds(input),
+      (error) => error instanceof CandidateSelectionError
+        && error.code === ERROR_CODES.INVALID_FIELD_VALUE
+        && error.field === 'vram_floor_gb',
+      'expected INVALID_FIELD_VALUE for vram_floor_gb=' + String(bad)
+    );
+  }
+});
+
+test('E5: a declared floor with a malformed specs map fails fast (no silent no-op)', () => {
+  // belowVramFloor reads filteringContext.specs only when a floor is declared, so
+  // a context missing that map used to turn the floor into a silent no-op. The
+  // SHAPE is now checked at the boundary; an individual absent spec row stays the
+  // legitimate UNKNOWN pinned by the test above.
+  const malformed = {
+    candidates: {},
+    platform_by_socket: {},
+    compat: {},
+  };
+  const withFloor = engineInput({
+    results: vramFixture(['g1']),
+    useCase: 'GAMING',
+    gpuRequired: ['GAMING'],
+    maxBuilds: 10,
+    filteringContext: malformed,
+  });
+  withFloor.vram_floor_gb = 8;
+  assert.throws(
+    () => assembleBuilds(withFloor),
+    (error) => error instanceof CandidateSelectionError
+      && error.code === ERROR_CODES.INVALID_INPUT
+      && error.field === 'filtering_context.specs'
+  );
+
+  // Differential: the SAME malformed context with NO declared floor still walks,
+  // so the guard is scoped to a declared floor and no other path changed.
+  const withoutFloor = engineInput({
+    results: vramFixture(['g1']),
+    useCase: 'GAMING',
+    gpuRequired: ['GAMING'],
+    maxBuilds: 10,
+    filteringContext: malformed,
+  });
+  assert.equal(Object.prototype.hasOwnProperty.call(withoutFloor, 'vram_floor_gb'), false);
+  assert.equal(assembleBuilds(withoutFloor).builds.length, 1);
+});
+// ---------------------------------------------------------------------------
+// E6 (Decision 43): a declared IGPU_ALLOWED policy makes the iGPU path the
+// ONLY path on an iGPU CPU; the legacy rule-2 OPTIONAL keeps the pre-E6 walk.
+// ---------------------------------------------------------------------------
+
+function assembleWithGpuPolicy({ gpuIds, gpuPolicy, integrated, budget }) {
+  const input = engineInput({
+    results: vramFixture(gpuIds),
+    useCase: 'OFFICE',
+    gpuRequired: ['GAMING'], // OFFICE is not in the legacy list: rule 2 fires
+    maxBuilds: 10,
+    ...(budget === undefined ? {} : { budget }),
+  });
+  if (integrated !== undefined) input.integrated_gpu_present = integrated;
+  if (gpuPolicy !== undefined) input.gpu_policy = gpuPolicy;
+  return assembleBuilds(input).builds;
+}
+
+test('E6: a declared IGPU_ALLOWED policy skips every dGPU branch on an iGPU CPU', () => {
+  const builds = assembleWithGpuPolicy({ gpuIds: ['g1', 'g2'], gpuPolicy: 'IGPU_ALLOWED' });
+  assert.ok(builds.length > 0, 'the iGPU omit path still assembles');
+  assert.deepEqual(gpuProductIds(builds), [], 'no discrete GPU reaches a build');
+});
+
+test('E6: the LEGACY rule-2 OPTIONAL (no declared policy) still walks every GPU verdict', () => {
+  const builds = assembleWithGpuPolicy({ gpuIds: ['g1', 'g2'] });
+  assert.ok(builds.length > 0, 'pre-E6 behaviour: GPU branches assemble');
+  assert.deepEqual(gpuProductIds(builds), ['g1', 'g2']);
+});
+
+test('E6: a declared IGPU_ALLOWED policy on a non-iGPU CPU keeps the GPU REQUIRED', () => {
+  const builds = assembleWithGpuPolicy({ gpuIds: ['g1'], gpuPolicy: 'IGPU_ALLOWED', integrated: { 'c1': false } });
+  assert.ok(builds.length > 0, 'the GPU walks assemble on a dGPU-only CPU');
+  assert.deepEqual(gpuProductIds(builds), ['g1']);
+});
+
+test('E6: a declared REQUIRED policy reaches the DFS - no omit path even on an iGPU CPU', () => {
+  const builds = assembleWithGpuPolicy({ gpuIds: ['g1'], gpuPolicy: 'REQUIRED' });
+  assert.ok(builds.length > 0, 'the discrete-GPU walk assembles');
+  assert.ok(
+    builds.every((build) => build.components.some((component) => component.component_role === 'GPU')),
+    'a declared REQUIRED policy forbids the GPU-omit path'
+  );
+});
+
+// E6 (Decision 43): the iGPU hard-skip is SAFE - it cannot turn a buildable
+// query into zero builds, which is why there is no fallback to the discrete
+// walk (a fallback could never fire). Omitting the GPU only RELAXES the walk:
+// every picked role has a strictly positive selected_price, so the budget gate
+// stays open; an absent pair partner contributes no FAIL (firstPairFailure);
+// and finishPath has no required-role gate. So a GPU-picking path implies its
+// GPU-less variant. Swept across budgets straddling the GPU-less total
+// (7 x 100 = 700) and the discrete total (800).
+test('E6: the iGPU-only hard-skip never empties a query the discrete walk could build', () => {
+  const gpuIds = ['g1', 'g2'];
+  const emptyAt = [];
+  const builtAt = [];
+  for (const budget of [650, 700, 750, 800, 900, 5000]) {
+    const policyOnly = assembleWithGpuPolicy({ gpuIds, gpuPolicy: 'IGPU_ALLOWED', budget });
+    const legacyWalk = assembleWithGpuPolicy({ gpuIds, budget });
+    if (legacyWalk.length > 0) {
+      assert.ok(
+        policyOnly.length > 0,
+        'budget ' + budget + ': the discrete walk built ' + legacyWalk.length +
+          ' but the iGPU-only walk is empty - the hard-skip dropped a buildable query'
+      );
+      builtAt.push(budget);
+    }
+    if (policyOnly.length === 0) {
+      emptyAt.push(budget);
+    }
+  }
+  // Non-vacuous: the sweep really produced both outcomes.
+  assert.ok(builtAt.length >= 4, 'the sweep must build at several budgets: ' + builtAt.join(','));
+  // The one empty budget is a GENUINE budget shortfall - the GPU-less build
+  // alone costs 700 - and the discrete walk is empty there too, so the policy
+  // introduces no new emptiness.
+  assert.deepEqual(emptyAt, [650], 'only the true budget shortfall is empty');
+  assert.equal(
+    assembleWithGpuPolicy({ gpuIds, budget: 650 }).length,
+    0,
+    'the discrete walk is empty at the same budget'
+  );
+  // Where the omit path fits but the GPU does not, the policy still builds.
+  assert.ok(assembleWithGpuPolicy({ gpuIds, gpuPolicy: 'IGPU_ALLOWED', budget: 700 }).length > 0);
+});
+
+test('E6: the assemble re-defense rejects a malformed declared gpu_policy', () => {
+  for (const bad of ['OPTIONAL', '', null, 1]) {
+    const input = engineInput({
+      results: vramFixture(['g1']),
+      useCase: 'OFFICE',
+      gpuRequired: ['GAMING'],
+      maxBuilds: 10,
+    });
+    input.gpu_policy = bad;
+    assert.throws(
+      () => assembleBuilds(input),
+      (error) => error instanceof CandidateSelectionError
+        && error.code === ERROR_CODES.INVALID_FIELD_VALUE
+        && error.field === 'gpu_policy',
+      'expected INVALID_FIELD_VALUE for gpu_policy=' + String(bad)
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// E8 / Decision 45: the three former Decision 26 item B rules inside the
+// walk. Registered in PAIRWISE_CHECKS as well as PAIR_EVALUATORS, so the
+// candidate filter and the DFS cannot diverge. The HARD pair prunes; the
+// SOFT pair only adds UNKNOWN.
+// ---------------------------------------------------------------------------
+
+/** E8 fixture: a clean am5 box whose RAM fits 2 slots / 16 GB. */
+function e8Context(specOverrides = {}) {
+  return pairSpecContext({
+    'p:p-cpu': { socket_id: 'am5', tdp_watts: 125 },
+    'p:p-mb': { socket_id: 'am5', dimm_slots: 2, max_memory_capacity_gb: 16 },
+    'p:p-ram': { module_count: 2, capacity_per_module_gb: 8 },
+    'p:p-psu': { rated_wattage: 650 },
+    'p:p-case': { max_gpu_length_mm: 350, max_gpu_thickness_slots: 4, max_cpu_cooler_height_mm: 170 },
+    'p:p-cooler': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155, max_tdp_watts: 250 },
+    ...specOverrides,
+  });
+}
+
+test('E8: OG-11 is HARD in the walk - an over-slot kit is never emitted', () => {
+  const results = [...fullSet(), verdict('RAM', 'p-ram-big')];
+  const context = e8Context({ 'p:p-ram-big': { module_count: 4, capacity_per_module_gb: 8 } });
+  const out = assembleBuilds(engineInput({ results, filteringContext: context }));
+
+  // Both kits are individually eligible verdicts, but the board has 2 slots:
+  // the 4-module kit fails the pair at RAM depth, so only the fitting kit is
+  // ever emitted. A rule that is merely *present* would emit both.
+  assert.equal(out.builds.length, 1);
+  assert.equal(idsOf(out.builds[0]).RAM, 'p-ram');
+});
+
+test('E8: OG-12 is HARD in the walk - an over-capacity kit is never emitted', () => {
+  const results = [...fullSet(), verdict('RAM', 'p-ram-big')];
+  const context = e8Context({ 'p:p-ram-big': { module_count: 2, capacity_per_module_gb: 32 } });
+  const out = assembleBuilds(engineInput({ results, filteringContext: context }));
+
+  // 2 x 32 GB = 64 GB over a 16 GB board: slots fit, capacity does not.
+  assert.equal(out.builds.length, 1);
+  assert.equal(idsOf(out.builds[0]).RAM, 'p-ram');
+});
+
+test('E8: OG-09 is SOFT in the walk - an under-spec cooler adds one UNKNOWN and prunes nothing', () => {
+  const results = fullSet();
+  const control = assembleBuilds(engineInput({ results, filteringContext: e8Context() }));
+  const soft = assembleBuilds(
+    engineInput({
+      results,
+      filteringContext: e8Context({ 'p:p-cooler': { cooler_requires_radiator: false, cooling_type: 'AIR', height_mm: 155, max_tdp_watts: 65 } }),
+    })
+  );
+
+  // Both assemble: the soft rule never abandons a branch. The under-spec
+  // cooler adds exactly one build-local UNKNOWN - the cooler_tdp pair - which
+  // is the differential proof that the walk really evaluates it.
+  assert.equal(control.builds.length, 1);
+  assert.equal(soft.builds.length, 1);
+  assert.equal(
+    soft.builds[0].unknown_pairwise_count,
+    control.builds[0].unknown_pairwise_count + 1
+  );
+});

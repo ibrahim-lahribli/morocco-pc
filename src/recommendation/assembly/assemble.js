@@ -15,6 +15,12 @@
  * every eligible GPU verdict in incoming order with no omit path, while
  * OPTIONAL walks every eligible GPU verdict first and then one omit path.
  *
+ * Decision 40 (E3): when candidate_caps.max_builds_per_pair is declared, a GPU
+ * branch whose (CPU, GPU) pair already holds that many builds is skipped at GPU
+ * depth, and a path whose pair is full is never emitted. The quota is enforced
+ * inside the walk, so the max_builds_per_query halt is not spent on one pair.
+ * Declared-absent keeps the pre-E3 walk exactly.
+ *
  * A path ends as soon as its running total moves past budget_amount; an
  * exact match walks on. Traversal halts once max_builds_per_query builds
  * are held. The per-role cap from the input contract is left alone here.
@@ -65,6 +71,10 @@ const {
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
 const { lookupPrice } = require('./prices');
 const { resolveGpuRequirement } = require('./gpu-policy');
+// E6 (Decision 43): staged, boundary-local copy of the Decision 37
+// GPU-policy vocabulary (one owner: ../scoring/use-cases.js GPU_POLICIES);
+// this stage must not import ../scoring (boundary pin).
+const GPU_POLICY_VALUES = Object.freeze(['REQUIRED', 'IGPU_ALLOWED']);
 // Decision 16: the pairwise gate reuses Engine 2D's own pair evaluators and
 // Engine 1's aggregation - never a second implementation of either.
 const {
@@ -76,6 +86,10 @@ const {
   evaluateCaseRadiatorPair,
   evaluateGpuCasePair,
   evaluateGpuPsuPair,
+  // E8 (Decision 45): the three previously-DEFERRED Decision 26 item B rules.
+  evaluateCoolerTdpPair,
+  evaluateMotherboardMemorySlotsPair,
+  evaluateMotherboardMemoryCapacityPair,
   aggregateCompatibilityResults,
   FINAL_STATUSES,
 } = require('../filtering/filter');
@@ -115,6 +129,29 @@ const VERDICT_FIELDS = Object.freeze([
 
 const PARTICIPATING_ROLES = new Set(EXPANSION_ORDER);
 
+/**
+ * Decision 40 (E3): the (CPU, GPU) identity a per-pair quota counts - product
+ * and variant of BOTH sides.
+ *
+ * This is NOT the same string as the pre-persistence selection pair key
+ * (select-diverse.js and select-archetypes.js), which is
+ * `${CPU product_id}|${GPU product_variant_id or ''}` and deliberately drops the
+ * GPU product_id and the CPU variant. The two keys induce the SAME partition
+ * only because offers/select.js enforceVariantIdentity guarantees a GPU
+ * candidate carries a non-null product_variant_id and every other role carries
+ * null - which is what makes the CPU variant always null here and the GPU
+ * product_id always implied by the variant there. Same-fixture agreement is
+ * pinned in assemble.test.js (E3/E4 pair-identity test); do not "simplify"
+ * either key without re-pinning that test.
+ */
+function pairKey(cpu, gpu) {
+  return JSON.stringify([cpu.product_id, cpu.product_variant_id, gpu.product_id, gpu.product_variant_id]);
+}
+
+function pairIsFull(pairCounts, cpu, gpu, maxPerPair) {
+  return (pairCounts.get(pairKey(cpu, gpu)) || 0) >= maxPerPair;
+}
+
 function fail(code, field, message) {
   throw new CandidateSelectionError(code, message, field);
 }
@@ -140,9 +177,11 @@ function readTraversalInputs(engine3Input) {
     use_case,
     gpu_required_use_cases,
     integrated_gpu_present,
+    gpu_policy,
     candidate_caps,
     prices,
     filtering_context,
+    vram_floor_gb,
   } = engine3Input;
   if (!Array.isArray(results)) {
     fail(ERROR_CODES.INVALID_FIELD_VALUE, 'results', '"results" must be an array');
@@ -197,6 +236,20 @@ function readTraversalInputs(engine3Input) {
       '"candidate_caps.max_builds_per_query" must be a positive integer'
     );
   }
+  // Decision 40 (E3): optional per-pair quota. Absent = no quota (pre-E3).
+  // A DECLARED null is a malformed quota, never an absent one, so it is validated.
+  const quotaDeclared = Object.prototype.hasOwnProperty.call(candidate_caps, 'max_builds_per_pair');
+  const maxPerPair = quotaDeclared ? candidate_caps.max_builds_per_pair : null;
+  if (
+    quotaDeclared &&
+    (typeof maxPerPair !== 'number' || !Number.isInteger(maxPerPair) || maxPerPair <= 0)
+  ) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'candidate_caps.max_builds_per_pair',
+      '"candidate_caps.max_builds_per_pair" must be a positive integer'
+    );
+  }
   if (prices === null || typeof prices !== 'object' || Array.isArray(prices)) {
     fail(ERROR_CODES.INVALID_INPUT, 'prices', '"prices" must be an object');
   }
@@ -211,6 +264,51 @@ function readTraversalInputs(engine3Input) {
       '"filtering_context" must be an object'
     );
   }
+  // E5 (Decision 42): optional resolution VRAM floor. Absent = no floor; a
+  // DECLARED null is malformed (Decision 40 quota semantics).
+  const vramFloorDeclared = Object.prototype.hasOwnProperty.call(engine3Input, 'vram_floor_gb');
+  const vramFloorGb = vramFloorDeclared ? vram_floor_gb : null;
+  if (
+    vramFloorDeclared &&
+    (typeof vramFloorGb !== 'number' || !Number.isInteger(vramFloorGb) || vramFloorGb < 1)
+  ) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'vram_floor_gb',
+      '"vram_floor_gb" must be an integer >= 1 when declared'
+    );
+  }
+  // E5 (Decision 42) hardening: a DECLARED floor makes `specs` load-bearing, so
+  // a malformed context fails fast here instead of silently turning the floor
+  // into a no-op. Only the SHAPE is checked - an INDIVIDUAL absent spec row, or
+  // a NULL `vram_capacity_gb`, stays the legitimate UNKNOWN that belowVramFloor
+  // and Decision 12 Rule 2 require. With no floor declared, `specs` is not read
+  // by this walk, so the pre-E5 contract is unchanged.
+  if (
+    vramFloorGb !== null &&
+    (filtering_context.specs === null ||
+      typeof filtering_context.specs !== 'object' ||
+      Array.isArray(filtering_context.specs))
+  ) {
+    fail(
+      ERROR_CODES.INVALID_INPUT,
+      'filtering_context.specs',
+      '"filtering_context.specs" must be an object when "vram_floor_gb" is declared'
+    );
+  }
+
+  // E6 (Decision 43): optional per-use-case GPU policy. Absent = the legacy
+  // gpu_required_use_cases rule; a DECLARED value must be an exact Decision
+  // 37 policy string (a declared null is malformed).
+  const gpuPolicyDeclared = Object.prototype.hasOwnProperty.call(engine3Input, 'gpu_policy');
+  const gpuPolicy = gpuPolicyDeclared ? gpu_policy : null;
+  if (gpuPolicyDeclared && (typeof gpuPolicy !== 'string' || !GPU_POLICY_VALUES.includes(gpuPolicy))) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'gpu_policy',
+      '"gpu_policy" must be one of ' + GPU_POLICY_VALUES.join(', ') + ' when declared'
+    );
+  }
   return {
     results,
     budget_amount,
@@ -219,6 +317,9 @@ function readTraversalInputs(engine3Input) {
     gpu_required_use_cases,
     integrated_gpu_present,
     maxBuilds,
+    maxPerPair,
+    vramFloorGb,
+    gpuPolicy,
     prices,
     filteringContext: filtering_context,
   };
@@ -397,6 +498,20 @@ const PAIRWISE_CHECKS = Object.freeze({
       leftIsNew: false,
       evaluator: evaluatePlatformMemoryPair,
     }),
+    // E8 (Decision 45): OG-11 / OG-12. The canonical left role is
+    // MOTHERBOARD, already picked, so leftIsNew stays false.
+    Object.freeze({
+      key: 'mb_memory_slots',
+      partnerRole: 'MOTHERBOARD',
+      leftIsNew: false,
+      evaluator: evaluateMotherboardMemorySlotsPair,
+    }),
+    Object.freeze({
+      key: 'mb_memory_capacity',
+      partnerRole: 'MOTHERBOARD',
+      leftIsNew: false,
+      evaluator: evaluateMotherboardMemoryCapacityPair,
+    }),
   ]),
   PSU: Object.freeze([
     Object.freeze({
@@ -432,6 +547,16 @@ const PAIRWISE_CHECKS = Object.freeze({
       partnerRole: 'CASE',
       leftIsNew: true,
       evaluator: evaluateCaseRadiatorPair,
+    }),
+    // E8 (Decision 45): OG-09, SOFT. The canonical left role is CPU and the
+    // CPU is already picked, so leftIsNew stays false. This pair only ever
+    // adds UNKNOWN (never FAIL) to the walk, because the resolver returns
+    // UNKNOWN for an under-spec or unmeasured cooler.
+    Object.freeze({
+      key: 'cooler_tdp',
+      partnerRole: 'CPU',
+      leftIsNew: false,
+      evaluator: evaluateCoolerTdpPair,
     }),
   ]),
 });
@@ -535,6 +660,23 @@ function narrowCompatibilityNotes(picked, verdict) {
 }
 
 /**
+ * E5 (Decision 42): true only when this GPU's VRAM is KNOWN and below the
+ * floor. A missing spec entry or a NULL `vram_capacity_gb` is UNKNOWN, and
+ * UNKNOWN is never FAIL - such a candidate stays eligible (the Decision 12
+ * Rule 2 semantics: PASS/UNKNOWN eligible, only a verified deficit excludes).
+ * The floor itself is a RECOMMENDATION policy, not a compatibility verdict.
+ *
+ * `filteringContext.specs` is guaranteed to be an object by the time this runs:
+ * readTraversalInputs rejects a malformed `specs` whenever a floor is declared
+ * (and this function is only called when one is).
+ */
+function belowVramFloor(filteringContext, verdict, floorGb) {
+  const spec = filteringContext.specs['v:' + verdict.product_variant_id];
+  const vram = spec !== undefined && spec !== null ? spec.vram_capacity_gb : null;
+  return typeof vram === 'number' && Number.isFinite(vram) && vram < floorGb;
+}
+
+/**
  * Walk EXPANSION_ORDER depth-first and return complete builds in discovery
  * order. Every choice adds its selected_price at once and stops that path
  * past the limit. The build cap halts the walk itself; later paths stay
@@ -546,9 +688,18 @@ function assembleBuilds(engine3Input) {
   const traversal = readTraversalInputs(engine3Input);
   const buckets = groupEligible(traversal.results);
   const builds = [];
+  const pairCounts = new Map();
   let halted = false;
 
   function finishPath(picked, runningTotal) {
+    // Decision 40 (E3): a path whose pair is already full is not emitted; only
+    // emitted builds count toward the pair quota and the max_builds_per_query halt.
+    const pair = traversal.maxPerPair !== null && picked[GPU_ROLE] !== undefined
+      ? pairKey(picked[EXPANSION_ORDER[0]], picked[GPU_ROLE])
+      : null;
+    if (pair !== null && (pairCounts.get(pair) || 0) >= traversal.maxPerPair) {
+      return;
+    }
     const components = [];
     let total = 0;
     for (const role of EXPANSION_ORDER) {
@@ -587,6 +738,9 @@ function assembleBuilds(engine3Input) {
     };
     deepFreeze(build);
     builds.push(build);
+    if (pair !== null) {
+      pairCounts.set(pair, (pairCounts.get(pair) || 0) + 1);
+    }
     if (builds.length >= traversal.maxBuilds) {
       halted = true;
     }
@@ -608,21 +762,51 @@ function assembleBuilds(engine3Input) {
         gpu_required_use_cases: traversal.gpu_required_use_cases,
         integrated_gpu_present: traversal.integrated_gpu_present,
         selectedCpuProductId: cpuChoice.product_id,
+        // E6 (Decision 43): the DECLARED per-use-case policy must reach Rule 0,
+        // or a declared REQUIRED could still be dropped and a declared
+        // IGPU_ALLOWED could not authorize the omit path. null when absent.
+        gpuPolicy: traversal.gpuPolicy,
       });
       const options = buckets[GPU_ROLE];
-      for (const verdict of options) {
-        const price = lookupPrice(traversal.prices, verdict);
-        const nextTotal = runningTotal + price.selected_price;
-        if (nextTotal > traversal.budget_amount) {
-          continue;
-        }
-        picked[GPU_ROLE] = verdict;
-        // GPU has no partner role earlier in EXPANSION_ORDER; its pair
-        // checks run when PSU / CASE are picked (see PAIRWISE_CHECKS).
-        descend(depth + 1, picked, nextTotal);
-        delete picked[GPU_ROLE];
-        if (halted) {
-          return;
+      // E6 (Decision 43): a DECLARED IGPU_ALLOWED policy makes the iGPU the
+      // GPU for this use case, so on an iGPU CPU the discrete-GPU branches
+      // are skipped ENTIRELY and the omit path below is the only path. There
+      // is deliberately no "fall back to the discrete walk if the omit path
+      // builds nothing": omitting the GPU can only RELAX the walk - every
+      // picked role has a strictly positive selected_price (prices.js), so
+      // the budget gate stays open; an absent partner contributes no pair
+      // FAIL (firstPairFailure); and finishPath has no required-role gate -
+      // so any GPU-picking path implies its GPU-less variant, and a
+      // fallback could never fire. Pinned by the budget-sweep test in
+      // assemble.test.js.
+      // The LEGACY rule-2 OPTIONAL (no declared policy) keeps walking every
+      // eligible GPU verdict (pre-E6 behaviour, byte-identical).
+      const skipDiscreteGpu = traversal.gpuPolicy === 'IGPU_ALLOWED' &&
+        traversal.integrated_gpu_present[cpuChoice.product_id] === true;
+      if (!skipDiscreteGpu) {
+        for (const verdict of options) {
+          const price = lookupPrice(traversal.prices, verdict);
+          const nextTotal = runningTotal + price.selected_price;
+          if (nextTotal > traversal.budget_amount) {
+            continue;
+          }
+          // E5 (Decision 42): skip a GPU branch below the resolution VRAM floor.
+          // UNKNOWN VRAM (NULL / missing spec) is never below-floor.
+          if (traversal.vramFloorGb !== null && belowVramFloor(traversal.filteringContext, verdict, traversal.vramFloorGb)) {
+            continue;
+          }
+          // Decision 40 (E3): skip a GPU branch whose pair is already full.
+          if (traversal.maxPerPair !== null && pairIsFull(pairCounts, cpuChoice, verdict, traversal.maxPerPair)) {
+            continue;
+          }
+          picked[GPU_ROLE] = verdict;
+          // GPU has no partner role earlier in EXPANSION_ORDER; its pair
+          // checks run when PSU / CASE are picked (see PAIRWISE_CHECKS).
+          descend(depth + 1, picked, nextTotal);
+          delete picked[GPU_ROLE];
+          if (halted) {
+            return;
+          }
         }
       }
       if (decision !== 'REQUIRED') {

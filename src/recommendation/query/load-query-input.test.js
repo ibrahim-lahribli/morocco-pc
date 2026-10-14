@@ -38,6 +38,8 @@ function queryRow(overrides = {}) {
     currency: 'MAD',
     use_case: 'GAMING',
     scoring_model_id: MODEL_ID,
+    resolution: null,
+    priority: 3,
     ...overrides,
   };
 }
@@ -71,7 +73,7 @@ async function rejectionOf(promise) {
 // ---------------------------------------------------------------------------
 
 const EXPECTED_SQL =
-  'SELECT id, budget_amount, currency, use_case, scoring_model_id ' +
+  'SELECT id, budget_amount, currency, use_case, scoring_model_id, resolution, priority ' +
   'FROM recommendation_query WHERE id = $1';
 
 test('the loader issues exactly the Decision 10/17.1 query', () => {
@@ -83,12 +85,13 @@ test('the loader issues exactly the Decision 10/17.1 query', () => {
 
 test('the SQL selects only contract columns and ignores v1-ignored fields', () => {
   const lowered = SELECT_QUERY_INPUT_SQL.toLowerCase();
-  for (const col of ['id', 'budget_amount', 'currency', 'use_case', 'scoring_model_id']) {
+  // E2/E4 (Decision 39 / 41): `resolution` and `priority` are now carried as
+  // VERBATIM SIBLINGS of the Engine 2A input (never inside it); only the
+  // profile-FK column stays unselected.
+  for (const col of ['id', 'budget_amount', 'currency', 'use_case', 'scoring_model_id', 'resolution', 'priority']) {
     assert.ok(lowered.includes(col), `SQL must select ${col}`);
   }
-  for (const ignored of ['resolution', 'priority', 'recommendation_profile_id']) {
-    assert.ok(!lowered.includes(ignored), `SQL must not select ${ignored}`);
-  }
+  assert.ok(!lowered.includes('recommendation_profile_id'), 'SQL must not select recommendation_profile_id');
 });
 
 test('the SQL issues no transaction or clock statements', () => {
@@ -114,7 +117,9 @@ test('happy path returns the frozen { query_id, scoring_model_id, input } shape'
   assert.equal(db.calls.length, 1);
   assert.equal(db.calls[0].sql, SELECT_QUERY_INPUT_SQL);
   assert.deepEqual(db.calls[0].params, [QUERY_ID]);
-  assert.deepEqual(Object.keys(out).sort(), ['input', 'query_id', 'scoring_model_id']);
+  // E4: `priority` is now a carried sibling (verbatim row value), like `resolution`.
+  assert.deepEqual(Object.keys(out).sort(), ['input', 'priority', 'query_id', 'resolution', 'scoring_model_id']);
+  assert.equal(out.priority, 3);
   assert.equal(out.query_id, QUERY_ID);
   assert.equal(out.scoring_model_id, MODEL_ID);
   assert.deepEqual(out.input, {
@@ -221,8 +226,12 @@ test('extra row columns are ignored and never leak into the result', async () =>
   };
   const db = makeDb([row]);
   const out = await loadQueryInput(QUERY_ID, db);
-  assert.deepEqual(Object.keys(out).sort(), ['input', 'query_id', 'scoring_model_id']);
+  assert.deepEqual(Object.keys(out).sort(), ['input', 'priority', 'query_id', 'resolution', 'scoring_model_id']);
   assert.deepEqual(Object.keys(out.input).sort(), ['budget_amount', 'currency', 'required_roles', 'use_case']);
+  assert.equal(out.resolution, '1440p');
+  assert.equal(out.priority, 2);
+  assert.ok(!('priority' in out.input), 'priority must stay OUTSIDE the Engine 2A input');
+  assert.ok(!('recommendation_profile_id' in out), 'the profile-FK column stays unselected');
 });
 
 test('invalid queryId and db are rejected; bad queryId never queries', async () => {
@@ -287,6 +296,15 @@ test('output is frozen and the input row is not mutated or frozen', async () => 
   assert.deepEqual(row, snapshot);
   assert.equal(Object.isFrozen(row), false);
   assert.deepEqual([...REQUIRED_ROLES], ['CPU', 'MOTHERBOARD', 'RAM', 'GPU', 'PSU', 'CASE', 'CPU_COOLER', 'SSD_BOOT']);
+});
+
+test('resolution is carried verbatim as a sibling of input, never inside it', async () => {
+  for (const resolution of [null, '1080p', '1440p', '2160p', 'unmapped-resolution']) {
+    const db = makeDb([queryRow({ resolution })]);
+    const out = await loadQueryInput(QUERY_ID, db);
+    assert.equal(out.resolution, resolution, JSON.stringify(resolution));
+    assert.ok(!('resolution' in out.input), 'resolution must not be part of the Engine 2A input');
+  }
 });
 
 test('load-query-input.js keeps its source boundary', () => {

@@ -19,7 +19,8 @@
  *   nowMs (epoch milliseconds)
  *     |  loadScoringModel(scoring_model_id, db)   Decision 11 (pinned FK only)
  *     v
- *   scoring model (configuration: weights, candidate_caps, gpu_required_use_cases)
+ *   scoring model (configuration: weights, candidate_caps, gpu_required_use_cases,
+ *                   use_case_profiles)
  *     |  loadCandidates(input, db)                Engine 2B
  *     v
  *   { input, candidates }
@@ -43,7 +44,8 @@
  *     v
  *   candidateScores { scores }
  *     |  retainTopKPerRole({ filterResult, candidateScores, topKPerRole,
- *     |                        prices: offerResult.prices })   Decision 27
+ *     |                        prices: offerResult.prices,
+ *     |                        roleTargets })   Decision 27 + E2
  *     v
  *   retentionResult { results }                  Decision 12/14 retention
  *     |  computeBudgetFloor({ retained, prices, budgetAmount, currency })
@@ -67,7 +69,8 @@
  *     is threaded into BOTH scoring steps. Decision 17 G4 rejected the
  *     assessment loader loaded_at (zero assessment rows -> null -> a
  *     legitimate no-evidence pool would fail the clock) and rejected any
- *     JS/injected clock. No Date.now() exists in this module.
+ *     JS/injected clock in the legacy path. Decision 38 permits explicit options.asOf
+ *     instead; no Date.now() exists in this module.
  *   - loadScoringModel runs immediately after that statement (Decision 17,
  *     clarification 2026-09-21, step 3): the pinned id comes from the query row
  *     and SCORING_MODEL_UNAVAILABLE must fail fast BEFORE the candidate / offer
@@ -131,6 +134,7 @@
  */
 // --- collaborators (called through their namespace objects - see the header) --
 
+const { parseAsOf } = require('../offers/as-of');
 const query = require('../query');
 const candidates = require('../candidates');
 const offers = require('../offers');
@@ -252,8 +256,10 @@ function withBuildScore(build, buildScore) {
  *        injected and validated by the loaders, never created or closed here.
  * @param {string} args.queryId pinned recommendation_query.id.
  * @param {object} [args.options] Decision 35 engine options, passed through to
- *        Stage 1 unchanged and never interpreted here. Default OFF: an omitted
+ *        Stage 1 unchanged; asOf is also consumed here (Decision 38). Default OFF: an omitted
  *        options object leaves every eligibility rule exactly as it was.
+ * Decision 38: options.asOf is optional ISO time with an explicit timezone;
+ * when supplied it pins scoring/offer freshness, otherwise the transaction clock remains.
  * @returns {Promise<object>} frozen { query_id, scoring_model_id, builds,
  *        budget_amount, currency, build_contributions, budget_floor } - builds
  *        in Engine 3 discovery order, each an Engine 3 build plus build_score,
@@ -278,7 +284,8 @@ async function runRecommendation(args) {
 
   // 2. Transaction timestamp (Decision 17.2): the FIRST statement after the
   //    query loader, and the only clock either scoring step sees.
-  const nowMs = await readTransactionTimestamp(db);
+  const asOf = parseAsOf(args.options);
+  const nowMs = asOf === null ? await readTransactionTimestamp(db) : asOf.nowMs;
 
   // 3. Pinned scoring model (Decision 11; position clarified in Decision 17,
   //    2026-09-21). Fails fast with SCORING_MODEL_UNAVAILABLE before the
@@ -321,11 +328,15 @@ async function runRecommendation(args) {
   //     STEP 2 scores, and the Decision 11 cap. Decision 27 adds Stage 1's own
   //     carrier BY REFERENCE - the same frozen object Engine 3 gets at step 13 -
   //     so the cheapest-per-role reservation needs no query and no new loader.
+  // E2: the active model's per-use-case spend targets become per-role price
+  // targets. A model that declares no `use_case_profiles`, or no profile for
+  // this query's use case, yields null and retention keeps the pre-E2 rule.
   const retentionResult = retention.retainTopKPerRole({
     filterResult,
     candidateScores,
     topKPerRole: configuration.candidate_caps.top_k_per_role,
     prices: offerResult.prices,
+    roleTargets: resolveRoleTargets(configuration, queryInput),
   });
 
   // 11b. Decision 27: the zero-build diagnostic. Pure, and computed
@@ -349,6 +360,14 @@ async function runRecommendation(args) {
     filterResult: retentionResult,
     scoringModel,
     prices: offerResult.prices,
+    // E5 (Decision 42): the resolved VRAM floor (integer) or null; Engine 3
+    // receives the floor as policy input and owns the GPU-depth enforcement.
+    vramFloorGb: resolveVramFloorGb(configuration, queryInput),
+    // E6 (Decision 43): the per-use-case GPU policy (REQUIRED |
+    // IGPU_ALLOWED) or null; Engine 3 receives it as policy input and owns
+    // the Step 3 decision. The declared profile wins over the legacy
+    // gpu_required_use_cases list for the query's use case.
+    gpuPolicy: resolveGpuPolicy(configuration, queryInput),
   });
 
   // 13. Engine 4 STEP 3 (index-aligned with the builds in discovery order; the
@@ -399,6 +418,9 @@ async function runRecommendation(args) {
     builds: Object.freeze(builds),
     budget_amount: queryInput.input.budget_amount,
     currency: queryInput.input.currency,
+    // E4 (Decision 41): carried VERBATIM as a sibling (same pattern as E2's
+    // resolution); only the archetype selection reads it.
+    priority: queryInput.priority,
     build_contributions: buildContributions.contributions,
     // Decision 27: last, so the two index-aligned fields stay adjacent.
     budget_floor: budgetFloor,
@@ -409,6 +431,83 @@ async function runRecommendation(args) {
     // no existing consumer reads this one yet.
     filter_verdicts: filterResult.results,
   });
+}
+
+/**
+ * E6 (Decision 43): the per-use-case GPU policy for this pass, or null.
+ * Reads the ACTIVE model's `use_case_profiles[queryInput.input.use_case]`
+ * (Decision 37; the same shape-guard pattern as resolveVramFloorGb below) - a model
+ * that declares no profile for the use case yields null and Step 3 keeps
+ * the legacy gpu_required_use_cases rule byte-identically (pre-E6).
+ */
+function resolveGpuPolicy(configuration, queryInput) {
+  const profiles = configuration === null || typeof configuration !== 'object'
+    ? undefined
+    : configuration.use_case_profiles;
+  if (profiles === null || typeof profiles !== 'object' || Array.isArray(profiles)) {
+    return null;
+  }
+  const profile = profiles[queryInput.input.use_case];
+  if (profile === null || typeof profile !== 'object') {
+    return null;
+  }
+  const policy = profile.gpu_policy;
+  return policy === 'REQUIRED' || policy === 'IGPU_ALLOWED' ? policy : null;
+}
+
+/**
+ * E2: per-role price targets for this pass, or null.
+ *
+ * Reads the ACTIVE model's `use_case_profiles[queryInput.input.use_case]`
+ * (Decision 37). `use_case_profiles` is an OPTIONAL configuration key and a
+ * model may declare only some use cases, so a missing key - or a use case the
+ * model does not declare - yields null and retention keeps the pre-E2 rule
+ * byte-for-byte. The profile shape itself is already validated by
+ * validateScoringModelConfiguration at load time; this only routes it.
+ */
+function resolveRoleTargets(configuration, queryInput) {
+  const profiles = configuration === null || typeof configuration !== 'object'
+    ? undefined
+    : configuration.use_case_profiles;
+  if (profiles === null || typeof profiles !== 'object' || Array.isArray(profiles)) {
+    return null;
+  }
+  const profile = profiles[queryInput.input.use_case];
+  if (profile === null || typeof profile !== 'object'
+      || profile.spend_targets === null || typeof profile.spend_targets !== 'object') {
+    return null;
+  }
+  return retention.computeRoleTargets({
+    spendTargets: profile.spend_targets,
+    budgetAmount: queryInput.input.budget_amount,
+    resolution: queryInput.resolution,
+  });
+}
+
+/**
+ * E5 (Decision 42): the resolution VRAM floor for this pass, or null.
+ *
+ * Reads the ACTIVE model's `resolution_profiles[queryInput.resolution]`
+ * (Decision 42; the Decision 37 optional-key family). `resolution_profiles` is
+ * OPTIONAL and a model may declare only some resolutions, so a missing key -
+ * or a resolution the model does not declare - yields null and the GPU-depth
+ * floor check stays off (pre-E5 behaviour, byte-identical). The profile shape
+ * is already validated by validateScoringModelConfiguration at load time; this
+ * only routes it. An absent/NULL query resolution yields null (no floor).
+ */
+function resolveVramFloorGb(configuration, queryInput) {
+  const profiles = configuration === null || typeof configuration !== 'object'
+    ? undefined
+    : configuration.resolution_profiles;
+  if (profiles === null || typeof profiles !== 'object' || Array.isArray(profiles)) {
+    return null;
+  }
+  const profile = profiles[queryInput.resolution];
+  if (profile === null || typeof profile !== 'object') {
+    return null;
+  }
+  const floor = profile.vram_floor_gb;
+  return typeof floor === 'number' && Number.isInteger(floor) && floor >= 1 ? floor : null;
 }
 
 module.exports = { runRecommendation, SELECT_NOW_SQL };

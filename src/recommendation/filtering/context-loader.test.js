@@ -127,18 +127,20 @@ function emptyRoutes() {
 
 function singleOfEachRoutes() {
   const routes = emptyRoutes();
-  routes.CPU = [{ product_id: U(1), socket_id: P(1), product_family_id: P(10), integrated_gpu_present: true }];
-  routes.MOTHERBOARD = [{ product_id: U(2), socket_id: P(1), form_factor: 'ATX', memory_type_id: P(20) }];
-  routes.RAM = [{ product_id: U(3), memory_type_id: P(20) }];
+  routes.CPU = [{ product_id: U(1), socket_id: P(1), product_family_id: P(10), integrated_gpu_present: true, tdp_watts: 125 }];
+  routes.MOTHERBOARD = [{ product_id: U(2), socket_id: P(1), form_factor: 'ATX', memory_type_id: P(20), dimm_slots: 4, max_memory_capacity_gb: 128 }];
+  routes.RAM = [{ product_id: U(3), memory_type_id: P(20), module_count: 2, capacity_per_module_gb: 8 }];
   routes.GPU = [{
     product_variant_id: V(1), board_tgp_watts: 250, length_mm: 300, width_slots: '2.50',
     required_power_connectors: { pcie_8pin: 2 }, recommended_psu_watts: 750,
+    // E5 (Decision 42): real VRAM data on the fixture row, never a bare field.
+    vram_capacity_gb: 12,
   }];
   routes.PSU = [{
     product_id: U(5), rated_wattage: 850, connector_24pin_atx: true,
     connector_eps_count: 2, connector_pcie_8pin: 4, connector_12vhpwr: null, connector_sata: 6,
   }];
-  routes.COOLER = [{ product_id: U(6), cooling_type: 'LIQUID' }];
+  routes.COOLER = [{ product_id: U(6), cooling_type: 'LIQUID', max_tdp_watts: 250 }];
   routes.CASE = [{ product_id: U(7), max_gpu_length_mm: 360, max_gpu_thickness_slots: 3 }];
   routes.PLATFORM = [{ id: P(1), socket_id: P(1) }];
   return routes;
@@ -185,11 +187,15 @@ test('specs keys use p:/v: prefixes and SQL rows are normalized', async () => {
 
   assert.deepEqual(context.specs['p:' + U(1)], {
     socket_id: P(1), product_family_id: P(10), integrated_gpu_present: true,
+    tdp_watts: 125,
   });
   assert.deepEqual(context.specs['p:' + U(2)], {
     socket_id: P(1), form_factor: 'ATX', memory_type_id: P(20),
+    dimm_slots: 4, max_memory_capacity_gb: 128,
   });
-  assert.deepEqual(context.specs['p:' + U(3)], { memory_type_id: P(20) });
+  assert.deepEqual(context.specs['p:' + U(3)], {
+    memory_type_id: P(20), module_count: 2, capacity_per_module_gb: 8,
+  });
   assert.deepEqual(context.specs['p:' + U(7)], {
     max_gpu_length_mm: 360, max_gpu_thickness_slots: 3,
     // OG-10 clearance side. NULL here is the UNKNOWN branch, never 0.
@@ -199,6 +205,7 @@ test('specs keys use p:/v: prefixes and SQL rows are normalized', async () => {
   assert.deepEqual(context.specs['v:' + V(1)], {
     board_tgp_watts: 250, length_mm: 300, width_slots: 2.5,
     required_power_connectors: { pcie_8pin: 2 }, recommended_psu_watts: 750,
+    vram_capacity_gb: 12,
   });
   // JSONB blob stays structured (never stringified).
   assert.equal(typeof context.specs['v:' + V(1)].required_power_connectors, 'object');
@@ -222,6 +229,8 @@ test('gpu specs: board_tgp_watts is projected and a missing value stays null', a
   }];
   const { context } = await fullContext(routes);
   assert.equal(context.specs['v:' + V(1)].board_tgp_watts, null);
+  // E5 (Decision 42): a missing VRAM stays NULL (UNKNOWN), never 0.
+  assert.equal(context.specs['v:' + V(1)].vram_capacity_gb, null);
 });
 
 test('cpu specs: integrated_gpu_present tri-state is preserved exactly', async () => {
@@ -295,7 +304,7 @@ test('cooler_spec.radiator_size_mm is carried through; NULL stays NULL (OG-28)',
     assert.deepEqual(context.specs['p:' + U(6)], {
       cooling_type: 'LIQUID', cooler_requires_radiator: true,
       radiator_size_mm: size, radiator_position: null,
-      height_mm: null,
+      height_mm: null, max_tdp_watts: null,
     });
   }
 
@@ -316,7 +325,7 @@ test('cooler specs derive cooler_requires_radiator; cooling_type preserved', asy
   assert.deepEqual(context.specs['p:' + U(6)], {
     cooling_type: 'LIQUID', cooler_requires_radiator: true,
     radiator_size_mm: null, radiator_position: null,
-    height_mm: null,
+    height_mm: null, max_tdp_watts: 250,
   });
 
   const variants = { AIR: false, PASSIVE: false, LIQUID: true, HYBRID: null, null: null };

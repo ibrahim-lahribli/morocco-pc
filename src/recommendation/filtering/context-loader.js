@@ -214,26 +214,28 @@ async function queryRows(db, sql, params) {
 // ---------------------------------------------------------------------------
 
 const CPU_SPEC_SQL = `
-SELECT cs.product_id, cs.socket_id, p.product_family_id, cs.integrated_gpu_present
+SELECT cs.product_id, cs.socket_id, p.product_family_id, cs.integrated_gpu_present,
+       cs.tdp_watts
   FROM cpu_spec cs
   JOIN product p ON p.id = cs.product_id
  WHERE cs.product_id = ANY($1::uuid[])
  ORDER BY cs.product_id ASC`;
 
 const MOTHERBOARD_SPEC_SQL = `
-SELECT product_id, socket_id, form_factor, memory_type_id
+SELECT product_id, socket_id, form_factor, memory_type_id,
+       dimm_slots, max_memory_capacity_gb
   FROM motherboard_spec
  WHERE product_id = ANY($1::uuid[])
  ORDER BY product_id ASC`;
 
 const RAM_SPEC_SQL = `
-SELECT product_id, memory_type_id
+SELECT product_id, memory_type_id, module_count, capacity_per_module_gb
   FROM ram_spec
  WHERE product_id = ANY($1::uuid[])
  ORDER BY product_id ASC`;
 
 const COOLER_SPEC_SQL = `
-SELECT product_id, cooling_type, radiator_size_mm, height_mm
+SELECT product_id, cooling_type, radiator_size_mm, height_mm, max_tdp_watts
   FROM cooler_spec
  WHERE product_id = ANY($1::uuid[])
  ORDER BY product_id ASC`;
@@ -254,11 +256,13 @@ SELECT product_id, rated_wattage,
  ORDER BY product_id ASC`;
 
 const GPU_VARIANT_SPEC_SQL = `
-SELECT product_variant_id, board_tgp_watts, length_mm, width_slots,
-       required_power_connectors, recommended_psu_watts
-  FROM gpu_board_spec
- WHERE product_variant_id = ANY($1::uuid[])
- ORDER BY product_variant_id ASC`;
+SELECT b.product_variant_id, b.board_tgp_watts, b.length_mm, b.width_slots,
+       b.required_power_connectors, b.recommended_psu_watts,
+       c.vram_capacity_gb
+  FROM gpu_board_spec b
+  LEFT JOIN gpu_chipset c ON c.id = b.gpu_chipset_id
+ WHERE b.product_variant_id = ANY($1::uuid[])
+ ORDER BY b.product_variant_id ASC`;
 
 const CPU_MOTHERBOARD_SUPPORT_SQL = `
 SELECT id, motherboard_product_id, cpu_product_id, cpu_product_family_id,
@@ -360,15 +364,30 @@ function normalizeSpecForRole(role, row) {
         socket_id: row.socket_id ?? null,
         product_family_id: row.product_family_id ?? null,
         integrated_gpu_present: row.integrated_gpu_present ?? null,
+        // E8 (Decision 45): cpu_spec.tdp_watts, the CPU side of the SOFT
+        // cooler-adequacy rule (OG-09). NULL stays NULL: an unmeasured TDP is
+        // UNKNOWN, never a pass and never 0.
+        tdp_watts: row.tdp_watts ?? null,
       };
     case 'MOTHERBOARD':
       return {
         socket_id: row.socket_id ?? null,
         form_factor: row.form_factor ?? null,
         memory_type_id: row.memory_type_id ?? null,
+        // E8 (Decision 45): the two motherboard memory-capacity operands of
+        // the HARD rules OG-11 (dimm_slots) and OG-12 (max_memory_capacity_gb).
+        // NULL is preserved exactly: an unmeasured board limit is UNKNOWN.
+        dimm_slots: row.dimm_slots ?? null,
+        max_memory_capacity_gb: row.max_memory_capacity_gb ?? null,
       };
     case 'RAM':
-      return { memory_type_id: row.memory_type_id ?? null };
+      return {
+        memory_type_id: row.memory_type_id ?? null,
+        // E8 (Decision 45): the RAM kit operands of OG-11 (module_count) and
+        // OG-12 (module_count * capacity_per_module_gb). NULL stays NULL.
+        module_count: row.module_count ?? null,
+        capacity_per_module_gb: row.capacity_per_module_gb ?? null,
+      };
     case 'CPU_COOLER':
       return {
         cooling_type: row.cooling_type ?? null,
@@ -386,6 +405,10 @@ function normalizeSpecForRole(role, row) {
         // rule to AIR only. NULL is preserved exactly: an un-researched height
         // is UNKNOWN, never 0 and never a pass.
         height_mm: row.height_mm ?? null,
+        // E8 (Decision 45): cooler_spec.max_tdp_watts, the cooler side of the
+        // SOFT OG-09 rule. NULL is a real state (seed 009 wrote NULL for the
+        // Corsair Nautilus because no TDP is published) and resolves UNKNOWN.
+        max_tdp_watts: row.max_tdp_watts ?? null,
       };
     case 'CASE':
       return {
@@ -420,6 +443,10 @@ function normalizeGpuSpec(row) {
     // JSONB: preserve the structure; never stringify.
     required_power_connectors: row.required_power_connectors ?? null,
     recommended_psu_watts: row.recommended_psu_watts ?? null,
+    // E5 (Decision 42): the resolution VRAM-floor input, INTEGER on
+    // gpu_chipset (nullable) via gpu_board_spec.gpu_chipset_id. NULL stays
+    // NULL - a missing chipset row or a NULL VRAM is UNKNOWN, never 0.
+    vram_capacity_gb: row.vram_capacity_gb ?? null,
   };
 }
 

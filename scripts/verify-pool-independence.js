@@ -11,7 +11,7 @@
 // still holds — it is a STANDING REGRESSION, not a one-off check.
 //
 // Usage:
-//   node scripts/verify-pool-independence.js
+//   node scripts/verify-pool-independence.js [--model=<name@version>]
 //
 // Reads and writes the TEST branch only (TEST_DATABASE_URL via
 // scripts/lib/db-url.js). It never contacts the shared DATABASE_URL except to
@@ -38,6 +38,7 @@ const { getWriteTestDbUrl } = require('./lib/db-url');
 const { runRecommendationSnapshot } = require('../src/recommendation/orchestrator');
 const { rankBuilds } = require('../src/recommendation/ranking');
 const { captureScoreVector, scoreVectorDrift } = require('./lib/score-vector');
+const modelPin = require('./lib/model-pin');
 
 // The two measured profiles, matching Decision 23's acceptance pass.
 const QUERIES = [
@@ -57,15 +58,14 @@ function fail(message) {
   throw new Error(message);
 }
 
-/** Read-only: the pinned active scoring model every query must reference. */
-async function readScoringModelId(client) {
-  const res = await client.query(
-    "SELECT id FROM scoring_model WHERE name = 'seed-minimal-v1' AND version = '1.0.0' AND is_active = true",
-  );
-  if (res.rows.length !== 1) {
-    fail('expected exactly 1 active seed-minimal-v1 scoring model, found ' + res.rows.length);
-  }
-  return res.rows[0].id;
+/**
+ * Read-only: the PINNED active scoring model every query must reference
+ * (Step-2 item 1 / OG-39 - a pin, so a two-active-model branch is measurable;
+ * resolvePinnedModel fails closed on an unmatched or inactive pin).
+ */
+async function readScoringModelId(client, modelPinValue) {
+  const model = await modelPin.resolvePinnedModel(client, modelPinValue);
+  return model.id;
 }
 
 /** Insert one throwaway recommendation_query per profile, in one transaction. */
@@ -220,7 +220,9 @@ async function main() {
     console.log('PI-1 pool-independence gate (Decision 23 criterion 3)');
     console.log('target: TEST branch only — the shared DATABASE_URL is never written to');
 
-    const scoringModelId = await readScoringModelId(client);
+    const pin = modelPin.modelPinValue(modelPin.readModelPinFlag(process.argv.slice(2)));
+    console.log('scoring model pin: ' + pin);
+    const scoringModelId = await readScoringModelId(client, pin);
     queryIds.push(...(await insertQueries(client, scoringModelId)));
     console.log('measurement queries inserted: ' + queryIds.length);
 

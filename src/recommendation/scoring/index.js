@@ -15,6 +15,15 @@
  *     configuration contract validator (see ./configuration).
  *   SCORING_MODEL_CONFIGURATION_KEYS    - the frozen required top-level key
  *     vocabulary, in documented order.
+ *   OPTIONAL_CONFIGURATION_KEYS         - the frozen optional top-level keys
+ *     (Decision 37: `use_case_profiles`).
+ *   listUseCases()                      - the use-case vocabulary of a model
+ *     (Decision 37): read from `use_case_profiles`, with the legacy
+ *     `gpu_required_use_cases` fallback for a model that declares no profiles.
+ *   validateUseCaseProfiles()           - the pure `use_case_profiles`
+ *     contract validator (see ./use-cases).
+ *   USE_CASE_PROFILES_KEY / GPU_POLICIES - the Decision 37 key and policy
+ *     vocabulary.
  *
  * Engine 4 (Decision 13 STEP 1-3):
  *   loadComponentAssessments()          - component_assessment loader: the
@@ -48,7 +57,14 @@ const {
 const {
   validateScoringModelConfiguration,
   SCORING_MODEL_CONFIGURATION_KEYS,
+  OPTIONAL_CONFIGURATION_KEYS,
 } = require('./configuration');
+const {
+  listUseCases,
+  validateUseCaseProfiles,
+  USE_CASE_PROFILES_KEY,
+  GPU_POLICIES,
+} = require('./use-cases');
 const {
   loadComponentAssessments,
   SELECT_COMPONENT_ASSESSMENTS_SQL,
@@ -66,6 +82,11 @@ module.exports = {
   SELECT_SCORING_MODEL_SQL,
   validateScoringModelConfiguration,
   SCORING_MODEL_CONFIGURATION_KEYS,
+  OPTIONAL_CONFIGURATION_KEYS,
+  listUseCases,
+  validateUseCaseProfiles,
+  USE_CASE_PROFILES_KEY,
+  GPU_POLICIES,
   loadComponentAssessments,
   SELECT_COMPONENT_ASSESSMENTS_SQL,
   selectAssessmentRow,

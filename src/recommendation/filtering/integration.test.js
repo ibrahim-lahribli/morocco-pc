@@ -171,16 +171,16 @@ function poolResult(aPool) {
 function routes() {
   return {
     CPU: [
-      { product_id: CPU_ID, socket_id: COMPATIBLE_SOCKET_ID, product_family_id: FAMILY_ID },
-      { product_id: AMBIGUOUS_CPU_ID, socket_id: AMBIGUOUS_SOCKET_ID, product_family_id: null },
+      { product_id: CPU_ID, socket_id: COMPATIBLE_SOCKET_ID, product_family_id: FAMILY_ID, integrated_gpu_present: false, tdp_watts: 125 },
+      { product_id: AMBIGUOUS_CPU_ID, socket_id: AMBIGUOUS_SOCKET_ID, product_family_id: null, integrated_gpu_present: null, tdp_watts: 65 },
     ],
     MOTHERBOARD: [
-      { product_id: MB_ID, socket_id: COMPATIBLE_SOCKET_ID, form_factor: 'ATX', memory_type_id: MEMORY_TYPE_ID },
-      { product_id: MISMATCHED_MB_ID, socket_id: MISMATCHED_SOCKET_ID, form_factor: 'ATX', memory_type_id: MEMORY_TYPE_ID },
-      { product_id: AMBIGUOUS_MB_ID, socket_id: AMBIGUOUS_SOCKET_ID, form_factor: 'ATX', memory_type_id: MEMORY_TYPE_ID },
+      { product_id: MB_ID, socket_id: COMPATIBLE_SOCKET_ID, form_factor: 'ATX', memory_type_id: MEMORY_TYPE_ID, dimm_slots: 4, max_memory_capacity_gb: 128 },
+      { product_id: MISMATCHED_MB_ID, socket_id: MISMATCHED_SOCKET_ID, form_factor: 'ATX', memory_type_id: MEMORY_TYPE_ID, dimm_slots: 4, max_memory_capacity_gb: 128 },
+      { product_id: AMBIGUOUS_MB_ID, socket_id: AMBIGUOUS_SOCKET_ID, form_factor: 'ATX', memory_type_id: MEMORY_TYPE_ID, dimm_slots: 2, max_memory_capacity_gb: 64 },
     ],
-    RAM: [{ product_id: RAM_ID, memory_type_id: MEMORY_TYPE_ID }],
-    COOLER: [{ product_id: COOLER_ID, cooling_type: 'AIR', height_mm: 155 }],
+    RAM: [{ product_id: RAM_ID, memory_type_id: MEMORY_TYPE_ID, module_count: 2, capacity_per_module_gb: 8 }],
+    COOLER: [{ product_id: COOLER_ID, cooling_type: 'AIR', height_mm: 155, max_tdp_watts: 250 }],
     CASE: [{ product_id: CASE_ID, max_gpu_length_mm: 360, max_gpu_thickness_slots: 3, max_cpu_cooler_height_mm: 170 }],
     PSU: [{
       product_id: PSU_ID, rated_wattage: 850, connector_24pin_atx: true,
@@ -250,6 +250,7 @@ test('integration: fully compatible candidate gets PASS through the real pipelin
     cpu_motherboard: FINAL_STATUSES.PASS,
     cooler_socket: FINAL_STATUSES.PASS,
     platform_memory: FINAL_STATUSES.PASS,
+    cooler_tdp: FINAL_STATUSES.PASS,
   });
 
   // The rest of the compatible combination passes as well (the SSD takes

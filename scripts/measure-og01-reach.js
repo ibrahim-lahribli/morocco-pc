@@ -27,6 +27,7 @@
  *
  * Usage:
  *   node scripts/measure-og01-reach.js [--budget N] [--use-case GAMING|OFFICE|...]
+ *     [--model=<name@version>]
  * Defaults: budget 25000 MAD, use_case GAMING (the batch-1 acceptance values).
  * Exit codes: 0 = measured; 1 = error; 2 = usage error.
  */
@@ -34,6 +35,8 @@
 require('dotenv').config();
 const { Client } = require('pg');
 const path = require('path');
+
+const modelPin = require('./lib/model-pin');
 
 const candidates = require(path.join(__dirname, '..', 'src', 'recommendation', 'candidates'));
 const offers = require(path.join(__dirname, '..', 'src', 'recommendation', 'offers', 'index.js'));
@@ -62,13 +65,16 @@ function argValue(flag) {
 }
 const BUDGET = Number(argValue('--budget') || 25000);
 const USE_CASE = argValue('--use-case') || 'GAMING';
+// Step-2 item 1 (OG-39): which ACTIVE scoring model this measurement reads.
+const MODEL_PIN = modelPin.modelPinValue(modelPin.readModelPinFlag(ARGS));
 if (
-  ARGS.some((a) => a !== '--budget' && a !== '--use-case' && a !== String(BUDGET) && a !== USE_CASE) ||
+  ARGS.some((a) => a !== '--budget' && a !== '--use-case' && a !== '--model=' + MODEL_PIN
+    && a !== String(BUDGET) && a !== USE_CASE) ||
   !Number.isFinite(BUDGET) ||
   BUDGET <= 0
 ) {
   console.error(
-    'usage: node scripts/measure-og01-reach.js [--budget N] [--use-case <use_case>]'
+    'usage: node scripts/measure-og01-reach.js [--budget N] [--use-case <use_case>] [--model=<name@version>]'
   );
   process.exit(2);
 }
@@ -99,13 +105,10 @@ async function main() {
   const db = new Client({ connectionString });
   await db.connect();
   try {
-    // Pinned seed scoring model (Decision 11), read-only.
-    const model = (
-      await db.query(
-        "SELECT id::text AS id, configuration FROM scoring_model WHERE name='seed-minimal-v1' AND version='1.0.0' AND is_active=true"
-      )
-    ).rows[0];
-    if (!model) throw new Error('seed-minimal-v1 not found');
+    // Step-2 item 1 (OG-39): the pinned scoring model, read-only. A pin names
+    // WHICH active model to measure, so a two-active-model branch is measurable;
+    // an unmatched or inactive pin is a hard error, never a silent fallback.
+    const model = await modelPin.resolvePinnedModel(db, MODEL_PIN);
     const configuration = model.configuration;
     const topK = configuration.candidate_caps.top_k_per_role;
     console.log(
@@ -113,7 +116,7 @@ async function main() {
         BUDGET +
         ' MAD | use_case ' +
         USE_CASE +
-        ' | model seed-minimal-v1 ' +
+        ' | model ' + MODEL_PIN + ' ' +
         ' | top_k_per_role ' +
         topK
     );

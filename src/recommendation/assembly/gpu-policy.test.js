@@ -266,3 +266,44 @@ test('gpu-policy.js contains no out-of-scope boundary crossings', () => {
   assert.deepEqual(exports_, ['resolveGpuRequirement']);
 });
 
+// ---------------------------------------------------------------------------
+// E6 (Decision 43): Rule 0 - a DECLARED per-use-case profile policy wins
+// over the legacy gpu_required_use_cases list.
+// ---------------------------------------------------------------------------
+
+test('E6 Rule 0: a declared IGPU_ALLOWED policy wins over the legacy REQUIRED list', () => {
+  assert.equal(
+    resolveGpuRequirement(makeArgs({
+      use_case: 'GAMING',
+      gpu_required_use_cases: ['GAMING'],
+      integrated_gpu_present: { 'cpu-1': true },
+      gpuPolicy: 'IGPU_ALLOWED',
+    })),
+    'OPTIONAL'
+  );
+});
+
+test('E6 Rule 0: declared IGPU_ALLOWED on a CPU without an iGPU stays REQUIRED', () => {
+  for (const flag of [false, null, undefined]) {
+    const present = flag === undefined ? {} : { 'cpu-1': flag };
+    assert.equal(
+      resolveGpuRequirement(makeArgs({ integrated_gpu_present: present, gpuPolicy: 'IGPU_ALLOWED' })),
+      'REQUIRED'
+    );
+  }
+});
+
+test('E6 Rule 0: a declared REQUIRED policy wins over the iGPU flag', () => {
+  assert.equal(
+    resolveGpuRequirement(makeArgs({ use_case: 'OFFICE', gpu_required_use_cases: [], gpuPolicy: 'REQUIRED' })),
+    'REQUIRED'
+  );
+});
+
+test('E6 Rule 0: no declared policy keeps the legacy rules unchanged', () => {
+  // Legacy rule 2: an iGPU CPU in a use case outside the required list ->.
+  assert.equal(
+    resolveGpuRequirement(makeArgs({ use_case: 'OFFICE', gpu_required_use_cases: [] })),
+    'OPTIONAL'
+  );
+});

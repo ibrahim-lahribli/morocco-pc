@@ -76,6 +76,8 @@ const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
  *              offer (ingestion_record_id IS NULL) bypasses the 30-day window;
  *              when false the added term is inert and behaviour is unchanged.
  */
+const { parseAsOf } = require('./as-of');
+
 const SELECT_OFFER_PRICES_SQL = [
   'SELECT o.id, o.store_id, o.product_id, o.product_variant_id, o.price, o.currency, o.availability, o.last_checked_at, o.ingestion_record_id, CURRENT_TIMESTAMP AS price_checked_at',
   'FROM store_offer o',
@@ -86,6 +88,10 @@ const SELECT_OFFER_PRICES_SQL = [
   "AND (o.last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days' OR ($3 AND o.ingestion_record_id IS NULL))",
   'ORDER BY o.price ASC, o.id ASC',
 ].join(' ');
+
+// Keep the legacy query byte-for-byte when no explicit run time is supplied.
+const SELECT_OFFER_PRICES_AS_OF_SQL = SELECT_OFFER_PRICES_SQL
+  .replace(/CURRENT_TIMESTAMP/g, '$4::timestamptz');
 
 function fail(code, field, message) {
   throw new CandidateSelectionError(code, message, field);
@@ -296,7 +302,10 @@ async function selectOfferPrices(candidatePoolResult, db, options) {
 
   const productIds = sortedIds(new Set(candidates.map((c) => c.product_id)));
 
-  const result = await db.query(SELECT_OFFER_PRICES_SQL, [productIds, input.currency, allowUnverifiedSeedOffers]);
+  const asOf = parseAsOf(options);
+  const params = [productIds, input.currency, allowUnverifiedSeedOffers];
+  if (asOf !== null) params.push(asOf.iso);
+  const result = await db.query(asOf === null ? SELECT_OFFER_PRICES_SQL : SELECT_OFFER_PRICES_AS_OF_SQL, params);
   const rows = result && Array.isArray(result.rows) ? result.rows : [];
 
   if (rows.length === 0) {

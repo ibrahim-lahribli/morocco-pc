@@ -4291,3 +4291,547 @@ Recorded the same day, additive to items 3 and 11; changes no decision above and
 **3. Per-phase measurement (no engine edits).** New `scripts/measure-api-pass-phases.js` wraps `client.query` and patches ONLY the documented namespace seams (Decision 17/21's stub convention) to attribute every statement to a phase; all patches are restored in `finally`. Measured one API-shaped pass on the TEST branch (GAMING / 20000 MAD): 75 statements, 10 670 ms statement time in a 12 114 ms wall (≈142 ms/statement) — consistent with this decision's load verdict (74 statements / 10 893 ms, same cost model). Largest phases: `engine.commit` 37 stmts / 4 906 ms; `engine.load_filtering_context` 14 / 1 886; `engine.load_candidates` 9 / 1 235; the pure stages (filter, retention, budget floor, assembly, scoring, ranking, explanation) total ≈19 ms with zero statements. Reported overlaps are exclusively parent→child nesting (`engine.snapshot` → `engine.pass` → loaders); no sibling phase overlaps, confirming the pipeline is strictly sequential and the cost is per-statement round-trip latency, not compute. The script deletes its own Layer 4 rows (dependency order) and exits non-zero on cleanup failure.
 
 **4. `test:api:db` hardened.** The DB-backed suite now (a) captures per-table row counts BEFORE the run and asserts residue against those counts AFTER cleanup (profile, query, result, build_candidate, build_component, build_rejection — before/after equality, not just zero at the end), (b) asserts the 422 zero-row case writes nothing (row counts unchanged for the tables the pass would touch), and (c) pins POST==GET with `assert.deepEqual` over the full response bodies rather than a field-by-field comparison. Additive assertions only; no existing assertion weakened.
+
+## Decision 37 — a scoring model owns its use-case policy and its use-case vocabulary (`use_case_profiles`)
+
+Status: RESOLVED + IMPLEMENTED (2026-10-08) — `use_case_profiles` is an OPTIONAL scoring-model configuration key validated in `src/recommendation/scoring/configuration.js` / `scoring/use-cases.js`; `listUseCases(configuration)` is exported from the scoring barrel; the `launch-v2` seed is authored and rehearsed branch-first; activation on a live database is a coordinated step (OG-39).
+
+Context
+  OG-38 (2026-10-07) measured that the API derives its accepted use-case vocabulary from `configuration.gpu_required_use_cases` — the same list that makes the GPU mandatory — so OFFICE was rejected 422 and only GAMING / WORKSTATION were reachable. Vocabulary and GPU mandate were one field, so no policy could separate them, and `use_case` had no effect on any result below a single `Array.includes` test.
+
+Decision
+  1. A scoring model MAY declare `use_case_profiles`, keyed by use-case name. Per profile:
+       `gpu_policy`            REQUIRED | IGPU_ALLOWED                 (required)
+       `spend_targets`         { <component_role>: share of budget }   (required, each share in [0, 1])
+       `role_weights`          per-role weight override                (optional)
+       `archetype_objectives`  { <ARCHETYPE>: <number> }              (optional)
+     Unknown profile fields, a missing required field, an out-of-vocabulary `gpu_policy`, or an out-of-range share fail fast with the exact nested path, in the existing Engine 2 error vocabulary.
+  2. `use_case_profiles` is OPTIONAL. A model that omits it validates and loads byte-for-byte unchanged, so `seed-minimal-v1` remains reproducible — the key is added to `OPTIONAL_CONFIGURATION_KEYS`, never to the required vocabulary.
+  3. The use-case VOCABULARY is `listUseCases(configuration)`: the `use_case_profiles` keys when declared, falling back to `gpu_required_use_cases` only for a legacy model that declares no profiles. The API's meta vocabulary consumes this accessor instead of `gpu_required_use_cases`; this is the acceptance that the vocabulary is decoupled.
+  4. `gpu_required_use_cases` is retained unchanged (Decision 10 / Decision 11 Rule 8) as the Engine 3 GPU-mandate input and as the legacy vocabulary fallback. It is no longer the vocabulary SOURCE for a model that declares profiles.
+  5. `gpu_policy`, `spend_targets` and `archetype_objectives` are HYPOTHESES pending human review (H3). They are validated structurally now and consumed by later epics (E2 retention, E3 pair quota, E4 archetypes, E5 resolution, E6 OFFICE); no scoring, retention, assembly or ranking behaviour changes in this decision.
+  6. `spend_targets` values are NORMALISED RELATIVE WEIGHTS, not a partition (added 2026-10-08, E1b): they need NOT sum to 1 (the authored launch-v2 profiles sum to 0.97 GAMING / 0.98 WORKSTATION / 0.89 OFFICE, and that headroom is intentional) and a profile MAY declare only the roles its policy cares about. A consumer that needs a distribution normalises by the declared sum. The enforced invariants are therefore: each declared share is a finite number in [0, 1] (unchanged), and the declared sum is STRICTLY POSITIVE so normalisation is well-defined - an empty or all-zero `spend_targets` fails fast with `INVALID_FIELD_VALUE` at `<profile>.spend_targets`.
+
+Data
+  `database/seeds/013_scoring_model_launch_v2.sql` inserts `launch-v2` `1.0.0` as v1's exact configuration with `use_case_profiles` appended (`||`, so nothing else differs), then makes it the single active model with the v1 row retained but inactive. Rehearsed on the TEST branch inside a transaction that is rolled back: after the first apply exactly 1 active model (`launch-v2`), vocabulary `{GAMING, OFFICE, WORKSTATION}`; a second apply changed nothing (no duplicate row); `ROLLBACK` restored v1 active with no `launch-v2` row.
+
+Out of scope (deliberately not done here)
+  * Applying seed 013 to the shared or TEST database. Four harnesses pin `seed-minimal-v1 ... is_active = true` BY NAME (`scripts/measure-orchestrator.js`, `scripts/test-orchestrator-full-run.js`, `scripts/verify-pool-independence.js`, `scripts/measure-og01-reach.js`), so flipping the active model breaks their preflight until they are updated. Tracked as OG-39. **UPDATED 2026-10-09:** every comparison harness and the golden preflight now select the model by `name@version` (`scripts/lib/model-pin.js`, default `seed-minimal-v1@1.0.0`), so a two-active-model branch is measurable while an inactive model is still never executed - OG-39 CLOSED (C-36).
+  * Consuming the new policy in assembly / retention / scoring — E2–E6.
+  * `apps/api/src/meta.js` rewiring — Platform owns `apps/api/`; the scoring-barrel export is the interface.
+
+Verification
+  `npm run test:unit` = 964 pass / 0 fail (950 before; +12 in E1 from `use-cases.test.js`, +2 more in E1b for the `spend_targets` relative-weight invariants). `src/recommendation/scoring/use-cases.test.js` pins the profile contract, the vocabulary decoupling (OFFICE declared by the profiles while absent from `gpu_required_use_cases`), the optional-key integration (a model without profiles gains no key), and the legacy fallback. `scoring/index.test.js` and `configuration.test.js` were updated for the new export surface and the new require (no assertion was weakened). No engine pass, score, rank or persisted row changed: only new configuration is accepted, and nothing consumes it yet. Item 6 (2026-10-08, E1b) pins `spend_targets` as relative weights: `use-cases.test.js` asserts a sum != 1 and a partial profile are valid, and that an empty or all-zero map fails fast.
+## Decision 38 — explicit asOf pins scoring and offer freshness without a migration
+
+Status: RESOLVED 2026-10-08; IMPLEMENTED 2026-10-08 — optional options.asOf is an explicit run input; absent preserves the transaction-clock path, present pins scoring and offer freshness.
+
+Date: 2026-10-08. E2-pre only, OG-42. No migration, seed activation, API change, retention change or E2/E3 implementation.
+
+### Current situation
+
+The orchestration scoring clock is `orchestrator/run.js`'s SQL `CURRENT_TIMESTAMP AS now`.
+The offer loader independently uses SQL `CURRENT_TIMESTAMP` for `price_checked_at` and
+its inclusive 30-day cutoff. `scoring/load-assessments.js` also emits `loaded_at`, but the
+orchestrator does not use it as a scoring clock. Different runs therefore age assessments
+at different instants; rounding can change ranks even with unchanged catalog data (OG-41).
+The restricted Platform-owned candidate/filtering loaders and persistence need no changes
+for explicit run-time pinning.
+
+### Decision
+
+1. `runRecommendation({ db, queryId, options: { asOf } })`,
+   `runRecommendationSnapshot(client, queryId, options)` and
+   `runRecommendationFullRun(client, queryId, options)` accept optional `options.asOf`.
+   This extends the existing options interface, not a new positional argument or query column.
+2. Absent/undefined asOf preserves the existing transaction-clock read and exact offer SQL
+   and parameter list. Explicit asOf must be an ISO timestamp with an explicit timezone
+   and at most millisecond precision; null, malformed, impossible-calendar or ambiguous
+   local timestamps fail `INVALID_FIELD_VALUE` on `asOf`, without a wall-clock fallback.
+   Offset timestamps normalize to UTC. No implicit truncation of greater precision.
+3. Explicit asOf replaces the scoring clock for candidate/build/contribution decay and
+   both offer SQL timestamp uses via a bound `$4::timestamptz`. The same returned timestamp
+   drives JS freshness normalisation and price decision metadata. Seed-offer waiver policy,
+   inclusivity of the 30-day boundary, deterministic tie-breaks and compatibility are unchanged.
+4. Snapshot ownership is unchanged. Full-run and the golden harness use the existing
+   REPEATABLE READ READ ONLY wrapper. Direct runRecommendation callers still own their
+   snapshot; asOf does not create or change a transaction.
+5. The golden manifest declares fixed `as_of = 2026-10-08T20:00:00.000Z`, passed as options.asOf
+   to both read passes and full runs. The baseline header prints it; its date derives from
+   this explicit input rather than report-generation wall time. Volatile freshness metadata
+   stays outside the committed baseline. Assertions remain unchanged.
+6. Persisting as_of on recommendation_query is a separate Platform-owned migration/request,
+   not implemented here. Cache keys must include as_of, explicit model identity/configuration,
+   engine/policy version/options and a catalog-data revision. Pinning time does not freeze
+   mutable offers/assessments/compatibility/catalog data or provide historical snapshots.
+7. Replaying an old asOf is a reproducibility input, not permission to advertise stale offers
+   as currently purchasable. Current availability/freshness revalidation is a separate serving
+   policy; do not mutate an existing query's time to refresh it.
+
+### Rejected alternatives
+
+- Updating only score time: offer eligibility and price decision metadata would still depend
+  on the run clock and the result would not be reproducible at a freshness boundary.
+- Patching Platform-owned loaders/persistence or adding a migration here: neither is needed
+  for the explicit input; schema persistence belongs to Platform.
+- Freezing JS Date globally, rewriting SQL through a client proxy, or mutating model staleness:
+  those obscure the input contract or change scoring policy rather than expose its time input.
+- Tolerance-only A8: a rounded ranking boundary can change selection despite tiny raw deltas.
+
+### Verdict for this pass
+
+Unit pins cover absent-option deep equality and identical SQL/params, malformed timestamps,
+full-run forwarding, pinned scoring time and inclusive/exclusive freshness boundaries.
+Read-only TEST comparison for S03/S06 at the manifest instant versus normal transaction time:
+101 post-offer/filter candidates, 40 retained, 25 ranked; retained identities and ranked
+signatures equal. Assessment ages differ slightly by elapsed wall time; this is expected
+arithmetic, not an eligibility/signature deviation. Two full golden runs and mechanical
+baseline comparison are reported in the E2-pre brief verification record.
+
+### Supersedes / superseded by
+
+Amends Decision 17's transaction-clock-only rule and Decision 7's run-current offer timestamp
+ONLY when asOf is explicit. The no-option path remains unchanged. The E0d migration-first
+proposal in the engine brief is superseded by this engine-only input plus Platform persistence
+request; no historical migration or earlier dated verification is rewritten.
+
+## Decision 39 — retention is target-aware: a profile's `spend_targets` choose which candidates survive each role (E2)
+
+Status: RESOLVED 2026-10-09; IMPLEMENTED 2026-10-09 — the query loader carries `resolution` as a sibling of the Engine 2A input, a new pure `retention/targets.js` turns a profile's `spend_targets` + budget + resolution into per-role `{target, ceiling}`, and `retainTopKPerRole` accepts an optional `roleTargets` that switches a targeted role bucket from top-K to price-band retention while keeping the Decision 27 reservation, the K cap and the Rule 3/5 order. A model that declares no `use_case_profiles` passes `null` and stays byte-identical. The band constants are HYPOTHESES pending the H3 human review.
+
+Date: 2026-10-09. E2 of `docs/briefs/engine.md`. It closes nothing in the gap register and registers **OG-43** for its own residual (unvalidated band constants; E2 is unexercised on the shared DB and by the API). It IS an engine behaviour change (retention, the query loader, the orchestrator wiring) plus a second committed golden baseline. It is NOT a migration, NOT a seed change (seed 013 is E1's, and it is applied to the TEST branch only), NOT a scoring/assembly/ranking/persistence change, NOT an API change, and NOT E3 (assembly-side pair quota) or E4–E6.
+
+### Current situation
+
+Retention (`src/recommendation/retention/retain.js`, Decision 12) kept the top
+`candidate_caps.top_k_per_role` verdicts per role by Engine 4 candidate score, plus the
+Decision 27 reservation of one cheapest eligible candidate per role. Nothing in the stage
+read the query's budget or the model's spend policy, so retention was budget-BLIND above the
+reservation. Measured on the TEST branch against the 100-product seed catalog,
+`seed-minimal-v1` retains the IDENTICAL per-role set at 8000 / 12000 / 20000 / 30000 MAD
+(`scripts/measure-retention-bands.js`, GAMING 1080p: 1 distinct set), so a 30000 MAD pass can
+retain the same 3200 MAD GPU as an 8000 MAD pass while every GPU inside the target band loses
+on score. Engine 2A's input contract (`candidates/input.js`) carries no resolution field, and
+`loadQueryInput` did not select `resolution` at all (Decision 17.6).
+
+### Decision
+
+1. `loadQueryInput` selects `recommendation_query.resolution` and returns it VERBATIM as a
+   SIBLING of `input` (`{ query_id, scoring_model_id, input, resolution }`), never inside the
+   Engine 2A input: resolution is a retention input, not part of the Decision 10
+   candidate-selection contract. `priority` and the profile FK stay unselected (E4).
+2. A new pure module `src/recommendation/retention/targets.js` owns the arithmetic:
+   `computeRoleTargets({ spendTargets, budgetAmount, resolution })` returns a deep-frozen
+   `{ <role>: { target, ceiling } }` where `target = share x budget` and
+   `ceiling = target x BAND_CEILING_FACTOR`. Only GPU is scaled by resolution
+   (`RESOLUTION_MULTIPLIERS`: 1080p 1.0, 1440p 1.25, 2160p 1.5); null/absent resolution is
+   neutral (1.0), while an unmapped non-null string fails `INVALID_FIELD_VALUE` on `resolution`
+   rather than silently defaulting. Roles absent from `spendTargets` are absent from the map.
+   No DB access, no clock, no randomness, caller objects never mutated.
+3. `retainTopKPerRole({ ..., roleTargets })` gains an OPTIONAL argument. null/absent keeps the
+   pre-E2 rule byte-for-byte. When present, a role that has a target partitions its eligible
+   candidates into three price bands — below the target, at target
+   (`|price - target| <= BAND_TOLERANCE x target`), above target (strictly over the tolerance,
+   bounded by `ceiling`; a candidate priced above `ceiling` belongs to no band) — and retains
+   the highest-scoring candidate in each band it can fill, then tops back up to K.
+4. Both modes share ONE selection pipeline: the Decision 27 cheapest-per-role reservation, the
+   Rule 2 eligibility (PASS | UNKNOWN), the Rule 3/5 ordering (score DESC then
+   `compareCandidates`), the `min(K, eligible)` hard cap, and the Rule 3/5 output order. The
+   band pass fills the `K - 1` slots the reservation does not own; the reservation then adds the
+   cheapest eligible candidate and the top-up draws the remainder in Rule 3/5 order, so K can
+   never be exceeded nor under-filled. A bucket no larger than K is returned whole and consults
+   no price at all, in either mode.
+5. `RESOLUTION_MULTIPLIERS`, `BAND_TOLERANCE` (0.15) and `BAND_CEILING_FACTOR` (2.0) are frozen
+   code constants in `targets.js`, by the `MAX_PER_PAIR` / `TOP_N_PERSISTED` precedent: a
+   per-model override would be a new optional configuration key plus a new seed. They are
+   HYPOTHESES pending H3 (Decision 37 item 5), not measured facts.
+6. `orchestrator/run.js` resolves the ACTIVE model's
+   `use_case_profiles[input.use_case].spend_targets` and passes the map as `roleTargets`. A
+   model that declares no `use_case_profiles`, a profile without `spend_targets`, and a use case
+   the model does not declare all yield `null`, so that pass keeps the pre-E2 rule. A malformed
+   share, a non-positive budget or a bad resolution fails fast rather than defaulting.
+
+### Rejected alternatives
+
+- Putting `resolution` inside the Engine 2A input: that contract is the Decision 10
+  candidate-selection input owned by `candidates/input.js`, and no candidate-selection stage
+  reads resolution — an inside-the-input field would change a contract with no consumer.
+- A per-model `band_tolerance` / `ceiling_factor` / per-resolution multiplier configuration key:
+  the values are unvalidated hypotheses, so shipping them as a configuration surface would
+  invite a seed to encode a guess as policy before the H3 review. A code constant is the honest
+  place for a hypothesis.
+- Making the band pass REPLACE the Decision 27 reservation instead of sharing the pipeline: the
+  reservation is the cheapest-per-role guarantee that stopped a rich catalog starving cheap
+  builds (OG-26), and dropping it would regress that fix.
+- Filling K by rank inside the target band only (no below/above bands): a single band turns
+  retention into a budget filter that returns fewer candidates than K at small budgets, making
+  the retained pool depend on how the shares were chosen rather than on which candidates exist.
+- Normalising `spend_targets` to a partition before multiplying by the budget: Decision 37 item 6
+  declares them relative weights, and a partition would move every target as soon as a profile
+  declared only a subset of roles.
+
+### Verdict for this pass
+
+Unit: `npm run test:unit` = 994 pass / 0 fail / 0 cancelled (994 before the E2 test files were
+counted as 970 + 24 new) on both Node 24.21.0 and Node 22.23.3, the version CI pins;
+`npm run test:scripts` = 212 pass / 0 fail / 0 cancelled on both. The new pins are
+`retention/targets.test.js` (10), 10 `retention/retain.test.js` cases, and 4 across
+`orchestrator/run.test.js`, `retention/index.test.js` and `query/load-query-input.test.js`. They
+cover the multiplier table and the null-neutral rule, GPU-only scaling, ceiling derivation, role
+omission, freezing and purity, fail-fast inputs, the band partition, the shared pipeline (K cap,
+reservation kept, Rule 3/5 order preserved, K=1 and K=2 smaller than the band count), a
+profile-less model passing null, and `resolution` carried as a sibling.
+
+Acceptance (TEST branch, `launch-v2@1.0.0`, GAMING 1080p, `scripts/measure-retention-bands.js`):
+the retained sets at 8000 / 12000 / 20000 / 30000 MAD are 4 DISTINCT (RESULT: PASS), against
+`seed-minimal-v1@1.0.0`, where the same script reports 1 distinct set and `roleTargets: null`
+(RESULT: FAIL) — so the PASS is differential, not vacuous.
+
+Primary regression guard: the v1 golden baseline regenerated after E2 is BYTE-IDENTICAL to the
+committed `test/golden/baseline-2026-10.md` (`cmp` clean), 81 rows / 56 PASS / 22 EXPECTED-RED /
+3 UNKNOWN, exit 0. The `launch-v2` baseline moved on exactly the rows E2 changes and is committed
+as `test/golden/baseline-launch-v2-2026-10.md` (81 rows / 55 PASS / 23 EXPECTED-RED / 3 UNKNOWN,
+exit 0, no approved assertion failed): A1 S03/S10/S11 rise 1 -> 2 distinct (CPU, GPU) pairs, A3
+signature overlap S03 1 -> 0.36 and S04 1 -> 0, A2/A4/A5 totals move with the newly retained
+cooler and GPU, and A1 S19 (OFFICE, no resolution) falls 3 -> 2 pairs. No threshold was tuned and
+`test/golden/CHANGELOG.md` gains no row because no threshold changed.
+
+### Supersedes / superseded by
+
+Extends Decision 12 (retention) with a second mode; amends Decision 17.6's 'resolution is not
+selected' for the retention input ONLY (resolution is still not part of the Engine 2A input);
+consumes Decision 37's `use_case_profiles.spend_targets` while leaving its item 5 hypothesis list
+and the pending H3 review untouched; leaves Decision 27's reservation, the K cap and the Rule 3/5
+order intact. Registers OG-43. No historical document is rewritten.
+
+## Decision 40 — the Engine 3 walk enforces the optional per-pair quota candidate_caps.max_builds_per_pair (E3)
+
+Status: RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 — `validateScoringModelConfiguration` accepts the OPTIONAL
+`candidate_caps.max_builds_per_pair` (valid iff a positive integer or absent; a DECLARED malformed value fails the
+nested path in both validators, never silently defaults), `validateEngine3Input` accepts and carries it, and
+`assembleBuilds` skips a GPU branch once its (CPU, GPU) pair already holds the quota and never emits a path whose
+pair is full, so the `max_builds_per_query` halt is no longer spent on one pair. A model that declares no
+`max_builds_per_pair` keeps the pre-E3 walk byte-identical.
+
+Date: 2026-10-10. E3 of `docs/briefs/engine.md`. It answers Decision 25's cap-starvation diagnosis inside Engine 3
+and consumes OG-43's "remaining work is E3" re-check trigger. It IS an engine behaviour change (the assembly walk
+and both validators) plus golden runs against both model pins. It is NOT a migration, and NOT a shared-DB change:
+seeds 014 / 015 / 016 (launch-v2 1.1.0 / 1.2.0 / 1.3.0) are TEST-branch only. It is NOT a scoring / retention /
+ranking / persistence change, NOT an API change, and NOT E4.
+
+### Current situation
+
+Engine 3's DFS halted once `candidate_caps.max_builds_per_query` builds were held, with no pair dimension, so the
+global cap bought pair diversity nothing: Decision 25 measured the walk spending its halt on one (CPU, GPU) pair
+and concluded no MAX_PER_PAIR value could help while the halt stayed pair-blind. `candidate_caps` was a closed
+two-key contract (`top_k_per_role`, `max_builds_per_query`), so a model configuration could not even state a
+per-pair cap. After E1/E2, golden A1 (at least 3 distinct (CPU, GPU) pairs in the selected set) still had red rows
+on `launch-v2` 1.0.0: the committed `baseline-launch-v2-2026-10.md` measures 23 EXPECTED-RED (55 PASS / 3 UNKNOWN)
+and reports one distinct pair at S03/S05/S07 (OG-43).
+
+### Problem
+
+The diversity objective that E0 pins (A1) cannot be met by retention or scoring: it is the `assembleBuilds` walk
+itself that stops after few pairs. Any fix at a later stage sees a smaller input pool, and lifting
+`max_builds_per_query` alone trades the OG-26 starvation history for a latency regression the Platform has not
+budgeted.
+
+### Decision
+
+1. `candidate_caps` stays a CLOSED contract but is declared with an OPTIONAL third key `max_builds_per_pair`:
+   valid iff a positive integer, or absent. A DECLARED non-positive / non-integer value (including `null`) fails
+   `INVALID_FIELD_VALUE` at the nested path in BOTH validators (`scoring/configuration.js`, `assembly/input.js`);
+   absence is the default and adds no key to the validated output (the declared-absent contract).
+2. Quota identity is the (CPU, GPU) product/variant pair, exactly the key the diverse-top selection pairs by, so
+   the two stages cannot disagree about what "one pair" means.
+3. `assembleBuilds` enforces the quota at GPU DEPTH: a GPU branch whose pair already holds the quota is skipped,
+   and a path whose pair is full is never emitted, so the pair counts and the global `max_builds_per_query` halt
+   both count EMITTED builds only. GPU branches are consumed in eligible-set order with no re-sort; the fixed
+   code-unit tie-breaks are untouched, so determinism and reproducibility are unchanged in kind.
+4. Below the quota, and when the key is absent, the walk is byte-identical to the pre-E3 rule (pinned
+   fixture-level, and re-proven on the real 20-scenario harness: see the verdict).
+5. The quota VALUE is a model decision, not an engine decision: seeds 014 / 015 / 016 add `launch-v2` 1.1.0 /
+   1.2.0 / 1.3.0 (quota 2 / 3 / 1) ACTIVE on the TEST branch beside 1.0.0 (`seed-minimal-v1` and 1.0.0 untouched,
+   shared DB untouched), each diverging from 1.0.0 only in the quota, so the name@version model pin (OG-39)
+   selects which version a run measures. The measured hypotheses: quota 2 reaches 4-6 pairs at S03..S09; quota 1
+   reaches 6+ at the halt of 25; quota 3 sits between. All three pins are HYPOTHESES pending the H3 review,
+   recorded as the same class of unvalidated constant as OG-43.
+
+### Rejected alternatives
+
+- Raising `max_builds_per_query` instead of adding a pair dimension: changes a global budget the Platform sized
+  from real measurements, buys diversity only where the DFS happens to wander, and re-exposes OG-26 starvation
+  dynamics under a bigger cap. Rejected on the Decision 25 diagnosis itself.
+- Making `max_builds_per_pair` REQUIRED: a required third key breaks every stored configuration that predates
+  this decision (`seed-minimal-v1`, launch-v2 1.0.0) the moment a validator re-reads them; an OPTIONAL key keeps
+  the reproducibility guarantee that pinned models replay unchanged.
+- Enforcing the quota in ranking or selection instead of the walk: those stages see the assembled builds whose
+  composition was already fixed; the pair spread must be decided while the DFS still has GPU branches to visit,
+  which is Decision 25's original point.
+- Freezing one quota value in code (the MAX_PER_PAIR enum precedent) rather than in a model key: the whole
+  objective is that different use cases/models may want different diversity-vs-latency trades, so the value
+  has to live next to the other candidate caps the model already declares.
+
+### Verdict for this pass
+
+Unit: `npm run test:unit` = 1002 pass / 0 fail / 0 cancelled on Node 24.21.0; the changed files re-run green on
+Node 22.23.3 (CI parity, 149/149 with 0 cancelled). `npm run test:scripts` = 212/212; `npm run test:api` = 38/38;
+`gen-decision-index --check` and `verify-docs --offline` clean. New pins: 5 assembly cases (absent = pre-E3 walk
+under the same halt; quota 1 reaches 6 distinct pairs under the same halt; quota 2 caps every pair at 2 with 5
+distinct pairs; deterministic Rule order per pair preserved; nested-path validation for 0 / -1 / 1.5 / "2" /
+null), one input-contract pin, two configuration pins.
+
+Golden (TEST branch, 20 scenarios): pinned `launch-v2@1.0.0`, the E3 engine reproduces the committed
+`test/golden/baseline-launch-v2-2026-10.md` BYTE-IDENTICALLY (`cmp` clean after the two normalized timestamp
+lines), proving the declared-absent contract on the real harness. Pinned `@1.1.0` (quota 2): 68 PASS / 10
+EXPECTED-RED / 3 UNKNOWN, exit 0 — A1 green across S03..S09 (S03 5, S04 6, S05 6, S06 4, S07 6, S08 6, S09 6
+pairs), so E3's A1 acceptance ("at least 3 distinct pairs at >= 12k MAD") is MET differentially, not vacuously.
+The remaining 10 EXPECTED-RED rows are exactly E4-E7 epics (A3 workstation signature, A4 VRAM floor, A5
+price-vs-performance archetypes, A6-S19 OFFICE/iGPU) and are not tuned. The measured scratch runs are committed
+as `test/golden/_scratch-v1..v6.md` (v1 seed-minimal-v1 RED -> v2 launch-v2 1.0.0 RED -> v3/v4/v5 quota 2/3/1
+GREEN -> v6 deterministic repro).
+
+Migrations: `verify:replay --reference=test` = 0 drift (18 files, 362/362 columns, 78/78 checks, 60/60 FKs,
+99/99 indexes). Pool independence: `verify:pi1` = PASS (GAMING 0/25 and OFFICE 0/25 pre-existing `build_score`
+moved; one earlier same-session run reported a single 54.79 -> 54.78 false drift, the gate's known intermittent
+mode; the paired re-run is the verdict). Seed idempotency: a real re-run of 014 / 015 / 016 through
+`scripts/apply-seed.js` is a no-op with byte-identical stored configurations.
+
+### Supersedes / superseded by
+
+Answers Decision 25 (the pair-blind halt) without rewriting it; amends Decision 37's `candidate_caps` closed
+shape with an OPTIONAL key and consumes OG-39's model pin; leaves Decision 27's reservation, Decision 39's
+retention bands, and every scoring weight untouched. Registers **OG-44** (the quota values 1 / 2 / 3 are
+unvalidated hypotheses, pending the same H3 review as OG-43's band constants; E3 is unexercised on the shared
+DB and by the API). No historical document is rewritten.
+
+## Decision 41 — archetype selection (selectArchetypes) replaces selectDiverseTop as the pre-persistence showcase (E4)
+
+Status: RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 — pure, DB-free `selectArchetypes({ ranked, budget, priority })` returns up to THREE pair-distinct showcase builds (PERFORMANCE / BALANCED / VALUE, output order set by the query `priority`, `persisted_rank` contiguous 1..N in output order) and degrades honestly with `NO_*` reason codes instead of padding; `strategy_key` is RETURNED but not persisted (Platform migration 019 absent) and `archetype_objectives` remain unconsumed hypotheses.
+
+Date: 2026-10-10. Scope: implements E4 of `docs/briefs/engine.md` and settles what the Decision 21 showcase selection is. Amends Decision 21's stage wiring without rewriting Decision 20 (pair identity) or Decision 25 (the halt diagnosis); Decision 40's per-pair quota is the assembly-side answer to Decision 25, this is the selection-side answer. NOT included: no migration (019 does not exist — `database/migrations/` ends at 018), no seed, no scoring change, no API change, no persistence change.
+
+### Current situation
+
+- The showcase set between `rankBuilds` and `explainSelection` was `selectDiverseTop` (Decision 20): a pair-capped walk (`MAX_PER_PAIR = 3`) over the FULL ranked list, whose spread is a function of the `max_builds_per_query` halt (Decision 25), not of any product notion of which builds to show. The API persists `priority` and no stage consumed it (OG-38's behavioral side).
+- Engine 6 runs BEFORE Engine 5b in the full run, and both require final entry values: `explanation/explain.js` `validateEntry` requires `persisted_rank` to be a positive integer, and `persistence/validate-selected.js` requires it contiguous 1..N (the Decision 19/21 selected shape). `selectDiverseTop` assigned the ranks at selection time; Engine 5b only validates and reads them.
+- Decision 37 authored the optional `archetype_objectives` profile key for later epics (E4 named explicitly); nothing consumed it at the start of this epic.
+- The golden harness projects the selection into its A-assertions as `selected`; E0's A1 reads the (CPU, GPU) pair count of that set.
+
+### Problem
+
+A showcase set driven by a latency halt cannot express product intent (show the performance option, the balanced option, the value option), its diversity depends on how fast the walk filled its quota, and `priority` — one of the three fields the API accepts and persists — has no voice anywhere in the pipeline. Without a decided selection contract, each caller invents its own "which builds to show" heuristic and the persisted showcase stays an artifact of caps.
+
+### Decision
+
+1. `selectArchetypes({ ranked, budget, priority })` (`src/recommendation/ranking/select-archetypes.js`, exported from the ranking barrel beside `selectDiverseTop`) is THE showcase selection of the full run. `selectDiverseTop` is RETAINED unchanged (reproducibility, `measure-api-pass-phases.js`); no production code calls it anymore.
+2. Strategies (frozen `STRATEGIES`): PERFORMANCE — highest `build_score` among entries with `total_price / budget.amount >= PERFORMANCE_FLOOR` (0.85, frozen code constant); BALANCED — highest `build_score` overall; VALUE — best `build_score / total_price`, ties to the CHEAPER build, then `signature` ASC. Within one strategy the scan is ranked order and ties keep the first match — deterministic, no clock, no randomness.
+3. Output order by `priority`: 1–2 -> [VALUE, PERFORMANCE, BALANCED]; 3, `null`, `undefined` -> [BALANCED, PERFORMANCE, VALUE]; 4–5 -> [PERFORMANCE, BALANCED, VALUE]. A priority outside 1..5 is `INVALID_FIELD_VALUE` — never silently defaulted.
+4. Pair-distinct across archetypes using the Decision 20 pair key (`cpu product_id | gpu variant-or-OMITTED`, the `select-diverse.js` identity): a claimed pair is never re-used, and fewer than three distinct pairs returns FEWER archetypes — never padding.
+5. `reason_codes` is a frozen array of strings from `REASON_CODES` in output order — `EMPTY_RANKED` (the single code for an empty ranked list, not three) or `NO_PERFORMANCE_CANDIDATE` / `NO_BALANCED_CANDIDATE` / `NO_VALUE_CANDIDATE` for each degraded strategy — empty when all three archetypes are found. Every strategy has a listed member: a first draft omitted `NO_BALANCED_CANDIDATE` and pushed `undefined` (fixed in the review pass, see Verdict).
+6. `persisted_rank` is contiguous 1..N in OUTPUT order (the Decision 20 contract), assigned BY THE SELECTION: Engine 6 validates it before the seam and Engine 5b re-validates it at the write, so it cannot be "assigned later" past either. A degraded strategy leaves no gap in the sequence.
+7. `strategy_key` is RETURNED on every archetype and deliberately NOT persisted: `recommendation_result.strategy_key` requires Platform migration 019, which is not in the tree. Deferred with a binding re-check trigger — registered as **OG-45**.
+8. The three strategy definitions, `PERFORMANCE_FLOOR = 0.85`, and Decision 37's `archetype_objectives` (which remains UNCONSUMED — the strategies are code constants, not profile-weighted) are HYPOTHESES pending the same H3 human review as OG-43 / OG-44; the golden manifest declares no A10 `archetype_strategies` assertion yet, so the harness never judges archetype output end-to-end. Registered as **OG-46**.
+9. Full-run composition (Decision 21 amended at the stage level only): `runRecommendationFullRun` wires rankBuilds -> selectArchetypes -> explainSelection -> runRecommendationCommit; the returned `selected` is the explained E4 array, and the result also carries `archetypes` + `archetype_reason_codes` for pre-persistence observation. The golden harness consumes the same shape (`scripts/lib/scenario-eval.js` projects `selection.archetypes`, falling back to the legacy `selected` key), so A1's pair count is now measured over the archetypes (<= 3 by construction).
+
+### Rejected alternatives
+
+- Keeping `selectDiverseTop` as the showcase: its pair spread is halt-dependent (Decision 25's diagnosis), it has no strategy semantics, and `priority` has no voice; different caps cannot express "performance vs value".
+- Leaving `persisted_rank: null` in the selection output "for Engine 5b to assign" (the E4 first draft): impossible as written — Engine 6 runs BEFORE Engine 5b and refuses a null rank, so every non-empty full run threw (proved in the review pass), and Engine 5b's contract is validate-and-read, never assign.
+- Assigning the ranks by seam-mapping in `full-run.js` instead: leaves every other consumer of the selection holding unusable ranks and re-creates the defect at the next caller; the selection owns its output order (the Decision 20 precedent assigns at selection).
+- Profile-weighted PERFORMANCE (`archetype_objectives`) now: no measured basis exists (Decision 37 validated the key structurally only); inventing weights would turn a hypothesis into shipped behavior. Deferred with the H3 review (OG-46).
+
+### Verdict for this pass
+
+Three seam defects were found and fixed while recording this decision (2026-10-10 adversarial review of the E4 wiring; each fix is pinned):
+1. `REASON_CODES` lacked `NO_BALANCED_CANDIDATE`, so a degraded BALANCED pushed `undefined` into the documented "frozen array of strings" (probe: a two-entry priority-2 run returned `reason_codes: [null]` in JSON). Fixed at the vocabulary; barrel key-set pin extended; a degradation pin added.
+2. The golden projection (`scripts/lib/scenario-eval.js`) fell back to a non-existent `selection.project` key for legacy `selectDiverseTop` results (`{ selected, dropped_count }` is the real shape) and silently projected an EMPTY selection, degrading A-assertions to UNKNOWN instead of measuring. Fixed to `selection.selected`; pinned.
+3. `persisted_rank: null` on the archetypes broke `runRecommendationFullRun` on EVERY non-empty selection (probe: `explainSelection` throws `INVALID_FIELD_VALUE "selected[0].persisted_rank" must be a positive integer`; `full-run.test.js` hid it by stubbing Engine 6 with rank-carrying fixtures). This was LIVE IN THE API WRITE PATH (`apps/api/src/engine.js` calls the function). Fixed at the producer (item 6); pinned.
+
+Tests: `npm run test:unit` = 1015 pass / 0 fail on Node 24.21.0 and on Node 22 (CI parity leg, 0 cancelled); `npm run test:scripts` = 212 pass / 0 fail. `scripts/test-orchestrator-full-run.js` on the TEST branch = 24 pass / 0 fail — the real snapshot -> rank -> selectArchetypes -> explain -> commit path: persisted rows land, the stored explanation matches Engine 6 text, the re-run guard refuses a second pass, cleanup residue 0. Golden harness (`--filter=S03`, TEST branch) exit 0 with cleanup residue 0. NOT run this pass (earlier recorded evidence stands, unrefreshed): the full 20-scenario golden sweep, `verify:pi1`, `verify:replay`, `test:api`.
+
+### Supersedes / superseded by
+
+Amends Decision 21's stage list (the showcase stage is `selectArchetypes`; the returned `selected` is the explained E4 array) without rewriting it; keeps Decision 20's pair identity and the `selectDiverseTop` module untouched; answers Decision 25 on the selection side (Decision 40 answers it on the assembly side). Registers **OG-45** (strategy_key persistence deferred pending Platform migration 019) and **OG-46** (no golden A10 coverage; archetype hypotheses pending H3). No historical document is rewritten.
+
+## Decision 42 — the engine enforces the OPTIONAL per-resolution VRAM floor resolution_profiles.<resolution>.vram_floor_gb at Engine 3 GPU depth (E5)
+
+Status: RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 (recorded 2026-10-13, after the docs-repair pass restored this log and the gap register) — a GPU candidate whose KNOWN chipset VRAM is below the active model's declared floor for the query's resolution is skipped at GPU depth; UNKNOWN VRAM or an undeclared resolution keeps the floor off entirely.
+
+Date: 2026-10-10 implementation (the E5 session), recorded 2026-10-13. E5 Phase A of `docs/briefs/engine.md`: the roadmap clause "resolution ... enforces a configurable VRAM floor from `gpu_chipset.vram_capacity_gb`" (hypothesis values 1080p 8 / 1440p 12 / 2160p 16 GB, H3 review pending). Prompted by OG-38 — use_case / resolution / priority had no runtime effect — and it gives Decision 39's `resolution` sibling (carried by the query loader, never part of the Engine 2A input) its first engine effect. It extends Decision 40's OPTIONAL contract family to a second Engine 3 input field. NOT a migration, no seed, no compatibility-verdict change: the floor is a RECOMMENDATION-policy walk constraint, never a hardware compatibility verdict.
+
+### Current situation
+
+- `gpu_chipset.vram_capacity_gb` is INTEGER and nullable (`database/migrations/004_hardware_tables.sql` and the column re-declared with `CHECK (vram_capacity_gb > 0)` in `005_hardware_schema_corrections.sql`), reached via `gpu_board_spec.gpu_chipset_id` (NOT NULL). The Engine 3 input therefore never sees 0 for an unknown: `filtering/context-loader.js` `GPU_VARIANT_SPEC_SQL` LEFT JOINs `gpu_chipset` and `normalizeGpuSpec` carries `vram_capacity_gb ?? null`.
+- No ACTIVE model declares `resolution_profiles` today (`seed-minimal-v1@1.0.0` and `launch-v2@1.0.0` on the TEST branch), so the shipped state is provably inert: every pass takes the pre-E5 walk.
+
+### Problem
+
+OG-38 stands: the API-persisted fields `use_case`, `resolution`, `priority` were inert (Decision 17.6, Decision 36 item 8), and the resolution dimension had no engine consumer at all. Implementing the E5 floor without a recorded contract would leave the boundary semantics — inclusive or strict, UNKNOWN handling, single owner — invented per caller; the same contract family Decision 40 had to pin for the pair quota.
+
+### Decision
+
+1. `resolution_profiles` is an OPTIONAL top-level scoring-model configuration key: a JSON object whose keys are non-blank resolution strings and whose values are CLOSED one-field profiles `{ vram_floor_gb: integer >= 1 }`. Validated in `scoring/configuration.js` (`validateResolutionProfiles`); a model without the key keeps its exact old shape; blank keys, unknown profile fields, a missing field or a non-integer / < 1 field fail fast. A DECLARED null profile is malformed, never a synonym for absent (Decision 40's quota semantics: declared means valid).
+2. `vram_floor_gb` is an OPTIONAL Engine 3 top-level input field, present iff declared; a declared value must be an integer >= 1 and a DECLARED null is malformed. Validated in `assembly/input.js` and re-defended in `assembly/assemble.js` `readTraversalInputs` (the traversal entry can be reached directly).
+3. `assembly/pipeline.js` receives the orchestrator-resolved floor and passes it as that OPTIONAL field; null or absent resolves to the field ABSENT, never to an explicit null.
+4. Enforcement lives ONLY at Engine 3 GPU depth (`assembly/assemble.js` `belowVramFloor`, inside the DFS between the budget continue and Decision 40's pair-quota continue): a candidate is below-floor iff the filtering-context spec keyed `v:<product_variant_id>` exists AND `vram_capacity_gb` is a finite number strictly below the floor. A missing spec row or a NULL VRAM is UNKNOWN and NEVER excluded (Decision 12 Rule 2: PASS / UNKNOWN eligible, only a verified deficit excludes). A DECLARED floor additionally makes `filtering_context.specs` load-bearing, so a malformed (non-object) `specs` is refused at the boundary (`readTraversalInputs`) rather than silently disabling the floor - added 2026-10-14 after review, and scoped to a declared floor so the no-floor walk is unchanged; an individual absent spec row stays the UNKNOWN above. The boundary is inclusive: a GPU exactly at the floor is eligible.
+5. The floor is RECOMMENDATION policy, not a compatibility verdict: no candidate REJECT, no `build_rejection` row, no reason code; below-floor GPU branches are skipped in the walk.
+6. `orchestrator/run.js` `resolveVramFloorGb(configuration, queryInput)` routes `configuration.resolution_profiles[queryInput.resolution]`; an absent profiles object, an undeclared resolution, a non-conforming profile or a NULL query resolution yields null, which is the pre-E5 walk byte-identically. The shape checks here re-load-defend what `validateScoringModelConfiguration` already guarantees.
+7. Determinism: no clock read, no randomness, no input mutation; identical DB state + query + model version yield identical walk sets. A model that declares nothing reproduces the pinned pre-E5 baseline byte-for-byte.
+
+### Rejected alternatives
+
+- Enforce it as a Layer-2 compatibility rule (an Engine 2 REJECT): a below-floor GPU is not incompatible — it assembles; this is query policy. It would also change the pinned verdict baseline (87 PASS / 12 UNKNOWN / 2 REJECT) without vendor-side evidence, contradicting Decision 12's verified-deficit-only exclusion.
+- Hardcode per-resolution floors in engine code when the profile is absent: policy belongs to the model's declared vocabulary (Decision 37 family — the model owns its use-case and resolution vocabularies); a code default would silently bind every future model.
+- Filter the GPU role in retention before assembly: it would give one constraint two owners and would re-excite the Decision 27 cheapest-per-role reservation against a filtered pool. The walk already disposes of partial paths cheaply.
+
+### Verdict for this pass
+
+Unit: 11 new pins — the assembly FIRE case, the inclusive boundary, UNKNOWN-is-never-below (NULL and missing spec), the absent-floor parity, the declared-null malformed input, the present-iff-declared round trip, and the `resolution_profiles` shape matrix (valid copy, absent-key preservation, 9 violations). `npm run test:unit` = 1026 pass / 0 fail on Node 24.21.0 and re-verified on Node 22 (CI parity, 0 cancelled) 2026-10-13. End-to-end (implementing session): the pinned `seed-minimal-v1@1.0.0` golden run reproduced the committed baseline byte-for-byte except the `as_of:` line (56 PASS / 22 EXPECTED-RED / 3 UNKNOWN, exit 0), plus `--filter=S06,S07,S09 --model=launch-v2@1.0.0` and a 24/24 real-DB full-run for the loader SQL. Re-verified this session: a fresh TEST-branch filtered golden run (S06/S09) exit 0, EXPECTED-RED only, cleanup residue 0. NOT run this pass (earlier recorded evidence stands, unrefreshed): `verify:pi1`, `verify:replay`, `test:api`, the full 20-scenario sweep. Registers **OG-47** (the rule is inert until a model declares `resolution_profiles`; the A4 floor values are hypotheses pending H3).
+
+### Supersedes / superseded by
+
+Amends Decision 39 (which records `resolution` as a query-loader sibling with no engine effect — E5 Phase A is that effect) and extends Decision 40's OPTIONAL-input pattern; Decision 37's `use_case_profiles` OPTIONAL-key validation is the shape precedent and is NOT modified. No historical document is rewritten.
+
+## Decision 43 — the Engine 3 walk honours a DECLARED per-use-case GPU policy (`gpu_policy`) at GPU depth (E6)
+
+Status: RESOLVED 2026-10-14; IMPLEMENTED 2026-10-14 (recorded 2026-10-14, after the code landed — it cited this number before the record existed, OG-48) — a scoring model whose `use_case_profiles[use_case].gpu_policy` is `IGPU_ALLOWED` makes the iGPU the GPU for that use case, so an iGPU CPU takes the omit path exclusively; `REQUIRED` forces the discrete GPU; a model that declares no profile keeps the legacy `gpu_required_use_cases` rule byte-identically. **The rule is UNREACHABLE on today's catalog**: its acceptance (A6) is not met and the OFFICE rank-1 CPU has no integrated GPU, so the declared policy correctly resolves to `REQUIRED`.
+
+Date: 2026-10-14. E6 of `docs/briefs/engine.md` ("OFFICE: GPU OPTIONAL with an iGPU CPU, low spend targets"). It consumes Decision 37's `use_case_profiles.gpu_policy` vocabulary and extends Decision 40 / Decision 42's OPTIONAL-input pattern to a third Engine 3 field. NOT a migration, no seed, no compatibility-verdict change, no retention change: the policy constrains the RECOMMENDATION walk only.
+
+### Current situation
+
+- Decision 37 gave a scoring model a declared `use_case_profiles` vocabulary, validated at load time by `scoring/use-cases.js` `validateUseCaseProfiles`, whose `gpu_policy` is a REQUIRED two-value field: `GPU_POLICIES = Object.freeze(['REQUIRED', 'IGPU_ALLOWED'])` (`scoring/use-cases.js:54`). Seed `013_scoring_model_launch_v2.sql` is the only declaring model — GAMING `REQUIRED` (line 53), WORKSTATION `REQUIRED` (line 62), OFFICE `IGPU_ALLOWED` (line 71) — and it is ACTIVE on the TEST branch only.
+- Before this decision the field was inert: nothing read `gpu_policy`, so the GPU decision came only from the model's `gpu_required_use_cases` list plus the selected CPU's iGPU flag (`assembly/gpu-policy.js` legacy Rules 1–3), and an OFFICE pass therefore always picked a discrete GPU — the same class of inertness Decision 42 closed for `resolution` (OG-38's behavioural side).
+- `assembly/gpu-policy.js` owns the decision, `assembly/assemble.js` owns the walk, `orchestrator/run.js` owns the configuration read, and `cpu_spec.integrated_gpu_present` (BOOLEAN, nullable) is the iGPU evidence: the TEST branch carries 18 CPUs, of which **6** are `true` (Ryzen 5 3400G, Ryzen 5 PRO 5655G, Ryzen 7 5700G, Ryzen 7 7700X, Ryzen 7 7800X3D, Ryzen 5 8600G), 12 are `false` and none is NULL (measured 2026-10-14).
+
+### Problem
+
+The API persists `use_case` and the model declares a per-use-case GPU policy, but no engine stage read it, so a model could not express "this use case does not need a discrete GPU" and an OFFICE recommendation always carried one. Without a recorded contract the boundary semantics would be invented per caller: whether a declared policy outranks the legacy list, what `IGPU_ALLOWED` means on a CPU with no iGPU, whether the omit path may be the ONLY path, and whether an undeclared policy must stay byte-identical to pre-E6.
+
+### Decision
+
+1. `gpu_policy` is an OPTIONAL Engine 3 top-level input field, present iff the active model declares a profile for the query's use case. Declared means valid: `assembly/input.js` (`ENGINE3_INPUT_FIELDS`, `OPTIONAL_ENGINE3_INPUT_FIELDS`, `GPU_POLICY_VALUES`) accepts only an exact `'REQUIRED' | 'IGPU_ALLOWED'` string and fails fast on anything else, including a declared null; `assembly/assemble.js` `validateEngine3Input` re-defends the same contract because the traversal entry can be reached directly.
+2. Rule 0 in `assembly/gpu-policy.js` `resolveGpuRequirement` runs BEFORE the legacy rules: a declared `IGPU_ALLOWED` yields OPTIONAL exactly when the selected CPU's `integrated_gpu_present` is strictly `true` (`=== true`; `false`, `null` and absent all fall to REQUIRED), and a declared `REQUIRED` yields REQUIRED regardless of the iGPU flag. An absent policy falls through to the unchanged legacy Rules 1–3.
+3. Enforcement lives ONLY at Engine 3 GPU depth (`assembly/assemble.js`): on a declared `IGPU_ALLOWED` with an iGPU CPU the discrete-GPU branches are skipped entirely and the omit path is the ONLY path (`skipDiscreteGpu`). There is deliberately NO "fall back to the discrete walk if the omit path builds nothing": omitting the GPU can only RELAX the walk (every picked role has a strictly positive `selected_price`, an absent partner contributes no pairwise FAIL, and `finishPath` has no required-role gate), so such a fallback could never fire and would only add a second owner to the constraint. The legacy Rule-2 OPTIONAL (no declared policy) keeps walking every eligible GPU verdict first and then the omit path — pre-E6, byte-identical.
+4. The policy is RECOMMENDATION policy, not a compatibility verdict: no candidate REJECT, no `build_rejection` row, no reason code, no verdict-baseline change and no retention change.
+5. `orchestrator/run.js` `resolveGpuPolicy(configuration, queryInput)` routes `configuration.use_case_profiles[input.use_case].gpu_policy` and returns null for a missing profiles object, a use case the model does not declare, a non-conforming profile, or a value outside the vocabulary; `assembly/pipeline.js` forwards it as an OPTIONAL field (omitted, never an explicit null).
+6. Determinism: no clock read, no randomness, no input mutation; a model that declares nothing reproduces the pre-E6 walk, and the pinned v1 golden outputs are unchanged.
+
+### Rejected alternatives
+
+- Make `IGPU_ALLOWED` resolve to OPTIONAL even on a CPU with no integrated GPU: it would emit a GPU-less build with no graphics at all, and it would make the policy a function of the model alone rather than of the hardware actually in the build.
+- Authorize the omit path ALONGSIDE the discrete walk (i.e. treat the declared policy like legacy Rule 2): the discrete branches would win the walk order and crowd the iGPU build out via the `max_builds_per_query` halt, which is precisely what makes a declared policy unobservable.
+- Read the policy in retention and reserve a slot for an iGPU CPU: it would give one constraint two owners and re-excite the Decision 27 cheapest-per-role reservation against a filtered pool; the walk already disposes of partial paths cheaply. (Note this is also what the measured defect now needs — see the verdict — but it belongs to the retention/archetype epics, not here.)
+- Treat a DECLARED null as "no policy": it would make a REQUIRED profile field silently optional at the boundary, the drift Decision 40's present-iff-declared rule exists to prevent.
+- Copy the vocabulary from `scoring/use-cases.js` into `assembly/` without pinning it: the assembly stage carries a boundary pin against `../scoring`, so the two-string copy is deliberate and its parity is pinned by tests on both sides rather than left to drift.
+
+### Verdict for this pass
+
+Unit: the field contract (present-iff-declared round trip, declared-null malformed, non-vocabulary value malformed, unknown-field rejection at the nested path), the Rule 0 matrix (declared `IGPU_ALLOWED` beats the legacy REQUIRED list; `IGPU_ALLOWED` on a non-iGPU CPU stays REQUIRED for `false` / `null` / absent; declared `REQUIRED` beats an iGPU; no declared policy keeps the legacy rules), the boundary-local vocabulary-parity pins, the pipeline pass-through, and the assembly FIRE case with its iGPU hard-skip. `Decision 43` is cited in **22 places across 9 files** in `src/` (measured 2026-10-14). `npm run test:unit` = 1083 pass / 0 fail on Node 24.21.0 as measured here (1089 once Decision 44's six further pins land), re-verified 2026-10-14 on Node 22 with 0 cancelled. The implementing session recorded the full 20-scenario acceptance run in commit `e29ef72` (launch-v2@1.1.0, 81 rows: PASS 67 / EXPECTED-RED 11 / FAIL 0 / UNKNOWN 3, exit 0, residue 0).
+End-to-end on the TEST branch, re-measured 2026-10-14 against `seed-minimal-v1@1.0.0` (declares nothing) and `launch-v2@1.0.0` (declares OFFICE `IGPU_ALLOWED`), filtered golden runs, both exit 0: S17 (OFFICE@4000) and S18 (OFFICE@6000) report `ranked_count 0` under BOTH pins — identical, so the declared policy changes nothing there (and those budgets sit below the cheapest assemblable build, 7677 MAD, i.e. the compatibility floor tracked as OG-40); S19 (OFFICE@10000) selects 3 builds under v1 (A1 3 pairs) and 2 under launch-v2 (A1 2, the retention effect), with A6 — the assertion that IS this epic's acceptance — never green.
+**So E6's objective is NOT met, and this is the honest status: no GPU-less OFFICE build exists on the 100-product catalog.** The cause is upstream of E6 and was diagnosed by the implementing session: the OFFICE rank-1 CPU is `Seed AMD Ryzen 5 5500` (899 MAD), which has `integrated_gpu_present = false`, so the declared `IGPU_ALLOWED` correctly resolves to REQUIRED and the hard-skip never becomes reachable; the price bound fails independently too (S19 top 9946 MAD vs the 0.40 × S03 bound of 4738, ratio 0.8397). E6 therefore needs the OFFICE profile to retain or prefer an iGPU CPU (E2 `spend_targets` / E4 archetypes) before its own skip can fire. Registered as **OG-49**, which also records the escalation landmine: `test/golden/scenarios.json` still declares `current_epic: "E1"`, so S17/S18 stay UNKNOWN — but their `expect_builds_after` is `E6`, so ADVANCING `current_epic` to E6 or beyond turns those two rows into HARD FAIL and makes the golden gate exit 1 until an iGPU OFFICE build exists.
+Recorded correction (not a re-litigation of an old banner): the repeated claim in Decisions 36/42 and in CONTEXT.md that a pinned v1 golden run "reproduces the committed baseline byte-for-byte" is imprecise for `test/golden/baseline-2026-10.md`. Measured 2026-10-14, that file's `selected` column reads 3 for every scenario where today's engine yields 1 — a consequence of Decision 41 replacing `selectDiverseTop`, i.e. drift that began after the file was generated on 2026-10-08. The live v1 reference is `test/golden/_scratch-v7-e6-v1-parity.md`, which the post-E7 run matches byte-for-byte except the `as_of:` line. Rebaselining a committed reference is a review-gated act and is deliberately NOT done here.
+NOT run this pass: `verify:pi1`, `verify:replay`, `test:api`, and a fresh full-suite run at the launch-v2 pin (the implementing session's `e29ef72` evidence stands; the v1 pinned full suite WAS run this session — see Decision 44).
+
+## Decision 44 — Engine 6 exposes STRUCTURED reason codes (`deriveReasons`) alongside the explanation string (E7)
+
+Status: RESOLVED 2026-10-14; IMPLEMENTED 2026-10-14 — Engine 6 gains a second, ADDITIVE, machine-readable output: a pure `deriveReasons(...)` returning frozen `{ code, value }` records in a fixed `REASON_ORDER`, sharing ONE owner (`explanation/build-facts.js`) with the string formatter; the committed `explanation` string, the persisted shape and the orchestrator seam are unchanged, and there is NO new column and NO JSONB.
+
+Date: 2026-10-14. E7 of `docs/briefs/engine.md` ("pure deriveReasons() emitting reason codes (no new JSONB column)"). It closes the numbering hole **OG-48** left: the engine cited Decision 43 for E6 before either record existed. NOT a migration, no seed, no API change, no persistence change, no engine-behaviour change.
+
+### Current situation
+
+- Engine 6 (`explanation/explain.js`, Decision 22) composes ONE deterministic prose string per selected build, and `persistence/persist-ranked.js` writes it into `recommendation_result.explanation`; `persistence/validate-selected.js` requires it non-empty. That string is the only machine-visible trace of WHY a build was selected, and it is prose.
+- Three of the facts the string encodes were derived privately inside `explain.js`: `dominantContribution`, `biosRequirements` and `unknownRoles`.
+- The API read path (`apps/api/src/repository.js`) rebuilds a response from `recommendation_result` + `build_candidate` + `build_component` + the `recommendation_query` row + the active model's configuration. `build_component` carries no per-component status, `compatibility_notes` and the Engine 4 `contributions` are never persisted at all, and `recommendation_result.strategy_key` does not exist (OG-45).
+
+### Problem
+
+A consumer that needs to sort, filter or render the reason for a recommendation must parse prose, and E7 as briefed ("no new JSONB column") is not implementable as a read-path derivation: only 3 of the 8 briefed codes are reconstructable from persisted rows. Without a recorded decision the boundary would be invented per caller — which codes, in what order, from which inputs, what an absent input means, where the function lives, and what it may not do.
+
+### Decision
+
+1. `src/recommendation/explanation/reasons.js` exports `deriveReasons(args)`, `REASON_CODES` and `REASON_ORDER`, re-exported by the Engine 6 barrel (`explanation/index.js`) by identity. `explanation/build-facts.js` is the SINGLE owner of the dominant / BIOS / UNKNOWN derivations and is consumed by BOTH `explain.js` and `reasons.js`; a second implementation of any of them is forbidden and pinned by test.
+2. Eight codes in this frozen order: `STRATEGY` (the E4 archetype strategy key, verbatim), `BUDGET_USED_PCT` (`total_price / budget.amount * 100`, unrounded), `GPU_SHARE` (the GPU component's price over the build total — its share of the spend; `null` when the build carries no GPU role, because the iGPU path is an ANSWER, not a missing value), `DOMINANT_ROLE` (the role of the dominant Engine 4 contribution, first maximum on a tie — the same one the string names), `BIOS_UPDATE_REQUIRED` (the verbatim `min_bios_version` texts of the CONDITIONAL pair notes, de-duplicated, in EXPANSION_ORDER-then-note order), `UNKNOWN_SPEC` (the roles whose component status is UNKNOWN, in EXPANSION_ORDER), `INPUT_APPLIED` (`{ use_case, resolution, priority, gpu_policy }`) and `LIMITED_CATALOG` (the E4 selection reason codes, de-duplicated).
+3. `deriveReasons` takes ONE argument object and requires only `build` and `budget`. Omitting any of `contributions` / `profile` / `inputs` / `strategy` / `catalogReasonCodes` OMITS its code rather than throwing or inventing a value: a value is never fabricated and an absent input is never an error. That is what lets one function serve both the engine seam (which holds every fact) and a read path (which holds three).
+4. Every SUPPLIED input is validated fail-fast with the repo's error contract (`CandidateSelectionError` + `ERROR_CODES`, fielded paths): `build.components` non-empty, `build.total_price` a finite number > 0 (or a plain-decimal NUMERIC string), `budget` validated as `explain.js` validates it EXCEPT that a plain-decimal NUMERIC STRING is coerced with `Number()` — `recommendation_query.budget_amount`, `build_candidate.total_price` and `build_component.selected_price` are all NUMERIC and node-postgres returns NUMERIC as a STRING (verified on the TEST branch 2026-10-14: `1000.00::numeric` -> `"1000.00"`, while `3::integer` -> `3`), which is exactly why the repo's own loaders coerce the same way (`offers/select.js` `Number(row.price)`); every other string form (`'1e3'`, `' 1000'`, `'1,000.00'`, `''`, `'abc'`) and every non-number stay malformed; each contribution a finite `weight` and `effective_score` with a non-empty `role`, `strategy` inside E4's `STRATEGIES`, `catalogReasonCodes` inside E4's `REASON_CODES`, `inputs.use_case` required with `resolution` a string-or-null and `priority` an integer in [1, 5] or null, and a DECLARED `profile.gpu_policy` an exact `GPU_POLICIES` string (a declared null is malformed). An out-of-vocabulary value never passes through.
+5. READ-PATH AVAILABILITY is a contract, not an accident: only `BUDGET_USED_PCT`, `GPU_SHARE` and `INPUT_APPLIED` are reconstructable from persisted rows; the other five need `contributions`, `compatibility_notes`, per-component status, `strategy_key` and E4's reason codes, none of which are persisted. The three were then exercised against the API's OWN read path on the TEST branch 2026-10-14 (`apps/api/src/repository.js` `readRecommendationResult`): the values it returns are NUMERIC STRINGS (`"4000.00"` / `"3000.00"` / `"1000.00"`) and all three codes derive from them, so the table is not a claim about a friendlier shape. One precision: the query row STORES `use_case`, `resolution` and `priority`, but the API's current `SELECT_QUERY_SQL` fetches only `use_case` and `budget_amount` - a caller wanting the other two adds them to its own SELECT. Therefore E7 adds NO column, NO JSONB and NO writer change, and the codes are deliberately NOT attached to the persisted `selected` entries. The table is pinned as executable assertions in `reasons.test.js`: a read-path-shaped build (flat `selected_price` as the NUMERIC string the driver actually returns, no status, no notes) yields exactly those three, frozen and deterministic, and never throws.
+6. Both price shapes are accepted — the engine build's nested `price.selected_price` and the read path's flat `selected_price`. `componentsByRole` takes `{ requireStatus: false }`, so a missing per-component status degrades to "that code is omitted rather than malformed" — and `false` / `null` / absent is still NOT UNKNOWN (only the literal `'UNKNOWN'` is).
+7. ROLE scope is `EXPANSION_ORDER`, the authoritative Engine 3 traversal order: a component carrying any other role contributes no BIOS version and no UNKNOWN entry. That is the string's long-standing boundary, now documented and pinned rather than left accidental.
+8. Determinism and purity: no DB access, no SQL, no clock, no randomness, no `localeCompare`, no input mutation; the return value is a deeply frozen array of frozen records, and identical inputs yield deeply equal output.
+9. Back-compat is total: the `explanation` string, the persisted rows, the persistence validators and `orchestrator/full-run.js` are unchanged, and the 13 pre-existing `explain.test.js` pins were not edited.
+
+### Rejected alternatives
+
+- Recompute all eight codes on the API read path from persisted rows: impossible for five of them (item 5) — `build_component` persists no status, `compatibility_notes` and `contributions` are never written at all, and `strategy_key` does not exist (OG-45).
+- Add a `reasons` JSONB column to `recommendation_result` (or a reasons array to `build_candidate`): CONTEXT.md discourages new JSONB without justification; it would persist facts the engine already holds at the seam, duplicate the string's content in a second representation that can drift, and require a migration plus a writer change for a surface no caller reads yet.
+- Re-derive dominance / BIOS / UNKNOWN privately inside `reasons.js`: a second implementation of a decided rule (Decision 22 items 4(c)–(e)) that could silently disagree with the committed prose. The derivations were EXTRACTED to `build-facts.js` instead, and `explain.js`'s own unmodified pins prove the refactor is behaviour-preserving.
+- Follow the brief's positional signature `deriveReasons(build, contributions, profile, budget)`: it cannot express the four further inputs E4/E7 need and it invites argument-order mistakes; the sibling `explainSelection({ ... })` convention is followed instead.
+- Emit string-formatted reasons ("BIOS >= 1.2.3 required"): it would make the codes unparseable for consumers and duplicate the prose surface the string already provides.
+- Throw on a missing per-component status: the read path can never supply one, so that would make the function unusable exactly where E7 needs it.
+
+### Verdict for this pass
+
+Unit: **50 new pins** in `explanation/reasons.test.js` (per-code firing AND omission with exact values, tie order, the frozen/deep-frozen contract, determinism, no argument mutation, DB-freedom of both modules by source assertion, the read-path availability table, the out-of-order-role boundary, and every guard) plus the updated barrel identity test (3 pins); `explain.test.js` (13 pins) was NOT edited and still passes, which is the evidence that the `build-facts.js` extraction is byte-identical for the string. `npm run test:unit` = **1089 pass / 0 fail** on Node 24.21.0 and `npx -y node@22 --test "src/**/*.test.js"` = **1089 pass / 0 fail / 0 cancelled** (the Node-22 nested-test trap this repo records).
+End-to-end, 2026-10-14 on the TEST branch: the full 20-scenario suite at the default pin `seed-minimal-v1@1.0.0` gives **81 rows / 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN, `RESULT: EXPECTED-RED`, exit 0, cleanup residue 0**, and the generated `test/golden/_scratch-v8-e7-parity.md` is **byte-identical to `test/golden/_scratch-v7-e6-v1-parity.md` except the `as_of:` line** — the differential that proves E7 changes no engine output. Public-surface smoke test through the barrel: a read-path-shaped build yields exactly `BUDGET_USED_PCT 75`, `GPU_SHARE 0.4333...`, `INPUT_APPLIED`, deeply frozen, deterministic. `verify-docs --offline`, `gen-decision-index --check` and the gap-register shape tests are green, with the verify-docs counts (40/5/46 -> 42/5/48) and AGENTS.md's decision range bumped in the same pass. NOT run (no file they exercise changed): `test:scripts`, `test:api`, `test:api:db`, `verify:replay`, `verify:pi1`.
+**Closes OG-48** — both E6's and E7's records now exist, so nothing in `src/` cites an unwritten decision.
+
+### Supersedes / superseded by
+
+Amends Decision 22 at the surface level only: items 2–4 (the fixed template, the dominance rule, the BIOS and UNKNOWN clauses) are UNCHANGED and their prose remains authoritative; E7 adds a parallel machine-readable output and makes the shared derivations a single owner. Decision 37's `GPU_POLICIES`, Decision 41's `STRATEGIES` / `REASON_CODES` and Decision 35's provenance vocabulary are consumed, not modified. Decision 43's recorded correction about the stale committed v1 baseline stands and is not re-litigated here. No historical document is rewritten.
+
+## Decision 45 — the last three Decision 26 item B rules are ENFORCED: OG-11 and OG-12 REJECT, OG-09 flags UNKNOWN (E8)
+
+Status: RESOLVED 2026-10-14; IMPLEMENTED 2026-10-14 — the three remaining DEFERRED Decision 26 item B rules leave DEFERRED: RAM `module_count` vs motherboard `dimm_slots` (OG-11) and RAM total capacity vs `max_memory_capacity_gb` (OG-12) resolve FAIL and REJECT the candidate, while cooler `max_tdp_watts` vs CPU `tdp_watts` (OG-09) resolves UNKNOWN and NEVER REJECTs; all five operands are now carried by the Engine 2D filtering context and BOTH topology sites register the new pairs, so the candidate filter and the assembly walk cannot diverge.
+
+Date: 2026-10-14. E8 of `docs/briefs/engine.md` ("enforce OG-11 and OG-12 as HARD rules, OG-09 as a soft/CONDITIONAL rule"). It closes the three register rows Decision 26 item B (2026-09-28) explicitly deferred after OG-10 was lifted by Decision 30 (2026-10-05), and it flips `scripts/check-deferred-rules.js` from "latent" to enforced. NOT a migration, no seed, no API change, no new column, no new table: the five spec columns already exist in the schema and are read for the first time here.
+
+### Current situation
+
+- Six Layer-1 columns existed and were read by NOTHING in `src/` before this pass: `cpu_spec.tdp_watts`, `cooler_spec.max_tdp_watts`, `motherboard_spec.dimm_slots`, `motherboard_spec.max_memory_capacity_gb`, `ram_spec.module_count`, `ram_spec.capacity_per_module_gb`. `filtering/context-loader.js` did not even SELECT them, so no resolver could have used them.
+- The structure to extend already existed: eight pair relationships in `filtering/filter.js` (`PAIR_EVALUATORS`, `ROLE_RELATIONSHIPS`), mirrored in `assembly/assemble.js` `PAIRWISE_CHECKS` for the Decision 16 DFS re-check; `compatibility/` resolvers returning PASS / FAIL / UNKNOWN; the candidate layer mapping FAIL -> REJECT; `compatibility/statuses.js` making CONDITIONAL a SOURCE status only (Decision 3b).
+- `scripts/check-deferred-rules.js` measured all four rules in catalog and compatibility-reachable scope, and described OG-09/OG-11/OG-12 as "EXPLICITLY DEFERRED and UNENFORCED".
+- Live measurements (2026-10-14, unchanged catalog): 0 violations in every scope; coverage `coolers TDP 9/10 | CPUs TDP 19/19 | RAM kits module data 7/7 | boards memory limits 7/8`. The one NULL cooler TDP is the Corsair Nautilus 240 RS ARGB (seed 009 wrote NULL because no vendor figure is published), and the one board with a NULL limit is "not measured" rather than a violation.
+- Decision 30 and Decision 42 had each already widened this same loader for exactly this class of change (cooler `height_mm` + case clearance; `gpu_chipset.vram_capacity_gb`), which is the precedent for widening it again here.
+
+### Problem
+
+Three HARD safety rules the architecture has prescribed since it was written (`RECOMMENDATION_ENGINE_ARCHITECTURE.md` sections 5.3 and 6) were unenforced while the catalog happened to violate none of them. That is safe only by luck: the standing gate is the only thing standing between the engine and an unsafe persisted build, and it reported "0 violations" for rules no code ran, so an over-slot or over-capacity kit introduced by any future seed would have been assembled and persisted as compatible. `check-deferred-rules.js` described exactly this as "latent risk one seed away".
+
+### Decision
+
+1. Three new pure resolvers in `src/recommendation/compatibility/`, exported by the `compatibility/index.js` barrel:
+   - `cooler-tdp.js` `resolveCoolerCpuTdp({ cooler_product_id, cpu_product_id, cooler_max_tdp_watts, cpu_tdp_watts })`;
+   - `memory-slots.js` `resolveRamMotherboardSlots({ ram_product_id, motherboard_product_id, ram_module_count, motherboard_dimm_slots })`;
+   - `memory-capacity.js` `resolveRamMotherboardCapacity({ ram_product_id, motherboard_product_id, ram_module_count, ram_capacity_per_module_gb, motherboard_max_memory_capacity_gb })`.
+2. OG-11 and OG-12 are HARD. `module_count > dimm_slots` -> FAIL `RAM_SLOTS_EXCEEDED`; `module_count * capacity_per_module_gb > max_memory_capacity_gb` -> FAIL `RAM_CAPACITY_EXCEEDED`. The candidate layer maps each FAIL to REJECT, so the pair can never reach a persisted build. The capacity is DERIVED arithmetically (the schema carries no total column), following the GPU-dimension precedent rather than adding a stored column.
+3. OG-09 is SOFT: `cooler_max_tdp_watts < cpu_tdp_watts` -> UNKNOWN `COOLER_TDP_INSUFFICIENT`, never FAIL. Vendor TDP ratings are marketing figures produced by different vendors under different assumptions, so an apparent shortfall is not the hardware incompatibility an over-slot kit is. The build survives and the shortfall stays visible.
+4. UNKNOWN, not CONDITIONAL: `compatibility/statuses.js` (Decision 3b) admits only PASS / FAIL / UNKNOWN as FINAL statuses and resolves a CONDITIONAL source row to UNKNOWN with the condition preserved in evidence. This decision follows that contract instead of widening the final-status vocabulary for one rule, so `aggregateCompatibilityResults`, the candidate verdict vocabulary and `ranking/rank.js`'s `deriveStatus` are untouched.
+5. A NULL operand is UNKNOWN in every one of the three rules, with its own reason code (`COOLER_TDP_UNKNOWN`, `RAM_SLOTS_UNKNOWN`, `RAM_CAPACITY_UNKNOWN`). NULL is never a PASS and never "unlimited": the unmeasured cooler is not an unlimited one, which is the exact failure class OG-34 hid. Every boundary is INCLUSIVE (`>=` / `<=`), so a cooler exactly at the CPU's TDP and a module count exactly equal to the slot count are both within spec.
+6. Both topology sites register the three relationships. `filtering/filter.js` gains `cooler_tdp` (CPU <-> CPU_COOLER), `mb_memory_slots` and `mb_memory_capacity` (MOTHERBOARD <-> RAM); `assembly/assemble.js` gains the same three in `PAIRWISE_CHECKS` with the correct `partnerRole` (`CPU`, `MOTHERBOARD`, `MOTHERBOARD`) and `leftIsNew: false`, so the walk re-checks the identical predicates. They are APPENDED, so every pre-E8 relationship keeps its canonical precedence for reason and decisive-partner selection.
+7. `filtering/context-loader.js` carries the six columns: `CPU_SPEC_SQL` + `cs.tdp_watts`; `COOLER_SPEC_SQL` + `cs.max_tdp_watts`; `MOTHERBOARD_SPEC_SQL` + `ms.dimm_slots, ms.max_memory_capacity_gb`; `RAM_SPEC_SQL` + `rs.module_count, rs.capacity_per_module_gb`, each projected through the existing `normalizeSpecForRole` shape with `?? null` (never a coerced 0). The change is additive; no existing key moved.
+8. `scripts/check-deferred-rules.js` stops calling any of the four rules latent: its header, its runtime banner and its RESULT line now say all four are ENFORCED, so a non-zero violation count is a LIVE DATA DEFECT — a pair the engine rejects (OG-10/OG-11/OG-12) or surfaces as UNKNOWN (OG-09). The four SQL definitions and both scopes are unchanged; the gate is still the binding pre-merge re-check of Decision 26 item 11.
+9. Enforcement is proven by FIRE tests, not by a zero count: `compatibility/cooler-tdp.test.js`, `memory-slots.test.js` and `memory-capacity.test.js` pin each resolver's tri-state and inclusive boundary; `filtering/filter.test.js` forces each violation through Engine 2D and asserts the REJECT plus its reason code, and asserts the SOFT rule yields UNKNOWN without rejecting; `assembly/assemble.test.js` forces the HARD pairs inside the walk and asserts the violating kit is never emitted, and proves the SOFT pair adds exactly one build-local UNKNOWN without pruning a branch.
+10. The register rows OG-09, OG-11 and OG-12 close, and no "DEFERRED"/"latent" wording for these three rules is retained anywhere in the tree.
+
+### Rejected alternatives
+
+- Leave OG-09 as a HARD REJECT like its two siblings: it would reject builds on a comparison between two marketing figures produced under different assumptions, which is a false-negative machine. The brief's "soft/CONDITIONAL" instruction is what this decision implements.
+- Introduce CONDITIONAL as a real final status so OG-09 can return it: it re-opens Decision 3b and propagates through `aggregateCompatibilityResults`, the candidate verdict vocabulary, `ranking/rank.js` `deriveStatus`, the persistence validator and the explanation text — a wide blast radius for one rule's benefit. UNKNOWN already means "this pair is not verified".
+- Resolve under-spec as PASS with a note: it would hide the shortfall from the "N checked rules" surface the product copy needs, and a PASS cannot carry a reason code.
+- File a Platform request and land the three rules inert: the engine has widened this exact loader for the same kind of spec-column addition twice already (Decision 30, Decision 42), and an inert rule has no acceptance — this would leave the last three HARD safety rules unenforced for a coordination reason.
+- Add a stored `ram_spec.total_capacity_gb` column: the shape is arithmetic, and `docs/RECIPES/add-a-pair-evaluator.md` step 5 says derive what is arithmetic; a stored total would need a migration, a seed and a drift guard for a value two integers already determine.
+- Register the new pairs in `filter.js` only: the recipe is explicit that a relationship registered in one site silently diverges between the candidate filter and the DFS, and `assembly/assemble.js` has an existing test asserting the walk's pairwise table stays in step.
+
+### Verdict for this pass
+
+Unit: `npm run test:unit` = **1121 pass / 0 fail** (1089 -> 1121, **32 new pins**) on Node 24.21.0, and `npx -y node@22 --test "src/**/*.test.js"` = **1121 pass / 0 fail / 0 cancelled**. The 19 pre-existing failures the change caused were ALL exact-shape fixture breakages in the files the repo's own lesson names (`filtering/context-loader.test.js`, `filter.test.js`, `integration.test.js`, `pipeline.test.js`, `assembly/assemble.test.js`) and every one was fixed by giving the fixture REAL data for the new columns — or, for the two genuinely empty-context fixtures, by updating the relationship-slot count the new pairs change from 6/8 to 9/11. No assertion was relaxed and no expectation was deleted. `npm run test:scripts` = 212 pass / 0 fail; `npm run test:api` = 38 pass / 0 fail.
+Live gates on the TEST branch, 2026-10-14: `verify:replay -- --test-db` = 18 migrations replayed, **0 drift** (columns 362/362, checks 78/78, FKs 60/60, indexes 99/99); `verify:pi1` = **PASS** on the immediate re-run (0/25 drifted for GAMING and for OFFICE; the first run reported 2 OFFICE builds at 55.03 -> 55.02, the known intermittent mode the repo documents — both runs recorded, neither alone); `check-deferred-rules.js` = **PASS, 0 violations in every scope** under the new enforced wording.
+Golden, TEST branch, `--no-volatile`: the 20-scenario suite at the default pin `seed-minimal-v1@1.0.0` gives **81 rows / 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN, `RESULT: EXPECTED-RED`, exit 0, residue 0**, and `test/golden/_scratch-v9-e8-v1.md` is **byte-identical to `test/golden/_scratch-v7-e6-v1-parity.md` except the `as_of:` line** (`diff` exit 0 after normalising that one line). At the E3 pin `launch-v2@1.1.0`: **81 rows / 67 PASS / 11 EXPECTED-RED / 3 UNKNOWN, exit 0, residue 0** (`test/golden/_scratch-v9-e8-launch-v2-1.1.0.md`). E8 therefore moves NO golden row at either pin. `current_epic` was deliberately NOT advanced (OG-49's landmine: S17/S18 escalate to HARD FAIL once it reaches E6, and no GPU-less OFFICE build exists).
+Catalog-level differential, read-only on the TEST branch: the Engine 2C-2D verdict set is **101 verdicts, 86 PASS / 13 UNKNOWN / 2 REJECT**, against the pre-E8 87/12/2. **Exactly ONE candidate flipped, and it is the correct one:** `Seed Corsair Nautilus 240 RS ARGB Black AIO` has `cooler_spec.max_tdp_watts = NULL`, so its `cooler_tdp` relationship is UNKNOWN and its verdict is now UNKNOWN `COOLER_TDP_UNKNOWN` instead of PASS. It remains ELIGIBLE (UNKNOWN is eligible in `assembleBuilds`), the other 100 verdicts are unchanged, and the v1 golden byte-identity proves the flip reaches no ranked or selected build on this catalog. Correction to this epic's own plan: its expectation that the 101-verdict baseline stays byte-identical is FALSE as stated — the candidate verdict set changes by exactly one, because the catalog genuinely lacks that one TDP, and that is the rule working rather than a regression.
+**Closes OG-09, OG-11 and OG-12.** E8 is the last engine epic in the M2 roadmap; `docs/briefs/engine.md` records it as DONE, and the E1/E4/E5/E6/E7 cross-team residuals (OG-38, OG-45, OG-47, OG-49) are untouched by this decision.
+
+### Supersedes / superseded by
+
+Amends Decision 26 item B: its four-rule deferral is now fully lifted (OG-10 by Decision 30, the other three here), and item 11's binding re-check keeps pointing at `scripts/check-deferred-rules.js`, which now guards four ENFORCED rules rather than three latent ones. Decision 30's and Decision 42's loader-widening precedent is followed, not modified. The current-status prose is updated in place where it is a status section: the three register rows (plus the new C-38 closed row and the register's §5 / §7 summaries), `AGENTS.md` §10 (its "three HARD rules are still DEFERRED and UNENFORCED" block) and §6 (the `check-deferred-rules.js` command entry), and `CONTEXT.md`'s status sections and decision pointers. **`docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` is deliberately NOT rewritten** — its dated `[DECISION 26, 2026-09-28 ...]` blocks are historical records of what the contract was before it landed, and Decision 30 left the same file's cooler-height block untouched for the same reason; `AGENTS.md` §10 is the current-status authority for these four rules. No dated banner anywhere is retro-edited.

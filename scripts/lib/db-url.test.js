@@ -10,7 +10,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveTestDbUrl } = require('./db-url');
+const { resolveTestDbUrl, describeTarget, toDirectUrl } = require('./db-url');
 
 const DIRECT = 'postgresql://writer@example-direct.neon.tech:5432/morocco_pc';
 const DIFFERENT = 'postgresql://writer@example-branch.neon.tech:5432/morocco_pc';
@@ -70,5 +70,30 @@ describe('resolveTestDbUrl', () => {
     assert.ok(!caught.message.includes('s3cret'), 'message leaks credential');
     assert.ok(!caught.message.includes('example-direct'), 'message leaks host');
     assert.ok(!caught.message.includes('postgresql://'), 'message leaks URL');
+  });
+});
+describe('describeTarget / toDirectUrl', () => {
+  const POOLED = 'postgresql://u:p@ep-cool-name-12345678-pooler.c-4.us-east-2.aws.neon.tech/neondb';
+  const DIRECT = 'postgresql://u:p@ep-cool-name-12345678.c-4.us-east-2.aws.neon.tech/neondb';
+
+  it('names the endpoint and flags a pooled host', () => {
+    assert.deepEqual(describeTarget(POOLED), {
+      endpointId: 'ep-cool-name-12345678', pooled: true, database: 'neondb',
+    });
+  });
+
+  it('flags a direct host and leaves it unchanged', () => {
+    assert.deepEqual(describeTarget(DIRECT), {
+      endpointId: 'ep-cool-name-12345678', pooled: false, database: 'neondb',
+    });
+    assert.equal(toDirectUrl(DIRECT), DIRECT);
+  });
+
+  it('strips -pooler from the first label only and preserves credentials exactly', () => {
+    const secret = 'postgresql://user:p%40ss-w0rd@ep-cool-name-12345678-pooler.c-4.us-east-2.aws.neon.tech:5432/neondb';
+    const direct = toDirectUrl(secret);
+    assert.equal(direct, 'postgresql://user:p%40ss-w0rd@ep-cool-name-12345678.c-4.us-east-2.aws.neon.tech:5432/neondb');
+    assert.ok(direct.includes('p%40ss-w0rd'), 'credential must not be re-encoded or dropped');
+    assert.equal(direct.includes('-pooler'), false);
   });
 });

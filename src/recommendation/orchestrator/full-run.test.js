@@ -31,13 +31,13 @@ function stubStages({ snapshotResult, rankResult, selectResult, explainResult, c
   const originals = {
     snapshot: snapshot.runRecommendationSnapshot,
     rank: ranking.rankBuilds,
-    select: ranking.selectDiverseTop,
+    select: ranking.selectArchetypes,
     explain: explanation.explainSelection,
     commit: commit.runRecommendationCommit,
   };
-  snapshot.runRecommendationSnapshot = async function stub(client, queryId) {
+  snapshot.runRecommendationSnapshot = async function stub(client, queryId, options) {
     order.push('snapshot');
-    snapshotCalls.push({ client, queryId });
+    snapshotCalls.push({ client, queryId, options });
     return snapshotResult;
   };
   ranking.rankBuilds = function stub(args) {
@@ -45,7 +45,7 @@ function stubStages({ snapshotResult, rankResult, selectResult, explainResult, c
     rankCalls.push(args);
     return rankResult;
   };
-  ranking.selectDiverseTop = function stub(args) {
+  ranking.selectArchetypes = function stub(args) {
     order.push('select');
     selectCalls.push(args);
     return selectResult;
@@ -70,7 +70,7 @@ function stubStages({ snapshotResult, rankResult, selectResult, explainResult, c
     restore() {
       snapshot.runRecommendationSnapshot = originals.snapshot;
       ranking.rankBuilds = originals.rank;
-      ranking.selectDiverseTop = originals.select;
+      ranking.selectArchetypes = originals.select;
       explanation.explainSelection = originals.explain;
       commit.runRecommendationCommit = originals.commit;
     },
@@ -91,6 +91,8 @@ function happyStubs() {
   const ranked = Object.freeze([{ marker: 'ranked-1' }, { marker: 'ranked-2' }]);
   const topN = Object.freeze([{ marker: 'ranked-1' }]);
   const selected = Object.freeze([{ persisted_rank: 1 }]);
+  const archetypes = Object.freeze([{ strategy_key: 'BALANCED', persisted_rank: 1 }]);
+  const reasonCodes = Object.freeze([]);
   const buildContributions = Object.freeze([Object.freeze([])]);
   const explained = Object.freeze([Object.freeze({ persisted_rank: 1, explanation: 'stub-explanation' })]);
   return {
@@ -117,6 +119,7 @@ function happyStubs() {
       builds,
       budget_amount: 12000,
       currency: 'MAD',
+      priority: null,
       build_contributions: buildContributions,
       budget_floor: Object.freeze({
         cheapest_total: 7693,
@@ -131,7 +134,7 @@ function happyStubs() {
       }),
     }),
     rankResult: Object.freeze({ ranked, top_n: topN }),
-    selectResult: Object.freeze({ selected, dropped_count: 1 }),
+    selectResult: Object.freeze({ archetypes, reason_codes: reasonCodes }),
     explainResult: explained,
     commitResult: Object.freeze({
       query_id: QUERY_ID,
@@ -165,6 +168,8 @@ test('full-run: snapshot -> rank -> select -> commit in order on one client', as
     'ranked',
     'top_n',
     'selected',
+    'archetypes',
+    'archetype_reason_codes',
     'dropped_count',
     'persisted_ranks',
     'build_candidate_ids',
@@ -178,13 +183,15 @@ test('full-run: snapshot -> rank -> select -> commit in order on one client', as
   assert.equal(out.ranked, fx.ranked);
   assert.equal(out.top_n, fx.topN);
   assert.equal(out.selected, fx.explained);
-  assert.equal(out.dropped_count, 1);
+  assert.equal(out.archetypes, fx.selectResult.archetypes);
+  assert.equal(out.archetype_reason_codes, fx.selectResult.reason_codes);
+  assert.equal(out.dropped_count, 0);
   assert.deepEqual(out.persisted_ranks, [1]);
   assert.deepEqual(out.build_candidate_ids, ['bc-1']);
   assert.deepEqual(out.recommendation_result_ids, ['rr-1']);
 });
 
-test('full-run: rank takes snapshot builds; select takes FULL ranked with barrel constants; write takes selected', async () => {
+test('full-run: rank takes snapshot builds; select takes FULL ranked with budget and priority; write takes selected', async () => {
   const client = { query() {} };
   const fx = happyStubs();
   await withStubbedStages(fx, async (stub) => {
@@ -193,13 +200,15 @@ test('full-run: rank takes snapshot builds; select takes FULL ranked with barrel
     assert.deepEqual(Object.keys(stub.rankCalls[0]), ['builds']);
     assert.equal(stub.rankCalls[0].builds, fx.builds);
     assert.equal(stub.selectCalls.length, 1);
-    assert.deepEqual(Object.keys(stub.selectCalls[0]).sort(), ['limit', 'maxPerPair', 'ranked']);
+    assert.deepEqual(Object.keys(stub.selectCalls[0]).sort(), ['budget', 'priority', 'ranked']);
     assert.equal(stub.selectCalls[0].ranked, fx.ranked);
     assert.ok(stub.selectCalls[0].ranked !== fx.topN, 'selection must not receive top_n');
-    assert.equal(stub.selectCalls[0].limit, ranking.TOP_N_PERSISTED);
-    assert.equal(stub.selectCalls[0].maxPerPair, ranking.MAX_PER_PAIR);
+    assert.deepEqual(stub.selectCalls[0].budget, { amount: 12000, currency: 'MAD' });
+    assert.equal(stub.selectCalls[0].priority, null);
     assert.equal(stub.explainCalls.length, 1);
-    assert.equal(stub.explainCalls[0].selected, fx.selected);
+    // E4: Engine 6 now consumes the ARCHAINED selection (selection.archetypes),
+    // so the `selected` arg is the archetypes array, reference-equal to it.
+    assert.equal(stub.explainCalls[0].selected, fx.selectResult.archetypes);
     assert.equal(stub.explainCalls[0].builds, fx.builds);
     assert.equal(stub.explainCalls[0].contributions, fx.buildContributions);
     assert.deepEqual(stub.explainCalls[0].budget, { amount: 12000, currency: 'MAD' });
@@ -232,6 +241,8 @@ test('full-run: zero builds still flow through rank, select, and commit with emp
   const ranked = Object.freeze([]);
   const topN = Object.freeze([]);
   const selected = Object.freeze([]);
+  const archetypes = Object.freeze([]);
+  const reasonCodes = Object.freeze(['EMPTY_RANKED']);
   const fx = {
     snapshotResult: Object.freeze({
       query_id: QUERY_ID,
@@ -239,6 +250,7 @@ test('full-run: zero builds still flow through rank, select, and commit with emp
       builds,
       budget_amount: 12000,
       currency: 'MAD',
+      priority: null,
       build_contributions: Object.freeze([]),
       // Decision 27: a zero-build pass still reports a floor. This is the case
       // the diagnostic exists for, so the fixture must carry one.
@@ -254,7 +266,7 @@ test('full-run: zero builds still flow through rank, select, and commit with emp
       }),
     }),
     rankResult: Object.freeze({ ranked, top_n: topN }),
-    selectResult: Object.freeze({ selected, dropped_count: 0 }),
+    selectResult: Object.freeze({ archetypes, reason_codes: reasonCodes }),
     explainResult: Object.freeze([]),
     commitResult: Object.freeze({
       query_id: QUERY_ID,
@@ -273,7 +285,8 @@ test('full-run: zero builds still flow through rank, select, and commit with emp
   });
   assert.deepEqual(out.builds, []);
   assert.deepEqual(out.selected, []);
-  assert.equal(out.dropped_count, 0);
+  assert.deepEqual(out.archetypes, []);
+  assert.deepEqual(out.archetype_reason_codes, ['EMPTY_RANKED']);
   assert.deepEqual(out.persisted_ranks, []);
   // Decision 27: zero builds is still an EXPLAINED outcome, and the floor is
   // null (not 0) because nothing was retained, not because everything is free.
@@ -284,7 +297,7 @@ test('full-run: zero builds still flow through rank, select, and commit with emp
 test('full-run: zero selected still calls the write wrapper with empty array', async () => {
   const client = { query() {} };
   const fx = happyStubs();
-  fx.selectResult = Object.freeze({ selected: Object.freeze([]), dropped_count: fx.ranked.length });
+  fx.selectResult = Object.freeze({ archetypes: Object.freeze([]), reason_codes: Object.freeze([]) });
   fx.explainResult = Object.freeze([]);
   fx.commitResult = Object.freeze({
     query_id: QUERY_ID,
@@ -298,7 +311,8 @@ test('full-run: zero selected still calls the write wrapper with empty array', a
     assert.equal(stub.selectCalls[0].ranked, fx.ranked);
     assert.deepEqual(stub.commitCalls[0].selected, []);
     assert.deepEqual(out.selected, []);
-    assert.equal(out.dropped_count, fx.ranked.length);
+    assert.deepEqual(out.archetypes, []);
+    assert.deepEqual(out.archetype_reason_codes, []);
   });
 });
 
@@ -321,7 +335,7 @@ test('full-run: a stage error propagates unchanged and later stages never run', 
       } else if (stage === 'rank') {
         ranking.rankBuilds = () => { stub.order.push('rank'); throw sentinel; };
       } else if (stage === 'select') {
-        ranking.selectDiverseTop = () => { stub.order.push('select'); throw sentinel; };
+        ranking.selectArchetypes = () => { stub.order.push('select'); throw sentinel; };
       } else if (stage === 'explain') {
         explanation.explainSelection = () => { stub.order.push('explain'); throw sentinel; };
       } else {
@@ -357,19 +371,30 @@ test('full-run.js keeps its source boundary (no SQL, no tx control, no driver)',
   assert.ok(source.includes('snapshot.runRecommendationSnapshot(client, queryId, options)'));
   assert.ok(source.includes('ranking.rankBuilds({ builds: snap.builds })'));
   assert.ok(source.includes('ranked: rankedResult.ranked'));
-  assert.ok(source.includes('ranking.TOP_N_PERSISTED'));
-  assert.ok(source.includes('ranking.MAX_PER_PAIR'));
+  // E4 (Decision 41): the archetype call replaces the selectDiverseTop call.
+  assert.ok(source.includes('ranking.selectArchetypes({'));
+  assert.ok(source.includes('budget: { amount: snap.budget_amount, currency: snap.currency }'));
+  assert.ok(source.includes('priority: snap.priority'));
   assert.ok(source.includes('explanation.explainSelection('));
   // OG-04: the pass's Engine 2D verdicts are forwarded as the 4th argument so
   // the commit wrapper can persist rejection reasons in the same transaction.
   assert.ok(source.includes('commit.runRecommendationCommit('));
   assert.ok(source.includes('snap.filter_verdicts'));
-  assert.ok(!source.includes('limit: 10'));
-  assert.ok(!source.includes('maxPerPair: 3'));
+  // The DiverseTop walking mode is gone from this file (E4 replaces it).
+  assert.ok(!source.includes('selectDiverseTop'));
+  assert.ok(!source.includes('maxPerPair'));
 });
 
 test('full-run.js imports exactly the snapshot wrapper, the commit wrapper, the ranking barrel, and Engine 6', () => {
   const source = stripComments(fs.readFileSync(path.join(__dirname, 'full-run.js'), 'utf8'));
   const requires = [...source.matchAll(/require\('([^']+)'\)/g)].map((match) => match[1]).sort();
   assert.deepEqual(requires, ['../explanation', '../ranking', './commit', './snapshot']);
+});
+
+test("Decision 38: full-run forwards explicit asOf unchanged into the snapshot", async () => {
+  const options = Object.freeze({ asOf: "2026-10-08T20:00:00.000Z" });
+  await withStubbedStages(happyStubs(), async (stub) => {
+    await runRecommendationFullRun({ query() {} }, QUERY_ID, options);
+    assert.equal(stub.snapshotCalls[0].options, options);
+  });
 });

@@ -280,7 +280,7 @@ test('no second engine behavior is introduced', async () => {
   const required = [...source.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
   assert.deepEqual(
     required.sort(),
-    ['../assembly/prices', '../candidates/candidate', '../candidates/errors', '../candidates/input'].sort()
+    ['../assembly/prices', '../candidates/candidate', '../candidates/errors', '../candidates/input', './as-of'].sort()
   );
   const bannedBehavior = [
     'filterCandidates',
@@ -394,4 +394,19 @@ test('invalid pool result and db fail without a query', async () => {
   await assert.rejects(() => selectOfferPrices({ input: BASE_INPUT, pool: [] }, db));
   await assert.rejects(() => selectOfferPrices(poolResult([cpu('cpu-1')]), null));
   assert.equal(db.calls.length, before);
+});
+
+test("Decision 38: explicit asOf controls the 30-day freshness boundary and price timestamp", async () => {
+  const asOf = DECISION_TS;
+  const rows = [offerRow({ ingestion_record_id: "verified", last_checked_at: msBeforeDecision(30 * 86400000) }), offerRow({ id: "older", price: 50, ingestion_record_id: "verified", last_checked_at: msBeforeDecision(30 * 86400000 + 1) })];
+  const db = makeDb(rows);
+  const out = await selectOfferPrices(poolResult([cpu("cpu-1")]), db, { asOf });
+  assert.equal(Object.values(out.prices)[0].selected_price, 100);
+  assert.equal(Object.values(out.prices)[0].price_checked_at, DECISION_TS);
+  assert.deepEqual(db.calls[0].params, [["cpu-1"], "MAD", false, DECISION_TS]);
+  assert.ok(db.calls[0].sql.includes("$4::timestamptz - INTERVAL"));
+  assert.ok(!db.calls[0].sql.includes("CURRENT_TIMESTAMP"));
+  const legacy = makeDb(rows);
+  const old = await selectOfferPrices(poolResult([cpu("cpu-1")]), legacy);
+  assert.deepEqual(old, out); assert.equal(legacy.calls[0].params.length, 3);
 });

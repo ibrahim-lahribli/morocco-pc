@@ -367,6 +367,9 @@ test('runRecommendation: one pass returns the frozen Decision 17.2 shape', async
     'builds',
     'budget_amount',
     'currency',
+    // E4 (Decision 41): carried VERBATIM as a sibling, same pattern as the
+    // E2 resolution sibling that follows the same loader contract.
+    'priority',
     'build_contributions',
     // Decision 27: last, so the two index-aligned fields stay adjacent.
     'budget_floor',
@@ -778,6 +781,66 @@ test('topKPerRole comes from candidate_caps: K=1 keeps one of two eligible coole
   });
 });
 // ---------------------------------------------------------------------------
+// 6b. E2: per-role price targets reach retention (roleTargets).
+// ---------------------------------------------------------------------------
+
+test('E2: a model with use_case_profiles gives retention per-role price targets', async () => {
+  const db = createDb({
+    routes: {
+      configuration: {
+        use_case_profiles: {
+          GAMING: {
+            gpu_policy: 'REQUIRED',
+            spend_targets: { CPU: 0.17, GPU: 0.38, MOTHERBOARD: 0.10 },
+          },
+        },
+      },
+    },
+  });
+  await withSpies([
+    { key: 'retention', namespace: retentionModule, name: 'retainTopKPerRole' },
+  ], async (spies) => {
+    await runRecommendation({ db, queryId: QUERY_ID });
+    const roleTargets = spies.retention.calls[0].args[0].roleTargets;
+    assert.notEqual(roleTargets, null);
+    assert.deepEqual(Object.keys(roleTargets).sort(), ['CPU', 'GPU', 'MOTHERBOARD']);
+    assert.equal(roleTargets.CPU.target, 0.17 * 12000);
+    // The fixture query row carries no resolution, so the GPU multiplier is neutral.
+    assert.equal(roleTargets.GPU.target, 0.38 * 12000);
+    assert.equal(roleTargets.GPU.ceiling, roleTargets.GPU.target * 2);
+  });
+});
+
+test('E2: a model without use_case_profiles passes roleTargets null (pre-E2 rule)', async () => {
+  const db = createDb();
+  await withSpies([
+    { key: 'retention', namespace: retentionModule, name: 'retainTopKPerRole' },
+  ], async (spies) => {
+    await runRecommendation({ db, queryId: QUERY_ID });
+    assert.equal(spies.retention.calls[0].args[0].roleTargets, null);
+  });
+});
+
+test('E2: a use case the model does not declare passes roleTargets null', async () => {
+  const db = createDb({
+    routes: {
+      configuration: {
+        use_case_profiles: {
+          OFFICE: { gpu_policy: 'IGPU_ALLOWED', spend_targets: { CPU: 0.22 } },
+        },
+      },
+    },
+  });
+  await withSpies([
+    { key: 'retention', namespace: retentionModule, name: 'retainTopKPerRole' },
+  ], async (spies) => {
+    // The fixture query use_case is GAMING, which this model does not declare.
+    await runRecommendation({ db, queryId: QUERY_ID });
+    assert.equal(spies.retention.calls[0].args[0].roleTargets, null);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 7. Fail-fast short-circuits (Decision 17.4) and the zero-build outcome.
 // ---------------------------------------------------------------------------
 
@@ -974,4 +1037,24 @@ test('runRecommendationSnapshot: BEGIN ... one real pass ... ROLLBACK, never COM
   assert.equal(countCalls(db.calls, (call) => call.sql === 'COMMIT'), 0);
   assert.equal(out.query_id, QUERY_ID);
   assert.equal(out.builds.length, 1);
+});
+
+test("Decision 38: absent asOf preserves legacy output and SQL; pinned run ignores DB clock", async () => {
+  const a = createDb(); const b = createDb();
+  const legacy = await runRecommendation({ db: a, queryId: QUERY_ID });
+  const absent = await runRecommendation({ db: b, queryId: QUERY_ID, options: { asOf: undefined } });
+  assert.deepEqual(absent, legacy); assert.deepEqual(b.calls, a.calls);
+  const c = createDb({ nowRows: [] });
+  const pinned = await runRecommendation({ db: c, queryId: QUERY_ID, options: { asOf: NOW_ISO } });
+  assert.deepEqual(pinned, legacy);
+  assert.equal(c.calls.some(x => x.sql === SELECT_NOW_SQL), false);
+  const offer = c.calls.find(x => x.sql.includes("FROM store_offer"));
+  assert.equal(offer.params[3], NOW_ISO);
+  assert.ok(!offer.sql.includes("CURRENT_TIMESTAMP"));
+});
+
+test("Decision 38: malformed explicit asOf fails closed", async () => {
+  for (const asOf of [null, 0, "2026-02-30T00:00:00Z", "2026-10-08", "2026-10-08T10:00:00"]) {
+    await assert.rejects(runRecommendation({ db: createDb(), queryId: QUERY_ID, options: { asOf } }), e => e.code === ERROR_CODES.INVALID_FIELD_VALUE && e.field === "asOf");
+  }
 });

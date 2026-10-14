@@ -3,7 +3,7 @@
 **GENERATED FILE — do not edit by hand.** Regenerate with `node scripts/gen-decision-index.js`
 (or `npm run gen:decisions`) after any change to `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 `node scripts/gen-decision-index.js --check` exits non-zero when this file is stale.
-Generated 2026-10-07 from RECOMMENDATION_ENGINE_DECISIONS.md (4294 lines).
+Generated 2026-10-14 from RECOMMENDATION_ENGINE_DECISIONS.md (4838 lines).
 
 Generated for audit finding **D5** (decision-log navigability): one row per decision with number,
 title, status, date and line anchor. Every status comes from the normalized `Status:` line at the
@@ -17,9 +17,9 @@ section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` a
 
 ## Open decisions
 
-None. All 36 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-07.
+None. All 45 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-14.
 
-## Global decisions (34 `## Decision` headings + 2 nested 4/5 aliases = 36)
+## Global decisions (43 `## Decision` headings + 2 nested 4/5 aliases = 45)
 
 | # | Title | Status | Date | DECISIONS.md line |
 |---|---|---|---|---|
@@ -57,6 +57,15 @@ None. All 36 global decisions (including the two nested 4/5 aliases) and all 5 E
 | 34 | offer identity (natural key), offer provenance and the manual-import ingestion path (OG-06) | RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 — `store_offer` gains a natural key and provenance columns (migration 017), ingestion is a reusable impure edge under `src/recommendation/ingestion/`, and the only shipped adapter is the operator-supplied manual file. No scraping. Migration 017 is now applied on BOTH the TEST branch and the shared DB (ledger = 17 on each; verified 2026-10-06), so OG-06 is CLOSED — see the `### UPDATE 2026-10-06` block at the end of this entry. | 2026-10-06 | 4078 |
 | 35 | a beta freshness exemption for seed offers, with the offer class snapshotted onto the build (OG-30 residual, OG-21) | RESOLVED 2026-10-06; IMPLEMENTED 2026-10-06 on the TEST branch and 2026-10-07 on the shared DB (migration 018 applied to both; ledger = 18 on each) — Stage 1 gains an explicit, default-OFF `allow_unverified_seed_offers` option that waives Decision 7's 30-day window for SEED offers only, every eligible offer now carries its provenance class (`SEED_UNVERIFIED` \| `VERIFIED`) plus its offer id on the Engine 3 price carrier, and `build_component` SNAPSHOTS that class and the offer id so a permalink stays labelled after the offer changes. | 2026-10-06 | 4131 |
 | 36 | the HTTP API is a thin, engine-free surface over the existing barrels: TEST-DB-first, one read path for POST and GET, beta option pinned on | RESOLVED 2026-10-07; IMPLEMENTED 2026-10-07 — a Fastify API under `apps/api/` serves four `/v1` routes over the UNCHANGED engine (no file in `src/recommendation/` was modified); it refuses the shared database unless `API_ALLOW_SHARED=1`, and it always runs with `allow_unverified_seed_offers: true` (not a request field). Binary: the API is a CLIENT of the engine, not part of it. | 2026-10-07 | 4203 |
+| 37 | a scoring model owns its use-case policy and its use-case vocabulary (`use_case_profiles`) | RESOLVED + IMPLEMENTED (2026-10-08) — `use_case_profiles` is an OPTIONAL scoring-model configuration key validated in `src/recommendation/scoring/configuration.js` / `scoring/use-cases.js`; `listUseCases(configuration)` is exported from the scoring barrel; the `launch-v2` seed is authored and rehearsed branch-first; activation on a live database is a coordinated step (OG-39). | 2026-10-08 | 4295 |
+| 38 | explicit asOf pins scoring and offer freshness without a migration | RESOLVED 2026-10-08; IMPLEMENTED 2026-10-08 — optional options.asOf is an explicit run input; absent preserves the transaction-clock path, present pins scoring and offer freshness. | 2026-10-08 | 4325 |
+| 39 | retention is target-aware: a profile's `spend_targets` choose which candidates survive each role (E2) | RESOLVED 2026-10-09; IMPLEMENTED 2026-10-09 — the query loader carries `resolution` as a sibling of the Engine 2A input, a new pure `retention/targets.js` turns a profile's `spend_targets` + budget + resolution into per-role `{target, ceiling}`, and `retainTopKPerRole` accepts an optional `roleTargets` that switches a targeted role bucket from top-K to price-band retention while keeping the Decision 27 reservation, the K cap and the Rule 3/5 order. A model that declares no `use_case_profiles` passes `null` and stays byte-identical. The band constants are HYPOTHESES pending the H3 human review. | 2026-10-09 | 4398 |
+| 40 | the Engine 3 walk enforces the optional per-pair quota candidate_caps.max_builds_per_pair (E3) | RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 — `validateScoringModelConfiguration` accepts the OPTIONAL | 2026-10-10 | 4507 |
+| 41 | archetype selection (selectArchetypes) replaces selectDiverseTop as the pre-persistence showcase (E4) | RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 — pure, DB-free `selectArchetypes({ ranked, budget, priority })` returns up to THREE pair-distinct showcase builds (PERFORMANCE / BALANCED / VALUE, output order set by the query `priority`, `persisted_rank` contiguous 1..N in output order) and degrades honestly with `NO_*` reason codes instead of padding; `strategy_key` is RETURNED but not persisted (Platform migration 019 absent) and `archetype_objectives` remain unconsumed hypotheses. | 2026-10-10 | 4608 |
+| 42 | the engine enforces the OPTIONAL per-resolution VRAM floor resolution_profiles.<resolution>.vram_floor_gb at Engine 3 GPU depth (E5) | RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 (recorded 2026-10-13, after the docs-repair pass restored this log and the gap register) — a GPU candidate whose KNOWN chipset VRAM is below the active model's declared floor for the query's resolution is skipped at GPU depth; UNKNOWN VRAM or an undeclared resolution keeps the floor off entirely. | 2026-10-10 | 4657 |
+| 43 | the Engine 3 walk honours a DECLARED per-use-case GPU policy (`gpu_policy`) at GPU depth (E6) | RESOLVED 2026-10-14; IMPLEMENTED 2026-10-14 (recorded 2026-10-14, after the code landed — it cited this number before the record existed, OG-48) — a scoring model whose `use_case_profiles[use_case].gpu_policy` is `IGPU_ALLOWED` makes the iGPU the GPU for that use case, so an iGPU CPU takes the omit path exclusively; `REQUIRED` forces the discrete GPU; a model that declares no profile keeps the legacy `gpu_required_use_cases` rule byte-identically. **The rule is UNREACHABLE on today's catalog**: its acceptance (A6) is not met and the OFFICE rank-1 CPU has no integrated GPU, so the declared policy correctly resolves to `REQUIRED`. | 2026-10-14 | 4696 |
+| 44 | Engine 6 exposes STRUCTURED reason codes (`deriveReasons`) alongside the explanation string (E7) | RESOLVED 2026-10-14; IMPLEMENTED 2026-10-14 — Engine 6 gains a second, ADDITIVE, machine-readable output: a pure `deriveReasons(...)` returning frozen `{ code, value }` records in a fixed `REASON_ORDER`, sharing ONE owner (`explanation/build-facts.js`) with the string formatter; the committed `explanation` string, the persisted shape and the orchestrator seam are unchanged, and there is NO new column and NO JSONB. | 2026-10-14 | 4737 |
+| 45 | the last three Decision 26 item B rules are ENFORCED: OG-11 and OG-12 REJECT, OG-09 flags UNKNOWN (E8) | RESOLVED 2026-10-14; IMPLEMENTED 2026-10-14 — the three remaining DEFERRED Decision 26 item B rules leave DEFERRED: RAM `module_count` vs motherboard `dimm_slots` (OG-11) and RAM total capacity vs `max_memory_capacity_gb` (OG-12) resolve FAIL and REJECT the candidate, while cooler `max_tdp_watts` vs CPU `tdp_watts` (OG-09) resolves UNKNOWN and NEVER REJECTs; all five operands are now carried by the Engine 2D filtering context and BOTH topology sites register the new pairs, so the candidate filter and the assembly walk cannot diverge. | 2026-10-14 | 4784 |
 
 ## Engine 3 contract decisions (Engine-3-local numbering; local 4–5 ARE global Decisions 4–5)
 
@@ -70,9 +79,9 @@ None. All 36 global decisions (including the two nested 4/5 aliases) and all 5 E
 
 ## Reconciliation
 
-- Global decisions: 36 = 34 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
+- Global decisions: 45 = 43 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
 - Engine-3-local contracts: 5 (`### Decision 1–5` under "Engine 3 contract decisions"; local 1–3 are NOT global 1–3, local 4/5 ARE global 4/5 — AGENTS.md §2).
-- Parsed headings: 34 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
+- Parsed headings: 43 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
 - Status source: each entry’s normalized `Status:` line (first content line). The generator exits
   non-zero if a decision is added without one, so this table cannot go stale silently.
 - Open decisions: none.

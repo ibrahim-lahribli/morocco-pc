@@ -19,7 +19,7 @@
  * compatibility logic, and does NOT filter by budget, score, assemble
  * builds, select final components, or persist anything.
  *
- * Relationships (exactly the eight required ones - no more):
+ * Relationships (exactly the eleven required ones - no more):
  *
  *   key                roles                  resolver checks
  *   ------------------ ---------------------- -------------------------------
@@ -31,6 +31,9 @@
  *   case_radiator      CPU_COOLER <-> CASE    radiator compatibility
  *   gpu_case           GPU <-> CASE           length; thickness
  *   gpu_psu            GPU <-> PSU            wattage; connectors
+ *   cooler_tdp         CPU <-> CPU_COOLER     TDP adequacy (SOFT, OG-09)
+ *   mb_memory_slots    MOTHERBOARD <-> RAM    module_count vs dimm_slots (OG-11)
+ *   mb_memory_capacity MOTHERBOARD <-> RAM    kit total vs board max (OG-12)
  *
  * SSD roles participate in no relationship (the Engine 2D contract defines
  * none); with zero applicable relationships a candidate is vacuously PASS.
@@ -130,7 +133,7 @@
  * reused; no new error hierarchy.
  *
  * Exports (Decision 16): besides filterCandidates / CANDIDATE_STATUSES, the
- * eight pair evaluators are exported verbatim so Engine 3's DFS can re-check
+ * eleven pair evaluators are exported verbatim so Engine 3's DFS can re-check
  * tentatively picked combinations against Engine 2D's exact pair logic, with
  * aggregateCompatibilityResults + FINAL_STATUSES re-exported so the consumer
  * gates on FAIL inside Engine 1's own vocabulary. No second implementation
@@ -148,6 +151,9 @@ const {
   resolveCpuMotherboardSupport,
   resolveCoolerSocketSupport,
   resolveCoolerCaseHeight,
+  resolveCoolerCpuTdp,
+  resolveRamMotherboardSlots,
+  resolveRamMotherboardCapacity,
   resolveCaseMotherboardFormFactor,
   resolveCaseRadiator,
   resolvePlatformMemorySupport,
@@ -170,7 +176,7 @@ const CANDIDATE_STATUSES = Object.freeze({
 });
 
 /**
- * The eight required relationships, in canonical evaluation order. Each
+ * The eleven required relationships, in canonical evaluation order. Each
  * relationship is evaluated from BOTH participating roles' perspectives (an
  * owner candidate against the partner-role bucket); left_role is only the
  * canonical argument order used for resolver wiring.
@@ -184,6 +190,11 @@ const RELATIONSHIPS = Object.freeze([
   Object.freeze({ key: 'case_radiator', left_role: 'CPU_COOLER', partner_role: 'CASE' }),
   Object.freeze({ key: 'gpu_case', left_role: 'GPU', partner_role: 'CASE' }),
   Object.freeze({ key: 'gpu_psu', left_role: 'GPU', partner_role: 'PSU' }),
+  // E8 (Decision 45): the three previously-DEFERRED Decision 26 item B rules,
+  // appended so every pre-E8 relationship keeps its canonical precedence.
+  Object.freeze({ key: 'cooler_tdp', left_role: 'CPU', partner_role: 'CPU_COOLER' }),
+  Object.freeze({ key: 'mb_memory_slots', left_role: 'MOTHERBOARD', partner_role: 'RAM' }),
+  Object.freeze({ key: 'mb_memory_capacity', left_role: 'MOTHERBOARD', partner_role: 'RAM' }),
 ]);
 
 /** Canonical relationship keys, in canonical order. */
@@ -544,6 +555,59 @@ function evaluateGpuPsuPair(context, gpu, psu) {
   ];
 }
 
+/**
+ * CPU <-> CPU_COOLER: cooler TDP adequacy (rule 7, OG-09 / E8 Decision 45).
+ * SOFT by design: an under-spec cooler resolves UNKNOWN, never FAIL, because
+ * vendor TDP figures are marketing numbers - see compatibility/cooler-tdp.js.
+ */
+function evaluateCoolerTdpPair(context, cpu, cooler) {
+  const cpuSpec = productSpecOf(context, cpu);
+  const coolerSpec = productSpecOf(context, cooler);
+  return [
+    resolveCoolerCpuTdp({
+      cooler_product_id: cooler.product_id,
+      cpu_product_id: cpu.product_id,
+      cooler_max_tdp_watts: coolerSpec ? coolerSpec.max_tdp_watts : null,
+      cpu_tdp_watts: cpuSpec ? cpuSpec.tdp_watts : null,
+    }),
+  ];
+}
+
+/**
+ * MOTHERBOARD <-> RAM: physical module slots (rule 8, OG-11 / E8 Decision 45).
+ * HARD: a kit with more modules than the board has slots cannot be installed.
+ */
+function evaluateMotherboardMemorySlotsPair(context, motherboard, ram) {
+  const motherboardSpec = productSpecOf(context, motherboard);
+  const ramSpec = productSpecOf(context, ram);
+  return [
+    resolveRamMotherboardSlots({
+      ram_product_id: ram.product_id,
+      motherboard_product_id: motherboard.product_id,
+      ram_module_count: ramSpec ? ramSpec.module_count : null,
+      motherboard_dimm_slots: motherboardSpec ? motherboardSpec.dimm_slots : null,
+    }),
+  ];
+}
+
+/**
+ * MOTHERBOARD <-> RAM: total capacity ceiling (rule 9, OG-12 / E8 Decision 45).
+ * HARD: a kit above the board's addressable maximum cannot be fully used.
+ */
+function evaluateMotherboardMemoryCapacityPair(context, motherboard, ram) {
+  const motherboardSpec = productSpecOf(context, motherboard);
+  const ramSpec = productSpecOf(context, ram);
+  return [
+    resolveRamMotherboardCapacity({
+      ram_product_id: ram.product_id,
+      motherboard_product_id: motherboard.product_id,
+      ram_module_count: ramSpec ? ramSpec.module_count : null,
+      ram_capacity_per_module_gb: ramSpec ? ramSpec.capacity_per_module_gb : null,
+      motherboard_max_memory_capacity_gb: motherboardSpec ? motherboardSpec.max_memory_capacity_gb : null,
+    }),
+  ];
+}
+
 /** relationship key -> pair evaluator with canonical (left, partner) args. */
 const PAIR_EVALUATORS = Object.freeze({
   cpu_motherboard: evaluateCpuMotherboardPair,
@@ -554,6 +618,9 @@ const PAIR_EVALUATORS = Object.freeze({
   case_radiator: evaluateCaseRadiatorPair,
   gpu_case: evaluateGpuCasePair,
   gpu_psu: evaluateGpuPsuPair,
+  cooler_tdp: evaluateCoolerTdpPair,
+  mb_memory_slots: evaluateMotherboardMemorySlotsPair,
+  mb_memory_capacity: evaluateMotherboardMemoryCapacityPair,
 });
 
 /**
@@ -765,6 +832,9 @@ module.exports = {
   evaluateCaseRadiatorPair,
   evaluateGpuCasePair,
   evaluateGpuPsuPair,
+  evaluateCoolerTdpPair,
+  evaluateMotherboardMemorySlotsPair,
+  evaluateMotherboardMemoryCapacityPair,
   aggregateCompatibilityResults,
   FINAL_STATUSES,
 };

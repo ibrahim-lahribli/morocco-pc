@@ -737,3 +737,62 @@ test('input.js is a pure structural gate with no I/O or async surface', () => {
   );
   assert.deepEqual(exports_, ['validateEngine3Input']);
 });
+
+test('E3: validateEngine3Input carries an optional max_builds_per_pair and rejects a bad one', () => {
+  const input = validateEngine3Input(makeInput({ candidate_caps: makeCaps({ max_builds_per_pair: 2 }) }));
+  assert.deepEqual(input.candidate_caps, { top_k_per_role: 5, max_builds_per_query: 10, max_builds_per_pair: 2 });
+  assert.throws(
+    () => validateEngine3Input(makeInput({ candidate_caps: makeCaps({ max_builds_per_pair: 0 }) })),
+    expectError(ERROR_CODES.INVALID_FIELD_VALUE, 'candidate_caps.max_builds_per_pair')
+  );
+});
+// ---------------------------------------------------------------------------
+// E5 (Decision 42): optional top-level `vram_floor_gb`.
+// ---------------------------------------------------------------------------
+
+test('E5: vram_floor_gb is present iff declared and passes through unchanged', () => {
+  const declared = validateEngine3Input(makeInput({ vram_floor_gb: 8 }));
+  assert.equal(declared.vram_floor_gb, 8);
+  const absent = validateEngine3Input(makeInput());
+  assert.equal(Object.prototype.hasOwnProperty.call(absent, 'vram_floor_gb'), false);
+  // The ten required fields keep the exact contract shape; the optional field
+  // is purely additive.
+  assert.deepEqual(Object.keys(absent), CONTRACT_FIELDS);
+});
+
+test('E5: a DECLARED vram_floor_gb must be an integer >= 1; declared null is malformed', () => {
+  for (const bad of [null, 0, -1, 1.5, '8', true]) {
+    assert.throws(
+      () => validateEngine3Input(makeInput({ vram_floor_gb: bad })),
+      (error) => error instanceof CandidateSelectionError
+        && error.code === ERROR_CODES.INVALID_FIELD_VALUE
+        && error.field === 'vram_floor_gb',
+      'expected INVALID_FIELD_VALUE for vram_floor_gb=' + String(bad)
+    );
+  }
+});
+// ---------------------------------------------------------------------------
+// E6 (Decision 43): optional gpu_policy, present iff declared.
+// ---------------------------------------------------------------------------
+
+test('E6: gpu_policy is present iff declared and passes through unchanged', () => {
+  const declared = validateEngine3Input(makeInput({ gpu_policy: 'IGPU_ALLOWED' }));
+  assert.equal(declared.gpu_policy, 'IGPU_ALLOWED');
+  const absent = validateEngine3Input(makeInput());
+  assert.equal(Object.prototype.hasOwnProperty.call(absent, 'gpu_policy'), false);
+  // The eleven required fields keep the exact contract shape; the optional
+  // field is purely additive (the E5 floor semantics).
+  assert.deepEqual(Object.keys(absent), CONTRACT_FIELDS);
+});
+
+test('E6: a DECLARED gpu_policy must be an exact Decision 37 policy string', () => {
+  for (const bad of [null, 'OPTIONAL', 'optional', '', 1, true]) {
+    assert.throws(
+      () => validateEngine3Input(makeInput({ gpu_policy: bad })),
+      expectError(ERROR_CODES.INVALID_FIELD_VALUE, 'gpu_policy'),
+      'expected INVALID_FIELD_VALUE for gpu_policy=' + String(bad)
+    );
+  }
+  assert.doesNotThrow(() => validateEngine3Input(makeInput({ gpu_policy: 'REQUIRED' })));
+  assert.doesNotThrow(() => validateEngine3Input(makeInput({ gpu_policy: 'IGPU_ALLOWED' })));
+});

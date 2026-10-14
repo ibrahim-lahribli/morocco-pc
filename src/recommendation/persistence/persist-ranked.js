@@ -1,7 +1,9 @@
 /**
  * Engine 5b - ranked persistence writer (Decision 19, DML only).
  *
- * Persists the `selected` array from selectDiverseTop: one build_candidate row
+ * Persists the `selected` array from the pre-persistence showcase
+ * (`selectArchetypes().selected` since Decision 41; the array shape is
+ * unchanged from the `selectDiverseTop` walk it replaced): one build_candidate row
  * plus its build_component rows plus one recommendation_result row per entry.
  * Fake-client tested: this module only calls client.query(sql, params) with
  * parameterized queries; it never issues BEGIN/COMMIT/ROLLBACK (Decision 19.1),

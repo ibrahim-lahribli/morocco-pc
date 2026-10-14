@@ -16,17 +16,23 @@ const assert = require('node:assert/strict');
 const scoring = require('./index');
 const loader = require('./load-scoring-model');
 const configuration = require('./configuration');
+const useCases = require('./use-cases');
 const assessments = require('./load-assessments');
 const effective = require('./effective-score');
 const candidate = require('./candidate-score');
 const build = require('./build-score');
 
-test('scoring barrel exposes exactly the thirteen-export public API', () => {
+test('scoring barrel exposes exactly the eighteen-export public API', () => {
   assert.deepEqual(Object.keys(scoring), [
     'loadScoringModel',
     'SELECT_SCORING_MODEL_SQL',
     'validateScoringModelConfiguration',
     'SCORING_MODEL_CONFIGURATION_KEYS',
+    'OPTIONAL_CONFIGURATION_KEYS',
+    'listUseCases',
+    'validateUseCaseProfiles',
+    'USE_CASE_PROFILES_KEY',
+    'GPU_POLICIES',
     'loadComponentAssessments',
     'SELECT_COMPONENT_ASSESSMENTS_SQL',
     'selectAssessmentRow',
@@ -50,6 +56,15 @@ test('scoring barrel re-exports every export by identity - no wrapper, no copy',
     scoring.SCORING_MODEL_CONFIGURATION_KEYS,
     configuration.SCORING_MODEL_CONFIGURATION_KEYS
   );
+  // Decision 37 (`use_case_profiles` + the vocabulary accessor).
+  assert.strictEqual(
+    scoring.OPTIONAL_CONFIGURATION_KEYS,
+    configuration.OPTIONAL_CONFIGURATION_KEYS
+  );
+  assert.strictEqual(scoring.listUseCases, useCases.listUseCases);
+  assert.strictEqual(scoring.validateUseCaseProfiles, useCases.validateUseCaseProfiles);
+  assert.strictEqual(scoring.USE_CASE_PROFILES_KEY, useCases.USE_CASE_PROFILES_KEY);
+  assert.strictEqual(scoring.GPU_POLICIES, useCases.GPU_POLICIES);
   // Engine 4 (Decision 13 STEP 1-3).
   assert.strictEqual(scoring.loadComponentAssessments, assessments.loadComponentAssessments);
   assert.strictEqual(scoring.SELECT_COMPONENT_ASSESSMENTS_SQL, assessments.SELECT_COMPONENT_ASSESSMENTS_SQL);

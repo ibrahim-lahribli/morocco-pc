@@ -10,9 +10,9 @@
  *     its own transaction without writing
  *     -> rankBuilds({ builds })                  - Engine 5a, pure, full
  *        ranked list plus the top_n slice
- *     -> selectDiverseTop({ ranked })            - Decision 20, walks the
- *        FULL ranked list (never the top_n slice), capped by the ranking
- *        barrel constants
+ *     -> ranking.selectArchetypes({ ranked, budget, priority }) - E4 / Decision
+ *        41, which REPLACED the Decision 20 selectDiverseTop walk here; up to
+ *        three pair-distinct archetypes, output-ordered by priority
  *     -> explainSelection({ selected, builds, contributions, budget }) - Engine
  *        6, Decision 22 item 3, pure/DB-free; produces the EXPLAINED array
  *     -> runRecommendationCommit(client, queryId, explained, verdicts) - separate
@@ -56,22 +56,31 @@ const explanation = require('../explanation');
  *        `allow_unverified_seed_offers`), forwarded unchanged to the read
  *        wrapper and then to Stage 1. Omitted means default OFF, so existing
  *        callers keep byte-identical behaviour.
+ * Decision 38: options.asOf is optional ISO time with an explicit timezone;
+ * when supplied it pins scoring/offer freshness, otherwise the transaction clock remains.
  * @returns {Promise<object>} the frozen combined result (eleven fields, see
  *          above).
  */
 async function runRecommendationFullRun(client, queryId, options) {
   const snap = await snapshot.runRecommendationSnapshot(client, queryId, options);
   const rankedResult = ranking.rankBuilds({ builds: snap.builds });
-  const selection = ranking.selectDiverseTop({
+  // E4 (Decision 41): the archetype selection REPLACES the selectDiverseTop
+  // walk as the pre-persistence showcase. Priority comes from the snapshot
+  // query row; strategy_key persistence is DEFERRED until Platform migration
+  // 019 adds recommendation_result.strategy_key - the archetypes' strategy
+  // keys are RETURNED here, not written.
+  const selection = ranking.selectArchetypes({
     ranked: rankedResult.ranked,
-    limit: ranking.TOP_N_PERSISTED,
-    maxPerPair: ranking.MAX_PER_PAIR,
+    budget: { amount: snap.budget_amount, currency: snap.currency },
+    priority: snap.priority,
   });
   // Decision 22 item 3: Engine 6 fills the pre-write seam - pure, DB-free, and
   // copies only (the frozen selection is never mutated). The committed and
-  // returned `selected` is the EXPLAINED array.
+  // returned `selected` is the explained array, E4-shape: the archetypes are
+  // explained with the SAME entries Engine 6 exists for (see E4 wiring note
+  // in the header).
   const explained = explanation.explainSelection({
-    selected: selection.selected,
+    selected: selection.archetypes,
     builds: snap.builds,
     contributions: snap.build_contributions,
     budget: { amount: snap.budget_amount, currency: snap.currency },
@@ -93,7 +102,9 @@ async function runRecommendationFullRun(client, queryId, options) {
     ranked: rankedResult.ranked,
     top_n: rankedResult.top_n,
     selected: explained,
-    dropped_count: selection.dropped_count,
+    archetypes: selection.archetypes,
+    archetype_reason_codes: selection.reason_codes,
+    dropped_count: 0,
     persisted_ranks: persisted.persisted_ranks,
     build_candidate_ids: persisted.build_candidate_ids,
     recommendation_result_ids: persisted.recommendation_result_ids,

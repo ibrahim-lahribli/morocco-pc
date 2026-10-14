@@ -446,10 +446,80 @@ test('the caller-owned configuration is never mutated or frozen', () => {
 test('configuration.js is a pure validator with no database dependency', () => {
   const source = fs.readFileSync(path.join(__dirname, 'configuration.js'), 'utf8');
   const required = [...source.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
-  assert.deepEqual(required, ['../candidates/errors']);
+  assert.deepEqual(required, ['../candidates/errors', './use-cases']);
 
   const banned = ["require('pg')", '.query(', 'SELECT ', 'INSERT ', 'new Pool'];
   for (const token of banned) {
     assert.ok(!source.includes(token), `configuration.js must not contain ${token}`);
+  }
+});
+test('E3: candidate_caps accepts the optional max_builds_per_pair and preserves it', () => {
+  const validated = validateScoringModelConfiguration(
+    makeConfiguration({ candidate_caps: { top_k_per_role: 5, max_builds_per_query: 25, max_builds_per_pair: 2 } })
+  );
+  assert.deepEqual(validated.candidate_caps, { top_k_per_role: 5, max_builds_per_query: 25, max_builds_per_pair: 2 });
+});
+
+test('E3: a declared max_builds_per_pair must be a positive integer; absence stays valid', () => {
+  for (const bad of [0, -1, 1.5, '2', null]) {
+    assert.throws(
+      () => validateScoringModelConfiguration(
+        makeConfiguration({ candidate_caps: { top_k_per_role: 5, max_builds_per_query: 25, max_builds_per_pair: bad } })
+      ),
+      (error) => error.field === 'candidate_caps.max_builds_per_pair',
+      'expected a nested-path failure for max_builds_per_pair=' + String(bad)
+    );
+  }
+  assert.deepEqual(
+    validateScoringModelConfiguration(makeConfiguration({ candidate_caps: { top_k_per_role: 5, max_builds_per_query: 25 } })).candidate_caps,
+    { top_k_per_role: 5, max_builds_per_query: 25 }
+  );
+});
+// ---------------------------------------------------------------------------
+// E5 (Decision 42): OPTIONAL `resolution_profiles` (per-resolution VRAM floor).
+// ---------------------------------------------------------------------------
+
+test('Decision 42: resolution_profiles validates and copies when well-formed', () => {
+  const configuration = validateScoringModelConfiguration(makeConfiguration({
+    resolution_profiles: {
+      '1080p': { vram_floor_gb: 8 },
+      '1440p': { vram_floor_gb: 12 },
+      '2160p': { vram_floor_gb: 16 },
+    },
+  }));
+  assert.deepEqual(configuration.resolution_profiles, {
+    '1080p': { vram_floor_gb: 8 },
+    '1440p': { vram_floor_gb: 12 },
+    '2160p': { vram_floor_gb: 16 },
+  });
+  assert.ok(Object.isFrozen(configuration.resolution_profiles));
+});
+
+test('Decision 42: a model without resolution_profiles keeps its exact old shape', () => {
+  const configuration = validateScoringModelConfiguration(makeConfiguration());
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(configuration, 'resolution_profiles'),
+    false
+  );
+});
+
+test('Decision 42: resolution_profiles fails fast on every shape violation', () => {
+  const bads = [
+    ['not an object', 'x', ERROR_CODES.INVALID_INPUT, 'resolution_profiles'],
+    ['blank resolution key', { ' ': { vram_floor_gb: 8 } }, ERROR_CODES.INVALID_FIELD_VALUE, 'resolution_profiles'],
+    ['non-object profile', { '1080p': 8 }, ERROR_CODES.INVALID_INPUT, 'resolution_profiles.1080p'],
+    ['unknown profile field', { '1080p': { vram_floor_gb: 8, gpu_share: 0.4 } }, ERROR_CODES.INVALID_FIELD_VALUE, 'resolution_profiles.1080p.gpu_share'],
+    ['missing vram_floor_gb', { '1080p': {} }, ERROR_CODES.MISSING_REQUIRED_FIELD, 'resolution_profiles.1080p.vram_floor_gb'],
+    ['zero floor', { '1080p': { vram_floor_gb: 0 } }, ERROR_CODES.INVALID_FIELD_VALUE, 'resolution_profiles.1080p.vram_floor_gb'],
+    ['fractional floor', { '1080p': { vram_floor_gb: 1.5 } }, ERROR_CODES.INVALID_FIELD_VALUE, 'resolution_profiles.1080p.vram_floor_gb'],
+    ['string floor', { '1080p': { vram_floor_gb: '8' } }, ERROR_CODES.INVALID_FIELD_VALUE, 'resolution_profiles.1080p.vram_floor_gb'],
+    ['declared null floor', { '1080p': { vram_floor_gb: null } }, ERROR_CODES.INVALID_FIELD_VALUE, 'resolution_profiles.1080p.vram_floor_gb'],
+  ];
+  for (const [label, value, code, field] of bads) {
+    assert.throws(
+      () => validateScoringModelConfiguration(makeConfiguration({ resolution_profiles: value })),
+      (error) => error instanceof CandidateSelectionError && error.code === code && error.field === field,
+      'expected ' + code + ' on ' + field + ' for: ' + label
+    );
   }
 });
