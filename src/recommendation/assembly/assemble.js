@@ -712,11 +712,19 @@ function assembleBuilds(engine3Input) {
         gpuPolicy: traversal.gpuPolicy,
       });
       const options = buckets[GPU_ROLE];
-      // E6 (Decision 43): a DECLARED IGPU_ALLOWED policy makes the iGPU
-      // omit path the ONLY path on an iGPU CPU - the discrete-GPU branches
-      // are skipped entirely. The LEGACY rule-2 OPTIONAL (no declared
-      // policy) keeps walking every eligible GPU verdict (pre-E6
-      // behaviour, byte-identical).
+      // E6 (Decision 43): a DECLARED IGPU_ALLOWED policy makes the iGPU the
+      // GPU for this use case, so on an iGPU CPU the discrete-GPU branches
+      // are skipped ENTIRELY and the omit path below is the only path. There
+      // is deliberately no "fall back to the discrete walk if the omit path
+      // builds nothing": omitting the GPU can only RELAX the walk - every
+      // picked role has a strictly positive selected_price (prices.js), so
+      // the budget gate stays open; an absent partner contributes no pair
+      // FAIL (firstPairFailure); and finishPath has no required-role gate -
+      // so any GPU-picking path implies its GPU-less variant, and a
+      // fallback could never fire. Pinned by the budget-sweep test in
+      // assemble.test.js.
+      // The LEGACY rule-2 OPTIONAL (no declared policy) keeps walking every
+      // eligible GPU verdict (pre-E6 behaviour, byte-identical).
       const skipDiscreteGpu = traversal.gpuPolicy === 'IGPU_ALLOWED' &&
         traversal.integrated_gpu_present[cpuChoice.product_id] === true;
       if (!skipDiscreteGpu) {

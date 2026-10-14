@@ -2037,12 +2037,13 @@ test('E5: a DECLARED vram_floor_gb must be an integer >= 1 (declared null is mal
 // ONLY path on an iGPU CPU; the legacy rule-2 OPTIONAL keeps the pre-E6 walk.
 // ---------------------------------------------------------------------------
 
-function assembleWithGpuPolicy({ gpuIds, gpuPolicy, integrated }) {
+function assembleWithGpuPolicy({ gpuIds, gpuPolicy, integrated, budget }) {
   const input = engineInput({
     results: vramFixture(gpuIds),
     useCase: 'OFFICE',
     gpuRequired: ['GAMING'], // OFFICE is not in the legacy list: rule 2 fires
     maxBuilds: 10,
+    ...(budget === undefined ? {} : { budget }),
   });
   if (integrated !== undefined) input.integrated_gpu_present = integrated;
   if (gpuPolicy !== undefined) input.gpu_policy = gpuPolicy;
@@ -2074,6 +2075,48 @@ test('E6: a declared REQUIRED policy reaches the DFS - no omit path even on an i
     builds.every((build) => build.components.some((component) => component.component_role === 'GPU')),
     'a declared REQUIRED policy forbids the GPU-omit path'
   );
+});
+
+// E6 (Decision 43): the iGPU hard-skip is SAFE - it cannot turn a buildable
+// query into zero builds, which is why there is no fallback to the discrete
+// walk (a fallback could never fire). Omitting the GPU only RELAXES the walk:
+// every picked role has a strictly positive selected_price, so the budget gate
+// stays open; an absent pair partner contributes no FAIL (firstPairFailure);
+// and finishPath has no required-role gate. So a GPU-picking path implies its
+// GPU-less variant. Swept across budgets straddling the GPU-less total
+// (7 x 100 = 700) and the discrete total (800).
+test('E6: the iGPU-only hard-skip never empties a query the discrete walk could build', () => {
+  const gpuIds = ['g1', 'g2'];
+  const emptyAt = [];
+  const builtAt = [];
+  for (const budget of [650, 700, 750, 800, 900, 5000]) {
+    const policyOnly = assembleWithGpuPolicy({ gpuIds, gpuPolicy: 'IGPU_ALLOWED', budget });
+    const legacyWalk = assembleWithGpuPolicy({ gpuIds, budget });
+    if (legacyWalk.length > 0) {
+      assert.ok(
+        policyOnly.length > 0,
+        'budget ' + budget + ': the discrete walk built ' + legacyWalk.length +
+          ' but the iGPU-only walk is empty - the hard-skip dropped a buildable query'
+      );
+      builtAt.push(budget);
+    }
+    if (policyOnly.length === 0) {
+      emptyAt.push(budget);
+    }
+  }
+  // Non-vacuous: the sweep really produced both outcomes.
+  assert.ok(builtAt.length >= 4, 'the sweep must build at several budgets: ' + builtAt.join(','));
+  // The one empty budget is a GENUINE budget shortfall - the GPU-less build
+  // alone costs 700 - and the discrete walk is empty there too, so the policy
+  // introduces no new emptiness.
+  assert.deepEqual(emptyAt, [650], 'only the true budget shortfall is empty');
+  assert.equal(
+    assembleWithGpuPolicy({ gpuIds, budget: 650 }).length,
+    0,
+    'the discrete walk is empty at the same budget'
+  );
+  // Where the omit path fits but the GPU does not, the policy still builds.
+  assert.ok(assembleWithGpuPolicy({ gpuIds, gpuPolicy: 'IGPU_ALLOWED', budget: 700 }).length > 0);
 });
 
 test('E6: the assemble re-defense rejects a malformed declared gpu_policy', () => {
