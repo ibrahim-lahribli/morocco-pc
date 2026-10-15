@@ -4292,6 +4292,30 @@ Recorded the same day, additive to items 3 and 11; changes no decision above and
 
 **4. `test:api:db` hardened.** The DB-backed suite now (a) captures per-table row counts BEFORE the run and asserts residue against those counts AFTER cleanup (profile, query, result, build_candidate, build_component, build_rejection — before/after equality, not just zero at the end), (b) asserts the 422 zero-row case writes nothing (row counts unchanged for the tables the pass would touch), and (c) pins POST==GET with `assert.deepEqual` over the full response bodies rather than a field-by-field comparison. Additive assertions only; no existing assertion weakened.
 
+### UPDATE 2026-10-15 — the use-case vocabulary reaches the API through `engine.js` (P2 Sprint 1, OG-38)
+
+Item 7's "`apps/api/src/meta.js` owns the lists AND the validator" is now half
+true, and the half that moved is the SOURCE:
+
+- `apps/api/src/engine.js` (still the only module permitted to require
+  `src/recommendation/**`) gained `useCaseVocabulary(configuration)`, which
+  wraps the scoring barrel's `listUseCases` and returns NULL when the
+  configuration declares neither `use_case_profiles` nor
+  `gpu_required_use_cases`. NULL is UNKNOWN, never an empty list.
+- `apps/api/src/meta.js` now receives the VALUES (a `string[]`) and owns only
+  the French labels plus the validator, so `useCaseOptions`, `useCaseValues`,
+  `buildOptions` and `isAllowedUseCase` all take an array.
+- Both routes (`GET /v1/meta/options`, `POST /v1/recommendations`) derive once
+  and answer 503 when the derivation is NULL. That also closes a latent gap:
+  a model with an unusable configuration used to be served as 200 with an
+  EMPTY `use_cases` array - the "form nobody can submit" case.
+- `import-boundary.test.js`'s exact-barrel pin went from two barrels to three;
+  it exists to force exactly this kind of deliberate change.
+
+Measured on the TEST branch after re-applying seed 013 (`launch-v2@1.0.0`
+active): the served vocabulary is GAMING / OFFICE / WORKSTATION and OFFICE is
+accepted (201). With `seed-minimal-v1` active the vocabulary is unchanged.
+
 ## Decision 37 — a scoring model owns its use-case policy and its use-case vocabulary (`use_case_profiles`)
 
 Status: RESOLVED + IMPLEMENTED (2026-10-08) — `use_case_profiles` is an OPTIONAL scoring-model configuration key validated in `src/recommendation/scoring/configuration.js` / `scoring/use-cases.js`; `listUseCases(configuration)` is exported from the scoring barrel; the `launch-v2` seed is authored and rehearsed branch-first; activation on a live database is a coordinated step (OG-39).

@@ -4,9 +4,10 @@
  * apps/api/src/engine.js - the API's ONLY engine entry point.
  *
  * Boundary: this file exists so the HTTP layer never reaches into an engine
- * module's internals. It requires exactly two PUBLIC BARRELS
- * (`src/recommendation/orchestrator/index.js` and
- * `src/recommendation/candidates/index.js`) and re-exports nothing the engine
+ * module's internals. It requires exactly three PUBLIC BARRELS
+ * (`src/recommendation/orchestrator/index.js`,
+ * `src/recommendation/candidates/index.js` and
+ * `src/recommendation/scoring/index.js`) and re-exports nothing the engine
  * does not already export. `import-boundary.test.js` enforces that rule by
  * scanning every file under apps/api/src for a `require` that resolves to a
  * path inside `src/recommendation/` and is neither a stage barrel (`index.js`)
@@ -26,9 +27,47 @@
 
 const orchestrator = require('../../../src/recommendation/orchestrator');
 const candidates = require('../../../src/recommendation/candidates');
+const scoring = require('../../../src/recommendation/scoring');
 
 /** The API's fixed engine options. Frozen so a caller cannot mutate it. */
 const API_ENGINE_OPTIONS = Object.freeze({ allow_unverified_seed_offers: true });
+
+/**
+ * The use-case vocabulary of the ACTIVE scoring model, or NULL when it
+ * cannot be derived.
+ *
+ * This is the API's single source for the accepted `use_case` values, and
+ * the reason it lives HERE rather than in the presenter: the vocabulary is a
+ * property of the scoring model (Decision 37), so `listUseCases` reads
+ * `configuration.use_case_profiles` and falls back to the legacy
+ * `gpu_required_use_cases` only for a model that declares no profiles. Before
+ * this function existed the HTTP layer derived the list itself from
+ * `gpu_required_use_cases` - the same list that makes a GPU mandatory - so
+ * OFFICE could never be offered even for a model that declares a policy for
+ * it (OG-38). Putting the derivation in the API's only engine-reaching
+ * module is what lets `meta.js` stay pure and own nothing but the French
+ * labels.
+ *
+ * NULL means UNKNOWN, never an empty list: a configuration declaring neither
+ * key is a state of the ACTIVE MODEL, not a request error, and both routes
+ * turn it into a 503. Returning `[]` would look like a valid answer and would
+ * leave a client with a form it can never submit (Decision 36 item 3). The
+ * validation error is deliberately not rethrown - it is not the caller's
+ * fault, and the 503 body already says the vocabulary is unavailable.
+ *
+ * @param {object} configuration a scoring-model configuration (validated or raw)
+ * @returns {string[]|null} frozen use-case values, or null. For a JSONB-backed
+ *          configuration the ORDER is jsonb's key order, not the seed file's
+ *          declaration order - jsonb sorts keys, so nothing may depend on the
+ *          order a seed wrote.
+ */
+function useCaseVocabulary(configuration) {
+  try {
+    return scoring.listUseCases(configuration);
+  } catch (_error) {
+    return null;
+  }
+}
 
 /**
  * The options one pass runs with, including the deploy identity Decision 46
@@ -81,6 +120,7 @@ async function runFullRun(client, queryId, engineVersion) {
 module.exports = {
   runFullRun,
   engineOptionsFor,
+  useCaseVocabulary,
   API_ENGINE_OPTIONS,
   ERROR_CODES: candidates.ERROR_CODES,
   CandidateSelectionError: candidates.CandidateSelectionError,

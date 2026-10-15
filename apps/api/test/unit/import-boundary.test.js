@@ -96,7 +96,7 @@ test('the engine is reachable from exactly one module: engine.js', () => {
   assert.deepEqual(importers, ['engine.js']);
 });
 
-test('engine.js requires exactly the two public barrels it needs', () => {
+test('engine.js requires exactly the three public barrels it needs', () => {
   const requests = requiresIn(path.join(API_SRC, 'engine.js'))
     .filter((request) => request.startsWith('.'))
     .map((request) => request.replace(/\\/g, '/'))
@@ -105,6 +105,7 @@ test('engine.js requires exactly the two public barrels it needs', () => {
   assert.deepEqual(requests, [
     '../../../src/recommendation/candidates',
     '../../../src/recommendation/orchestrator',
+    '../../../src/recommendation/scoring',
   ]);
 });
 

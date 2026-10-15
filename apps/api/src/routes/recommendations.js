@@ -261,12 +261,21 @@ function registerRecommendationRoutes(app) {
       return reply.code(503).send(scoringUnavailable());
     }
 
+    // The ACTIVE model owns the use-case vocabulary (Decision 37), and the
+    // derivation lives behind engine.js so the HTTP layer never imports the
+    // engine itself. NULL is UNKNOWN, never an empty list: a model with no
+    // usable vocabulary is UNAVAILABLE, not a 422 that blames the request.
+    const useCases = app.engine.useCaseVocabulary(model.configuration);
+    if (useCases === null) {
+      return reply.code(503).send(scoringUnavailable());
+    }
+
     // Vocabulary checks the schema cannot express: the accepted use cases are
     // a property of the ACTIVE MODEL, not of the request.
-    if (!meta.isAllowedUseCase(body.use_case, model.configuration)) {
+    if (!meta.isAllowedUseCase(body.use_case, useCases)) {
       return reply.code(422).send(fieldError(
         'use_case',
-        'use_case must be one of: ' + meta.useCaseValues(model.configuration).join(', ')
+        'use_case must be one of: ' + meta.useCaseValues(useCases).join(', ')
       ));
     }
     if (!meta.isAllowedCurrency(body.currency)) {

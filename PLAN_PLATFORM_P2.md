@@ -31,7 +31,7 @@
 Five failure modes this plan's own tests do not fully cover, most likely first.
 
 1. **A trusted `X-Forwarded-For` that is spoofable.** Turning `trustProxy` on without pinning the hop count lets any caller set their own IP and bypass every per-IP limit. Owning sprint: Sprint 2.
-2. **An OFFICE request that 422s only because no model declares it.** The vocabulary swap is observable ONLY with a profiles-declaring model active, and today neither database has one. Owning sprint: Sprint 1.
+2. **An OFFICE request that 422s only because no model declares it.** The vocabulary swap is observable ONLY with a profiles-declaring model active. ~~today neither database has one~~ **Measured 2026-10-15: the SHARED database still has only `seed-minimal-v1` (so the swap is inert there), but the TEST branch had NO `launch-v2` row at all; seed 013 was re-applied there, so the swap IS observable on the branch now. Closing this for real means activating a profiles-declaring model on the database the API serves.** Owning sprint: Sprint 1.
 3. **A catalog page that shows a seed price as if it were real.** The beta waiver keeps unverified seed offers in play; exposing prices on a public page without the class and the disclaimer makes indicative data look confirmed. Owning sprint: Sprint 3.
 4. **A cursor that skips or repeats rows.** Any keyset pagination over a table whose order is not unique (product names are not unique — there is no unique constraint on `product.name`) can drop or duplicate a product page. Owning sprint: Sprint 3.
 5. **A 429 with no `Retry-After`**, which clients and proxies treat as a permanent failure rather than a wait. Owning sprint: Sprint 4.
@@ -54,11 +54,11 @@ Five failure modes this plan's own tests do not fully cover, most likely first.
 - Consumes: `listUseCases(configuration)` from `src/recommendation/scoring`'s barrel — returns a frozen `string[]`: the `use_case_profiles` keys when present, otherwise `gpu_required_use_cases` (the legacy fallback), and throws `INVALID_INPUT` / field `configuration` when neither exists.
 - Produces: the same `{ value, label }` pairs `GET /v1/meta/options` serves today, with French labels; the POST validator accepts exactly the values it advertises, because both come from one list.
 
-- [ ] **Step 1: write the failing tests.** With a stubbed active model carrying `use_case_profiles` for `{GAMING, OFFICE, WORKSTATION}` and `gpu_required_use_cases: ['GAMING','WORKSTATION']`, assert `GET /v1/meta/options` advertises all three and that `POST /v1/recommendations` with `use_case: "OFFICE"` is **not** a 422 at the vocabulary gate. With the legacy model (`seed-minimal-v1`), assert the vocabulary is exactly `{GAMING, WORKSTATION}` — byte-identical to today. Run: `npm run test:api`. Expected: FAIL on the OFFICE case.
-- [ ] **Step 2: implement the swap** — one source for the list, and the validator reading the same array so the two cannot drift.
-- [ ] **Step 3: prove the fallback is inert.** `npm run test:api` 0 fail, and `npm run test:api:db` 1/0 against the branch, where `seed-minimal-v1` is the only active model: the served vocabulary must be unchanged.
-- [ ] **Step 4: apply seed 013 to the branch to make OFFICE observable** (`database/seeds/013_scoring_model_launch_v2.sql`, branch-first through an explicit target — `run-seeds.js` ignores `--test-db` and routes nothing). Re-run `test:api:db`; the DB suite must now advertise OFFICE. Then the onboarding caveat: **`launch-v2` is ACTIVE on neither database as of 2026-10-15** (measured), so without this step the swap changes nothing observable anywhere.
-- [ ] **Step 5: update `docs/API.md`'s vocabulary section and `docs/briefs/requests.md`, then commit.**
+- [x] **Step 1: write the failing tests.** With a stubbed active model carrying `use_case_profiles` for `{GAMING, OFFICE, WORKSTATION}` and `gpu_required_use_cases: ['GAMING','WORKSTATION']`, assert `GET /v1/meta/options` advertises all three and that `POST /v1/recommendations` with `use_case: "OFFICE"` is **not** a 422 at the vocabulary gate. With the legacy model (`seed-minimal-v1`), assert the vocabulary is exactly `{GAMING, WORKSTATION}` — byte-identical to today. Run: `npm run test:api`. Expected: FAIL on the OFFICE case.
+- [x] **Step 2: implement the swap** — one source for the list, and the validator reading the same array so the two cannot drift.
+- [x] **Step 3: prove the fallback is inert.** `npm run test:api` 0 fail, and `npm run test:api:db` 1/0 against the branch, where `seed-minimal-v1` is the only active model: the served vocabulary must be unchanged.
+- [x] **Step 4: apply seed 013 to the branch to make OFFICE observable** (`database/seeds/013_scoring_model_launch_v2.sql`, branch-first through an explicit target — `run-seeds.js` ignores `--test-db` and routes nothing). Re-run `test:api:db`; the DB suite must now advertise OFFICE. Then the onboarding caveat: **`launch-v2` is ACTIVE on neither database as of 2026-10-15** (measured), so without this step the swap changes nothing observable anywhere.
+- [x] **Step 5: update `docs/API.md`'s vocabulary section and `docs/briefs/requests.md`, then commit.**
 
 **Definition of done**
 - The advertised vocabulary and the POST validator both come from `listUseCases(activeModel.configuration)`; no `gpu_required_use_cases` read remains in `meta.js`.
@@ -73,6 +73,31 @@ Five failure modes this plan's own tests do not fully cover, most likely first.
 | 1.3 | A model with neither key | `INVALID_INPUT` / `configuration` surfaces as a 503-class failure, not a silent empty list |
 | 1.4 | A value not in the advertised list | still 422 with per-field `details` |
 | 1.5 | `GET /v1/meta/options` under `launch-v2` on the branch | OFFICE present with its French label |
+
+**Status 2026-10-15 — DONE, with one shape change and one measurement worth keeping.**
+
+The derivation went into `apps/api/src/engine.js` (`useCaseVocabulary`), not into
+`meta.js`: `import-boundary.test.js` pins the engine as reachable from exactly ONE
+module under `apps/api/src` and pins `engine.js` to an exact barrel list, so a
+direct `require` of the scoring barrel from `meta.js` is not implementable. The
+observable acceptance is unchanged, and the barrellist pin went 2 -> 3 on purpose.
+
+**Step 3 was proved at unit level, not by a branch run, and the difference is
+recorded rather than glossed.** The branch suite now runs against `launch-v2`
+(measured: `GET` serves GAMING / OFFICE / WORKSTATION; `POST` OFFICE@20000 -> 201
+with one build; `POST` STREAMING -> 422 naming the declared vocabulary and writing
+zero rows). The legacy side is pinned by the unit suite through the real routes
+with a legacy model row (`ACTIVE_MODEL`), plus the pre-apply branch measurement
+that the same `listUseCases` call returned `["GAMING","WORKSTATION"]` while v1 was
+the only active row. Re-measuring legacy through the branch would require
+deactivating `launch-v2` again, which is not worth doing.
+
+**Unplanned finding, now recorded in `DEVELOPMENT_NOTES.md`:** seed 013 was not
+merely unapplied on the branch - the branch had NO `launch-v2` row at all, while
+OG-43, OG-44, OG-49 and CONTEXT 7f all describe the branch as the place where
+`launch-v2` IS active. Re-applying it also restores the documented harness
+workflow: the default pin `seed-minimal-v1@1.0.0` now fails closed on the branch,
+so comparison harnesses there need `--model=launch-v2@1.0.0`.
 
 ---
 

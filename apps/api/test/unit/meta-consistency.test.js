@@ -70,17 +70,98 @@ test('a value that is NOT advertised is rejected in every dimension', async () =
   assert.equal(priority.statusCode, 422);
 });
 
-test('use_case is derived from the active scoring model, not from a second hardcoded list', async () => {
+test('the engine, not the API, owns the use-case vocabulary', () => {
+  const engine = require('../../src/engine');
+
+  // A LEGACY model (no `use_case_profiles`) keeps the pre-Decision-37
+  // derivation byte-for-byte: the retained seed-minimal-v1 must behave
+  // exactly as it always did.
+  assert.deepEqual(
+    engine.useCaseVocabulary({ gpu_required_use_cases: ['GAMING', 'WORKSTATION'] }),
+    ['GAMING', 'WORKSTATION']
+  );
+  assert.deepEqual(engine.useCaseVocabulary({ gpu_required_use_cases: ['OFFICE'] }), ['OFFICE']);
+
+  // A Decision 37 model takes its vocabulary from the PROFILES, which is how
+  // OFFICE becomes reachable even though `gpu_required_use_cases` never names
+  // it (OG-38). `listUseCases` reads the KEYS - validating the profile bodies
+  // is the configuration validator's job - so a minimal body is enough here.
+  assert.deepEqual(
+    engine.useCaseVocabulary({
+      gpu_required_use_cases: ['GAMING'],
+      use_case_profiles: { GAMING: {}, OFFICE: {} },
+    }),
+    ['GAMING', 'OFFICE']
+  );
+
+  // UNKNOWN is NULL, never an empty list: none of these shapes is a
+  // vocabulary, and the routes turn null into a 503.
+  assert.equal(engine.useCaseVocabulary({}), null);
+  assert.equal(engine.useCaseVocabulary(null), null);
+  assert.equal(engine.useCaseVocabulary(undefined), null);
+  assert.equal(engine.useCaseVocabulary({ use_case_profiles: {} }), null);
+});
+
+test('the presenter labels, dedupes and orders the vocabulary it is handed', () => {
   const meta = require('../../src/meta');
 
-  // A configuration change alone must change the advertised vocabulary.
-  assert.deepEqual(meta.useCaseValues({ gpu_required_use_cases: ['GAMING', 'WORKSTATION'] }), ['GAMING', 'WORKSTATION']);
-  assert.deepEqual(meta.useCaseValues({ gpu_required_use_cases: ['OFFICE'] }), ['OFFICE']);
-  assert.deepEqual(meta.useCaseValues({}), []);
-  assert.deepEqual(meta.useCaseValues(null), []);
+  assert.deepEqual(meta.useCaseValues(['GAMING', 'WORKSTATION']), ['GAMING', 'WORKSTATION']);
+  assert.deepEqual(meta.useCaseOptions(['OFFICE']), [{ value: 'OFFICE', label: 'Bureautique' }]);
   // Unknown-but-real values are labelled by falling back to the raw value.
-  assert.deepEqual(meta.useCaseOptions({ gpu_required_use_cases: ['OFFICE'] }), [{ value: 'OFFICE', label: 'Bureautique' }]);
-  assert.equal(meta.useCaseOptions({ gpu_required_use_cases: ['NEW_THING'] })[0].label, 'NEW_THING');
+  assert.equal(meta.useCaseOptions(['NEW_THING'])[0].label, 'NEW_THING');
   // Duplicates collapse; non-strings are ignored.
-  assert.deepEqual(meta.useCaseValues({ gpu_required_use_cases: ['GAMING', 'GAMING', 7, null] }), ['GAMING']);
+  assert.deepEqual(meta.useCaseValues(['GAMING', 'GAMING', 7, null]), ['GAMING']);
+  // No vocabulary is an empty list HERE; the ROUTE is what must never serve one.
+  assert.deepEqual(meta.useCaseValues(null), []);
+  assert.deepEqual(meta.useCaseValues(undefined), []);
+  // A raw CONFIGURATION is not a vocabulary - the caller derives first. The old
+  // signature invited exactly this call, so pin that it now yields nothing.
+  assert.deepEqual(meta.useCaseValues({ gpu_required_use_cases: ['GAMING'] }), []);
+});
+
+test('a legacy model advertises exactly the use cases it always advertised', async () => {
+  const app = stub.createTestApp();
+  const options = (await app.inject({ method: 'GET', url: '/v1/meta/options' })).json();
+  assert.deepEqual(options.use_cases.map((option) => option.value), ['GAMING', 'WORKSTATION']);
+});
+
+test('a profiles model advertises OFFICE, and POST accepts it', async () => {
+  const app = stub.createTestApp({
+    repository: stub.createRepositoryStub({
+      selectActiveScoringModel: async () => stub.PROFILE_MODEL,
+    }),
+  });
+
+  const options = (await app.inject({ method: 'GET', url: '/v1/meta/options' })).json();
+  assert.deepEqual(options.use_cases.map((option) => option.value), ['GAMING', 'WORKSTATION', 'OFFICE']);
+  assert.equal(options.use_cases[2].label, 'Bureautique', 'OFFICE is labelled, not raw');
+
+  const accepted = await postWith(app, { use_case: 'OFFICE' });
+  assert.equal(accepted.statusCode, 201, 'an ADVERTISED use case must be accepted, not a 422');
+
+  // The other direction still holds: a use case the model does not declare is
+  // still a 422, so this is not "accept everything".
+  const rejected = await postWith(app, { use_case: 'STREAMING' });
+  assert.equal(rejected.statusCode, 422);
+  assert.match(
+    rejected.json().details[0].message,
+    /GAMING, WORKSTATION, OFFICE/,
+    "the 422 names the vocabulary the model actually declares"
+  );
+});
+
+test('a model with no usable vocabulary is a 503, not an empty form', async () => {
+  const app = stub.createTestApp({
+    repository: stub.createRepositoryStub({
+      selectActiveScoringModel: async () => ({ id: 'no-vocabulary', configuration: {} }),
+    }),
+  });
+
+  const options = await app.inject({ method: 'GET', url: '/v1/meta/options' });
+  assert.equal(options.statusCode, 503, 'an empty use_cases array would be a form nobody can submit');
+  assert.equal(options.json().error, 'SCORING_MODEL_UNAVAILABLE');
+
+  const post = await postWith(app);
+  assert.equal(post.statusCode, 503, 'the vocabulary is unavailable, so the request is not to blame');
+  assert.equal(post.json().error, 'SCORING_MODEL_UNAVAILABLE');
 });

@@ -218,10 +218,17 @@ test('GET /v1/meta/options matches its contract and labels in French', async () 
   assert.equal(response.statusCode, 200);
   const body = response.json();
   assert.deepEqual(contractErrors(contracts.MetaOptionsSchema, body), []);
-  assert.deepEqual(body.use_cases.map((option) => option.value), ['GAMING', 'WORKSTATION']);
+  // Byte-identity for the LEGACY model: the whole option list, values AND labels
+  // in order. Before P2 Sprint 1 this list was derived inside `meta.js`; it is
+  // now derived by the engine's `listUseCases` and handed in, so this is the
+  // assertion that proves the two sources agree exactly - not merely on the
+  // values, but on the pairs the API serves.
+  assert.deepEqual(body.use_cases, [
+    { value: 'GAMING', label: 'Jeux vidéo' },
+    { value: 'WORKSTATION', label: 'Travail professionnel' },
+  ]);
   assert.deepEqual(body.currencies.map((option) => option.value), ['MAD']);
   assert.deepEqual(body.priorities.map((option) => option.value), [1, 2, 3, 4, 5]);
-  assert.equal(body.use_cases[0].label, 'Jeux vidéo');
   assert.equal(body.currencies[0].label, 'Dirham marocain (MAD)');
 });
 

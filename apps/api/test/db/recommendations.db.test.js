@@ -132,11 +132,21 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
     beforeCounts = await countAll(pool);
 
     // ---- 0. the real active model drives the advertised vocabulary ----------
+    // Seed 013 must be applied to THIS BRANCH for the suite to be meaningful:
+    // `launch-v2` is the model that declares `use_case_profiles`, and without it
+    // the served vocabulary is the legacy pair and OFFICE is unobservable.
     const metaResponse = await app.inject({ method: 'GET', url: '/v1/meta/options' });
     assert.equal(metaResponse.statusCode, 200);
-    const useCases = metaResponse.json().use_cases.map((option) => option.value);
+    const options = metaResponse.json().use_cases;
+    const useCases = options.map((option) => option.value);
     assert.ok(useCases.includes('GAMING'), 'the seed model requires GPU for GAMING');
     assert.ok(useCases.includes('WORKSTATION'));
+    // Order is the JSONB key order of `use_case_profiles` (jsonb does not keep
+    // declaration order), so compare the SET, not a sequence.
+    assert.deepEqual([...useCases].sort(), ['GAMING', 'OFFICE', 'WORKSTATION'],
+      'the branch must have seed 013 applied (launch-v2 active); advertised: ' + JSON.stringify(useCases));
+    const office = options.find((option) => option.value === 'OFFICE');
+    assert.equal(office.label, 'Bureautique', 'OFFICE is advertised WITH its French label');
 
     // ---- 1. a valid POST produces real, labelled builds --------------------
     const created = await app.inject({
@@ -351,14 +361,36 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
     assert.equal(emptyRefetch.json().engine_version, null);
 
     // ---- 4. vocabulary derived from the REAL model -------------------------
-    const pre422 = await countAll(pool);
-    const rejected = await app.inject({
+    // The vocabulary is the ACTIVE model's (Decision 37), and with seed 013 on
+    // this branch that model is `launch-v2`, which declares OFFICE. So OFFICE is
+    // not merely advertised by GET - it survives the POST gate too (OG-38).
+    const officePost = await app.inject({
       method: 'POST',
       url: '/v1/recommendations',
       payload: { budget_amount: 20000, currency: 'MAD', use_case: 'OFFICE' },
     });
-    assert.equal(rejected.statusCode, 422, 'OFFICE is not in the active model gpu_required_use_cases');
-    // The 422 short-circuits BEFORE any INSERT, so nothing may be written.
+    const officeBody = officePost.json();
+    if (officeBody.id) {
+      createdQueryIds.push(officeBody.id);
+    }
+    assert.ok(
+      officePost.statusCode === 201 || officePost.statusCode === 200,
+      'an advertised use case must be ACCEPTED when the model declares it: got '
+        + officePost.statusCode + ' ' + JSON.stringify(officeBody.details || officeBody)
+    );
+    assert.equal(officeBody.use_case, 'OFFICE', 'the accepted use case is what was persisted');
+
+    // The other direction is unchanged: a value the model does NOT declare is a
+    // 422, and it short-circuits BEFORE any INSERT, so nothing may be written.
+    const pre422 = await countAll(pool);
+    const rejected = await app.inject({
+      method: 'POST',
+      url: '/v1/recommendations',
+      payload: { budget_amount: 20000, currency: 'MAD', use_case: 'STREAMING' },
+    });
+    assert.equal(rejected.statusCode, 422, 'STREAMING is declared by no active model');
+    assert.match(rejected.json().details[0].message, /GAMING, OFFICE, WORKSTATION/,
+      'the 422 names the vocabulary the active model actually declares');
     assert.deepEqual(
       await countAll(pool),
       pre422,

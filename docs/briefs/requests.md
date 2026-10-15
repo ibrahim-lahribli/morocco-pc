@@ -52,9 +52,18 @@ mutable data or establish historical replay. Current purchase eligibility needs 
 No shared-DB apply is authorized by this request. No change to filtering/context-loader.js,
 candidates/loader.js or persistence/ is requested for the engine-only option.
 
-## 2026-10-08 — Wire `listUseCases` into `apps/api/src/meta.js` (Decision 37 / OG-38)
+## 2026-10-08 — Wire `listUseCases` into `apps/api/src/meta.js` (Decision 37 / OG-38) — **CLOSED 2026-10-15**
 
 **Owner:** Platform. **Requested by:** Engine (E1b).
+
+**Closed 2026-10-15 (P2 Sprint 1).** Every acceptance bullet below is met, with ONE
+deliberate deviation from the letter of the request: because
+`apps/api/test/unit/import-boundary.test.js` pins the engine as reachable from
+exactly ONE module under `apps/api/src`, `meta.js` may not call `listUseCases`
+itself. The derivation lives in `apps/api/src/engine.js`
+(`useCaseVocabulary(configuration)`), which hands the values to `meta.js`. The
+observable behaviour is exactly what was asked for, and the branch measurement is
+recorded in `docs/OPEN_GAPS.md` (OG-38) and `DEVELOPMENT_NOTES.md` (2026-10-15).
 
 Today `apps/api/src/meta.js` derives the accepted use-case vocabulary from
 `configuration.gpu_required_use_cases` — the SAME list that makes the GPU mandatory — so OFFICE is

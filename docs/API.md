@@ -379,17 +379,24 @@ labels** (the product is the Moroccan market).
 
 | Dimension | Source |
 |---|---|
-| `use_cases` | **Only** the active scoring model's `configuration.gpu_required_use_cases`. Not a `DISTINCT` over submitted values, and not a second hardcoded list. |
+| `use_cases` | The active scoring model's use-case vocabulary: the `use_case_profiles` keys when the model declares them (`launch-v2`), otherwise the legacy `configuration.gpu_required_use_cases` (`seed-minimal-v1`). Not a `DISTINCT` over submitted values, and not a second hardcoded list. Order follows the JSONB key order of `use_case_profiles`, not the declaration order in the seed file. |
 | `currencies` | A fixed allow-list (`MAD`), not a `DISTINCT` over `store_offer`. Stage 1 matches currency by exact equality, so advertising an unpriceable currency would be a lie. |
 | `resolutions`, `priorities` | Fixed lists. **Stored on the profile/query, not read by the engine.** |
 
-The option list and the POST validator are owned by one module
-(`apps/api/src/meta.js`) so they cannot drift: a value POST accepts is always
-advertised, and vice versa. Both directions are pinned by
-`apps/api/test/unit/meta-consistency.test.js`.
+The option list and the POST validator read ONE array, derived in one place:
+`apps/api/src/engine.js` calls the scoring barrel's `listUseCases` (the API's
+only permitted engine import), and `apps/api/src/meta.js` turns those values
+into French-labelled options and validates POST against them. A value POST
+accepts is therefore always advertised, and vice versa. Both directions are
+pinned by `apps/api/test/unit/meta-consistency.test.js` (unit) and
+`apps/api/test/db/recommendations.db.test.js` (the real active model on the
+branch).
 
-If the active scoring model cannot be read, `/v1/meta/options` answers **503** —
-never an empty array, which would look like a valid form with no valid choice.
+If the active scoring model cannot be read — or it can be read but its
+configuration declares no use-case vocabulary at all, which is UNKNOWN rather
+than empty — `/v1/meta/options` answers **503**, and so does a POST, because a
+model with no vocabulary cannot validate one. Never an empty array, which
+would look like a valid form with no valid choice.
 
 **`resolution` and `priority` do not change results.** The engine does not read
 `recommendation_query.resolution`, `recommendation_query.priority`, or

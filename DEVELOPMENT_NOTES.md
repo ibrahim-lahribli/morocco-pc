@@ -1080,3 +1080,59 @@ result without checking the command's own exit status.
 **Still owed in this sprint:** the owner dispatch and its per-step conclusion (Step 2-3), any fix if a step
 fails (Step 4), and the "UNVERIFIED in CI" wording updates (Step 5) - which stay as they are until the run is
 actually green.
+
+## 2026-10-15 - P2 Sprint 1: the API use-case vocabulary comes from the model (OG-38)
+
+**The measurement that reframed the task.** Before touching anything, the TEST
+branch held ONE `scoring_model` row: `seed-minimal-v1 1.0.0`, active. There was no
+`launch-v2` row at all - although OG-43, OG-44, OG-49 and CONTEXT.md (7f) all
+describe the branch as the place where `launch-v2` IS active, and OG-44 calls the
+seed-014/015/016 quotas "TEST branch only". So seed 013's effect had been LOST, not
+merely never applied: a branch is a parent snapshot, and a reset restores the parent
+state. Seed 013 was re-applied this session and confirmed idempotent by a real
+second apply (row set and flags byte-identical).
+
+**Applying a seed to the branch, the way that works.** `run-seeds.js` ignores
+`--test-db` and has no routing, so it would have written to the SHARED database.
+The working pattern: `getWriteTestDbUrl()` (a pg CONFIG OBJECT, never a URL string),
+`SET search_path = public` first (a client's default is `pg_temp`), then the file
+WHOLE via `client.query(rawText)` - never `split(';')`. Seed 013 is DML-only with no
+BEGIN/COMMIT, so this is safe and re-runnable.
+
+**Its measured consequence is the seed header's own warning.** With `launch-v2`
+active, `seed-minimal-v1` is INACTIVE, so comparison harnesses on the DEFAULT pin
+now fail closed on the branch: `resolvePinnedModel(branch,
+`seed-minimal-v1@1.0.0`` returns "exists but is NOT ACTIVE ... Active:
+launch-v2@1.0.0", while `launch-v2@1.0.0` resolves. That is the pin SELECTOR doing
+its job - run those harnesses on the branch with `--model=launch-v2@1.0.0` (or
+`SCORING_MODEL_PIN`). `DEFAULT_MODEL_PIN` was deliberately NOT changed: the SHARED
+database still runs v1, so moving the default would break the shared runs to fix a
+branch-only state.
+
+**One boundary rule decided the shape of the change.** `import-boundary.test.js`
+asserts that the engine is reachable from exactly ONE file under `apps/api/src`
+(`engine.js`), and that `engine.js` requires an EXACT list of stage barrels. So
+"call `listUseCases` from `meta.js`" is not implementable as written: the derivation
+became `engine.js`'s `useCaseVocabulary(configuration)` (NULL - UNKNOWN, never an
+empty list - when the configuration declares neither key), and `meta.js` was
+narrowed to take the VALUES. The exact-barrel pin went 2 -> 3 on purpose; that pin
+exists to make a reviewer notice.
+
+**A latent defect the swap closed.** The old `meta.js` returned an empty list for a
+configuration with no usable key, and the route only 503'd when the MODEL was
+missing - so a model with an unusable configuration was served as **200 with an
+empty `use_cases` array**, the exact "form nobody can submit" its own header says
+must never happen. Both verbs now answer 503 on an UNKNOWN vocabulary, on the same
+body, so a client has one state to handle.
+
+**jsonb does not preserve key order.** The served order on the branch is GAMING,
+OFFICE, WORKSTATION - not the seed's declaration order - because `jsonb` stores
+keys in its own canonical order (length, then bytes) and `listUseCases` returns
+`Object.keys` of the parsed value. A test must therefore compare the SET: the DB
+suite sorts before comparing. Do not "fix" the order by reordering the seed.
+
+**Verified (2026-10-15).** `npm run test:api` 49 pass / 0 fail (was 44).
+`npm run test:api:db` 1 pass / 0 fail with `launch-v2` active, residue 0. Through
+the real API on the branch: `GET /v1/meta/options` -> 200 GAMING / OFFICE
+("Bureautique") / WORKSTATION; `POST` OFFICE@20000 -> 201 with one build;
+`POST` STREAMING -> 422 naming the declared vocabulary, writing zero rows.

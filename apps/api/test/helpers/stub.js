@@ -18,6 +18,24 @@ const ACTIVE_MODEL = Object.freeze({
   configuration: Object.freeze({ gpu_required_use_cases: ['GAMING', 'WORKSTATION'] }),
 });
 
+/**
+ * The same shape, but declaring Decision 37 `use_case_profiles` - i.e. what
+ * `launch-v2` looks like once seed 013 is applied. OFFICE appears ONLY here,
+ * because OFFICE is exactly the use case the legacy `gpu_required_use_cases`
+ * derivation could not offer (OG-38).
+ */
+const PROFILE_MODEL = Object.freeze({
+  id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  configuration: Object.freeze({
+    gpu_required_use_cases: ['GAMING', 'WORKSTATION'],
+    use_case_profiles: Object.freeze({
+      GAMING: Object.freeze({ gpu_policy: 'REQUIRED', spend_targets: Object.freeze({ GPU: 0.38 }) }),
+      WORKSTATION: Object.freeze({ gpu_policy: 'REQUIRED', spend_targets: Object.freeze({ GPU: 0.25 }) }),
+      OFFICE: Object.freeze({ gpu_policy: 'IGPU_ALLOWED', spend_targets: Object.freeze({ CPU: 0.3 }) }),
+    }),
+  }),
+});
+
 const TEST_ENGINE_VERSION = 'test-sha';
 
 const SAMPLE_BUDGET_FLOOR = Object.freeze({
@@ -162,9 +180,14 @@ function createRepositoryStub(overrides) {
 }
 
 function createEngineStub(runFullRun) {
+  // The REAL module, never a copy of its rules: the vocabulary derivation is
+  // a property of the engine (Decision 37), so a stub that re-implemented it
+  // could agree with a test while the served API disagreed with itself.
+  const realEngine = require('../../src/engine');
   const calls = [];
   return {
     calls,
+    useCaseVocabulary: realEngine.useCaseVocabulary,
     // The third argument is FORWARDED, not swallowed: it is the deploy the
     // engine records on each result row (Decision 46), so a stub that dropped
     // it would make a test that inspects `engine_version` fail for a reason
@@ -232,6 +255,7 @@ function validBody(overrides) {
 
 module.exports = {
   ACTIVE_MODEL,
+  PROFILE_MODEL,
   QUERY_ROW,
   SAMPLE_BUDGET_FLOOR,
   SAMPLE_ROWS,
