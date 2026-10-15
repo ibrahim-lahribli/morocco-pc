@@ -1137,6 +1137,47 @@ the real API on the branch: `GET /v1/meta/options` -> 200 GAMING / OFFICE
 ("Bureautique") / WORKSTATION; `POST` OFFICE@20000 -> 201 with one build;
 `POST` STREAMING -> 422 naming the declared vocabulary, writing zero rows.
 
+## 2026-10-15 — `measure-api-pass-phases.js` pins its scoring model, and the pin exposed an 18-statement difference that was invisible
+
+It was the last comparison harness still measuring "whichever model the target
+database has ACTIVE". Every other one pins a `name@version` (`scripts/lib/model-pin.js`),
+and this one now does too: `--model=<name@version>`, else `SCORING_MODEL_PIN`, else
+`seed-minimal-v1@1.0.0`, resolved through `resolvePinnedModel` and reported as
+`scoring_model: { pin, requested, id }`. That is not cosmetic — the engine loads its
+model from `recommendation_query.scoring_model_id` (Decision 11), so the pin decides
+which model the pass actually runs, and a pin that matches nothing, is ambiguous, or
+is INACTIVE fails closed before a single row is written.
+
+The selector stayed a SEAM (`modelSelector.select`, still labelled `api.model_select`),
+so the phase table keeps its shape: one statement under the same label, only the WHERE
+clause changed — measured 1 statement / 137 ms on the pinned run, same as the baseline.
+
+**What the pin immediately exposed.** The two databases disagree about which model is
+active (shared `seed-minimal-v1@1.0.0`; TEST branch `launch-v2@1.0.0`, with
+`seed-minimal-v1` present but inactive), and the recorded 2026-10-07 baseline predates
+`launch-v2` entirely. Live on the branch: the default pin refuses (exit 1, "exists but is
+NOT ACTIVE ... Active: launch-v2@1.0.0", zero rows in all six Layer 4 tables afterwards),
+an explicit `--model=seed-minimal-v1@1.0.0` refuses identically, and
+`--model=launch-v2@1.0.0` runs green with residue 0. The pinned run reports 57 statements
+in a 9 588 ms wall, `engine.commit` at 19 statements / 2 607 ms — against the v1-era
+baseline of 75 / 12 114 / 37 / 4 906. **Read that as "the model and the code both
+changed", never as a speed-up**: the two runs are pinned differently and taken two
+releases apart. The point of the pin is that the model difference can no longer hide
+inside the number.
+
+P1 Sprint 2 Step 1 asked for exactly this measurement, and its expected figure (37
+statements, ~4.9 s) is now known to be a `seed-minimal-v1` figure that cannot be
+re-measured on the TEST branch at all, because that model is inactive there and a pin
+never activates one. The plan records the correction per pin instead of a single number.
+
+DB-free contract: `scripts/lib/measure-phases-cli.test.js` (9 tests) pins the flag forms,
+the precedence, the early refusal of a malformed or repeated pin, and that `require()`
+never starts a pass — the script exports `parseArgs` behind a `require.main === module`
+guard for that. Fail-first: 4 of those 9 passed before the implementation (they describe
+behaviour that already existed) and 5 failed on `unknown argument: --model=...`.
+Verified: `npm run test:scripts` 236 pass / 0 fail (227 before), the Node 22 leg 236/236
+with `# cancelled 0`.
+
 ## 2026-10-15 — the shared-apply audit log's `target` NAMES the database (P1 Sprint 1 follow-up)
 
 Every audit line carried `target: "shared"`, and that value was not a name but an INFERENCE from the

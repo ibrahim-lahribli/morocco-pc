@@ -202,6 +202,21 @@ in the report are only parent→child nesting (`engine.snapshot` → `engine.pas
 engine's reads is ENGINE work (Decision 17's stage order is pinned by tests)
 and must not be smuggled into the API.
 
+The harness PINS the model it measures (`--model=<name@version>`, else
+`SCORING_MODEL_PIN`, else `seed-minimal-v1@1.0.0`) and fails closed on an
+inactive pin, because the engine loads its model from
+`recommendation_query.scoring_model_id`: without a pin, a number is not
+attributable to a model at all. Two consequences to keep straight. The table
+above was measured 2026-10-07, when `seed-minimal-v1` was the only model in
+existence (`launch-v2` was created 2026-10-15), so those are v1 figures. And a
+run pinned to `launch-v2@1.0.0` on 2026-10-15 measured 57 statements in a
+9 588 ms wall, with `engine.commit` at 19 statements / 2 607 ms — against the
+v1-era 75 / 12 114 / 37 / 4 906. That gap is the MODEL and the code both having
+changed; it is not a speed-up, and two runs pinned differently are not
+comparable. On today's TEST branch only `launch-v2@1.0.0` can be measured:
+`seed-minimal-v1` is inactive there, and a pin selects among active models
+instead of activating one.
+
 ## Endpoints
 
 All routes are under `/v1` and speak JSON.

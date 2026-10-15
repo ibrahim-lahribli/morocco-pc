@@ -93,7 +93,7 @@ Preferred: Fly.io, region `fra` (Frankfurt). `fly.toml` sets `primary_region = "
 
 - [ ] **Step 8: re-measure, twice, and record both.**
 
-`node scripts/measure-api-pass-phases.js --budget=20000 --use-case=GAMING` against the new target (per-phase statement counts and timings), then the 50-POST HTTP load profile that produced the recorded baseline (min 9 988.6 / p50 11 898.8 / p95 13 313.0 / max 14 425.5 ms). Record: statements per phase, ms per phase, ms per round trip, and the p50/p95/max, next to the target host and region.
+`node scripts/measure-api-pass-phases.js --budget=20000 --use-case=GAMING --model=<name@version>` against the new target (per-phase statement counts and timings, **with the pin recorded** — the instrument refuses to measure an inactive pin, and two runs pinned differently are not a comparison), then the 50-POST HTTP load profile that produced the recorded baseline (min 9 988.6 / p50 11 898.8 / p95 13 313.0 / max 14 425.5 ms). Record: statements per phase, ms per phase, ms per round trip, and the p50/p95/max, next to the target host and region.
 
 - [ ] **Step 9: commit.**
 
@@ -174,7 +174,7 @@ untouched.
 
 - [ ] **Step 1: measure first, on the current code.**
 
-`node scripts/measure-api-pass-phases.js --budget=20000 --use-case=GAMING` against the co-located target. Record the commit phase's statement count and ms. Expected (roadmap figure, to be confirmed or corrected): 37 statements, ~4.9 s.
+`node scripts/measure-api-pass-phases.js --budget=20000 --use-case=GAMING --model=<name@version>` against the co-located target. Record the commit phase's statement count and ms **together with the pin**. The roadmap's 37 statements / ~4.9 s is a `seed-minimal-v1` figure — it predates `launch-v2` (created 2026-10-15) — and the pin is what stops the difference from being silent: the same command pinned to `launch-v2@1.0.0` on 2026-10-15 measured 19 statements / 2 607 ms for `engine.commit` on the same branch, against the v1-era 37 / 4 906. Both the model and the code changed between those two runs, so the pin removes ONE variable, not both. Expect the figure to be confirmed or corrected PER PIN, and note that a v1 comparison is not measurable on the TEST branch at all (`seed-minimal-v1` is inactive there; a pin never activates a model).
 
 - [ ] **Step 2: write the failing statement-count tests.**
 
