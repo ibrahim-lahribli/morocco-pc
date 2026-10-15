@@ -189,7 +189,11 @@ Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 
 - [ ] **Step 4: prove output identity**: `npm run test:unit` 0 fail, then the same before/after row-dump comparison as Sprint 2 using a real branch pass (`eval:scenarios` at the unchanged baseline is the end-to-end gate).
 - [ ] **Step 5: re-measure and commit.**
 
-**Definition of done:** the loaders issue fewer statements than the recorded baseline, pinned by an assertion; every downstream shape is byte-identical; `test:unit`, `verify:pi1` and `eval:scenarios` all match their pre-change results.
+**Definition of done**
+
+- The loaders issue fewer statements than the recorded baseline, pinned by an assertion.
+- Every downstream shape is byte-identical.
+- `test:unit`, `verify:pi1` and `eval:scenarios` all match their pre-change results.
 
 **Test scenarios**
 | # | Scenario | Expected |
@@ -220,7 +224,11 @@ Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 
 - [ ] **Step 3: run the gates.** `npm run gen:decisions` then `node scripts/gen-decision-index.js --check` (0), `npm run verify:docs --offline` (OK).
 - [ ] **Step 4: commit.**
 
-**Definition of done:** the Decision exists with a normalized `Status:` line; `gen-decision-index --check` and `verify-docs --offline` are green; no code changed.
+**Definition of done**
+
+- The Decision exists with a normalized `Status:` line.
+- `gen-decision-index --check` and `verify-docs --offline` are green.
+- No code changed.
 
 **Test scenarios**
 | # | Scenario | Expected |
@@ -255,7 +263,11 @@ Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 
 - [ ] **Step 4: update the contract + docs + snapshot; `npm run test:api` 0 fail.**
 - [ ] **Step 5: commit.**
 
-**Definition of done:** a repeated identical POST creates no new rows and returns the original id; the contract is v1.3 pinned by a committed snapshot; `test:api` and `test:api:db` green with residue 0.
+**Definition of done**
+
+- A repeated identical POST creates no new rows and returns the original id.
+- The contract is a new minor (allocated at merge time, see the version note in `PLAN_PLATFORM_P2.md`), pinned by a committed snapshot.
+- `test:api` and `test:api:db` green with residue 0.
 
 **Test scenarios**
 | # | Scenario | Expected |
@@ -287,7 +299,11 @@ Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 
 - [ ] **Step 4: branch-apply, generate, then verify the endpoint end-to-end** (`test:api:db`).
 - [ ] **Step 5: `npm run gen:schema`, `verify:docs --offline --live`, `verify:replay --test-db`, then commit** — including the audit line if the migration is applied to a non-branch target.
 
-**Definition of done:** the endpoint serves presets generated from the current catalog version; a regeneration for the same catalog version is idempotent; `verify:replay` 0 drift; the generated docs match.
+**Definition of done**
+
+- The endpoint serves presets generated from the current catalog version.
+- A regeneration for the same catalog version is idempotent.
+- `verify:replay` 0 drift and the generated docs match.
 
 **Test scenarios**
 | # | Scenario | Expected |

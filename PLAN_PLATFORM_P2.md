@@ -173,7 +173,10 @@ Five failure modes this plan's own tests do not fully cover, most likely first.
 - [ ] **Step 3: document** the allow-list semantics (empty = disabled, not reflected), the limits, and the header/absence found in Step 2.
 - [ ] **Step 4: commit.**
 
-**Definition of done:** the four CORS behaviours are pinned by tests; the 429 contract (body + any `Retry-After`) is stated in `docs/API.md` and matches the server.
+**Definition of done**
+
+- The four CORS behaviours are pinned by tests.
+- The 429 contract (body + any `Retry-After`) is stated in `docs/API.md` and matches the server.
 
 **Test scenarios**
 | # | Scenario | Expected |
@@ -201,7 +204,11 @@ Five failure modes this plan's own tests do not fully cover, most likely first.
 - [ ] **Step 2: fill whatever the gate exposes** — most likely missing error-response schemas for 422/429/500.
 - [ ] **Step 3: run the suite** (`npm run test:api` 0 fail), regenerate the snapshot if a schema was added, and commit.
 
-**Definition of done:** the coverage test fails when a route is added without documentation (proven by the synthetic route); every served route is documented with at least one response schema; the snapshot matches.
+**Definition of done**
+
+- The coverage test fails when a route is added without documentation (proven by the synthetic route).
+- Every served route is documented with at least one response schema.
+- The snapshot matches.
 
 **Test scenarios**
 | # | Scenario | Expected |
