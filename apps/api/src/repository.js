@@ -26,6 +26,16 @@
  * Reads are parameterized only; nothing is interpolated. NUMERIC columns come
  * back from pg as strings and are converted by the presenter, not here, so the
  * row shape stays honest about what the database actually returned.
+ *
+ * REQUEST DEDUPE (Platform P1 Sprint 5, Decision 47). Since migration 021 the
+ * query row also records the CATALOG VERSION its pass ran against, and
+ * `findReusableQuery` is the read that makes a repeated POST cheap: the route
+ * asks for an existing pass with the SAME request identity and the SAME catalog
+ * and engine version BEFORE it creates anything. The key is deliberately the
+ * eight components PLAN_PLATFORM_P1.md Sprint 5 names - budget, currency, use
+ * case, resolution, priority, model, catalog version, engine version - and not
+ * the profile's UUID name, which is per-request by construction and identifies
+ * nothing.
  */
 
 const { randomUUID } = require('node:crypto');
@@ -67,8 +77,9 @@ const INSERT_PROFILE_SQL = [
  */
 const INSERT_QUERY_SQL = [
   'INSERT INTO recommendation_query',
-  '  (id, recommendation_profile_id, scoring_model_id, budget_amount, currency, use_case, priority, resolution)',
-  'VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+  '  (id, recommendation_profile_id, scoring_model_id, budget_amount, currency, use_case, priority, resolution,',
+  '   catalog_version)',
+  'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
   'RETURNING id',
 ].join(' ');
 
@@ -82,9 +93,77 @@ const INSERT_QUERY_SQL = [
  * `parseFloor` handles the string case only for safety.
  */
 const SELECT_QUERY_SQL = [
-  'SELECT id, budget_amount, currency, use_case, created_at, budget_floor',
+  'SELECT id, budget_amount, currency, use_case, created_at, budget_floor, catalog_version',
   'FROM recommendation_query',
   'WHERE id = $1',
+].join(' ');
+
+/**
+ * An existing pass that answers this request EXACTLY, or nothing.
+ *
+ * Seven components are columns on `recommendation_query`, one on
+ * `recommendation_result`. Every comparison is a value comparison, never a
+ * LIKE or a range: a dedupe key that matched APPROXIMATELY would serve an
+ * answer computed for a different request.
+ *
+ * `IS NOT DISTINCT FROM` for `resolution` and `priority`, and plain `=` for
+ * `catalog_version` - a deliberate asymmetry, not an oversight. Omitting a
+ * resolution is a property of the REQUEST, so two requests that both omit it
+ * are the same request, and `= NULL` would make the row unmatchable (including
+ * the row this very request would have written). An UNRECORDED catalog version
+ * means something else entirely: the state is UNKNOWN, and Decision 47 item 10
+ * says an unknown version is a MISS, never a match. Two rows that both failed to
+ * record a version are not known to have run against the same catalog, so
+ * matching them would risk exactly the stale answer the column exists to
+ * prevent. `q.catalog_version IS NOT NULL AND q.catalog_version = $7` states both
+ * halves: the row must have recorded a version, and a request with no version
+ * (`= NULL` is NULL, never true) matches nothing.
+ *
+ * The engine version is not a column on this table; it is recorded per RESULT
+ * row (Decision 46), so it is expressed as "no row disagrees": a pass whose
+ * result rows all name the answering deploy matches, and a pass from any other
+ * deploy does not. A committed pass that assembled NOTHING has no result row to
+ * consult - see the `budget_floor IS NOT NULL` condition below and the note on
+ * that residual case.
+ *
+ * `q.budget_floor IS NOT NULL` is the COMMITTED-PASS condition, and it is
+ * load-bearing. Decision 46's `persistPassFacts` writes the floor
+ * unconditionally on commit (Decision 27 computes it unconditionally), so a
+ * non-null floor means the pass reached its write transaction. A row with a
+ * NULL floor is therefore a FAILED pass - the API inserts the query row before
+ * running the engine, so a pass that threw before the commit stage leaves one
+ * behind. Serving such a row is wrong in a way a shape check would not catch:
+ * its `reason` is not persisted, so the reply would have to FABRICATE one, and
+ * a repeat request would keep being answered from a failure that a later fix
+ * cannot clear. A failed pass is not an answer, so it is not reused; the
+ * trigger to revisit is EMPTY_CANDIDATE_POOL becoming common, at which point the
+ * honest fix is to persist the reason as a pass fact the way Decision 46
+ * persists the others, and then a reuse can be exact.
+ *
+ * Neither the ordering nor the LIMIT is arbitrary: any match is an equivalent
+ * answer, so the newest one is served (its rows are the freshest), with a
+ * deterministic tie-break on id so two passes created in the same transaction
+ * cannot make the choice depend on physical row order.
+ */
+const SELECT_REUSABLE_QUERY_SQL = [
+  'SELECT q.id',
+  'FROM recommendation_query q',
+  'WHERE q.scoring_model_id = $1',
+  '  AND q.budget_amount = $2',
+  '  AND q.currency = $3',
+  '  AND q.use_case = $4',
+  '  AND q.resolution IS NOT DISTINCT FROM $5',
+  '  AND q.priority IS NOT DISTINCT FROM $6',
+  '  AND q.catalog_version IS NOT NULL',
+  '  AND q.catalog_version = $7',
+  '  AND q.budget_floor IS NOT NULL',
+  '  AND NOT EXISTS (',
+  '    SELECT 1 FROM recommendation_result r',
+  '    WHERE r.recommendation_query_id = q.id',
+  '      AND r.engine_version IS DISTINCT FROM $8',
+  '  )',
+  'ORDER BY q.created_at DESC, q.id ASC',
+  'LIMIT 1',
 ].join(' ');
 
 /**
@@ -165,9 +244,15 @@ async function selectActiveScoringModel(db) {
  * neither row behind. Returns the ids the caller needs (the engine pins only
  * the query id; the profile id is returned for tests and diagnostics).
  *
+ * `catalogVersion` is written ONCE, at INSERT, and never updated: it is the
+ * catalog state this pass is about to read, and a later pass writes its own row.
+ * An absent value is SQL NULL rather than an invented one - the caller degrades
+ * to "not recorded" when the digest fails, which disables reuse for that row
+ * instead of guessing (Decision 47 item 10).
+ *
  * @param {object} client a single dedicated connection
  * @param {object} input { scoringModelId, budgetAmount, currency, useCase,
- *        resolution, priority }
+ *        resolution, priority, catalogVersion }
  * @returns {Promise<{profileId: string, queryId: string}>} frozen
  */
 async function createRecommendationQuery(client, input) {
@@ -191,9 +276,41 @@ async function createRecommendationQuery(client, input) {
       input.useCase,
       input.priority === undefined ? null : input.priority,
       input.resolution === undefined ? null : input.resolution,
+      input.catalogVersion === undefined ? null : input.catalogVersion,
     ]);
   });
   return Object.freeze({ profileId, queryId });
+}
+
+/**
+ * The existing pass that answers this request exactly, if there is one.
+ *
+ * A READ, deliberately: the caller runs it before `createRecommendationQuery`,
+ * on the same dedicated connection, so a hit costs one statement instead of a
+ * whole engine pass (74 statements, measured).
+ *
+ * @param {object} db pool or client exposing query(sql, params)
+ * @param {object} key { scoringModelId, budgetAmount, currency, useCase,
+ *        resolution, priority, catalogVersion, engineVersion }
+ * @returns {Promise<{queryId: string}|null>} the reusable query, or null when
+ *          this request has no equivalent stored pass
+ */
+async function findReusableQuery(db, key) {
+  const result = await db.query(SELECT_REUSABLE_QUERY_SQL, [
+    key.scoringModelId,
+    key.budgetAmount,
+    key.currency,
+    key.useCase,
+    key.resolution === undefined ? null : key.resolution,
+    key.priority === undefined ? null : key.priority,
+    key.catalogVersion === undefined ? null : key.catalogVersion,
+    key.engineVersion === undefined ? null : key.engineVersion,
+  ]);
+  const rows = result && Array.isArray(result.rows) ? result.rows : [];
+  if (rows.length === 0) {
+    return null;
+  }
+  return Object.freeze({ queryId: rows[0].id });
 }
 
 /**
@@ -222,7 +339,9 @@ module.exports = {
   INSERT_QUERY_SQL,
   SELECT_QUERY_SQL,
   SELECT_BUILDS_SQL,
+  SELECT_REUSABLE_QUERY_SQL,
   selectActiveScoringModel,
   createRecommendationQuery,
+  findReusableQuery,
   readRecommendationResult,
 };

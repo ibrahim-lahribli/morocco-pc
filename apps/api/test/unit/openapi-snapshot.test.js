@@ -2,30 +2,37 @@
 
 /**
  * apps/api/test/unit/openapi-snapshot.test.js - the served OpenAPI document,
- * pinned (Sprint 4 of PLAN_PLATFORM_P0.md: contract v1.1 pass facts, then v1.2
- * product identity).
+ * pinned (Sprint 4 of PLAN_PLATFORM_P0.md: v1.1 pass facts, v1.2 product
+ * identity; Platform P1 Sprint 5: v1.3 request dedupe).
  *
  * A committed snapshot is the only thing that makes a published contract a
  * CLAIM rather than a description: without it, the document can lose a field,
  * change a type or gain a path and every test still passes, because the tests
- * assert against the same code that generates the document. `openapi-v1.2.json`
+ * assert against the same code that generates the document. `openapi-v1.3.json`
  * is the served bytes, not a hand-written file - regenerate it, never edit it.
+ * There is exactly ONE snapshot on purpose: v1.2 was DELETED when v1.3 landed,
+ * because two plausible contracts in the tree is worse than none - a reader
+ * cannot tell which one the service serves.
  *
  * How to regenerate (deliberate contract change only):
  *
  *   node -e "const fs=require('fs');const stub=require('./apps/api/test/helpers/stub');\
  *   stub.createTestApp().inject({method:'GET',url:'/v1/docs/json'})\
- *   .then(r=>fs.writeFileSync('apps/api/test/unit/openapi-v1.2.json',r.body))"
+ *   .then(r=>fs.writeFileSync('apps/api/test/unit/openapi-v1.3.json',r.body+'\n'))"
  *
  * The comparison ignores ONE trailing newline so that a committed text file may
  * keep the POSIX convention; every other byte must match exactly, including key
  * order, which is what makes this a snapshot rather than a schema check.
  *
- * v1.2 covers `components[].slug` and the `display_name`-precedence name, both
- * migration 020 (product identity). The document declares `slug` because the
- * API serves it; `display_name` itself is NOT a response field - it is only the
- * source of `name`, via COALESCE in the repository, so a document that declared
- * it would be advertising a field no client receives.
+ * v1.3 adds the two dedupe-era fields: `catalog_version` (Decision 47 / migration
+ * 021 - the catalog state the pass ran against, nullable like its column) and
+ * `reused` (the request fact that says whether THIS POST answered from an
+ * equivalent committed pass). `served_by` is deliberately UNCHANGED: it already
+ * answers which deploy replied, and the dedupe did not change that question.
+ *
+ * v1.2 covered `components[].slug` and the `display_name`-precedence name, both
+ * migration 020 (product identity); those assertions are kept below, because a
+ * new minor must not silently drop the one before it.
  */
 
 const test = require('node:test');
@@ -35,7 +42,7 @@ const path = require('node:path');
 
 const stub = require('../helpers/stub');
 
-const SNAPSHOT_PATH = path.join(__dirname, 'openapi-v1.2.json');
+const SNAPSHOT_PATH = path.join(__dirname, 'openapi-v1.3.json');
 
 async function servedDocument() {
   const response = await stub.createTestApp().inject({ method: 'GET', url: '/v1/docs/json' });
@@ -43,31 +50,35 @@ async function servedDocument() {
   return { raw: response.body, document: response.json() };
 }
 
-test('the served OpenAPI document is byte-identical to the committed v1.2 snapshot', async () => {
+/** Both verbs serve the same response schema; that sameness IS the contract. */
+function responsesFor(document) {
+  return [
+    ['POST 201', document.paths['/v1/recommendations'].post.responses['201']],
+    ['GET 200', document.paths['/v1/recommendations/{id}'].get.responses['200']],
+  ];
+}
+
+test('the served OpenAPI document is byte-identical to the committed v1.3 snapshot', async () => {
   const { raw } = await servedDocument();
   const committed = fs.readFileSync(SNAPSHOT_PATH, 'utf8');
 
   assert.equal(
     raw,
     committed.replace(/\n$/, ''),
-    'the served document differs from openapi-v1.2.json. If the change is deliberate, regenerate the '
+    'the served document differs from openapi-v1.3.json. If the change is deliberate, regenerate the '
       + 'snapshot with the command in this file\'s header and commit it together with the schema change; '
       + 'if it is not, the contract has drifted and this is the gate that noticed.'
   );
 });
 
-test('the v1.2 document advertises the persisted pass facts on BOTH verbs', async () => {
+test('the v1.3 document advertises the persisted pass facts on BOTH verbs', async () => {
   const { document } = await servedDocument();
 
-  assert.equal(document.info.version, '1.2.0', 'the version names the current surface (product identity)');
+  assert.equal(document.info.version, '1.3.0', 'the version names the current surface (request dedupe)');
 
   // Both verbs serve the same response schema, and that sameness is the
   // contract: a client may read either and see the same fields.
-  const responses = [
-    ['POST 201', document.paths['/v1/recommendations'].post.responses['201']],
-    ['GET 200', document.paths['/v1/recommendations/{id}'].get.responses['200']],
-  ];
-  for (const [label, response] of responses) {
+  for (const [label, response] of responsesFor(document)) {
     const schema = response.content['application/json'].schema;
     assert.ok(
       Object.prototype.hasOwnProperty.call(schema.properties, 'budget_floor'),
@@ -109,7 +120,45 @@ test('the v1.2 document advertises the persisted pass facts on BOTH verbs', asyn
   );
 });
 
-test('the v1.2 document declares components[].slug on BOTH verbs, nullable like its column', async () => {
+test('the v1.3 document declares the dedupe fields on BOTH verbs', async () => {
+  const { document } = await servedDocument();
+
+  for (const [label, response] of responsesFor(document)) {
+    const schema = response.content['application/json'].schema;
+
+    // Nullable because the COLUMN is (021 stores NULL for a pass whose digest
+    // was unavailable, and Decision 47 item 10 makes an unknown version
+    // unmatchable rather than comparable). A schema that demanded a string
+    // would serialize-fail on exactly the rows the migration chose to allow.
+    assert.deepEqual(
+      schema.properties.catalog_version,
+      { type: 'string', nullable: true },
+      label + ' declares catalog_version as a nullable string'
+    );
+
+    // NOT nullable, and that is the point: `reused` is a request fact that is
+    // always answerable (false on every GET and on every POST that ran its own
+    // pass), so a null would mean "unknown" about something the API knows.
+    assert.deepEqual(
+      schema.properties.reused,
+      { type: 'boolean' },
+      label + ' declares reused as a required boolean'
+    );
+    assert.ok(
+      schema.required.includes('reused') && schema.required.includes('catalog_version'),
+      label + ' requires both dedupe fields'
+    );
+  }
+
+  // `served_by` is unchanged by the dedupe: it still names the deploy that
+  // ANSWERED the request, which is a different question from the deploy that RAN
+  // the pass (billed per build as `engine_version`).
+  const servedBy = document.paths['/v1/recommendations'].post.responses['201']
+    .content['application/json'].schema.properties.served_by;
+  assert.deepEqual(servedBy.required, ['engine_version'], 'served_by still carries exactly its one field');
+});
+
+test('the v1.3 document declares components[].slug on BOTH verbs, nullable like its column', async () => {
   const { document } = await servedDocument();
 
   // `slug` is served from the persisted column (migration 020), so it belongs in
@@ -119,11 +168,7 @@ test('the v1.2 document declares components[].slug on BOTH verbs, nullable like 
   // rendered shape, not just presence, is what makes this a contract pin rather
   // than a field check - a schema that quietly demanded a string would fail
   // against a real row created after 020's backfill.
-  const forEachVerb = [
-    ['POST 201', document.paths['/v1/recommendations'].post.responses['201']],
-    ['GET 200', document.paths['/v1/recommendations/{id}'].get.responses['200']],
-  ];
-  for (const [label, response] of forEachVerb) {
+  for (const [label, response] of responsesFor(document)) {
     const component = response.content['application/json'].schema.properties.builds.items.properties.components.items;
     assert.ok(component, label + ' declares a component schema');
     assert.deepEqual(

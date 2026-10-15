@@ -7,15 +7,23 @@
  * properties are load-bearing and easy to get wrong:
  *
  *   1. Nullability mirrors the DATABASE, not the happy path. `budget_floor`,
- *      `engine_version`, `strategy_key` and `components[].slug` are all nullable
- *      because their columns are (migrations 019 and 020), and NULL means "not
- *      recorded" - a pre-019 row, a pass that ran without an engine version, or
- *      a product inserted after 020's backfill without a slug. A schema that
- *      demanded a value would make GET unserializable against real data, and
- *      would also assert a fact the schema itself declares unknowable.
+ *      `engine_version`, `strategy_key`, `catalog_version` and
+ *      `components[].slug` are all nullable because their columns are
+ *      (migrations 019, 020 and 021), and NULL means "not recorded" - a
+ *      pre-019 row, a pass that ran without an engine version, a product
+ *      inserted after 020's backfill without a slug, or a pass whose catalog
+ *      digest was unavailable (021). A schema that demanded a value would make
+ *      GET unserializable against real data, and would also assert a fact the
+ *      schema itself declares unknowable.
  *   2. `price_status` is DERIVED, never stored: 'verified' only when EVERY
  *      component's persisted `offer_class` is VERIFIED, 'indicative' otherwise.
  *      The disclaimer text is what makes an indicative price honest.
+ *   3. `reused` is a REQUEST fact, alongside `served_by.engine_version`:
+ *      `true` only when a POST answered from an equivalent committed pass
+ *      (Platform P1 Sprint 5, Decision 47), `false` on every GET and on every
+ *      POST that ran its own pass. It is NOT nullable and NOT derivable from
+ *      the stored rows - nothing persisted distinguishes a pass that was
+ *      reused from one that was not, because nothing needed to.
  *
  * The body schema is intentionally narrow: `budget_amount` is a NUMBER (the
  * engine's loader is strict about that, and the API does not accept a numeric
@@ -84,6 +92,17 @@ const RecommendationResponseSchema = Type.Object({
   generated_at: Type.Union([Type.String(), Type.Null()]),
   budget_floor: Type.Union([BudgetFloorSchema, Type.Null()]),
   engine_version: Type.Union([Type.String(), Type.Null()]),
+  /**
+   * The catalog state this pass ran against (Decision 47 / migration 021): a
+   * 32-character hex content digest, or null when none was recorded. Served
+   * because a client that keeps an id is making a durable reference, and
+   * Decision 47 item 17 requires the reference to name the catalog it belongs
+   * to. It is the reason a repeated POST can answer "same id" or "new id" and
+   * be checkable rather than mysterious.
+   */
+  catalog_version: Type.Union([Type.String(), Type.Null()]),
+  /** A request fact: true only when THIS POST reused an equivalent pass. */
+  reused: Type.Boolean(),
   reason: Type.Union([Type.String(), Type.Null()]),
   disclaimer: Type.String(),
   served_by: Type.Object({ engine_version: Type.String() }, { additionalProperties: false }),

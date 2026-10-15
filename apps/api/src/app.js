@@ -110,7 +110,13 @@ function buildApp(options) {
         // COALESCE(product.display_name, product.name), so the `Seed ` prefix
         // no longer reaches a client. Pinned byte-for-byte by
         // apps/api/test/unit/openapi-snapshot.test.js.
-        version: '1.2.0',
+        // 1.3.0 (2026-10-16): request dedupe (Platform P1 Sprint 5). A POST
+        // whose request identity, catalog version and engine version match an
+        // existing committed pass answers 200 with `reused: true` and the
+        // ORIGINAL id; every response now also carries the pass's
+        // `catalog_version` (Decision 47). Pinned byte-for-byte by
+        // apps/api/test/unit/openapi-v1.3.json.
+        version: '1.3.0',
       },
     },
   });

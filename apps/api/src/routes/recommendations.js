@@ -24,11 +24,29 @@
  * this request, which is a different question from the deploy that RAN the pass
  * (`engine_version`).
  *
+ * REQUEST DEDUPE (Platform P1 Sprint 5, Decision 47). A POST whose request
+ * identity, catalog version and engine version match an existing COMMITTED pass
+ * is answered from that pass's persisted rows instead of running a second one:
+ * 200 with `reused: true` and the ORIGINAL `id`. It does not cache a body - it
+ * re-reads through the same statement GET uses, so a reused reply is the same
+ * code path with the same guarantees. Two facts are deliberately NOT reused: a
+ * pass that never committed (its `reason` is not persisted, so serving it would
+ * mean inventing one - see `SELECT_REUSABLE_QUERY_SQL` in ../repository.js), and
+ * a pass from a different deploy, which would make the answer stale by
+ * construction.
+ *
+ * `reused` is a REQUEST fact, like `served_by.engine_version`, not a property of
+ * the stored resource: it is TRUE only on a POST that found an equivalent pass,
+ * and FALSE on every GET and on every POST that ran its own pass. Nothing in
+ * the persisted rows could answer it, which is exactly why it is not derivable
+ * from them.
+ *
  * Status codes:
- *   201  a recommendation with at least one build
- *   200  a valid recommendation that produced ZERO builds (an under-budget
- *        floor is a legitimate outcome, not an error) - and the same 200 for
- *        EMPTY_CANDIDATE_POOL, which additionally carries `reason`
+ *   201  THIS request created a pass that produced at least one build
+ *   200  a reused pass (`reused: true`), or a valid pass that produced ZERO
+ *        builds (an under-budget floor is a legitimate outcome, not an error) -
+ *        and the same 200 for EMPTY_CANDIDATE_POOL, which additionally carries
+ *        `reason`
  *   404  GET of an unknown query id (the query row is the resource; a malformed
  *        id can match no row, so it is a 404 rather than a 500)
  *   422  schema validation, or a value outside the advertised vocabulary
@@ -57,6 +75,51 @@ function toNumberOrNull(value) {
   }
   const numeric = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+/**
+ * A TEXT column as a string, or null when it was not recorded. A non-string can
+ * only come from a hand-built fixture, and the response schema declares this
+ * field a nullable string - so passing a surprise through would turn a fixture
+ * mistake into a 500 instead of a null.
+ */
+function toStringOrNull(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return typeof value === 'string' ? value : null;
+}
+
+/**
+ * Read the catalog version of THIS moment, or null when it cannot be computed.
+ *
+ * Degrading to null is a POLICY decision made here, not in the engine: the
+ * engine's `catalogVersion` throws when the database cannot produce a digest,
+ * and a digest is a dedupe key, not part of the answer. Refusing to serve a
+ * recommendation because a cache key was unavailable would break the product to
+ * protect an optimization, and the beta's whole premise is that it always
+ * answers (the same reasoning as `API_ENGINE_OPTIONS` in ../engine.js).
+ *
+ * NULL is the honest value and the SAFE one, never a guessed placeholder: the
+ * row records "not recorded", and the dedupe cannot match it (Decision 47 item
+ * 10 - an unknown version is a MISS, never a match), so the blast radius of a
+ * broken digest is "reuse is off", not "a stale answer". The failure is logged
+ * at warn, so it is visible rather than silent.
+ *
+ * The function's EXISTENCE is checked outside the try: a missing collaborator is
+ * a wiring error that must be loud, and a catch here would swallow it into the
+ * same null as a database failure.
+ */
+async function resolveCatalogVersion(app, request, client) {
+  if (typeof app.engine.catalogVersion !== 'function') {
+    throw new Error('app.engine.catalogVersion is not a function - the engine boundary is not wired');
+  }
+  try {
+    return await app.engine.catalogVersion(client);
+  } catch (error) {
+    request.log.warn({ err: error }, 'catalog version unavailable - request reuse is disabled for this pass');
+    return null;
+  }
 }
 
 /** Normalize a timestamp (Date or string) to an ISO string, or null. */
@@ -167,12 +230,15 @@ function priceStatusFor(components) {
  * Present one persisted result as the wire contract. Pure, and fed ONLY by
  * persisted rows - the engine's in-memory result is not a parameter, which is
  * what makes the two verbs agree by construction rather than by discipline.
+ * The two exceptions are named as such: `reason` (which the engine's error is
+ * the only source of, and which is therefore null for any pass that did not
+ * just run) and `reused` (a request fact, `false` on every GET).
  *
- * @param {object} source { snapshot, reason, deployVersion }
+ * @param {object} source { snapshot, reason, deployVersion, reused }
  * @returns {object} the response body
  */
 function presentRecommendationResult(source) {
-  const { snapshot, reason, deployVersion } = source;
+  const { snapshot, reason, deployVersion, reused } = source;
   const query = snapshot.query || {};
   const grouped = groupBuilds(snapshot.rows || []);
   // The top-level engine_version is the one recorded on the persisted result
@@ -216,6 +282,17 @@ function presentRecommendationResult(source) {
     // Stage 1..11 to derive a floor from, and Decision 27 forbids inventing one.
     budget_floor: parseFloor(query.budget_floor),
     engine_version: persistedEngineVersion,
+    // The catalog state this pass ran against (Decision 47): a column since
+    // migration 021, NULL for a pre-021 row - recorded as unknown, never
+    // derived. It is served because a client that stores an id is making a
+    // durable reference, and Decision 47 item 17 requires the reference to
+    // carry the catalog it belongs to. NOT part of the dedupe key's request
+    // half: it says which catalog produced the answer, not which was asked for.
+    catalog_version: toStringOrNull(query.catalog_version),
+    // A REQUEST fact, like served_by below, and the one field on this payload
+    // that no persisted row could answer: true only when THIS POST found an
+    // equivalent committed pass and served it instead of running one.
+    reused: reused === true,
     reason: reason === undefined ? null : reason,
     disclaimer: DISCLAIMER,
     served_by: { engine_version: deployVersion },
@@ -290,34 +367,69 @@ function registerRecommendationRoutes(app) {
 
     const client = await app.pool.connect();
     try {
-      const created = await app.repo.createRecommendationQuery(client, {
+      // 1. The catalog version of THIS moment (Decision 47). Computed before
+      //    anything is written, because it is both a component of the dedupe key
+      //    and a fact the query row must record so a LATER request can compare
+      //    against it.
+      const catalogVersion = await resolveCatalogVersion(app, request, client);
+
+      // 2. Has this request already been answered? The key is the request
+      //    identity plus the catalog and engine versions - never the profile's
+      //    UUID name, which is per-request by construction and identifies
+      //    nothing (PLAN_PLATFORM_P1.md Sprint 5).
+      const reusable = await app.repo.findReusableQuery(client, {
         scoringModelId: model.id,
         budgetAmount: body.budget_amount,
         currency: body.currency,
         useCase: body.use_case,
         resolution: body.resolution,
         priority: body.priority,
+        catalogVersion,
+        engineVersion: app.engineVersion,
       });
 
+      let queryId;
+      let reused = false;
       let reason = null;
-      try {
-        // `app.engineVersion` is handed to the engine so the pass records which
-        // deploy produced it (Decision 46). The engine result is deliberately
-        // NOT read here: every field of the response comes from the re-read
-        // below, which is what keeps POST and GET on one code path.
-        await app.engine.runFullRun(client, created.queryId, app.engineVersion);
-      } catch (error) {
-        if (error && error.code === 'EMPTY_CANDIDATE_POOL') {
-          reason = 'EMPTY_CANDIDATE_POOL';
-        } else if (error && error.code === 'SCORING_MODEL_UNAVAILABLE') {
-          request.log.warn({ err: error }, 'pinned scoring model became unavailable mid-pass');
-          return reply.code(503).send(scoringUnavailable());
-        } else {
-          throw error;
+
+      if (reusable !== null) {
+        // The hit path runs NO engine pass and writes NOTHING. It still reads,
+        // through the same statement every GET uses, so a reused reply cannot
+        // differ from a first reply about any persisted field - the read path is
+        // not bypassed on the cheap route (Decision 36 item 4).
+        queryId = reusable.queryId;
+        reused = true;
+      } else {
+        const created = await app.repo.createRecommendationQuery(client, {
+          scoringModelId: model.id,
+          budgetAmount: body.budget_amount,
+          currency: body.currency,
+          useCase: body.use_case,
+          resolution: body.resolution,
+          priority: body.priority,
+          catalogVersion,
+        });
+        queryId = created.queryId;
+
+        try {
+          // `app.engineVersion` is handed to the engine so the pass records which
+          // deploy produced it (Decision 46). The engine result is deliberately
+          // NOT read here: every field of the response comes from the re-read
+          // below, which is what keeps POST and GET on one code path.
+          await app.engine.runFullRun(client, queryId, app.engineVersion);
+        } catch (error) {
+          if (error && error.code === 'EMPTY_CANDIDATE_POOL') {
+            reason = 'EMPTY_CANDIDATE_POOL';
+          } else if (error && error.code === 'SCORING_MODEL_UNAVAILABLE') {
+            request.log.warn({ err: error }, 'pinned scoring model became unavailable mid-pass');
+            return reply.code(503).send(scoringUnavailable());
+          } else {
+            throw error;
+          }
         }
       }
 
-      const snapshot = await app.repo.readRecommendationResult(client, created.queryId);
+      const snapshot = await app.repo.readRecommendationResult(client, queryId);
       if (!snapshot.found) {
         throw new Error('the query row disappeared after it was committed');
       }
@@ -326,10 +438,12 @@ function registerRecommendationRoutes(app) {
         snapshot,
         reason,
         deployVersion: app.engineVersion,
+        reused,
       });
-      // 201 only when the pass actually produced a build; a zero-build pass is a
-      // valid answer and is served as 200.
-      return reply.code(payload.builds.length > 0 ? 201 : 200).send(payload);
+      // 201 means THIS request created a pass that produced builds. A reuse
+      // created nothing to be created - it is a read - and a zero-build pass is
+      // a valid answer either way (Decision 17.2), so both are served as 200.
+      return reply.code(reused || payload.builds.length === 0 ? 200 : 201).send(payload);
     } finally {
       client.release();
     }
@@ -361,6 +475,10 @@ function registerRecommendationRoutes(app) {
       // pass facts are columns now, so the same presenter reads them back.
       reason: null,
       deployVersion: app.engineVersion,
+      // Nothing was reused by a read: `reused` describes a POST that found an
+      // equivalent pass, which is a fact about that request and not about the
+      // resource being fetched.
+      reused: false,
     }));
   });
 }
@@ -372,6 +490,8 @@ module.exports = {
   parseFloor,
   priceStatusFor,
   toNumberOrNull,
+  toStringOrNull,
+  resolveCatalogVersion,
   toIsoOrNull,
   UUID_RE,
   POST_RATE_LIMIT,

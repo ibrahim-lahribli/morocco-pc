@@ -4,10 +4,11 @@
  * apps/api/src/engine.js - the API's ONLY engine entry point.
  *
  * Boundary: this file exists so the HTTP layer never reaches into an engine
- * module's internals. It requires exactly three PUBLIC BARRELS
+ * module's internals. It requires exactly four PUBLIC BARRELS
  * (`src/recommendation/orchestrator/index.js`,
- * `src/recommendation/candidates/index.js` and
- * `src/recommendation/scoring/index.js`) and re-exports nothing the engine
+ * `src/recommendation/candidates/index.js`,
+ * `src/recommendation/scoring/index.js` and
+ * `src/recommendation/query/index.js`) and re-exports nothing the engine
  * does not already export. `import-boundary.test.js` enforces that rule by
  * scanning every file under apps/api/src for a `require` that resolves to a
  * path inside `src/recommendation/` and is neither a stage barrel (`index.js`)
@@ -28,6 +29,7 @@
 const orchestrator = require('../../../src/recommendation/orchestrator');
 const candidates = require('../../../src/recommendation/candidates');
 const scoring = require('../../../src/recommendation/scoring');
+const query = require('../../../src/recommendation/query');
 
 /** The API's fixed engine options. Frozen so a caller cannot mutate it. */
 const API_ENGINE_OPTIONS = Object.freeze({ allow_unverified_seed_offers: true });
@@ -117,10 +119,28 @@ async function runFullRun(client, queryId, engineVersion) {
   return orchestrator.runRecommendationFullRun(client, queryId, engineOptionsFor(engineVersion));
 }
 
+/**
+ * The catalog's content version (Decision 47), re-exported from the engine's
+ * `query/` barrel at the API's single engine boundary.
+ *
+ * It is NOT wrapped, and deliberately so: the engine's `catalogVersion` throws
+ * when the database cannot produce a digest, and what that failure MEANS is an
+ * API policy decision, not an engine one - `useCaseVocabulary` above returns
+ * NULL for the same reason, and each route decides whether a missing value is
+ * fatal (the vocabulary: yes, 503) or a degradation (the catalog version: yes,
+ * reuse off). A catch here would have to guess, and would also hide a genuine
+ * wiring error - the route checks the function exists before calling it.
+ *
+ * It issues one read-only `SELECT` and writes nothing, so it is safe to call on
+ * the connection the POST has already checked out.
+ */
+const catalogVersion = query.catalogVersion;
+
 module.exports = {
   runFullRun,
   engineOptionsFor,
   useCaseVocabulary,
+  catalogVersion,
   API_ENGINE_OPTIONS,
   ERROR_CODES: candidates.ERROR_CODES,
   CandidateSelectionError: candidates.CandidateSelectionError,

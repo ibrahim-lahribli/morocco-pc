@@ -164,6 +164,17 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
     assert.equal(post.served_by.engine_version, ENGINE_VERSION);
     assert.equal(post.reason, null);
     assert.ok(post.budget_floor !== null, 'Stage 1 succeeded, so the floor was computed');
+    assert.equal(post.reused, false, 'the first POST of this key ran its own pass');
+
+    // ---- 1a. the catalog version is REAL, computed and persisted ------------
+    // Decision 47: the digest is what a later request compares against, so a
+    // null or malformed value here would silently disable reuse forever.
+    assert.match(post.catalog_version, /^[0-9a-f]{32}$/, 'the served catalog version is a 32-hex digest');
+    const persistedVersion = (await pool.query(
+      'SELECT catalog_version FROM recommendation_query WHERE id = $1',
+      [post.id]
+    )).rows[0].catalog_version;
+    assert.equal(persistedVersion, post.catalog_version, 'the served value is the one the ROW records');
 
     for (const build of post.builds) {
       assert.ok(build.components.length > 0, 'every build carries its components');
@@ -228,6 +239,76 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
       'the persisted floor is the real diagnostic'
     );
 
+    // ---- 1c. DEDUPE: an identical POST reuses this pass (Sprint 5.1) --------
+    // Two assertions matter equally: the SAME id comes back, and no second set
+    // of rows is written. The counts are compared against the state the first
+    // POST left behind, so this does not depend on the suite running on a
+    // pristine database - only on this POST not adding anything.
+    const afterFirst = await countAll(pool);
+    const repeat = await app.inject({
+      method: 'POST',
+      url: '/v1/recommendations',
+      payload: { budget_amount: 20000, currency: 'MAD', use_case: 'GAMING' },
+    });
+    assert.equal(repeat.statusCode, 200, 'a reuse created a pass it did not need to create, so it is a 200');
+    const repeated = repeat.json();
+    assert.equal(repeated.reused, true, 'the second identical POST reports the reuse');
+    assert.equal(repeated.id, post.id, 'and returns the ORIGINAL id, which is what keeps a share link stable');
+    assert.deepEqual(
+      await countAll(pool),
+      afterFirst,
+      'a reused POST writes NOTHING: no second profile, query, candidate, component or result row'
+    );
+    assert.equal(repeated.catalog_version, post.catalog_version, 'a reuse is the same catalog by construction');
+    assert.deepEqual(repeated.builds, post.builds, 'the reused reply is the same persisted answer');
+
+    // ---- 1d. a DIFFERENT request is not a reuse (Sprint 5.2) ---------------
+    const differentBudget = await app.inject({
+      method: 'POST',
+      url: '/v1/recommendations',
+      payload: { budget_amount: 21000, currency: 'MAD', use_case: 'GAMING' },
+    });
+    const differentBody = differentBudget.json();
+    if (differentBody.id) {
+      createdQueryIds.push(differentBody.id);
+    }
+    // Both statuses are accepted here ON PURPOSE: the property under test is
+    // that a different request is not a REUSE, and 21000 MAD may legitimately
+    // assemble nothing (200) just as 20000 assembles builds (201). Pinning 201
+    // would make this assertion a claim about the catalog rather than about the
+    // dedupe key.
+    assert.ok(
+      differentBudget.statusCode === 201 || differentBudget.statusCode === 200,
+      'a different budget still gets a valid answer: got ' + differentBudget.statusCode
+    );
+    assert.equal(differentBody.reused, false, 'a different budget is never a reuse');
+    assert.notEqual(differentBody.id, post.id, 'a different budget gets its own id');
+
+    // ---- 1e. a different DEPLOY is not a reuse (the engine-version half) ---
+    // The stored pass's result rows name ENGINE_VERSION; this app answers as a
+    // different one, so the pass must NOT be served - a redeploy can change what
+    // the engine returns for the same catalog and request.
+    const otherDeploy = createApp(pool, { engineVersion: ENGINE_VERSION + '-next' });
+    const afterDeploy = await countAll(pool);
+    const redeployed = await otherDeploy.inject({
+      method: 'POST',
+      url: '/v1/recommendations',
+      payload: { budget_amount: 20000, currency: 'MAD', use_case: 'GAMING' },
+    });
+    const redeployedBody = redeployed.json();
+    if (redeployedBody.id) {
+      createdQueryIds.push(redeployedBody.id);
+    }
+    assert.equal(redeployed.statusCode, 201, 'a new deploy runs its own pass rather than reusing an older one');
+    assert.equal(redeployedBody.reused, false);
+    assert.notEqual(redeployedBody.id, post.id, 'the older deploy\'s pass is not served');
+    const afterDeployCounts = await countAll(pool);
+    assert.equal(
+      Number(afterDeployCounts.queries),
+      Number(afterDeploy.queries) + 1,
+      'the new deploy wrote exactly one query row'
+    );
+
     // ---- 2. GET is identical on persisted fields and never re-runs the engine
     let engineCalls = 0;
     const spyApp = createApp(pool, {
@@ -248,6 +329,7 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
     const get = fetched.json();
 
     assert.equal(engineCalls, 0, 'GET reads persisted rows only - it never re-runs the engine');
+    assert.equal(get.reused, false, 'a GET never reports a reuse: `reused` describes a POST');
     assert.deepEqual(get.builds, post.builds, 'POST and GET agree on every persisted build field');
     assert.equal(get.generated_at, post.generated_at);
     assert.equal(get.budget_amount, post.budget_amount);
@@ -359,6 +441,38 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
       'a GET of the empty pass reproduces the floor POST reported'
     );
     assert.equal(emptyRefetch.json().engine_version, null);
+
+    // ---- 3b. a zero-build pass is REUSED too (Sprint scenario 5.5) ---------
+    // A committed pass that assembled NOTHING is a valid answer, so a repeat
+    // must be served from it - 200 with an empty list, exactly as the first
+    // reply was - rather than running a second pass. It is reusable BECAUSE it
+    // committed: Decision 46's persistPassFacts writes the floor
+    // unconditionally, and this pass's floor exists (the budget is disproven),
+    // so `budget_floor IS NOT NULL` holds. The contrast is the
+    // EMPTY_CANDIDATE_POOL case, which throws in the read pass - before
+    // runRecommendationCommit - and therefore leaves a NULL floor, which is why
+    // its `reason` is never lost by a reuse: such a row is not reusable at all.
+    const afterEmpty = await countAll(pool);
+    const emptyRepeat = await app.inject({
+      method: 'POST',
+      url: '/v1/recommendations',
+      payload: { budget_amount: 1000, currency: 'MAD', use_case: 'GAMING' },
+    });
+    assert.equal(emptyRepeat.statusCode, 200, 'a reused zero-build pass is still a valid 200 answer');
+    const emptyRepeated = emptyRepeat.json();
+    assert.equal(emptyRepeated.reused, true, 'the committed zero-build pass answers the repeat');
+    assert.equal(emptyRepeated.id, emptyBody.id, 'and it hands back the ORIGINAL id');
+    assert.deepEqual(emptyRepeated.builds, [], 'still zero builds - emptiness is not an error');
+    assert.equal(
+      emptyRepeated.reason,
+      emptyBody.reason,
+      'the reused reply carries the same `reason` the first reply did (both null here)'
+    );
+    assert.deepEqual(
+      await countAll(pool),
+      afterEmpty,
+      'a reused zero-build POST writes nothing either'
+    );
 
     // ---- 4. vocabulary derived from the REAL model -------------------------
     // The vocabulary is the ACTIVE model's (Decision 37), and with seed 013 on

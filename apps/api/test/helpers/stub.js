@@ -38,6 +38,14 @@ const PROFILE_MODEL = Object.freeze({
 
 const TEST_ENGINE_VERSION = 'test-sha';
 
+/**
+ * A stand-in for Decision 47's catalog digest: a fixed, well-formed 32-hex
+ * value. Fixed on purpose - a stub that varied per call would make every
+ * "identical request" test flaky, and the only property the API needs from it is
+ * that it is a STRING it can compare and persist.
+ */
+const TEST_CATALOG_VERSION = '0123456789abcdef0123456789abcdef';
+
 const SAMPLE_BUDGET_FLOOR = Object.freeze({
   cheapest_total: 4477,
   currency: 'MAD',
@@ -64,6 +72,8 @@ const QUERY_ROW = Object.freeze({
   use_case: 'GAMING',
   created_at: new Date('2026-10-07T09:00:00.000Z'),
   budget_floor: SAMPLE_BUDGET_FLOOR,
+  // The catalog version the pass recorded (migration 021 / Decision 47).
+  catalog_version: TEST_CATALOG_VERSION,
 });
 
 /**
@@ -161,11 +171,17 @@ const SAMPLE_ROWS = [
 ];
 
 function createRepositoryStub(overrides) {
-  const state = { createCalls: [], readCalls: [] };
+  const state = { createCalls: [], readCalls: [], findCalls: [] };
   const stub = {
     state,
     async selectActiveScoringModel() {
       return ACTIVE_MODEL;
+    },
+    // A MISS by default: the ordinary case, and the one a test that wants a HIT
+    // has to opt into explicitly rather than inherit.
+    async findReusableQuery(_db, key) {
+      state.findCalls.push(key);
+      return null;
     },
     async createRecommendationQuery(_client, input) {
       state.createCalls.push(input);
@@ -187,7 +203,16 @@ function createEngineStub(runFullRun) {
   const calls = [];
   return {
     calls,
+    catalogCalls: [],
     useCaseVocabulary: realEngine.useCaseVocabulary,
+    // The engine's digest is a real database read, so the unit suites stub it.
+    // It is NOT copied from the engine: the value's only contract here is
+    // "a 32-hex string", and a copy of the real statement would be a second
+    // implementation of something these suites do not test.
+    async catalogVersion(client) {
+      this.catalogCalls.push(client);
+      return TEST_CATALOG_VERSION;
+    },
     // The third argument is FORWARDED, not swallowed: it is the deploy the
     // engine records on each result row (Decision 46), so a stub that dropped
     // it would make a test that inspects `engine_version` fail for a reason
@@ -260,6 +285,7 @@ module.exports = {
   SAMPLE_BUDGET_FLOOR,
   SAMPLE_ROWS,
   TEST_ENGINE_VERSION,
+  TEST_CATALOG_VERSION,
   createRepositoryStub,
   createEngineStub,
   createPoolStub,

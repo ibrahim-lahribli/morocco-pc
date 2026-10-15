@@ -10,6 +10,9 @@
  *     createCandidateSelectionInput (see ./load-query-input).
  *   SELECT_QUERY_INPUT_SQL - the single exact-ID query constant.
  *   REQUIRED_ROLES         - the Decision 10 Rule 1 loader constant.
+ *   catalogVersion(db)     - Decision 47's content digest of the catalog, the
+ *     version of the input state a pass ran against (see ./catalog-version).
+ *     Read-only, deterministic, one `SELECT`.
  *
  * NOT owned here: orchestrator composition, ranking, persistence, profile
  * fallback, any write, `scoring_model` loading (Decision 11), and the
@@ -24,4 +27,17 @@ const {
   REQUIRED_ROLES,
 } = require('./load-query-input');
 
-module.exports = { loadQueryInput, SELECT_QUERY_INPUT_SQL, REQUIRED_ROLES };
+const {
+  catalogVersion,
+  CATALOG_VERSION_SQL,
+  CATALOG_COVERED_TABLES,
+} = require('./catalog-version');
+
+module.exports = {
+  loadQueryInput,
+  SELECT_QUERY_INPUT_SQL,
+  REQUIRED_ROLES,
+  catalogVersion,
+  CATALOG_VERSION_SQL,
+  CATALOG_COVERED_TABLES,
+};

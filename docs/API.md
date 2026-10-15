@@ -12,14 +12,25 @@ databases now carry the schema it reads (019 + 020; shared applied 2026-10-15), 
 the write-safety default still points the API at the isolated branch - see *Database
 target*.
 
-**Contract v1.2 (2026-10-15):** v1.1 (2026-10-14) surfaced the persisted pass
+**Contract v1.3 (2026-10-16):** v1.1 (2026-10-14) surfaced the persisted pass
 facts - `budget_floor`, `engine_version` and each build's `strategy_key` became
 columns in migration `019_recommendation_pass_facts.sql` (Decision 46), so POST
 and GET no longer differ on any persisted field. v1.2 adds product identity:
 each component carries its persisted `slug`, and its `name` is
 `COALESCE(product.display_name, product.name)` as of migration
 `020_product_identity_and_media.sql`, so the ingestion-only `Seed ` prefix no
-longer reaches a client. See *Response shape*.
+longer reaches a client. **v1.3 adds request dedupe** (Platform P1 Sprint 5): an
+identical POST against an equivalent committed pass answers `200` with
+`reused: true` and the ORIGINAL id instead of running a second engine pass, and
+every reply now carries `catalog_version` - the catalog state the pass ran
+against, from migration `021_recommendation_query_catalog_version.sql`
+(Decision 47). See *Request dedupe* and *Response shape*.
+
+**`catalog_version` is served on both databases, but only the branch RECORDS it
+so far.** Migration 021 is applied to the TEST branch and not yet to the shared
+database, so against shared every reply serves `catalog_version: null`
+(not recorded - NULL means UNKNOWN here) and reuse is simply always a miss. A
+miss is a correct answer; the degradation is by design, not a failure mode.
 
 **Schema prerequisite - SATISFIED on BOTH databases (2026-10-15).** Migrations 019
 and 020 are applied on the TEST branch AND on the shared database: both ledgers read
@@ -225,7 +236,7 @@ All routes are under `/v1` and speak JSON.
 |---|---|---|---|
 | GET | `/v1/health` | 120/min | Liveness + database reachability |
 | GET | `/v1/meta/options` | 120/min | Accepted use cases, currencies, resolutions, priorities |
-| POST | `/v1/recommendations` | 30/min | Run one full engine pass and persist it |
+| POST | `/v1/recommendations` | 30/min | Run one full engine pass and persist it — or reuse an equivalent stored pass |
 | GET | `/v1/recommendations/:id` | 120/min | Read a persisted recommendation |
 | GET | `/v1/docs/json` | 120/min | OpenAPI 3.0 document |
 
@@ -256,12 +267,56 @@ entire engine pass, so they must not share a budget. The request body limit is
 Unknown fields are **rejected**, not ignored (`additionalProperties: false` with
 ajv `removeAdditional: false`), so a typo is a 422 rather than a silent default.
 
+### Request dedupe (contract v1.3)
+
+A POST whose **request identity** matches an existing **committed** pass, against
+the same **catalog version** and the same **engine version**, is answered from
+that pass instead of running a second one: `200`, `reused: true`, and the
+ORIGINAL `id`. The key is
+`(budget_amount, currency, use_case, resolution, priority, scoring model, catalog_version, engine_version)`
+— the profile's UUID `name` is deliberately **not** part of it, because it is
+minted per request and identifies nothing.
+
+What a reuse does and does not do:
+
+- It **writes nothing**: no second `recommendation_profile`, no second
+  `recommendation_query`, no new builds.
+- It **runs no engine pass**, which is the point — a pass is ~74 statements and
+  the client-side budget slider snaps to 500 MAD steps, so identical requests are
+  common.
+- It **still reads through the same statement GET uses**, so a reused reply and a
+  first reply agree on every persisted field. There is no cached copy of a body.
+- It is not served for a pass from a **different deploy** (`engine_version`), so a
+  redeploy cannot hand a client an answer the new engine would not produce.
+- It is not served for a pass that **never committed** — one that threw before its
+  write transaction. Such a row has no persisted `reason`, so serving it would mean
+  inventing one; the repeat request runs its own pass instead. A failed pass is not
+  an answer.
+- It **DOES reuse a committed zero-build pass** — one that assembled nothing but
+  finished its write transaction. That is not a failure: an under-budget request
+  is a legitimate answer (Decision 17.2), so a repeat is served `200` with an
+  empty `builds`, the same persisted `budget_floor`, and no new row (Sprint
+  scenario 5.5). Its `reason` is null on both replies, and that is the one field
+  where a reuse cannot do better: `reason` is the single response field NO column
+  records, so a reused reply can only agree with the first one. Nothing is lost in
+  practice, because the pass that DOES carry a non-null `reason`,
+  `EMPTY_CANDIDATE_POOL`, throws in the read pass before the write transaction: its
+  row has no floor and is not reusable at all, so a reason can never be lost by a
+  reuse.
+- It is not served when the pass recorded **no catalog version** (see
+  *Known limitations*), because an unknown version is a MISS, never a match.
+
+`catalog_version` appears in every reply, reused or not: it is the catalog state
+the pass ran against, so a client that keeps an `id` (a share link, a saved
+build) can tell which catalog that reference belongs to.
+
 Status codes:
 
 | Status | When |
 |---|---|
-| **201** | A recommendation was created **and produced at least one build**. |
-| **200** | A valid recommendation that produced **zero builds** — an under-budget floor is a legitimate outcome, not an error. Also the status for `EMPTY_CANDIDATE_POOL`, which additionally carries `reason`. |
+| **201** | **This request created a pass that produced at least one build.** `reused` is `false`. |
+| **200** | **A reuse** — an equivalent pass already exists, so nothing was created (`reused: true`, and `id` is the ORIGINAL id). |
+| **200** | A valid pass that produced **zero builds** — an under-budget floor is a legitimate outcome, not an error. Also the status for `EMPTY_CANDIDATE_POOL`, which additionally carries `reason`. |
 | **422** | Body validation, or a value outside the advertised vocabulary. |
 | **413** | Body over 10 KB. |
 | **429** | Rate limit exceeded. |
@@ -298,6 +353,8 @@ Status codes:
     "missing_roles": []
   },
   "engine_version": "a1b2c3d",
+  "catalog_version": "f6df98b7588334800b687280242eb95f",
+  "reused": false,
   "reason": null,
   "disclaimer": "Prix indicatifs, non actualisés.",
   "served_by": { "engine_version": "a1b2c3d" },
@@ -356,6 +413,15 @@ Two fields name a deploy, and they answer different questions:
 row, and so has no pass engine version to report — its `budget_floor` is still
 recorded, because that lives on the query row. The API will not attribute a pass
 to a deploy the database does not name.
+
+**`reused` is the second exception, and it is a REQUEST fact, not a property of
+the resource.** No persisted row distinguishes a pass that was served from one
+that was just run, because nothing needed to: a reuse returns the same rows
+either way. So `reused` is `true` only on the POST that found an equivalent pass,
+and `false` on every GET and on every POST that ran its own pass — exactly like
+`served_by`, which also answers a question about the request rather than about the
+stored data. `catalog_version` has no such caveat: it is a column, so it is read
+back like every other field.
 
 Each build also carries its own `engine_version` and `strategy_key`: which E4
 archetype (Decision 41) nominated that rank. Both are read per result row, so two
@@ -473,3 +539,7 @@ profile id is captured before the query is deleted).
 - **`resolution`/`priority` are accepted but inert** (see *Option vocabulary*).
 - **The identity surface needs migration 020 wherever the API points.** `components[].name` is `COALESCE(product.display_name, product.name)` and `components[].slug` is `product.slug`; against a database below 020 those columns do not exist, the component read fails `42703`, and the request answers the generic `500 INTERNAL_ERROR`. Both databases are at 020 since 2026-10-15 (the shared catalog's 104 products all carry distinct CHECKed slugs and no `Seed `-prefixed `display_name`), so on either target the prefix is gone from served names and every component carries a slug.
 - **`strategy_key` / `engine_version` are recorded but not yet consumed.** They are persisted and served; no client reads them back yet, and their golden-harness coverage (A10) is still owed (**OG-46** — OG-45 tracks the persistence itself, which is done wherever migration 019 is applied).
+- **A zero-build pass is deploy-blind in the reuse key.** `engine_version` is recorded on `recommendation_result` rows (Decision 46), and a pass that assembled nothing has none, so the key can only require that *no* result row contradicts the answering deploy. A committed zero-build pass therefore survives a redeploy in the key. Its `budget_floor` is catalog-derived and the catalog IS in the key, so the exposure is narrow; the fix, when it matters, is to record the engine version on the query row too.
+- **Two identical POSTs in flight at once can both run a pass.** The lookup is a read, not a lock, so the second request may not see the first's row yet. The suites are sequential and the sprint's DoD is about repeated (not concurrent) requests; a unique index on the key plus a retry would close it.
+- **A failed catalog digest degrades to `catalog_version: null` and disables reuse.** The digest is one read over the catalog tables; if it cannot be computed the pass still runs (a cache key must not break the product), the row records NULL, and no later request can match it — the safe direction, never a stale hit. Reuse is off until the digest works again, and the failure is logged at `warn`.
+- **The dedupe lookup has no index yet.** It filters seven columns on `recommendation_query` and takes `LIMIT 1`; the table holds zero rows and grows only with DISTINCT requests, so a sequential scan is correct today. Add an index when there is a measured slow lookup and a plan to justify its shape.
