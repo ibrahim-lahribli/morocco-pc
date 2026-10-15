@@ -1044,3 +1044,39 @@ The plan's golden leg "at the v1 pin and at `launch-v2@1.1.0`" cannot run on thi
 scoring model is `seed-minimal-v1@1.0.0` (the `launch-v2` models are not in this branch's data after its
 2026-10-15 re-creation reset it to the parent), and `--model=launch-v2@1.1.0` fails closed naming the active
 model - correct behaviour, not a defect.
+
+## 2026-10-15 — P3 Sprint 1 (first pass): the recurring job's ref choice, and the nightly gate is red by construction
+
+**`gh` is not installed on this box**, so dispatching `recurring-gates` is genuinely owner-side: the plan marks
+the dispatch OWNER-gated, and that is not a formality. Owner path: GitHub -> Actions -> `ci` -> "Run workflow"
+-> choose ref `agent/platforms` (NOT the default branch; see below) -> Run.
+
+**Local pre-flight of the three job steps, with the exact CI arguments** (all green today on the unchanged
+tree): `check-offer-freshness --fail-days=14` PASS (first VERIFIED expiry 18.7 days out; 101 SEED offers
+never counted as verified-fresh); `verify-migrations-replay --test-db` 0 drift (20 files into an empty
+database: columns 370/370, checks 79/79, fks 60/60, indexes 100/100); `test:api:db` 1 pass / 0 fail with
+residue 0. What CANNOT be checked from a checkout: that the two repository secrets exist and are correct,
+and that the Neon instance accepts a GitHub runner connection - a failed run is expected to be one of those
+two, not a code defect.
+
+**The ref choice is the finding, and it corrects the plan.** The first draft of `PLAN_PLATFORM_P3.md` said the
+default branch lacks the API and these CI steps. Measured against `origin/master` (`c8c16b9`): it HAS
+`apps/api`, `apps/api/test/db/recommendations.db.test.js`, the `test:api:db` step and the whole
+`recurring-gates` job. The real reason to dispatch on this branch is different: **master's migration tail
+ends at `018` while the replay's default reference (`DATABASE_URL`) stands at `020`**, and
+`verify-migrations-replay.js --test-db` diffs a fresh replay against that reference. So a default-branch
+dispatch fails the replay step with drift that is an ARTIFACT of this branch being unmerged - a false red,
+which is worse than no run because it teaches the team to ignore the gate. **Corollary: the nightly
+`schedule` runs only from the default branch, so the recurring gate is red BY CONSTRUCTION at the replay step
+until this branch merges.** Making the nightly meaningful is therefore part of the merge, not a separate
+task. The plan text was corrected and committed with this note.
+
+**Gotcha that produced a silent wrong answer first (worth remembering).** `git show origin/master:path` is
+mangled by Git Bash's MSYS argument conversion into `origin\master;path`, and because it failed, a `grep -c`
+on empty input printed `0` and read like a real "absent" result - it very nearly confirmed the false premise.
+Use `export MSYS_NO_PATHCONV=1` or name the commit SHA (`git show c8c16b9:path`), and never read a `grep -c`
+result without checking the command's own exit status.
+
+**Still owed in this sprint:** the owner dispatch and its per-step conclusion (Step 2-3), any fix if a step
+fails (Step 4), and the "UNVERIFIED in CI" wording updates (Step 5) - which stay as they are until the run is
+actually green.
