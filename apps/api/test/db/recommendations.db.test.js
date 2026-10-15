@@ -30,6 +30,7 @@ const assert = require('node:assert/strict');
 const { Pool } = require('pg');
 
 const { resolveTestDbUrl } = require('../../../../scripts/lib/db-url');
+const { assertNoSeedNames } = require('../helpers/seed-guard');
 const { buildApp } = require('../../src/app');
 const repository = require('../../src/repository');
 const engine = require('../../src/engine');
@@ -160,7 +161,18 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
       assert.ok(['indicative', 'verified'].includes(build.price_status));
       for (const component of build.components) {
         assert.equal(typeof component.product_id, 'string');
-        assert.ok(component.name.length > 0, 'the product name comes from the persisted join');
+        // Product identity (migration 020), read from the real rows: the name
+        // is display_name and the slug is its machine form. A presenter that
+        // went back to reading `product.name` serves the `Seed ` prefix and
+        // the raw catalogue name, and both assertions below catch it.
+        assert.equal(typeof component.name, 'string');
+        assert.ok(component.name.length > 0, 'the display name comes from the persisted join');
+        assert.equal(typeof component.slug, 'string', 'every post-020 product row carries a slug');
+        assert.match(
+          component.slug,
+          /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+          'the served slug satisfies chk_product_slug_format: ' + component.slug
+        );
         assert.equal(typeof component.price_used, 'number');
         assert.ok(['SEED_UNVERIFIED', 'VERIFIED'].includes(component.offer_class));
         // The seed catalog is 100% seed offers, so the provenance label is real.
@@ -168,6 +180,13 @@ test('the API round-trips a real recommendation and leaves no residue', async ()
       }
     }
     assert.ok(post.builds.every((build) => build.price_status === 'indicative'));
+
+    // The catalog's own rows, not a fixture: 020 backfilled display_name for
+    // all 100 products, so no served name may still carry the prefix. This is
+    // the assertion that would have failed before 020 was applied.
+    assertNoSeedNames(post);
+    const seededNames = post.builds.flatMap((build) => build.components.map((c) => c.name));
+    assert.ok(seededNames.length > 0, 'the no-Seed assertion above inspected at least one name');
 
     // ---- 1b. the pass facts came back from the ROWS, so the engine_version
     // the API reports is the one it pushed DOWN to the engine (the Sprint 2

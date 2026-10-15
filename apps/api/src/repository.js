@@ -99,6 +99,15 @@ const SELECT_QUERY_SQL = [
  * can name the component (the engine's in-memory build carries no product name;
  * product_variant has no name column at all - only `sku`).
  *
+ * The name itself comes from `COALESCE(p.display_name, p.name)` since migration
+ * 020 (product identity), and `p.slug` is carried alongside it. The COALESCE is
+ * the reason the `Seed ` prefix stops reaching clients: 020 backfills
+ * `display_name` for every existing product, and the fallback to `name` keeps
+ * the statement total for a row inserted after that backfill, where nullable is
+ * the honest state (see migration 020's header). `slug` is read, not derived:
+ * 020 stores a globally unique, deterministic slug, so the API never invents
+ * one and never has to reproduce the generator.
+ *
  * `r.engine_version` / `r.strategy_key` are the Decision 46 provenance facts:
  * which deploy produced this rank, and which E4 archetype nominated it. Both
  * are TEXT and nullable, so a pre-019 row (or a pass that ran without an
@@ -123,7 +132,8 @@ const SELECT_BUILDS_SQL = [
   '  c.selected_price,',
   '  c.offer_class,',
   '  c.store_offer_id,',
-  '  p.name AS product_name,',
+  '  p.slug AS product_slug,',
+  '  COALESCE(p.display_name, p.name) AS product_name,',
   '  v.sku AS variant_sku',
   'FROM recommendation_result r',
   'JOIN build_candidate b ON b.id = r.build_candidate_id',

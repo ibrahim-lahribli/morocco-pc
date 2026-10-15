@@ -104,9 +104,13 @@ function buildApp(options) {
         description: 'Recommendation API over the morocco-pc engine. Prices are indicative.',
         // 1.1.0 (2026-10-14): the response surfaces the persisted pass facts
         // (budget_floor, engine_version, strategy_key) instead of serving two
-        // of them as null on GET. Pinned byte-for-byte by
+        // of them as null on GET.
+        // 1.2.0 (2026-10-15): product identity - each component carries its
+        // persisted `slug`, and `name` is read from
+        // COALESCE(product.display_name, product.name), so the `Seed ` prefix
+        // no longer reaches a client. Pinned byte-for-byte by
         // apps/api/test/unit/openapi-snapshot.test.js.
-        version: '1.1.0',
+        version: '1.2.0',
       },
     },
   });

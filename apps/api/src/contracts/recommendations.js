@@ -7,9 +7,10 @@
  * properties are load-bearing and easy to get wrong:
  *
  *   1. Nullability mirrors the DATABASE, not the happy path. `budget_floor`,
- *      `engine_version` and `strategy_key` are all nullable because their
- *      columns are (migration 019), and NULL means "not recorded" - a pre-019
- *      row, or a pass that ran without an engine version. A schema that
+ *      `engine_version`, `strategy_key` and `components[].slug` are all nullable
+ *      because their columns are (migrations 019 and 020), and NULL means "not
+ *      recorded" - a pre-019 row, a pass that ran without an engine version, or
+ *      a product inserted after 020's backfill without a slug. A schema that
  *      demanded a value would make GET unserializable against real data, and
  *      would also assert a fact the schema itself declares unknowable.
  *   2. `price_status` is DERIVED, never stored: 'verified' only when EVERY
@@ -39,6 +40,8 @@ const BuildComponentSchema = Type.Object({
   role: Type.String(),
   product_id: Type.String(),
   name: Type.String(),
+  /** The persisted product slug (migration 020). Nullable like its column. */
+  slug: Type.Union([Type.String(), Type.Null()]),
   variant: Type.Union([Type.String(), Type.Null()]),
   price_used: Type.Union([Type.Number(), Type.Null()]),
   offer_class: Type.String(),

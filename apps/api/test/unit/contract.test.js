@@ -14,6 +14,7 @@ const { Value } = require('@sinclair/typebox/value');
 
 const contracts = require('../../src/contracts');
 const stub = require('../helpers/stub');
+const { findSeedNames, assertNoSeedNames } = require('../helpers/seed-guard');
 
 /** Collect TypeBox validation errors as readable strings (empty means valid). */
 function contractErrors(schema, value) {
@@ -161,7 +162,11 @@ test('components are labelled from the persisted join and price_status is derive
   assert.deepEqual(cpu, {
     role: 'CPU',
     product_id: 'p-cpu',
-    name: 'Seed CPU Alpha',
+    // Post-020 identity: the served name is display_name and the slug is its
+    // machine form. The exact shape is asserted, not relaxed - a presenter that
+    // read `product.name` would serve 'Seed CPU Alpha' with no slug at all.
+    name: 'CPU Alpha',
+    slug: 'cpu-alpha',
     variant: null,
     price_used: 1999,
     offer_class: 'SEED_UNVERIFIED',
@@ -239,7 +244,49 @@ test('the OpenAPI document is served as JSON at /v1/docs/json', async () => {
   const document = response.json();
   assert.equal(document.openapi, '3.0.3');
   assert.equal(document.info.title, 'morocco-pc API');
-  assert.equal(document.info.version, '1.1.0', 'the contract version names the pass-facts surface');
+  assert.equal(document.info.version, '1.2.0', 'the contract version names the current surface (product identity)');
   assert.ok(document.paths['/v1/recommendations'], 'the recommendation path is documented');
   assert.ok(document.paths['/v1/recommendations/{id}'], 'the read path is documented');
+});
+
+test('every component serves its persisted slug, and no name carries the "Seed " prefix', async () => {
+  const app = stub.createTestApp();
+  const body = (await createRecommendation(app)).json();
+
+  assert.deepEqual(contractErrors(contracts.RecommendationResponseSchema, body), []);
+
+  const components = body.builds.flatMap((build) => build.components);
+  assert.equal(components.length, 3, 'the fixture must carry components for this to prove anything');
+  assert.deepEqual(
+    components.map((component) => component.slug),
+    ['cpu-alpha', 'gpu-beta', 'cpu-gamma'],
+    'slug is read per component row, from the persisted column'
+  );
+  assert.deepEqual(
+    components.map((component) => component.name),
+    ['CPU Alpha', 'GPU Beta', 'CPU Gamma'],
+    'name is the persisted display_name'
+  );
+
+  // The guard, run on the payload the route actually produced. The fixture
+  // models the post-020 join, where `product_name` IS the aliased
+  // COALESCE(display_name, name), so it cannot by itself distinguish the two
+  // columns - the DB suite is what proves the alias is applied to REAL rows,
+  // whose `product.name` still carries the `Seed ` prefix (migration 020's
+  // whole point is that it stops being served).
+  assertNoSeedNames(body);
+});
+
+test('the no-Seed guard FIRES - a prefixed name is not merely unasserted', async () => {
+  // Proves the guard is live rather than vacuous: without this, a guard whose
+  // walk was broken (wrong field name, wrong nesting) would report zero
+  // offenders on every suite and look identical to a clean catalog.
+  const app = stub.createTestApp();
+  const body = (await createRecommendation(app)).json();
+
+  body.builds[0].components[0].name = 'Seed CPU Alpha';
+  const offenders = findSeedNames(body);
+  assert.equal(offenders.length, 1, 'the guard sees exactly the sabotaged component');
+  assert.equal(offenders[0].product_id, 'p-cpu', 'the failure names the row to look at');
+  assert.throws(() => assertNoSeedNames(body), /Seed CPU Alpha/, 'and the assertion throws on it');
 });

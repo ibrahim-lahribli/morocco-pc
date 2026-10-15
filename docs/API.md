@@ -9,10 +9,29 @@ Status at 2026-10-14: **implemented and running against the TEST branch.** The
 DB-free suite runs on every push/PR; the DB-backed suite is wired into the
 recurring CI job and has been verified locally, but **not yet by a CI run**.
 
-**Contract v1.1 (2026-10-14):** the response now surfaces the persisted pass
-facts. `budget_floor`, `engine_version` and each build's `strategy_key` are
-columns as of migration `019_recommendation_pass_facts.sql` (Decision 46), so
-POST and GET no longer differ on any persisted field. See *Response shape*.
+**Contract v1.2 (2026-10-15):** v1.1 (2026-10-14) surfaced the persisted pass
+facts - `budget_floor`, `engine_version` and each build's `strategy_key` became
+columns in migration `019_recommendation_pass_facts.sql` (Decision 46), so POST
+and GET no longer differ on any persisted field. v1.2 adds product identity:
+each component carries its persisted `slug`, and its `name` is
+`COALESCE(product.display_name, product.name)` as of migration
+`020_product_identity_and_media.sql`, so the ingestion-only `Seed ` prefix no
+longer reaches a client. See *Response shape*.
+
+**Schema prerequisite (2026-10-15) - read this before pointing the API at the
+shared database.** Migrations 019 and 020 are applied on the TEST branch ONLY;
+the shared database is still at 018. The read path now needs both: below 019 the
+component read fails `42703` on `recommendation_query.budget_floor`, and below
+020 on `product.slug` / `product.display_name`. Either way the whole response
+fails, and what a client sees is the generic `500 INTERNAL_ERROR` with a request id -
+an undefined column is an UNEXPECTED error, so `503` is NOT the answer (`503` on this
+API means only "no active scoring model"). That makes the shared apply a prerequisite
+for `API_ALLOW_SHARED=1`, not a nice-to-have - and the failure is not free:
+`createRecommendationQuery` commits the profile and query rows BEFORE the engine runs,
+so a failed POST leaves an unmarked `recommendation_query` row behind, and the golden
+harness refuses to run while ANY unmarked `recommendation_query` row exists. Pointing
+the API at shared therefore also blocks `npm run eval:scenarios` until those rows are
+deleted in FK order.
 
 ## What it is not
 
@@ -277,6 +296,7 @@ Status codes:
           "role": "CPU",
           "product_id": "…",
           "name": "…",
+          "slug": "…",
           "variant": null,
           "price_used": 1999.00,
           "offer_class": "SEED_UNVERIFIED",
@@ -334,12 +354,18 @@ and the `store_offer_id` that produced it, both snapshotted at commit time
 (migration 018 / Decision 35), so a later `store_offer` update cannot relabel a
 historical build.
 
-`name` comes from `product.name` and `variant` from `product_variant.sku` (that
-table has no name column) — read back from the persisted join, which is also why
-POST and GET agree. **The `Seed ` prefix still reaches clients:** the catalog is
-seed data, and the `display_name` / `slug` columns that would replace it are
-migration `020_product_identity_and_media.sql`, which is not in the tree yet.
-Until it lands, treat `components[].name` as internal vocabulary.
+`name` comes from `COALESCE(product.display_name, product.name)` and `slug` from
+`product.slug`; `variant` comes from `product_variant.sku` (that table has no
+name column). All of them are read back from the persisted join, which is also
+why POST and GET agree. Migration `020_product_identity_and_media.sql` backfills
+`display_name` (the `Seed `-stripped name) for every catalog row and assigns a
+unique, deterministic, CHECKed `slug`, so **the `Seed ` prefix no longer reaches
+clients** and `components[].name` is a name fit to show. `slug` is **nullable**,
+because its column is: 020 deliberately did not add `NOT NULL`, since that would
+break every product writer that supplies no slug, and NULL means UNKNOWN in this
+schema. A row inserted after 020's backfill without a `display_name` legitimately
+falls back to `name` - that fallback is the one case where the prefix could
+reappear, and it is a data-completeness problem rather than a contract one.
 
 ## Option vocabulary
 
@@ -418,5 +444,5 @@ profile id is captured before the query is deleted).
 - **No 202/polling path.** A POST is synchronous; measure before adding
   asynchronous job handling.
 - **`resolution`/`priority` are accepted but inert** (see *Option vocabulary*).
-- **`components[].name` still shows the `Seed ` prefix.** The whole catalog is seed data and migration `020_product_identity_and_media.sql` (its `display_name` / `slug` columns) is not in the tree, so the API has nothing else to name a product with. Do not present it to end users as a product name.
+- **The identity surface needs migration 020 where the API points.** `components[].name` is `COALESCE(product.display_name, product.name)` and `components[].slug` is `product.slug`; against a database below 020 those columns do not exist, the component read fails `42703`, and the request answers the generic `500 INTERNAL_ERROR`. On the TEST branch (020 applied) the prefix is gone from served names and every component carries a slug. Do not point the API at the shared database until 019 and 020 are applied there.
 - **`strategy_key` / `engine_version` are recorded but not yet consumed.** They are persisted and served; no client reads them back yet, and their golden-harness coverage (A10) is still owed (**OG-46** — OG-45 tracks the persistence itself, which is done wherever migration 019 is applied).

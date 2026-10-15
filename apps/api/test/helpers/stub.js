@@ -72,7 +72,8 @@ const SAMPLE_ROWS = [
     selected_price: '1999.00',
     offer_class: 'SEED_UNVERIFIED',
     store_offer_id: 'so-cpu',
-    product_name: 'Seed CPU Alpha',
+    product_name: 'CPU Alpha',
+    product_slug: 'cpu-alpha',
     variant_sku: null,
   },
   {
@@ -92,7 +93,8 @@ const SAMPLE_ROWS = [
     selected_price: '3200.00',
     offer_class: 'SEED_UNVERIFIED',
     store_offer_id: 'so-gpu',
-    product_name: 'Seed GPU Beta',
+    product_name: 'GPU Beta',
+    product_slug: 'gpu-beta',
     variant_sku: 'GPU-BETA-8G',
   },
   {
@@ -112,7 +114,8 @@ const SAMPLE_ROWS = [
     selected_price: '1499.00',
     offer_class: 'VERIFIED',
     store_offer_id: 'so-cpu-2',
-    product_name: 'Seed CPU Gamma',
+    product_name: 'CPU Gamma',
+    product_slug: 'cpu-gamma',
     variant_sku: null,
   },
   // LEFT-JOIN artifact: the candidate exists but this component row is null.
@@ -134,6 +137,7 @@ const SAMPLE_ROWS = [
     offer_class: null,
     store_offer_id: null,
     product_name: null,
+    product_slug: null,
     variant_sku: null,
   },
 ];

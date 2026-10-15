@@ -138,6 +138,7 @@ function groupBuilds(rows) {
         role: row.role,
         product_id: row.product_id === undefined ? null : row.product_id,
         name: row.product_name === null || row.product_name === undefined ? '' : String(row.product_name),
+        slug: row.product_slug === undefined ? null : row.product_slug,
         variant: row.variant_sku === undefined ? null : row.variant_sku,
         price_used: toNumberOrNull(row.selected_price),
         offer_class: row.offer_class === null || row.offer_class === undefined ? 'SEED_UNVERIFIED' : String(row.offer_class),

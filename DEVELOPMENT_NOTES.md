@@ -971,3 +971,40 @@ normalization from it, so `--check` then failed on the `Generated <date>` line e
 STALE swapped for another. Apply the SAME normalization to BOTH sides. (2) The generated index's
 `(N lines)` footer is a parse-derived value; it is stable across CRLF/LF source materialization
 because the parse normalizes first, and the new test asserts that instead of assuming it.
+
+## 2026-10-15 — `TEST_DATABASE_URL` `28P01` was a STALE HOST, not a dead branch; migration 020 then applied and replayed green
+
+`TEST_DATABASE_URL` had been returning `password authentication failed for user 'neondb_owner'`
+(`28P01`) since at least 2026-10-14 — the exact error a dead or re-created branch produces — so
+`test:api:db`, `verify:pi1` and every other guarded script read as "the branch is gone". It was not
+gone. **The Neon connector answers this question in three calls, without a credential:**
+`list_projects` (project `morocco-pc`, `gentle-fog-04615130`), `list_branches --include-deleted`
+(both `production` and `test` present and `ready`, nothing deleted), then `list_branch_computes`
+per branch, which returns each branch's CURRENT host. The `.env` value for `DATABASE_URL` matched
+production's endpoint exactly; the `TEST_DATABASE_URL` host matched NO endpoint, because the `test`
+branch had been re-created after 2026-10-02 and **a re-creation mints a NEW endpoint**.
+
+**The repair is host-only, and that is the lesson.** A Neon role password belongs to the ROLE, not
+to the endpoint, so re-pointing `TEST_DATABASE_URL` at the branch's current host — password
+untouched, value never printed or echoed — connected on the FIRST attempt. Do not rotate the
+credential and do not re-create the branch for a stale endpoint. Confirm the swap with the
+prescribed 1-row SELECT through `resolveTestDbUrl`, which is also what proves the two hosts differ
+after pooler normalization — the thing that tells a real fix apart from two hosts pointing at the
+same database.
+
+**A re-created branch resets its ledger to its parent's, so "019 is applied on the branch" prose
+goes stale silently.** The repaired branch sat at ledger 18 with 0 of the 8 new columns, i.e. 019
+AND 020 were both pending, although the docs recorded "TEST ledger = 19". After ANY branch
+re-creation, re-apply the tail (`node scripts/run-migrations.js --test-db`) before trusting or
+citing branch state — and expect the branch's DATA to be the parent snapshot as of the
+re-creation, not the old branch's.
+
+Measured 2026-10-15 after the repair, each on its own exit status: `--test-db --dry-run` listed
+`019` then `020` IN ORDER; `--test-db` wrote both (ledger 18 -> 20); `--check` reported no pending;
+all 8 columns present and nullable; 020's backfill over 100 real products = 100 slugs / 100
+distinct / 100 display_names / 0 still `Seed `-prefixed / 0 format violations / 0 suffixes, with
+products and offers unchanged (no row created or destroyed); `verify:replay --test-db
+--reference=test` = **20 files, 0 drift** (columns 370/370, checks 79/79, fks 60/60, indexes
+100/100 — the +5 columns, +1 check and +1 index over the 019-era 365/78/60/99 are exactly 020's
+additions); `scripts/test-orchestrator-full-run.js` = **36 pass / 0 fail**, pass-facts read-back
+included; `npm run test:api:db` = **1 passed / 0 failed**, residue 0.

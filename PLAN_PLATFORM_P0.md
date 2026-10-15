@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-14  
 **Author:** Platform agent (agent/platforms), on behalf of the approved review.  
-**Purpose of this file:** the single, dated, auditable record of what the platform agent agreed to build next — migration 019 (persisted `budget_floor` / `engine_version` / `strategy_key` + the column-scoped UPDATE grants that resolve the production-role write problem), migration 020 (`display_name` / `slug` / image fields with a deterministic backfill), the pass-facts write seam and API wiring that consume them, and the contract v1.1 deltas in `docs/API.md`. It is also the work breakdown by 1-hour sprints with a definition of done and a verification gate per sprint, so the execution can be driven sprint-by-sprint without re-deriving scope from prose.
+**Purpose of this file:** the single, dated, auditable record of what the platform agent agreed to build next — migration 019 (persisted `budget_floor` / `engine_version` / `strategy_key` + the column-scoped UPDATE grants that resolve the production-role write problem), migration 020 (`display_name` / `slug` / image fields with a deterministic backfill), the pass-facts write seam and API wiring that consume them, and the contract v1.1 → v1.2 deltas in `docs/API.md`. It is also the work breakdown by 1-hour sprints with a definition of done and a verification gate per sprint, so the execution can be driven sprint-by-sprint without re-deriving scope from prose.
 
 **Decision id:** Decision 46 (Platform manual/019/020 + persisted pass facts). The commit of this file is the pool-independent record of that decision; the actual decision entry in `docs/RECOMMENDATION_ENGINE_DECISIONS.md` is written in Sprint 2 alongside the seam. **`docs/RECOMMENDATION_ENGINE_DECISIONS.md` Decision 46 is the SINGLE AUTHORITATIVE STATEMENT of that contract;** this file owns the work breakdown and the execution records and cites the entry instead of restating it, so each contract detail lives in exactly one place.
 
@@ -14,7 +14,7 @@
 
 ## Outcome
 
-After this plan, the API can answer a GET with the same facts it produced on the POST (budget floor, engine version, strategy key, and per-component slug/display_name), the user no longer sees `Seed <model>` tokens through `components[].name`, and the contract moves to v1.1. The bigger items — region coarsening / topology move, loader batching (engine-owned), real-data ingestion, and ops — stay explicitly planned, not absorbed into "done."
+After this plan, the API can answer a GET with the same facts it produced on the POST (budget floor, engine version, strategy key, and per-component slug/display_name), the user no longer sees `Seed <model>` tokens through `components[].name`, and the contract moves to v1.1 and then v1.2. The bigger items — region coarsening / topology move, loader batching (engine-owned), real-data ingestion, and ops — stay explicitly planned, not absorbed into "done."
 
 ## Scope (build now)
 
@@ -34,7 +34,7 @@ After this plan, the API can answer a GET with the same facts it produced on the
 - `apps/api/src/contracts/recommendations.js`
 - `apps/api/test/unit/contract.test.js`
 - `docs/API.md` (the v1.1 deltas)
-- optional: `apps/api/test/unit/openapi-v1.1.json` (the API contract snapshot)
+- optional: `apps/api/test/unit/openapi-v1.2.json` (the API contract snapshot; the v1.1 snapshot was superseded and deleted)
 
 **Not started this session (recorded as still-planned):**
 - P1 step 1 (region/topology move) — operator action, not a code change.
@@ -155,9 +155,13 @@ The deliverable was the decision RECORD, not a second copy of it. **Decision 46 
 
 ## Sprint 3 — author 019 and 020, review against the recipe, branch-apply and replay (60 min)
 
-**Status 2026-10-14: 019 DONE, 020 NOT STARTED.** This pass was scoped to 019 alone,
-because 019 is what unblocks the red write gates; 020 and the 20-migration replay tail
-are still open. Evidence in "Sprint 3 execution record — 019" below.
+**Status 2026-10-15: 019 and 020 BOTH DONE and BOTH applied on the TEST branch.**
+019 was the first pass because it unblocked the red write gates. 020 was authored the same day and
+its generator was executed read-only first; `TEST_DATABASE_URL` had been failing `28P01` on a stale
+host (NOT a dead branch - see `DEVELOPMENT_NOTES.md`, 2026-10-15), and repairing it revealed the
+branch at ledger 18, so BOTH files were still pending there. They were then applied together,
+replay-verified at 0 drift, and the branch-side corroboration gates re-ran green. Evidence in the
+two "Sprint 3 execution record" sections below.
 
 **Date:** 2026-10-14  
 **Purpose:** write the two migrations, review them against the migration recipe, and apply + replay them on the TEST branch. **Do not** run `gen:schema` in this sprint — that runs against the shared DB and would desync the generated docs from the digest gate target.
@@ -215,6 +219,11 @@ One comparator trap worth keeping: the floor cannot be compared with `util.isDee
 Deliberately NOT done in this pass: `gen:schema` (this sprint forbids it — it targets the shared DB and would desync the digest gate before 019 is applied there), `020`, and the shared apply (Sprint 5). Because 019 is applied only on the branch, the SHARED database still lacks the three columns, so a write against shared still fails `42703`: the transition hazard above is closed for the branch, not for shared.
 
 ### Migration 020 shape
+
+**SUPERSEDED 2026-10-15 - the file is authored; the sketch below is not the shipped SQL.**
+`database/migrations/020_product_identity_and_media.sql` replaces its `row_number()` generator
+(not collision-free across bases) and drops `ALTER COLUMN slug SET NOT NULL` (it would break
+every existing product writer). See the 020 execution record below.
 
 ```sql
 ALTER TABLE product
@@ -288,6 +297,77 @@ CREATE UNIQUE INDEX uq_product_slug ON product (slug);
 - Lock note: `ALTER COLUMN slug SET NOT NULL`, the validating `ADD CONSTRAINT chk_product_slug_format` and the non-concurrent `CREATE UNIQUE INDEX` each take ACCESS EXCLUSIVE on `product`. Trivially fine on an empty replay target and brief on the branch, but the shared DB is the only dev DB and is where the API connects in P3 — sequence them in a quiet window rather than assuming the lock is free.
 - `display_name` does not participate in any seed foreign key; it is purely user-facing.
 
+### Sprint 3 execution record — 020 (2026-10-15)
+
+**AUTHORED and APPLIED on the TEST branch 2026-10-15.**
+`database/migrations/020_product_identity_and_media.sql` is 166 lines, CRLF, and was applied after
+019 in the same pass (ledger 18 -> 20); see the measurements at the end of this record. Its
+generator had first been executed READ-ONLY, from the shipped text, which is how the two defects
+below were found before any apply. It is applied on the TEST branch ONLY: the shared database is
+still at 018, so `product.slug` / `display_name` and the three image columns do not exist there.
+
+**Two defects the EXECUTION caught, both fatal at first apply, neither visible by reading.**
+`min(uuid)` does not exist in PostgreSQL, so the sketch's ordering primitive could never have
+run at all. And the walk's anchor was `integer` while `row_number()` is `bigint`, which Postgres
+rejects as a recursive-query type conflict. The generator now sequences on
+`row_number() OVER (ORDER BY p.id)` — uuid ordering is byte-wise, not collation-dependent, so it
+is deterministic and code-unit ordered as AGENTS.md section 5 requires. This is the whole reason
+the generator was executed rather than inspected: reading it twice found neither.
+
+**Why `slug` is NULLABLE (deliberate deviation, measured).** `ALTER COLUMN slug SET NOT NULL`
+would break every product writer that does not supply one. Measured 2026-10-15:
+`database/seeds/001_minimal_builds.sql` and `002_catalog_expansion.sql` (3 INSERTs),
+`scripts/test-compatibility.js` (4), `test-layer3.js`, `test-layer4.js`,
+`verify-hardware-schema.js` (8) and `verify-pool-independence.js` — so `npm run seed`, both layer
+scripts and the `verify:pi1` gate would start failing on their next insert. NULL means UNKNOWN
+in this schema (AGENTS.md section 8); the unique index still forbids two EQUAL slugs, and a later
+migration can add NOT NULL once the writers supply one.
+
+**Proven by execution** — the generator lifted VERBATIM from the shipped file (the probe reads it
+and strips only the outer `UPDATE`), run read-only against the shared catalog:
+
+| Probe | Result |
+|---|---|
+| live catalog, 104 products | 104 assigned / 104 distinct / 0 NULL / 0 suffixed / 0 CHECK violations |
+| adversarial set: duplicate names, a product literally named `Alpha-Beta-2`, and one curated slug `alpha-beta-2-2` | greedy: **0 duplicates, 0 clashes** — `alpha-beta, alpha-beta-2, alpha-beta-2-3, alpha-beta-2-4, alpha-beta-3, alpha-beta-4, alpha-beta-2-5` |
+| the SAME set through the sketch's `row_number()` generator | **2 duplicates** (`alpha-beta-2`, `alpha-beta-3`) and **1 clash** with the curated slug — the hazard is real, not theoretical |
+| empty `product` table (the replay target) | walk = the seed row only, so the `UPDATE` matches nothing and the file cannot fail on an empty DB |
+| re-run with every slug already assigned | 0 rows written — idempotent, and a seeded/curated slug is never overwritten |
+| `chk_product_slug_format` regex | rejects `''` and uppercase, accepts suffixed forms; NULL yields NULL, so the CHECK passes for NULL by design (that is what NULLABLE buys) |
+
+**Gates that ran:** `run-migrations.js --dry-run` lists `019` then `020` in order — the sprint's
+own ordering gate, satisfied against the shared ledger; `verify-docs --offline` PASS including
+`migrations-contiguous` at 20 files; `AGENTS.md` section 4's range refreshed to `001`–`020`
+(the `migrations-range-documented` gate warns otherwise).
+
+**Measured ON THE BRANCH after `TEST_DATABASE_URL` was repaired (2026-10-15).** Its stale HOST,
+not a dead branch, had been the blocker — see `DEVELOPMENT_NOTES.md`, 2026-10-15 — and the repair
+exposed the branch at ledger 18, so 019 and 020 were both still pending and were applied together:
+
+| Gate | Result |
+|---|---|
+| `run-migrations.js --test-db --dry-run` | pending: `019`, `020` IN ORDER |
+| `run-migrations.js --test-db` | `MIGRATED` 019 then 020; ledger 18 -> 20 |
+| `run-migrations.js --test-db --check` | no pending migrations |
+| column shape read-back | all 8 columns present, correct types (`budget_floor` jsonb, the rest text), all nullable, no default |
+| 020 backfill over 100 real products | 100 slugs / **100 distinct** / 100 display_names / **0 still `Seed `-prefixed** / 0 format violations / 0 suffixes |
+| row counts before vs after | products 100, offers 101 unchanged — no row created or destroyed |
+| `chk_product_slug_format` + `uq_product_slug` | both present on `product` |
+| `verify:replay --test-db --reference=test` | **20 files replayed, 0 drift** (columns 370/370, checks 79/79, fks 60/60, indexes 100/100) |
+| `test-orchestrator-full-run.js` | **36 pass / 0 fail**, including the pass-facts read-back |
+| `npm run test:api:db` | **1 passed / 0 failed**, residue 0 |
+
+The replay deltas over the 019-era numbers (365/78/60/99) are exactly 020's additions: +5 columns,
++1 check, +1 index. The dry-run and the empty-target run of the generator had already been proven
+read-only before the apply, so the branch apply is the first time the DDL itself executed — it
+succeeded on the first attempt, on a branch carrying 100 real products.
+
+**Still blocked, and not claimed:** the SHARED apply (Sprint 5, owner-gated on a Neon restore
+point), `gen:schema` (which targets the shared DB and would desync the digest gate before that
+apply), and Sprint 4's product-identity half (`slug` / `COALESCE(display_name, name)` in the API
+read path and the "no `Seed ` prefix" guard) — now unblocked by data but not yet built. The
+`slug` column is NULLABLE by the deliberate deviation above.
+
 ### Verification at the door
 
 - `node scripts/run-migrations.js --dry-run` → pending: 019, 020 in order.
@@ -304,24 +384,25 @@ CREATE UNIQUE INDEX uq_product_slug ON product (slug);
 
 ---
 
-## Sprint 4 — API read/wire + presenter + contract v1.1 + tests (60 min)
+## Sprint 4 — API read/wire + presenter + contract v1.1 + v1.2 + tests (60 min)
 
-**Status 2026-10-14: the PASS-FACTS half is DONE; the product-identity half is BLOCKED on 020.**
-`budget_floor`, `engine_version` and `strategy_key` are read back and served on both
-verbs, the contract is v1.1 with a committed OpenAPI snapshot, and the read path is
-proven on the branch. Everything this sprint says about `p.slug`,
-`COALESCE(p.display_name, p.name)`, `components[].slug` and the "no `Seed ` prefix"
-guard is **not done and cannot be** — those columns are migration
-`020_product_identity_and_media.sql`, which is not in the tree. Evidence in
-"Sprint 4 execution record — pass facts" below.
+**Status 2026-10-15: BOTH halves are DONE.** The pass-facts half (v1.1, migration 019)
+landed 2026-10-14: `budget_floor`, `engine_version` and `strategy_key` are read back and
+served on both verbs. The product-identity half (v1.2, migration 020) landed 2026-10-15:
+each component carries its persisted `slug`, `name` is read from
+`COALESCE(p.display_name, p.name)`, the contract moved to v1.2 with a committed
+`openapi-v1.2.json` (the v1.1 snapshot was DELETED, not kept as a second plausible
+contract), and the "no `Seed ` prefix" guard is asserted by both API suites against a
+real branch row read. Migration 020 IS in the tree and applied on the TEST branch
+(ledger 20). Evidence in the two execution records below.
 
 **Date:** 2026-10-14  
-**Purpose:** make the read path and the presenter surface the new columns on both POST and GET, so the two verbs agree on persisted fields, the user sees human-readable names and slugs, and the contract moves to v1.1.
+**Purpose:** make the read path and the presenter surface the new columns on both POST and GET, so the two verbs agree on persisted fields, the user sees human-readable names and slugs, and the contract moves to v1.1 and then v1.2.
 
 ### Files to add or edit
 
 **Add:**
-- `apps/api/test/unit/openapi-v1.1.json` — committed snapshot of the OpenAPI document served at `/v1/docs/json` after the v1.1 change. Regenerate only when the contract is deliberately changed; the test pins it byte-for-byte.
+- `apps/api/test/unit/openapi-v1.2.json` — committed snapshot of the OpenAPI document served at `/v1/docs/json`. v1.1 shipped its own snapshot; the v1.2 change replaced it (the old file was DELETED rather than kept as a second plausible contract, and `info.version` is now `1.2.0`), so there is exactly one live snapshot. Regenerate only when the contract is deliberately changed; the test pins it byte-for-byte.
 
 **Edit:**
 - `apps/api/src/repository.js` — `SELECT_QUERY_SQL` adds `budget_floor`; `SELECT_BUILDS_SQL` adds `r.engine_version`, `r.strategy_key`, `p.slug`, and `COALESCE(p.display_name, p.name) AS product_name`.
@@ -329,7 +410,7 @@ guard is **not done and cannot be** — those columns are migration
 - `apps/api/src/contracts/recommendations.js` — TypeBox response schemas updated for `budget_floor`, `engine_version`, `strategy_key`, `components[].slug`.
 - `apps/api/test/unit/contract.test.js` — updated for the new fields.
 - `docs/API.md` — v1.1 deltas: new fields persisted, the "POST and GET differ in no persisted field" table, the reconcile note for the two latency figures (75/142 ms vs 74/147 ms), any new limitations surfaced; **and the §Production-mode role SCRIPT itself, not just prose about it** — it gains the two column-scoped GRANT statements Decision 46 item 7 specifies, and its `has_table_privilege` / `has_column_privilege` self-check lines gain the three column assertions (the table-level UPDATE answers stay `f`). A prose note alone would leave the script pinning a role that cannot run the new writer.
-- `apps/api/src/server.js` — OpenAPI `info.version` to `1.1.0` (path via `@fastify/swagger`'s `openapi.info`; confirm the exact path during the sprint and pin it).
+- `apps/api/src/app.js` — OpenAPI `info.version` to `1.1.0` (the swagger registration lives here, not in `server.js`; the path is `@fastify/swagger`'s `openapi.info`; confirm it during the sprint and pin it).
 
 ### Read-path change details
 
@@ -348,8 +429,8 @@ guard is **not done and cannot be** — those columns are migration
 
 ### OpenAPI snapshot test
 
-- A committed `openapi-v1.1.json` is compared byte-for-byte to the document served at `/v1/docs/json`; the test fails if the served document differs. Regenerate the snapshot only when the contract is deliberately changed.
-- This is the simple version of the P2 "contract v1.1" item; the rest of P2 stays planned.
+- A committed `openapi-v1.2.json` is compared byte-for-byte to the document served at `/v1/docs/json`; the test fails if the served document differs. Regenerate the snapshot only when the contract is deliberately changed, and replace the old file rather than adding a second one.
+- This is the simple version of the P2 "contract version" item; the rest of P2 stays planned.
 
 ### Verification at the door
 
@@ -362,7 +443,7 @@ guard is **not done and cannot be** — those columns are migration
 
 ### Definition of done
 
-- `repository.js`, `recommendations.js`, `contracts/recommendations.js`, `contract.test.js`, `server.js`, `docs/API.md`, and the OpenAPI snapshot are updated for v1.1.
+- `repository.js`, `recommendations.js`, `contracts/recommendations.js`, `contract.test.js`, `app.js`, `docs/API.md`, and the OpenAPI snapshot are updated for v1.1, then v1.2.
 - The read path surface the new columns on both verbs.
 - No `components[].name` starts with `Seed ` (backfill or presenter proved by test).
 - POST and GET read back byte-identical persisted fields for a real pass on the branch (parity + idempotency).
@@ -415,9 +496,10 @@ per-rank `engine_version` / `strategy_key` are compared against a direct SELECT 
 spy that swallowed `engineVersion` would leave the column NULL and make a READ-path test
 fail for a reason unrelated to the read path.
 
-Contract v1.1 is pinned by a committed `apps/api/test/unit/openapi-v1.1.json`
+Contract v1.1 is pinned by a committed snapshot
 (11 491 bytes, byte-for-byte, deterministic across app instances) plus a second test that
-names what the snapshot is for. `@fastify/swagger` renders TypeBox's
+names what the snapshot is for; **superseded 2026-10-15** by `openapi-v1.2.json`, which
+replaced it rather than joining it (see the product-identity execution record below). `@fastify/swagger` renders TypeBox's
 `Union([Type.String(), Type.Null()])` as OpenAPI 3.0 `nullable: true`, not `anyOf` —
 worth knowing before writing an assertion against it.
 
@@ -435,6 +517,62 @@ Verified, each on its own exit status:
 `GRANT` statements themselves (an operator step, recorded in `docs/API.md`'s role script
 and self-checks rather than executed against a shared database); the A10 golden coverage
 for `strategy_key` (OG-46, a separate gap).
+
+### Sprint 4 execution record — product identity (2026-10-15)
+
+The second half of Sprint 4 landed: the API serves product identity from the PERSISTED
+rows. `SELECT_BUILDS_SQL` now reads `p.slug AS product_slug` and
+`COALESCE(p.display_name, p.name) AS product_name`; the presenter passes `slug` through
+unchanged (nullable like its column); the TypeBox `ComponentSchema` declares it; the
+OpenAPI document moved to `1.2.0`; and `apps/api/test/unit/openapi-v1.2.json` REPLACED the
+v1.1 snapshot rather than joining it.
+
+**The alias, not the guard, is what the DB suite proves.** The unit fixture was CORRECTED to
+the post-020 shape — its rows now carry `product_name: 'CPU Alpha'` and a `product_slug` —
+because relaxing the assertion instead would have made the fixture stop modelling the join
+it exists to model. That correction is also why the guard cannot carry the proof alone: a
+presenter that reverted to `product.name` would pass a no-`Seed ` guard run against a
+corrected fixture. The DB suite is the real proof — it drives a real pass on the branch and
+asserts every served component carries a `slug` satisfying `chk_product_slug_format` and
+that no served name carries the prefix.
+
+**The guard is proved to FIRE, not merely to pass.** A separate test sabotages one component
+name, asserts the guard reports exactly that component together with its `product_id`, and
+that the assertion throws naming it — a guard whose walk was broken (wrong field, wrong
+nesting) would otherwise report zero offenders on every suite and look identical to a clean
+catalog. `apps/api/test/helpers/seed-guard.js` is the single owner both suites import, and
+`docs/TEST_MAP.md` records that its scope is regression, not a by-construction backfill
+proof.
+
+**The sharpest operational consequence: the component read now needs 019 AND 020.**
+`SELECT_BUILDS_SQL` reads `p.slug` / `p.display_name` and `SELECT_QUERY_SQL` reads
+`budget_floor`, so against a database below the required migration the SELECT fails `42703`
+and the request answers the generic `500 INTERNAL_ERROR` (`503` means only "no active scoring model"). Measured 2026-10-15: the shared database is at
+ledger 18 with none of those columns, the TEST branch at 20 with all of them. So
+`API_ALLOW_SHARED=1` cannot produce an answer until the Sprint 5 shared apply lands — now
+stated in `docs/API.md` (Schema prerequisite + Known limitations), in `CONTEXT.md`, and in
+the OG-45 register row, rather than only in this plan.
+
+Verified, each on its own exit status (re-run independently 2026-10-15):
+
+| Check | Result |
+|---|---|
+| `npm run test:api` | **45 pass / 0 fail** (40 pre-existing + identity, guard-fires, v1.2 snapshot) |
+| `npm run test:api:db` | **1 passed / 0 failed**, residue 0 — real branch rows |
+| `npm run test:unit` / `test:scripts` | 1149/0/0 and 212/0 |
+| `verify:docs --offline` / `gen-decision-index --check` | PASS / clean |
+| branch identity read-back (read-only) | 100 products: 100 display_names, **0 `Seed `-prefixed**, 0 mismatching the backfill regexp, 100 distinct slugs, 0 NULL, `chk_product_slug_format` present |
+| shared read-back (read-only) | ledger 18, no `slug` / `display_name` / `budget_floor` — the 503 path |
+| `gen:schema` | **NOT run** — it targets the shared DB; Sprint 5 owns it |
+
+Deliberately NOT done here: the shared apply (Sprint 5, owner-gated on a Neon restore
+point), the operator-run column-scoped GRANTs, and the A10 golden coverage for
+`strategy_key` (OG-46). One note for Sprint 5: `gen-schema-reference.js --check` exits 1 on
+this tree, but for `docs/DATA_STATE.md` only — `SCHEMA_REFERENCE.md` is up to date and the
+`verify-docs --live` schema digest passes. `DATA_STATE.md` is deliberately ungated and its
+shared counts had already drifted (products 100 → 104) before this change.
+
+---
 
 ## Sprint 5 — shared-apply gate, generated-doc refresh, and P1–P4 carried-as-planned review (60 min)
 
@@ -521,7 +659,7 @@ The plan is done when:
 1. `019_recommendation_pass_facts.sql` and `020_product_identity_and_media.sql` are committed, reviewed against `add-a-migration.md`, applied on the TEST branch, and replay-verified 0 drift at the 20-migration tail.
 2. The pass-facts seam is real: `full-run.js` threads a live `passFacts` to the commit, the new writer persists `budget_floor` on `recommendation_query` and `engine_version` / `strategy_key` on `recommendation_result`, with a column-scoped GRANT decided for each of those three columns, and an undefined pass-facts call issues no statements.
 3. `name` is untouched, `display_name` is generated deterministically from the `Seed ` prefix, `slug` is unique and deterministic with its own CHECK, and the API's read and write paths both surface them — so the `Seed ` tokens no longer reach end users through `components[].name`.
-4. The contract is v1.1 in `docs/API.md` and pinned by a committed OpenAPI snapshot test.
+4. The contract is v1.2 in `docs/API.md` and pinned by a committed OpenAPI snapshot test (`openapi-v1.2.json`, replacing the v1.1 file).
 5. The larger P1–P4 items are explicitly recorded as still-planned (engine-owned loader batching, topology move, real-data gate, ops) so nothing is silently absorbed into "done".
 6. No regression on the suite that matters: `test:unit` 0 fail, `test:scripts` 0 fail, `test:api` 0 fail, `test:api:db` 1/0 with residue 0, `verify:replay` 0 drift, `verify:pi1` PASS on paired re-run, `check-deferred-rules` 0 violations, `check-offer-freshness --fail-days=14` green, golden harness exits 0 at the v1 pin and at `launch-v2@1.1.0`.
 
