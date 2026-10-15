@@ -130,9 +130,7 @@ line of a shared apply. Three findings worth keeping:
   and the note reaching the persisted line). Read that as the real shape of
   the gap: plumbing, not the log format.
 - **A blank note is refused (exit 2); a non-blank one is kept verbatim.** The
-  note says WHAT the apply was for (as of 2026-10-15 the `target` field itself names the database
-  — a `db:<12 hex>` digest from `applyLogTarget` — so the note no longer has to), and a note that
-  explains nothing is worse
+  note says WHAT the apply was for — a note that explains nothing is worse
   than none, and evidence is never normalized. The `=<value>` form is
   mandatory, exactly as for `--restore-point`.
 - **FOLLOW-UP (2026-10-15): the audit `target` NAMES the database.** `applyLogTarget(connectionString)`
@@ -374,7 +372,7 @@ Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 
 - Sprint 1 Steps 4–7 are owner actions (new cloud resources, spend). Steps 1–3, 8 and 9 are agent work.
 - Point the API at the NEW project only after Step 6's parity check is clean; keep the original project untouched as the fallback.
 - Write-capable tests always via `TEST_DATABASE_URL`; the shared dev DB is never a write target.
-- Apply migrations only through the ledger; a non-`--test-db` apply needs `--restore-point=<id>` and now a `--note` naming the target.
+- Apply migrations only through the ledger; a non-`--test-db` apply needs `--restore-point=<id>`; the appended line's `target` names the database on its own (every shared-target run prints it as `AUDIT TARGET:`), and `--note` says what the apply was for.
 - `eval:scenarios` refuses to run while ANY unmarked `recommendation_query` row exists — check `--cleanup-orphans` before blaming a change.
 - CRLF everywhere in `docs/` and `database/`; never normalize an existing file's endings.
 
