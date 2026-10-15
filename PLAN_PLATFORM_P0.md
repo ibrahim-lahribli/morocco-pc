@@ -6,7 +6,7 @@
 
 **Decision id:** Decision 46 (Platform manual/019/020 + persisted pass facts). The commit of this file is the pool-independent record of that decision; the actual decision entry in `docs/RECOMMENDATION_ENGINE_DECISIONS.md` is written in Sprint 2 alongside the seam. **`docs/RECOMMENDATION_ENGINE_DECISIONS.md` Decision 46 is the SINGLE AUTHORITATIVE STATEMENT of that contract;** this file owns the work breakdown and the execution records and cites the entry instead of restating it, so each contract detail lives in exactly one place.
 
-**Branch:** `agent/platforms` at commit `c8c16b9`, identical to `origin/master`. The branch is clean and has zero in-flight platform commits.  
+**Branch:** `agent/platforms`. **UPDATED 2026-10-15: all five platform sprints are COMMITTED here**, on top of `c8c16b9` — the merge commit `origin/master` still points at — so the work is UNMERGED. At planning time the branch was `c8c16b9`, identical to `origin/master` with zero in-flight platform commits.  
 **Target version:** `0.1.0` in `package.json`.  
 **Database reality checked before planning:** the commit seam already holds the pieces it would need to thread a `passFacts` ([commit.js:118](src/recommendation/orchestrator/commit.js#L118), [full-run.js:104](src/recommendation/orchestrator/full-run.js#L104)); the production role is documented as having **no UPDATE** ([docs/API.md](docs/API.md)); the production-role resolution is Decision 46 item 7 - column-scoped grants, one per written column, never a row-wide UPDATE - whose operator script lives in `docs/API.md` Production mode; `strategy_key` stays TEXT (precedent: `use_case` is TEXT); the new writer follows the proven pattern in `persist-rejections.js` (DML-only boundary, replace-not-append idempotency, boundary test banning SELECT/BEGIN/COMMIT). Column shapes read from the generated [SCHEMA_REFERENCE.md](docs/SCHEMA_REFERENCE.md): `product` 9 columns, `recommendation_query` 9, `recommendation_result` 6; migrations end at `018`; seeds end at `016`.
 
@@ -142,7 +142,7 @@ The deliverable was the decision RECORD, not a second copy of it. **Decision 46 
 - No DB in this sprint; schema not yet created.
 - **Known transition hazard — record it here, do not discover it from a red job.** `full-run.js` supplies `passFacts` unconditionally, so from Sprint 2 until 019 lands `persistPassFacts` runs on EVERY pass and fails `42703` against a schema without the three columns (measured 2026-10-14: 0 of 3 present on the shared DB AND on the TEST branch). Every DB-backed write gate is therefore RED on this branch — `test-orchestrator-full-run.js`, `measure-orchestrator.js`, `eval:scenarios`, `verify:pi1`, `test:api:db` — and the nightly `recurring-gates` job would fail at `test:api:db`. Accepted only as a pre-merge branch state on the assumption that Sprint 3 lands 019 immediately; if Sprint 3 is deferred, land 019 alone first.
 
-**RESOLVED ON THE TEST BRANCH 2026-10-14 (Sprint 3, 019 only).** `019_recommendation_pass_facts.sql` is authored, applied with `--test-db` and replay-verified 0 drift, and all five named gates were re-verified green on the branch: `test-orchestrator-full-run.js` 36/0, `measure-orchestrator.js` exit 0, `eval:scenarios` exit 0 at 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN, `verify:pi1` PASS with 0 drift, `test:api:db` 1/0. **This hazard is NOT closed for the SHARED database:** 019 is applied on the branch only, so the shared schema still lacks all three columns and any write against shared still fails `42703`. The shared apply is the Sprint 5 decision. See "Sprint 3 execution record — 019" below.
+**RESOLVED ON THE TEST BRANCH 2026-10-14 (Sprint 3, 019 only).** `019_recommendation_pass_facts.sql` is authored, applied with `--test-db` and replay-verified 0 drift, and all five named gates were re-verified green on the branch: `test-orchestrator-full-run.js` 36/0, `measure-orchestrator.js` exit 0, `eval:scenarios` exit 0 at 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN, `verify:pi1` PASS with 0 drift, `test:api:db` 1/0. **This hazard is NOT closed for the SHARED database:** 019 is applied on the branch only, so the shared schema still lacks all three columns and any write against shared still fails `42703`. **[SUPERSEDED 2026-10-15 (Sprint 5): 019 AND 020 are now applied on the SHARED database from restore point `br-damp-grass-axyri6yl`, so this clause is false — the hazard is closed on BOTH databases.]** The shared apply is the Sprint 5 decision. See "Sprint 3 execution record — 019" below.
 
 ### Definition of done
 
@@ -562,7 +562,7 @@ Verified, each on its own exit status (re-run independently 2026-10-15):
 | `npm run test:unit` / `test:scripts` | 1149/0/0 and 212/0 |
 | `verify:docs --offline` / `gen-decision-index --check` | PASS / clean |
 | branch identity read-back (read-only) | 100 products: 100 display_names, **0 `Seed `-prefixed**, 0 mismatching the backfill regexp, 100 distinct slugs, 0 NULL, `chk_product_slug_format` present |
-| shared read-back (read-only) | ledger 18, no `slug` / `display_name` / `budget_floor` — the 503 path |
+| shared read-back (read-only, **BEFORE** the Sprint 5 apply) | ledger 18, no `slug` / `display_name` / `budget_floor` — the generic `500 INTERNAL_ERROR` path (`503` means only "no active scoring model") |
 | `gen:schema` | **NOT run** — it targets the shared DB; Sprint 5 owns it |
 
 Deliberately NOT done here: the shared apply (Sprint 5, owner-gated on a Neon restore
@@ -700,7 +700,7 @@ this instance and reported as unavailable rather than tuned around.
 
 ## How to run this safely on the agent/platforms branch
 
-- `git status` first (shared checkout; `agent/platforms` is identical to `origin/master` at `c8c16b9`).
+- `git status` first (shared checkout; **as of 2026-10-15 `agent/platforms` carries all five platform sprints on top of `c8c16b9` and is UNMERGED, since `origin/master` is still `c8c16b9`**; the planning-time state was `c8c16b9`, identical to `origin/master`).
 - Sprint 1–2: no schema, no DB; work against the engine seam with fake clients; the commit/full-run suites are unit-only and already pinned. Keep the 3/4-arg call sites untouched.
 - Sprint 3: create the two migration files, run `run-migrations.js --dry-run` for order, then branch-apply with `run-migrations.js --test-db`. Do **not** run `gen:schema` here.
 - Sprint 4: wire the read path, run the fake-read-path tests + contract test, then branch-state parity with `npm run test:api` (DB-free) and a real `test:api:db` parity proof on the branch (residual cleanup asserted).
