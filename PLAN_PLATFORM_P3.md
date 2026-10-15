@@ -1,0 +1,264 @@
+# PLATFORM PLAN — P3: ops (CI truth, the production role, two environments, observability)
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** close the gap between "the pipeline is wired" and "the pipeline has run" — a dispatched CI job that is green, a production database role proven under load, two named environments with a deploy that refuses to ship ahead of its schema, and error/uptime signal that would actually page someone.
+
+**Architecture:** every sprint here produces EVIDENCE, not features. Three of the five are owner-gated (GitHub dispatch, cloud accounts, database DDL on shared); the agent's job in those is to prepare the exact command, then read and record the result. Nothing in this plan may weaken a gate to make it pass.
+
+**Tech Stack:** GitHub Actions (`.github/workflows/ci.yml`, Node 22), PostgreSQL 18 on Neon, `scripts/run-migrations.js` (ledger-driven, restore-point-guarded), Fastify/pino JSON logs, Fly.io or Render, Sentry (`@sentry/node`) per the service catalog.
+
+**Spec:** this file; the P3 section of the M3 roadmap; `docs/API.md` §Production mode (the role script, its self-check and its three-step TEST-branch rehearsal plan, designed 2026-10-07 and **not yet applied**); `docs/DEVELOPMENT_NOTES.md` (CI/DB operational lessons); **OG-52** (the P3 carryover) and **OG-30** (offer freshness) in `docs/OPEN_GAPS.md`.
+
+**Date:** 2026-10-15 · **Branch:** `agent/platforms` · **Decision id:** only Sprint 3 needs one (the environment/deploy contract).
+
+**State this plan starts from (all measured 2026-10-15):** `recurring-gates` exists with `workflow_dispatch` and has **never been dispatched**; the `morocco_pc_api` role does not exist on shared (and therefore no column-scoped GRANT is applied); there is no staging or production environment, no deploy workflow, no error tracking, no uptime check, no log drain; `apps/api/Dockerfile` has never been built because no Docker is available on the authoring box; `/v1/health` answers **200 even when the database is down**, with `{ status, db, engine_version }`.
+
+## Global Constraints
+
+- **Never write to the shared Neon database outside the migration ledger**, and never apply a migration to shared without a recorded restore point (`--restore-point=<id>`, `^[A-Za-z0-9_-]{8,}$`). `--baseline` is guarded too.
+- **Never reset, drop or truncate shared.** Never point a write test at it; write-capable tests use `TEST_DATABASE_URL` through `scripts/lib/db-url.js`.
+- **A gate that cannot prove it cleaned up has not proved anything.** Any probe that creates a role, a row or a fixture removes it in `finally`, asserts residue 0 LAST, and fails the run when cleanup fails. `process.exit(code)` ignores `process.exitCode`, so a cleanup verdict must be folded into the exit path.
+- **Never weaken a gate, skip a test, or raise a threshold to get a green run.** A red nightly is a result to record, not to silence.
+- **No secret ever enters the tree, a log line, or a chat message.** Values live in GitHub secrets and the host's secret store; the repo holds key names in `.env.example` only. Errors are logged without a body, a URL or a credential — that rule already holds in `apps/api/src` and must keep holding.
+- **The API's write target guard stays on.** Reaching `DATABASE_URL` requires `API_ALLOW_SHARED=1` explicitly, and only in a production-role configuration.
+- **Docs are CRLF.** Adding a decision bumps the counts in `scripts/verify-docs.js` and requires `npm run gen:decisions`; a migration bumps the range in `AGENTS.md` §4 and requires `npm run gen:schema`.
+- **Operator actions are recorded, not implied.** Every sprint that needs a human ends with the exact command/URL for them and a place to record the outcome (`DEVELOPMENT_NOTES.md` dated entry, plus `docs/briefs/requests.md` when the ask belongs to another owner).
+
+## Review Focus
+
+Five failure modes this plan's own tests do not fully cover, most likely first.
+
+1. **A monitor that trusts HTTP 200.** `/v1/health` answered 200 while the database was unreachable — by design, so the endpoint can distinguish "app broken" from "database broken". A naive uptime check therefore reports a total database outage as healthy. Owning sprint: Sprint 4.
+2. **A deploy that ships code ahead of its schema.** New API code against a database below the columns it reads is a 500 per request (an undefined column is an unexpected error, and 503 means only "no active scoring model"). Owning sprint: Sprint 3.
+3. **A role with a row-wide UPDATE it was never meant to have.** Decision 46 grants `UPDATE` per column so the table-level answer stays `f`; a reset that grants `UPDATE ON recommendation_result` silently re-opens the invariant. Owning sprint: Sprint 2.
+4. **A scratch database left behind by a crashed CI run.** `verify-migrations-replay.js` creates and drops one fixed name (`migrations_replay_tmp`); a killed run makes every later run fail with "database is being accessed by other users" — and the nightly is the only thing that would notice. Owning sprint: Sprint 1.
+5. **A secret that is present but wrong**, which fails as a connection timeout far from the cause. Owning sprint: Sprint 1.
+
+---
+
+## Sprint 1 — prove the recurring CI job (owner-gated, ~45 min)
+
+**Summary.** Dispatch `recurring-gates` and read the run. Record the outcome whether it passes or fails; if it fails, fix the cause (not the gate) and dispatch again.
+
+**Why now.** This is the cheapest high-value item in P3: two of its three steps (migration replay, `test:api:db`) are the strongest end-to-end checks the project has, and neither has ever executed in CI.
+
+**Owner gate:** a human with repository access must open the Actions tab and dispatch the workflow. `workflow_dispatch` accepts a **ref**, which matters — see Step 1.
+
+**Files:**
+- Modify: `.github/workflows/ci.yml` only if the run exposes a defect
+- Modify: `docs/DEVELOPMENT_NOTES.md` (a dated entry with the run URL, the ref, the conclusion and any fix)
+- Modify: `AGENTS.md` §10 / `CONTEXT.md` (the "UNVERIFIED in CI" claim, once and only once it is true)
+- Modify: `docs/OPEN_GAPS.md` (OG-52's P3 item, when closed)
+
+**Interfaces:** Consumes the two repository secrets (`DATABASE_URL`, `TEST_DATABASE_URL`) and the `concurrency` group `recurring-gates`. Produces: a recorded conclusion per step.
+
+- [ ] **Step 1: choose the ref deliberately and record why.** A `schedule` event only runs from the DEFAULT branch, and the default branch does not contain the API or these CI steps (they live on `agent/platforms`, which is ahead of `origin/master` and unmerged). `workflow_dispatch` can target a ref, so dispatch against `agent/platforms` — otherwise the run proves the job works while exercising none of the code this plan cares about. Record the ref in the same line as the outcome.
+- [ ] **Step 2 (OWNER): dispatch `ci` → `recurring-gates` on that ref.**
+- [ ] **Step 3: read the run step by step and record the conclusion of each.** Expected shape and the failure each step would surface: `Assert secrets are present` (a named error instead of a timeout), `check-offer-freshness --fail-days=14` (a real expiry inside 14 days), `verify-migrations-replay --test-db` (drift between a fresh replay and the reference, or a leftover scratch DB), `test:api:db` (the real engine against the branch; residue must be 0).
+- [ ] **Step 4: if it fails, fix the CAUSE, then re-dispatch.** The three named failure classes: a missing/misnamed secret; the Neon instance refusing a GitHub runner (dynamic IPs — the project's `allowed_ips` is empty, i.e. unrestricted, verified 2026-10-15, so this is unlikely but must be checked before assuming it); a leftover `migrations_replay_tmp`, cleared with a documented `pg_terminate_backend` + `DROP DATABASE IF EXISTS`.
+- [ ] **Step 5: update the "UNVERIFIED in CI" claims** in `AGENTS.md`, `CONTEXT.md`, `docs/API.md` and Decision 36's limitations, in the same commit as the evidence. Until the run is green, those claims stay as they are.
+- [ ] **Step 6: commit** (`docs/` + `.github/workflows/ci.yml` if changed).
+
+**Definition of done**
+- A dispatched run on a named ref is recorded with its conclusion, per step.
+- If a step failed, the cause was fixed and a second run recorded — never a gate weakened.
+- The "UNVERIFIED in CI" wording exists nowhere in current-status docs once green, and everywhere it still applies if not.
+
+**Test scenarios**
+| # | Scenario | Expected |
+|---|---|---|
+| 1.1 | Dispatch on the right ref | `recurring-gates` executes (not skipped by its `if:`) |
+| 1.2 | Missing secret | the named `::error::` line, not a connection timeout |
+| 1.3 | Scratch DB left from a crashed run | the documented clear, then a green replay |
+| 1.4 | `test:api:db` | executes ≥1 test (zero executed is a failure by design) and asserts residue 0 |
+| 1.5 | An unmarked `recommendation_query` row left on the branch | the harness fails loudly rather than silently |
+
+---
+
+## Sprint 2 — rehearse the production database role (TEST branch first, ~90 min)
+
+**Summary.** Apply the role script from `docs/API.md` §Production mode on the TEST branch, prove the engine's whole write path runs as `morocco_pc_api` with no `42501`, run the self-check with every expected value asserted, and remove the role afterwards. Only then is the shared application a measured step instead of a hope.
+
+**Why now.** It is the last residue of Platform P0 Sprint 5 (OG-52, P3): the script exists, the role does not. Every production question below (access, privilege, deploy) depends on it.
+
+**Files:**
+- Create: `scripts/rehearse-api-role.js` (creates the role + grants on the TEST branch, runs the probe as that role, asserts the self-check, then drops the role — cleanup in `finally`, residue asserted last, non-zero exit if cleanup fails)
+- Modify: `docs/API.md` §Production mode (record that the rehearsal ran, with the date and the commands)
+- Test: `scripts/lib/*.test.js` for the pure parts (the privilege expectation table), following the `scripts/lib/*.test.js` + `test:scripts` convention
+
+**Interfaces:**
+- Consumes: the `CREATE ROLE` / `GRANT` block and the `has_table_privilege` / `has_column_privilege` self-check in `docs/API.md`; `scripts/measure-api-pass-phases.js` (whose POST path is the probe); `getWriteTestDbUrl()` — a pg **config object**, not a URL string.
+- Produces: `scripts/rehearse-api-role.js` and a recorded privilege table (expected vs actual, all 20 assertions).
+
+- [ ] **Step 1: write the pure expectation table as a fixture** — the 20 privilege answers from `docs/API.md` (table-level `f` for `product`/`store_offer`, `t` for the six INSERT targets, `f` for row-wide UPDATE on `recommendation_query`/`recommendation_result`, `t` for the three column-scoped UPDATEs). Unit-test that the table is well-formed and that a missing expectation is a failure, not a skip.
+- [ ] **Step 2: write the rehearsal script.** Order: create the role (idempotent: `DROP ROLE IF EXISTS` first is destructively wrong if the role pre-exists with grants — instead fail loudly if it exists, so the rehearsal never silently mutates a role someone else created); apply the grants; open a SECOND connection authenticated as the role; drive the full POST path (`selectActiveScoringModel` → `createRecommendationQuery` → `runFullRun` → `readRecommendationResult`); assert no `42501` and residue 0; run the self-check and compare every answer to the fixture; then `DROP ROLE` in `finally` and assert `pg_roles` no longer lists it.
+- [ ] **Step 3: run it on the branch** and record the output verbatim in `docs/API.md` §Production mode. Expected: the pass completes end-to-end as `morocco_pc_api`; every privilege matches; the role is gone afterwards.
+- [ ] **Step 4: prove the negative.** Deliberately attempt one forbidden action as the role (`UPDATE recommendation_result SET rank = rank` — a row-wide UPDATE) and assert it fails `42501`; then assert the column-scoped one succeeds. A privilege test that only shows the allowed paths does not distinguish a correctly-scoped role from an over-granted one.
+- [ ] **Step 5 (OWNER): apply the role to the shared database.** This is DDL on the only dev DB and it is NOT a migration: it needs a recorded Neon restore point for the same reason an apply does, plus the password from the secret store. Record the date, the restore point and the self-check output in `DEVELOPMENT_NOTES.md`.
+- [ ] **Step 6: commit** the script + docs.
+
+**Definition of done**
+- The rehearsal runs end to end on the branch as `morocco_pc_api` with no `42501`, residue 0, and the role removed at the end.
+- The self-check's 20 answers are asserted against a fixture, including the three `t` column-scoped UPDATEs and the two `f` row-wide ones.
+- A forbidden action is proven to fail (Step 4).
+- The shared application is either recorded as done with its restore point, or explicitly recorded as still pending with the reason.
+
+**Test scenarios**
+| # | Scenario | Expected |
+|---|---|---|
+| 2.1 | Full POST path as the role | completes; no `42501`; residue 0 |
+| 2.2 | Column-scoped UPDATE | `t` for `budget_floor`, `engine_version`, `strategy_key` |
+| 2.3 | Row-wide UPDATE | `f` at table level AND a real `42501` when attempted |
+| 2.4 | Catalog writes | `f` for INSERT/UPDATE/DELETE on `product` and `store_offer` |
+| 2.5 | Cleanup | the role is absent afterwards; a failed `DROP` fails the run |
+| 2.6 | Re-running the script while the role exists | fails loudly, does not mutate an existing role |
+
+---
+
+## Sprint 3 — staging and production, with a deploy that respects the schema (owner-gated, ~120 min)
+
+**Summary.** Stand up two named environments and a deploy workflow that refuses to ship code whose schema is not present: staging (the TEST branch) and production (the EU project from P1, or shared once the owner decides).
+
+**Why now.** The M3 exit criterion is "deployed staging + prod"; and the failure this prevents is concrete — a new image against a database below 019/020 answers every request with a generic 500.
+
+**Files:**
+- Create: `.github/workflows/deploy.yml`, and one deploy config per environment
+- Modify: `docs/API.md` (a `Deploy` section: the environments, their database targets, the env vars, the pre-flight, the rollback)
+- Modify: `apps/api/.env.example` if a variable is added (`TRUST_PROXY` from P2 Sprint 2 is the likely one)
+- Create: the Decision entry for the environment contract (names, targets, who may deploy, what the rollback is)
+
+**Interfaces:**
+- Consumes: `fly.toml` + the deployed origin from P1 Sprint 1; `npm run verify:replay`; `node scripts/run-migrations.js --check`.
+- Produces: `deploy-staging` / `deploy-production` procedures; `ENGINE_VERSION` set to the deployed short SHA on each.
+
+- [ ] **Step 1: write the pre-flight as the first step of the deploy job** — `node scripts/run-migrations.js --check` against the environment's database, exiting non-zero when anything is pending, so a deploy cannot ship ahead of its schema. Run it locally against both targets first and record both answers.
+- [ ] **Step 2: define the environments** — staging targets the TEST branch (`API_ALLOW_SHARED=0`); production targets the chosen database with the `morocco_pc_api` role and `API_ALLOW_SHARED=1`. Never the same database for both, and never shared for staging.
+- [ ] **Step 3: wire the deploy** (build → pre-flight → deploy → `GET /v1/health` assertion → record `ENGINE_VERSION`), keeping the provider token in GitHub secrets.
+- [ ] **Step 4: document the rollback**: redeploy the previous image; for the database, the restore point recorded with each apply. A rollback procedure that has never been rehearsed is a paragraph, not a procedure — rehearse the image rollback once on staging and record it.
+- [ ] **Step 5: record the Decision** (environments, targets, deploy authority, rollback, and the explicit rule that a migration apply against a production database is a separate owner-gated step with its own restore point).
+- [ ] **Step 6: run the gates a decision entry triggers** (`npm run gen:decisions`, `gen-decision-index --check`, `verify:docs --offline`) and commit.
+
+**Definition of done**
+- Two environments exist and are named in `docs/API.md` with their database targets.
+- The deploy refuses to run when the target database has pending migrations (proven by forcing it).
+- A deploy records the `ENGINE_VERSION` that is then served by `/v1/health`.
+- The rollback is documented AND rehearsed once on staging.
+
+**Test scenarios**
+| # | Scenario | Expected |
+|---|---|---|
+| 3.1 | Deploy with a pending migration on the target | the job FAILS at the pre-flight, before any image swap |
+| 3.2 | Deploy with a current schema | proceeds; `/v1/health` responds with the new `ENGINE_VERSION` |
+| 3.3 | Wrong database target (staging pointed at shared) | refused by the API's own write-target guard at startup |
+| 3.4 | Image rollback | the previous image serves again; `ENGINE_VERSION` reverts |
+| 3.5 | A deploy while the DB is unreachable | fails with a named error, no half-deployed state |
+
+---
+
+## Sprint 4 — observability that would actually page someone (~90 min)
+
+**Summary.** Capture unhandled errors with a request id, and monitor health in a way that notices a database outage. The second half is the subtle one: `/v1/health` returns 200 even when `db` is `"down"`, so a monitor that only checks the status code would report a total database outage as healthy.
+
+**Why now.** It is the cheapest insurance in the plan, and the health-endpoint design makes the naive implementation wrong in exactly the failure people care about.
+
+**Owner gate:** adding a monitoring service is a new dependency and a new account — owner approval, and the DSN/token come from the secret store.
+
+**Files:**
+- Modify: `apps/api/src/app.js` (capture in the existing `setErrorHandler`, before the generic 500 reply), `apps/api/src/server.js` (initialise the client once, before `listen`), `package.json` + lockfile (the SDK), `apps/api/.env.example` (`SENTRY_DSN`, optional `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`)
+- Test: `apps/api/test/unit/errors.test.js` (capture is invoked once per 5xx with the request id; a 4xx is NOT captured); `apps/api/test/unit/import-boundary.test.js` stays green
+- Modify: `docs/API.md` (an Observability paragraph: what is captured, what is never captured, the health-body contract for monitors)
+- Modify: `CONTEXT.md`, `AGENTS.md` §3 (the dependency), `.github/workflows/ci.yml` (only if `npm ci` needs nothing new — it does not)
+
+**Interfaces:**
+- Consumes: `buildApp({ pool, repository, engine, env, logger })`; the existing error handler's `String(request.id)`; `apps/api/src/db.js`'s `ping(pool, PING_TIMEOUT_MS)`.
+- Produces: `SENTRY_DSN` (absent ⇒ the SDK is not initialised and nothing changes — the same feature-detection pattern `pino-pretty` already uses).
+
+- [ ] **Step 1: write the failing tests** — with a stubbed capture function injected through `buildApp`, an unexpected error calls it exactly once with the request id attached; a 422/429/413 does NOT call it; with no DSN the API boots and serves normally.
+- [ ] **Step 2: install and wire `@sentry/node`** — initialise in `server.js` (never in a module that a test imports), capture inside the existing error handler, and attach the request id as a tag so a user-reported 500 maps to an event. Follow the vendor's Fastify guidance for the exact call (service catalog entry: sentry, `SENTRY_DSN`); **never capture a request body, a query string or a database URL**.
+- [ ] **Step 3: prove it end-to-end on the deployed staging environment** — force one 500 through an admin-only path or a temporary route on staging, confirm the event arrives with the request id, then remove the trigger. A capture call that has never delivered an event is unproven.
+- [ ] **Step 4: fix the monitor's contract.** Configure the uptime check to assert the BODY (`db == "ok"`), not the status code, and document that in `docs/API.md`. If the chosen monitor cannot parse a body, add a separate readiness endpoint that returns 503 when `db != "ok"` — and say which was chosen and why.
+- [ ] **Step 5: decide on log retention explicitly.** JSON logs already go to stdout and the platform captures them; long-term retention needs a drain (a new service). Record the decision as "no drain yet, and here is what is lost" rather than leaving it ambiguous.
+- [ ] **Step 6: commit** (including the dependency update and the docs).
+
+**Definition of done**
+- Unexpected 5xx errors produce one captured event carrying the request id; 4xx do not; an absent DSN changes nothing.
+- The uptime check fails when `db` is not `"ok"` (proven by pointing it at an instance whose database is unreachable, or by a readiness endpoint asserted in a test).
+- No configured sink can receive a request body, a query string or a credential.
+- `test:api` 0 fail; `import-boundary.test.js` green; the dependency is recorded in `AGENTS.md` §3.
+
+**Test scenarios**
+| # | Scenario | Expected |
+|---|---|---|
+| 4.1 | Unexpected 500 | one capture, request id attached, detail logged |
+| 4.2 | 422 / 429 / 413 | no capture |
+| 4.3 | No DSN configured | normal boot and normal responses |
+| 4.4 | Database down, `/v1/health` | 200 with `db: "down"` — and the MONITOR reports the outage |
+| 4.5 | Body/URL in an error path | never captured (asserted on the payload passed to the stub) |
+
+---
+
+## Sprint 5 — make the offer-freshness gate see real offers (~60 min)
+
+**Summary.** `check-offer-freshness.js` classifies offers by provenance CLASS, so a non-seed, non-`VERIFIED` offer can age out without the nightly gate noticing. Extract the classification into a pure helper, extend it to non-seed offers regardless of class, and pin the behaviour with unit tests.
+
+**Why now.** This is the one P3 item that does not need real data to be *built*: the gate can be written and proven with fixtures today, so it is armed before the first real offer lands (P4 depends on a retailer; this does not).
+
+**Files:**
+- Create: `scripts/lib/offer-freshness.js` (pure: classify + decide, no DB) and `scripts/lib/offer-freshness.test.js` (runs in `test:scripts`)
+- Modify: `scripts/check-offer-freshness.js` (use the helper; keep `--fail-days=N` equals-form only, since the space form exits 2 by design)
+- Modify: `docs/OPEN_GAPS.md` (OG-52's P4 provenance-gate item), `DEVELOPMENT_NOTES.md`
+
+**Interfaces:**
+- Consumes: `store_offer` rows with `last_checked_at`, `fetched_at`, `offer_class`, `product_url`, `ingestion_record_id`.
+- Produces: `classifyOffer(row)` → `'VERIFIED' | 'SEED' | 'UNVERIFIED' | 'NON_SEED_UNVERIFIED'` and `evaluateFreshness(rows, { failDays, asOf })` → `{ failing: [...], warnings: [...], firstExpiry }`; the script keeps its current PASS/FAIL wording and exit contract.
+
+- [ ] **Step 1: write the failing tests** — a non-seed offer with a stale `fetched_at` FAILS even when its class is not `VERIFIED`; the current 101 seed offers produce no failure (SEED/UNVERIFIED stay informational, as today); the boundary is inclusive at `failDays`; a NULL `fetched_at` on a non-seed offer is reported, not silently passed.
+- [ ] **Step 2: implement the helper and switch the script to it**, keeping the existing output and exit codes for today's data.
+- [ ] **Step 3: prove both directions on the shared database, read-only** — the current run must stay PASS (101 seed offers, first SEED expiry 2026-11-03), and a forced fixture (a fake non-seed row passed to the pure helper) must FAIL. A gate with no violations is indistinguishable from a gate that never runs.
+- [ ] **Step 4: run `npm run test:scripts` (0 fail) and `node scripts/check-offer-freshness.js --fail-days=14` (PASS on today's data), then commit.** No migration, no seed, no write.
+
+**Definition of done**
+- A non-seed offer of ANY class is evaluated by age and can fail the gate.
+- Today's data still passes, and the informational seed line is unchanged.
+- The pure helper is unit-tested in `test:scripts`; the script's CLI contract (`--fail-days=N`, equals form) is unchanged.
+- The gap row is updated to say the gate now covers non-seed provenance, while P4's real-data work stays open.
+
+**Test scenarios**
+| # | Scenario | Expected |
+|---|---|---|
+| 5.1 | Stale non-seed UNVERIFIED offer | FAIL |
+| 5.2 | Fresh non-seed offer | PASS |
+| 5.3 | The 101 current seed offers | PASS, informational line unchanged |
+| 5.4 | Boundary at exactly `fail-days` | inclusive |
+| 5.5 | Non-seed offer with NULL `fetched_at` | reported as unknown, not passed |
+| 5.6 | `--fail-days 14` (space form) | usage error, exit 2 (unchanged by design) |
+
+---
+
+## Definition of done (whole plan)
+
+1. A dispatched `recurring-gates` run is recorded with its per-step conclusion, and the "UNVERIFIED in CI" wording is updated only where the evidence supports it.
+2. The production role is rehearsed on the branch (full write path, no `42501`, all 20 privilege answers asserted, a forbidden action proven to fail, role removed) and its shared application is either done with a restore point or explicitly pending.
+3. Staging and production exist, the deploy refuses a pending schema, and the rollback is rehearsed.
+4. Error capture and a body-aware uptime check are live, and neither can leak a body, a query string or a credential.
+5. The offer-freshness gate covers non-seed provenance regardless of class, with the boundary and the NULL case pinned.
+6. No regression anywhere: `test:unit`, `test:scripts`, `test:api`, `test:api:db`, `verify:replay`, `verify:pi1`, `check-deferred-rules`, `check-offer-freshness --fail-days=14`, `eval:scenarios` at the unchanged-engine baseline, `verify:docs --offline` and `gen-decision-index --check`.
+7. **No gate was weakened to reach any of the above.** If a dispatched run failed, the failure and the fix are both recorded.
+
+## How to run this safely
+
+- `git status` first. This is a shared checkout and another agent may hold uncommitted work; commit with an explicit pathspec rather than staging.
+- Sprints 1, 3 and 4's service setup, and Sprint 2 Step 5, are OWNER actions. Prepare the exact command or URL, then ask — do not create cloud resources, roles or accounts on your own initiative.
+- The shared database is never a test target. Everything rehearsable is rehearsed on the branch first.
+- A role, a probe row or a fixture that cannot be cleaned up fails the run that created it.
+- After any decision entry: `npm run gen:decisions`, `node scripts/gen-decision-index.js --check`, `npm run verify:docs --offline`. After any migration: `npm run gen:schema`, `verify:docs --live`, `verify:replay`.
+- Never put a secret in a file, a log line or a message. Direct the owner to the host's secret store or GitHub secrets, and reference key NAMES only.
+
+## Self-review (run against this plan)
+
+- **Spec coverage:** the roadmap's P3 list maps to Sprint 1 (dispatch the recurring job until `test:api:db` is verified), Sprint 2 (rehearse the production role), Sprint 3 (staging + production + the migration deploy step), Sprint 4 (error tracking, uptime on `/v1/health`, log shipping), Sprint 5 (the `fetched_at`/provenance extension of the freshness gate). ✔
+- **Step scan:** each step names a command, a file or an owner action and the result that means it passed; no step says "configure monitoring appropriately". ✔
+- **Type consistency:** `getWriteTestDbUrl()` (config object), `ping(pool, PING_TIMEOUT_MS)`, `buildApp({ pool, repository, engine, env, logger })`, `--fail-days=N` and `--restore-point=<id>` are used with one spelling each. ✔
+- **Review Focus:** all five lines have an owning sprint and a numbered scenario (4.4, 3.1, 2.3, 1.3, 1.2). ✔
+- **Proportion:** no implementation bodies; the two new scripts are specified by their interfaces and their tests. ✔
