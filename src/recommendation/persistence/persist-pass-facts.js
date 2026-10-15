@@ -3,83 +3,38 @@
 /**
  * Engine 5b - pass-facts persistence (Decision 46).
  *
- * The third sibling of ./persist-ranked and ./persist-rejections: same
- * Decision 19 transaction discipline, same boundary (DML only - no
- * BEGIN/COMMIT/ROLLBACK, no SELECT, no pool, no clock), same
- * parameterized-only rule. It records the facts the pass PRODUCED ABOUT
- * ITSELF, which is the piece nothing else carries:
+ * The third sibling of ./persist-ranked and ./persist-rejections: the same
+ * Decision 19 transaction discipline (DML only - no BEGIN/COMMIT/ROLLBACK, no
+ * SELECT, no pool, no clock, parameterized only) plus one rule of its own -
+ * UPDATE-ONLY, because the rows it annotates already exist (persistRanked
+ * inserted them moments earlier in the same transaction). It therefore mints no
+ * id, generates no UUID, issues no INSERT/DELETE, and returns statement COUNTS
+ * rather than claiming that a row matched - which only a SELECT (banned here)
+ * could establish.
  *
- *   * `recommendation_query.budget_floor` - the Decision 27 diagnostic the
- *     orchestrator already returns as `budget_floor` on the full-run result.
- *     Until now it lived only in the HTTP reply, so a later GET of the same
- *     query could not reproduce it (the A1/A3 gap: a 200 reply carried a floor
- *     that the persisted row did not).
- *   * `recommendation_result.engine_version` / `.strategy_key` - which engine
- *     build produced a given ranked row, and which E4 strategy (Decision 41)
- *     nominated it. select-archetypes.js RETURNS `strategy_key` today and
- *     explicitly notes that persisting it needs Platform migration 019; this
- *     writer is that persistence, and the columns start NULL for pre-019 rows
- *     (history is genuinely unknowable, so nothing is backfilled).
+ * WHAT IT WRITES - this module's own interface. The CONTRACT has ONE owner,
+ * Decision 46 (why UPDATE-only, the additive seam, the caller-supplied
+ * engineVersion, the column-scoped production-role grants), and the
+ * operator-facing GRANT script lives in docs/API.md "Production mode". Cite
+ * those instead of restating them here:
  *
- * Why UPDATE and not INSERT: the rows this writer touches already exist. The
- * commit wrapper calls it AFTER persistence.persistRanked has inserted
- * build_candidate / build_component / recommendation_result for this pass, so
- * there is nothing to create and no id to mint - which is why this module
- * generates no UUIDs and returns no id list, unlike its two siblings. It is
- * the only writer in the family that is UPDATE-only, and therefore the only
- * one that needs its own GRANT (see the production-role note below).
- *
- * Idempotency: replacement by construction. The floor UPDATE is scoped to the
- * query id and sets one column; each result UPDATE is scoped to the query id
- * AND `rank`, which is unique per query (migration 011's
- * `uq_recommendation_result_query_rank (recommendation_query_id, rank)`), so a
- * re-commit of the same pass converges on the same values instead of
- * duplicating anything - the same Decision 31 replace-not-append discipline
- * ./persist-rejections uses, achieved here without a DELETE because UPDATE is
- * inherently idempotent.
+ *   * `recommendation_query.budget_floor` <- the Decision 27 diagnostic the
+ *     orchestrator returns on the full-run result: one UPDATE scoped to `id`.
+ *   * `recommendation_result.engine_version` / `.strategy_key` <- which deploy
+ *     produced a rank, and which E4 archetype (Decision 41) nominated it: one
+ *     UPDATE per rank, scoped to `(recommendation_query_id, rank)`.
  *
  * RANK ALIGNMENT: result rows are addressed by `rank = index + 1` over the
- * supplied `strategyKeys` array. That is exactly the order
- * persistence.persistRanked wrote them in - it writes `entry.persisted_rank` in
- * input order, and validate-selected.js pins `persisted_rank` to contiguous
- * 1..N over the same array.
+ * supplied `strategyKeys`, which is the order `persistRanked` wrote them in
+ * (validate-selected.js pins contiguous 1..N over the same array). The LENGTH
+ * half of that alignment is enforced here, which is why the caller also passes
+ * `selected`; the CONTENT half cannot be checked without a SELECT and is pinned
+ * at the seam (orchestrator/full-run.test.js).
  *
- * Two halves of that alignment, and only one of them is checkable here:
- *   * the LENGTH half is enforced, which is why this function also takes
- *     `selected`: `strategyKeys.length` must equal `selected.length`, so a
- *     short array (which would silently leave some rows NULL) or a long one
- *     (which would fire UPDATEs matching no row) fails fast instead of
- *     writing half a story with a green test.
- *   * the CONTENT half - WHICH key belongs to WHICH rank - cannot be checked
- *     without reading the rows back, and a SELECT is forbidden here. It is
- *     pinned at the seam instead (orchestrator/full-run.test.js, against
- *     select-archetypes.js's `persisted_rank = index + 1` contract).
- *
- * NULL is never coerced (AGENTS.md section 8): an absent fact is written as
- * SQL NULL, never as '' or 0. `engineVersion: null` and a `null` entry in
- * `strategyKeys` are legitimate "this pass did not know" values.
- *
- * Production-role note (Decision 46): the documented `morocco_pc_api` role has
- * SELECT + INSERT and deliberately NO UPDATE (docs/API.md, Production mode).
- * This writer breaks that invariant for exactly one column, so the role script
- * gains a COLUMN-scoped grant -
- * `GRANT UPDATE (budget_floor) ON recommendation_query TO morocco_pc_api;` -
- * and NOT a table-wide one: `has_table_privilege('morocco_pc_api',
- * 'recommendation_query', 'UPDATE')` stays `f` while
- * `has_column_privilege('morocco_pc_api', 'recommendation_query',
- * 'budget_floor', 'UPDATE')` becomes `t`. The rejected alternative (a new
- * insert-only diagnostic table) would split the floor from the query row it
- * describes and create a fresh key/UPSERT problem for re-commit handling.
- * `recommendation_result.engine_version` / `.strategy_key` do NOT need a grant
- * of their own only if the role is already granted UPDATE there - it is not,
- * so the same column-scoped treatment applies to those two columns and is
- * recorded in docs/API.md alongside the floor grant. Migration 019 adds the
- * columns; the grants are a separate operator step, never a migration.
- *
- * The budget_floor parameter is passed THROUGH unchanged: node-postgres
- * JSON-encodes a plain object parameter for a jsonb column (verified against
- * the shared DB: `SELECT $1::jsonb` with `{a:1}` round-trips to an object, and
- * a JS `null` becomes SQL NULL), so stringifying here would double-encode it.
+ * NULL is never coerced (AGENTS.md section 8): an absent fact reaches the driver
+ * as null, never as '' or 0. `budgetFloor` is passed THROUGH unchanged, because
+ * node-postgres JSON-encodes a plain object parameter for a jsonb column and
+ * stringifying it here would double-encode it.
  */
 
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');

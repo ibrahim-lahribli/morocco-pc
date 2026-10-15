@@ -4,11 +4,11 @@
 **Author:** Platform agent (agent/platforms), on behalf of the approved review.  
 **Purpose of this file:** the single, dated, auditable record of what the platform agent agreed to build next — migration 019 (persisted `budget_floor` / `engine_version` / `strategy_key` + the column-scoped UPDATE grants that resolve the production-role write problem), migration 020 (`display_name` / `slug` / image fields with a deterministic backfill), the pass-facts write seam and API wiring that consume them, and the contract v1.1 deltas in `docs/API.md`. It is also the work breakdown by 1-hour sprints with a definition of done and a verification gate per sprint, so the execution can be driven sprint-by-sprint without re-deriving scope from prose.
 
-**Decision id:** Decision 46 (Platform manual/019/020 + persisted pass facts). The commit of this file is the pool-independent record of that decision; the actual decision entry in `docs/RECOMMENDATION_ENGINE_DECISIONS.md` is written in Sprint 2 alongside the seam.
+**Decision id:** Decision 46 (Platform manual/019/020 + persisted pass facts). The commit of this file is the pool-independent record of that decision; the actual decision entry in `docs/RECOMMENDATION_ENGINE_DECISIONS.md` is written in Sprint 2 alongside the seam. **`docs/RECOMMENDATION_ENGINE_DECISIONS.md` Decision 46 is the SINGLE AUTHORITATIVE STATEMENT of that contract;** this file owns the work breakdown and the execution records and cites the entry instead of restating it, so each contract detail lives in exactly one place.
 
 **Branch:** `agent/platforms` at commit `c8c16b9`, identical to `origin/master`. The branch is clean and has zero in-flight platform commits.  
 **Target version:** `0.1.0` in `package.json`.  
-**Database reality checked before planning:** the commit seam already holds the pieces it would need to thread a `passFacts` ([commit.js:118](src/recommendation/orchestrator/commit.js#L118), [full-run.js:104](src/recommendation/orchestrator/full-run.js#L104)); the production role is documented as having **no UPDATE** ([docs/API.md](docs/API.md)); the production-role decision is a set of COLUMN-scoped grants — `GRANT UPDATE (budget_floor) ON recommendation_query` plus `GRANT UPDATE (engine_version, strategy_key) ON recommendation_result`, one per column the writer touches and never a row-wide UPDATE; `strategy_key` stays TEXT (precedent: `use_case` is TEXT); the new writer follows the proven pattern in `persist-rejections.js` (DML-only boundary, replace-not-append idempotency, boundary test banning SELECT/BEGIN/COMMIT). Column shapes read from the generated [SCHEMA_REFERENCE.md](docs/SCHEMA_REFERENCE.md): `product` 9 columns, `recommendation_query` 9, `recommendation_result` 6; migrations end at `018`; seeds end at `016`.
+**Database reality checked before planning:** the commit seam already holds the pieces it would need to thread a `passFacts` ([commit.js:118](src/recommendation/orchestrator/commit.js#L118), [full-run.js:104](src/recommendation/orchestrator/full-run.js#L104)); the production role is documented as having **no UPDATE** ([docs/API.md](docs/API.md)); the production-role resolution is Decision 46 item 7 - column-scoped grants, one per written column, never a row-wide UPDATE - whose operator script lives in `docs/API.md` Production mode; `strategy_key` stays TEXT (precedent: `use_case` is TEXT); the new writer follows the proven pattern in `persist-rejections.js` (DML-only boundary, replace-not-append idempotency, boundary test banning SELECT/BEGIN/COMMIT). Column shapes read from the generated [SCHEMA_REFERENCE.md](docs/SCHEMA_REFERENCE.md): `product` 9 columns, `recommendation_query` 9, `recommendation_result` 6; migrations end at `018`; seeds end at `016`.
 
 ---
 
@@ -74,20 +74,11 @@ After this plan, the API can answer a GET with the same facts it produced on the
 
 ### What the writer does
 
-- Boundary: DML only — no SELECT, no BEGIN/COMMIT/ROLLBACK, parameterized-only; same discipline as `persist-rejections.js`. **UPDATE-only** as well: the rows already exist by the time it runs (`persistRanked` inserted them earlier in this same transaction), so it contains no INSERT, no DELETE and no UUID generation — unlike both of its siblings.
-- One parameterized `UPDATE recommendation_query SET budget_floor = $2 WHERE id = $1`. The floor object is passed THROUGH unchanged, not stringified: node-postgres JSON-encodes a plain object parameter for a jsonb column (measured against the shared DB 2026-10-14: `SELECT $1::jsonb` with `{a:1}` round-trips to an object; a JS `null` becomes SQL NULL), and stringifying would double-encode it.
-- One parameterized `UPDATE recommendation_result SET engine_version = $1, strategy_key = $2 WHERE recommendation_query_id = $3 AND rank = $4` per result row, addressed by `rank = index + 1` over the supplied `strategyKeys` array. That is exactly the order `persistRanked` wrote them in, because `validate-selected.js` pins `persisted_rank` to contiguous 1..N over the same array; migration 011's `uq_recommendation_result_query_rank (recommendation_query_id, rank)` makes the `AND rank = $4` match hit at most one row. WHICH key belongs to WHICH rank stays verified by the read path, not by the writer claiming it.
-- The writer also takes `selected`, for ONE purpose: it refuses a mismatch between `passFacts.strategyKeys.length` and `selected.length`. A short array would silently leave rows NULL and a long one would fire UPDATEs that match nothing, and NEITHER is visible to a fake-client test. The length half is therefore enforced in the writer; the content half is pinned at the seam in Sprint 2.
-- `undefined` ⇒ the wrapper invokes nothing (zero statements). `null` (or any non-object) ⇒ refused by the wrapper with `CandidateSelectionError(ERROR_CODES.INVALID_FIELD_VALUE, field 'passFacts')` BEFORE `BEGIN`, so not even a transaction is opened. `null` is deliberately NOT a synonym for `undefined`: omitting the argument is what means "persist no facts".
-- Idempotency: the writer REPLACES the query's floor (one UPDATE scoped to the query id) and replaces each result row's engine_version/strategy_key; it does not INSERT anything, so a re-commit of the same pass converges. Replacement here is inherited from UPDATE itself rather than from a DELETE step, so it also sidesteps the unique-index problem on the (id, NULL) product-keyed rows.
-- Return shape: frozen `{ query_id, floor_update_issued: true, result_updates_issued: N }` — honest STATEMENT COUNTS, deliberately not named "rows updated": without a SELECT (banned here) the writer cannot prove a row matched. The seam caller does not reshape the return.
+Not restated here. **Decision 46 is the single authoritative statement of this contract** (items 1-5 and 8-10), and `persist-pass-facts.js`'s header owns the module's own interface - the two statement constants, the `rank = index + 1` addressing, the `strategyKeys`/`selected` length cross-check, and the frozen statement-count return. This section used to copy both; it now cites them.
 
-### Decisions recorded in this sprint (in code and in the writer's test header)
+### Decisions recorded in this sprint
 
-- The 5th argument is `undefined`-able, not required, for backward compatibility with the existing commit suite and with the 3-/4-arg call sites.
-- `null` is refused rather than folded into `undefined` — pinned in `commit.js`, in the writer and in the tests, not left floating.
-- The query-row floor UPDATE is column-scoped by design; the production-role GRANTs for every column the writer touches are recorded as a Decision 46 implementation note in the writer's header and in the docs addendum, not deferred to Sprint 5.
-- `engine_version` is TEXT and nullable (pre-019 rows are unknowable), same as `strategy_key`.
+All four are recorded ONCE, in **Decision 46**: the additive 5th argument, and `null` refused rather than folded into `undefined` (item 3); the column-scoped GRANTs on every column the writer touches (item 7, with the operator script in `docs/API.md` Production mode); and `engine_version` / `strategy_key` as nullable TEXT (item 8). Nothing about this contract is specified only here.
 
 ### Tests (fake client, no DB)
 
@@ -122,7 +113,7 @@ After this plan, the API can answer a GET with the same facts it produced on the
 ### Files to add or edit
 
 **Add:**
-- `docs/RECOMMENDATION_ENGINE_DECISIONS.md` addendum entry for Decision 46 (if not already written) — one normalized `Status:` line and a short body: what 019/020 add, why the production role gets column-scoped `GRANT UPDATE` privileges on EACH written column (`budget_floor`, `engine_version`, `strategy_key`) rather than a row-wide UPDATE or an insert-only diagnostic table, the `has_table_privilege` / `has_column_privilege` self-check that keeps the invariant provable, and the rejected alternative plus the reason.
+- `docs/RECOMMENDATION_ENGINE_DECISIONS.md` Decision 46 (if not already written) — one normalized `Status:` line plus the entry that IS the authoritative statement of this contract. Item 7 owns the production-role resolution (the column-scoped GRANTs, the `has_table_privilege` / `has_column_privilege` self-check, the rejected alternative); the operator-facing script itself is maintained in `docs/API.md` Production mode.
 
 **Edit:**
 - `src/recommendation/orchestrator/full-run.js` — call `commit.runRecommendationCommit(client, queryId, explained, snap.filter_verdicts, passFacts)` where `passFacts` is `{ budgetFloor: snap.budget_floor, engineVersion, strategyKeys: selection.archetypes.map(a => a.strategy_key) }`. The `engineVersion` comes from the engine's own option/constant at the seam, not from the API's `ENGINE_VERSION` env (the API passes its deploy version down through `engine.runFullRun`; decide the exact handoff during the sprint and pin it).
@@ -130,8 +121,7 @@ After this plan, the API can answer a GET with the same facts it produced on the
 
 ### What the writer does (cross-check, not re-implement)
 
-- The same boundaries and idempotency from Sprint 1.
-- The writer does not INSERT; it UPDATEs. A re-run of the same pass for the same query id converges (the same replacement logic as `persistRejections`).
+Unchanged from Sprint 1, and specified once - in Decision 46. This sprint's subject is the WIRING, not the writer.
 
 ### Tests (fake client, no DB, plus a seam proof)
 
@@ -143,18 +133,7 @@ After this plan, the API can answer a GET with the same facts it produced on the
 
 ### Decision 46 recorded here (the production-role write resolution)
 
-Implement as **column-scoped grants, one per column the writer touches** — never a row-wide UPDATE, because the role's write surface is otherwise SELECT+INSERT only and that invariant is the whole point:
-
-```sql
-GRANT UPDATE (budget_floor) ON recommendation_query TO morocco_pc_api;
-GRANT UPDATE (engine_version, strategy_key) ON recommendation_result TO morocco_pc_api;
-```
-
-BOTH statements are required. The documented role has no UPDATE anywhere, so granting only `budget_floor` leaves the two `recommendation_result` UPDATEs to fail with `42501` in production mode — exactly the class of failure the grant exists to prevent.
-
-The invariant stays provable, and the self-check must assert all three columns: `has_table_privilege('morocco_pc_api','recommendation_query','UPDATE')` → `f` and `has_table_privilege('morocco_pc_api','recommendation_result','UPDATE')` → `f`, while `has_column_privilege('morocco_pc_api','recommendation_query','budget_floor','UPDATE')`, `has_column_privilege('morocco_pc_api','recommendation_result','engine_version','UPDATE')` and `has_column_privilege('morocco_pc_api','recommendation_result','strategy_key','UPDATE')` → `t`. The grants themselves are an operator step, never a migration.
-
-Rejected alternative: a new insert-only `recommendation_diagnostic` table. Reason: a column-scoped GRANT keeps the "no row-wide UPDATE" invariant provable and is the smallest change that lets the facts reach the rows where they belong. An insert-only table would split the floor from the query and create a new PK/UPSERT problem for re-commit handling.
+The deliverable was the decision RECORD, not a second copy of it. **Decision 46 item 7 is the resolution** - column-scoped GRANTs, one per column the writer touches, never a row-wide `UPDATE`, because the role's SELECT+INSERT-only surface is the point - and `docs/API.md` Production mode carries the operator script plus the privilege self-check. This section used to restate both.
 
 ### Verification at the door
 
@@ -349,7 +328,7 @@ guard is **not done and cannot be** — those columns are migration
 - `apps/api/src/routes/recommendations.js` — presenter: `budget_floor` and `engine_version` now come from the persisted row on both verbs (the two-field-difference table in `docs/API.md` collapses to "differs in no persisted field" except `served_by`); per-build `engine_version`, `strategy_key`, and `components[].slug` added; lazy guard asserting no `components[].name` starts with `Seed `.
 - `apps/api/src/contracts/recommendations.js` — TypeBox response schemas updated for `budget_floor`, `engine_version`, `strategy_key`, `components[].slug`.
 - `apps/api/test/unit/contract.test.js` — updated for the new fields.
-- `docs/API.md` — v1.1 deltas: new fields persisted, the "POST and GET differ in no persisted field" table, the reconcile note for the two latency figures (75/142 ms vs 74/147 ms), any new limitations surfaced; **and the §Production-mode role SCRIPT itself, not just prose about it** — it gains `GRANT UPDATE (budget_floor) ON recommendation_query` and `GRANT UPDATE (engine_version, strategy_key) ON recommendation_result`, and its `has_table_privilege` / `has_column_privilege` self-check lines gain the three column assertions (the table-level UPDATE answers stay `f`). A prose note alone would leave the script pinning a role that cannot run the new writer.
+- `docs/API.md` — v1.1 deltas: new fields persisted, the "POST and GET differ in no persisted field" table, the reconcile note for the two latency figures (75/142 ms vs 74/147 ms), any new limitations surfaced; **and the §Production-mode role SCRIPT itself, not just prose about it** — it gains the two column-scoped GRANT statements Decision 46 item 7 specifies, and its `has_table_privilege` / `has_column_privilege` self-check lines gain the three column assertions (the table-level UPDATE answers stay `f`). A prose note alone would leave the script pinning a role that cannot run the new writer.
 - `apps/api/src/server.js` — OpenAPI `info.version` to `1.1.0` (path via `@fastify/swagger`'s `openapi.info`; confirm the exact path during the sprint and pin it).
 
 ### Read-path change details
