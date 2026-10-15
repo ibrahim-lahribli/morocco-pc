@@ -52,5 +52,15 @@ Verify:
 npm run gen:schema                              # regenerates both generated docs
 npm run verify:docs                             # migrations-contiguous must stay PASS
 node scripts/run-migrations.js --check          # no pending migrations (ledger gate)
+npm run verify:replay -- --test-db --reference=test   # fresh replay vs the TEST branch: 0 drift
 npm run test:unit                               # 0 failures
 ```
+
+## A TEST-first migration reports drift against the SHARED reference
+
+`verify-migrations-replay.js` diffs the fresh replay against `DATABASE_URL` unless `--reference=test` is
+passed. So a migration applied on the branch BEFORE the shared apply makes the default run report drift, and
+the nightly `recurring-gates` job fails at that step. That is the gate working, not a broken migration: with
+`--reference=test` the question is "does the tree replay cleanly and match the branch"; by default it is "does
+shared still match the tree". Clear it by landing the shared apply (with a recorded `--restore-point`), never by
+weakening the gate.

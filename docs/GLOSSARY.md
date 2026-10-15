@@ -34,14 +34,18 @@ source of truth. When a term here and a decision entry disagree, the decision wi
 | O1 / O2 | Decision 23's two objectives: O1 = GPU/PSU connector + dimension data (seed 003), O2 = build-local `unknown_pairwise_count`. |
 | PI-1 | Decision 23 criterion 3: pool-independence regression — builds must not depend on unrelated catalog rows. Not yet built (F5). |
 | no-evidence branch | The §9 scoring policy: an unevidenced product scores `neutral_baseline − no_evidence_penalty` (40.000 on current config). Unevidenced products tie each other; see Decision 23's degeneracy root cause. |
+| `budget_floor` | Decision 27's per-pass diagnostic: the cheapest retained `selected_price` per `BUDGET_FLOOR_ROLES` (EXPANSION_ORDER minus GPU), plus `cheapest_total` / `within_budget` / `missing_roles`. Persisted on `recommendation_query.budget_floor` (jsonb) since Decision 46 / migration 019. `cheapest_total` and `within_budget` are `null` — never `0` — when a required role is missing. |
+| `strategy_key` | The E4 archetype (Decision 41) that nominated a rank: `PERFORMANCE` / `BALANCED` / `VALUE`. Persisted per result row on `recommendation_result.strategy_key` since Decision 46 / migration 019. An identifier for provenance, not user-facing prose. |
+| pass facts | The three facts a pass persists ABOUT ITSELF inside its own write transaction: `budget_floor` (query row) and `engine_version` + `strategy_key` (result rows). Threaded as the commit wrapper's OPTIONAL 5th argument (Decision 46): an `undefined` argument persists none, a `null` VALUE means "this pass did not know". |
 
 ## Identifiers and conventions
 
 | Term | Meaning |
 |---|---|
-| `Decision N` | An engine decision in `docs/RECOMMENDATION_ENGINE_DECISIONS.md` (Decisions 1–26). |
+| `Decision N` | An engine decision in `docs/RECOMMENDATION_ENGINE_DECISIONS.md`; the generated `docs/DECISION_INDEX.md` carries the current set and `verify:docs` pins its count, so no range is cited here (a hand-kept range drifts). |
 | `D2` (bare) | A seed-file header decision — e.g. `002_catalog_expansion.sql` D1–D8 or `003_gpu_psu_connector_data.sql` D1–D9. **Collision hazard:** bare `D2` ≠ `Decision 2`. This collision already caused one recorded correction (`DECISIONS.md:2810`). Write "seed 002 Dn" or "Decision n" unambiguously. |
 | `OG-nn` | A row in `docs/OPEN_GAPS.md`, the consolidated open-gap register. |
 | `K1–K16` / `U1–U13` / `W1–W12` | Registers in `docs/PROJECT_STATUS_REVIEW_2026-09-28.md`: known issues, unverified areas, structural weaknesses. |
 | `An` (audit) | A recommendation in `docs/DOCUMENTATION_AUDIT_2026-09-28.md` §4 (A1–A12); `Dn` (audit) = its finding D1–D12. Another `Dn` collision — scope it ("audit D2") when ambiguous. |
 | `RESOLVED / OPEN / DEFERRED / UNVERIFIED` | Status vocabulary for audit findings and gap-register rows. DEFERRED means recorded with a binding re-check trigger, not forgotten. |
+| `engine_version` vs `served_by.engine_version` | A same-name collision worth scoping, like the seed 002 `D2` above. `engine_version` is the deploy that RAN the pass, persisted on each `recommendation_result` row (Decision 46) and `null` for a zero-build pass (which writes no result row). `served_by.engine_version` is the deploy that ANSWERED the HTTP request — the process's `ENGINE_VERSION`, always populated. Two different questions; the API contract carries both. |

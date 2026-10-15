@@ -419,4 +419,4 @@ profile id is captured before the query is deleted).
   asynchronous job handling.
 - **`resolution`/`priority` are accepted but inert** (see *Option vocabulary*).
 - **`components[].name` still shows the `Seed ` prefix.** The whole catalog is seed data and migration `020_product_identity_and_media.sql` (its `display_name` / `slug` columns) is not in the tree, so the API has nothing else to name a product with. Do not present it to end users as a product name.
-- **`strategy_key` / `engine_version` are recorded but not yet consumed.** They are persisted and served; no client reads them back yet, and their golden-harness coverage (A10) is still owed (OG-45, OG-46).
+- **`strategy_key` / `engine_version` are recorded but not yet consumed.** They are persisted and served; no client reads them back yet, and their golden-harness coverage (A10) is still owed (**OG-46** — OG-45 tracks the persistence itself, which is done wherever migration 019 is applied).
