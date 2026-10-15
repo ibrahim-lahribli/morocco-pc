@@ -46,7 +46,7 @@ const ALL_MIGRATIONS = fs
 
 // parseArgs never touches pg, so it is safe to load once up front.
 const { parseArgs } = require(RUNNER);
-const { APPLY_LOG_FIELDS } = require('./migrations');
+const { APPLY_LOG_FIELDS, applyLogTarget } = require('./migrations');
 
 /** Size of the audit log, or 0 when it does not exist yet. */
 function auditLogSize() {
@@ -395,7 +395,9 @@ describe('run-migrations shared-apply audit log', () => {
         const rec = JSON.parse(line);
         assert.deepStrictEqual(Object.keys(rec).sort(), APPLY_LOG_FIELDS);
         assert.match(rec.filename, /^\d+_.*\.sql$/);
-        assert.equal(rec.target, 'shared');
+        // The target names the DATABASE this run was actually pointed at, as a
+        // digest of its normalized host+database - never an inferred role.
+        assert.equal(rec.target, applyLogTarget(FAKE_SHARED));
         assert.equal(rec.restore_point, 'br-abc12345');
         assert.equal(rec.note, null);
         assert.match(rec.git_sha, /^[0-9a-f]{40}$/, 'the git SHA must be recorded, not "unknown"');
@@ -429,12 +431,61 @@ describe('run-migrations shared-apply audit log', () => {
         const rec = JSON.parse(line);
         assert.equal(rec.note, NOTE, 'the note must reach the persisted line');
         assert.equal(rec.restore_point, 'br-abc12345');
-        assert.equal(rec.target, 'shared', 'the note qualifies the target, it does not change it');
+        assert.equal(rec.target, applyLogTarget(FAKE_SHARED));
         assert.deepStrictEqual(Object.keys(rec).sort(), APPLY_LOG_FIELDS);
       }
     } finally {
       fs.writeFileSync(AUDIT_LOG, snapshot);
     }
     assert.deepStrictEqual(fs.readFileSync(AUDIT_LOG), snapshot, 'the tracked audit log must be restored');
+  });
+
+  // The regression this change closes: the old runner labelled EVERY
+  // non---test-db apply `shared`, so an apply against any other database wrote
+  // a line that was false and unfixable. Same flag, different connection, and
+  // the logged target must follow the CONNECTION.
+  it('names the database it wrote to, not the role it assumed', async () => {
+    const OTHER = 'postgres://stub:stub@eu-central-1.invalid/eudb';
+    const snapshot = fs.readFileSync(AUDIT_LOG);
+    const beforeCount = snapshot.toString('utf8').split(/\r?\n/).filter((line) => line !== '').length;
+    try {
+      const res = await runMain(['--restore-point=br-abc12345', '--note=P1 co-location: EU project'], {
+        ledger: PARTIAL_LEDGER,
+        env: { DATABASE_URL: OTHER },
+      });
+      assert.equal(res.exitCode, undefined, 'the CLI exits 0');
+      const lines = fs
+        .readFileSync(AUDIT_LOG, 'utf8')
+        .split(/\r?\n/)
+        .filter((line) => line !== '');
+      assert.equal(lines.length, beforeCount + PENDING_COUNT);
+      const targets = new Set(lines.slice(beforeCount).map((line) => JSON.parse(line).target));
+      assert.deepEqual([...targets], [applyLogTarget(OTHER)], 'the logged target follows the connection');
+      assert.notEqual(applyLogTarget(OTHER), applyLogTarget(FAKE_SHARED), 'two hosts must not collide');
+    } finally {
+      fs.writeFileSync(AUDIT_LOG, snapshot);
+    }
+    assert.deepStrictEqual(fs.readFileSync(AUDIT_LOG), snapshot, 'the tracked audit log must be restored');
+  });
+
+  // Saying which target a run WOULD log, before it writes anything, is what
+  // makes the field checkable by a script instead of trusted. A --test-db run
+  // writes no audit line, so it must not advertise one.
+  it('prints the audit target it would write on --dry-run, and not for --test-db', async () => {
+    const dry = await runMain(['--dry-run'], { ledger: PARTIAL_LEDGER });
+    assert.equal(dry.exitCode, undefined, 'the CLI exits 0');
+    const expected = applyLogTarget(FAKE_SHARED);
+    assert.ok(
+      dry.out.includes('AUDIT TARGET: ' + expected),
+      'the dry run must name the target it would log: ' + dry.out
+    );
+
+    const testDb = await runMain(['--dry-run', '--test-db'], {
+      ledger: PARTIAL_LEDGER,
+      env: { TEST_DATABASE_URL: FAKE_TEST },
+    });
+    assert.equal(testDb.exitCode, undefined, 'the CLI exits 0');
+    assert.match(testDb.out, /DRY-RUN/, 'the dry run still reports');
+    assert.doesNotMatch(testDb.out, /AUDIT TARGET/, 'a TEST run writes no audit line, so it advertises no target');
   });
 });

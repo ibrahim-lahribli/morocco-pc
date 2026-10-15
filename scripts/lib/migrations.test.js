@@ -22,8 +22,10 @@ const {
   isValidRestorePointId,
   shouldRefuseSharedApply,
   formatApplyLogLine,
+  applyLogTarget,
   APPLY_LOG_FIELDS,
-  APPLY_LOG_TARGETS,
+  LEGACY_APPLY_LOG_TARGETS,
+  TARGET_DIGEST_RE,
   APPLY_LOG_EOL,
 } = require('./migrations');
 
@@ -169,14 +171,69 @@ describe('shouldRefuseSharedApply', () => {
   });
 });
 
+describe('applyLogTarget', () => {
+  const POOLED = 'postgres://u:p@ep-steep-sun-123456-pooler.eu-central-1.aws.neon.tech/neondb';
+  const DIRECT = 'postgres://u:p@ep-steep-sun-123456.eu-central-1.aws.neon.tech/neondb';
+
+  it('is a db:<12 hex> digest, deterministic for the same target', () => {
+    const target = applyLogTarget(POOLED);
+    assert.match(target, TARGET_DIGEST_RE);
+    assert.equal(target.length, 'db:'.length + 12);
+    assert.equal(target, applyLogTarget(POOLED), 'same input, same value');
+  });
+
+  // Neon serves one endpoint as two hostnames (pooled and direct), and this
+  // repo has already been bitten by treating them as different targets:
+  // describeTarget prints the pooled host while apply-seed prints the direct
+  // one, and that is not a mismatch.
+  it('treats the pooled and the direct host as the SAME database', () => {
+    assert.equal(applyLogTarget(POOLED), applyLogTarget(DIRECT));
+    assert.equal(
+      applyLogTarget('postgres://u:p@EP-STEEP-SUN-123456-POOLER.eu-central-1.aws.neon.tech/neondb'),
+      applyLogTarget(DIRECT),
+      'the comparison is case-insensitive, like db-url.js normalizeHost'
+    );
+  });
+
+  it('distinguishes a different host, and a different database on one host', () => {
+    const a = applyLogTarget('postgres://u:p@host-a.eu/neondb');
+    const b = applyLogTarget('postgres://u:p@host-b.eu/neondb');
+    const c = applyLogTarget('postgres://u:p@host-a.eu/migrations_replay_tmp');
+    assert.notEqual(a, b, 'a different host is a different database');
+    assert.notEqual(a, c, 'the replay scratch database is not the branch database');
+    assert.notEqual(b, c);
+  });
+
+  // The security property, stated as a test: the value cannot encode a
+  // credential, because credentials are not part of its input. The whitelist
+  // exists so a tracked file can never carry a URL, a host or a secret.
+  it('CANNOT encode a credential: user, password, port and query params do not change it', () => {
+    const base = applyLogTarget(POOLED);
+    assert.equal(base, applyLogTarget('postgres://other:s3cret@ep-steep-sun-123456-pooler.eu-central-1.aws.neon.tech/neondb'));
+    assert.equal(base, applyLogTarget('postgres://u:p@ep-steep-sun-123456-pooler.eu-central-1.aws.neon.tech:5432/neondb'));
+    assert.equal(base, applyLogTarget(POOLED + '?sslmode=verify-full&application_name=x'));
+    assert.doesNotMatch(base, /neon|ep-|neondb|pooler|s3cret/i);
+    assert.doesNotMatch(base, /@/);
+  });
+
+  it('refuses a value whose target cannot be identified', () => {
+    assert.throws(() => applyLogTarget('not a url'), /target/i);
+    assert.throws(() => applyLogTarget(null), /target/i);
+    assert.throws(() => applyLogTarget('postgres://host-a.eu/'), /target/i);
+  });
+});
+
 describe('formatApplyLogLine', () => {
+  // `target` is a DIGEST of the connection target's identity (`db:<12 hex>`),
+  // never an inferred role. The four lines already in the tracked log carry
+  // the older `shared` role and are read-only history.
   const normal = {
     applied_at: '2026-10-07T00:00:00.000Z',
     filename: '019_example.sql',
     git_sha: 'abcdef1234567890abcdef1234567890abcdef12',
     note: null,
     restore_point: 'br-abc12345',
-    target: 'shared',
+    target: 'db:9f3a1c7b9d2e',
   };
 
   it('emits exactly the whitelisted fields', () => {
@@ -201,6 +258,25 @@ describe('formatApplyLogLine', () => {
   it('refuses an unknown target', () => {
     assert.throws(() => formatApplyLogLine({ ...normal, target: 'staging' }), /target/);
     assert.throws(() => formatApplyLogLine({ ...normal, target: undefined }), /target/);
+  });
+
+  // `$` WITHOUT the `m` flag anchors at end of INPUT in ECMAScript, so the pattern
+  // itself already refuses a trailing newline (measured, not assumed — a length
+  // guard would be dead code). The cases below pin that it stays that strict.
+  it('refuses a digest-shaped target that is not exactly 12 hex characters', () => {
+    const digest = applyLogTarget('postgres://u:p@host.example:5432/db');
+    assert.throws(() => formatApplyLogLine({ ...normal, target: digest + '\n' }), /target/);
+    assert.throws(() => formatApplyLogLine({ ...normal, target: digest + 'x' }), /target/);
+    assert.throws(() => formatApplyLogLine({ ...normal, target: digest.slice(0, -1) }), /target/);
+  });
+
+  // The change, pinned from the WRITE side: a role name is no longer an
+  // acceptable target, not even the ones this runner used to write. Accepting
+  // them would let the inference back in through the formatter.
+  it('refuses a role name as a target, including the ones it used to write', () => {
+    for (const role of LEGACY_APPLY_LOG_TARGETS) {
+      assert.throws(() => formatApplyLogLine({ ...normal, target: role }), /target/);
+    }
   });
 
   it('refuses an unusable git sha or timestamp', () => {
@@ -280,12 +356,21 @@ describe('database/migration-applies.jsonl', () => {
   it('never records a connection string, a credential or a hostname', () => {
     assert.doesNotMatch(raw, /postgres(ql)?:\/\//i);
     assert.doesNotMatch(raw, /@/);
+    // Endpoint host labels are the one host fact a digest is derived from, so
+    // assert none leaked: the digest is a hash, never the label itself.
+    assert.doesNotMatch(raw, /ep-[a-z0-9-]+\./i);
   });
 
   it('keeps every field usable and every target known', () => {
     for (const line of lines) {
       const rec = JSON.parse(line);
-      assert.ok(APPLY_LOG_TARGETS.includes(rec.target), `unknown target in ${line}`);
+      // The file legitimately holds pre-digest lines, written before
+      // applyLogTarget existed; every line written from now on carries a
+      // digest, and the formatter refuses to write a role name at all.
+      assert.ok(
+        LEGACY_APPLY_LOG_TARGETS.includes(rec.target) || TARGET_DIGEST_RE.test(rec.target),
+        `unrecognized target in ${line}`
+      );
       assert.ok(
         rec.restore_point === null || isValidRestorePointId(rec.restore_point),
         `bad restore point in ${line}`

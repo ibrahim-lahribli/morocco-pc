@@ -44,6 +44,24 @@ is refused rather than dropped, so a connection string, user or hostname cannot 
 tracked file. `restore_point` is `null` only for the 017 backfill — applied before the guard
 existed — and a null restore point **requires** a non-empty `note` saying why.
 
+`target` is what makes a line self-describing: `db:<12 hex>`, the first 12 hex characters of
+`sha256("<normalized host>/<database>")`, from `applyLogTarget` in the same module. It is derived from
+the connection string, so a reader RECOMPUTES it instead of trusting prose (`node
+scripts/run-migrations.js --check` prints the digest of whatever `DATABASE_URL` holds, in any mode and
+before the restore-point guard, so even a refused apply names its target). The `-pooler` suffix is
+normalized away, so the pooled and direct hosts of one endpoint give ONE value, while two databases on
+one endpoint give two.
+
+Lines written before 2026-10-15 carry the role name the runner INFERRED from the flag (`shared`, or
+`test`). Those are history and are read, never rewritten: `LEGACY_APPLY_LOG_TARGETS` accepts them and
+the formatter refuses to WRITE one, so the inference cannot come back in through a write.
+
+Recorded disclosure: this is 48 bits of a hash whose input is a hostname. The input is not a secret
+(hosts appear in connection errors and in these docs) and the digest is not reversible in general, but
+someone holding a candidate hostname can CONFIRM a match. That is the deliberate trade for a target a
+script can check, and it is why no URL, host or credential is persisted — the field whitelist still
+refuses one.
+
 The apply prints `Reminder: commit database/migration-applies.jsonl ...`; commit that line with the
 apply rather than later.
 

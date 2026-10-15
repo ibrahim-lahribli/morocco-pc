@@ -1136,3 +1136,39 @@ suite sorts before comparing. Do not "fix" the order by reordering the seed.
 the real API on the branch: `GET /v1/meta/options` -> 200 GAMING / OFFICE
 ("Bureautique") / WORKSTATION; `POST` OFFICE@20000 -> 201 with one build;
 `POST` STREAMING -> 422 naming the declared vocabulary, writing zero rows.
+
+## 2026-10-15 — the shared-apply audit log's `target` NAMES the database (P1 Sprint 1 follow-up)
+
+Every audit line carried `target: "shared"`, and that value was not a name but an INFERENCE from the
+flag: the runner reads whichever URL `DATABASE_URL` holds, so an apply against the P1 EU project would
+have appended lines claiming `shared` while `APPLY_LOG_TARGETS = ['shared','test']` refused anything
+else. The `--note` flag was the workaround — it made the target's job the note's prose.
+
+The field now names the database:
+
+- `applyLogTarget(connectionString)` (`scripts/lib/migrations.js`) returns `db:<12 hex>` — the first 12
+  hex characters of `sha256("<normalized host>/<database>")` — via `normalizeTarget`
+  (`scripts/lib/db-url.js`), which reuses `normalizeHost`'s `-pooler` strip and `splitHost`'s database
+  read and deliberately hands out neither the parsed URL nor its `.href` (both carry the password).
+- `formatApplyLogLine` REFUSES every other shape, so an inferred role name cannot come back through a
+  write; `LEGACY_APPLY_LOG_TARGETS` keeps the four pre-existing lines readable. The log is append-only
+  and those lines are history — never rewrite them.
+- The runner prints `AUDIT TARGET: db:…` right after it connects, in every shared-target mode and
+  BEFORE the restore-point guard, so a refused apply still names its target. `--test-db` prints none
+  (it writes no audit line). It is NOT dry-run-only: the state a reviewer is in when checking an
+  existing line is the one with nothing pending, where a dry-run-only print never ran.
+- Pooled and direct hosts of one endpoint give ONE value; two databases on one endpoint (the replay
+  scratch database and the branch database) give two. Measured 2026-10-15: shared
+  `db:54ff6ea3f6e6`, TEST branch `db:798b3aa04976`, each invariant across its pooled/direct pair.
+- Disclosure, recorded rather than hidden: 48 bits of a hash whose input is a hostname is not
+  reversible in general, but someone holding a candidate hostname can CONFIRM a match. The input is not
+  a secret (hosts appear in connection errors and in the docs) and no URL, host or credential is
+  persisted — the field whitelist still refuses one.
+
+Verified: `npm run test:scripts` 227 pass / 0 fail (218 before; 9 new), the Node 22 leg 227/227 with
+`# cancelled 0` (CI pins 22 where an accidentally nested test is silently CANCELLED, not failed),
+`node scripts/run-migrations.js --check` against shared exits 0 and prints `AUDIT TARGET:`,
+`--check --test-db` prints none, `verify:docs --offline` OK. Not proven: no apply has happened against
+a database that is not shared, so the EU leg of P1 Sprint 1 Step 5 stays owner-gated, and no real line
+has yet been written with a digest target — the TEST branch is a snapshot whose ledger stands at 020,
+so nothing is ever pending on it.

@@ -48,7 +48,7 @@ The five failure modes this plan's own tests do not fully cover, most likely fir
 **Files:**
 - Create: `fly.toml` (repo root; the container's app definition, health check, internal port, region)
 - Create: `scripts/check-target-parity.js` (read-only: compares two databases' ledger tail, table list and row counts, and prints a table)
-- Modify: `scripts/run-migrations.js` and `scripts/lib/run-migrations-cli.js` — add `--note=<text>` so an apply can name its target in the audit log (see the task below; the `note` field already exists in `APPLY_LOG_FIELDS` and `formatApplyLogLine` validates it, but the runner hardcodes `note: null` and there is no flag)
+- Modify: `scripts/run-migrations.js` and `scripts/lib/run-migrations-cli.js` — add `--note=<text>` so an apply can say WHAT it was for (see the task below; the `note` field already exists in `APPLY_LOG_FIELDS` and `formatApplyLogLine` validates it, but the runner hardcodes `note: null` and there is no flag)
 - Modify: `docs/API.md` — a "Deploy (EU)" subsection: the region, the host, the env var list, the health-check path, and the deploy command
 - Modify: `DEVELOPMENT_NOTES.md` — the measured before/after table and every command used
 - Test: `scripts/lib/run-migrations-cli.test.js`, `scripts/lib/migrations.test.js` (the `--note` flag and its audit-line shape)
@@ -61,13 +61,15 @@ The five failure modes this plan's own tests do not fully cover, most likely fir
 
 `parseArgs(argv)` gains `note` (default `null`, non-empty string when present); the parsed object becomes `{ flags, restorePoint, note }`; `recordSharedApply({ restorePoint, files, note })` threads it into the line instead of the hardcoded `note: null` at `scripts/run-migrations.js:175`. Why this is a step and not a nicety: the runner reads whichever URL `DATABASE_URL` holds, and `APPLY_LOG_TARGETS` is exactly `['shared', 'test']` (verified in `scripts/lib/migrations.js`), so an apply against a NEW EU project would append lines claiming `target: "shared"` with nothing to correct them. The `note` field is the existing, whitelisted way to say otherwise.
 
+**SUPERSEDED 2026-10-15 — the `target` field itself now NAMES the database, so the note stops carrying that job.** `applyLogTarget` derives `db:<12 hex>` from the connection string (normalized host + database), the formatter refuses any other shape, the runner prints the value as `AUDIT TARGET:` before it writes anything, and `LEGACY_APPLY_LOG_TARGETS` keeps the four pre-existing `shared` lines readable without accepting a new one. Step 1 stands: a note is still the human half of a line, and it is now prose about intent rather than the only field that can name a database.
+
 - [x] **Step 2: write the failing tests for the flag.**
 
 In `scripts/lib/run-migrations-cli.test.js`: a parse for `--note=a new EU project` returns that note; `--note=` (empty) is an error with the usage text; a note is carried into the audit line. In `scripts/lib/migrations.test.js`: `formatApplyLogLine({ applied_at, filename, git_sha, note: 'x', restore_point: 'abc12345', target: 'shared' })` round-trips with `note: 'x'`, and an unknown key still throws. Run: `npm run test:scripts`. Expected before the implementation: FAIL.
 
 - [x] **Step 3: implement, then verify.**
 
-Run: `npm run test:scripts` → expected 0 fail. Then `node scripts/run-migrations.js --dry-run` → expected: the pending list only, no write (the audit log is untouched: `git --no-pager diff --stat -- database/migration-applies.jsonl` prints nothing).
+Run: `npm run test:scripts` → expected 0 fail. Then `node scripts/run-migrations.js --dry-run` → expected: the pending list plus the `AUDIT TARGET: db:…` line the run would log (added 2026-10-15), no write (the audit log is untouched: `git --no-pager diff --stat -- database/migration-applies.jsonl` prints nothing).
 
 - [ ] **Step 4 (OWNER): create the EU Neon project, and record its id and region.**
 
@@ -79,7 +81,7 @@ Target: Frankfurt, co-located with Fly's `fra` / Render's `frankfurt`. `list_reg
 
 `node scripts/run-migrations.js --restore-point=<new branch id> --note="P1 co-location: new EU project <id> (<region>)"`
 
-Expected: 20 files `MIGRATED`, one audit line each, `target: "shared"` with the note naming the EU project. Then run every seed: **`run-seeds.js` ignores `--test-db` and has no routing**, so apply `database/seeds/*.sql` through a script that uses `getWriteTestDbUrl()`-style explicit targeting — or point `DATABASE_URL` at the new project and run it, then reset `DATABASE_URL`. Either way, run each file as it is (`client.query(rawText)`), never split on `;`.
+Expected: 20 files `MIGRATED`, one audit line each with the note naming the EU project, and `target` = the EU project's OWN `db:<12 hex>` digest — never `shared`, because since 2026-10-15 the field names the database, so a `shared` value on a line written now means the runner wrote to the wrong one. Then run every seed: **`run-seeds.js` ignores `--test-db` and has no routing**, so apply `database/seeds/*.sql` through a script that uses `getWriteTestDbUrl()`-style explicit targeting — or point `DATABASE_URL` at the new project and run it, then reset `DATABASE_URL`. Either way, run each file as it is (`client.query(rawText)`), never split on `;`.
 
 - [ ] **Step 6: prove parity with `check-target-parity.js`.**
 
@@ -128,11 +130,20 @@ line of a shared apply. Three findings worth keeping:
   and the note reaching the persisted line). Read that as the real shape of
   the gap: plumbing, not the log format.
 - **A blank note is refused (exit 2); a non-blank one is kept verbatim.** The
-  note is EVIDENCE about which database a `target: "shared"` line is about
-  (`APPLY_LOG_TARGETS` is only `['shared','test']` and the runner reads
-  whatever `DATABASE_URL` holds), so a note that explains nothing is worse
+  note says WHAT the apply was for (as of 2026-10-15 the `target` field itself names the database
+  — a `db:<12 hex>` digest from `applyLogTarget` — so the note no longer has to), and a note that
+  explains nothing is worse
   than none, and evidence is never normalized. The `=<value>` form is
   mandatory, exactly as for `--restore-point`.
+- **FOLLOW-UP (2026-10-15): the audit `target` NAMES the database.** `applyLogTarget(connectionString)`
+  returns `db:<12 hex>` — the first 12 hex characters of `sha256("<normalized host>/<database>")` — and
+  `formatApplyLogLine` refuses every other shape, so a role name can only be READ
+  (`LEGACY_APPLY_LOG_TARGETS`), never written again. Every shared-target run prints `AUDIT TARGET:
+  <digest>` right after it connects and BEFORE the restore-point guard, so a refused apply still names
+  its target; `--test-db` prints none because it writes no audit line at all. The print is deliberately
+  not dry-run-only: the state a reviewer is in when checking an EXISTING line is the one with nothing
+  pending. Measured: `npm run test:scripts` 227 pass / 0 fail (218 before, 9 new), the Node 22 leg
+  227/227 with `# cancelled 0`, live shared `db:54ff6ea3f6e6` vs TEST branch `db:798b3aa04976`.
 - **The flag is inert on a `--test-db` run**, which writes no audit line at
   all. That is documented in the runner header rather than enforced, so a
   scripted invocation may pass `--note` in any mode.

@@ -89,6 +89,29 @@ function describeTarget(urlString) {
   return { endpointId, pooled, database };
 }
 
+/**
+ * The IDENTITY of the database a connection string points at, and nothing
+ * else: the normalized host plus the database name.
+ *
+ * Deliberately does NOT hand out the parsed URL (nor splitHost, which returns
+ * it): a parsed URL still carries the password in `.href`/`.password`, and the
+ * one consumer here - the audit-log target digest - must be structurally
+ * unable to persist a credential into a tracked file.
+ *
+ * Parses the string twice, on purpose: it reuses the two CANONICAL
+ * derivations (normalizeHost strips a `-pooler` label; splitHost owns reading
+ * the database out of the path) instead of copying either one. That strip is
+ * already written in three places and must not become four.
+ *
+ * @param {string} urlString a PostgreSQL connection string
+ * @returns {{host: string, database: string}} credential-free identity
+ * @throws {TypeError} when the URL cannot be parsed
+ */
+function normalizeTarget(urlString) {
+  const { database } = splitHost(urlString);
+  return { host: normalizeHost(urlString), database };
+}
+
 /** Swap the pooled host for the direct one, preserving credentials verbatim. */
 function toDirectUrl(urlString) {
   const { parsed, labels, pooled } = splitHost(urlString);
@@ -107,4 +130,5 @@ module.exports = {
   getWriteTestDbUrl,
   describeTarget,
   toDirectUrl,
+  normalizeTarget,
 };
