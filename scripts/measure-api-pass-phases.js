@@ -21,7 +21,17 @@
 // a cleanup failure exits non-zero (a gate that cannot prove cleanup has not
 // proved anything).
 //
-// Usage: node scripts/measure-api-pass-phases.js [--budget N] [--use-case U]
+// Usage: node scripts/measure-api-pass-phases.js [--budget=N] [--use-case=U]
+//
+// The `=<value>` form is MANDATORY (parseArgs matches the prefixes `--budget=` /
+// `--use-case=` and throws `unknown argument: --budget` on the space form), exactly
+// like check-offer-freshness.js' `--fail-days=N`.
+//
+// Comparability warning: this harness does NOT pin a scoring model — it measures
+// whichever model the target database has ACTIVE. The two databases currently
+// disagree (shared seed-minimal-v1@1.0.0, TEST branch launch-v2@1.0.0), so a
+// before/after across targets is only meaningful once the model is pinned with
+// scripts/lib/model-pin.js or recorded alongside the numbers.
 
 require('dotenv').config();
 
