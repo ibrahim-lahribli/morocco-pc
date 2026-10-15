@@ -57,15 +57,15 @@ The five failure modes this plan's own tests do not fully cover, most likely fir
 - Consumes: `apps/api/Dockerfile` (builds from the repository root, copies `src`, `apps/api`, `scripts/lib`), `apps/api/.env.example` (the complete env-var list: `PORT`, `HOST`, `ALLOWED_ORIGINS`, `LOG_LEVEL`, `LOG_PRETTY`, `ENGINE_VERSION`, `DATABASE_URL`, `TEST_DATABASE_URL`, `API_ALLOW_SHARED`), `scripts/run-migrations.js`, `scripts/run-seeds.js`, `scripts/measure-api-pass-phases.js`
 - Produces: `TARGET_DATABASE_URL` (the new EU project's connection string) and `API_BASE_URL` (the deployed origin) for every later sprint; `fly.toml`; the parity table from `check-target-parity.js`
 
-- [ ] **Step 1: add `--note=<text>` to the migration runner.**
+- [x] **Step 1: add `--note=<text>` to the migration runner.**
 
 `parseArgs(argv)` gains `note` (default `null`, non-empty string when present); the parsed object becomes `{ flags, restorePoint, note }`; `recordSharedApply({ restorePoint, files, note })` threads it into the line instead of the hardcoded `note: null` at `scripts/run-migrations.js:175`. Why this is a step and not a nicety: the runner reads whichever URL `DATABASE_URL` holds, and `APPLY_LOG_TARGETS` is exactly `['shared', 'test']` (verified in `scripts/lib/migrations.js`), so an apply against a NEW EU project would append lines claiming `target: "shared"` with nothing to correct them. The `note` field is the existing, whitelisted way to say otherwise.
 
-- [ ] **Step 2: write the failing tests for the flag.**
+- [x] **Step 2: write the failing tests for the flag.**
 
 In `scripts/lib/run-migrations-cli.test.js`: a parse for `--note=a new EU project` returns that note; `--note=` (empty) is an error with the usage text; a note is carried into the audit line. In `scripts/lib/migrations.test.js`: `formatApplyLogLine({ applied_at, filename, git_sha, note: 'x', restore_point: 'abc12345', target: 'shared' })` round-trips with `note: 'x'`, and an unknown key still throws. Run: `npm run test:scripts`. Expected before the implementation: FAIL.
 
-- [ ] **Step 3: implement, then verify.**
+- [x] **Step 3: implement, then verify.**
 
 Run: `npm run test:scripts` → expected 0 fail. Then `node scripts/run-migrations.js --dry-run` → expected: the pending list only, no write (the audit log is untouched: `git --no-pager diff --stat -- database/migration-applies.jsonl` prints nothing).
 
@@ -113,6 +113,37 @@ Preferred: Fly.io, region `fra` (Frankfurt). `fly.toml` sets `primary_region = "
 | 1.4 | `check-target-parity.js` after deleting one product on B | a named difference for `product`, exit 1 |
 | 1.5 | `GET /v1/health` on the deployed origin | 200, `status: ok`, `db: ok`, an `engine_version` equal to the deployed short SHA |
 | 1.6 | The same instrument run against both targets | a statement count that is IDENTICAL (the pipeline did not change) and a lower ms/round trip |
+
+**Status 2026-10-15 — Steps 1-3 DONE and committed; Steps 4-9 remain OWNER-gated.**
+
+`--note=<text>` exists on `scripts/run-migrations.js` and reaches every audit
+line of a shared apply. Three findings worth keeping:
+
+- **The formatter was already ready; only the FLAG was missing.**
+  `formatApplyLogLine` has validated a `note` field since the audit log was
+  added, and the runner hardcoded `note: null`. So the two
+  `scripts/lib/migrations.test.js` cases written first PASSED before any
+  implementation - the only failing tests were the three in
+  `scripts/lib/run-migrations-cli.test.js` (`parseArgs` default/value/blank,
+  and the note reaching the persisted line). Read that as the real shape of
+  the gap: plumbing, not the log format.
+- **A blank note is refused (exit 2); a non-blank one is kept verbatim.** The
+  note is EVIDENCE about which database a `target: "shared"` line is about
+  (`APPLY_LOG_TARGETS` is only `['shared','test']` and the runner reads
+  whatever `DATABASE_URL` holds), so a note that explains nothing is worse
+  than none, and evidence is never normalized. The `=<value>` form is
+  mandatory, exactly as for `--restore-point`.
+- **The flag is inert on a `--test-db` run**, which writes no audit line at
+  all. That is documented in the runner header rather than enforced, so a
+  scripted invocation may pass `--note` in any mode.
+
+Verified: `npm run test:scripts` **218 pass / 0 fail** (218 total, 3 failing
+before the implementation); `--dry-run` and `--check` both exit 0 against the
+shared DB with the audit log byte-identical (`git diff --stat --
+database/migration-applies.jsonl` prints nothing); `--note=` and the space
+form both exit 2 with the usage text. Steps 4-7 (the EU project, the replay,
+parity, the deploy) and Step 8 (re-measurement) need owner resources and are
+untouched.
 
 ---
 

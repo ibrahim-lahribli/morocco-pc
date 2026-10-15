@@ -10,7 +10,7 @@
 // bare `CREATE TYPE`, so the old replay-everything runner aborted at
 // `type "product_category" already exists` (see DEVELOPMENT_NOTES.md).
 //
-// Usage: node scripts/run-migrations.js [mode] [--restore-point=<id>]
+// Usage: node scripts/run-migrations.js [mode] [--restore-point=<id>] [--note=<text>]
 //
 // A real apply against the shared DATABASE_URL REFUSES unless
 // --restore-point=<id> is given and matches ^[A-Za-z0-9_-]{8,}$ (Neon
@@ -23,6 +23,14 @@
 // append-only database/migration-applies.jsonl, carrying exactly the six
 // whitelisted fields of scripts/lib/migrations.js APPLY_LOG_FIELDS (restore
 // point, git SHA, timestamp, filename, target, note).
+// --note=<text> fills that last field on every line of a shared apply. It is
+// operator EVIDENCE, not policy: the runner reads whatever DATABASE_URL holds
+// while the log's `target` values are only `shared` and `test`, so an apply
+// against any other database would otherwise append lines claiming
+// `target: "shared"` with nothing to correct them (P1's EU project is the
+// case that motivated this). A blank value is refused rather than recorded, a
+// non-blank one is kept verbatim, and a --test-db run writes no audit line at
+// all, so the flag is inert there.
 //   (no mode)          apply every PENDING migration, then verify
 //   --dry-run          list pending migrations without executing or writing
 //   --check            exit 0 when nothing is pending, 1 when something is
@@ -56,32 +64,51 @@ const {
 
 const MODES = ['--dry-run', '--check', '--baseline', '--offline', '--test-db'];
 
+/** The two value-taking flags. `=<value>` form only - never a space. */
+const RESTORE_POINT_FLAG = '--restore-point=';
+const NOTE_FLAG = '--note=';
+
+const USAGE = `usage: node scripts/run-migrations.js [${MODES.join('] [')}] [--restore-point=<id>] [--note=<text>]`;
+
 
 /**
- * Parse argv into a mode set plus an optional restore-point id.
+ * Parse argv into a mode set plus the two optional values.
  *
  * PURE on purpose: an unrecognized flag or an unusable mode combination is
  * RETURNED as `error` instead of calling process.exit, so the refusal paths are
  * testable without a database (scripts/lib/run-migrations-cli.test.js). The
  * bootstrap prints the error to stderr and exits 2.
+ *
+ * A non-blank `--note` is kept VERBATIM - it is evidence about which database a
+ * `target: "shared"` line was written against, and evidence is never
+ * normalized. A blank one is refused instead, because a note that explains
+ * nothing is worse than no note: the line still cannot be corrected.
  */
 function parseArgs(argv) {
   const flags = new Set();
   let restorePoint = null;
+  let note = null;
   for (const arg of argv) {
-    if (arg.startsWith('--restore-point=')) {
-      restorePoint = arg.slice('--restore-point='.length);
+    if (arg.startsWith(RESTORE_POINT_FLAG)) {
+      restorePoint = arg.slice(RESTORE_POINT_FLAG.length);
+      continue;
+    }
+    if (arg.startsWith(NOTE_FLAG)) {
+      note = arg.slice(NOTE_FLAG.length);
       continue;
     }
     if (!MODES.includes(arg)) {
-      return { error: `usage: node scripts/run-migrations.js [${MODES.join('] [')}] [--restore-point=<id>]` };
+      return { error: USAGE };
     }
     flags.add(arg);
   }
   if (flags.has('--baseline') && (flags.has('--dry-run') || flags.has('--check') || flags.has('--offline'))) {
     return { error: 'ERROR: --baseline cannot be combined with --dry-run / --check / --offline' };
   }
-  return { flags, restorePoint };
+  if (note !== null && note.trim() === '') {
+    return { error: `ERROR: ${NOTE_FLAG}<text> requires a non-empty value\n${USAGE}` };
+  }
+  return { flags, restorePoint, note };
 }
 
 /**
@@ -157,7 +184,7 @@ async function baselineLedger(files, client) {
  * built by the whitelisting formatter, so a malformed record is refused rather
  * than written into a tracked file.
  */
-function recordSharedApply({ restorePoint, files }) {
+function recordSharedApply({ restorePoint, files, note = null }) {
   const logPath = path.join(process.cwd(), 'database', 'migration-applies.jsonl');
   let gitSha = 'unknown';
   try {
@@ -172,13 +199,14 @@ function recordSharedApply({ restorePoint, files }) {
         applied_at: appliedAt,
         filename,
         git_sha: gitSha,
-        note: null,
+        note,
         restore_point: restorePoint,
         target: 'shared',
       })
     );
     fs.appendFileSync(logPath, lines.join(APPLY_LOG_EOL) + APPLY_LOG_EOL, 'utf8');
     console.log(`Recorded ${lines.length} audit line(s) in database/migration-applies.jsonl`);
+    if (note !== null) console.log(`  note: ${note}`);
     console.log('Reminder: commit database/migration-applies.jsonl with this apply (tracked, append-only).');
   } catch (err) {
     console.log('WARNING: could not append to database/migration-applies.jsonl: ' + err.message);
@@ -225,7 +253,7 @@ async function main(argv = process.argv.slice(2)) {
     process.exitCode = 2;
     return;
   }
-  const { flags, restorePoint } = parsed;
+  const { flags, restorePoint, note } = parsed;
   const offline = flags.has('--offline');
 
   const migrationsDir = path.join(process.cwd(), 'database', 'migrations');
@@ -315,7 +343,7 @@ async function main(argv = process.argv.slice(2)) {
     // numbered migration) so a fresh 001->NNN replay stays clean, and audit
     // metadata is not schema. TEST-target runs never write here.
     if (!flags.has('--test-db')) {
-      recordSharedApply({ restorePoint, files: pending });
+      recordSharedApply({ restorePoint, files: pending, note });
     }
 
     await verify(client);

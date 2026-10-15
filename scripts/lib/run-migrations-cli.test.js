@@ -164,6 +164,34 @@ describe('run-migrations parseArgs', () => {
     assert.equal(parseArgs(['--restore-point=']).restorePoint, '');
   });
 
+  it('reads the --note=<text> value and defaults it to null', () => {
+    assert.equal(parseArgs(['--dry-run']).note, null, 'no flag means no note');
+    assert.equal(parseArgs(['--note=a new EU project']).note, 'a new EU project');
+    assert.equal(
+      parseArgs(['--note=  padded  ']).note,
+      '  padded  ',
+      'the note is EVIDENCE, so it is kept verbatim - never trimmed'
+    );
+    const both = parseArgs(['--note=x', '--restore-point=br-abc12345']);
+    assert.equal(both.note, 'x');
+    assert.equal(both.restorePoint, 'br-abc12345');
+  });
+
+  // A note is how an audit line says which database it was written against,
+  // because the runner reads whatever DATABASE_URL holds while
+  // APPLY_LOG_TARGETS is only ['shared', 'test']. An empty or blank one would
+  // persist a line that claims to explain and explains nothing, so it fails
+  // loudly instead - the same reason the space form of --restore-point does.
+  it('refuses an empty or blank --note', () => {
+    assert.match(parseArgs(['--note=']).error, /usage/);
+    assert.match(parseArgs(['--note=']).error, /non-empty/);
+    assert.match(parseArgs(['--note=   ']).error, /non-empty/);
+  });
+
+  it('refuses the space form of --note, like --restore-point', () => {
+    assert.match(parseArgs(['--note', 'x']).error, /usage/);
+  });
+
   it('reports an unknown flag as an error instead of exiting', () => {
     assert.match(parseArgs(['--nope']).error, /usage/);
     // The space form is NOT a mode: `--restore-point br-abc12345` must fail loudly
@@ -372,6 +400,37 @@ describe('run-migrations shared-apply audit log', () => {
         assert.equal(rec.note, null);
         assert.match(rec.git_sha, /^[0-9a-f]{40}$/, 'the git SHA must be recorded, not "unknown"');
         assert.ok(!Number.isNaN(Date.parse(rec.applied_at)));
+      }
+    } finally {
+      fs.writeFileSync(AUDIT_LOG, snapshot);
+    }
+    assert.deepStrictEqual(fs.readFileSync(AUDIT_LOG), snapshot, 'the tracked audit log must be restored');
+  });
+
+  // The flag exists so an apply can name the database it wrote to. Asserting
+  // the parser alone would miss the failure this step is FOR: a note parsed
+  // and then dropped before the line is built leaves exactly the false
+  // `target: "shared"` record the flag was added to prevent.
+  it('carries --note=<text> into every audit line, and restores the log afterwards', async () => {
+    const NOTE = 'P1 co-location: new EU project eu-1 (aws-eu-central-1)';
+    const snapshot = fs.readFileSync(AUDIT_LOG);
+    const beforeCount = snapshot.toString('utf8').split(/\r?\n/).filter((line) => line !== '').length;
+    try {
+      const res = await runMain(['--restore-point=br-abc12345', '--note=' + NOTE], {
+        ledger: PARTIAL_LEDGER,
+      });
+      assert.equal(res.exitCode, undefined, 'the CLI exits 0');
+      const lines = fs
+        .readFileSync(AUDIT_LOG, 'utf8')
+        .split(/\r?\n/)
+        .filter((line) => line !== '');
+      assert.equal(lines.length, beforeCount + PENDING_COUNT, 'one line per applied file');
+      for (const line of lines.slice(beforeCount)) {
+        const rec = JSON.parse(line);
+        assert.equal(rec.note, NOTE, 'the note must reach the persisted line');
+        assert.equal(rec.restore_point, 'br-abc12345');
+        assert.equal(rec.target, 'shared', 'the note qualifies the target, it does not change it');
+        assert.deepStrictEqual(Object.keys(rec).sort(), APPLY_LOG_FIELDS);
       }
     } finally {
       fs.writeFileSync(AUDIT_LOG, snapshot);

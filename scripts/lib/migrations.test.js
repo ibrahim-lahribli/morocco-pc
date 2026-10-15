@@ -225,6 +225,25 @@ describe('formatApplyLogLine', () => {
     );
   });
 
+  // The combination the `--note` flag actually produces: a note ALONGSIDE a
+  // valid restore point. Only the null-restore-point branch was pinned, so a
+  // writer that dropped a non-null note would have passed every test above.
+  it('carries a note alongside a restore point (the --note flag path)', () => {
+    const rec = JSON.parse(
+      formatApplyLogLine({
+        ...normal,
+        note: 'P1 co-location: new EU project eu-1 (aws-eu-central-1)',
+      })
+    );
+    assert.equal(rec.note, 'P1 co-location: new EU project eu-1 (aws-eu-central-1)');
+    assert.equal(rec.restore_point, 'br-abc12345');
+    assert.deepStrictEqual(Object.keys(rec).sort(), APPLY_LOG_FIELDS);
+  });
+
+  it('refuses a note that is not a string', () => {
+    assert.throws(() => formatApplyLogLine({ ...normal, note: 42 }), /note/);
+  });
+
   it('returns one line with no terminator, and the terminator is CRLF', () => {
     assert.doesNotMatch(formatApplyLogLine(normal), /[\r\n]/);
     assert.strictEqual(APPLY_LOG_EOL, '\r\n');

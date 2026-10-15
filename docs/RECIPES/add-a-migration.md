@@ -15,7 +15,12 @@ Schema change = **new sequential file**, never edit a committed one (`AGENTS.md`
    `--restore-point=<id>`** — a Neon restore point id matching `^[A-Za-z0-9_-]{8,}$`. A
    placeholder such as `<PASTE ID HERE>` fails that shape on purpose. Without a valid id the
    runner prints the pending files and exits non-zero. The id is recorded (with the git SHA and
-   a timestamp) in `database/migration-applies.jsonl`, one line per applied file.
+   a timestamp) in `database/migration-applies.jsonl`, one line per applied file. Add
+   `--note="<what this apply is for>"` whenever the target is NOT the shared dev database: the
+   log's `target` field can only be `shared` or `test`, so the note is the one field that says
+   which database the line is about (a P1 EU-project apply would otherwise be logged as
+   `shared`). The value is kept verbatim; a blank `--note=` is a usage error, exit 2. A
+   `--test-db` run writes no audit line, so the flag does nothing there.
    *Why a log file and not migration `019` adding `applied_by`/`notes` to `schema_migrations`:*
    `verify-migrations-replay.js` replays the raw files into an empty database and NEVER creates
    `schema_migrations` (the runner does), so a `019 ALTER TABLE schema_migrations` would abort
