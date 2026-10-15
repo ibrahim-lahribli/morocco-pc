@@ -1008,3 +1008,39 @@ products and offers unchanged (no row created or destroyed); `verify:replay --te
 100/100 — the +5 columns, +1 check and +1 index over the 019-era 365/78/60/99 are exactly 020's
 additions); `scripts/test-orchestrator-full-run.js` = **36 pass / 0 fail**, pass-facts read-back
 included; `npm run test:api:db` = **1 passed / 0 failed**, residue 0.
+
+## 2026-10-15 — Platform P0 Sprint 5: 019 + 020 applied to the SHARED database from a restore point, and what the guard cannot check
+
+**A restore point had to be CREATED first, and that is the lesson.** No backup branch existed - the project
+held only `production` and `test` - so the apply's precondition was unmet even though the request said "the
+restore point I provide". `br-damp-grass-axyri6yl` was created from `production` at LSN `0/4C9C840` with
+`create_branch(parent_id=production, no_compute=true)`: copy-on-write, no compute to pay for, `ready` in
+seconds, and its id is what `--restore-point` then carried. **`run-migrations.js` cannot verify that id** -
+the guard is the regex `^[A-Za-z0-9_-]{8,}$` and nothing else - so a plausible-looking string passes exactly
+as well as a real branch. The discipline is the whole control, which is why an invented id must never be
+used to get past it.
+
+**Verified after the apply, each on its own exit status.** Shared ledger 18 -> 20, one transaction per file,
+no pending migrations on either database. All 8 new columns present and nullable. The shared catalog: 104
+products, 104 `display_name`s, **104 distinct slugs, 0 NULL, 0 format violations** - the greedy generator
+needed no suffixing, exactly as the pre-flight predicted - with `chk_product_slug_format` and `uq_product_slug`
+present. `verify:replay` replayed 20 files into a genuinely empty database at **0 drift** (370/370 columns,
+79/79 checks, 60/60 fks, 100/100 indexes). `gen:schema` rewrote both generated docs and `verify-docs --live`
+matched the new digest, which also cleared the long-standing `gen-schema-reference --check` exit 1 that had
+been firing on `DATA_STATE.md` alone. `check-deferred-rules` 0 violations; `check-offer-freshness
+--fail-days=14` PASS; `verify:pi1` PASS (0 of 25 drifted in both use cases, cleanup verified); the golden
+harness 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN, exit 0; `test:scripts` 212/0 (it validates the new
+`migration-applies.jsonl` lines), `test:unit` 1149/0, `test:api` 45/0, `test:api:db` 1/0.
+
+**The read path was proven ON SHARED, read-only, by executing the repository's own statements.**
+`SELECT_QUERY_SQL` and `SELECT_BUILDS_SQL` with a random uuid: 0 rows, no error, where they previously raised
+`42703`. That is the direct proof the API can now answer against shared. It deliberately stops short of a
+POST: a write test against shared is prohibited, and a failed POST would leave an unmarked
+`recommendation_query` row that blocks the golden harness preflight.
+
+**Two honest gaps, recorded not buried.** (1) The `morocco_pc_api` role does not exist on shared, so Decision
+46 item 7's column-scoped GRANTs remain unapplied; the script is ready in `docs/API.md` Production mode. (2)
+The plan's golden leg "at the v1 pin and at `launch-v2@1.1.0`" cannot run on this instance: the only ACTIVE
+scoring model is `seed-minimal-v1@1.0.0` (the `launch-v2` models are not in this branch's data after its
+2026-10-15 re-creation reset it to the parent), and `--model=launch-v2@1.1.0` fails closed naming the active
+model - correct behaviour, not a defect.

@@ -9,6 +9,16 @@ series and cross-cutting coordination.
 
 ---
 
+## 2026-10-15 — Platform P0 Sprint 5: 019 + 020 applied to the SHARED database; one operator step remains (the API role)
+
+**Owner:** Platform (the role + GRANTs). **Requested by:** Platform (self-recorded so the owner sees it). **Status:** the shared apply is DONE; the role provisioning is a REQUEST.
+
+The shared database went from ledger 18 to 20 on 2026-10-15: `019_recommendation_pass_facts.sql` and `020_product_identity_and_media.sql` applied through the OG-14 ledger, one transaction per file, from restore point `br-damp-grass-axyri6yl` - a `pre-019-020` branch created off `production` at LSN `0/4C9C840` BEFORE the apply, because no backup branch existed. Two audit lines were appended to `database/migration-applies.jsonl`, both carrying the restore point and the applying git sha. Measured after: no pending migrations on either database; all 8 new columns present and nullable; 104 shared products all with `display_name` and 104 distinct CHECKed slugs, 0 NULL, 0 format violations; `verify:replay` replays 20 files into an empty database at 0 drift; `gen:schema` regenerated `docs/SCHEMA_REFERENCE.md` + `docs/DATA_STATE.md` and `verify-docs --live` matches the new schema digest. The API's read path was proven against shared by executing both repository statements read-only (they previously raised `42703`) - note this needed migration 020 as well as 019, because the component read selects `p.slug` and `COALESCE(p.display_name, p.name)`.
+
+**The request.** The `morocco_pc_api` production role does not exist on the shared database (`pg_roles` has no such row), so the COLUMN-scoped GRANTs Decision 46 item 7 specifies are still unapplied and cannot be applied yet. The script and its `has_table_privilege` / `has_column_privilege` self-checks are maintained in `docs/API.md` Production mode.
+
+**Acceptance:** once the role is provisioned on shared, the Production-mode script runs clean and its self-checks report table-level `UPDATE` false for `recommendation_query` and `recommendation_result` while `has_column_privilege(...,'budget_floor','UPDATE')`, `(...,'engine_version','UPDATE')` and `(...,'strategy_key','UPDATE')` are all true; and a role-parameterised pass completes with no `42501` and residue 0.
+
 ## 2026-10-14 — Engine widened `filtering/context-loader.js` for E8, and a shared-DB fixture leak needs an owner
 
 **Owner:** Platform (the loader file, and the shared-DB cleanup). **Requested by:** Engine (E8). **Status:** the loader change is DONE by Engine and disclosed here; the fixture cleanup is a REQUEST.

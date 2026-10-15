@@ -5,9 +5,12 @@ specified by **Decision 36**, and owns **no engine logic**: every route calls th
 engine through its public barrels and reads or writes Layer 4 rows through one
 repository module.
 
-Status at 2026-10-14: **implemented and running against the TEST branch.** The
+Status at 2026-10-15: **implemented and running against the TEST branch.** The
 DB-free suite runs on every push/PR; the DB-backed suite is wired into the
-recurring CI job and has been verified locally, but **not yet by a CI run**.
+recurring CI job and has been verified locally, but **not yet by a CI run**. Both
+databases now carry the schema it reads (019 + 020; shared applied 2026-10-15), while
+the write-safety default still points the API at the isolated branch - see *Database
+target*.
 
 **Contract v1.2 (2026-10-15):** v1.1 (2026-10-14) surfaced the persisted pass
 facts - `budget_floor`, `engine_version` and each build's `strategy_key` became
@@ -18,20 +21,22 @@ each component carries its persisted `slug`, and its `name` is
 `020_product_identity_and_media.sql`, so the ingestion-only `Seed ` prefix no
 longer reaches a client. See *Response shape*.
 
-**Schema prerequisite (2026-10-15) - read this before pointing the API at the
-shared database.** Migrations 019 and 020 are applied on the TEST branch ONLY;
-the shared database is still at 018. The read path now needs both: below 019 the
-component read fails `42703` on `recommendation_query.budget_floor`, and below
-020 on `product.slug` / `product.display_name`. Either way the whole response
-fails, and what a client sees is the generic `500 INTERNAL_ERROR` with a request id -
-an undefined column is an UNEXPECTED error, so `503` is NOT the answer (`503` on this
-API means only "no active scoring model"). That makes the shared apply a prerequisite
-for `API_ALLOW_SHARED=1`, not a nice-to-have - and the failure is not free:
-`createRecommendationQuery` commits the profile and query rows BEFORE the engine runs,
-so a failed POST leaves an unmarked `recommendation_query` row behind, and the golden
-harness refuses to run while ANY unmarked `recommendation_query` row exists. Pointing
-the API at shared therefore also blocks `npm run eval:scenarios` until those rows are
-deleted in FK order.
+**Schema prerequisite - SATISFIED on BOTH databases (2026-10-15).** Migrations 019
+and 020 are applied on the TEST branch AND on the shared database: both ledgers read
+20, shared was applied 2026-10-15 from restore point `br-damp-grass-axyri6yl`, and
+`verify:replay` replays 20 files into an empty database at 0 drift (columns 370/370,
+checks 79/79, fks 60/60, indexes 100/100). The read path needs both: below 019 the
+component read fails `42703` on `recommendation_query.budget_floor`, and below 020 on
+`product.slug` / `product.display_name`. Either way the whole response fails, and what
+a client sees is the generic `500 INTERNAL_ERROR` with a request id - an undefined
+column is an UNEXPECTED error, so `503` is NOT the answer (`503` on this API means only
+"no active scoring model"). That is why the shared apply was the prerequisite for
+`API_ALLOW_SHARED=1`; it is now met. Two notes that still hold: a failed POST is not
+free, because `createRecommendationQuery` commits the profile and query rows BEFORE the
+engine runs, so it leaves an unmarked `recommendation_query` row behind and the golden
+harness refuses to run while ANY unmarked row exists (delete them in FK order); and the
+`morocco_pc_api` role does not exist on the shared database yet, so the column-scoped
+GRANTs in *Production mode* remain unapplied.
 
 ## What it is not
 
@@ -444,5 +449,5 @@ profile id is captured before the query is deleted).
 - **No 202/polling path.** A POST is synchronous; measure before adding
   asynchronous job handling.
 - **`resolution`/`priority` are accepted but inert** (see *Option vocabulary*).
-- **The identity surface needs migration 020 where the API points.** `components[].name` is `COALESCE(product.display_name, product.name)` and `components[].slug` is `product.slug`; against a database below 020 those columns do not exist, the component read fails `42703`, and the request answers the generic `500 INTERNAL_ERROR`. On the TEST branch (020 applied) the prefix is gone from served names and every component carries a slug. Do not point the API at the shared database until 019 and 020 are applied there.
+- **The identity surface needs migration 020 wherever the API points.** `components[].name` is `COALESCE(product.display_name, product.name)` and `components[].slug` is `product.slug`; against a database below 020 those columns do not exist, the component read fails `42703`, and the request answers the generic `500 INTERNAL_ERROR`. Both databases are at 020 since 2026-10-15 (the shared catalog's 104 products all carry distinct CHECKed slugs and no `Seed `-prefixed `display_name`), so on either target the prefix is gone from served names and every component carries a slug.
 - **`strategy_key` / `engine_version` are recorded but not yet consumed.** They are persisted and served; no client reads them back yet, and their golden-harness coverage (A10) is still owed (**OG-46** — OG-45 tracks the persistence itself, which is done wherever migration 019 is applied).

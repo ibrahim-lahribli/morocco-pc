@@ -216,7 +216,7 @@ Verified, each on its own exit status:
 
 One comparator trap worth keeping: the floor cannot be compared with `util.isDeepStrictEqual`. `jsonb` does not preserve key order, and the engine's `cheapest_by_role` is a deliberately **null-prototype** object (`retention/budget-floor.js` uses `Object.create(null)`), which `isDeepStrictEqual` rejects against the driver-parsed plain object. The gate compares key-sorted JSON content instead.
 
-Deliberately NOT done in this pass: `gen:schema` (this sprint forbids it — it targets the shared DB and would desync the digest gate before 019 is applied there), `020`, and the shared apply (Sprint 5). Because 019 is applied only on the branch, the SHARED database still lacks the three columns, so a write against shared still fails `42703`: the transition hazard above is closed for the branch, not for shared.
+Deliberately NOT done in this pass: `gen:schema` (this sprint forbids it — it targets the shared DB and would desync the digest gate before 019 is applied there), `020`, and the shared apply (Sprint 5). Because 019 is applied only on the branch, the SHARED database still lacks the three columns, so a write against shared still fails `42703`: the transition hazard above is closed for the branch, not for shared. **[SUPERSEDED 2026-10-15 (Sprint 5): 019 AND 020 are applied on the SHARED database, so the hazard is closed for shared too — see the Sprint 5 execution record below.]**
 
 ### Migration 020 shape
 
@@ -304,7 +304,7 @@ CREATE UNIQUE INDEX uq_product_slug ON product (slug);
 019 in the same pass (ledger 18 -> 20); see the measurements at the end of this record. Its
 generator had first been executed READ-ONLY, from the shipped text, which is how the two defects
 below were found before any apply. It is applied on the TEST branch ONLY: the shared database is
-still at 018, so `product.slug` / `display_name` and the three image columns do not exist there.
+still at 018, so `product.slug` / `display_name` and the three image columns do not exist there. **[SUPERSEDED 2026-10-15 — Sprint 5 applied 019 + 020 to the SHARED database from restore point `br-damp-grass-axyri6yl`; this record is the state of that morning only. See the Sprint 5 execution record below.]**
 
 **Two defects the EXECUTION caught, both fatal at first apply, neither visible by reading.**
 `min(uuid)` does not exist in PostgreSQL, so the sketch's ordering primitive could never have
@@ -362,7 +362,7 @@ The replay deltas over the 019-era numbers (365/78/60/99) are exactly 020's addi
 read-only before the apply, so the branch apply is the first time the DDL itself executed — it
 succeeded on the first attempt, on a branch carrying 100 real products.
 
-**Still blocked, and not claimed:** the SHARED apply (Sprint 5, owner-gated on a Neon restore
+**Still blocked, and not claimed — [ALL THREE WERE ANSWERED LATER THE SAME DAY (2026-10-15): Sprint 5 applied both migrations to shared, `gen:schema` ran after it, and Sprint 4's product-identity half landed.]:** the SHARED apply (Sprint 5, owner-gated on a Neon restore
 point), `gen:schema` (which targets the shared DB and would desync the digest gate before that
 apply), and Sprint 4's product-identity half (`slug` / `COALESCE(display_name, name)` in the API
 read path and the "no `Seed ` prefix" guard) — now unblocked by data but not yet built. The
@@ -576,6 +576,12 @@ shared counts had already drifted (products 100 → 104) before this change.
 
 ## Sprint 5 — shared-apply gate, generated-doc refresh, and P1–P4 carried-as-planned review (60 min)
 
+**Status 2026-10-15: DONE — option (b) was taken.** No restore-point branch existed, so one was
+created BEFORE any write (`br-damp-grass-axyri6yl`, a `pre-019-020` branch off `production` at
+LSN `0/4C9C840`, no compute), and 019 + 020 were then applied to the shared database through the
+OG-14 ledger. Both ledgers read 20, `verify:replay` is 0 drift at the 20-file tail, `gen:schema`
+ran, and OG-45 / OG-18 closed. Evidence in "Sprint 5 execution record" below.
+
 **Date:** 2026-10-14  
 **Purpose:** close the shared-apply-mode decision, refresh generated docs if a shared apply happened, correct stale migration-version language, and record the P1–P4 carryover as cascade notes rather than absorbed-invisible work.
 
@@ -614,6 +620,51 @@ Record in `docs/OPEN_GAPS.md` as cascade notes:
 3. Post-state parity on the branch for a shared-state recommendation: GET reads back exactly what POST persisted, including `budget_floor` (nested JSONB), `engine_version`, `strategy_key`, and `slug` per component.
 4. No-regression gates if the code changed: `npm run test:unit` 0 fail, `npm run test:scripts` 0 fail, `npm run test:api` 0 fail, `npm run test:api:db` 1/0 with residue 0, `node scripts/test-db.js` reachable.
 
+### Sprint 5 execution record (2026-10-15)
+
+**Mode (b) — applied with a recorded restore point.** The request arrived as "apply 019 and 020 using
+the restore point I provide", but no backup existed: `list_branches` returned only `production` and
+`test`. So the restore point was created FIRST, before any write — `create_branch(parent_id =
+production, name = 'pre-019-020', no_compute = true)` — yielding `br-damp-grass-axyri6yl`, parent LSN
+`0/4C9C840`, `ready` before the apply. Worth stating plainly: `run-migrations.js` cannot verify that
+id (its guard is the format regex `^[A-Za-z0-9_-]{8,}$` and nothing else), so a plausible-looking
+string would have passed exactly as well as a real branch. That is why the branch was created rather
+than named.
+
+| Check | Result |
+|---|---|
+| `run-migrations.js --dry-run` | pending: `019`, `020` IN ORDER |
+| `run-migrations.js --restore-point=br-damp-grass-axyri6yl` | `MIGRATED` 019 then 020; ledger 18 → 20; 2 audit lines appended to `database/migration-applies.jsonl` |
+| shared read-back | 8 new columns present and nullable; 104 products / 104 `display_name` / **104 distinct slugs / 0 NULL / 0 format violations**; `chk_product_slug_format` + `uq_product_slug` present |
+| `run-migrations.js --check` (shared) + `--test-db --check` | no pending migrations on either |
+| `npm run gen:schema` | wrote `docs/SCHEMA_REFERENCE.md` + `docs/DATA_STATE.md` |
+| `verify:docs --offline` / `--live` | PASS / PASS; schema digest now `e56483044956491d` |
+| `gen-schema-reference.js --check` | **OK for both files** (this had been exiting 1 on `DATA_STATE.md` alone before the apply) |
+| `verify:replay -- --test-db` (reference = shared) | 20 files into an empty database, **0 drift** (370/370 columns, 79/79 checks, 60/60 fks, 100/100 indexes) |
+| API read path on SHARED (read-only) | `SELECT_QUERY_SQL` + `SELECT_BUILDS_SQL` with a random uuid: 0 rows, no error (previously `42703`) |
+| `check-deferred-rules.js` | 0 violations in every scope |
+| `check-offer-freshness.js --fail-days=14` | PASS |
+| `verify:pi1` | PASS — 0 of 25 drifted in both use cases, cleanup verified |
+| `eval:scenarios` | exit 0 — 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN (the unchanged-engine baseline) |
+| `test:unit` / `test:scripts` / `test:api` / `test:api:db` | 1149/0/0 · 212/0 · 45/0 · 1/0 |
+
+**Deliberately NOT done, and why.** (1) No POST was ever issued against shared — a write test against
+the shared database is prohibited, and a failed one would leave an unmarked `recommendation_query`
+row that blocks the golden harness — so the read path was proven by executing the repository's own
+two statements there, read-only. (2) The column-scoped GRANTs remain unapplied because the
+`morocco_pc_api` role does not exist on shared (`pg_roles` has no such row), so there is nothing to
+grant to; the script waits in `docs/API.md` Production mode. (3) The plan's second golden pin could
+not run: the only ACTIVE scoring model on this instance is `seed-minimal-v1@1.0.0` (the branch's
+`launch-v2` models went with its re-creation reset to the parent), and `--model=launch-v2@1.1.0` fails
+closed naming the active model — correct behaviour, reported rather than worked around. (4) The P1–P4
+carryover is registered as **OG-52** plus a §7 addendum, not absorbed into this sprint's "done".
+
+**Propagated in the same session:** `OG-45 → C-39`, `OG-18 → C-40` (both closed on exactly the
+condition the shared apply answered), `OG-52` added; and re-stated for shared = 020 in `CONTEXT.md`
+(Environment), `AGENTS.md` §7 item 5, Decision 46's `Status:` line plus a Sprint 5 UPDATE block,
+`docs/API.md` (Schema prerequisite + Known limitations), `docs/briefs/engine.md` and
+`docs/briefs/requests.md`.
+
 ### Verification at the door (whichever apply mode)
 
 - `npm run gen:schema` → `npm run verify:docs --offline` → `npm run verify:docs --live` (digest gate) → `npm run verify:replay -- --reference=test` → `node scripts/run-migrations.js --test-db --check` → `npm run test:unit` → `npm run test:scripts` → `npm run test:api` → on branch: `npm run test:api:db` (residue 0) and `node scripts/test-db.js`. Each captured on its own exit, not filtered.
@@ -626,6 +677,11 @@ Record in `docs/OPEN_GAPS.md` as cascade notes:
 - The shared-apply-mode decision is recorded with its rationale; either path is fully validated (defer-to-owner with a recorded note, or apply + generated-doc + replay).
 - Stale "019 does not exist" / "current migration 018" pointers are gone from the targeted grep sweep.
 - P1–P4 carryover is explicitly recorded as still-planned (not absorbed).
+
+**All four met 2026-10-15 (mode (b)).** The decision is recorded here and in `docs/briefs/requests.md`;
+the grep sweep for stale "current migration" pointers is clean; P1–P4 live in **OG-52** plus the
+register's §7 addendum; and the gate table above is green — with the E3-pin golden leg unavailable on
+this instance and reported as unavailable rather than tuned around.
 - No regression: `test:unit` 0 fail, `test:scripts` 0 fail, `test:api` 0 fail, `test:api:db` 1/0 residue 0, `verify:replay` 0 drift, `verify:pi1` PASS on paired re-run, `check-deferred-rules` 0 violations, `check-offer-freshness --fail-days=14` green, golden harness exits 0 at both pins.
 
 ---
@@ -662,6 +718,14 @@ The plan is done when:
 4. The contract is v1.2 in `docs/API.md` and pinned by a committed OpenAPI snapshot test (`openapi-v1.2.json`, replacing the v1.1 file).
 5. The larger P1–P4 items are explicitly recorded as still-planned (engine-owned loader batching, topology move, real-data gate, ops) so nothing is silently absorbed into "done".
 6. No regression on the suite that matters: `test:unit` 0 fail, `test:scripts` 0 fail, `test:api` 0 fail, `test:api:db` 1/0 with residue 0, `verify:replay` 0 drift, `verify:pi1` PASS on paired re-run, `check-deferred-rules` 0 violations, `check-offer-freshness --fail-days=14` green, golden harness exits 0 at the v1 pin and at `launch-v2@1.1.0`.
+
+**Whole-plan status 2026-10-15: items 1–5 MET; item 6 met except one leg that is unavailable here.**
+The shared apply landed from restore point `br-damp-grass-axyri6yl`, so `019` and `020` are applied on
+both databases and the contract is v1.2 pinned by a committed snapshot. The single unmet leg is the
+`launch-v2@1.1.0` golden pin: only `seed-minimal-v1@1.0.0` is ACTIVE on this instance, and the pin
+fails closed rather than silently falling back — so that leg was not run, not passed. With the apply
+done, the plan has no open BUILD work left; its residue is the operator-gated `morocco_pc_api` role +
+column-scoped GRANTs, registered as **OG-52** (P3) with the script in `docs/API.md` Production mode.
 
 ---
 
