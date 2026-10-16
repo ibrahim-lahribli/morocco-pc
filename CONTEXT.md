@@ -54,7 +54,10 @@ whole response) needs both migrations. That prerequisite is now MET on the share
 database (applied 2026-10-15), so `API_ALLOW_SHARED=1` no longer fails on a missing
 column; the API is still pointed at the TEST branch by default, and the one operator
 step outstanding is the column-scoped GRANT for `morocco_pc_api`, a role that does not
-exist on the shared database yet. **Branch caveat (2026-10-15): `TEST_DATABASE_URL` had been failing `28P01` on a STALE HOST, not a dead branch; after the repair the branch was found at ledger 18 because a re-creation resets the ledger to its parent's — re-apply the tail before trusting any branch-state claim. See `DEVELOPMENT_NOTES.md`, 2026-10-15.** Migration state is tracked in the `schema_migrations` ledger (OG-14, 2026-10-04); `node scripts/run-migrations.js` applies the pending tail and is re-runnable.
+exist on the shared database yet — but the role itself is now REHEARSED end to end on the
+TEST branch (`scripts/rehearse-api-role.js`, 2026-10-17: 20/20 privilege answers, zero
+`42501`, a row-wide UPDATE denied, role removed), so **P3 Sprint 2 Step 5** is a measured
+quantity rather than a first attempt. **Branch caveat (2026-10-15): `TEST_DATABASE_URL` had been failing `28P01` on a STALE HOST, not a dead branch; after the repair the branch was found at ledger 18 because a re-creation resets the ledger to its parent's — re-apply the tail before trusting any branch-state claim. See `DEVELOPMENT_NOTES.md`, 2026-10-15.** Migration state is tracked in the `schema_migrations` ledger (OG-14, 2026-10-04); `node scripts/run-migrations.js` applies the pending tail and is re-runnable.
 
 Currently next:
 - (1) Decisions 17–19 RESOLVED (2026-09-21) — orchestrator contract, ranking, persistence (recorded; query/ loader implemented and wired via `orchestrator/run.js`, Decision 17 no-writes pass).

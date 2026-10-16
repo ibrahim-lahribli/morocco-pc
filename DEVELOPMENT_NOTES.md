@@ -1256,3 +1256,44 @@ Verified 2026-10-17:
 Not proven / limits: there are no live non-seed offers on either database (all 101 are seed rows), so the
 non-seed branch rests on the fixtures plus the pure helper until a real ingestion lands — which is P4’s
 retailer, not this sprint. No migration, no seed, no write.
+
+## 2026-10-17 — the production role can only be dropped after a REVOKE sweep (P3 Sprint 2 Steps 1–4)
+
+`node scripts/rehearse-api-role.js` creates `morocco_pc_api` on the TEST branch, drives the API's
+whole POST write path AS that role, asserts all 20 privilege answers against a hard-coded fixture,
+proves a row-wide UPDATE is denied, then removes the role and the rows. Green twice in a row with
+identical hard assertions (20/20 answers, 0 × `42501` across 61 statements, 25 builds, residue back
+to 0/0/0/0/0/0, role gone) — full record in `docs/API.md` § Production mode.
+
+**Tearing the role down is the part that does NOT work the obvious way.** Measured, in this order:
+
+- `DROP ROLE morocco_pc_api` → **`2BP01`** `role "..." cannot be dropped because some objects
+  depend on it`, with a DETAIL line naming every granted object (one table per line, plus
+  "privileges for schema public"). The dependencies ARE the grants: `pg_shdepend` held **44** rows
+  with `deptype = 'a'` for this role.
+- `DROP OWNED BY morocco_pc_api` → **`42501`** `permission denied to drop objects`. `DROP OWNED`
+  (like `REASSIGN OWNED`) requires MEMBERSHIP in the named role, and the owner is not a member of a
+  role it has just created — so this route is not available here at all.
+- `ALTER DEFAULT PRIVILEGES … REVOKE` alone is not enough either: the table and schema ACLs still
+  reference the role. The order that works is `REVOKE ALL ON ALL TABLES IN SCHEMA public` →
+  `REVOKE ALL ON ALL SEQUENCES IN SCHEMA public` → `REVOKE ALL ON SCHEMA public` →
+  `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES` → `DROP ROLE`. Measured:
+  `pg_shdepend` **44 → 0**, then the drop succeeds. `buildTeardownStatements()` in the rehearsal owns
+  that order and a unit test pins that the sweep contains no `DROP ROLE` inside it.
+
+**A role is a CLUSTER-scoped object, so a branch guard only guards the CONNECTION.** Neon roles are
+project-wide: the role created on the TEST endpoint was also visible from the shared endpoint while
+it existed (verified absent from BOTH after the run). Two consequences, both implemented: the
+rehearsal REFUSES to start when the role already exists — a `DROP ROLE IF EXISTS` first would
+silently destroy a role someone else created, grants and all — and it asserts the role's absence
+after its own teardown rather than trusting `DROP ROLE`'s exit code.
+
+**Two smaller traps from the same session.**
+
+- `CREATE ROLE` needs `rolcreaterole`. Measured on the branch: `neondb_owner` is `rolsuper` f,
+  `rolcreatedb` t, **`rolcreaterole` t**, so a rehearsal is possible there — but that is a separate
+  attribute from `rolcreatedb`, which is the one the replay harness documents (AGENTS.md §7 item 8).
+- dotenv 17 prints a tip banner to **STDOUT**, so any harness that prints a JSON report emits banner
+  lines first and one of them contains braces. `JSON.parse(text.slice(text.indexOf('{')))` therefore
+  lands inside the banner and throws `Expected property name`. Locate the report by its own first
+  line being exactly `{`, or strip the leading banner lines.

@@ -43,12 +43,12 @@ unverified into evidence.
 | P2 | 4 — CORS allow-list + 429 contract, proven | NOT STARTED | 4 steps; DB-free, startable now |
 | P2 | 5 — contract-completeness gate | NOT STARTED | 3 steps; DB-free, startable now |
 | P3 | 1 — prove the recurring CI job | **PARTIAL** | Ref rationale recorded (commit `438ecf6`); **Step 2 dispatch OWNER**; Steps 3–6 not started |
-| P3 | 2 — rehearse the production DB role | NOT STARTED | Steps 1–4 agent (branch rehearsal); **Step 5 OWNER** (role on shared) |
+| P3 | 2 — rehearse the production DB role | **PARTIAL** | Steps 1–4 **DONE 2026-10-17** (`scripts/rehearse-api-role.js`: 20/20 privilege answers, zero `42501` as the role, row-wide UPDATE denied, residue 0, role removed); **Step 5 OWNER** (role on shared) |
 | P3 | 3 — staging + production + schema-gated deploy | NOT STARTED | 6 steps; **owner-gated** (cloud accounts); needs P1 S1 |
 | P3 | 4 — observability that pages someone | NOT STARTED | 6 steps; **owner gate** (monitoring account) |
 | P3 | 5 — freshness gate sees real offers | **DONE** | Pure helper + tests (2026-10-17); every non-seed offer evaluated by age, SEED stays informational |
 
-**Totals:** 21 sprints — 10 DONE, 2 PARTIAL, 9 NOT STARTED.
+**Totals:** 21 sprints — 10 DONE, 3 PARTIAL, 8 NOT STARTED.
 
 ## Owner-gated backlog (from OG-52, mapped to sprints)
 
@@ -86,7 +86,7 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 **Startable now, no owner action (agent work):**
 - **P1 S4** — DONE 2026-10-16 (Decision 47; implemented by S5). It no longer gates anything here;
   P2 S3 still needs the co-located target it names.
-- **P3 S2 Steps 1–4** — rehearse the production role on the TEST branch (only Step 5 touches shared).
+- **P3 S2 Steps 1–4** — **DONE 2026-10-17** (the role is rehearsed end to end on the TEST branch); only Step 5, the shared apply, still touches shared.
 - **P3 S5** — **DONE 2026-10-17** (the gate covers non-seed provenance; no migration, no write).
 - **P2 S4 and P2 S5** — the CORS/429 proof and the OpenAPI-completeness gate (both DB-free).
 

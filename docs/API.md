@@ -193,6 +193,89 @@ before any shared apply):
    with no `42501` (insufficient privilege) and residue 0.
 3. Run the self-check on the branch and assert every expected value.
 
+**REHEARSAL RAN 2026-10-17 — Steps 1–4 of P3 Sprint 2, GREEN on the TEST branch.**
+`node scripts/rehearse-api-role.js` performs the three steps above in one run: it refuses to
+start if the role exists, applies the `CREATE ROLE` / `GRANT` block verbatim as the database
+owner, opens a SECOND connection authenticated as `morocco_pc_api`, drives the API's POST write
+path on it, asserts the self-check against a hard-coded fixture, proves the negative, then
+removes both the role and the rows the pass wrote. Its pure half — the 20-answer table, the
+grant script and the self-check SQL — is unit-tested by
+`scripts/lib/rehearse-api-role-cli.test.js` (15 DB-free tests, `npm run test:scripts`). It calls
+the four POST steps on the API's own modules (`repository` + `engine`) rather than
+parameterizing `measure-api-pass-phases.js`, because that harness pins a scoring model and
+writes timing rows and neither is something a privilege rehearsal should vary.
+
+Target: endpoint `ep-dry-mountain-ax6b5wu6` (DIRECT host), database `neondb`. Recorded from two
+consecutive runs whose hard assertions were **identical** (25 builds, 61 statements as the role,
+20/20 answers, same residue, same negative proof).
+
+| # | Privilege answer | Expected | Actual |
+|---|---|---|---|
+| 1 | `has_schema_privilege('morocco_pc_api','public','CREATE')` | `f` | `f` |
+| 2 | `has_table_privilege('morocco_pc_api','product','INSERT')` | `f` | `f` |
+| 3 | `has_table_privilege('morocco_pc_api','product','UPDATE')` | `f` | `f` |
+| 4 | `has_table_privilege('morocco_pc_api','product','DELETE')` | `f` | `f` |
+| 5 | `has_table_privilege('morocco_pc_api','product','SELECT')` | `t` | `t` |
+| 6 | `has_table_privilege('morocco_pc_api','store_offer','INSERT')` | `f` | `f` |
+| 7 | `has_table_privilege('morocco_pc_api','store_offer','DELETE')` | `f` | `f` |
+| 8 | `has_table_privilege('morocco_pc_api','recommendation_profile','INSERT')` | `t` | `t` |
+| 9 | `has_table_privilege('morocco_pc_api','recommendation_query','INSERT')` | `t` | `t` |
+| 10 | `has_table_privilege('morocco_pc_api','build_candidate','INSERT')` | `t` | `t` |
+| 11 | `has_table_privilege('morocco_pc_api','build_component','INSERT')` | `t` | `t` |
+| 12 | `has_table_privilege('morocco_pc_api','recommendation_result','INSERT')` | `t` | `t` |
+| 13 | `has_table_privilege('morocco_pc_api','build_rejection','INSERT')` | `t` | `t` |
+| 14 | `has_table_privilege('morocco_pc_api','build_component','DELETE')` | `f` | `f` |
+| 15 | `has_table_privilege('morocco_pc_api','build_rejection','DELETE')` | `t` | `t` |
+| 16 | `has_table_privilege('morocco_pc_api','recommendation_query','UPDATE')` | `f` | `f` |
+| 17 | `has_table_privilege('morocco_pc_api','recommendation_result','UPDATE')` | `f` | `f` |
+| 18 | `has_column_privilege('morocco_pc_api','recommendation_query','budget_floor','UPDATE')` | `t` | `t` |
+| 19 | `has_column_privilege('morocco_pc_api','recommendation_result','engine_version','UPDATE')` | `t` | `t` |
+| 20 | `has_column_privilege('morocco_pc_api','recommendation_result','strategy_key','UPDATE')` | `t` | `t` |
+
+20 answered / 20 matched, none missing, none mismatched, none unexpected — the four INSERT
+probes beyond the two the self-check above already carried (rows 8, 11, 12, 13) are included
+because the grant script lists all six targets in one statement and only asserting two of them
+would leave four unmeasured.
+
+- **Grants applied:** 8 statements, as the owner (`rolcreatedb` `t`, `rolcreaterole` `t`). The
+  role itself: `rolsuper` `f`, `rolcreatedb` `f`, `rolcreaterole` `f`, `rolcanlogin` `t`,
+  `rolbypassrls` `f`; `product`, `store_offer` and `build_candidate` all remain owned by
+  `neondb_owner`. The rehearsal also refuses to start if the role exists, so it can never
+  mutate a role someone else created.
+- **The whole POST path ran AS `morocco_pc_api`** — the second connection reports
+  `current_user = session_user = morocco_pc_api`. Model select → catalog version → the
+  profile+query insert → the engine's full run → read-back: 58 statements, 61 in the whole
+  session, and **zero of them failed `42501`**. The pass produced **25 builds**, recorded the
+  budget floor and the catalog version, and read back 8 rows. The model is the API's own
+  selection (the active row): **`launch-v2@1.0.0`**.
+- **The negative proof (Step 4).** `UPDATE recommendation_result SET rank = rank WHERE
+  recommendation_query_id = $1::uuid` → **`42501 permission denied for table
+  recommendation_result`**, while `UPDATE recommendation_query SET budget_floor = budget_floor
+  WHERE id = $1::uuid` and `UPDATE recommendation_result SET engine_version = engine_version,
+  strategy_key = strategy_key WHERE recommendation_query_id = $1::uuid` **both succeeded**
+  (row_count 1 each). A privilege test that only walks the allowed paths cannot tell a
+  correctly-scoped role from an over-granted one; this one can, in both directions.
+- **Cleanup.** The pass's own rows were deleted in FK order (2 `build_rejection`, 1
+  `recommendation_result`, 8 `build_component`, 1 `build_candidate`, 1 `recommendation_query`,
+  1 `recommendation_profile`), and all six Layer 4 tables read back their pre-run counts
+  (0/0/0/0/0/0). The role is **gone**: verified from separate connections after the run —
+  `pg_roles` lists neither `morocco_pc_api` on the branch nor on the shared instance, and the
+  shared database's Layer 4 tables are still 0 queries / 0 profiles, so the rehearsal wrote
+  nothing anywhere but the branch.
+
+**Removing the role later needs a REVOKE sweep, not a bare `DROP ROLE`** (measured 2026-10-17;
+the full lesson is in `DEVELOPMENT_NOTES.md`). While the role holds the grants, `DROP ROLE
+morocco_pc_api` fails **`2BP01`** — "cannot be dropped because some objects depend on it", one
+`pg_shdepend` row per granted object, 44 of them on this catalog — and `DROP OWNED BY
+morocco_pc_api` is refused **`42501`** `permission denied to drop objects`, because `DROP OWNED`
+requires MEMBERSHIP in the named role and the owner is not a member of a role it just created.
+The order that works: `REVOKE ALL ON ALL TABLES IN SCHEMA public` → `REVOKE ALL ON ALL
+SEQUENCES IN SCHEMA public` → `REVOKE ALL ON SCHEMA public` → `ALTER DEFAULT PRIVILEGES IN
+SCHEMA public REVOKE ALL ON TABLES` → `DROP ROLE` (dependency rows 44 → 0, drop OK). Note also
+that a Neon role is project-wide, not branch-scoped: the branch guard protects the CONNECTION,
+so "TEST branch only" is a claim about where the script connects and where the rows land, not
+about the role's visibility.
+
 ### Region (facts only)
 
 - The Neon project hosting the shared `DATABASE_URL` is in **us-east-2**
