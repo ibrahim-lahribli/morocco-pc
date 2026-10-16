@@ -326,7 +326,7 @@ Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 
 - [ ] **Step 2: write the failing route test** (DB-free): an empty table returns an empty list with the catalog version, not a 404.
 - [ ] **Step 3: implement the generator** (`--dry-run` first, then `--commit`), writing idempotently per `(budget, use_case, catalog_version)`.
 - [ ] **Step 4: branch-apply, generate, then verify the endpoint end-to-end** (`test:api:db`).
-- [ ] **Step 5: `npm run gen:schema`, `verify:docs --offline --live`, `verify:replay --test-db`, then commit** — including the audit line if the migration is applied to a non-branch target.
+- [x] **Step 5: `npm run gen:schema`, `verify:docs --offline --live`, `verify:replay --test-db`, then commit** — including the audit line if the migration is applied to a non-branch target.
 
 **Definition of done**
 
