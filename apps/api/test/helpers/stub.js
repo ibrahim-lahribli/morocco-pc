@@ -171,7 +171,7 @@ const SAMPLE_ROWS = [
 ];
 
 function createRepositoryStub(overrides) {
-  const state = { createCalls: [], readCalls: [], findCalls: [] };
+  const state = { createCalls: [], readCalls: [], findCalls: [], presetCalls: [] };
   const stub = {
     state,
     async selectActiveScoringModel() {
@@ -190,6 +190,12 @@ function createRepositoryStub(overrides) {
     async readRecommendationResult(_db, queryId) {
       state.readCalls.push(queryId);
       return { found: true, query: QUERY_ROW, rows: SAMPLE_ROWS };
+    },
+    // An EMPTY ribbon by default: the ordinary case, and the one a test that
+    // wants rows has to opt into explicitly rather than inherit.
+    async selectPresets(_db, key) {
+      state.presetCalls.push(key);
+      return [];
     },
   };
   return Object.assign(stub, overrides || {});

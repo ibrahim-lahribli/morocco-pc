@@ -5,6 +5,7 @@
 const errors = require('./errors');
 const health = require('./health');
 const meta = require('./meta');
+const presets = require('./presets');
 const recommendations = require('./recommendations');
 
 module.exports = {
@@ -20,4 +21,7 @@ module.exports = {
   BudgetFloorSchema: recommendations.BudgetFloorSchema,
   RecommendationResponseSchema: recommendations.RecommendationResponseSchema,
   RecommendationParamsSchema: recommendations.RecommendationParamsSchema,
+  PresetSchema: presets.PresetSchema,
+  PresetsResponseSchema: presets.PresetsResponseSchema,
+  PresetsQuerySchema: presets.PresetsQuerySchema,
 };

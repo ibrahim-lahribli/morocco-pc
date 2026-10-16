@@ -33,6 +33,7 @@ const swagger = require('@fastify/swagger');
 
 const { registerHealthRoutes } = require('./routes/health');
 const { registerMetaRoutes } = require('./routes/meta');
+const { registerPresetRoutes } = require('./routes/presets');
 const { registerRecommendationRoutes } = require('./routes/recommendations');
 const { registerDocsRoutes } = require('./routes/docs');
 
@@ -114,9 +115,13 @@ function buildApp(options) {
         // whose request identity, catalog version and engine version match an
         // existing committed pass answers 200 with `reused: true` and the
         // ORIGINAL id; every response now also carries the pass's
-        // `catalog_version` (Decision 47). Pinned byte-for-byte by
-        // apps/api/test/unit/openapi-v1.3.json.
-        version: '1.3.0',
+        // `catalog_version` (Decision 47).
+        // 1.4.0 (2026-10-16): GET /v1/presets (Platform P1 Sprint 6 /
+        // Decision 48) - the generated landing-page ribbon: the presets of the
+        // CURRENT catalog version for one use case and currency, cheapest
+        // budget first. Pinned byte-for-byte by
+        // apps/api/test/unit/openapi-v1.4.json.
+        version: '1.4.0',
       },
     },
   });
@@ -165,6 +170,7 @@ function buildApp(options) {
   app.register(async (instance) => {
     registerHealthRoutes(instance);
     registerMetaRoutes(instance);
+    registerPresetRoutes(instance);
     registerRecommendationRoutes(instance);
     registerDocsRoutes(instance);
   });

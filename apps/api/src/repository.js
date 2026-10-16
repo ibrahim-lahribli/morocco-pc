@@ -224,6 +224,122 @@ const SELECT_BUILDS_SQL = [
 ].join(' ');
 
 /**
+ * The preset ribbon of ONE (use case, currency, catalog version), cheapest
+ * budget first (Decision 48 / migration 022) - the rows GET /v1/presets serves.
+ *
+ * The three counts are computed here, not by the presenter: they are facts of
+ * the PERSISTED rows, and only the statement can see them. They are what the
+ * route's derived `price_status` stands on:
+ *
+ *   - `build_count` - the builds the pass committed. 0 for a pass that
+ *     assembled nothing, which is a legitimate outcome (Decision 17.2), and
+ *     then there is no price to make a claim about.
+ *   - `rank1_component_count` - the components of the SHOWN build (rank 1).
+ *   - `rank1_unverified_count` - those whose `offer_class` is not exactly
+ *     'VERIFIED'. `IS DISTINCT FROM` is deliberate: a NULL offer_class is
+ *     UNKNOWN provenance, and unknown is never advertised as verified
+ *     (Decision 36 item 4). Two counts rather than one `NOT EXISTS (... <> ...)`
+ *     because an empty component set contradicts nothing and would read as
+ *     verified.
+ *
+ * `build_score` is the rank-1 build's score - NUMERIC, so a string at this
+ * boundary - and NULL when nothing was assembled, never 0 (a score nobody
+ * computed). The rank-1 pick is total and deterministic (`ORDER BY b.id ASC`),
+ * so two reads of the same committed rows are byte-identical.
+ *
+ * `p.catalog_version = $3` is plain `=`, never `IS NOT DISTINCT FROM` - the
+ * same asymmetry SELECT_REUSABLE_QUERY_SQL documents: the endpoint selects BY
+ * the version it computed, and an unknown version selects nothing (Decision 47
+ * item 10 - a miss, never a match).
+ */
+const SELECT_PRESETS_SQL = [
+  'SELECT',
+  '  p.budget_amount,',
+  '  p.query_id AS recommendation_id,',
+  '  p.generated_at,',
+  '  (SELECT b.score',
+  '   FROM recommendation_result r',
+  '   JOIN build_candidate b ON b.id = r.build_candidate_id',
+  '   WHERE r.recommendation_query_id = p.query_id AND r.rank = 1',
+  '   ORDER BY b.id ASC',
+  '   LIMIT 1) AS build_score,',
+  '  (SELECT count(*)::int',
+  '   FROM recommendation_result r',
+  '   WHERE r.recommendation_query_id = p.query_id) AS build_count,',
+  '  (SELECT count(*)::int',
+  '   FROM recommendation_result r',
+  '   JOIN build_component c ON c.build_candidate_id = r.build_candidate_id',
+  '   WHERE r.recommendation_query_id = p.query_id AND r.rank = 1) AS rank1_component_count,',
+  '  (SELECT count(*)::int',
+  '   FROM recommendation_result r',
+  '   JOIN build_component c ON c.build_candidate_id = r.build_candidate_id',
+  '   WHERE r.recommendation_query_id = p.query_id AND r.rank = 1',
+  "     AND c.offer_class IS DISTINCT FROM 'VERIFIED') AS rank1_unverified_count",
+  'FROM recommendation_preset p',
+  'WHERE p.use_case = $1',
+  '  AND p.currency = $2',
+  '  AND p.catalog_version = $3',
+  'ORDER BY p.budget_amount ASC',
+].join(' ');
+
+/** The exact key's pass, or nothing - the generator's SKIP (idempotency layer 1). */
+const FIND_PRESET_QUERY_ID_SQL = [
+  'SELECT query_id',
+  'FROM recommendation_preset',
+  'WHERE use_case = $1',
+  '  AND currency = $2',
+  '  AND catalog_version = $3',
+  '  AND budget_amount = $4',
+].join(' ');
+
+/**
+ * Record the pointer, replacing an existing one (Decision 31's replace-idempotent
+ * convention): the four-part key is the PRIMARY KEY, so a duplicate row is
+ * unrepresentable and a re-run converges on ONE row whose pointer MOVES to the
+ * new pass instead of raising 23505. `generated_at` is the row's creation time
+ * (migration 022's column comment) and is deliberately not touched.
+ */
+const UPSERT_PRESET_SQL = [
+  'INSERT INTO recommendation_preset (use_case, currency, catalog_version, budget_amount, query_id)',
+  'VALUES ($1, $2, $3, $4, $5)',
+  'ON CONFLICT (use_case, currency, catalog_version, budget_amount)',
+  'DO UPDATE SET query_id = EXCLUDED.query_id',
+  'RETURNING query_id',
+].join(' ');
+
+/**
+ * Remove the preset rows of a scope and return the passes they pointed at, so
+ * the caller can delete those too (the preset rows would cascade from the
+ * query, but the caller owns the pass cleanup and reports it). Every scope
+ * field is OPTIONAL: a null parameter widens the scope instead of filtering,
+ * which is what lets `generate-presets.js --cleanup` mean "every preset" or
+ * "one catalog version" with one statement.
+ */
+const DELETE_PRESETS_SQL = [
+  'DELETE FROM recommendation_preset',
+  'WHERE ($1::text IS NULL OR use_case = $1)',
+  '  AND ($2::text IS NULL OR currency = $2)',
+  '  AND ($3::text IS NULL OR catalog_version = $3)',
+  'RETURNING query_id',
+].join(' ');
+
+/**
+ * Prune a family (use case, currency, budget) down to ONE catalog version
+ * (Decision 48's retention policy): the rows of every other version go, and the
+ * passes they pointed at are returned so the caller can remove those as well.
+ * Plain `<>` because `catalog_version` is NOT NULL here (migration 022) - a
+ * preset with no version is unrepresentable.
+ */
+const DELETE_SUPERSEDED_PRESETS_SQL = [
+  'DELETE FROM recommendation_preset',
+  'WHERE use_case = $1',
+  '  AND currency = $2',
+  '  AND budget_amount = $3',
+  '  AND catalog_version <> $4',
+  'RETURNING query_id',
+].join(' ');
+
+/**
  * The active scoring model, or null when none is active.
  *
  * @param {object} db pool or client exposing query(sql, params)
@@ -333,6 +449,100 @@ async function readRecommendationResult(db, queryId) {
   return { found: true, query: queryRows[0], rows };
 }
 
+/**
+ * The preset ribbon rows of one (use case, currency, catalog version), cheapest
+ * budget first. Rows are RAW pg rows - NUMERIC as strings, timestamps as Dates -
+ * exactly as `readRecommendationResult` returns them; the route's presenter
+ * converts.
+ *
+ * @param {object} db pool or client exposing query(sql, params)
+ * @param {object} key { useCase, currency, catalogVersion }
+ * @returns {Promise<Array<object>>} SELECT_PRESETS_SQL rows
+ */
+async function selectPresets(db, key) {
+  const result = await db.query(SELECT_PRESETS_SQL, [
+    key.useCase,
+    key.currency,
+    key.catalogVersion,
+  ]);
+  return result && Array.isArray(result.rows) ? result.rows : [];
+}
+
+/**
+ * The exact key's pass id, or null - the SKIP that makes a second generator run
+ * write nothing. Exact on all four key parts; a partial match is no match.
+ *
+ * @param {object} db pool or client exposing query(sql, params)
+ * @param {object} key { useCase, currency, catalogVersion, budgetAmount }
+ * @returns {Promise<string|null>} the recorded pass id
+ */
+async function findPresetQueryId(db, key) {
+  const result = await db.query(FIND_PRESET_QUERY_ID_SQL, [
+    key.useCase,
+    key.currency,
+    key.catalogVersion,
+    key.budgetAmount,
+  ]);
+  const rows = result && Array.isArray(result.rows) ? result.rows : [];
+  return rows.length === 0 ? null : rows[0].query_id;
+}
+
+/**
+ * Record (or MOVE) the key's pointer. Replace-idempotent: one row per key,
+ * pointing at the pass just written.
+ *
+ * @param {object} client a single dedicated connection
+ * @param {object} key { useCase, currency, catalogVersion, budgetAmount, queryId }
+ * @returns {Promise<{queryId: string}>} the pointer the row holds after the write
+ */
+async function upsertPreset(client, key) {
+  const result = await client.query(UPSERT_PRESET_SQL, [
+    key.useCase,
+    key.currency,
+    key.catalogVersion,
+    key.budgetAmount,
+    key.queryId,
+  ]);
+  return { queryId: result.rows[0].query_id };
+}
+
+/**
+ * Delete the preset rows of a scope - every field optional - and return the pass
+ * ids they pointed at. Pass cleanup (FK order, profiles) belongs to the caller.
+ *
+ * @param {object} client a single dedicated connection
+ * @param {object} [scope] { useCase?, currency?, catalogVersion? }; empty means
+ *        every preset row
+ * @returns {Promise<string[]>} the deleted rows' query ids
+ */
+async function deletePresets(client, scope) {
+  const s = scope || {};
+  const result = await client.query(DELETE_PRESETS_SQL, [
+    s.useCase === undefined ? null : s.useCase,
+    s.currency === undefined ? null : s.currency,
+    s.catalogVersion === undefined ? null : s.catalogVersion,
+  ]);
+  return result.rows.map((row) => row.query_id);
+}
+
+/**
+ * Prune the family's superseded rows (every catalog version but the key's own)
+ * and return their pass ids so the caller can delete the passes too.
+ *
+ * @param {object} client a single dedicated connection
+ * @param {object} key { useCase, currency, catalogVersion, budgetAmount }
+ * @returns {Promise<string[]>} the pruned rows' query ids
+ */
+async function deleteSupersededPresets(client, key) {
+  const result = await client.query(DELETE_SUPERSEDED_PRESETS_SQL, [
+    key.useCase,
+    key.currency,
+    key.budgetAmount,
+    key.catalogVersion,
+  ]);
+  return result.rows.map((row) => row.query_id);
+}
+
 module.exports = {
   SELECT_ACTIVE_SCORING_MODEL_SQL,
   INSERT_PROFILE_SQL,
@@ -340,8 +550,18 @@ module.exports = {
   SELECT_QUERY_SQL,
   SELECT_BUILDS_SQL,
   SELECT_REUSABLE_QUERY_SQL,
+  SELECT_PRESETS_SQL,
+  FIND_PRESET_QUERY_ID_SQL,
+  UPSERT_PRESET_SQL,
+  DELETE_PRESETS_SQL,
+  DELETE_SUPERSEDED_PRESETS_SQL,
   selectActiveScoringModel,
   createRecommendationQuery,
   findReusableQuery,
   readRecommendationResult,
+  selectPresets,
+  findPresetQueryId,
+  upsertPreset,
+  deletePresets,
+  deleteSupersededPresets,
 };
