@@ -93,6 +93,31 @@ test('--use-case is carried verbatim', () => {
   assert.equal(parseArgs(ARGV.concat(['--use-case=WORKSTATION']), NO_ENV).useCase, 'WORKSTATION');
 });
 
+test('--help throws the usage text before any flag is read', () => {
+  assert.throws(
+    () => parseArgs(ARGV.concat(['--help']), NO_ENV),
+    /usage: node scripts\/measure-api-pass-phases\.js/
+  );
+  // It wins over an otherwise-valid flag set: the preflight runs before the loop.
+  assert.throws(() => parseArgs(ARGV.concat(['--budget=15000', '--help']), NO_ENV), /usage:/);
+});
+
+test('--help prints the usage without a stack trace, and exits non-zero', () => {
+  const child = spawnSync(
+    process.execPath,
+    ['scripts/measure-api-pass-phases.js', '--help'],
+    {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      env: Object.assign({}, process.env, { TEST_DATABASE_URL: '' }),
+    }
+  );
+  assert.equal(child.status, 1, 'a usage request is a non-zero no-op');
+  const output = child.stdout + child.stderr;
+  assert.match(output, /usage: node scripts\/measure-api-pass-phases\.js/);
+  assert.doesNotMatch(output, /at parseArgs|at main|Node\.js v/);
+});
+
 test('requiring the script does not start a pass (the require.main guard)', () => {
   const child = spawnSync(
     process.execPath,

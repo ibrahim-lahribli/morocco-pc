@@ -22,7 +22,13 @@
 // proved anything).
 //
 // Usage: node scripts/measure-api-pass-phases.js [--budget=N] [--use-case=U]
-//        [--model=<name@version>]
+//        [--model=<name@version>] [--help]
+//
+// `--help` is the one token this parser treats specially, and it is a preflight
+// rather than a mode: if `argv` contains it, parseArgs throws the usage text
+// before reading any flag or touching the database, and the entry point prints
+// that text and exits 1. The db-url.js / model-pin.js convention is an injected
+// `env`, never a mode token.
 //
 // The `=<value>` form is MANDATORY (parseArgs matches the prefixes `--budget=` /
 // `--use-case=` / `--model=` and throws `unknown argument: --budget` on the space
@@ -41,9 +47,9 @@
 // branch (launch-v2@1.0.0 is the active one there), so a run MUST pass
 // `--model=launch-v2@1.0.0` or the pin refuses before it writes anything.
 // The 2026-10-07 figures in docs/API.md predate launch-v2 and are therefore
-// seed-minimal-v1 numbers — which CANNOT be re-measured here: that model is
-// inactive on the branch and a pin never activates one. Measure what is active
-// and label the number with it, rather than comparing across two pins.
+// seed-minimal-v1 numbers — which cannot be re-measured on the TEST branch:
+// that model is inactive there and a pin never activates one. Measure what is
+// active and label the number with it, rather than comparing across two pins.
 
 require('dotenv').config();
 
@@ -79,8 +85,29 @@ const MEASUREMENT_ENGINE_VERSION = 'measure-api-pass-phases';
 /**
  * `env` is injected (db-url.js convention) so the pin precedence is testable
  * without touching the real environment.
+ *
+ * `--help` is a preflight, not a mode: it throws the usage text before any flag
+ * is read or the database is touched, and the entry point prints that text alone
+ * (no stack trace) and exits 1. Keeping it in parseArgs is what makes the help
+ * text and the real flags share one source.
+ *
+ * @param {string[]} argv
+ * @param {object} [env]
+ * @returns {{ budget: number, useCase: string, modelPin: string }}
+ * @throws {Error} on `--help` (non-zero, usage text, no DB) and on every
+ *   other parse failure (malformed flag, bad budget, repeated --model, etc.).
+ *   The `--help` path is an early preflight only: it does not read any flag
+ *   and does not touch the database.
  */
 function parseArgs(argv, env = process.env) {
+  if (argv.includes('--help')) {
+    throw new Error(
+      'usage: node scripts/measure-api-pass-phases.js [--budget=N] [--use-case=U] [--model=<name@version>] [--help]\n' +
+      'Environment: SCORING_MODEL_PIN (overridden by --model=<name@version>; else the default seed-minimal-v1@1.0.0).\n' +
+      'This is the TEST-branch-only per-phase pass profiler. A real pass is never started by `require()` — see the guard at the bottom of the file.'
+    );
+  }
+
   const args = { budget: 20000, useCase: 'GAMING' };
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -420,5 +447,12 @@ async function main() {
 module.exports = { parseArgs };
 
 if (require.main === module) {
-  main();
+  // parseArgs and getWriteTestDbUrl both throw BEFORE main's try block, so a
+  // rejected promise is how a usage error or a guard refusal reaches the user.
+  // Print the message alone: an unhandled rejection buries the --help usage
+  // under a Node stack trace.
+  main().catch((error) => {
+    console.error(error && error.message ? error.message : String(error));
+    process.exit(1);
+  });
 }
