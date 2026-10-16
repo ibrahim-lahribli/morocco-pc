@@ -12,7 +12,7 @@ databases now carry the schema it reads (019 + 020; shared applied 2026-10-15), 
 the write-safety default still points the API at the isolated branch - see *Database
 target*.
 
-**Contract v1.3 (2026-10-16):** v1.1 (2026-10-14) surfaced the persisted pass
+**Contract v1.4 (2026-10-16):** v1.1 (2026-10-14) surfaced the persisted pass
 facts - `budget_floor`, `engine_version` and each build's `strategy_key` became
 columns in migration `019_recommendation_pass_facts.sql` (Decision 46), so POST
 and GET no longer differ on any persisted field. v1.2 adds product identity:
@@ -24,13 +24,24 @@ identical POST against an equivalent committed pass answers `200` with
 `reused: true` and the ORIGINAL id instead of running a second engine pass, and
 every reply now carries `catalog_version` - the catalog state the pass ran
 against, from migration `021_recommendation_query_catalog_version.sql`
-(Decision 47). See *Request dedupe* and *Response shape*.
+(Decision 47). See *Request dedupe* and *Response shape*. **v1.4 adds the
+presets ribbon** (Platform P1 Sprint 6): `GET /v1/presets` serves the generated
+landing-page presets of the CURRENT catalog version for one use case and
+currency, from migration `022_recommendation_preset.sql` (Decision 48). See
+*GET /v1/presets*.
 
 **`catalog_version` is served on both databases, but only the branch RECORDS it
 so far.** Migration 021 is applied to the TEST branch and not yet to the shared
 database, so against shared every reply serves `catalog_version: null`
 (not recorded - NULL means UNKNOWN here) and reuse is simply always a miss. A
 miss is a correct answer; the degradation is by design, not a failure mode.
+
+**`GET /v1/presets` has no such fallback.** Migration 022
+(`recommendation_preset`) is likewise TEST-branch-only so far, and unlike a null
+`catalog_version` there is no graceful miss: against a database without the
+table the route's read fails `42P01` and the request answers the generic `500
+INTERNAL_ERROR`. The ribbon is served from the branch only until the shared
+apply of 021 and 022 lands.
 
 **Schema prerequisite - SATISFIED on BOTH databases (2026-10-15).** Migrations 019
 and 020 are applied on the TEST branch AND on the shared database: both ledgers read
@@ -238,6 +249,7 @@ All routes are under `/v1` and speak JSON.
 | GET | `/v1/meta/options` | 120/min | Accepted use cases, currencies, resolutions, priorities |
 | POST | `/v1/recommendations` | 30/min | Run one full engine pass and persist it — or reuse an equivalent stored pass |
 | GET | `/v1/recommendations/:id` | 120/min | Read a persisted recommendation |
+| GET | `/v1/presets` | 120/min | Generated landing-page presets for one use case and currency (current catalog version) |
 | GET | `/v1/docs/json` | 120/min | OpenAPI 3.0 document |
 
 Rate limits are per client IP and per route — a GET is cheap, a POST runs an
@@ -332,6 +344,57 @@ Status codes:
 - A **known query with zero builds is a 200 with `"builds": []`** — never a 404.
 - GET **never re-runs the engine** and never recomputes a floor. The DB-backed
   suite proves this with a spy, not by inspection.
+
+### GET /v1/presets
+
+The read-only landing-page ribbon (Platform P1 Sprint 6 / Decision 48):
+`GET /v1/presets?use_case=<use_case>&currency=<CCC>`.
+
+| Query parameter | Required | Notes |
+|---|---|---|
+| `use_case` | yes | One of the advertised values — checked against the ACTIVE model's vocabulary in the handler, so an undeclared use case is a **422 carrying the vocabulary**, never an empty list. |
+| `currency` | yes | Exactly 3 characters, one of the advertised values. Unknown query parameters are refused (422), like unknown body fields. |
+
+```json
+{
+  "catalog_version": "9f0c5a1b2d3e4f5061728394a5b6c7d8",
+  "generated_at": "2026-10-16T09:00:00.000Z",
+  "presets": [
+    {
+      "budget_amount": 6000,
+      "recommendation_id": "b6f1c0a5-0f2f-4f2a-9c0f-2b1f5f2f6a10",
+      "build_score": 61.25,
+      "price_status": "verified"
+    }
+  ]
+}
+```
+
+- A preset is a **pointer**, not a copy: `recommendation_id` is an ordinary
+  recommendation id, and `GET /v1/recommendations/:id` answers it through the
+  same read path as a POST reply — so the ribbon and the pass cannot disagree.
+- Only rows of the **current catalog version** are served, cheapest budget
+  first. `catalog_version` is the version the route itself computed; rows of a
+  superseded version are invisible, so a price update can never answer with the
+  builds it invalidated.
+- `generated_at` is the newest generation time among the rows returned, and
+  `null` for an empty list. **200 with an empty list is a valid answer**
+  ("nothing generated for this catalog yet"), never a 404.
+- `build_score` is the rank-1 build's persisted score, `null` when the pass
+  assembled nothing — never `0`.
+- `price_status` is derived per preset: `"verified"` only when the shown build
+  has components and every one is `VERIFIED`; `"indicative"` when any is not
+  (unknown provenance included); `null` when there is no build to make a claim
+  about. Same direction as the recommendation contract, with one extra outcome.
+- **503** when there is no active scoring model, the model declares no usable
+  use-case vocabulary, or the catalog version could not be computed — without a
+  version nothing can be selected, and an empty list would be indistinguishable
+  from "nothing generated".
+- Presets are generated by `node scripts/generate-presets.js --commit`
+  (TEST-branch write target only), idempotent per key: a second run for the same
+  catalog version runs no pass and writes nothing. `--cleanup` removes the
+  preset rows with their passes — generated passes are unmarked
+  `recommendation_query` rows and block `npm run eval:scenarios` until removed.
 
 ## Response shape
 

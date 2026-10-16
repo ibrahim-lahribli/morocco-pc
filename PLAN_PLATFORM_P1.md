@@ -248,9 +248,9 @@ Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 
 **Interfaces:**
 - Produces: `catalogVersion(db)` — one pure-ish read (a single `SELECT`) returning a deterministic string that changes when the catalog changes, and a canonical product key definition usable as an identity (`product.slug` from migration 020 is the candidate; the Decision must justify it or reject it).
 
-- [ ] **Step 1: decide and record.** The Decision must answer: what `catalog_version` is computed FROM (a max `updated_at`, a content digest, a seeded counter), what invalidates it, whether it is persisted anywhere, and what the canonical key is.
-- [ ] **Step 2: update the entry's `Status:` line, the counts in `scripts/verify-docs.js`, the range in `AGENTS.md` §2, `CONTEXT.md`, and the glossary.**
-- [ ] **Step 3: run the gates.** `npm run gen:decisions` then `node scripts/gen-decision-index.js --check` (0), `npm run verify:docs --offline` (OK).
+- [x] **Step 1: decide and record.** The Decision must answer: what `catalog_version` is computed FROM (a max `updated_at`, a content digest, a seeded counter), what invalidates it, whether it is persisted anywhere, and what the canonical key is.
+- [x] **Step 2: update the entry's `Status:` line, the counts in `scripts/verify-docs.js`, the range in `AGENTS.md` §2, `CONTEXT.md`, and the glossary.**
+- [x] **Step 3: run the gates.** `npm run gen:decisions` then `node scripts/gen-decision-index.js --check` (0), `npm run verify:docs --offline` (OK).
 - [ ] **Step 4: commit.**
 
 **Definition of done**
@@ -286,10 +286,10 @@ Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 
 - Consumes: `readRecommendationResult(db, queryId)`, `createRecommendationQuery(client, input)`, `catalogVersion(db)` from Sprint 4.
 - Produces: POST 201 with `reused: false` on a miss and 200 with `reused: true` plus the existing `id` on a hit; `ServedBySchema` unchanged.
 
-- [ ] **Step 1: write the failing tests** (DB-free, stubbed repository): a second identical POST returns the SAME id, `reused: true`, a 200, and does NOT insert a profile; a POST with a different budget returns a new id.
-- [ ] **Step 2: implement the lookup keyed on the persisted profile+query columns, excluding the profile's UUID name.**
-- [ ] **Step 3: prove it on the branch** (`npm run test:api:db`): two identical POSTs → one `recommendation_profile` row, one `recommendation_query` row, residue 0.
-- [ ] **Step 4: update the contract + docs + snapshot; `npm run test:api` 0 fail.**
+- [x] **Step 1: write the failing tests** (DB-free, stubbed repository): a second identical POST returns the SAME id, `reused: true`, a 200, and does NOT insert a profile; a POST with a different budget returns a new id.
+- [x] **Step 2: implement the lookup keyed on the persisted profile+query columns, excluding the profile's UUID name.**
+- [x] **Step 3: prove it on the branch** (`npm run test:api:db`): two identical POSTs → one `recommendation_profile` row, one `recommendation_query` row, residue 0.
+- [x] **Step 4: update the contract + docs + snapshot; `npm run test:api` 0 fail.**
 - [ ] **Step 5: commit.**
 
 **Definition of done**
@@ -322,10 +322,10 @@ Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 
 - Consumes: the full-run orchestrator, `catalogVersion`.
 - Produces: `GET /v1/presets?use_case=&currency=` → `{ catalog_version, generated_at, presets: [{ budget_amount, recommendation_id, build_score, price_status }] }`.
 
-- [ ] **Step 1: author the migration** (never edit a committed one), following `docs/RECIPES/add-a-migration.md`; `--dry-run` lists it; apply to the branch with `--test-db`.
-- [ ] **Step 2: write the failing route test** (DB-free): an empty table returns an empty list with the catalog version, not a 404.
-- [ ] **Step 3: implement the generator** (`--dry-run` first, then `--commit`), writing idempotently per `(budget, use_case, catalog_version)`.
-- [ ] **Step 4: branch-apply, generate, then verify the endpoint end-to-end** (`test:api:db`).
+- [x] **Step 1: author the migration** (never edit a committed one), following `docs/RECIPES/add-a-migration.md`; `--dry-run` lists it; apply to the branch with `--test-db`.
+- [x] **Step 2: write the failing route test** (DB-free): an empty table returns an empty list with the catalog version, not a 404.
+- [x] **Step 3: implement the generator** (`--dry-run` first, then `--commit`), writing idempotently per `(budget, use_case, catalog_version)`.
+- [x] **Step 4: branch-apply, generate, then verify the endpoint end-to-end** (`test:api:db`) — green 2026-10-16 after the repair pass (commit `36620ec`; the original commit landed with the route unregistered and the repository layer missing).
 - [x] **Step 5: `npm run gen:schema`, `verify:docs --offline --live`, `verify:replay --test-db`, then commit** — including the audit line if the migration is applied to a non-branch target.
 
 **Definition of done**

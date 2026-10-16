@@ -12,7 +12,7 @@
 
 **Date:** 2026-10-15 · **Branch:** `agent/platforms` · **Decision id:** only Sprint 5 needs a decision entry (the catalog read contract); take the next free number from the log's tail at write time.
 
-**Contract version note.** The live contract is **v1.3** (`apps/api/test/unit/openapi-v1.3.json`; the v1.1 and v1.2 snapshots were superseded and deleted rather than kept — P1 Sprint 5 landed first). P2 Sprint 3 is the next change that wants a minor, so it takes **v1.4**. Never commit two snapshots and never leave a superseded one in the tree.
+**Contract version note.** The live contract is **v1.4** (`apps/api/test/unit/openapi-v1.4.json`; the v1.1, v1.2 and v1.3 snapshots were superseded and deleted rather than kept — P1 Sprints 5 and 6 landed first). P2 Sprint 3 is the next change that wants a minor, so it takes **v1.5**. Never commit two snapshots and never leave a superseded one in the tree.
 
 **Program rules:** the Global Constraints, the run-safely protocol and the self-review protocol this plan works inside live once, for P0–P3, in [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md). This plan adds only what is specific to it, and its self-review verdict is recorded there.
 
@@ -140,7 +140,7 @@ so comparison harnesses there need `--model=launch-v2@1.0.0`.
 - Create: `apps/api/src/routes/catalog.js`, `apps/api/src/contracts/catalog.js`
 - Modify: `apps/api/src/repository.js` (the two read statements), `apps/api/src/app.js` (register), `apps/api/src/contracts/index.js`
 - Create: `apps/api/test/unit/catalog.test.js`; modify `apps/api/test/db/recommendations.db.test.js` (a real read against the branch)
-- Create: `apps/api/test/unit/openapi-v1.3.json` (or v1.4; see the version note) — delete the superseded snapshot in the same commit
+- Create: `apps/api/test/unit/openapi-v1.5.json` (see the version note — v1.4 is taken by P1 Sprint 6) — delete the superseded snapshot in the same commit
 - Modify: `docs/API.md`, `docs/TEST_MAP.md`, `CONTEXT.md`
 
 **Interfaces:**

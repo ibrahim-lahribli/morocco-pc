@@ -25,7 +25,7 @@ and `apps/api/src/server.js`.
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–47). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–48). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
    To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
@@ -71,7 +71,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `docs/GLOSSARY.md` | Load-bearing vocabulary (status vocabulary, decision ids, the `D2` vs `Decision 2` collision) |
 | `docs/TEST_MAP.md` | Which test pins which contract — check before changing pinned behavior |
 | `docs/RECIPES/` | Task checklists: add a migration/seed/scoring-model/pair-evaluator/stage/status-claim |
-| `database/migrations/` | Authoritative schema (`001`–`021`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
+| `database/migrations/` | Authoritative schema (`001`–`022`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
 | `database/seeds/` | DML-only, idempotent seed data |
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |
 | `scripts/` | CLIs: migrations, seeds, schema verifiers, engine checks |
@@ -207,7 +207,7 @@ Command gotchas (verified 2026-09-28):
   no such var, so it exports an EMPTY value that shadows the one `dotenv` just loaded, and the
   failure surfaces as a bare `ERR` with an empty message.
 - Adding a decision to the log **breaks `verify-docs` by design**: `scripts/verify-docs.js` hardcodes
-  the expected heading and `Status:` counts (now 42 / 48) and derives AGENTS.md's required
+  the expected heading and `Status:` counts (now 46 / 52) and derives AGENTS.md's required
   "Decisions 1-N" from that parse. Bump both counts when you add Decision N+1, and update the
   `database/migrations/` range cited in AGENTS.md §4 or `migrations-range-documented` warns. `docs/DECISION_INDEX.md` embeds each entry's WHOLE `Status:` line, so editing that line alone (even with no heading change) makes the index stale — re-run `npm run gen:decisions`; editing only a body section does not.
 - Writing a spec-data seed: put the guard in the DML, not only the header comment. `UPDATE..FROM
@@ -259,11 +259,11 @@ getting the nightly gate, which is why `workflow_dispatch` is wired up too.
    check is now the repeatable `npm run verify:replay` gate, so re-run it after any migration lands
    rather than trusting a one-off measurement. The shared and TEST databases are baselined in the
    `schema_migrations` ledger (OG-14); the SHARED database stands at **020** and the TEST branch at
-   **021** as of 2026-10-16 — `021_recommendation_query_catalog_version.sql` (Decision 47, Platform
-   P1 Sprint 5) is **BRANCH-ONLY so far**, because the API runs against the branch and a shared
+   **022** as of 2026-10-16 — `021_recommendation_query_catalog_version.sql` (Decision 47, Platform
+   P1 Sprint 5) and `022_recommendation_preset.sql` (Decision 48, Platform P1 Sprint 6) are **BRANCH-ONLY so far**, because the API runs against the branch and a shared
    apply is a separate owner-approved step needing a recorded restore point. So `verify:replay`'s
-   default SHARED reference legitimately reports exactly 021's two new objects (the column and its
-   CHECK constraint, both fresh-only - measured 2026-10-16) as drift until the shared apply
+   default SHARED reference legitimately reports exactly 021's and 022's new objects (the column, its
+   CHECK constraint and 022’s `recommendation_preset` table, all fresh-only - measured 2026-10-16) as drift until the shared apply
    lands; that is the documented TEST-first state, never a broken migration
    (`docs/RECIPES/add-a-migration.md`). Before 021, both databases stood at **020** on 2026-10-15
    (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04,
@@ -274,7 +274,7 @@ getting the nightly gate, which is why `workflow_dispatch` is wired up too.
    2026-10-15 from restore point `br-damp-grass-axyri6yl`, so there was no branch-only trail left at
    that point).
    `verify:replay` diffs a fresh replay against `DATABASE_URL` and reports **0 drift** (20 files
-   replayed as of 2026-10-15; 21 files, and 0 drift again, once 021 has been applied to shared). Use `npm run verify:replay -- --test-db --reference=test` to diff against the branch
+   replayed as of 2026-10-15; 22 files, and 0 drift again, once 021 and 022 have been applied to shared). Use `npm run verify:replay -- --test-db --reference=test` to diff against the branch
    instead of shared.
 6. **Migration ledger (OG-14, 2026-10-04).** `run-migrations.js` is ledger-driven: it records each
    applied filename in `schema_migrations` and applies only the pending tail, so it is re-runnable

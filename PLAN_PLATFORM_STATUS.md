@@ -6,20 +6,20 @@
 plans. The plans own the HOW; the register owns the open-item ledger; this page owns the
 where-are-we.
 
-**Date:** 2026-10-15 · **Branch:** `agent/platforms` · **Rules:** [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md).
+**Date:** 2026-10-16 · **Branch:** `agent/platforms` · **Rules:** [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md).
 Passing-test counts are deliberately not restated here — see the dated entries in
 `DEVELOPMENT_NOTES.md`.
 
 ## Verdict
 
-**6 sprints done, 2 partial, 13 not started. Almost every remaining sprint of agent work is gated
+**9 sprints done, 2 partial, 10 not started. Almost every remaining sprint of agent work is gated
 behind an owner action — most of them behind two: the EU Neon project + hosting account (P1
 Sprint 1) and the GitHub dispatch (P3 Sprint 1). Four sprints need no owner at all and can start
-today.** The BETA engine and API surface are live on the TEST branch (contract v1.2,
-schema at ledger 20 on both databases); nothing is deployed, nothing is in production, and the CI
+today.** The BETA engine and API surface are live on the TEST branch (contract v1.4,
+schema at ledger 22 on the branch and 20 on shared); nothing is deployed, nothing is in production, and the CI
 job that would prove the end-to-end path has never been run. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency
-sprints and the deployed-host legs; **P1 Sprint 4** (design-only, no owner) unblocks P1 Sprints 5–6
-and P2 Sprint 3; and **P3 Sprint 1** (the CI dispatch) is the only way to turn the CI claim from
+sprints and the deployed-host legs; **P1 Sprint 4** (DONE 2026-10-16) unblocked P1 Sprints 5–6 (both DONE 2026-10-16)
+and still gates P2 Sprint 3; and **P3 Sprint 1** (the CI dispatch) is the only way to turn the CI claim from
 unverified into evidence.
 
 ## Sprint completion matrix
@@ -34,9 +34,9 @@ unverified into evidence.
 | P1 | 1 — co-locate (EU Neon + deploy + re-measure) | **PARTIAL** | Steps 1–3 committed (`--note`, audit `target` digest); **Steps 4–9 OWNER** |
 | P1 | 2 — batch the commit to ≤ 6 statements | NOT STARTED | 5 steps; needs the co-located target to measure |
 | P1 | 3 — reduce loader statements | NOT STARTED | 5 steps; baseline needs P1 S1 |
-| P1 | 4 — `catalog_version` + canonical key (design only) | NOT STARTED | 4 steps; **no owner needed**, unblocks P1 S5/S6 + P2 S3 |
-| P1 | 5 — dedupe repeated POSTs (contract change) | NOT STARTED | 5 steps; blocked on P1 S4; owner review before merge |
-| P1 | 6 — presets job + `GET /v1/presets` | NOT STARTED | 5 steps; blocked on P1 S4 |
+| P1 | 4 — `catalog_version` + canonical key (design only) | **DONE** | Decision 47 RESOLVED 2026-10-16 and implemented by S5 (`catalogVersion(db)` + migration 021) |
+| P1 | 5 — dedupe repeated POSTs (contract change) | **DONE** | Live: 200 + `reused: true` + the original id; contract v1.3 |
+| P1 | 6 — presets job + `GET /v1/presets` | **DONE** | Migration 022 + generator + endpoint (contract v1.4, Decision 48); the commit shipped broken and was repaired 2026-10-16 (36620ec) |
 | P2 | 1 — use-case vocabulary from the model (OG-38) | **DONE** | `listUseCases` swap; branch serves GAMING/OFFICE/WORKSTATION |
 | P2 | 2 — truthful per-IP limits (`trustProxy`) | NOT STARTED | 5 steps; code is DB-free, Step 4 needs a deployed host |
 | P2 | 3 — catalog endpoints (read-only) | NOT STARTED | 7 steps; Step 7 is an **owner** decision (public exposure) |
@@ -48,7 +48,7 @@ unverified into evidence.
 | P3 | 4 — observability that pages someone | NOT STARTED | 6 steps; **owner gate** (monitoring account) |
 | P3 | 5 — freshness gate sees real offers | NOT STARTED | 4 steps; pure helper + tests, **startable now**, no owner |
 
-**Totals:** 21 sprints — 6 DONE, 2 PARTIAL, 13 NOT STARTED.
+**Totals:** 21 sprints — 9 DONE, 2 PARTIAL, 10 NOT STARTED.
 
 ## Owner-gated backlog (from OG-52, mapped to sprints)
 
@@ -59,7 +59,7 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 |---|---|---|
 | P1 region/co-location move | P1 S1 Steps 4–7 | Create an EU Neon project (Frankfurt), a hosting account, deploy the API |
 | P1 engine-owned loader batching | P1 S3 (blocked by P1 S4) | — (agent; needs the `catalog_version` Decision first) |
-| P1 dedupe + presets | P1 S5, S6 (blocked by P1 S4) | Owner review before merge (P1 S5 changes the POST contract) |
+| P1 dedupe + presets | P1 S5, S6 | — **DONE 2026-10-16** (both landed; owner review of the POST contract still invited before merge) |
 | P2 catalog endpoints | P2 S3 | Step 7: decide whether catalog pages may be public |
 | P2 `trustProxy` config | P2 S2 | — (agent; Step 4 needs P1's deployed host) |
 | P2 remainder of the OpenAPI snapshot surface | P2 S5 | — (agent, DB-free) |
@@ -84,8 +84,8 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 - *P2 S3 Step 7* needs the public-exposure decision.
 
 **Startable now, no owner action (agent work):**
-- **P1 S4** — the `catalog_version` + canonical-key Decision (design-only; the one gate in front of
-  P1 S5/S6 and P2 S3).
+- **P1 S4** — DONE 2026-10-16 (Decision 47; implemented by S5). It no longer gates anything here;
+  P2 S3 still needs the co-located target it names.
 - **P3 S2 Steps 1–4** — rehearse the production role on the TEST branch (only Step 5 touches shared).
 - **P3 S5** — the non-seed offer-freshness gate (pure helper + unit tests; no migration, no write).
 - **P2 S4 and P2 S5** — the CORS/429 proof and the OpenAPI-completeness gate (both DB-free).
@@ -95,7 +95,7 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 The drift this page first exposed was corrected in `docs/OPEN_GAPS.md` on 2026-10-16: OG-52's row
 now reads **OPEN (partially started)**, the P2 `listUseCases` swap it listed is marked landed (P2
 Sprint 1, 2026-10-15), and the `morocco_pc_api` role names **P3 Sprint 2** as its owning sprint.
-Everything else OG-52 lists is still accurate.
+The P1 `dedupe + presets` clause landed 2026-10-16 (S5 + S6, with Decision 48 recorded); everything else OG-52 lists is still accurate.
 
 ## Where things live
 

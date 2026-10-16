@@ -393,7 +393,7 @@ real branch row read. Migration 020 IS in the tree and applied on the TEST branc
 ### Files to add or edit
 
 **Add:**
-- `apps/api/test/unit/openapi-v1.2.json` — committed snapshot of the OpenAPI document served at `/v1/docs/json`. v1.1 shipped its own snapshot; the v1.2 change replaced it (the old file was DELETED rather than kept as a second plausible contract, and `info.version` is now `1.2.0`), so there is exactly one live snapshot. Regenerate only when the contract is deliberately changed; the test pins it byte-for-byte.
+- `apps/api/test/unit/openapi-v1.2.json` — committed snapshot of the OpenAPI document served at `/v1/docs/json`. v1.1 shipped its own snapshot; the v1.2 change replaced it (the old file was DELETED rather than kept as a second plausible contract, and `info.version` was `1.2.0` then — the live snapshot is `apps/api/test/unit/openapi-v1.4.json` since P1 Sprint 6, 2026-10-16), so there is exactly one live snapshot. Regenerate only when the contract is deliberately changed; the test pins it byte-for-byte.
 
 **Edit:**
 - `apps/api/src/repository.js` — `SELECT_QUERY_SQL` adds `budget_floor`; `SELECT_BUILDS_SQL` adds `r.engine_version`, `r.strategy_key`, `p.slug`, and `COALESCE(p.display_name, p.name) AS product_name`.
@@ -420,7 +420,7 @@ real branch row read. Migration 020 IS in the tree and applied on the TEST branc
 
 ### OpenAPI snapshot test
 
-- A committed `openapi-v1.2.json` is compared byte-for-byte to the document served at `/v1/docs/json`; the test fails if the served document differs. Regenerate the snapshot only when the contract is deliberately changed, and replace the old file rather than adding a second one.
+- A committed snapshot (`openapi-v1.2.json` in this sprint; `apps/api/test/unit/openapi-v1.4.json` today) is compared byte-for-byte to the document served at `/v1/docs/json`; the test fails if the served document differs. Regenerate the snapshot only when the contract is deliberately changed, and replace the old file rather than adding a second one.
 - This is the simple version of the P2 "contract version" item; the rest of P2 stays planned.
 
 ### Verification at the door
