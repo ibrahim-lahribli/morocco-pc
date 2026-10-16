@@ -12,19 +12,9 @@
 
 **Date:** 2026-10-15 · **Branch:** `agent/platforms` · **Decision id:** only Sprint 5 needs a decision entry (the catalog read contract); take the next free number from the log's tail at write time.
 
-**Contract version note.** The live contract is **v1.2** (`apps/api/test/unit/openapi-v1.2.json`; the v1.1 snapshot was deleted, not kept). Sprint 3 and P1 Sprint 5 both want a new minor, so the version is allocated at merge time: whichever lands first takes v1.3, the next v1.4. Never commit two snapshots and never leave a superseded one in the tree.
+**Contract version note.** The live contract is **v1.3** (`apps/api/test/unit/openapi-v1.3.json`; the v1.1 and v1.2 snapshots were superseded and deleted rather than kept — P1 Sprint 5 landed first). P2 Sprint 3 is the next change that wants a minor, so it takes **v1.4**. Never commit two snapshots and never leave a superseded one in the tree.
 
-## Global Constraints
-
-- **No engine logic in `apps/api/`.** Only `engine.js` may require `src/recommendation/**`, and only through stage barrels. `import-boundary.test.js` enforces it and must stay green.
-- **The API never recomputes a persisted fact.** A value absent from the database is `null`, never derived (Decision 36 item 4).
-- **Price provenance is never inflated.** `price_status` is `"verified"` only when EVERY component's persisted `offer_class` is `VERIFIED`; anything else is `"indicative"`, and the French `disclaimer` restates it. Catalog responses carry the same rule.
-- **The beta option stays pinned.** `engine.js` passes `{ allow_unverified_seed_offers: true }` always; it is not a request field and must not become one.
-- **Unknown body fields are 422**, not dropped (`additionalProperties: false`, `removeAdditional: false`), and a numeric-string budget stays rejected (`coerceTypes: false`).
-- **No new runtime dependency without an explicit owner decision.** Adding one means updating `package.json`, the lockfile, `AGENTS.md` §3, and CI's `npm ci`.
-- **DB-free tests stay DB-free.** `test:api` uses `fastify.inject` + stubs and runs in the push/PR job; anything needing the real engine goes to `test:api:db` (TEST branch, residue 0, fails fast when `TEST_DATABASE_URL` is missing or targets shared).
-- **Docs are CRLF**, `docs/API.md` included. Contract changes update `docs/API.md`, `docs/TEST_MAP.md` and the committed snapshot in one commit.
-- **The committed snapshot is the contract.** `openapi-snapshot.test.js` compares the served document to the committed file; a route added without a snapshot update fails the suite.
+**Program rules:** the Global Constraints, the run-safely protocol and the self-review protocol this plan works inside live once, for P0–P3, in [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md). This plan adds only what is specific to it, and its self-review verdict is recorded there.
 
 ## Review Focus
 
@@ -253,19 +243,3 @@ so comparison harnesses there need `--model=launch-v2@1.0.0`.
 4. CORS and 429 behaviour are pinned by tests and stated in `docs/API.md`; no header is claimed that the server does not send.
 5. The contract is one version with one committed snapshot, and a test proves every served route is documented.
 6. No regression: `test:api` 0 fail, `test:api:db` 1/0 with residue 0, `test:unit` 0 fail, `verify:docs --offline` OK, `gen-decision-index --check` clean, and `import-boundary.test.js` green.
-
-## How to run this safely
-
-- Read `apps/api/src/app.js`'s header before touching it: the route plugin ordering (routes registered INSIDE a plugin, after the `onRoute` hooks) is load-bearing for both swagger and rate limiting.
-- `test:api` must stay DB-free; anything needing rows goes to `test:api:db`, which fails fast on a missing or shared `TEST_DATABASE_URL` and fails on zero executed tests.
-- Sprint 1 Step 4 applies a seed. Branch-first with an explicit target; seeds are idempotent but `run-seeds.js` has **no** `--test-db` routing.
-- Never serve a price without its `offer_class`. The beta waiver is a documented exemption, not a licence to present indicative data as verified.
-- Every contract change updates `docs/API.md`, `docs/TEST_MAP.md` and the committed snapshot in ONE commit — a route without a snapshot is a red suite.
-
-## Self-review (run against this plan)
-
-- **Spec coverage:** the roadmap's P2 list maps to Sprints 1 (vocabulary/final snapshot test), 2 (trustProxy), 3 (catalog endpoints), 4 (CORS + 429), 5 (remainder of the OpenAPI surface). The two items already done (v1.1 contract, snapshot + tests) are recorded as done in the header rather than re-planned. ✔
-- **Step scan:** each step names a file, a command and an expected result; no step says "as needed" or transcribes a body. ✔
-- **Type consistency:** `listUseCases(configuration)`, `buildApp({ pool, repository, engine, env, logger })`, `parseOrigins(raw)`, `readRecommendationResult(db, queryId)` and the `slug` field are spelled once each. ✔
-- **Review Focus:** all five lines have an owning sprint and a numbered scenario (2.2, 1.5, 3.3/3.5, 3.2, 4.5). ✔
-- **Proportion:** no implementation bodies; every step is a decision the implementer could not make alone. ✔

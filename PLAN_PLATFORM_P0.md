@@ -44,16 +44,7 @@ After this plan, the API can answer a GET with the same facts it produced on the
 - P3 ops, CI `test:api:db` verification, role rehearsal, error tracking, staging+prod, migration-deploy step — operator/owner work, recorded.
 - P4 real data, the missing non-seed provenance gate, Decision 7 amendment, seed retirement per PIPELINE_DESIGN §7, the read-path `ACTIVE` audit — blocked on H2 (a retailer with readable terms); recorded, not started.
 
-## House rules applied to this plan
-
-- Schema change = new sequential migration, never edit a committed one. (Recipe: `docs/RECIPES/add-a-migration.md`.)
-- `gen:schema` regenerates `docs/SCHEMA_REFERENCE.md` and `docs/DATA_STATE.md` from the shared DB; it is run only after any shared apply, not before. Running it now would desynchronise the generated docs from the database the digest gate hashes.
-- `verify-docs.js` pins `global=43` / `Status=49`; adding Decision 46 means `global=44` / `Status=50`, plus its comment block, then `npm run gen:decisions`.
-- `migrations-range-documented` keys on the `AGENTS.md` §4 range; that range must be refreshed when 019/020 land.
-- `str_replace` ignores whitespace across line wraps; CRLF files in `docs/` and `database/` must be edited so anchors sit wholly inside one physical line. For new migration files, write CRLF from the start and never normalize.
-- Never apply a migration to the shared `DATABASE_URL` without a recorded Neon restore point; `run-migrations.js` refuses with exit 1 and a clean ledger unless `--restore-point=<id>` matches `^[A-Za-z0-9_-]{8,}$`.
-- TEST apply is unbounded in this plan; shared apply is a gated operator step whose mode (defer to owner, or apply with a restore point handed by the owner) is decided in Sprint 5 and recorded in `docs/briefs/requests.md`.
-- Every verification at a sprint door is captured on its own exit, not filtered through a pager or `grep`.
+**Program rules:** the Global Constraints, the run-safely protocol this plan works inside, for P0–P3, in [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md). P0 is the one plan that predates the self-review protocol — it was written and executed on 2026-10-14/15, the protocol is dated 2026-10-15 — so it records no verdict there: its equivalent is the `Verification at the door` table and the dated execution record each of its five sprints already carries.
 
 ## Sprint 1 — pass-facts writer + 5th-arg seam (60 min)
 
@@ -203,13 +194,13 @@ Verified, each on its own exit status:
 | raw file re-executed by hand | no error, shape byte-identical, so the no-`ADD CONSTRAINT` re-runnability claim holds |
 | `run-migrations.js --test-db --check` | No pending migrations |
 | `verify:replay --test-db --reference=test` | 19 files replayed, **0 drift** (columns 365/365, checks 78/78, fks 60/60, indexes 99/99) |
-| `test-orchestrator-full-run.js` | **36 pass / 0 fail** (24 pre-existing + 12 new pass-fact assertions) |
-| `test-orchestrator-commit.js` | 51 pass / 0 fail |
+| `test-orchestrator-full-run.js` | 0 fail — count in `DEVELOPMENT_NOTES.md` (12 new pass-fact assertions added) |
+| `test-orchestrator-commit.js` | 0 fail — count in `DEVELOPMENT_NOTES.md` |
 | `measure-orchestrator.js` | exit 0, Decision 23 criteria 1–2 MET for GAMING and OFFICE |
 | `eval:scenarios --no-baseline --no-volatile` | exit 0, 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN (the documented unchanged-engine baseline) |
 | `verify:pi1` | PASS, 0 drifted of 25 in both use cases, cleanup verified |
 | `test:api:db` | 1 passed / 0 failed, no residue |
-| `test:unit` / `test:scripts` / `test:api` | 1149/0/0 (Node 24 **and** the Node 22 CI leg, `# cancelled 0`) / 212/0 / 38/0 |
+| `test:unit` / `test:scripts` / `test:api` | 0 fail each — counts in `DEVELOPMENT_NOTES.md` (Node 24 **and** the Node 22 CI leg, `# cancelled 0`) |
 | `verify:docs --offline`, `gen-decision-index --check` | OK |
 
 **The write gate now reads the columns it was blind to.** `test-orchestrator-full-run.js` asserted nothing about `budget_floor`, `engine_version` or `strategy_key`, so its earlier green proved only that the writer no longer raised `42703` — not that any fact landed, because `persistPassFacts` is UPDATE-only and a statement that matches no row still exits 0. It now reads the rows back across two passes: the default pass (no options) must show the Decision 27 floor present and `engine_version` **NULL**, and a second pass given `{ engineVersion }` must show that value on **every** result row. That pair is what makes "silently wrote nothing" impossible to pass.
@@ -354,7 +345,7 @@ exposed the branch at ledger 18, so 019 and 020 were both still pending and were
 | row counts before vs after | products 100, offers 101 unchanged — no row created or destroyed |
 | `chk_product_slug_format` + `uq_product_slug` | both present on `product` |
 | `verify:replay --test-db --reference=test` | **20 files replayed, 0 drift** (columns 370/370, checks 79/79, fks 60/60, indexes 100/100) |
-| `test-orchestrator-full-run.js` | **36 pass / 0 fail**, including the pass-facts read-back |
+| `test-orchestrator-full-run.js` | 0 fail — count in `DEVELOPMENT_NOTES.md`, including the pass-facts read-back |
 | `npm run test:api:db` | **1 passed / 0 failed**, residue 0 |
 
 The replay deltas over the 019-era numbers (365/78/60/99) are exactly 020's additions: +5 columns,
@@ -507,9 +498,9 @@ Verified, each on its own exit status:
 
 | Check | Result |
 |---|---|
-| `npm run test:api` | **40 pass / 0 fail** (38 pre-existing + 2 snapshot tests) |
+| `npm run test:api` | 0 fail — count in `DEVELOPMENT_NOTES.md` (2 snapshot tests added) |
 | `npm run test:api:db` | **1 passed / 0 failed**, residue 0 |
-| `npm run test:unit` / `test:scripts` | 1149/0/0 and 212/0 |
+| `npm run test:unit` / `test:scripts` | 0 fail each — counts in `DEVELOPMENT_NOTES.md` |
 | `verify:docs --offline` | PASS (all checks) |
 | `node scripts/run-migrations.js --test-db --check` | no pending migrations |
 
@@ -557,9 +548,9 @@ Verified, each on its own exit status (re-run independently 2026-10-15):
 
 | Check | Result |
 |---|---|
-| `npm run test:api` | **45 pass / 0 fail** (40 pre-existing + identity, guard-fires, v1.2 snapshot) |
+| `npm run test:api` | 0 fail — count in `DEVELOPMENT_NOTES.md` (identity, guard-fires, v1.2 snapshot) |
 | `npm run test:api:db` | **1 passed / 0 failed**, residue 0 — real branch rows |
-| `npm run test:unit` / `test:scripts` | 1149/0/0 and 212/0 |
+| `npm run test:unit` / `test:scripts` | 0 fail each — counts in `DEVELOPMENT_NOTES.md` |
 | `verify:docs --offline` / `gen-decision-index --check` | PASS / clean |
 | branch identity read-back (read-only) | 100 products: 100 display_names, **0 `Seed `-prefixed**, 0 mismatching the backfill regexp, 100 distinct slugs, 0 NULL, `chk_product_slug_format` present |
 | shared read-back (read-only, **BEFORE** the Sprint 5 apply) | ledger 18, no `slug` / `display_name` / `budget_floor` — the generic `500 INTERNAL_ERROR` path (`503` means only "no active scoring model") |
@@ -646,7 +637,7 @@ than named.
 | `check-offer-freshness.js --fail-days=14` | PASS |
 | `verify:pi1` | PASS — 0 of 25 drifted in both use cases, cleanup verified |
 | `eval:scenarios` | exit 0 — 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN (the unchanged-engine baseline) |
-| `test:unit` / `test:scripts` / `test:api` / `test:api:db` | 1149/0/0 · 212/0 · 45/0 · 1/0 |
+| `test:unit` / `test:scripts` / `test:api` / `test:api:db` | 0 fail each — counts in `DEVELOPMENT_NOTES.md` |
 
 **Deliberately NOT done, and why.** (1) No POST was ever issued against shared — a write test against
 the shared database is prohibited, and a failed one would leave an unmarked `recommendation_query`
@@ -698,9 +689,9 @@ this instance and reported as unavailable rather than tuned around.
 
 ---
 
-## How to run this safely on the agent/platforms branch
+## Sprint run order (P0-specific; the shared safety protocol is in [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md))
 
-- `git status` first (shared checkout; **as of 2026-10-15 `agent/platforms` carries all five platform sprints on top of `c8c16b9` and is UNMERGED, since `origin/master` is still `c8c16b9`**; the planning-time state was `c8c16b9`, identical to `origin/master`).
+- **Branch state:** as of 2026-10-15 `agent/platforms` carries all five platform sprints on top of `c8c16b9` and is UNMERGED (`origin/master` is still `c8c16b9`).
 - Sprint 1–2: no schema, no DB; work against the engine seam with fake clients; the commit/full-run suites are unit-only and already pinned. Keep the 3/4-arg call sites untouched.
 - Sprint 3: create the two migration files, run `run-migrations.js --dry-run` for order, then branch-apply with `run-migrations.js --test-db`. Do **not** run `gen:schema` here.
 - Sprint 4: wire the read path, run the fake-read-path tests + contract test, then branch-state parity with `npm run test:api` (DB-free) and a real `test:api:db` parity proof on the branch (residual cleanup asserted).

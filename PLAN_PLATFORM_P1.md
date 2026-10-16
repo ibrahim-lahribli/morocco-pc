@@ -14,18 +14,7 @@
 
 **Owner gates in this plan:** Sprint 1 needs a new Neon project and a hosting account (spend + new cloud resources) — owner approval before creation. Sprint 5 changes the POST contract — owner review before merge.
 
-## Global Constraints
-
-- **Do not raise a budget, threshold or timeout to make a measurement pass.** Re-measure instead. This rule exists because a raised budget already hid OG-26 once.
-- **Every latency claim must come from `scripts/measure-api-pass-phases.js` or the HTTP load profile**, with the command, the date, the target host and the region recorded next to it. A number without those four is not evidence.
-- **The engine stays pure.** No DB access outside loaders/orchestrator, no clock reads, no randomness. `Decision 17`'s stage order is pinned by tests.
-- **Determinism is a requirement.** Identical DB state + query + model version must yield identical builds, scores, ranks and text. Batching must not change row order or content: compare persisted rows before and after, not just statement counts.
-- **Migrations only through the ledger**, never renumbered, never replayed by hand. A real apply against `DATABASE_URL` refuses without `--restore-point=<id>` matching `^[A-Za-z0-9_-]{8,}$`.
-- **Never reset, drop or truncate the shared Neon database.** It is the only dev DB.
-- **Write-capable tests go through `scripts/lib/db-url.js` and `TEST_DATABASE_URL` only.** `getWriteTestDbUrl()` returns a pg **config object**, not a string.
-- **Docs are CRLF**; `docs/RECOMMENDATION_ENGINE_DECISIONS.md` also carries a UTF-8 BOM. No new runtime dependency without an explicit owner decision.
-- Adding a decision entry breaks `verify-docs` by design: bump the heading/`Status:` counts in `scripts/verify-docs.js`, refresh the `database/migrations/` range in `AGENTS.md` §4 when a migration lands, and run `npm run gen:decisions`.
-- **A step is measured against the target the owner re-derives after Sprint 1**, which is allowed to differ from the roadmap's hypothesis (p95 ≤ 2.5 s uncached / ≤ 300 ms cached).
+**Program rules:** the Global Constraints, the run-safely protocol and the self-review protocol this plan works inside live once, for P0–P3, in [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md). This plan adds only what is specific to it, and its self-review verdict is recorded there.
 
 ## Review Focus
 
@@ -140,13 +129,13 @@ line of a shared apply. Three findings worth keeping:
   <digest>` right after it connects and BEFORE the restore-point guard, so a refused apply still names
   its target; `--test-db` prints none because it writes no audit line at all. The print is deliberately
   not dry-run-only: the state a reviewer is in when checking an EXISTING line is the one with nothing
-  pending. Measured: `npm run test:scripts` 227 pass / 0 fail (218 before, 9 new), the Node 22 leg
-  227/227 with `# cancelled 0`, live shared `db:54ff6ea3f6e6` vs TEST branch `db:798b3aa04976`.
+  pending. Measured: `npm run test:scripts` 0 fail (see `DEVELOPMENT_NOTES.md`, 2026-10-15); the
+  Node 22 leg also cancels nothing (`# cancelled 0`), live shared `db:54ff6ea3f6e6` vs TEST branch `db:798b3aa04976`.
 - **The flag is inert on a `--test-db` run**, which writes no audit line at
   all. That is documented in the runner header rather than enforced, so a
   scripted invocation may pass `--note` in any mode.
 
-Verified: `npm run test:scripts` **218 pass / 0 fail** (218 total, 3 failing
+Verified: `npm run test:scripts` 0 fail (see `DEVELOPMENT_NOTES.md`; 3 failing
 before the implementation); `--dry-run` and `--check` both exit 0 against the
 shared DB with the audit log byte-identical (`git diff --stat --
 database/migration-applies.jsonl` prints nothing); `--note=` and the space
@@ -288,7 +277,7 @@ Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 
 **Owner gate:** this changes the POST response contract — owner review before merge.
 
 **Files:**
-- Modify: `apps/api/src/repository.js` (`findReusableQuery(client, key)`; a read before `createRecommendationQuery`)
+- Modify: `apps/api/src/repository.js` (`findReusableQuery(db, key)`; a read before `createRecommendationQuery`)
 - Modify: `apps/api/src/routes/recommendations.js` (the hit path re-reads the existing rows through the SAME `readRecommendationResult`)
 - Modify: `apps/api/src/contracts/recommendations.js`, `apps/api/test/unit/contract.test.js`, `apps/api/test/unit/openapi-v1.3.json` (new snapshot; delete v1.2 rather than keep two plausible contracts)
 - Modify: `docs/API.md` (the contract, the new status/field, the doc line in `docs/TEST_MAP.md`)
@@ -365,21 +354,3 @@ Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 
 6. Presets are generated idempotently and served by `GET /v1/presets`.
 7. No regression: `test:unit`, `test:scripts`, `test:api`, `test:api:db` (residue 0), `verify:replay` 0 drift, `verify:pi1` PASS, `check-deferred-rules` 0 violations, `check-offer-freshness --fail-days=14` green, `eval:scenarios` exit 0 at the unchanged-engine baseline.
 8. **Never a raised budget or threshold to make a step pass.** If a target is missed after Sprints 1–3, the target is re-derived with the owner — not the measurement.
-
-## How to run this safely
-
-- `git status` first: this is a shared checkout, and another agent may hold uncommitted work.
-- Sprint 1 Steps 4–7 are owner actions (new cloud resources, spend). Steps 1–3, 8 and 9 are agent work.
-- Point the API at the NEW project only after Step 6's parity check is clean; keep the original project untouched as the fallback.
-- Write-capable tests always via `TEST_DATABASE_URL`; the shared dev DB is never a write target.
-- Apply migrations only through the ledger; a non-`--test-db` apply needs `--restore-point=<id>`; the appended line's `target` names the database on its own (every shared-target run prints it as `AUDIT TARGET:`), and `--note` says what the apply was for.
-- `eval:scenarios` refuses to run while ANY unmarked `recommendation_query` row exists — check `--cleanup-orphans` before blaming a change.
-- CRLF everywhere in `docs/` and `database/`; never normalize an existing file's endings.
-
-## Self-review (run against this plan)
-
-- **Spec coverage:** each of the roadmap's five P1 steps and its target has a sprint (1, 2, 3, 4, 5–6, and the target in the whole-plan DoD). ✔
-- **Step scan:** every step names a command and an expected result; no step says "handle edge cases"; no step transcribes a function body the signature and tests already determine. ✔
-- **Type consistency:** `leadClient`/`client`, `catalogVersion(db)`, `readRecommendationResult`, `persistRanked({ queryId, selected })` are used with one spelling each across sprints. ✔
-- **Review Focus:** all five lines have a named owning sprint; 2.3, 5.3 and 6.3 carry the tests for items 2, 5 and 5. ✔
-- **Proportion:** this plan is shorter than the code it describes and contains no implementation bodies. ✔

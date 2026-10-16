@@ -1,0 +1,110 @@
+# PLATFORM PROGRAM STATUS — P0–P3 roll-up
+
+**What this page is:** the single answer to "what is left". It rolls up the 21 sprints of
+`PLAN_PLATFORM_P0.md` … `PLAN_PLATFORM_P3.md` and the owner-gated backlog registered in
+`docs/OPEN_GAPS.md` **OG-52**, so the state can be read here instead of reconstructed from four
+plans. The plans own the HOW; the register owns the open-item ledger; this page owns the
+where-are-we.
+
+**Date:** 2026-10-15 · **Branch:** `agent/platforms` · **Rules:** [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md).
+Passing-test counts are deliberately not restated here — see the dated entries in
+`DEVELOPMENT_NOTES.md`.
+
+## Verdict
+
+**6 sprints done, 2 partial, 13 not started. Almost every remaining sprint of agent work is gated
+behind an owner action — most of them behind two: the EU Neon project + hosting account (P1
+Sprint 1) and the GitHub dispatch (P3 Sprint 1). Four sprints need no owner at all and can start
+today.** The BETA engine and API surface are live on the TEST branch (contract v1.2,
+schema at ledger 20 on both databases); nothing is deployed, nothing is in production, and the CI
+job that would prove the end-to-end path has never been run. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency
+sprints and the deployed-host legs; **P1 Sprint 4** (design-only, no owner) unblocks P1 Sprints 5–6
+and P2 Sprint 3; and **P3 Sprint 1** (the CI dispatch) is the only way to turn the CI claim from
+unverified into evidence.
+
+## Sprint completion matrix
+
+| Plan | Sprint | Status | Done / remaining |
+|---|---|---|---|
+| P0 | 1 — pass-facts writer + 5th-arg seam | **DONE** | Writer + seam committed |
+| P0 | 2 — wire the seam + column-scoped grant | **DONE** | `full-run.js` threads `passFacts`; Decision 46 recorded |
+| P0 | 3 — author 019 + 020, branch-apply, replay | **DONE** | Both migrations; ledger 18 → 20 on the branch, `verify:replay` 0 drift |
+| P0 | 4 — API read/wire + presenter + v1.1/v1.2 | **DONE** | Pass facts on both verbs; product identity; `openapi-v1.2.json` |
+| P0 | 5 — shared-apply gate + doc refresh + P1–P4 review | **DONE** | 019+020 applied to shared from `br-damp-grass-axyri6yl`; OG-52 registered |
+| P1 | 1 — co-locate (EU Neon + deploy + re-measure) | **PARTIAL** | Steps 1–3 committed (`--note`, audit `target` digest); **Steps 4–9 OWNER** |
+| P1 | 2 — batch the commit to ≤ 6 statements | NOT STARTED | 5 steps; needs the co-located target to measure |
+| P1 | 3 — reduce loader statements | NOT STARTED | 5 steps; baseline needs P1 S1 |
+| P1 | 4 — `catalog_version` + canonical key (design only) | NOT STARTED | 4 steps; **no owner needed**, unblocks P1 S5/S6 + P2 S3 |
+| P1 | 5 — dedupe repeated POSTs (contract change) | NOT STARTED | 5 steps; blocked on P1 S4; owner review before merge |
+| P1 | 6 — presets job + `GET /v1/presets` | NOT STARTED | 5 steps; blocked on P1 S4 |
+| P2 | 1 — use-case vocabulary from the model (OG-38) | **DONE** | `listUseCases` swap; branch serves GAMING/OFFICE/WORKSTATION |
+| P2 | 2 — truthful per-IP limits (`trustProxy`) | NOT STARTED | 5 steps; code is DB-free, Step 4 needs a deployed host |
+| P2 | 3 — catalog endpoints (read-only) | NOT STARTED | 7 steps; Step 7 is an **owner** decision (public exposure) |
+| P2 | 4 — CORS allow-list + 429 contract, proven | NOT STARTED | 4 steps; DB-free, startable now |
+| P2 | 5 — contract-completeness gate | NOT STARTED | 3 steps; DB-free, startable now |
+| P3 | 1 — prove the recurring CI job | **PARTIAL** | Ref rationale recorded (commit `438ecf6`); **Step 2 dispatch OWNER**; Steps 3–6 not started |
+| P3 | 2 — rehearse the production DB role | NOT STARTED | Steps 1–4 agent (branch rehearsal); **Step 5 OWNER** (role on shared) |
+| P3 | 3 — staging + production + schema-gated deploy | NOT STARTED | 6 steps; **owner-gated** (cloud accounts); needs P1 S1 |
+| P3 | 4 — observability that pages someone | NOT STARTED | 6 steps; **owner gate** (monitoring account) |
+| P3 | 5 — freshness gate sees real offers | NOT STARTED | 4 steps; pure helper + tests, **startable now**, no owner |
+
+**Totals:** 21 sprints — 6 DONE, 2 PARTIAL, 13 NOT STARTED.
+
+## Owner-gated backlog (from OG-52, mapped to sprints)
+
+OG-52 is the register's record of "the work P0 did NOT absorb". Each item below keeps its owner;
+"owner" means a human, not the agent.
+
+| OG-52 item | Owning sprint | Owner action needed |
+|---|---|---|
+| P1 region/co-location move | P1 S1 Steps 4–7 | Create an EU Neon project (Frankfurt), a hosting account, deploy the API |
+| P1 engine-owned loader batching | P1 S3 (blocked by P1 S4) | — (agent; needs the `catalog_version` Decision first) |
+| P1 dedupe + presets | P1 S5, S6 (blocked by P1 S4) | Owner review before merge (P1 S5 changes the POST contract) |
+| P2 catalog endpoints | P2 S3 | Step 7: decide whether catalog pages may be public |
+| P2 `trustProxy` config | P2 S2 | — (agent; Step 4 needs P1's deployed host) |
+| P2 remainder of the OpenAPI snapshot surface | P2 S5 | — (agent, DB-free) |
+| P2 `meta.js` `listUseCases` swap (OG-38) | P2 S1 | — **DONE 2026-10-15** (the swap landed; OG-38's behavioural half stays open) |
+| P3 the `morocco_pc_api` role + column-scoped GRANTs | P3 S2 Step 5 | Apply the role to the shared DB (DDL on the only dev DB; needs a recorded restore point + the secret) — **the only residue of P0 Sprint 5** |
+| P3 CI verification of `test:api:db` | P3 S1 Step 2 | Dispatch `recurring-gates` on `agent/platforms` |
+| P3 error tracking | P3 S4 | A monitoring account + a DSN in the secret store |
+| P3 staging + production | P3 S3 | Two named environments + a deploy provider account |
+| P3 migration-deploy step | P3 S3 | — (agent, once the environments exist) |
+| P4 H2 retailer with readable terms | — (no P4 plan file) | A real retailer; blocks all P4 real-data work |
+| P4 non-seed provenance gate | P3 S5 | — (agent, startable now) |
+| P4 Decision 7 amendment / seed retirement / read-path `ACTIVE` audit | — (no P4 plan file) | — (agent, but gated behind real data) |
+
+## What is blocked vs. what can start now
+
+**Blocked on an owner action (do not start; prepare the exact command):**
+- *Everything down the P1 co-location chain* — P1 S2, P1 S3 (their measurement baseline is the
+  co-located target), and P2 S2 Step 4 / P2 S5's deployed-host legs.
+- *P3 S3* (staging + production) needs both the cloud accounts and P1's deployment; *P3 S4* needs a
+  monitoring account; *P3 S1* needs the GitHub dispatch; *P3 S2 Step 5* needs the DB password and a
+  restore point.
+- *P2 S3 Step 7* needs the public-exposure decision.
+
+**Startable now, no owner action (agent work):**
+- **P1 S4** — the `catalog_version` + canonical-key Decision (design-only; the one gate in front of
+  P1 S5/S6 and P2 S3).
+- **P3 S2 Steps 1–4** — rehearse the production role on the TEST branch (only Step 5 touches shared).
+- **P3 S5** — the non-seed offer-freshness gate (pure helper + unit tests; no migration, no write).
+- **P2 S4 and P2 S5** — the CORS/429 proof and the OpenAPI-completeness gate (both DB-free).
+
+## Register sync
+
+The drift this page first exposed was corrected in `docs/OPEN_GAPS.md` on 2026-10-16: OG-52's row
+now reads **OPEN (partially started)**, the P2 `listUseCases` swap it listed is marked landed (P2
+Sprint 1, 2026-10-15), and the `morocco_pc_api` role names **P3 Sprint 2** as its owning sprint.
+Everything else OG-52 lists is still accurate.
+
+## Where things live
+
+| Question | Read |
+|---|---|
+| The rules every plan works inside | [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md) |
+| P0 sprint-by-sprint execution records | [PLAN_PLATFORM_P0.md](PLAN_PLATFORM_P0.md) |
+| P1 (latency) | [PLAN_PLATFORM_P1.md](PLAN_PLATFORM_P1.md) |
+| P2 (API surface) | [PLAN_PLATFORM_P2.md](PLAN_PLATFORM_P2.md) |
+| P3 (ops) | [PLAN_PLATFORM_P3.md](PLAN_PLATFORM_P3.md) |
+| What is still open, with class/status/owner | [docs/OPEN_GAPS.md](docs/OPEN_GAPS.md) — OG-52 and OG-38 |
+| Measured before/after numbers and run logs | [DEVELOPMENT_NOTES.md](DEVELOPMENT_NOTES.md) |

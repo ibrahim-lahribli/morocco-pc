@@ -14,16 +14,7 @@
 
 **State this plan starts from (all measured 2026-10-15):** `recurring-gates` exists with `workflow_dispatch` and has **never been dispatched**; the `morocco_pc_api` role does not exist on shared (and therefore no column-scoped GRANT is applied); there is no staging or production environment, no deploy workflow, no error tracking, no uptime check, no log drain; `apps/api/Dockerfile` has never been built because no Docker is available on the authoring box; `/v1/health` answers **200 even when the database is down**, with `{ status, db, engine_version }`.
 
-## Global Constraints
-
-- **Never write to the shared Neon database outside the migration ledger**, and never apply a migration to shared without a recorded restore point (`--restore-point=<id>`, `^[A-Za-z0-9_-]{8,}$`). `--baseline` is guarded too.
-- **Never reset, drop or truncate shared.** Never point a write test at it; write-capable tests use `TEST_DATABASE_URL` through `scripts/lib/db-url.js`.
-- **A gate that cannot prove it cleaned up has not proved anything.** Any probe that creates a role, a row or a fixture removes it in `finally`, asserts residue 0 LAST, and fails the run when cleanup fails. `process.exit(code)` ignores `process.exitCode`, so a cleanup verdict must be folded into the exit path.
-- **Never weaken a gate, skip a test, or raise a threshold to get a green run.** A red nightly is a result to record, not to silence.
-- **No secret ever enters the tree, a log line, or a chat message.** Values live in GitHub secrets and the host's secret store; the repo holds key names in `.env.example` only. Errors are logged without a body, a URL or a credential — that rule already holds in `apps/api/src` and must keep holding.
-- **The API's write target guard stays on.** Reaching `DATABASE_URL` requires `API_ALLOW_SHARED=1` explicitly, and only in a production-role configuration.
-- **Docs are CRLF.** Adding a decision bumps the counts in `scripts/verify-docs.js` and requires `npm run gen:decisions`; a migration bumps the range in `AGENTS.md` §4 and requires `npm run gen:schema`.
-- **Operator actions are recorded, not implied.** Every sprint that needs a human ends with the exact command/URL for them and a place to record the outcome (`DEVELOPMENT_NOTES.md` dated entry, plus `docs/briefs/requests.md` when the ask belongs to another owner).
+**Program rules:** the Global Constraints, the run-safely protocol and the self-review protocol this plan works inside live once, for P0–P3, in [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md). This plan adds only what is specific to it, and its self-review verdict is recorded there.
 
 ## Review Focus
 
@@ -245,20 +236,3 @@ Five failure modes this plan's own tests do not fully cover, most likely first.
 5. The offer-freshness gate covers non-seed provenance regardless of class, with the boundary and the NULL case pinned.
 6. No regression anywhere: `test:unit`, `test:scripts`, `test:api`, `test:api:db`, `verify:replay`, `verify:pi1`, `check-deferred-rules`, `check-offer-freshness --fail-days=14`, `eval:scenarios` at the unchanged-engine baseline, `verify:docs --offline` and `gen-decision-index --check`.
 7. **No gate was weakened to reach any of the above.** If a dispatched run failed, the failure and the fix are both recorded.
-
-## How to run this safely
-
-- `git status` first. This is a shared checkout and another agent may hold uncommitted work; commit with an explicit pathspec rather than staging.
-- Sprints 1, 3 and 4's service setup, and Sprint 2 Step 5, are OWNER actions. Prepare the exact command or URL, then ask — do not create cloud resources, roles or accounts on your own initiative.
-- The shared database is never a test target. Everything rehearsable is rehearsed on the branch first.
-- A role, a probe row or a fixture that cannot be cleaned up fails the run that created it.
-- After any decision entry: `npm run gen:decisions`, `node scripts/gen-decision-index.js --check`, `npm run verify:docs --offline`. After any migration: `npm run gen:schema`, `verify:docs --live`, `verify:replay`.
-- Never put a secret in a file, a log line or a message. Direct the owner to the host's secret store or GitHub secrets, and reference key NAMES only.
-
-## Self-review (run against this plan)
-
-- **Spec coverage:** the roadmap's P3 list maps to Sprint 1 (dispatch the recurring job until `test:api:db` is verified), Sprint 2 (rehearse the production role), Sprint 3 (staging + production + the migration deploy step), Sprint 4 (error tracking, uptime on `/v1/health`, log shipping), Sprint 5 (the `fetched_at`/provenance extension of the freshness gate). ✔
-- **Step scan:** each step names a command, a file or an owner action and the result that means it passed; no step says "configure monitoring appropriately". ✔
-- **Type consistency:** `getWriteTestDbUrl()` (config object), `ping(pool, PING_TIMEOUT_MS)`, `buildApp({ pool, repository, engine, env, logger })`, `--fail-days=N` and `--restore-point=<id>` are used with one spelling each. ✔
-- **Review Focus:** all five lines have an owning sprint and a numbered scenario (4.4, 3.1, 2.3, 1.3, 1.2). ✔
-- **Proportion:** no implementation bodies; the two new scripts are specified by their interfaces and their tests. ✔
