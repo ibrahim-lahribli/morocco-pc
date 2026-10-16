@@ -6,15 +6,15 @@
 plans. The plans own the HOW; the register owns the open-item ledger; this page owns the
 where-are-we.
 
-**Date:** 2026-10-16 · **Branch:** `agent/platforms` · **Rules:** [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md).
+**Date:** 2026-10-17 · **Branch:** `agent/platforms` · **Rules:** [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md).
 Passing-test counts are deliberately not restated here — see the dated entries in
 `DEVELOPMENT_NOTES.md`.
 
 ## Verdict
 
-**9 sprints done, 2 partial, 10 not started. Almost every remaining sprint of agent work is gated
+**10 sprints done, 2 partial, 9 not started. Almost every remaining sprint of agent work is gated
 behind an owner action — most of them behind two: the EU Neon project + hosting account (P1
-Sprint 1) and the GitHub dispatch (P3 Sprint 1). Four sprints need no owner at all and can start
+Sprint 1) and the GitHub dispatch (P3 Sprint 1). Three sprints need no owner at all and can start
 today.** The BETA engine and API surface are live on the TEST branch (contract v1.4,
 schema at ledger 22 on the branch and 20 on shared); nothing is deployed, nothing is in production, and the CI
 job that would prove the end-to-end path has never been run. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency
@@ -46,9 +46,9 @@ unverified into evidence.
 | P3 | 2 — rehearse the production DB role | NOT STARTED | Steps 1–4 agent (branch rehearsal); **Step 5 OWNER** (role on shared) |
 | P3 | 3 — staging + production + schema-gated deploy | NOT STARTED | 6 steps; **owner-gated** (cloud accounts); needs P1 S1 |
 | P3 | 4 — observability that pages someone | NOT STARTED | 6 steps; **owner gate** (monitoring account) |
-| P3 | 5 — freshness gate sees real offers | NOT STARTED | 4 steps; pure helper + tests, **startable now**, no owner |
+| P3 | 5 — freshness gate sees real offers | **DONE** | Pure helper + tests (2026-10-17); every non-seed offer evaluated by age, SEED stays informational |
 
-**Totals:** 21 sprints — 9 DONE, 2 PARTIAL, 10 NOT STARTED.
+**Totals:** 21 sprints — 10 DONE, 2 PARTIAL, 9 NOT STARTED.
 
 ## Owner-gated backlog (from OG-52, mapped to sprints)
 
@@ -70,7 +70,7 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 | P3 staging + production | P3 S3 | Two named environments + a deploy provider account |
 | P3 migration-deploy step | P3 S3 | — (agent, once the environments exist) |
 | P4 H2 retailer with readable terms | — (no P4 plan file) | A real retailer; blocks all P4 real-data work |
-| P4 non-seed provenance gate | P3 S5 | — (agent, startable now) |
+| P4 non-seed provenance gate | P3 S5 | — **DONE 2026-10-17** (the gate covers non-seed provenance; the P4 real-data work stays open) |
 | P4 Decision 7 amendment / seed retirement / read-path `ACTIVE` audit | — (no P4 plan file) | — (agent, but gated behind real data) |
 
 ## What is blocked vs. what can start now
@@ -87,7 +87,7 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 - **P1 S4** — DONE 2026-10-16 (Decision 47; implemented by S5). It no longer gates anything here;
   P2 S3 still needs the co-located target it names.
 - **P3 S2 Steps 1–4** — rehearse the production role on the TEST branch (only Step 5 touches shared).
-- **P3 S5** — the non-seed offer-freshness gate (pure helper + unit tests; no migration, no write).
+- **P3 S5** — **DONE 2026-10-17** (the gate covers non-seed provenance; no migration, no write).
 - **P2 S4 and P2 S5** — the CORS/429 proof and the OpenAPI-completeness gate (both DB-free).
 
 ## Register sync

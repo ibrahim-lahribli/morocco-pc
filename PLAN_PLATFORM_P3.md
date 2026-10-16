@@ -204,10 +204,10 @@ Five failure modes this plan's own tests do not fully cover, most likely first.
 - Consumes: `store_offer` rows with `last_checked_at`, `fetched_at`, `offer_class`, `product_url`, `ingestion_record_id`.
 - Produces: `classifyOffer(row)` → `'VERIFIED' | 'SEED' | 'UNVERIFIED' | 'NON_SEED_UNVERIFIED'` and `evaluateFreshness(rows, { failDays, asOf })` → `{ failing: [...], warnings: [...], firstExpiry }`; the script keeps its current PASS/FAIL wording and exit contract.
 
-- [ ] **Step 1: write the failing tests** — a non-seed offer with a stale `fetched_at` FAILS even when its class is not `VERIFIED`; the current 101 seed offers produce no failure (SEED/UNVERIFIED stay informational, as today); the boundary is inclusive at `failDays`; a NULL `fetched_at` on a non-seed offer is reported, not silently passed.
-- [ ] **Step 2: implement the helper and switch the script to it**, keeping the existing output and exit codes for today's data.
-- [ ] **Step 3: prove both directions on the shared database, read-only** — the current run must stay PASS (101 seed offers, first SEED expiry 2026-11-03), and a forced fixture (a fake non-seed row passed to the pure helper) must FAIL. A gate with no violations is indistinguishable from a gate that never runs.
-- [ ] **Step 4: run `npm run test:scripts` (0 fail) and `node scripts/check-offer-freshness.js --fail-days=14` (PASS on today's data), then commit.** No migration, no seed, no write.
+- [x] **Step 1: write the failing tests** — a non-seed offer with a stale `fetched_at` FAILS even when its class is not `VERIFIED`; the current 101 seed offers produce no failure (SEED/UNVERIFIED stay informational, as today); the boundary is inclusive at `failDays`; a NULL `fetched_at` on a non-seed offer is reported, not silently passed.
+- [x] **Step 2: implement the helper and switch the script to it**, keeping the existing output and exit codes for today's data.
+- [x] **Step 3: prove both directions on the shared database, read-only** — the current run must stay PASS (101 seed offers, first SEED expiry 2026-11-03), and a forced fixture (a fake non-seed row passed to the pure helper) must FAIL. A gate with no violations is indistinguishable from a gate that never runs.
+- [x] **Step 4: run `npm run test:scripts` (0 fail) and `node scripts/check-offer-freshness.js --fail-days=14` (PASS on today's data), then commit.** No migration, no seed, no write.
 
 **Definition of done**
 - A non-seed offer of ANY class is evaluated by age and can fail the gate.

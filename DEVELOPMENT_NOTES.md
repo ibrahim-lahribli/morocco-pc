@@ -1213,3 +1213,46 @@ Verified: `npm run test:scripts` 227 pass / 0 fail (218 before; 9 new), the Node
 a database that is not shared, so the EU leg of P1 Sprint 1 Step 5 stays owner-gated, and no real line
 has yet been written with a digest target — the TEST branch is a snapshot whose ledger stands at 020,
 so nothing is ever pending on it.
+
+## 2026-10-17 — the offer-freshness gate now sees non-seed offers of ANY class (Platform P3 Sprint 5)
+
+The gate classified in SQL with one predicate — `ingestion_record_id IS NULL` is SEED, else VERIFIED — and
+decided PASS/FAIL in the same query, so a non-seed offer whose recorded provenance is not `VERIFIED` had no
+class of its own: it rode the seed informational line and could age out unseen (OG-52’s P4 clause).
+
+What landed, DB-free except the one read-only proof:
+
+- `scripts/lib/offer-freshness.js` — the pure half. `classifyOffer(row)` -> `SEED | VERIFIED | UNVERIFIED |
+  NON_SEED_UNVERIFIED`; `evaluateFreshness(rows, { failDays, asOf })` -> `{ failing, warnings, firstExpiry,
+  seedFirstExpiry, counts }`. `asOf` is REQUIRED, so it reads no clock and the same rows always give the same
+  verdict; `failing`/`warnings` are sorted by id (code-unit, never `localeCompare`).
+- `scripts/lib/offer-freshness.test.js` — 10 tests in `test:scripts` covering the plan’s scenarios 5.1-5.6.
+- `scripts/check-offer-freshness.js` now reads ROWS and delegates; its printed output and exit contract are
+  unchanged.
+
+Age basis differs by class, deliberately: a SEED row is measured from `last_checked_at` (the Stage 1 column,
+and the one seed 006 re-stamps), so the gate’s own historical numbers reproduce exactly; an INGESTED row is
+measured from `fetched_at`, the real fetch, because `last_checked_at` is maintenance state a re-stamp can move
+with no fetch having happened. A non-seed row with NULL `fetched_at` has no computable age: it is REPORTED
+(`UNKNOWN_AGE`) and never counted fresh.
+
+Schema note the plan got wrong, corrected here: `store_offer` has NO `offer_class` column. That vocabulary
+lives on `build_component` (migration 018), a SNAPSHOT of a chosen offer, while the plan listed `offer_class`
+among `store_offer`’s consumed fields. So every LIVE non-seed row classifies `NON_SEED_UNVERIFIED` — which is
+exactly the class the old gate could not separate, and which now fails on age like any other non-seed row. The
+two explicit classes (`VERIFIED` / `UNVERIFIED`) light up the moment a class is recorded, with no code change.
+
+Verified 2026-10-17:
+
+- `npm run test:scripts` 259 pass / 0 fail (249 before; 10 new).
+- `node scripts/check-offer-freshness.js --fail-days=14` — read-only, PASS: 101 offers, 101 seed, 0 expired,
+  first SEED expiry 2026-11-03 (17.2 days). The whole output diffed against the pre-change gate at HEAD on the
+  same rows is IDENTICAL except the dotenv tip text and the pg warning’s PID, so the change is inert on today’s
+  data — which is the point.
+- Both directions on fixtures, not just the happy one: a stale non-seed row of EITHER non-verified class FAILS
+  (`EXPIRED`), a fresh non-seed row passes, a NULL-`fetched_at` non-seed row WARNs, and a 400-day-old seed row
+  stays informational (`seedExpired 1`, `failing 0`).
+
+Not proven / limits: there are no live non-seed offers on either database (all 101 are seed rows), so the
+non-seed branch rests on the fixtures plus the pure helper until a real ingestion lands — which is P4’s
+retailer, not this sprint. No migration, no seed, no write.
