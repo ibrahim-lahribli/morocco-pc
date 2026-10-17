@@ -14,8 +14,8 @@ Passing-test counts are deliberately not restated here — see the dated entries
 
 **12 sprints done, 5 partial, 4 not started. Almost every remaining sprint of agent work is gated
 behind an owner action — most of them behind two: the EU Neon project + hosting account (P1
-Sprint 1) and the GitHub dispatch (P3 Sprint 1). Three sprints need no owner at all and can start
-today.** The BETA engine and API surface are live on the TEST branch (contract v1.5,
+Sprint 1) and the GitHub dispatch (P3 Sprint 1). No agent-only sprint remains: every one of the
+nine open sprints is blocked on the co-located target, an owner decision, or an owner account.** The BETA engine and API surface are live on the TEST branch (contract v1.5,
 schema at ledger 22 on the branch and 20 on shared); nothing is deployed, nothing is in production, and the CI
 job that would prove the end-to-end path has never been run. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency
 sprints and the deployed-host legs; **P1 Sprint 4** (DONE 2026-10-16) unblocked P1 Sprints 5–6 (both DONE 2026-10-16), and
