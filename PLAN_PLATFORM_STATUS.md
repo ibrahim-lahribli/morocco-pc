@@ -64,7 +64,7 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 | P2 `trustProxy` config | P2 S2 | — (agent; Step 4 needs P1's deployed host) |
 | P2 remainder of the OpenAPI snapshot surface | P2 S5 | — (agent, DB-free) |
 | P2 `meta.js` `listUseCases` swap (OG-38) | P2 S1 | — **DONE 2026-10-15** (the swap landed; OG-38's behavioural half stays open) |
-| P3 the `morocco_pc_api` role + column-scoped GRANTs | P3 S2 Step 5 | Apply the role to the shared DB (DDL on the only dev DB; needs a recorded restore point + the secret) — **the only residue of P0 Sprint 5** |
+| P3 the `morocco_pc_api` role + column-scoped GRANTs | P3 S2 Step 5 | Apply the role to the shared DB (DDL on the only dev DB; needs a recorded restore point + the secret) — **the only residue of P0 Sprint 5**. PREPARED 2026-10-17: the guarded apply and the smoke test exist and are dry-run verified, with the owner runbook `docs/RECIPES/provision-the-api-role.md`; the human action is now two commands |
 | P3 CI verification of `test:api:db` | P3 S1 Step 2 | Dispatch `recurring-gates` on `agent/platforms` |
 | P3 error tracking | P3 S4 | A monitoring account + a DSN in the secret store |
 | P3 staging + production | P3 S3 | Two named environments + a deploy provider account |

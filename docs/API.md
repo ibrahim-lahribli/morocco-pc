@@ -58,7 +58,10 @@ free, because `createRecommendationQuery` commits the profile and query rows BEF
 engine runs, so it leaves an unmarked `recommendation_query` row behind and the golden
 harness refuses to run while ANY unmarked row exists (delete them in FK order); and the
 `morocco_pc_api` role does not exist on the shared database yet, so the column-scoped
-GRANTs in *Production mode* remain unapplied.
+GRANTs in *Production mode* remain unapplied. Step 5 is no longer improvised: `node
+scripts/apply-api-role.js` applies the block under a restore-point guard that refuses without
+one, and `node scripts/smoke-api-role.js --confirm-shared` proves the API itself runs as the
+role; the owner procedure is `docs/RECIPES/provision-the-api-role.md`.
 
 ## What it is not
 
@@ -181,6 +184,22 @@ SELECT has_column_privilege('morocco_pc_api','recommendation_query','budget_floo
        has_column_privilege('morocco_pc_api','recommendation_result','strategy_key','UPDATE');    -- t
 ```
 
+**The apply and the smoke test are scripts, and the procedure is a recipe (2026-10-17).** The
+rehearsal proved the block; applying it is now scripted rather than transcribed.
+`node scripts/apply-api-role.js` REFUSES (exit 1, nothing written) without
+`--restore-point=<id>` matching `^[A-Za-z0-9_-]{8,}$` — the predicate `run-migrations.js`
+enforces — refuses an existing role instead of recreating it, takes the password from
+`API_ROLE_PASSWORD` or `--password-file` and never from argv, prints the `db:<12 hex>` audit
+digest beside the plan with the password redacted, and after the grants runs the self-check
+above and compares all 20 answers to a fixture: a missing, unexpected or NULL answer is a
+FAILURE and a red self-check ROLLS THE ROLE BACK. `node scripts/smoke-api-role.js
+--confirm-shared` then runs the API itself as the role — its own shared-pool path, health on
+the BODY, one real POST asserting `reused === false` and at least one committed build (zero
+builds is reported INCONCLUSIVE, because the build-table INSERT grants would then never be
+exercised), no `42501` on the pool, and the six Layer 4 counts asserted back to their pre-run
+values with a failed cleanup failing the run. Both scripts are pinned DB-free by
+`npm run test:scripts`.
+
 **TEST-branch rehearsal plan** (proves the commit path runs under the role
 before any shared apply):
 
@@ -200,7 +219,8 @@ owner, opens a SECOND connection authenticated as `morocco_pc_api`, drives the A
 path on it, asserts the self-check against a hard-coded fixture, proves the negative, then
 removes both the role and the rows the pass wrote. Its pure half — the 20-answer table, the
 grant script and the self-check SQL — is unit-tested by
-`scripts/lib/rehearse-api-role-cli.test.js` (15 DB-free tests, `npm run test:scripts`). It calls
+`scripts/lib/api-role.test.js` (11 DB-free tests) and its own CLI and cleanup policy by
+`scripts/lib/rehearse-api-role-cli.test.js` (9), all in `npm run test:scripts`. It calls
 the four POST steps on the API's own modules (`repository` + `engine`) rather than
 parameterizing `measure-api-pass-phases.js`, because that harness pins a scoring model and
 writes timing rows and neither is something a privilege rehearsal should vary.
