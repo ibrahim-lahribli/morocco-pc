@@ -38,7 +38,7 @@ unverified into evidence.
 | P1 | 5 — dedupe repeated POSTs (contract change) | **DONE** | Live: 200 + `reused: true` + the original id; contract v1.3 |
 | P1 | 6 — presets job + `GET /v1/presets` | **DONE** | Migration 022 + generator + endpoint (contract v1.4, Decision 48); the commit shipped broken and was repaired 2026-10-16 (36620ec) |
 | P2 | 1 — use-case vocabulary from the model (OG-38) | **DONE** | `listUseCases` swap; branch serves GAMING/OFFICE/WORKSTATION |
-| P2 | 2 — truthful per-IP limits (`trustProxy`) | **PARTIAL** | Steps 1–3 **DONE 2026-10-17** (`TRUST_PROXY` = trusted proxy address/CIDR list, default off, unsafe shapes refused; 14 new tests, `test:api` 89/0; **Decision 49** recorded); **Step 4 needs P1's deployed host**, Step 5 commit |
+| P2 | 2 — truthful per-IP limits (`trustProxy`) | **PARTIAL** | Steps 1–3 **DONE 2026-10-17** (`TRUST_PROXY` = trusted proxy address/CIDR list, default off, unsafe shapes refused; 14 new tests, `test:api` 89/0; **Decision 49** recorded); Step 5 committed (`aab917f`); **Step 4 needs P1's deployed host** |
 | P2 | 3 — catalog endpoints (read-only) | NOT STARTED | 7 steps; Step 7 is an **owner** decision (public exposure) |
 | P2 | 4 — CORS allow-list + 429 contract, proven | **DONE** | 4 CORS tests + the 429 body/`Retry-After` pin, both documented (2026-10-17); `test:api` 75/0 |
 | P2 | 5 — contract-completeness gate | **DONE** | `openapi-coverage.test.js` (7 tests); the gate exposed missing 429/500 on all five routes, now declared; snapshot regenerated (2026-10-17) |
