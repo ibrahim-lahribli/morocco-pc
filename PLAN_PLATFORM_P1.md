@@ -62,6 +62,8 @@ Run: `npm run test:scripts` → expected 0 fail. Then `node scripts/run-migratio
 
 - [ ] **Step 4 (OWNER): create the EU Neon project, and record its id and region.**
 
+**Runbook: `docs/RECIPES/deploy-eu-colocation.md`.** It turns Steps 4-9 into copy-paste commands and states the env-var mapping once: `apps/api/src/db.js` pools on `DATABASE_URL` only when `API_ALLOW_SHARED=1`, and on `TEST_DATABASE_URL` otherwise - so a deploy that keeps the plan's earlier `API_ALLOW_SHARED=0` would silently connect to `TEST_DATABASE_URL`.
+
 Target: Frankfurt, co-located with Fly's `fra` / Render's `frankfurt`. `list_regions` is **not available to this account's organization API key** (measured 2026-10-15: HTTP 404 "not allowed for organization API keys"), so confirm the region id in the Neon console rather than assuming it — `create_project` rejects an invalid id, which is the check. Record the project id and region in `DEVELOPMENT_NOTES.md`. Nothing else in this sprint can start before this exists.
 
 - [ ] **Step 5: create the restore point, then replay into the new project.**
@@ -70,7 +72,7 @@ Target: Frankfurt, co-located with Fly's `fra` / Render's `frankfurt`. `list_reg
 
 `node scripts/run-migrations.js --restore-point=<new branch id> --note="P1 co-location: new EU project <id> (<region>)"`
 
-Expected: 20 files `MIGRATED`, one audit line each with the note naming the EU project, and `target` = the EU project's OWN `db:<12 hex>` digest — never `shared`, because since 2026-10-15 the field names the database, so a `shared` value on a line written now means the runner wrote to the wrong one. Then run every seed: **`run-seeds.js` ignores `--test-db` and has no routing**, so apply `database/seeds/*.sql` through a script that uses `getWriteTestDbUrl()`-style explicit targeting — or point `DATABASE_URL` at the new project and run it, then reset `DATABASE_URL`. Either way, run each file as it is (`client.query(rawText)`), never split on `;`.
+Expected: **22** files `MIGRATED` (the ledger moved to 022 after this plan was written; 021 and 022 are branch-only, which is why the TEST branch is the replay source), one audit line each with the note naming the EU project, and `target` = the EU project's OWN `db:<12 hex>` digest — never `shared`, because since 2026-10-15 the field names the database, so a `shared` value on a line written now means the runner wrote to the wrong one. Then run every seed: **`run-seeds.js` ignores `--test-db` and has no routing**, so point `DATABASE_URL` at the new project's DIRECT host and run it (`DATABASE_URL=<direct EU URL> node scripts/run-seeds.js`, runbook section 6); the script runs each file as it is, never split on `;`. Reset `DATABASE_URL` afterwards.
 
 - [ ] **Step 6: prove parity with `check-target-parity.js`.**
 
@@ -78,7 +80,7 @@ Expected: 20 files `MIGRATED`, one audit line each with the note naming the EU p
 
 - [ ] **Step 7: deploy.**
 
-Preferred: Fly.io, region `fra` (Frankfurt). `fly.toml` sets `primary_region = "fra"`, `internal_port` matching `PORT` (the app reads `PORT`, default 3000), a health check on `/v1/health`, and `[[vm]] shared-cpu-1x 256MB` to start; then `fly secrets set DATABASE_URL=... TEST_DATABASE_URL=... ENGINE_VERSION=$(git rev-parse --short HEAD) API_ALLOW_SHARED=0` and `fly deploy` (it builds the repo-root Dockerfile). Alternative: Render, region `frankfurt`, Docker from the repo root, `PORT=10000`, `healthCheckPath=/v1/health`. **Verify current pricing and the region list before committing spend** — Fly's smallest always-on machine is roughly $2.28–2.53/month and Render's smallest paid web service ~$7/month (researched 2026-10-15; the sources are in the sprint record).
+Preferred: Fly.io, region `fra` (Frankfurt). `fly.toml` sets `primary_region = "fra"`, `internal_port` matching `PORT` (the app reads `PORT`, default 3000), a health check on `/v1/health`, and `[[vm]] shared-cpu-1x 256MB` to start; then `fly secrets set DATABASE_URL=<the EU project's pooled URL> ENGINE_VERSION=$(git rev-parse --short HEAD)` with `API_ALLOW_SHARED=1` in `[env]` and **no `TEST_DATABASE_URL`**, and `fly deploy` (it builds the repo-root Dockerfile). The mapping is not cosmetic: without `API_ALLOW_SHARED=1` the pool reads `TEST_DATABASE_URL`, so the API would answer health checks while writing to the old database (runbook section 1). Alternative: Render, region `frankfurt`, Docker from the repo root, `PORT=10000`, `healthCheckPath=/v1/health`. **Verify current pricing and the region list before committing spend** — Fly's smallest always-on machine is roughly $2.28–2.53/month and Render's smallest paid web service ~$7/month (researched 2026-10-15; the sources are in the sprint record).
 
 - [ ] **Step 8: re-measure, twice, and record both.**
 
@@ -106,6 +108,16 @@ Preferred: Fly.io, region `fra` (Frankfurt). `fly.toml` sets `primary_region = "
 | 1.6 | The same instrument run against both targets | a statement count that is IDENTICAL (the pipeline did not change) and a lower ms/round trip |
 
 **Status 2026-10-15 — Steps 1-3 DONE and committed; Steps 4-9 remain OWNER-gated.**
+
+**Prepared 2026-10-17 — the owner runbook exists and the parity gate is real.**
+`docs/RECIPES/deploy-eu-colocation.md` carries Steps 4-9 as runnable commands, the host comparison
+(Fly `fra` vs Render `frankfurt`) with sources, the env-var mapping, and the two measurement
+caveats the 2026-10-07 baseline did not have (dedupe makes a repeated POST a 200 reuse; the
+30/min limit needs pacing for a 50-POST profile). `scripts/check-target-parity.js` - the tool
+Step 6 names - now exists, with its comparison half pinned by `scripts/lib/target-parity.test.js`
+in `npm run test:scripts`; it is read-only and was exercised on both live targets (same target
+MATCH exit 0; shared vs branch names the 20-vs-22 ledger, 104-vs-100 products and 1-vs-2 models,
+exit 1).
 
 `--note=<text>` exists on `scripts/run-migrations.js` and reaches every audit
 line of a shared apply. Three findings worth keeping:

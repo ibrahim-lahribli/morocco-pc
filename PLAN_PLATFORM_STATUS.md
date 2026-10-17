@@ -31,7 +31,7 @@ unverified into evidence.
 | P0 | 3 — author 019 + 020, branch-apply, replay | **DONE** | Both migrations; ledger 18 → 20 on the branch, `verify:replay` 0 drift |
 | P0 | 4 — API read/wire + presenter + v1.1/v1.2 | **DONE** | Pass facts on both verbs; product identity; `openapi-v1.2.json` |
 | P0 | 5 — shared-apply gate + doc refresh + P1–P4 review | **DONE** | 019+020 applied to shared from `br-damp-grass-axyri6yl`; OG-52 registered |
-| P1 | 1 — co-locate (EU Neon + deploy + re-measure) | **PARTIAL** | Steps 1–3 committed (`--note`, audit `target` digest); **Steps 4–9 OWNER** |
+| P1 | 1 — co-locate (EU Neon + deploy + re-measure) | **PARTIAL** | Steps 1–3 committed (`--note`, audit `target` digest); **Steps 4–9 OWNER**, with a runnable runbook (`docs/RECIPES/deploy-eu-colocation.md`) and the parity gate (`scripts/check-target-parity.js`) ready |
 | P1 | 2 — batch the commit to ≤ 6 statements | NOT STARTED | 5 steps; needs the co-located target to measure |
 | P1 | 3 — reduce loader statements | NOT STARTED | 5 steps; baseline needs P1 S1 |
 | P1 | 4 — `catalog_version` + canonical key (design only) | **DONE** | Decision 47 RESOLVED 2026-10-16 and implemented by S5 (`catalogVersion(db)` + migration 021) |
