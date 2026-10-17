@@ -193,6 +193,8 @@ function registerPresetRoutes(app) {
       response: {
         200: PresetsResponseSchema,
         422: ErrorResponseSchema,
+        429: ErrorResponseSchema,
+        500: ErrorResponseSchema,
         503: ErrorResponseSchema,
       },
     },

@@ -54,3 +54,35 @@ test('GET is capped at 120 requests per minute, and only the excess is rejected'
 
   assert.equal(limited, 1);
 });
+
+test('the 429 carries the error envelope, a request id and Retry-After', async () => {
+  const app = stub.createTestApp();
+  let limited = null;
+
+  for (let index = 0; index <= POST_LIMIT; index += 1) {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/recommendations',
+      payload: stub.validBody(),
+    });
+    if (response.statusCode === 429) {
+      limited = response;
+      break;
+    }
+  }
+
+  assert.ok(limited, 'the request past the limit must be the 429 this test inspects');
+  assert.match(limited.headers['content-type'], /^application\/json/);
+
+  const body = limited.json();
+  assert.equal(body.error, 'RATE_LIMITED', 'the standard envelope, not the plugin\'s raw body');
+  assert.equal(body.message, 'Too many requests');
+  assert.equal(typeof body.request_id, 'string', 'a limit that fires is traceable to one request');
+  assert.ok(body.request_id.length > 0);
+
+  // Measured, not assumed (PLAN_PLATFORM_P2.md Sprint 4 Step 2): the plugin sends
+  // `Retry-After` in SECONDS, and the window is exactly one minute.
+  assert.equal(limited.headers['retry-after'], '60', 'the caller is told how long to wait');
+  assert.equal(limited.headers['x-ratelimit-limit'], String(POST_LIMIT));
+  assert.equal(limited.headers['x-ratelimit-remaining'], '0');
+});

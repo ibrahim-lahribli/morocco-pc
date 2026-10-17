@@ -183,10 +183,24 @@ so comparison harnesses there need `--model=launch-v2@1.0.0`.
 
 **Interfaces:** Consumes `parseOrigins(raw)` (already exported) and the per-route `config.rateLimit` objects. Produces: documented, tested behaviour; no new env var.
 
-- [ ] **Step 1: write the failing tests.** (a) With `ALLOWED_ORIGINS=https://example.ma`, a request with `Origin: https://example.ma` gets `Access-Control-Allow-Origin: https://example.ma` and a successful preflight; the same request with another origin gets **no** ACAO header. (b) With `ALLOWED_ORIGINS` empty, no ACAO header is sent for any origin. (c) Exceed the POST limit and assert the 429 body's shape **and whether a `Retry-After` header is present**.
-- [ ] **Step 2: implement whatever (c) shows is missing** — if the plugin does not send `Retry-After`, either configure it or document its absence explicitly in `docs/API.md`. Do not assert a header the server does not send.
-- [ ] **Step 3: document** the allow-list semantics (empty = disabled, not reflected), the limits, and the header/absence found in Step 2.
-- [ ] **Step 4: commit.**
+- [x] **Step 1: write the failing tests.** (a) With `ALLOWED_ORIGINS=https://example.ma`, a request with `Origin: https://example.ma` gets `Access-Control-Allow-Origin: https://example.ma` and a successful preflight; the same request with another origin gets **no** ACAO header. (b) With `ALLOWED_ORIGINS` empty, no ACAO header is sent for any origin. (c) Exceed the POST limit and assert the 429 body's shape **and whether a `Retry-After` header is present**.
+- [x] **Step 2: implement whatever (c) shows is missing** — if the plugin does not send `Retry-After`, either configure it or document its absence explicitly in `docs/API.md`. Do not assert a header the server does not send.
+- [x] **Step 3: document** the allow-list semantics (empty = disabled, not reflected), the limits, and the header/absence found in Step 2.
+- [x] **Step 4: commit.**
+
+**Measured 2026-10-17 — DONE.** CORS was already correct and is now PROVEN:
+an allow-listed origin is echoed exactly (never `*`) with a successful preflight,
+a disallowed origin gets no `Access-Control-Allow-Origin` while the request is
+still served, an empty list grants nothing, and a comma-separated list trims and
+admits exactly its entries (`apps/api/test/unit/cors.test.js`, 4 tests; the two
+older CORS tests in `surface.test.js` moved here so one behaviour has one
+owner). Step 2's measurement found `Retry-After: 60` PRESENT (seconds, the
+one-minute window) plus `x-ratelimit-limit/remaining/reset`, so nothing needed
+configuring — it needed stating. The 429 body is the standard envelope
+`{error: RATE_LIMITED, message, request_id}`; `request_id` was ADDED so a limit
+that fires correlates with the log like a 500, and `rate-limit.test.js` asserts
+the body AND the header. `docs/API.md` records the contract and
+`apps/api/.env.example` carries an example origin. `test:api` 75/0.
 
 **Definition of done**
 
@@ -215,9 +229,20 @@ so comparison harnesses there need `--model=launch-v2@1.0.0`.
 
 **Interfaces:** Consumes `app.swagger()` (the document) and Fastify's route table. Produces: a test that fails when a route exists without a documented path or without a response schema.
 
-- [ ] **Step 1: write the failing test.** Enumerate every registered route (method + path, excluding GET `/v1/docs/json` itself by an explicit allow-list), and for each assert a matching `paths` entry with at least one response schema. Add a synthetic route in the test to prove the gate fires.
-- [ ] **Step 2: fill whatever the gate exposes** — most likely missing error-response schemas for 422/429/500.
-- [ ] **Step 3: run the suite** (`npm run test:api` 0 fail), regenerate the snapshot if a schema was added, and commit.
+- [x] **Step 1: write the failing test.** Enumerate every registered route (method + path, excluding GET `/v1/docs/json` itself by an explicit allow-list), and for each assert a matching `paths` entry with at least one response schema. Add a synthetic route in the test to prove the gate fires.
+- [x] **Step 2: fill whatever the gate exposes** — most likely missing error-response schemas for 422/429/500.
+- [x] **Step 3: run the suite** (`npm run test:api` 0 fail), regenerate the snapshot if a schema was added, and commit.
+
+**Measured 2026-10-17 — DONE.** The gate found the real gap the plan predicted:
+no route declared `429` or `500`. Both are now on all five documented routes
+(`ErrorResponseSchema` each), and the snapshot was regenerated — same version
+`1.4.0`, since only error documentation was added. The gate exempts exactly
+HEAD (synthesized per GET), the CORS preflight wildcard `OPTIONS *`, and
+`/v1/docs/json`, each with a stated reason, and asserts every exemption matches
+a real route so a stale one cannot excuse anything. Synthetic cases prove the
+gate FIRES on an undocumented route, an untyped response and a missing 429/500;
+the real case compares the registered route table with `app.swagger()`.
+`test:api` 75/0.
 
 **Definition of done**
 

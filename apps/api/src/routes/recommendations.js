@@ -327,6 +327,8 @@ function registerRecommendationRoutes(app) {
         200: RecommendationResponseSchema,
         201: RecommendationResponseSchema,
         422: ErrorResponseSchema,
+        429: ErrorResponseSchema,
+        500: ErrorResponseSchema,
         503: ErrorResponseSchema,
       },
     },
@@ -455,7 +457,12 @@ function registerRecommendationRoutes(app) {
       tags: ['recommendations'],
       summary: 'Read a persisted recommendation',
       params: RecommendationParamsSchema,
-      response: { 200: RecommendationResponseSchema, 404: ErrorResponseSchema },
+      response: {
+        200: RecommendationResponseSchema,
+        404: ErrorResponseSchema,
+        429: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
     },
   }, async (request, reply) => {
     const id = request.params.id;

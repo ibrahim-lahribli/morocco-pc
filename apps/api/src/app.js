@@ -150,9 +150,14 @@ function buildApp(options) {
     // carrying a 4xx statusCode would otherwise be flattened into a 500 here.
     // Honor the status, but keep the message ours.
     if (error && error.statusCode === 429) {
+      // The request id is what lets a client (and the log) correlate the limit
+      // that fired; it is the same field a 500 carries, so one parse path covers
+      // both. `@fastify/rate-limit` also sends `Retry-After` (seconds), which is
+      // the header that tells a caller to wait rather than give up.
       return reply.code(429).send({
         error: 'RATE_LIMITED',
         message: 'Too many requests',
+        request_id: String(request.id),
       });
     }
     // Unexpected: log the detail, return a generic body plus the request id.

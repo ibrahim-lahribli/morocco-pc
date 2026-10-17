@@ -11,7 +11,7 @@
  */
 
 const { ping, PING_TIMEOUT_MS } = require('../db');
-const { HealthResponseSchema } = require('../contracts');
+const { HealthResponseSchema, ErrorResponseSchema } = require('../contracts');
 
 const HEALTH_RATE_LIMIT = Object.freeze({ max: 120, timeWindow: '1 minute' });
 
@@ -21,7 +21,10 @@ function registerHealthRoutes(app) {
     schema: {
       tags: ['ops'],
       summary: 'Liveness plus database reachability',
-      response: { 200: HealthResponseSchema },
+      // 429 and 500 are declared on every route: the rate limiter and the generic
+      // error handler apply to all of them, and the contract-completeness gate
+      // (apps/api/test/unit/openapi-coverage.test.js) fails on an undeclared one.
+      response: { 200: HealthResponseSchema, 429: ErrorResponseSchema, 500: ErrorResponseSchema },
     },
   }, async (_request, reply) => {
     const db = app.pool ? await ping(app.pool, PING_TIMEOUT_MS) : 'down';

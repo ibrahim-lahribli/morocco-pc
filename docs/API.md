@@ -359,6 +359,24 @@ Rate limits are per client IP and per route — a GET is cheap, a POST runs an
 entire engine pass, so they must not share a budget. The request body limit is
 **10 KB**.
 
+**The 429 contract (measured 2026-10-17, P2 Sprint 4).** A limit that fires
+answers the normal error envelope — `{ "error": "RATE_LIMITED", "message":
+"Too many requests", "request_id": "<id>" }` — and carries `Retry-After: 60`,
+in seconds, the one-minute window. `x-ratelimit-limit`,
+`x-ratelimit-remaining` and `x-ratelimit-reset` describe the same bucket.
+`Retry-After` is the header that tells a client to wait rather than treat the
+limit as a permanent failure, and `apps/api/test/unit/rate-limit.test.js`
+asserts both it and the body, so neither can disappear silently.
+
+**CORS (measured 2026-10-17, P2 Sprint 4).** `ALLOWED_ORIGINS` is a
+comma-separated allow-list (whitespace trimmed). An allowed origin is echoed
+EXACTLY in `Access-Control-Allow-Origin` — never `*` — and its preflight
+succeeds with the requested method and headers. A disallowed origin gets no
+`Access-Control-Allow-Origin` header, but the request itself is still served:
+CORS is a browser policy, not authentication. An EMPTY allow-list disables CORS
+entirely rather than reflecting any origin. All four behaviours are pinned by
+`apps/api/test/unit/cors.test.js`.
+
 ### POST /v1/recommendations
 
 ```json
@@ -665,7 +683,8 @@ One envelope for every non-2xx body:
 `INTERNAL_ERROR` returns a generic message plus `request_id` and **never** echoes
 the underlying error, which can carry a SQL fragment or a host; the detail is
 logged under that same request id. `NOT_FOUND` never reveals whether an id
-merely looks wrong.
+merely looks wrong. A **429** carries `request_id` as well, so a limit that
+fires can be correlated with the log exactly like a 500.
 
 ## Logging and the OpenAPI document
 
@@ -676,6 +695,14 @@ database URLs are never logged.** `ENGINE_VERSION` identifies the deploy.
 `exposeRoute` option was removed from `@fastify/swagger` v9 and the UI route
 belongs to `@fastify/swagger-ui`, which is not a dependency here — so the
 document is served by a two-line route of our own at `/v1/docs/json`.
+
+**The document is a GATE, not a description.** `apps/api/test/unit/openapi-coverage.test.js`
+enumerates every route Fastify actually registered, exempts only HEAD (synthesized
+for every GET), the CORS preflight wildcard and `/v1/docs/json` itself, and fails
+when any other route has no matching `paths` entry, no JSON response schema, or
+omits its `429`/`500` response. The exemption list is asserted to match real
+routes, so it cannot go stale. The snapshot pins the bytes; this gate pins
+completeness. Adding a route without documenting it is now a red suite.
 
 ## Testing
 

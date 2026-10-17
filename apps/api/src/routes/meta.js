@@ -35,7 +35,7 @@ function registerMetaRoutes(app) {
     schema: {
       tags: ['meta'],
       summary: 'Accepted use cases, currencies, resolutions and priorities',
-      response: { 200: MetaOptionsSchema, 503: ErrorResponseSchema },
+      response: { 200: MetaOptionsSchema, 429: ErrorResponseSchema, 500: ErrorResponseSchema, 503: ErrorResponseSchema },
     },
   }, async (_request, reply) => {
     const model = await app.repo.selectActiveScoringModel(app.pool);
