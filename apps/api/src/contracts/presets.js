@@ -54,7 +54,7 @@ const PresetSchema = Type.Object({
    * known OpenAPI 3.0 rendering artifact: `@fastify/swagger` folds `Type.Null()`
    * into `{ type: 'object', nullable: true, enum: [null] }`, which a generator
    * may read as "an object" rather than "null". It is pinned by
-   * openapi-v1.4.json rather than hidden, and the alternative readings were
+   * openapi-v1.5.json rather than hidden, and the alternative readings were
    * worse: a third vocabulary member (`'none'`) would put a value on this
    * endpoint that GET /v1/recommendations does not have for the same field name,
    * and omitting the property would make the row shape vary per row.

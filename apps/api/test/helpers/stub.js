@@ -171,7 +171,17 @@ const SAMPLE_ROWS = [
 ];
 
 function createRepositoryStub(overrides) {
-  const state = { createCalls: [], readCalls: [], findCalls: [], presetCalls: [] };
+  const state = {
+    createCalls: [],
+    readCalls: [],
+    findCalls: [],
+    presetCalls: [],
+    // Catalog call logs: the arguments matter as much as the rows, because the
+    // keyset contract is "the cursor is forwarded verbatim, and the page query is
+    // asked for limit + 1".
+    catalogCalls: [],
+    catalogDetailCalls: [],
+  };
   const stub = {
     state,
     async selectActiveScoringModel() {
@@ -197,6 +207,17 @@ function createRepositoryStub(overrides) {
       state.presetCalls.push(key);
       return [];
     },
+    // An EMPTY catalogue page by default, for the same reason.
+    async selectCatalogProducts(_db, key) {
+      state.catalogCalls.push(key);
+      return [];
+    },
+    // A MISS by default: an unknown slug is the ordinary 404, and a test that
+    // wants a product page has to opt into it.
+    async readCatalogProduct(_db, key) {
+      state.catalogDetailCalls.push(key);
+      return { found: false };
+    },
   };
   return Object.assign(stub, overrides || {});
 }
@@ -211,6 +232,11 @@ function createEngineStub(runFullRun) {
     calls,
     catalogCalls: [],
     useCaseVocabulary: realEngine.useCaseVocabulary,
+    // The catalog's role filter is the ENGINE's vocabulary (component_role ->
+    // product_category), so the stub forwards the real derivation: a copy here
+    // could agree with a test while the served API disagreed with itself.
+    catalogRoles: realEngine.catalogRoles,
+    categoryForRole: realEngine.categoryForRole,
     // The engine's digest is a real database read, so the unit suites stub it.
     // It is NOT copied from the engine: the value's only contract here is
     // "a 32-hex string", and a copy of the real statement would be a second

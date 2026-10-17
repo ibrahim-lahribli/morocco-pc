@@ -2,6 +2,7 @@
 
 /** apps/api/src/contracts/index.js - boundary-only barrel for the schemas. */
 
+const catalog = require('./catalog');
 const errors = require('./errors');
 const health = require('./health');
 const meta = require('./meta');
@@ -24,4 +25,10 @@ module.exports = {
   PresetSchema: presets.PresetSchema,
   PresetsResponseSchema: presets.PresetsResponseSchema,
   PresetsQuerySchema: presets.PresetsQuerySchema,
+  CatalogProductSchema: catalog.CatalogProductSchema,
+  CatalogListResponseSchema: catalog.CatalogListResponseSchema,
+  CatalogProductsQuerySchema: catalog.CatalogProductsQuerySchema,
+  CatalogProductParamsSchema: catalog.CatalogProductParamsSchema,
+  CatalogOfferSchema: catalog.CatalogOfferSchema,
+  CatalogProductDetailSchema: catalog.CatalogProductDetailSchema,
 };

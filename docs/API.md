@@ -12,7 +12,7 @@ databases now carry the schema it reads (019 + 020; shared applied 2026-10-15), 
 the write-safety default still points the API at the isolated branch - see *Database
 target*.
 
-**Contract v1.4 (2026-10-16):** v1.1 (2026-10-14) surfaced the persisted pass
+**Contract v1.5 (2026-10-17):** v1.1 (2026-10-14) surfaced the persisted pass
 facts - `budget_floor`, `engine_version` and each build's `strategy_key` became
 columns in migration `019_recommendation_pass_facts.sql` (Decision 46), so POST
 and GET no longer differ on any persisted field. v1.2 adds product identity:
@@ -28,7 +28,12 @@ against, from migration `021_recommendation_query_catalog_version.sql`
 presets ribbon** (Platform P1 Sprint 6): `GET /v1/presets` serves the generated
 landing-page presets of the CURRENT catalog version for one use case and
 currency, from migration `022_recommendation_preset.sql` (Decision 48). See
-*GET /v1/presets*.
+*GET /v1/presets*. **v1.5 adds the read-only catalog** (Platform P2 Sprint 3, Decision 50):
+`GET /v1/catalog/products` and `GET /v1/catalog/products/:slug` serve the
+addressable catalogue migration 020 made possible - keyset pagination on the
+unique `slug`, every price beside its Decision 35 provenance class, and a
+product page carrying its spec row, its eligible offers and the French
+disclaimer. See *GET /v1/catalog/products*.
 
 **`catalog_version` is served on both databases, but only the branch RECORDS it
 so far.** Migration 021 is applied to the TEST branch and not yet to the shared
@@ -354,6 +359,8 @@ All routes are under `/v1` and speak JSON.
 | POST | `/v1/recommendations` | 30/min | Run one full engine pass and persist it — or reuse an equivalent stored pass |
 | GET | `/v1/recommendations/:id` | 120/min | Read a persisted recommendation |
 | GET | `/v1/presets` | 120/min | Generated landing-page presets for one use case and currency (current catalog version) |
+| GET | `/v1/catalog/products` | 120/min | Paginated ACTIVE catalogue, keyset-ordered by `slug` (contract v1.5) |
+| GET | `/v1/catalog/products/:slug` | 120/min | One product: spec row, eligible offers, provenance, disclaimer |
 | GET | `/v1/docs/json` | 120/min | OpenAPI 3.0 document |
 
 Rate limits are per client IP and per route — a GET is cheap, a POST runs an
@@ -548,6 +555,78 @@ The read-only landing-page ribbon (Platform P1 Sprint 6 / Decision 48):
   catalog version runs no pass and writes nothing. `--cleanup` removes the
   preset rows with their passes — generated passes are unmarked
   `recommendation_query` rows and block `npm run eval:scenarios` until removed.
+
+### GET /v1/catalog/products
+
+The read-only catalogue page (Platform P2 Sprint 3, contract v1.5, Decision 50):
+`GET /v1/catalog/products?role=<role>&limit=<n>&cursor=<slug>`.
+
+| Query parameter | Required | Notes |
+|---|---|---|
+| `role` | no | A `component_role` (`CPU`, `GPU`, `MOTHERBOARD`, `RAM`, `SSD_BOOT`, `SSD_SECONDARY`, `PSU`, `CASE`, `CPU_COOLER`), translated to its `product_category`. An unknown value is a **422 naming the accepted roles**. |
+| `limit` | no | Integer 1-100; **default 20**. `limit=0` and `limit=1000` are 422s. |
+| `cursor` | no | The previous page's `next_cursor` (a slug). Omit it for the first page. Unknown query parameters are refused (422). |
+
+```json
+{
+  "products": [
+    {
+      "slug": "amd-ryzen-5-5600",
+      "display_name": "AMD Ryzen 5 5600",
+      "category": "CPU",
+      "from_price": 899,
+      "offer_class": "SEED_UNVERIFIED",
+      "has_offer": true
+    }
+  ],
+  "next_cursor": "amd-ryzen-5-5600"
+}
+```
+
+- Rows are the ACTIVE products that have a canonical spec table (the same set the engine
+  can select from), ordered by `slug` - the unique column, so pagination is a **keyset**: the
+  next page asks for `slug > cursor`. A page boundary revisited returns the same rows; no row
+  is skipped or repeated, and no `OFFSET` is involved. `next_cursor: null` means the last page.
+- `category` is **derived** from spec-table presence; `product` has no category column.
+- `from_price` is the cheapest **eligible** offer of that product in MAD - `price > 0`,
+  `availability <> 'OUT_OF_STOCK'`, and inside the 30-day freshness window unless it is a seed
+  offer (the same eligibility the engine prices with). `offer_class` is that price's Decision 35
+  provenance; `has_offer: false` with a `null` `from_price` means "no eligible offer yet", and
+  such a product is still listed rather than silently dropped.
+- There is **no `use_case` parameter**, although the sprint sketch listed one: the active model
+  exposes no per-use-case product filter, so it could only be inert, and this API refuses a
+  query parameter it would ignore. `PLAN_PLATFORM_P2.md` records the deviation.
+
+### GET /v1/catalog/products/:slug
+
+One product page: identity, specs, every eligible offer, and the derived price status.
+
+```json
+{
+  "slug": "amd-ryzen-5-5600",
+  "display_name": "AMD Ryzen 5 5600",
+  "category": "CPU",
+  "specs": { "cores": 6, "threads": 12, "socket_id": "8b1c...", "tdp_watts": 65 },
+  "offers": [{ "price": 899, "currency": "MAD", "offer_class": "SEED_UNVERIFIED" }],
+  "price_status": "indicative",
+  "disclaimer": "Prix indicatifs, non actualisés."
+}
+```
+
+- `specs` is the canonical spec table's row as ONE flat object, with identity and audit
+  columns stripped. A GPU's spec belongs to the **variant whose price is shown** (the variant
+  of the cheapest eligible offer; the lowest-id variant when there is no offer), so the spec and
+  the price cannot describe two different cards.
+- `offers` is every eligible offer, cheapest first, each carrying its provenance class. The list
+  endpoint's `from_price` is this list's first price.
+- `price_status` is derived exactly as the recommendation response derives it: `"verified"` only
+  when the product HAS offers and every one is `VERIFIED`; `"indicative"` when any is not (an
+  unknown class included); `null` when there is no eligible offer - a build-less page has no
+  price to make a claim about. Seed pricing, which is the whole catalogue today, is therefore
+  `indicative`, and the disclaimer is always present.
+- **404** for any slug without an ACTIVE catalogue product, malformed slugs included (there is no
+  row to leak a PostgreSQL `22P02` from). **422** only for a schema violation, such as an
+  over-long slug.
 
 ## Response shape
 

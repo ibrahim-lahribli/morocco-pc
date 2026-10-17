@@ -339,6 +339,274 @@ const DELETE_SUPERSEDED_PRESETS_SQL = [
   'RETURNING query_id',
 ].join(' ');
 
+/* -------------------------------------------------------------------------
+ * CATALOG READ SURFACE (Platform P2 Sprint 3)
+ *
+ * Two public, read-only reads: a keyset page of ACTIVE products and one
+ * product by `slug`. They exist for the storefront, and four rules shape them.
+ *
+ * 1. CATEGORY IS DERIVED, NEVER STORED. `product` has no category column
+ *    (AGENTS section 5; the engine derives it the same way in
+ *    candidates/loader.js). The CASE below tests canonical spec-table presence
+ *    in the `product_category` enum's declaration order, and GPU is the one
+ *    VARIANT-keyed category - a GPU product is reached through
+ *    `product_variant` -> `gpu_board_spec`. A product with no spec row is not a
+ *    catalog product at all and is EXCLUDED rather than served with a null
+ *    category; that is the same set the engine can select from.
+ *
+ * 2. PAGINATION IS KEYSET ON `slug`, never OFFSET. `slug` is the only
+ *    candidate key with a uniqueness guarantee (migration 020's
+ *    `uq_product_slug`); `product.name` has none, which is exactly how an
+ *    OFFSET page can repeat or skip a row while looking correct. The page
+ *    query asks for `limit + 1` rows so the caller can answer `next_cursor`
+ *    without a COUNT, and the cursor is compared with `>`, the same total order
+ *    the ORDER BY uses.
+ *
+ * 3. A PRICE ALWAYS TRAVELS WITH ITS PROVENANCE. `offer_class` is derived the
+ *    way the engine derives it (Decision 35 / migration 018):
+ *    `ingestion_record_id IS NULL` -> SEED_UNVERIFIED, otherwise VERIFIED.
+ *    A catalog price without its class would let a beta seed price read as
+ *    confirmed, which is the failure mode this sprint exists to prevent.
+ *
+ * 4. ELIGIBILITY MIRRORS THE ENGINE. Currency exact, `price > 0`,
+ *    `availability <> 'OUT_OF_STOCK'`, and the 30-day freshness window that
+ *    seed offers are exempt from - the same predicate as
+ *    offers/select.js, so the catalog cannot advertise a price the engine
+ *    would refuse to build with. The exemption is unconditional here because
+ *    the API always runs that way (apps/api/src/engine.js,
+ *    API_ENGINE_OPTIONS). A NULL `last_checked_at` is never fresh: NULL is
+ *    UNKNOWN, and an unknown age is not a waiver.
+ *
+ * The catalog reads NO Layer 4 table and writes nothing.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * The derived-category expression. Every reference is `p.id`; the spec tables
+ * are a fixed, literal list (never a value from a request).
+ */
+const CATALOG_CATEGORY_EXPRESSION = [
+  'CASE',
+  "  WHEN EXISTS (SELECT 1 FROM cpu_spec s WHERE s.product_id = p.id) THEN 'CPU'",
+  "  WHEN EXISTS (SELECT 1 FROM motherboard_spec s WHERE s.product_id = p.id) THEN 'MOTHERBOARD'",
+  "  WHEN EXISTS (SELECT 1 FROM ram_spec s WHERE s.product_id = p.id) THEN 'MEMORY'",
+  '  WHEN EXISTS (',
+  '    SELECT 1 FROM gpu_board_spec s',
+  '    JOIN product_variant v ON v.id = s.product_variant_id',
+  '    WHERE v.product_id = p.id',
+  "  ) THEN 'GPU'",
+  "  WHEN EXISTS (SELECT 1 FROM ssd_spec s WHERE s.product_id = p.id) THEN 'STORAGE'",
+  "  WHEN EXISTS (SELECT 1 FROM psu_spec s WHERE s.product_id = p.id) THEN 'PSU'",
+  "  WHEN EXISTS (SELECT 1 FROM case_spec s WHERE s.product_id = p.id) THEN 'CASE'",
+  "  WHEN EXISTS (SELECT 1 FROM cooler_spec s WHERE s.product_id = p.id) THEN 'COOLER'",
+  '  ELSE NULL',
+  // The alias is part of the fragment: BOTH statements select it as
+  // `category`, and an unaliased CASE is named "case" by Postgres - which
+  // surfaces as a confusing "column c.category does not exist" from the CTE.
+  'END AS category',
+].join('\n');
+
+/**
+ * The offer-eligibility predicate, shared verbatim by the list and the detail.
+ * One joined condition on purpose: both statements inline it after their own
+ * `AND`, so a fragment already carrying `AND`s would emit `AND AND`.
+ */
+const CATALOG_OFFER_ELIGIBILITY_SQL = [
+  'o.price > 0',
+  "o.availability <> 'OUT_OF_STOCK'",
+  "(o.last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days' OR o.ingestion_record_id IS NULL)",
+].join(' AND ');
+
+/**
+ * One page of ACTIVE catalog products, ordered by slug, cheapest eligible offer
+ * alongside it.
+ *
+ * $1 text    category filter, or NULL for every category
+ * $2 text    keyset cursor (the previous page's last slug), or NULL for the first
+ * $3 integer page size + 1 - the extra row is how "there is a next page" is
+ *            known without counting
+ * $4 text    advertised currency (exact match, no conversion)
+ *
+ * `best_offer` ranks each product's eligible offers by `(price, id)`: the same
+ * total order offers/select.js uses, so the catalog's "from" price and the
+ * engine's selected price cannot disagree about which offer is cheapest. The
+ * LEFT JOIN keeps a product with NO eligible offer in the page - silent
+ * omission would make the catalog look complete when it is not - and the
+ * caller reports `has_offer: false`.
+ */
+const SELECT_CATALOG_PRODUCTS_SQL = [
+  'WITH categorized AS (',
+  '  SELECT p.id, p.slug, COALESCE(p.display_name, p.name) AS display_name,',
+  CATALOG_CATEGORY_EXPRESSION.split('\n').map((line) => '  ' + line).join('\n'),
+  '  FROM product p',
+  "  WHERE p.lifecycle_status = 'ACTIVE' AND p.slug IS NOT NULL",
+  '),',
+  'listed AS (',
+  '  SELECT c.id, c.slug, c.display_name, c.category',
+  '  FROM categorized c',
+  '  WHERE c.category IS NOT NULL',
+  '    AND ($1::text IS NULL OR c.category = $1)',
+  '    AND ($2::text IS NULL OR c.slug > $2)',
+  '  ORDER BY c.slug ASC',
+  '  LIMIT $3',
+  '),',
+  'best_offer AS (',
+  '  SELECT o.product_id, o.price, o.ingestion_record_id,',
+  '         ROW_NUMBER() OVER (PARTITION BY o.product_id ORDER BY o.price ASC, o.id ASC) AS rn',
+  '  FROM store_offer o',
+  '  WHERE o.currency = $4',
+  '    AND ' + CATALOG_OFFER_ELIGIBILITY_SQL,
+  ')',
+  'SELECT l.slug, l.display_name, l.category,',
+  '       b.price AS from_price,',
+  '       CASE WHEN b.product_id IS NULL THEN NULL',
+  "            WHEN b.ingestion_record_id IS NULL THEN 'SEED_UNVERIFIED'",
+  "            ELSE 'VERIFIED' END AS offer_class",
+  'FROM listed l',
+  'LEFT JOIN best_offer b ON b.product_id = l.id AND b.rn = 1',
+  'ORDER BY l.slug ASC',
+].join('\n');
+
+/**
+ * One ACTIVE catalog product's identity, by slug. `category IS NOT NULL` is the
+ * same eligibility the list applies, so a slug the list can never serve is a
+ * 404 here too rather than a product page with an unknown category.
+ *
+ * $1 text  slug
+ */
+const SELECT_CATALOG_PRODUCT_SQL = [
+  'WITH categorized AS (',
+  '  SELECT p.id, p.slug, COALESCE(p.display_name, p.name) AS display_name,',
+  CATALOG_CATEGORY_EXPRESSION.split('\n').map((line) => '  ' + line).join('\n'),
+  '  FROM product p',
+  "  WHERE p.lifecycle_status = 'ACTIVE' AND p.slug = $1",
+  ')',
+  'SELECT id, slug, display_name, category',
+  'FROM categorized',
+  'WHERE category IS NOT NULL',
+].join('\n');
+
+/**
+ * Every ELIGIBLE offer of one product, cheapest first - the detail page's
+ * price list. Same eligibility as the list, same total order, so the first row
+ * IS the list's `from_price`.
+ *
+ * $1 uuid  product id
+ * $2 text  currency
+ */
+const SELECT_CATALOG_OFFERS_SQL = [
+  'SELECT o.id, o.product_variant_id, o.price, o.currency, o.ingestion_record_id',
+  'FROM store_offer o',
+  'WHERE o.product_id = $1',
+  '  AND o.currency = $2',
+  '  AND ' + CATALOG_OFFER_ELIGIBILITY_SQL,
+  'ORDER BY o.price ASC, o.id ASC',
+].join('\n');
+
+/**
+ * The spec columns that are IDENTITY, not specification. They are stripped from
+ * the served object: a catalog consumer needs `socket`, `tdp_watts` and the
+ * like, not row keys or audit timestamps.
+ *
+ * `id` is in the list although no `*_spec` table has one: each spec table's PK
+ * is `product_id` or `product_variant_id` (migration 004 - one-to-one). jsonb's
+ * `-` ignores a missing key, so naming it costs nothing and keeps a future
+ * surrogate key out of the response without another edit.
+ */
+const CATALOG_SPEC_STRIP_COLUMNS = "ARRAY['id', 'product_id', 'product_variant_id', 'created_at', 'updated_at']";
+
+/**
+ * Category -> the statement returning its spec row as ONE jsonb object.
+ *
+ * The table name is a TRUSTED LITERAL from this frozen map, selected by the
+ * category the database itself derived - never by a request value. Product-keyed
+ * categories read `product_id`; GPU reads the VARIANT's spec, because a GPU
+ * board row is variant-keyed. `$1` is always the product id; the GPU statement
+ * also takes `$2`.
+ *
+ * Each spec table is ONE-TO-ONE with its key (migration 004: `product_id` or
+ * `product_variant_id` is the PK), so there is no ordering to impose; `LIMIT 1`
+ * only stops a violated invariant from producing two rows.
+ */
+const CATALOG_SPEC_SQL_BY_CATEGORY = Object.freeze({
+  CPU: 'SELECT to_jsonb(s) - ' + CATALOG_SPEC_STRIP_COLUMNS + ' AS specs FROM cpu_spec s WHERE s.product_id = $1 LIMIT 1',
+  MOTHERBOARD: 'SELECT to_jsonb(s) - ' + CATALOG_SPEC_STRIP_COLUMNS + ' AS specs FROM motherboard_spec s WHERE s.product_id = $1 LIMIT 1',
+  MEMORY: 'SELECT to_jsonb(s) - ' + CATALOG_SPEC_STRIP_COLUMNS + ' AS specs FROM ram_spec s WHERE s.product_id = $1 LIMIT 1',
+  STORAGE: 'SELECT to_jsonb(s) - ' + CATALOG_SPEC_STRIP_COLUMNS + ' AS specs FROM ssd_spec s WHERE s.product_id = $1 LIMIT 1',
+  PSU: 'SELECT to_jsonb(s) - ' + CATALOG_SPEC_STRIP_COLUMNS + ' AS specs FROM psu_spec s WHERE s.product_id = $1 LIMIT 1',
+  CASE: 'SELECT to_jsonb(s) - ' + CATALOG_SPEC_STRIP_COLUMNS + ' AS specs FROM case_spec s WHERE s.product_id = $1 LIMIT 1',
+  COOLER: 'SELECT to_jsonb(s) - ' + CATALOG_SPEC_STRIP_COLUMNS + ' AS specs FROM cooler_spec s WHERE s.product_id = $1 LIMIT 1',
+  /**
+   * $2 is the variant the CHEAPEST eligible offer belongs to, so the spec shown
+   * is the thing priced. NULL (no offer, or a variant-less offer) falls back to
+   * the product's lowest-id variant, deterministically - a product with two GPU
+   * variants exists in the live catalog (measured 2026-10-17: 21 GPU products,
+   * 22 variants), so "whichever row came back" is not good enough here.
+   */
+  GPU: 'SELECT to_jsonb(s) - ' + CATALOG_SPEC_STRIP_COLUMNS + ' AS specs FROM gpu_board_spec s'
+    + ' WHERE s.product_variant_id = COALESCE($2::uuid,'
+    + ' (SELECT v.id FROM product_variant v WHERE v.product_id = $1 ORDER BY v.id ASC LIMIT 1))'
+    + ' LIMIT 1',
+});
+
+/**
+ * One page of catalog products.
+ *
+ * @param {object} db pool or client exposing query(sql, params)
+ * @param {object} key { category: string|null, cursor: string|null,
+ *        limit: number (page size + 1), currency }
+ * @returns {Promise<Array<object>>} raw rows; NUMERIC is a string here
+ */
+async function selectCatalogProducts(db, key) {
+  const result = await db.query(SELECT_CATALOG_PRODUCTS_SQL, [
+    key.category === undefined ? null : key.category,
+    key.cursor === undefined ? null : key.cursor,
+    key.limit,
+    key.currency,
+  ]);
+  return result && Array.isArray(result.rows) ? result.rows : [];
+}
+
+/**
+ * One catalog product with its offers and its spec object.
+ *
+ * @param {object} db pool or client exposing query(sql, params)
+ * @param {object} key { slug, currency }
+ * @returns {Promise<{found: false} | {found: true, product: object,
+ *   offers: Array<object>, specs: object|null}>} `specs` is null only if the
+ *   derived category has no spec row, which the list query cannot produce.
+ */
+async function readCatalogProduct(db, key) {
+  const identity = await db.query(SELECT_CATALOG_PRODUCT_SQL, [key.slug]);
+  const identityRows = identity && Array.isArray(identity.rows) ? identity.rows : [];
+  if (identityRows.length === 0) {
+    return { found: false };
+  }
+  const product = identityRows[0];
+
+  const offerResult = await db.query(SELECT_CATALOG_OFFERS_SQL, [product.id, key.currency]);
+  const offers = offerResult && Array.isArray(offerResult.rows) ? offerResult.rows : [];
+
+  const specSql = CATALOG_SPEC_SQL_BY_CATEGORY[product.category];
+  if (specSql === undefined) {
+    // Unreachable by construction: the identity statement's CASE and this map
+    // are the same eight categories. Throwing beats serving a product page with
+    // a silently empty spec block.
+    throw new Error('no catalog spec statement for derived category ' + String(product.category));
+  }
+  const specParams = product.category === 'GPU'
+    ? [product.id, offers.length > 0 ? offers[0].product_variant_id : null]
+    : [product.id];
+  const specResult = await db.query(specSql, specParams);
+  const specRows = specResult && Array.isArray(specResult.rows) ? specResult.rows : [];
+
+  return {
+    found: true,
+    product,
+    offers,
+    specs: specRows.length === 0 ? null : specRows[0].specs,
+  };
+}
+
 /**
  * The active scoring model, or null when none is active.
  *
@@ -555,6 +823,13 @@ module.exports = {
   UPSERT_PRESET_SQL,
   DELETE_PRESETS_SQL,
   DELETE_SUPERSEDED_PRESETS_SQL,
+  CATALOG_CATEGORY_EXPRESSION,
+  CATALOG_SPEC_SQL_BY_CATEGORY,
+  SELECT_CATALOG_PRODUCTS_SQL,
+  SELECT_CATALOG_PRODUCT_SQL,
+  SELECT_CATALOG_OFFERS_SQL,
+  selectCatalogProducts,
+  readCatalogProduct,
   selectActiveScoringModel,
   createRecommendationQuery,
   findReusableQuery,

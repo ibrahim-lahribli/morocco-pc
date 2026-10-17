@@ -136,11 +136,43 @@ async function runFullRun(client, queryId, engineVersion) {
  */
 const catalogVersion = query.catalogVersion;
 
+/**
+ * The component-role vocabulary the catalog's `role` filter accepts, in the
+ * `component_role` enum's declaration order.
+ *
+ * It is read from the candidates barrel rather than restated in `meta.js` for
+ * the reason Decision 37 gives about use cases: a role list that lived in two
+ * places would let the API accept a filter value the engine has no category for
+ * (or hide one it does). Frozen by the engine - do not mutate it here.
+ *
+ * @returns {readonly string[]} the nine component roles
+ */
+function catalogRoles() {
+  return candidates.COMPONENT_ROLES;
+}
+
+/**
+ * The `product_category` a role must come from, or null for an unknown role.
+ *
+ * The catalog filter is expressed in ROLES and applied in CATEGORIES because
+ * the engine's vocabulary maps many-to-one (RAM -> MEMORY, SSD_BOOT and
+ * SSD_SECONDARY -> STORAGE): a client asks for the thing it builds with, and
+ * the database filters on the thing it derives. Null is the caller's 422 cue.
+ *
+ * @param {string} role a `component_role` value
+ * @returns {string|null} a `product_category` value, or null
+ */
+function categoryForRole(role) {
+  return candidates.expectedCategoryForRole(role);
+}
+
 module.exports = {
   runFullRun,
   engineOptionsFor,
   useCaseVocabulary,
   catalogVersion,
+  catalogRoles,
+  categoryForRole,
   API_ENGINE_OPTIONS,
   ERROR_CODES: candidates.ERROR_CODES,
   CandidateSelectionError: candidates.CandidateSelectionError,

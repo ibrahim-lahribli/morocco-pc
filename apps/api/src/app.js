@@ -37,6 +37,7 @@ const cors = require('@fastify/cors');
 const rateLimit = require('@fastify/rate-limit');
 const swagger = require('@fastify/swagger');
 
+const { registerCatalogRoutes } = require('./routes/catalog');
 const { registerHealthRoutes } = require('./routes/health');
 const { registerMetaRoutes } = require('./routes/meta');
 const { registerPresetRoutes } = require('./routes/presets');
@@ -248,9 +249,14 @@ function buildApp(options) {
         // 1.4.0 (2026-10-16): GET /v1/presets (Platform P1 Sprint 6 /
         // Decision 48) - the generated landing-page ribbon: the presets of the
         // CURRENT catalog version for one use case and currency, cheapest
-        // budget first. Pinned byte-for-byte by
-        // apps/api/test/unit/openapi-v1.4.json.
-        version: '1.4.0',
+        // budget first.
+        // 1.5.0 (2026-10-17): the read-only catalog (Platform P2 Sprint 3) -
+        // GET /v1/catalog/products (keyset pagination on slug) and
+        // GET /v1/catalog/products/:slug. Every price carries its Decision 35
+        // provenance class, and the detail carries the derived price_status
+        // and the disclaimer. Pinned byte-for-byte by
+        // apps/api/test/unit/openapi-v1.5.json.
+        version: '1.5.0',
       },
     },
   });
@@ -302,6 +308,7 @@ function buildApp(options) {
   // Registered as a plugin so these routes are added after the plugins above
   // have attached their onRoute hooks (see the header).
   app.register(async (instance) => {
+    registerCatalogRoutes(instance);
     registerHealthRoutes(instance);
     registerMetaRoutes(instance);
     registerPresetRoutes(instance);

@@ -12,7 +12,7 @@
 
 **Date:** 2026-10-15 · **Branch:** `agent/platforms` · **Decision id:** only Sprint 5 needs a decision entry (the catalog read contract); take the next free number from the log's tail at write time.
 
-**Contract version note.** The live contract is **v1.4** (`apps/api/test/unit/openapi-v1.4.json`; the v1.1, v1.2 and v1.3 snapshots were superseded and deleted rather than kept — P1 Sprints 5 and 6 landed first). P2 Sprint 3 is the next change that wants a minor, so it takes **v1.5**. Never commit two snapshots and never leave a superseded one in the tree.
+**Contract version note.** The live contract is **v1.5** (`apps/api/test/unit/openapi-v1.5.json`; the v1.1-v1.4 snapshots were superseded and deleted rather than kept — P1 Sprints 5-6 and P2 Sprint 3 landed in that order). Never commit two snapshots and never leave a superseded one in the tree.
 
 **Program rules:** the Global Constraints, the run-safely protocol and the self-review protocol this plan works inside live once, for P0–P3, in [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md). This plan adds only what is specific to it, and its self-review verdict is recorded there.
 
@@ -148,7 +148,7 @@ limit is conditional on the proxy being named).
 **Files:**
 - Create: `apps/api/src/routes/catalog.js`, `apps/api/src/contracts/catalog.js`
 - Modify: `apps/api/src/repository.js` (the two read statements), `apps/api/src/app.js` (register), `apps/api/src/contracts/index.js`
-- Create: `apps/api/test/unit/catalog.test.js`; modify `apps/api/test/db/recommendations.db.test.js` (a real read against the branch)
+- Create: `apps/api/test/unit/catalog.test.js` and `apps/api/test/db/catalog.db.test.js` (READ-ONLY: real rows on the branch, no write suites touched)
 - Create: `apps/api/test/unit/openapi-v1.5.json` (see the version note — v1.4 is taken by P1 Sprint 6) — delete the superseded snapshot in the same commit
 - Modify: `docs/API.md`, `docs/TEST_MAP.md`, `CONTEXT.md`
 
@@ -156,12 +156,12 @@ limit is conditional on the proxy being named).
 - Produces: `GET /v1/catalog/products?use_case=&role=&limit=&cursor=` → `{ products: [{ slug, display_name, category, from_price, offer_class, has_offer }], next_cursor }`; `GET /v1/catalog/products/:slug` → `{ slug, display_name, category, specs: {...}, offers: [{ price, offer_class, currency }], price_status, disclaimer }`. Both read-only, rate-limited like the other GETs (120/min).
 - Consumes: `product.slug` / `display_name` (migration 020), the spec tables, `store_offer.price` / `offer_class`.
 
-- [ ] **Step 1: write the failing route tests** (DB-free, stubbed repository): a list returns the advertised shape; an unknown slug is a 404 with the standard envelope; `limit=0` and `limit=1000` are 422s; a product with no offer reports `has_offer: false` and a null `from_price` rather than being filtered out silently.
-- [ ] **Step 2: implement the reads in `repository.js`** — keyset pagination on `(slug)` (unique since 020's `uq_product_slug`), never `OFFSET`; `from_price` is the lowest offer price for the product, and **`offer_class` travels with it**.
-- [ ] **Step 3: implement the routes** with TypeBox schemas for both responses.
-- [ ] **Step 4: apply the pricing rule in the response** — `price_status` derived exactly as the recommendation response derives it (`"verified"` only when every contributing offer is `VERIFIED`), with the French `disclaimer`; the seed data will therefore report `indicative`, which is correct and must not be special-cased.
-- [ ] **Step 5: pin the contract** — regenerate the snapshot, run `npm run test:api` (0 fail) and `npm run test:api:db` (a real read of a real slug on the branch, residue 0).
-- [ ] **Step 6: update `docs/API.md` + `docs/TEST_MAP.md` + `CONTEXT.md`, then commit.**
+- [x] **Step 1: write the failing route tests** (DB-free, stubbed repository): a list returns the advertised shape; an unknown slug is a 404 with the standard envelope; `limit=0` and `limit=1000` are 422s; a product with no offer reports `has_offer: false` and a null `from_price` rather than being filtered out silently.
+- [x] **Step 2: implement the reads in `repository.js`** — keyset pagination on `(slug)` (unique since 020's `uq_product_slug`), never `OFFSET`; `from_price` is the lowest offer price for the product, and **`offer_class` travels with it**.
+- [x] **Step 3: implement the routes** with TypeBox schemas for both responses.
+- [x] **Step 4: apply the pricing rule in the response** — `price_status` derived exactly as the recommendation response derives it (`"verified"` only when every contributing offer is `VERIFIED`), with the French `disclaimer`; the seed data will therefore report `indicative`, which is correct and must not be special-cased.
+- [x] **Step 5: pin the contract** — regenerate the snapshot, run `npm run test:api` (0 fail) and `npm run test:api:db` (a real read of a real slug on the branch, residue 0).
+- [x] **Step 6: update `docs/API.md` + `docs/TEST_MAP.md` + `CONTEXT.md`, then commit.**
 - [ ] **Step 7 (owner): decide whether catalog pages may be public before any frontend is pointed at them** — this is the same beta-waiver question the recommendation endpoint answered, and it is not the implementer's call.
 
 **Definition of done**
@@ -180,6 +180,37 @@ limit is conditional on the proxy being named).
 | 3.5 | A product with zero offers | present in the list with `has_offer: false` |
 | 3.6 | `limit=1000` | 422 (bounded), not a slow query |
 
+**Status 2026-10-17 — Steps 1-6 DONE; Step 7 is the owner's (public exposure).**
+
+Both endpoints are served, documented and pinned by `openapi-v1.5.json` (v1.4 was
+deleted in the same change, so exactly one snapshot remains). `test:api` went **89 -> 98**
+(8 route tests in `apps/api/test/unit/catalog.test.js` plus one snapshot assertion), and
+`test:api:db` is **9 pass / 0 fail** against the branch (5 read-only catalog tests in
+`catalog.db.test.js`, beside the 4 pre-existing write tests). The page walk was measured against the live branch: **100
+products** in ascending slug order, no duplicate and none missing; `role=GPU` returns
+**21**; the seed catalog reports `price_status: "indicative"` on every page, which is the
+correct reading and is not special-cased. Recorded as **Decision 50**.
+
+**Two interface changes, each with its reason.** (1) `use_case` is NOT a parameter,
+although this plan's sketch listed one: the active model has no per-use-case PRODUCT filter
+(`role_weights` are global; only `gpu_policy` varies), so it could only be inert - and this
+API refuses unknown query parameters rather than accepting a no-op. (2) The detail's
+`specs` is an OPEN object rather than an enumerated one: its keys are the spec table's
+columns, and enumerating them would make every spec migration a breaking API change. Both
+are stated in `docs/API.md` and pinned by the snapshot test.
+
+**What the implementation learned, worth keeping.** The spec tables have NO `id` column -
+each is one-to-one with `product_id` or (for GPU) `product_variant_id` (migration 004), so
+an `ORDER BY s.id` is a SQL error, not a tie-break. A GPU product has variant-level specs,
+and one live GPU product has TWO variants (measured: 21 products, 22 variants), so the
+detail serves the spec of the variant its cheapest offer priced - otherwise the page would
+show one card's specs beside another's price. The DB suite is deliberately READ-ONLY (it
+inserts nothing, so it has no residue to assert); the write suites own the residue checks,
+and a whole-table comparison here would measure their parallel work.
+
+The plan named `recommendations.db.test.js` as the DB target; the read-only catalog got its
+own `apps/api/test/db/catalog.db.test.js` instead, which the runner's `*.db.test.js` glob
+picks up and which keeps one behaviour in one file.
 ---
 
 ## Sprint 4 — CORS allow-list and the 429 contract, proven (~45 min)
