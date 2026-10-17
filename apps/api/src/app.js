@@ -20,11 +20,17 @@
  *   - Rate limits are per route (`config.rateLimit`), registered with
  *     `global: false`: a GET is cheap and a POST runs a whole engine pass, so
  *     they must not share a budget. 30/min on POST, 120/min on GET.
+ *   - `trustProxy` is OFF unless `TRUST_PROXY` names the proxy's ADDRESS. The
+ *     limiter keys on `request.ip`, so without it every caller behind a platform
+ *     proxy shares one bucket; trusting the whole chain instead would let every
+ *     caller write its own key. See `parseTrustProxy` below.
  *   - Routes are registered INSIDE a plugin so they are added after
  *     `@fastify/rate-limit` and `@fastify/swagger` have loaded - both attach
  *     `onRoute` hooks, and a route added before them would be invisible to
  *     both.
  */
+
+const net = require('node:net');
 
 const Fastify = require('fastify');
 const cors = require('@fastify/cors');
@@ -56,6 +62,124 @@ function parseOrigins(raw) {
     .filter((value) => value.length > 0);
 }
 
+/**
+ * `TRUST_PROXY` names the proxy whose `X-Forwarded-For` we accept, and it
+ * defaults to OFF. It is NOT a hop count - see below.
+ *
+ * Fastify's `trustProxy` decides how `request.ip` is derived from
+ * `X-Forwarded-For`, and `@fastify/rate-limit` keys every bucket on that value.
+ * The accepted forms are proxy-addr's: an address, a CIDR, or one of its named
+ * ranges, comma-separated. Three consequences shape this parser:
+ *
+ *   - `false` (unset, blank, `false`, `0`, `off`, `no`) is the default: the
+ *     header is ignored entirely, which is correct for a directly reachable
+ *     process and is the only safe default before a proxy is known to exist.
+ *   - A trusted ADDRESS makes Fastify stop at the first untrusted hop, so the
+ *     client is the address the proxy appended - never the leftmost entry,
+ *     which a client can write.
+ *   - A HOP COUNT and `true` are both REFUSED. fastify@5.12 disables
+ *     hop-count trust outright (`getTrustProxyFn` returns a function that
+ *     trusts nothing) because it cannot validate the immediate peer, and
+ *     `true` trusts the whole chain, so either one hands every caller its own
+ *     rate-limit key. A `/0` prefix is refused on the same ground - it is
+ *     `true` in CIDR spelling. A start must fail loudly instead of silently
+ *     voiding the per-IP limit; the error names the supported form.
+ */
+const TRUST_PROXY_RANGES = new Set(['loopback', 'linklocal', 'uniquelocal']);
+
+/**
+ * Why one comma-separated entry is unusable, or null when it is fine.
+ *
+ * A `/0` prefix is refused explicitly: it trusts EVERY peer, which makes
+ * `request.ip` the leftmost `X-Forwarded-For` entry - exactly the hole that
+ * refusing `true` closes. Accepting it would reopen the same bypass under a
+ * CIDR spelling.
+ */
+function trustProxyEntryProblem(value) {
+  if (TRUST_PROXY_RANGES.has(value)) {
+    return null;
+  }
+  const parts = value.split('/');
+  if (parts.length > 2) {
+    return 'not an IP address or CIDR';
+  }
+  const family = net.isIP(parts[0]);
+  if (family === 0) {
+    return 'not an IP address or CIDR';
+  }
+  if (parts.length === 1) {
+    return null;
+  }
+  if (!/^[0-9]{1,3}$/.test(parts[1])) {
+    return 'not an IP address or CIDR';
+  }
+  const prefix = Number(parts[1]);
+  if (prefix > (family === 4 ? 32 : 128)) {
+    return 'prefix out of range';
+  }
+  if (prefix === 0) {
+    return 'trusts every peer';
+  }
+  return null;
+}
+
+function parseTrustProxy(raw) {
+  if (raw === undefined || raw === null || raw === false) {
+    return false;
+  }
+  if (Array.isArray(raw)) {
+    return parseTrustProxy(raw.join(','));
+  }
+  if (typeof raw === 'number') {
+    throw new TypeError(
+      'TRUST_PROXY is a trusted proxy address, not a hop count (' + raw + '). ' +
+      'fastify@5.12 disables hop-count trust because it cannot validate the immediate peer; ' +
+      'set TRUST_PROXY to the proxy\'s address or CIDR, e.g. TRUST_PROXY=127.0.0.1'
+    );
+  }
+  if (typeof raw !== 'string') {
+    throw new TypeError('TRUST_PROXY must be a comma-separated proxy address list or false; got ' + typeof raw);
+  }
+  const value = raw.trim();
+  if (value === '' || /^(false|off|no|0)$/i.test(value)) {
+    return false;
+  }
+  if (/^[0-9]+$/.test(value)) {
+    throw new TypeError(
+      'TRUST_PROXY is a trusted proxy address, not a hop count ("' + value + '"). ' +
+      'fastify@5.12 disables hop-count trust because it cannot validate the immediate peer; ' +
+      'set TRUST_PROXY to the proxy\'s address or CIDR, e.g. TRUST_PROXY=127.0.0.1'
+    );
+  }
+  if (/^(true|yes|on)$/i.test(value)) {
+    throw new TypeError(
+      'TRUST_PROXY=true would trust the whole X-Forwarded-For chain, letting any caller pick ' +
+      'its own rate-limit bucket; name the proxy\'s address or CIDR instead'
+    );
+  }
+  const entries = value.split(',').map((entry) => entry.trim().toLowerCase()).filter((entry) => entry.length > 0);
+  if (entries.length === 0) {
+    return false;
+  }
+  const problems = entries
+    .map((entry) => ({ entry, problem: trustProxyEntryProblem(entry) }))
+    .filter((item) => item.problem !== null);
+  if (problems.some((item) => item.problem === 'trusts every peer')) {
+    throw new TypeError(
+      'TRUST_PROXY has a /0 entry, which trusts EVERY peer: a caller could then write its own ' +
+      'X-Forwarded-For and choose its rate-limit bucket, exactly what `true` is refused for. ' +
+      'Name a narrower address or CIDR instead.'
+    );
+  }
+  if (problems.length > 0) {
+    throw new TypeError(
+      'TRUST_PROXY has an entry that is not an IP address, CIDR or known range: "' +
+      problems.map((item) => item.entry + ' (' + item.problem + ')').join(', ') + '"'
+    );
+  }
+  return entries;
+}
+
 /** ajv errors -> the `details` array of the error envelope. */
 function validationDetails(error) {
   const items = Array.isArray(error.validation) ? error.validation : [];
@@ -78,9 +202,14 @@ function buildApp(options) {
   const opts = options || {};
   const env = opts.env || process.env;
 
+  const trustProxy = parseTrustProxy(
+    opts.trustProxy === undefined ? env.TRUST_PROXY : opts.trustProxy
+  );
+
   const app = Fastify({
     logger: opts.logger === undefined ? false : opts.logger,
     bodyLimit: BODY_LIMIT_BYTES,
+    trustProxy,
     ajv: {
       customOptions: {
         removeAdditional: false,
@@ -183,4 +312,10 @@ function buildApp(options) {
   return app;
 }
 
-module.exports = { buildApp, BODY_LIMIT_BYTES, parseOrigins, validationDetails };
+module.exports = {
+  buildApp,
+  BODY_LIMIT_BYTES,
+  parseOrigins,
+  parseTrustProxy,
+  validationDetails,
+};

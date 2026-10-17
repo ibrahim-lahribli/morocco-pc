@@ -121,7 +121,7 @@ Five failure modes this plan's own tests do not fully cover, most likely first.
 **Files:**
 - Create: `.github/workflows/deploy.yml`, and one deploy config per environment
 - Modify: `docs/API.md` (a `Deploy` section: the environments, their database targets, the env vars, the pre-flight, the rollback)
-- Modify: `apps/api/.env.example` if a variable is added (`TRUST_PROXY` from P2 Sprint 2 is the likely one)
+- Modify: `apps/api/.env.example` if a NEW variable is added — `TRUST_PROXY` from P2 Sprint 2 is already documented there (2026-10-17), and P3 S3 adds the environment names, not the proxy list
 - Create: the Decision entry for the environment contract (names, targets, who may deploy, what the rollback is)
 
 **Interfaces:**

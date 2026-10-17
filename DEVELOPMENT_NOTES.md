@@ -1297,3 +1297,48 @@ after its own teardown rather than trusting `DROP ROLE`'s exit code.
   lines first and one of them contains braces. `JSON.parse(text.slice(text.indexOf('{')))` therefore
   lands inside the banner and throws `Expected property name`. Locate the report by its own first
   line being exactly `{`, or strip the leading banner lines.
+
+## 2026-10-17 — fastify@5.12 DISABLES a numeric `trustProxy`, so "one hop" is not a config (P2 Sprint 2)
+
+The plan (P2 Sprint 2) was written as "set `trustProxy` to the hop count (1 on Fly.io and
+Render)". Measured against the installed `fastify@5.12.5`, a numeric hop count does NOTHING:
+`node_modules/fastify/lib/request.js` `getTrustProxyFn` returns `function () { return false }` for
+`typeof tp === 'number'`, with the comment "Hop-count-only trust cannot validate the immediate
+peer. Fail closed so direct clients cannot spoof X-Forwarded-* values by supplying enough
+hops." Its `Server.md` says the same and directs you to an IP/CIDR list, an array, or a custom
+function that validates the proxy address.
+
+Measured with `fastify.inject` (socket `127.0.0.1`), one `X-Forwarded-For: 203.0.113.9` and a
+two-entry chain `192.0.2.55, 203.0.113.9`:
+
+| `trustProxy` | single header | chained header |
+|---|---|---|
+| `false` | `127.0.0.1` | `127.0.0.1` (ignored) |
+| `1` (number) | `127.0.0.1` | `127.0.0.1` (fail-closed) |
+| `'127.0.0.1'` | `203.0.113.9` | `203.0.113.9` (prefix ignored) |
+| `true` | `203.0.113.9` | `192.0.2.55` — the CLIENT-WRITTEN prefix wins |
+
+Consequences, all implemented:
+
+- `TRUST_PROXY` is a trusted-PROXY ADDRESS list (an address, a CIDR, or proxy-addr's
+  `loopback` / `linklocal` / `uniquelocal`), comma-separated, default `false`.
+  `parseTrustProxy` in `apps/api/src/app.js` is the single owner, and `buildApp` reads
+  `env.TRUST_PROXY` exactly as it reads `ALLOWED_ORIGINS`, so `server.js` is unchanged.
+- A hop count and `true` are REFUSED at startup with a message naming the supported form. A
+  silent no-op is the worst outcome for a rate-limit key, and `true` is worse still: the table
+  above shows a client choosing its own bucket. A `/0` prefix is refused too — it is `true` in
+  CIDR spelling, and review caught that accepting it would have reopened the same bypass.
+- Naming the proxy is also the only shape that satisfies the sprint's anti-spoofing requirement:
+  with the peer trusted, Fastify stops at the first untrusted hop, so the client is the address
+  the proxy appended.
+
+Tests: `npm run test:api` **89 pass / 0 fail** (75 before; 3 bucket tests in
+`rate-limit.test.js`, 11 config tests in `trust-proxy.test.js`, which replaced the plan's
+non-existent `app.test.js`). The default is proven inert (two forwarded addresses share one
+30/min bucket) and a spoofed prefix is proven unable to mint one.
+
+Still open: Step 4 (measure the same behaviour on the deployed origin) needs P1's host. The
+concrete value is a per-host fact — `127.0.0.1` for a same-host reverse proxy, the proxy's CIDR
+for a private-network one — and none is recorded here because no host is chosen and this repo
+holds no provider evidence. Pin it from the deploy's own `request.ip` evidence; do not copy a
+range from memory. The contract is recorded as **Decision 49**.

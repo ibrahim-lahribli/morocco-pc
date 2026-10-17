@@ -4316,6 +4316,13 @@ Measured on the TEST branch after re-applying seed 013 (`launch-v2@1.0.0`
 active): the served vocabulary is GAMING / OFFICE / WORKSTATION and OFFICE is
 accepted (201). With `seed-minimal-v1` active the vocabulary is unchanged.
 
+### UPDATE 2026-10-17 — the per-IP half is conditional on `TRUST_PROXY` (Decision 49)
+
+Item 11's "30/min/IP on POST and 120/min on GET" is only literally true when the proxy
+is named in `TRUST_PROXY`; with the default (off) every caller behind a platform proxy
+shares one bucket. Decision 49 records the variable's contract and why a hop count is
+refused. No route, limit or response changed.
+
 ## Decision 37 — a scoring model owns its use-case policy and its use-case vocabulary (`use_case_profiles`)
 
 Status: RESOLVED + IMPLEMENTED (2026-10-08) — `use_case_profiles` is an OPTIONAL scoring-model configuration key validated in `src/recommendation/scoring/configuration.js` / `scoring/use-cases.js`; `listUseCases(configuration)` is exported from the scoring barrel; the `launch-v2` seed is authored and rehearsed branch-first; activation on a live database is a coordinated step (OG-39).
@@ -5116,3 +5123,58 @@ Three questions decide the shape of this feature, and left undecided each become
 ### Supersedes / superseded by
 
 Supersedes nothing and amends no earlier decision; it consumes Decision 47's `catalog_version` (the key's version component), Decision 31's replace-idempotent convention (item 5), Decision 37's vocabulary ownership (item 9) and Decision 46's pass facts (item 7). It corrects `docs/OPEN_GAPS.md` OG-52's P1 clause in place — "dedupe + presets" is no longer open — and that correction is made in the same pass as this entry. No dated banner anywhere is retro-edited.
+
+## Decision 49 — `TRUST_PROXY` names the trusted PROXY ADDRESS, never a hop count, and both unsafe shapes fail at startup (Platform P2 Sprint 2)
+
+Status: RESOLVED 2026-10-17; IMPLEMENTED 2026-10-17 — the rate limiter keys on the client IP only when `TRUST_PROXY` names the proxy that forwarded the request; the default ignores `X-Forwarded-For`, and a hop count or `true` is refused before the process listens.
+
+Date: 2026-10-17. Platform P2 Sprint 2 Steps 1-3 of `PLAN_PLATFORM_P2.md` (the "truthful per-IP limits" sprint). It records the contract the plan described as a HOP COUNT, which the installed `fastify@5.12.5` makes impossible in that shape. It closes no gap: Step 4 (measure on the deployed origin) still needs P1's host. It is NOT an engine change - no module under `src/recommendation/` is touched, no score, rank, route or response field changes, and the OpenAPI document stays v1.4.
+
+### Current situation
+
+- `@fastify/rate-limit` is registered `global: false` with a per-route budget: 30/min on `POST /v1/recommendations`, 120/min on the GETs. Its `defaultKeyGenerator` is `normalizeIP(req.ip, ipv6Subnet)` - the bucket key IS `request.ip`.
+- `fastify@^5.12.5` `lib/request.js` `getTrustProxyFn` maps a NUMERIC `trustProxy` to `function () { return false }`, with the comment "Hop-count-only trust cannot validate the immediate peer. Fail closed so direct clients cannot spoof X-Forwarded-* values by supplying enough hops." `true` maps to `() => true`; a string or array goes to `proxyAddr.compile`.
+- Measured 2026-10-17 through `fastify.inject` (socket `127.0.0.1`), one header `203.0.113.9` and a two-entry chain `192.0.2.55, 203.0.113.9`: `false` -> `127.0.0.1` / `127.0.0.1`; `1` -> `127.0.0.1` / `127.0.0.1`; `'127.0.0.1'` -> `203.0.113.9` / `203.0.113.9`; `true` -> `203.0.113.9` / **`192.0.2.55`**, the client-written prefix.
+- Before this entry `buildApp` passed no `trustProxy` at all, so `request.ip` was always the socket address.
+
+### Problem
+
+Behind a platform proxy every caller shares the proxy's address, so the 30/min POST budget is 30/min for the entire internet - the per-IP claim in `docs/API.md` and in Decision 36 item 11 was true of the code but false of the deployment.
+
+The plan's remedy - a numeric hop count - is a SILENT NO-OP on this library version: the process starts, the setting looks configured, and every forwarded header is ignored. `true` is worse, not better: the measurement above shows a caller choosing its own bucket by writing its own `X-Forwarded-For` prefix, which voids every per-IP limit and any load-test measurement built on it (the risk `PLAN_PLATFORM_P1.md` names for exactly this sprint).
+
+### Decision
+
+1. **`TRUST_PROXY` is the trusted proxy ADDRESS list** - a comma-separated list in `proxy-addr` syntax: an IPv4/IPv6 address, a CIDR, or one of its named ranges (`loopback`, `linklocal`, `uniquelocal`). `apps/api/src/app.js` `parseTrustProxy` is the single owner and returns either `false` or the entry list.
+2. **The default is OFF.** Unset, blank, `false`, `0`, `off` and `no` all yield `false`, and Fastify then ignores `X-Forwarded-For` entirely. That is the only safe default for a directly reachable process, and it is proven inert rather than assumed.
+3. **A trusted peer makes `request.ip` the address the proxy appended.** Fastify stops at the first untrusted hop, so a client-written prefix can neither move the caller to another bucket nor mint a new one.
+4. **A hop count is REFUSED, and so are `true` and a `/0` prefix.** All three raise a `TypeError` during `buildApp`, i.e. before the process listens, with a message naming the supported form. `yes`/`on` are refused with `true`, and `0.0.0.0/0` / `::/0` are refused because they are `true` in CIDR spelling - trusting every peer makes `request.ip` the leftmost `X-Forwarded-For` entry. A malformed entry (a hostname, an out-of-range prefix) is refused rather than dropped. A rate-limit key must never fail open silently.
+5. **One reader, one precedence.** `buildApp` reads `env.TRUST_PROXY` exactly as it reads `ALLOWED_ORIGINS`, so `server.js` is unchanged; an explicit `buildApp({ trustProxy })` overrides the environment, which is what the tests use.
+6. **The concrete value is a PER-HOST fact.** `TRUST_PROXY=127.0.0.1` is the shape for a same-host reverse proxy (and the value the tests pin); a proxy on a private network is its CIDR. No value is recorded for the eventual host, because no host exists yet - it is pinned from the deployed origin's own `request.ip` evidence at Step 4, never copied from memory.
+7. **The guarantee is per process.** The counters live in memory: N instances allow N x the stated limit and a restart resets every bucket. A shared store is future work and is not claimed by `docs/API.md`.
+8. **The contract is documented where an operator looks.** The `TRUST_PROXY` row in `docs/API.md` has the environment table and a *Per-IP limits behind a proxy* section states the default, the accepted forms, both refusals and the in-process caveat; `apps/api/.env.example` carries the same rule. No route, limit, response or OpenAPI document change is involved.
+9. **The behaviour is pinned by DB-free tests**, not by the config value: `apps/api/test/unit/rate-limit.test.js` proves the default shares one bucket, a trusted peer separates two forwarded addresses, and a spoofed prefix cannot mint one; `apps/api/test/unit/trust-proxy.test.js` proves the parse contract, both refusals (including at app construction), the env wiring and the option precedence.
+
+### Rejected alternatives
+
+- **A numeric hop count, as the plan specified.** Rejected by measurement, not taste: `fastify@5.12.5` returns a trust function that trusts nothing for a number, so the setting would be a no-op and a test asserting separate buckets could only pass against a value the server ignores.
+- **`trustProxy: true`.** Rejected: measured to resolve `X-Forwarded-For: 192.0.2.55, 203.0.113.9` to `192.0.2.55`, so any caller picks its own bucket. It is the failure mode this sprint exists to prevent.
+- **A hop count translated into a custom trust function (`(address, hop) => hop < N`).** Rejected: it reproduces the intended semantics, but Fastify's own documentation calls hop-count-only checks unsafe when the origin can be reached directly - which it is today, because nothing is deployed behind a proxy yet - so the anti-spoofing half of the sprint's definition of done could not be demonstrated. Naming the peer is the same one-hop configuration with the peer check kept.
+- **A heuristic peer check (trust only RFC1918 / loopback addresses).** Rejected: it invents a fact about the host. A proxy may legitimately present a public address, and a private peer is not proof that the request came through the proxy.
+- **Leave `trustProxy` unset until the host is chosen.** Rejected: it leaves the false per-IP claim in place, leaves no testable contract, and delays the only part that the host choice does not decide - the accepted forms and the refusals.
+- **Accept `true` "for hosts that publish no proxy range".** Rejected for now: it trades the anti-spoofing guarantee for convenience without measuring need. If a host proves to need it, that is a new decision with its own evidence, not a parser allowance.
+- **Accept a `/0` CIDR as "all proxies".** Rejected: it is `true` in CIDR spelling and reopens the same bypass, so the parser refuses it instead of documenting a footgun. A narrower prefix (even `/1`) parses, which keeps the refusal a bright line rather than a judgement about "too broad".
+
+### Verdict for this pass
+
+- **Unit - PASS.** `npm run test:api` **89 pass / 0 fail** (75 before this sprint; 3 bucket tests in `rate-limit.test.js`, 11 config tests in `trust-proxy.test.js`), on Node 24.21.0 AND on `npx -y node@22 --test "apps/api/test/unit/*.test.js"` (the version CI pins) with 0 cancelled.
+- **Default inert - PASS.** Two different `X-Forwarded-For` values alternating over 31 POSTs hit the limit at exactly the 31st request, which is the same bucket.
+- **Trusted peer - PASS.** With `TRUST_PROXY=127.0.0.1`, 30 requests per address all pass and each address's 31st is a 429; a chain `192.0.2.55, 203.0.113.9` is attributed to `203.0.113.9`, and changing the prefix does not mint a bucket.
+- **Refusals - PASS.** A hop count (`1`, `'1'`), `true`/`yes`/`on` and `0.0.0.0/0` / `::/0` throw during `buildApp`; a malformed entry throws; none is coerced. The `/0` case was found in review: without it the `true` refusal could be bypassed by CIDR spelling.
+- **Docs gates - PASS.** `npm run verify:docs` OK with `decisions-parse` at 47 headings / 53 `Status:` lines and `agents-decision-range` citing "Decisions 1-49"; `gen-decision-index --check` clean; `npm run test:unit` 0 fail.
+- **OpenAPI - unchanged.** No route or schema changed, so the v1.4 snapshot is untouched and the completeness gate still passes.
+- **Step 4 - BLOCKED.** The deployed-origin measurement needs P1's host; nothing here claims it was run. No database was read or written.
+
+### Supersedes / superseded by
+
+It does not supersede a decision, but it QUALIFIES Decision 36 item 11: "30/min/IP on POST ... 120/min on GET" is literally true only when the proxy is named, and that item now carries a dated UPDATE block pointing here. It corrects `PLAN_PLATFORM_P2.md` Sprint 2 in place (the hop-count interface and scenarios 2.2/2.3 reworded, with the measurement recorded), and `DEVELOPMENT_NOTES.md` (2026-10-17) carries the operational finding. No dated banner anywhere is retro-edited.

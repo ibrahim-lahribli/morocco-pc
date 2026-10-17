@@ -270,6 +270,10 @@ function createTestApp(options) {
     repository: opts.repository || createRepositoryStub(),
     engine: opts.engine || createEngineStub(),
     engineVersion: opts.engineVersion || TEST_ENGINE_VERSION,
+    // Forwarded, never defaulted: `undefined` is the production default (read
+    // TRUST_PROXY from env), so a stub that passed `false` here would hide a
+    // broken env path.
+    trustProxy: opts.trustProxy,
     env: Object.assign({ ENGINE_VERSION: TEST_ENGINE_VERSION, ALLOWED_ORIGINS: '' }, opts.env),
     logger: false,
   });

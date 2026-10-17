@@ -86,6 +86,7 @@ Environment variables (see `apps/api/.env.example` for the full list):
 |---|---|
 | `PORT`, `HOST` | Listener. Defaults `3000` / `0.0.0.0`. |
 | `ALLOWED_ORIGINS` | Comma-separated CORS allow-list. **Empty means CORS is disabled entirely** — no `Access-Control-Allow-Origin` header is sent. |
+| `TRUST_PROXY` | Trusted proxy address/CIDR list that makes `request.ip` the client instead of the proxy, comma-separated. **Empty (the default) ignores `X-Forwarded-For` entirely**; a hop count or `true` is REFUSED at startup — see *Per-IP limits behind a proxy*. |
 | `LOG_LEVEL`, `LOG_PRETTY` | pino level; `LOG_PRETTY=1` uses `pino-pretty` (a devDependency, feature-detected — production installs log JSON). |
 | `ENGINE_VERSION` | The value reported as `served_by.engine_version` and, since Decision 46, PERSISTED per result row as the pass's `engine_version` — the API hands it to the engine, so a stored build names the deploy that produced it. Intended to be the git short SHA; defaults to `dev`. |
 | `DATABASE_URL`, `TEST_DATABASE_URL` | Both required. The guard compares their hostnames to prove they differ. |
@@ -356,8 +357,9 @@ All routes are under `/v1` and speak JSON.
 | GET | `/v1/docs/json` | 120/min | OpenAPI 3.0 document |
 
 Rate limits are per client IP and per route — a GET is cheap, a POST runs an
-entire engine pass, so they must not share a budget. The request body limit is
-**10 KB**.
+entire engine pass, so they must not share a budget. "Per client IP" is only
+true when the proxy is named in `TRUST_PROXY` (see *Per-IP limits behind a
+proxy* below). The request body limit is **10 KB**.
 
 **The 429 contract (measured 2026-10-17, P2 Sprint 4).** A limit that fires
 answers the normal error envelope — `{ "error": "RATE_LIMITED", "message":
@@ -376,6 +378,36 @@ succeeds with the requested method and headers. A disallowed origin gets no
 CORS is a browser policy, not authentication. An EMPTY allow-list disables CORS
 entirely rather than reflecting any origin. All four behaviours are pinned by
 `apps/api/test/unit/cors.test.js`.
+
+**Per-IP limits behind a proxy (measured 2026-10-17, P2 Sprint 2).** The limiter
+keys on `request.ip`, and with `TRUST_PROXY` unset (the default) that is the
+socket address — so every caller behind the platform proxy shares one bucket and
+the 30/min POST budget is 30/min for the entire internet. `TRUST_PROXY` names
+the proxy whose `X-Forwarded-For` is trusted: an address, a CIDR or a
+`proxy-addr` named range (`loopback`, `linklocal`, `uniquelocal`),
+comma-separated. `request.ip` then becomes the address that proxy appended, so a
+prefix the client wrote itself is ignored.
+
+**It is NOT a hop count, and `true` is refused.** `fastify@5.12` disables
+numeric `trustProxy` outright — its trust function returns false for every
+address — because a bare hop count cannot validate the immediate peer, so a
+directly reachable process could be spoofed (`trustProxy: 1` measured:
+`request.ip` stays `127.0.0.1`). `true` is worse: it trusts the whole chain, so
+`X-Forwarded-For: 192.0.2.55, 203.0.113.9` resolves to the client-written
+`192.0.2.55` and any caller can mint its own bucket. Both are therefore STARTUP
+ERRORS, not silent no-ops - and so is a `/0` prefix, which trusts every peer
+exactly as `true` does. For a same-host reverse proxy the value is
+`TRUST_PROXY=127.0.0.1` (the shape the tests pin); a proxy on a private network
+is its CIDR. The concrete value is a per-host fact, pinned on the deployed
+origin (P2 Sprint 2 Steps 3–4) and not yet recorded because no host is chosen.
+
+**The counters live in process memory**, so they do not survive a multi-instance
+deploy: N instances allow N × the stated limit, and a restart resets every
+bucket. A shared store is future work, not a claim this document makes. The
+default-off, separate-bucket and spoofed-prefix behaviours are pinned by
+`apps/api/test/unit/trust-proxy.test.js` and
+`apps/api/test/unit/rate-limit.test.js`. The contract is **Decision 49**
+(2026-10-17).
 
 ### POST /v1/recommendations
 

@@ -20,7 +20,7 @@
 
 Five failure modes this plan's own tests do not fully cover, most likely first.
 
-1. **A trusted `X-Forwarded-For` that is spoofable.** Turning `trustProxy` on without pinning the hop count lets any caller set their own IP and bypass every per-IP limit. Owning sprint: Sprint 2.
+1. **A trusted `X-Forwarded-For` that is spoofable.** Turning `trustProxy` on without NAMING the trusted proxy lets any caller set their own IP and bypass every per-IP limit. Measured 2026-10-17: a hop count is not a safe shorthand (fastify@5.12 disables it), and `true` is exactly this failure — it trusts a client-written prefix. Owning sprint: Sprint 2.
 2. **An OFFICE request that 422s only because no model declares it.** The vocabulary swap is observable ONLY with a profiles-declaring model active. ~~today neither database has one~~ **Measured 2026-10-15: the SHARED database still has only `seed-minimal-v1` (so the swap is inert there), but the TEST branch had NO `launch-v2` row at all; seed 013 was re-applied there, so the swap IS observable on the branch now. Closing this for real means activating a profiles-declaring model on the database the API serves.** Owning sprint: Sprint 1.
 3. **A catalog page that shows a seed price as if it were real.** The beta waiver keeps unverified seed offers in play; exposing prices on a public page without the class and the disclaimer makes indicative data look confirmed. Owning sprint: Sprint 3.
 4. **A cursor that skips or repeats rows.** Any keyset pagination over a table whose order is not unique (product names are not unique — there is no unique constraint on `product.name`) can drop or duplicate a product page. Owning sprint: Sprint 3.
@@ -93,40 +93,49 @@ so comparison harnesses there need `--model=launch-v2@1.0.0`.
 
 ## Sprint 2 — truthful per-IP limits behind a proxy (`trustProxy`) (~60 min)
 
-**Summary.** Configure Fastify's `trustProxy` from the environment and pin the hop count, so the rate limiter sees the real client IP instead of collapsing every user behind the platform's proxy into one bucket.
+**Summary.** Configure Fastify's `trustProxy` from the environment and PROVE it, so the rate limiter keys on the real client IP instead of collapsing every user behind the platform's proxy into one bucket. The interface became a trusted-proxy ADDRESS list rather than a hop count - Step 2 records why, measured.
 
 **Why now.** Verified 2026-10-15: `trustProxy` appears **nowhere** in `apps/`, `src/` or `docs/API.md` — only in the plan and the gap register as an open item. On Fly.io or Render the app always sits behind a proxy, so today 30 POST/min is 30/min for the entire internet.
 
 **Files:**
-- Modify: `apps/api/src/app.js` (`buildApp` gains `trustProxy`; passed to the Fastify factory)
-- Modify: `apps/api/src/server.js` (read `TRUST_PROXY` from env — it is the only file that reads `process.env` for connection settings)
+- Modify: `apps/api/src/app.js` (`buildApp` gains `trustProxy`; `parseTrustProxy` owns the env contract, and the parsed list is passed to the Fastify factory)
+- No change: `apps/api/src/server.js` — `buildApp` reads `env.TRUST_PROXY` itself, exactly as it reads `ALLOWED_ORIGINS`, and `start()` already passes the whole env through. A second reader would be two owners for one setting.
 - Modify: `apps/api/.env.example` (document `TRUST_PROXY`, default off)
-- Test: `apps/api/test/unit/rate-limit.test.js`, `apps/api/test/unit/app.test.js`
+- Test: `apps/api/test/unit/rate-limit.test.js` (the bucket consequences) and `apps/api/test/unit/trust-proxy.test.js` (the config contract; the plan named `app.test.js`, which does not exist)
 - Modify: `docs/API.md` (the Operational limits paragraph)
 
 **Interfaces:**
-- Consumes: `buildApp({ pool, repository, engine, env, logger })` — gains an optional `trustProxy` (a number of hops, or `false`).
-- Produces: `TRUST_PROXY=<number|false>`; `request.ip` is the client IP when set correctly.
+- Consumes: `buildApp({ pool, repository, engine, env, logger })` — gains an optional `trustProxy` (a trusted proxy address/CIDR list, or `false`); otherwise `env.TRUST_PROXY` is parsed.
+- Produces: `TRUST_PROXY=<addr[,addr...]|false>` (default `false`); `request.ip` is the client IP once the proxy peer is trusted.
 
-- [ ] **Step 1: write the failing tests.** With `trustProxy: 1`, two `inject` calls carrying different `X-Forwarded-For` values must occupy separate rate-limit buckets (one gets a 429 while the other does not). With `trustProxy: false` (the default), the same two headers must be ignored and the two calls must share one bucket. Run: `npm run test:api`. Expected: FAIL.
-- [ ] **Step 2: implement** — pass the hop count through, defaulting to `false` so nothing changes for a directly reachable process.
-- [ ] **Step 3: pin the hop count for the chosen host.** One proxy hop on both Fly.io and Render; record the value in `docs/API.md` and in the deployment notes so the next person does not have to rediscover it.
-- [ ] **Step 4: re-run the exact per-IP behaviour on the deployed host** once P1's deployment exists: two requests from the same client keep one bucket; a spoofed header does not create a new one. Record both results.
+- [x] **Step 1: write the failing tests.** Two `inject` calls carrying different `X-Forwarded-For` values must occupy separate rate-limit buckets once the proxy is trusted, and must share one bucket when it is not. Run: `npm run test:api`. **Measured:** FAIL first (the trusted case shared a bucket because nothing was configured), then PASS after Step 2 — the suite went from **75 to 89** tests.
+- [x] **Step 2: implement** — pass the trusted-proxy list to the Fastify factory, defaulting to `false` so nothing changes for a directly reachable process. **Measured 2026-10-17, and the plan was WRONG about the interface:** `fastify@5.12.5`'s `getTrustProxyFn` returns `() => false` for a NUMERIC `trustProxy` ("Hop-count-only trust is disabled because it cannot validate the immediate peer..."), so `trustProxy: 1` leaves `request.ip` at the socket address. Verified directly: `false` → `127.0.0.1` for a single and a chained header; `1` → `127.0.0.1` both times; `'127.0.0.1'` → `203.0.113.9` both times (the appended entry wins); `true` → `192.0.2.55`, i.e. a CLIENT-WRITTEN prefix mints the bucket. So `TRUST_PROXY` takes proxy-addr's address/CIDR/range list, and a hop count or `true` is REFUSED at startup with a message naming the supported form. Naming the proxy is also the only form that satisfies the DoD's spoofing half.
+- [x] **Step 3: pin the value for the chosen host.** No host is chosen yet (P1 Sprint 1 is owner-gated), so what is recorded is the rule and the candidate shapes, not an invented address: `TRUST_PROXY=127.0.0.1` for a same-host reverse proxy (the shape the tests pin) and the proxy's CIDR for a private-network hop. `docs/API.md` states both, and `DEVELOPMENT_NOTES.md` (2026-10-17) records the Fastify finding so nobody rediscovers it. The concrete value is pinned by Step 4's evidence on the deployed origin.
+- [ ] **Step 4: re-run the exact per-IP behaviour on the deployed host** once P1's deployment exists: two requests from the same client keep one bucket; a spoofed header does not create a new one. Record both results, and record the pinned `TRUST_PROXY` value with them.
 - [ ] **Step 5: commit.**
 
 **Definition of done**
 - `trustProxy` is configurable, defaults to `false`, and the default is proven to ignore `X-Forwarded-For`.
-- With a hop count set, distinct forwarded addresses get distinct buckets and a spoofed header cannot mint one.
-- `docs/API.md` states the limit, the unit (per IP), the in-process caveat (limits do not survive a multi-instance deploy) and the configured hop count.
+- With the proxy trusted, distinct forwarded addresses get distinct buckets and a spoofed header cannot mint one — and the unsafe shapes (a hop count, `true`) are REFUSED rather than silently accepted.
+- `docs/API.md` states the limit, the unit (per IP), the in-process caveat (limits do not survive a multi-instance deploy) and that the trusted value is a per-host fact, naming the `127.0.0.1` shape a same-host proxy uses.
 
 **Test scenarios**
 | # | Scenario | Expected |
 |---|---|---|
-| 2.1 | `trustProxy: false`, two different `X-Forwarded-For` | shared bucket → the 31st request is 429 |
-| 2.2 | `trustProxy: 1`, two different `X-Forwarded-For` | separate buckets → neither 429s early |
-| 2.3 | `trustProxy: 1`, a chain of two hops | the client IP is taken from the correct position, not the nearest hop |
+| 2.1 | `TRUST_PROXY` unset, two different `X-Forwarded-For` | shared bucket → the 31st request is 429 |
+| 2.2 | `TRUST_PROXY=127.0.0.1`, two different `X-Forwarded-For` | separate buckets → neither 429s early |
+| 2.3 | `TRUST_PROXY=127.0.0.1`, a client-written prefix in the chain | the address the proxy appended is the client: the prefix cannot mint a bucket |
 | 2.4 | GET limit (120/min) vs POST limit (30/min) | unchanged: the two do not share a budget |
 | 2.5 | Deployed origin, two clients | separate buckets (recorded evidence, not asserted in CI) |
+
+**Steps 1–3 MEASURED GREEN 2026-10-17.** `npm run test:api` **89 pass / 0 fail** (75 before:
+3 new bucket tests in `rate-limit.test.js` and 11 config tests in `trust-proxy.test.js`). The
+default is proven inert - alternating two `X-Forwarded-For` values still spends ONE 30/min
+bucket - a trusted peer is proven to separate them, and a client-written prefix is proven unable
+to mint one; those are the same assertions a `trustProxy: true` configuration would fail. Step 4
+still needs P1's deployed host, and Step 5 is a commit this session did not make.
+Recorded as **Decision 49**, which also qualifies Decision 36 item 11 (the per-IP
+limit is conditional on the proxy being named).
 
 ---
 
@@ -263,7 +272,7 @@ the real case compares the registered route table with `app.swagger()`.
 ## Definition of done (whole plan)
 
 1. The use-case vocabulary comes from the active model; OFFICE is reachable with a profiles-declaring model and the legacy behaviour is byte-identical.
-2. `trustProxy` is configurable, defaults off, and the hop count is pinned for the deployed host with evidence.
+2. `trustProxy` is configurable, defaults off, and the trusted proxy address for the deployed host is pinned with evidence.
 3. `GET /v1/catalog/products` and `/v1/catalog/products/:slug` serve documented, keyset-paginated, provenance-labelled data.
 4. CORS and 429 behaviour are pinned by tests and stated in `docs/API.md`; no header is claimed that the server does not send.
 5. The contract is one version with one committed snapshot, and a test proves every served route is documented.
