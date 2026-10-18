@@ -4,6 +4,12 @@
 // Proves runRecommendationFullRun end to end on test-scratch: one real query
 // is scored, ranked, diversity-selected, and persisted (visible on a second
 // connection); a second full-run for the same query_id hits the re-run guard.
+// It also proves the Decision 46 pass facts LAND (Platform migration 019): the
+// Decision 27 floor on the query row and engine_version / strategy_key on every
+// result row - and that an ABSENT engineVersion option persists SQL NULL rather
+// than a guessed placeholder. Those are assertions over the committed rows, and
+// the floor is compared by CONTENT (see canonicalJson) because jsonb reorders
+// keys and the engine's cheapest_by_role is a null-prototype object.
 // Safety contract mirrors scripts/test-orchestrator-commit.js: TEST_DATABASE_URL
 // only, host-only logging, ISOLATED-WRITE (no outer BEGIN), cleanup by
 // captured id in reverse dependency order. NOT named *.test.js so the unit
@@ -76,6 +82,46 @@ async function countsForQuery(client, queryId) {
       + '   WHERE b.recommendation_query_id = $1) AS components',
     [queryId]
   );
+}
+
+// Compare two JSON-shaped values by CONTENT, not by identity of their objects.
+// Two boundary facts make the obvious comparators wrong here:
+//   * jsonb does NOT preserve key order, so a raw JSON.stringify comparison
+//     compares key order rather than content;
+//   * the floor's `cheapest_by_role` is a deliberately NULL-PROTOTYPE object
+//     (retention/budget-floor.js uses Object.create(null) so a role named
+//     "__proto__" cannot collide with an inherited property), while the driver
+//     hands back a plain object - and util.isDeepStrictEqual compares
+//     prototypes, so it rejects two identical payloads.
+// A key-sorted stringify ignores both differences and compares values.
+function canonicalJson(value) {
+  return JSON.stringify(value, (key, entry) => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+    const sorted = {};
+    for (const name of Object.keys(entry).sort()) sorted[name] = entry[name];
+    return sorted;
+  });
+}
+
+// Decision 46 / migration 019: read back the facts a pass recorded about
+// itself. The floor is jsonb (parsed into an object by node-postgres) and the
+// two result columns are TEXT; an absent or pre-019 fact is SQL NULL.
+async function readPassFacts(client, queryId) {
+  const floor = (await client.query(
+    'SELECT budget_floor FROM recommendation_query WHERE id = $1',
+    [queryId]
+  )).rows[0].budget_floor;
+  const rows = (await client.query(
+    'SELECT rank, engine_version, strategy_key FROM recommendation_result'
+      + ' WHERE recommendation_query_id = $1 ORDER BY rank',
+    [queryId]
+  )).rows;
+  return {
+    floor,
+    ranks: rows.map((row) => row.rank),
+    engineVersions: rows.map((row) => row.engine_version),
+    strategyKeys: rows.map((row) => row.strategy_key),
+  };
 }
 
 // Canonical seeded state of the test branch: seeds 001 (15 products) + 002
@@ -195,6 +241,29 @@ async function testFullPass(client, other, ctx, createdIds) {
     assert(row.explanation === expectedExplanation,
       'persisted explanation matches Engine 6 generated text for rank ' + row.rank + ': ' + row.explanation);
   }
+
+  // Decision 46 / migration 019: the pass facts must actually LAND on the rows
+  // they describe. persistPassFacts is UPDATE-only, so a statement that matched
+  // no row would still exit 0 and leave this gate green on an empty story -
+  // which is why the facts are read back here instead of trusted.
+  const facts = await readPassFacts(other, queryId);
+  assert(facts.floor !== null && typeof facts.floor === 'object' && !Array.isArray(facts.floor),
+    'the Decision 27 floor landed on the query row as a jsonb object: ' + JSON.stringify(facts.floor));
+  assert(canonicalJson(facts.floor) === canonicalJson(result.budget_floor),
+    'the persisted floor equals the floor the full run returned, key order and null-prototype aside');
+  assert(typeof facts.floor.cheapest_total === 'number' && typeof facts.floor.currency === 'string',
+    'the persisted floor is the real diagnostic payload, not an empty object or a re-encoded string');
+  assert(facts.ranks.length === result.selected.length,
+    'every persisted rank was read back for its pass facts: ' + JSON.stringify(facts.ranks));
+  assert(facts.strategyKeys.length === result.selected.length
+    && facts.strategyKeys.every((key) => typeof key === 'string' && key.length > 0),
+    'every result row carries the archetype that nominated it: ' + JSON.stringify(facts.strategyKeys));
+  assert(JSON.stringify(facts.strategyKeys)
+    === JSON.stringify(result.selected.map((row) => row.strategy_key)),
+    'the persisted strategy keys match the selected archetypes in rank order (the CONTENT half of'
+      + ' the persistPassFacts rank alignment, which only a read-back can pin)');
+  assert(facts.engineVersions.every((version) => version === null),
+    'an ABSENT engineVersion option persists SQL NULL, never a guess: ' + JSON.stringify(facts.engineVersions));
   return queryId;
 }
 
@@ -212,6 +281,34 @@ async function testRerunGuard(client, other, queryId) {
     'the refused re-run changed no row count: ' + JSON.stringify(after));
   const probe = await client.query('SELECT 1 AS ok');
   assert(probe.rows[0].ok === 1, 'the session is usable after the fail-fast ROLLBACK');
+}
+
+// Decision 46: a caller-supplied engineVersion must survive verbatim to every
+// result row of the pass it describes. This needs its own query because the
+// first pass deliberately ran without the option, and the value is a fact about
+// the CALLER (which deploy produced these rows) - so it must arrive from the
+// argument, never from an engine constant and never from process.env.
+async function testPassFactsEngineVersion(client, other, ctx, createdIds) {
+  console.log('\n--- 3. the pass facts carry a supplied engine version ---');
+  const queryId = await insertQuery(client, ctx.scoringModelId);
+  createdIds.push(queryId);
+
+  const engineVersion = 'pass-facts-gate@1.0.0';
+  const result = await runRecommendationFullRun(client, queryId, { engineVersion });
+  assert(result.selected.length > 0, 'the second pass selected a build too');
+
+  const facts = await readPassFacts(other, queryId);
+  assert(facts.ranks.length === result.selected.length
+    && facts.engineVersions.length === result.selected.length,
+    'one pass-fact result row per selected build (ranks ' + JSON.stringify(facts.ranks) + ')');
+  assert(facts.engineVersions.every((version) => version === engineVersion),
+    'the supplied engineVersion reached EVERY result row verbatim: ' + JSON.stringify(facts.engineVersions));
+  assert(JSON.stringify(facts.strategyKeys)
+    === JSON.stringify(result.selected.map((row) => row.strategy_key)),
+    'the strategy keys still match the selected archetypes in rank order: ' + JSON.stringify(facts.strategyKeys));
+  assert(canonicalJson(facts.floor) === canonicalJson(result.budget_floor),
+    'the floor of the second pass landed too');
+  return queryId;
 }
 
 async function main() {
@@ -238,6 +335,7 @@ async function main() {
     console.log('second connection open (persisted rows are checked from it)');
     const queryId = await testFullPass(client, other, ctx, createdIds);
     await testRerunGuard(client, other, queryId);
+    await testPassFactsEngineVersion(client, other, ctx, createdIds);
   } finally {
     if (connected) {
       try {

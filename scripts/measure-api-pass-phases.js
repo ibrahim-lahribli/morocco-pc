@@ -21,12 +21,41 @@
 // a cleanup failure exits non-zero (a gate that cannot prove cleanup has not
 // proved anything).
 //
-// Usage: node scripts/measure-api-pass-phases.js [--budget N] [--use-case U]
+// Usage: node scripts/measure-api-pass-phases.js [--budget=N] [--use-case=U]
+//        [--model=<name@version>] [--help]
+//
+// `--help` is the one token this parser treats specially, and it is a preflight
+// rather than a mode: if `argv` contains it, parseArgs throws the usage text
+// before reading any flag or touching the database, and the entry point prints
+// that text and exits 1. The db-url.js / model-pin.js convention is an injected
+// `env`, never a mode token.
+//
+// The `=<value>` form is MANDATORY (parseArgs matches the prefixes `--budget=` /
+// `--use-case=` / `--model=` and throws `unknown argument: --budget` on the space
+// form), exactly like check-offer-freshness.js' `--fail-days=N`.
+//
+// SCORING MODEL: this harness PINS one, the way every other comparison harness
+// does (scripts/lib/model-pin.js) — `--model=<name@version>`, else the
+// SCORING_MODEL_PIN environment variable, else seed-minimal-v1@1.0.0. A pin
+// selects among ACTIVE models only and fails CLOSED on a malformed, ambiguous,
+// inactive or unmatched one, printing the active list. That is what makes a
+// before/after across two targets compare ONE model: the engine loads its model
+// from `recommendation_query.scoring_model_id` (Decision 11), so the pass
+// measures exactly the model chosen here and the report names it.
+//
+// Expect this on today's databases: the default pin is INACTIVE on the TEST
+// branch (launch-v2@1.0.0 is the active one there), so a run MUST pass
+// `--model=launch-v2@1.0.0` or the pin refuses before it writes anything.
+// The 2026-10-07 figures in docs/API.md predate launch-v2 and are therefore
+// seed-minimal-v1 numbers — which cannot be re-measured on the TEST branch:
+// that model is inactive there and a pin never activates one. Measure what is
+// active and label the number with it, rather than comparing across two pins.
 
 require('dotenv').config();
 
 const { Client } = require('pg');
 const { getWriteTestDbUrl } = require('./lib/db-url');
+const modelPin = require('./lib/model-pin');
 
 // Namespace seams (all called through their module namespace by the engine).
 const run = require('../src/recommendation/orchestrator/run');
@@ -43,7 +72,42 @@ const retention = require('../src/recommendation/retention');
 const assembly = require('../src/recommendation/assembly');
 const repository = require('../apps/api/src/repository');
 
-function parseArgs(argv) {
+/**
+ * Decision 46: the `engine_version` this harness stamps onto the rows it writes.
+ *
+ * It is deliberately NOT the API's `ENGINE_VERSION` and not a deploy SHA: this
+ * script is not a deploy, and recording one would make a measurement row look
+ * like production output. Naming the tool keeps the provenance true and
+ * traceable, which is the whole reason the column exists.
+ */
+const MEASUREMENT_ENGINE_VERSION = 'measure-api-pass-phases';
+
+/**
+ * `env` is injected (db-url.js convention) so the pin precedence is testable
+ * without touching the real environment.
+ *
+ * `--help` is a preflight, not a mode: it throws the usage text before any flag
+ * is read or the database is touched, and the entry point prints that text alone
+ * (no stack trace) and exits 1. Keeping it in parseArgs is what makes the help
+ * text and the real flags share one source.
+ *
+ * @param {string[]} argv
+ * @param {object} [env]
+ * @returns {{ budget: number, useCase: string, modelPin: string }}
+ * @throws {Error} on `--help` (non-zero, usage text, no DB) and on every
+ *   other parse failure (malformed flag, bad budget, repeated --model, etc.).
+ *   The `--help` path is an early preflight only: it does not read any flag
+ *   and does not touch the database.
+ */
+function parseArgs(argv, env = process.env) {
+  if (argv.includes('--help')) {
+    throw new Error(
+      'usage: node scripts/measure-api-pass-phases.js [--budget=N] [--use-case=U] [--model=<name@version>] [--help]\n' +
+      'Environment: SCORING_MODEL_PIN (overridden by --model=<name@version>; else the default seed-minimal-v1@1.0.0).\n' +
+      'This is the TEST-branch-only per-phase pass profiler. A real pass is never started by `require()` — see the guard at the bottom of the file.'
+    );
+  }
+
   const args = { budget: 20000, useCase: 'GAMING' };
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -51,6 +115,9 @@ function parseArgs(argv) {
       args.budget = Number(arg.slice('--budget='.length));
     } else if (arg.startsWith('--use-case=')) {
       args.useCase = arg.slice('--use-case='.length);
+    } else if (arg.startsWith(modelPin.MODEL_FLAG)) {
+      // Accepted here; readModelPinFlag below refuses a repeated flag.
+      continue;
     } else {
       throw new Error('unknown argument: ' + arg);
     }
@@ -58,6 +125,12 @@ function parseArgs(argv) {
   if (!Number.isFinite(args.budget) || args.budget <= 0) {
     throw new Error('--budget must be a positive finite number');
   }
+  // Flag beats environment beats the legacy default. A blank flag does NOT
+  // shadow the next level down (model-pin.js modelPinValue).
+  args.modelPin = modelPin.modelPinValue(modelPin.readModelPinFlag(argv), env);
+  // Malformed pins fail BEFORE the connection is opened; a pin that matches
+  // nothing, or only an inactive row, is explained by resolvePinnedModel.
+  modelPin.parseModelPin(args.modelPin);
   return args;
 }
 
@@ -144,9 +217,24 @@ function restorePatches() {
   }
 }
 
+/**
+ * The model-selector seam the report still calls `api.model_select`.
+ *
+ * It resolves the PINNED model instead of asking the repository for "whichever
+ * model is active", and that already decides which model the pass runs: the
+ * engine loads its model from the persisted `recommendation_query.scoring_model_id`
+ * (Decision 11). Keeping it a seam preserves the phase table's shape — one
+ * statement under the same label — so a pinned run stays comparable with the
+ * recorded baseline while the WHERE clause changes. A pin matches ACTIVE rows
+ * only, so it is a selector and never an activation switch.
+ */
+const modelSelector = {
+  select: (client, pin) => modelPin.resolvePinnedModel(client, pin),
+};
+
 function installPatches() {
   // API-side phases (repository.js is the API's only SQL owner).
-  phase(repository, 'selectActiveScoringModel', 'api.model_select');
+  phase(modelSelector, 'select', 'api.model_select');
   phase(repository, 'createRecommendationQuery', 'api.profile_query_insert');
   phase(repository, 'readRecommendationResult', 'api.read_back');
   // Engine phases (orchestrator + stage barrels, all namespace-called).
@@ -286,8 +374,9 @@ async function main() {
     installPatches();
     // The API POST flow, minus HTTP: same repository, same engine barrel options,
     // one dedicated client for the whole request.
-    const model = await repository.selectActiveScoringModel(client);
-    if (model === null) throw new Error('no active scoring model on the TEST branch');
+    // resolvePinnedModel throws — naming the active models — on every failure
+    // mode, so there is no null case to handle here.
+    const model = await modelSelector.select(client, args.modelPin);
     const created = await repository.createRecommendationQuery(client, {
       scoringModelId: model.id,
       budgetAmount: args.budget,
@@ -299,12 +388,21 @@ async function main() {
     ids.queryId = created.queryId;
     ids.profileId = created.profileId;
 
-    const runResult = await require('../apps/api/src/engine').runFullRun(client, created.queryId);
+    // Decision 46: this harness is not a deploy, but it still writes real rows,
+    // so it names ITSELF as the engine version rather than claiming a deploy's
+    // identity or leaving the column NULL with no way to tell which tool wrote
+    // it. Without this, `recommendation_result.engine_version` reads NULL for
+    // every row this script creates and the provenance is unrecoverable.
+    const runResult = await require('../apps/api/src/engine')
+      .runFullRun(client, created.queryId, MEASUREMENT_ENGINE_VERSION);
     const snapshot = await repository.readRecommendationResult(client, created.queryId);
     const wallMs = Number(process.hrtime.bigint() - runStarted) / 1e6;
 
     const report = {
       target: 'TEST_DATABASE_URL (host hidden)',
+      // Which model was measured, and what was ASKED for: a pin is a selector, so
+      // the numbers are only comparable with a run pinned the same way.
+      scoring_model: { pin: modelPin.formatModelPin(model), requested: args.modelPin, id: model.id },
       input: { budget: args.budget, currency: 'MAD', use_case: args.useCase },
       outcome: {
         builds: runResult.builds.length,
@@ -343,4 +441,18 @@ async function main() {
   process.exit(exitCode);
 }
 
-main();
+// Exported so the DB-free contract tests (scripts/lib/measure-phases-cli.test.js)
+// can check the CLI contract and the scoring-model pin without a database. The
+// guard is what makes that safe: `require()` must never run a real pass.
+module.exports = { parseArgs };
+
+if (require.main === module) {
+  // parseArgs and getWriteTestDbUrl both throw BEFORE main's try block, so a
+  // rejected promise is how a usage error or a guard refusal reaches the user.
+  // Print the message alone: an unhandled rejection buries the --help usage
+  // under a Node stack trace.
+  main().catch((error) => {
+    console.error(error && error.message ? error.message : String(error));
+    process.exit(1);
+  });
+}

@@ -1,6 +1,8 @@
 node_modules
 .env
 .env.local
+.env.frontend-dev
+.env.eu
 *.log
 .DS_Store
 dist

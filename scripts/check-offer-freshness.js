@@ -1,45 +1,60 @@
 'use strict';
 
 /**
- * OG-30 offer-freshness cliff gate (read-only), split by Decision 35 class.
+ * OG-30 offer-freshness gate (read-only), split by Decision 35 class.
  *
- * The gap: every store_offer row was written with last_checked_at = NOW()
- * at seed-apply time (seeds 001/002) and nothing ever refreshes it, while
- * Stage 1 hard-filters last_checked_at >= CURRENT_TIMESTAMP - INTERVAL
- * '30 days' (src/recommendation/offers/select.js, Decision 7, re-enforced in
- * JS). Unrenewed, the oldest rows expire first and every query fails loud with
- * EMPTY_CANDIDATE_POOL once all rows are stale -- an exception, not silent
- * zero builds (budget_floor is computed after Stage 1 and never runs on this
- * path).
+ * The gap: every store_offer row was written with last_checked_at = NOW() at
+ * seed-apply time (seeds 001/002) and nothing ever refreshes it, while Stage 1
+ * hard-filters last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
+ * (src/recommendation/offers/select.js, Decision 7, re-enforced in JS).
+ * Unrenewed, the oldest rows expire first and every query fails loud with
+ * EMPTY_CANDIDATE_POOL once all rows are stale -- an exception, not silent zero
+ * builds (budget_floor is computed after Stage 1 and never runs on this path).
  *
  * Decision 35 adds a SECOND class. Stage 1 now labels every offer from its
  * provenance (migration 017): ingestion_record_id IS NULL is SEED/UNVERIFIED,
  * non-NULL is VERIFIED. A seed offer may bypass the 30-day window ONLY when the
  * caller passes allow_unverified_seed_offers (default OFF). This gate therefore
- * reports the two classes separately and FAILs on the VERIFIED class only:
- * seed offers never count toward "verified fresh", and a stale seed catalog is
- * reported as a loud WARN (the beta trade-off is explicit, not hidden), never
- * as a PASS.
+ * reports the two classes separately and FAILs on the non-seed class only: seed
+ * offers never count toward "verified fresh", and a stale seed catalog is
+ * reported as a loud WARN (the beta trade-off is explicit, not hidden), never as
+ * a PASS.
+ *
+ * Platform P3 Sprint 5 moved the CLASSIFICATION and the DECISION into the pure,
+ * unit-tested scripts/lib/offer-freshness.js, and widened the failing class from
+ * "has an ingestion record" to "EVERY non-seed offer, regardless of provenance
+ * class". That closes OG-52's P4 clause: a non-seed offer whose recorded
+ * provenance is not VERIFIED no longer rides along on the seed informational
+ * line - it is evaluated by age and can fail the gate. The output below is
+ * unchanged for the data it sees today (all 101 offers are seed rows), so
+ * "VERIFIED" in these lines means the NON-SEED population; the helper's own
+ * header is the contract for the four classes.
  *
  * Distinct from OG-37 (price VALUE accuracy: the half of OG-06 that stayed open
  * when OG-06's missing offer-level unique key closed as C-34 on 2026-10-06) and
  * OG-19 (seller/url NULLs): this measures eligibility (fresh vs expired), never
  * accuracy.
  *
- * Read-only: one SELECT against DATABASE_URL. It never writes, so it needs
- * no TEST_DATABASE_URL guard (same reasoning as the OG-01 gate).
+ * Read-only: one SELECT against DATABASE_URL. It never writes, so it needs no
+ * TEST_DATABASE_URL guard (same reasoning as the OG-01 gate).
  *
  * Usage: node scripts/check-offer-freshness.js [--warn-days N] [--fail-days N]
  *   --warn-days N: informational warning threshold (default 14)
- *   --fail-days N: failure threshold on days-to-first-VERIFIED-expiry (default 7)
- * Exit codes: 0 = gate satisfied; 1 = VERIFIED offers already expired, or the
- * first VERIFIED expiry is within --fail-days, or the live data could not be
- * read; 2 = usage error. A stale SEED class is reported but never fails the
- * gate -- the class is not a launch blocker once Decision 35 exists.
+ *   --fail-days N: failure threshold on days-to-first-non-seed-expiry (default 7)
+ * The `=` form is mandatory (`--fail-days=14`); the space form is a usage error
+ * by design and exits 2.
+ * Exit codes: 0 = gate satisfied; 1 = non-seed offers already expired, or the
+ * first non-seed expiry is within --fail-days, or the live data could not be
+ * read; 2 = usage error. A stale SEED class is reported but never fails the gate
+ * -- the class is not a launch blocker once Decision 35 exists.
  */
 
 require('dotenv').config();
 const { Client } = require('pg');
+
+const { classifyOffer, evaluateFreshness, CLASSIFICATIONS } = require('./lib/offer-freshness');
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const ARGS = process.argv.slice(2);
 let warnDays = 14;
@@ -55,25 +70,18 @@ for (const arg of ARGS) {
   }
 }
 
-const FRESHNESS_SQL = [
-  'SELECT count(*)::int AS total,',
-  '  count(*) FILTER (WHERE o.ingestion_record_id IS NULL)::int AS seed_total,',
-  '  count(*) FILTER (WHERE o.ingestion_record_id IS NOT NULL)::int AS verified_total,',
-  "  count(*) FILTER (WHERE o.ingestion_record_id IS NULL AND o.last_checked_at >= NOW() - INTERVAL '30 days')::int AS seed_fresh,",
-  "  count(*) FILTER (WHERE o.ingestion_record_id IS NULL AND o.last_checked_at < NOW() - INTERVAL '30 days')::int AS seed_expired,",
-  "  count(*) FILTER (WHERE o.ingestion_record_id IS NOT NULL AND o.last_checked_at >= NOW() - INTERVAL '30 days')::int AS verified_fresh,",
-  "  count(*) FILTER (WHERE o.ingestion_record_id IS NOT NULL AND o.last_checked_at < NOW() - INTERVAL '30 days')::int AS verified_expired,",
-  '  min(o.last_checked_at) AS oldest,',
-  '  max(o.last_checked_at) AS newest,',
-  "  min(o.last_checked_at + INTERVAL '30 days') FILTER (WHERE o.ingestion_record_id IS NOT NULL) AS first_verified_expiry,",
-  "  EXTRACT(EPOCH FROM (min(o.last_checked_at + INTERVAL '30 days') FILTER (WHERE o.ingestion_record_id IS NOT NULL) - NOW())) / 86400 AS days_to_first_verified_expiry,",
-  "  min(o.last_checked_at + INTERVAL '30 days') FILTER (WHERE o.ingestion_record_id IS NULL) AS first_seed_expiry,",
-  "  EXTRACT(EPOCH FROM (min(o.last_checked_at + INTERVAL '30 days') FILTER (WHERE o.ingestion_record_id IS NULL) - NOW())) / 86400 AS days_to_first_seed_expiry",
-  'FROM store_offer o',
-].join(' ');
+// Rows, not an aggregate: the classification and the decision are the pure
+// helper's job now, so the gate reads the columns that helper consumes and does
+// the arithmetic in JS (the same reasoning the other guards use to keep ONE owner
+// for a rule). `offer_class` is deliberately not selected -- store_offer has no
+// such column (it lives on build_component, migration 018), so every live non-seed
+// row classifies as NON_SEED_UNVERIFIED and is still evaluated by age.
+const OFFERS_SQL = 'SELECT id, last_checked_at, fetched_at, ingestion_record_id FROM store_offer';
 
-function days(value) {
-  return value === null || value === undefined ? null : Number(value);
+/** Days from `asOf` to a Date, or null. */
+function daysFrom(asOf, target) {
+  if (target === null || target === undefined) return null;
+  return (target.getTime() - asOf.getTime()) / DAY_MS;
 }
 
 async function main() {
@@ -86,57 +94,83 @@ async function main() {
   const client = new Client({ connectionString });
   try {
     await client.connect();
-    const row = (await client.query(FRESHNESS_SQL)).rows[0];
+    const rows = (await client.query(OFFERS_SQL)).rows;
+    const asOf = new Date();
+    const view = evaluateFreshness(rows, { failDays, asOf });
+    const counts = view.counts;
 
-    const firstVerified = days(row.days_to_first_verified_expiry);
-    const firstSeed = days(row.days_to_first_seed_expiry);
+    // Checked range over every row's last_checked_at (unchanged meaning).
+    let oldest = null;
+    let newest = null;
+    for (const row of rows) {
+      const ts = row.last_checked_at instanceof Date ? row.last_checked_at : new Date(row.last_checked_at);
+      if (Number.isNaN(ts.getTime())) continue;
+      if (oldest === null || ts < oldest) oldest = ts;
+      if (newest === null || ts > newest) newest = ts;
+    }
+
+    // Diagnostic: how many non-seed offers are NOT VERIFIED provenance. Zero on
+    // today's data, so no extra line is printed.
+    let nonVerifiedNonSeed = 0;
+    for (const row of rows) {
+      const cls = classifyOffer(row);
+      if (cls === CLASSIFICATIONS.SEED || cls === CLASSIFICATIONS.VERIFIED) continue;
+      nonVerifiedNonSeed += 1;
+    }
+
+    const firstVerifiedDays = daysFrom(asOf, view.firstExpiry);
+    const firstSeedDays = daysFrom(asOf, view.seedFirstExpiry);
 
     console.log('OG-30 offer-freshness gate (read-only, DATABASE_URL; Decision 35 classes)');
-    console.log('Offers: total ' + row.total);
+    console.log('Offers: total ' + counts.total);
     console.log(
       '  VERIFIED        (ingestion_record_id NOT NULL): fresh ' +
-        row.verified_fresh +
+        counts.nonSeedFresh +
         ' | expired ' +
-        row.verified_expired
+        counts.nonSeedExpired
     );
     console.log(
       '  SEED/UNVERIFIED (ingestion_record_id IS NULL) : fresh ' +
-        row.seed_fresh +
+        counts.seedFresh +
         ' | expired ' +
-        row.seed_expired
+        counts.seedExpired
     );
-    console.log('Checked range: ' + row.oldest + ' ... ' + row.newest);
-    if (row.first_verified_expiry === null) {
+    console.log('Checked range: ' + (oldest === null ? 'n/a' : oldest) + ' ... ' + (newest === null ? 'n/a' : newest));
+    if (view.firstExpiry === null) {
       console.log('First VERIFIED expiry: n/a (no verified offers yet)');
     } else {
       console.log(
-        'First VERIFIED expiry: ' +
-          row.first_verified_expiry +
-          ' (' +
-          firstVerified.toFixed(1) +
-          ' days)'
+        'First VERIFIED expiry: ' + view.firstExpiry + ' (' + firstVerifiedDays.toFixed(1) + ' days)'
       );
     }
-    if (row.first_seed_expiry !== null) {
+    if (view.seedFirstExpiry !== null) {
       console.log(
-        'First SEED expiry:     ' +
-          row.first_seed_expiry +
-          ' (' +
-          firstSeed.toFixed(1) +
-          ' days)'
+        'First SEED expiry:     ' + view.seedFirstExpiry + ' (' + firstSeedDays.toFixed(1) + ' days)'
       );
     }
 
-    // ---- VERIFIED class decides the gate -----------------------------------
+    // Diagnostics for the widened class, printed only when such offers exist.
+    if (nonVerifiedNonSeed > 0) {
+      console.log(
+        'INFO - ' + nonVerifiedNonSeed + ' non-seed offer(s) are not VERIFIED provenance; each is still evaluated by age'
+      );
+    }
+    if (counts.nonSeedUnknownAge > 0) {
+      console.log(
+        'WARN - ' + counts.nonSeedUnknownAge + ' non-seed offer(s) have no fetched_at; age is UNKNOWN and is never counted as fresh'
+      );
+    }
+
+    // ---- non-seed class decides the gate -----------------------------------
     let exitCode = 0;
-    if (row.verified_expired > 0) {
+    if (counts.nonSeedExpired > 0) {
       console.log(
         'RESULT: FAIL - ' +
-          row.verified_expired +
+          counts.nonSeedExpired +
           ' VERIFIED offer(s) already fail the Stage 1 30-day predicate'
       );
       exitCode = 1;
-    } else if (row.verified_total > 0 && firstVerified <= failDays) {
+    } else if (counts.nonSeedTotal > 0 && firstVerifiedDays !== null && firstVerifiedDays <= failDays) {
       console.log(
         'RESULT: FAIL - first VERIFIED offer expires within ' + failDays + ' days; refresh the source before then'
       );
@@ -145,31 +179,31 @@ async function main() {
       console.log(
         'RESULT: PASS - no expired VERIFIED offers and first VERIFIED expiry beyond ' + failDays + ' days'
       );
-      if (row.verified_total > 0 && firstVerified <= warnDays) {
+      if (counts.nonSeedTotal > 0 && firstVerifiedDays !== null && firstVerifiedDays <= warnDays) {
         console.log('WARN - first VERIFIED expiry within ' + warnDays + ' days; schedule a source refresh');
       }
     }
 
     // ---- SEED class is reported, never failed ------------------------------
-    if (row.seed_total > 0) {
-      if (row.seed_expired > 0) {
+    if (counts.seedTotal > 0) {
+      if (counts.seedExpired > 0) {
         console.log(
           'WARN - ' +
-            row.seed_expired +
+            counts.seedExpired +
             ' SEED/UNVERIFIED offer(s) already expired; runs continue ONLY with allow_unverified_seed_offers=ON, otherwise they fail EMPTY_CANDIDATE_POOL'
         );
-      } else if (firstSeed !== null && firstSeed <= warnDays) {
+      } else if (firstSeedDays !== null && firstSeedDays <= warnDays) {
         console.log(
           'WARN - first SEED/UNVERIFIED expiry within ' +
             warnDays +
             ' days (' +
-            firstSeed.toFixed(1) +
+            firstSeedDays.toFixed(1) +
             '); re-apply seed 006_offer_refresh.sql or run with allow_unverified_seed_offers=ON'
         );
       } else {
         console.log(
           'INFO - ' +
-            row.seed_fresh +
+            counts.seedFresh +
             ' SEED/UNVERIFIED offer(s) fresh; never counted toward verified-fresh'
         );
       }

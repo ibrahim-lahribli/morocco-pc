@@ -3,10 +3,12 @@
 /**
  * apps/api/src/meta.js - the HTTP API's option vocabulary (Decision 36).
  *
- * Boundary: a PURE module. No database access, no clock, no I/O. It turns the
- * active scoring model's configuration into the `{ value, label }` option
- * lists GET /v1/meta/options serves, and it is the single owner of the
- * accepted-value vocabulary the POST body is validated against.
+ * Boundary: a PURE module. No database access, no clock, no I/O, and - since
+ * the vocabulary moved to the scoring model (Decision 37) - no knowledge of
+ * the engine either. It turns the use-case values its caller derived into the
+ * `{ value, label }` option lists GET /v1/meta/options serves, and it is the
+ * single owner of the accepted-value vocabulary the POST body is validated
+ * against.
  *
  * Why this module exists as the owner (Decision 36 item 3): the frontend must
  * never imply that a value changes a result. `resolution` and `priority` are
@@ -17,12 +19,16 @@
  * accepts is always present in /v1/meta/options, and `meta-consistency.test.js`
  * pins exactly that.
  *
- * use_case is DERIVED, never enumerated twice: it comes ONLY from the active
- * scoring model's `configuration.gpu_required_use_cases`. There is no DISTINCT
- * over user-submitted values and no hardcoded second list, so a scoring-model
- * change is the only thing that can change the accepted use cases. When the
- * configuration cannot be read, the ROUTE answers 503 - this module never
- * fabricates an empty list (Decision 36 item 3).
+ * use_case is DERIVED, never enumerated twice, and this module no longer does
+ * the deriving: the values are HANDED IN by the caller, which gets them from
+ * the engine's `listUseCases` through `engine.js` (Decision 37 / OG-38). There
+ * is no DISTINCT over user-submitted values and no hardcoded second list -
+ * this module's whole contribution is collapsing duplicates and attaching the
+ * French label, so a scoring-model change remains the only thing that can
+ * change the accepted use cases. A caller that hands in NULL has no
+ * vocabulary at all (UNKNOWN, never an empty list) and the ROUTE answers 503;
+ * `useCaseOptions` treats a non-array as an empty list, so it must never be
+ * given one (Decision 36 item 3).
  *
  * currency is a fixed allow-list (MAD), NOT a DISTINCT over `store_offer`: the
  * engine's Stage 1 matches currency by exact equality, so an ingested offer in
@@ -71,16 +77,13 @@ function labelFor(map, value) {
 }
 
 /**
- * Build the use-case option list from a validated scoring-model configuration.
- * `gpu_required_use_cases` is the ONLY source. Absent/malformed configuration
- * yields an empty list - the caller (the meta route) must treat that as a
- * 503-worthy state rather than serving an empty array.
+ * Build the use-case option list from the vocabulary the caller derived.
+ *
+ * @param {string[]} useCases values from the engine's `listUseCases`
+ * @returns {object[]} frozen `{ value, label }` options, in declared order
  */
-function useCaseOptions(configuration) {
-  const raw = configuration !== null && typeof configuration === 'object'
-    ? configuration.gpu_required_use_cases
-    : null;
-  const values = Array.isArray(raw) ? raw : [];
+function useCaseOptions(useCases) {
+  const values = Array.isArray(useCases) ? useCases : [];
   const seen = new Set();
   const options = [];
   for (const value of values) {
@@ -93,15 +96,19 @@ function useCaseOptions(configuration) {
   return Object.freeze(options);
 }
 
-/** The accepted use_case values, in configuration order. */
-function useCaseValues(configuration) {
-  return useCaseOptions(configuration).map((option) => option.value);
+/**
+ * The accepted use_case values, in the order the engine reported them. A JSONB
+ * `use_case_profiles` value is stored in jsonb's own key order, so the
+ * advertised order follows the data, not the seed file.
+ */
+function useCaseValues(useCases) {
+  return useCaseOptions(useCases).map((option) => option.value);
 }
 
 /** The complete /v1/meta/options payload. */
-function buildOptions(configuration) {
+function buildOptions(useCases) {
   return Object.freeze({
-    use_cases: useCaseOptions(configuration),
+    use_cases: useCaseOptions(useCases),
     currencies: CURRENCIES,
     resolutions: RESOLUTIONS,
     priorities: PRIORITIES,
@@ -120,8 +127,8 @@ function isAllowedPriority(value) {
   return PRIORITIES.some((option) => option.value === value);
 }
 
-function isAllowedUseCase(value, configuration) {
-  return useCaseValues(configuration).includes(value);
+function isAllowedUseCase(value, useCases) {
+  return useCaseValues(useCases).includes(value);
 }
 
 module.exports = {

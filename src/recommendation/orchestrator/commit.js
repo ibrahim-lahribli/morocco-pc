@@ -45,6 +45,16 @@
  * so no existing caller sees a new or reshaped field; read the committed rows
  * back with a SELECT on build_rejection for the query id.
  *
+ * Decision 46 pass facts: the optional 5th argument `passFacts` is the pass's
+ * own facts - the Decision 27 budget floor, the engine version that produced the
+ * pass, and the E4 strategy key per persisted rank. It is threaded to
+ * persistence/persist-pass-facts inside THIS transaction, immediately after
+ * persistRanked (the rows it rewrites must already exist), and it is additive:
+ * `undefined` means "no facts supplied" and issues zero statements, so every
+ * pre-046 three-/four-argument call site keeps byte-identical behaviour. `null`
+ * is NOT that signal - it is a malformed call, refused before BEGIN, so a bad
+ * call can never leave a transaction to roll back.
+ *
  * Why replace instead of a second guard (Decision 31, OG-33): guard 2 below
  * keys on build_candidate ONLY, so a zero-build pass that still rejected
  * candidates leaves build_rejection unguarded and a second commit for the same
@@ -99,6 +109,7 @@
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
 const persistence = require('../persistence/persist-ranked');
 const { persistRejections } = require('../persistence/persist-rejections');
+const { persistPassFacts } = require('../persistence/persist-pass-facts');
 
 /**
  * Decision 18-D9: plain BEGIN, default isolation, no explicit escalation.
@@ -157,6 +168,13 @@ function validateClient(client) {
  *        statements, table untouched). A provided array - including `[]` -
  *        REPLACES this query's build_rejection rows with this pass's REJECT
  *        set ([] clears stale rows, writing none).
+ * @param {object} [passFacts] Decision 46: this pass's own facts
+ *        `{ budgetFloor, engineVersion, strategyKeys }`, written to the query row
+ *        (budget_floor) and to each result row (engine_version, strategy_key) in
+ *        THIS transaction. Optional; `undefined` means "no facts supplied" and
+ *        issues zero statements. Pass `null` and the call is refused before
+ *        BEGIN (INVALID_FIELD_VALUE / field 'passFacts'): null is not a synonym
+ *        for undefined. Omit the argument to persist no facts.
  * @returns {Promise<object>} the frozen persistRanked result, BY REFERENCE and
  *          unchanged (Decision 19 seam). The OG-04 rejection rows are committed
  *          in the same transaction but are not merged into this object - see
@@ -167,8 +185,24 @@ function validateClient(client) {
  *        INVALID_INPUT/field 'client' when the client contract fails (no
  *        statement is issued).
  */
-async function runRecommendationCommit(client, queryId, selected, rejections) {
+async function runRecommendationCommit(client, queryId, selected, rejections, passFacts) {
   validateClient(client);
+
+  // Decision 46: refuse a malformed pass-facts argument BEFORE BEGIN, so a bad
+  // call issues no statement at all (not even a transaction to roll back). Only
+  // the top-level shape is checked here - the value of each fact is the writer's
+  // contract (persist-pass-facts.js), exactly as `rejections` is
+  // validate-rejections.js's job.
+  if (passFacts !== undefined) {
+    if (passFacts === null || typeof passFacts !== 'object' || Array.isArray(passFacts)) {
+      fail(
+        ERROR_CODES.INVALID_FIELD_VALUE,
+        'passFacts',
+        'passFacts must be an object carrying budgetFloor, engineVersion and '
+          + 'strategyKeys (omit the argument entirely to persist no facts)'
+      );
+    }
+  }
 
   // Outside the try: if BEGIN itself fails there is no transaction to end.
   await client.query(BEGIN_SQL);
@@ -202,6 +236,16 @@ async function runRecommendationCommit(client, queryId, selected, rejections) {
     // `selected` it issues no statement at all and returns frozen empties.
     const result = await persistence.persistRanked({ client, queryId, selected });
 
+    // Decision 46: the pass's own facts land on the rows persistRanked just
+    // created - in the SAME transaction, on the SAME client - so a pass can never
+    // commit builds whose floor/engine/strategy provenance failed to write. It is
+    // UPDATE-only, so it cannot create or duplicate a row on a re-commit.
+    // Invoked ONLY when the caller supplied the argument (see the gate above).
+    let passFactsResult;
+    if (passFacts !== undefined) {
+      passFactsResult = await persistPassFacts({ client, queryId, selected, passFacts });
+    }
+
     // OG-04 / Decision 31: the rejection-reason writer runs in the SAME
     // transaction, after persistRanked, on the SAME client - so a failure in
     // either rolls back both and a pass can never commit builds without their
@@ -228,6 +272,7 @@ async function runRecommendationCommit(client, queryId, selected, rejections) {
     // retained only so its id list is observable to a caller that wants it,
     // without changing this return.
     void rejectionResult;
+    void passFactsResult;
     return result;
   } catch (error) {
     // Any failure - a guard fail-fast, a writer error, or a failing COMMIT -

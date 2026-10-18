@@ -4,9 +4,11 @@
  * apps/api/src/engine.js - the API's ONLY engine entry point.
  *
  * Boundary: this file exists so the HTTP layer never reaches into an engine
- * module's internals. It requires exactly two PUBLIC BARRELS
- * (`src/recommendation/orchestrator/index.js` and
- * `src/recommendation/candidates/index.js`) and re-exports nothing the engine
+ * module's internals. It requires exactly four PUBLIC BARRELS
+ * (`src/recommendation/orchestrator/index.js`,
+ * `src/recommendation/candidates/index.js`,
+ * `src/recommendation/scoring/index.js` and
+ * `src/recommendation/query/index.js`) and re-exports nothing the engine
  * does not already export. `import-boundary.test.js` enforces that rule by
  * scanning every file under apps/api/src for a `require` that resolves to a
  * path inside `src/recommendation/` and is neither a stage barrel (`index.js`)
@@ -26,9 +28,77 @@
 
 const orchestrator = require('../../../src/recommendation/orchestrator');
 const candidates = require('../../../src/recommendation/candidates');
+const scoring = require('../../../src/recommendation/scoring');
+const query = require('../../../src/recommendation/query');
 
 /** The API's fixed engine options. Frozen so a caller cannot mutate it. */
 const API_ENGINE_OPTIONS = Object.freeze({ allow_unverified_seed_offers: true });
+
+/**
+ * The use-case vocabulary of the ACTIVE scoring model, or NULL when it
+ * cannot be derived.
+ *
+ * This is the API's single source for the accepted `use_case` values, and
+ * the reason it lives HERE rather than in the presenter: the vocabulary is a
+ * property of the scoring model (Decision 37), so `listUseCases` reads
+ * `configuration.use_case_profiles` and falls back to the legacy
+ * `gpu_required_use_cases` only for a model that declares no profiles. Before
+ * this function existed the HTTP layer derived the list itself from
+ * `gpu_required_use_cases` - the same list that makes a GPU mandatory - so
+ * OFFICE could never be offered even for a model that declares a policy for
+ * it (OG-38). Putting the derivation in the API's only engine-reaching
+ * module is what lets `meta.js` stay pure and own nothing but the French
+ * labels.
+ *
+ * NULL means UNKNOWN, never an empty list: a configuration declaring neither
+ * key is a state of the ACTIVE MODEL, not a request error, and both routes
+ * turn it into a 503. Returning `[]` would look like a valid answer and would
+ * leave a client with a form it can never submit (Decision 36 item 3). The
+ * validation error is deliberately not rethrown - it is not the caller's
+ * fault, and the 503 body already says the vocabulary is unavailable.
+ *
+ * @param {object} configuration a scoring-model configuration (validated or raw)
+ * @returns {string[]|null} frozen use-case values, or null. For a JSONB-backed
+ *          configuration the ORDER is jsonb's key order, not the seed file's
+ *          declaration order - jsonb sorts keys, so nothing may depend on the
+ *          order a seed wrote.
+ */
+function useCaseVocabulary(configuration) {
+  try {
+    return scoring.listUseCases(configuration);
+  } catch (_error) {
+    return null;
+  }
+}
+
+/**
+ * The options one pass runs with, including the deploy identity Decision 46
+ * persists onto `recommendation_result.engine_version`.
+ *
+ * This is the API half of that handoff: the engine version is a CALLER-supplied
+ * `options.engineVersion` and the engine never reads `process.env` for it, so
+ * whoever knows which deploy is running has to say so. Here that is
+ * `app.engineVersion` (from `ENGINE_VERSION`, defaulting to `dev`), which is the
+ * same value the response reports as `served_by.engine_version` - so a persisted
+ * row and the reply that produced it name one deploy, not two.
+ *
+ * A value that is not a non-empty string is DROPPED rather than passed through.
+ * `persistPassFacts` refuses a blank or non-string engineVersion, and that
+ * refusal would abort the entire pass with a 500 over a cosmetic provenance
+ * field. Degrading to "not recorded" (SQL NULL) is the honest failure
+ * direction: the schema is nullable precisely because this fact can be unknown,
+ * and NULL means UNKNOWN - never a guessed placeholder. `buildApp` already
+ * normalizes the ordinary path to a string, so this only guards direct callers.
+ *
+ * @param {string} [engineVersion] the deploy that is running this pass
+ * @returns {object} frozen options for runRecommendationFullRun
+ */
+function engineOptionsFor(engineVersion) {
+  if (typeof engineVersion === 'string' && engineVersion.trim().length > 0) {
+    return Object.freeze(Object.assign({}, API_ENGINE_OPTIONS, { engineVersion }));
+  }
+  return API_ENGINE_OPTIONS;
+}
 
 /**
  * Run one full recommendation pass for `queryId` on `client`.
@@ -40,14 +110,69 @@ const API_ENGINE_OPTIONS = Object.freeze({ allow_unverified_seed_offers: true })
  *
  * @param {object} client pg-compatible single dedicated connection
  * @param {string} queryId pinned recommendation_query.id
+ * @param {string} [engineVersion] the deploy running this pass; persisted as
+ *        the pass's `engine_version` (see engineOptionsFor). Callers that omit
+ *        it still run - the column simply reads back NULL.
  * @returns {Promise<object>} the engine's frozen combined result
  */
-async function runFullRun(client, queryId) {
-  return orchestrator.runRecommendationFullRun(client, queryId, API_ENGINE_OPTIONS);
+async function runFullRun(client, queryId, engineVersion) {
+  return orchestrator.runRecommendationFullRun(client, queryId, engineOptionsFor(engineVersion));
+}
+
+/**
+ * The catalog's content version (Decision 47), re-exported from the engine's
+ * `query/` barrel at the API's single engine boundary.
+ *
+ * It is NOT wrapped, and deliberately so: the engine's `catalogVersion` throws
+ * when the database cannot produce a digest, and what that failure MEANS is an
+ * API policy decision, not an engine one - `useCaseVocabulary` above returns
+ * NULL for the same reason, and each route decides whether a missing value is
+ * fatal (the vocabulary: yes, 503) or a degradation (the catalog version: yes,
+ * reuse off). A catch here would have to guess, and would also hide a genuine
+ * wiring error - the route checks the function exists before calling it.
+ *
+ * It issues one read-only `SELECT` and writes nothing, so it is safe to call on
+ * the connection the POST has already checked out.
+ */
+const catalogVersion = query.catalogVersion;
+
+/**
+ * The component-role vocabulary the catalog's `role` filter accepts, in the
+ * `component_role` enum's declaration order.
+ *
+ * It is read from the candidates barrel rather than restated in `meta.js` for
+ * the reason Decision 37 gives about use cases: a role list that lived in two
+ * places would let the API accept a filter value the engine has no category for
+ * (or hide one it does). Frozen by the engine - do not mutate it here.
+ *
+ * @returns {readonly string[]} the nine component roles
+ */
+function catalogRoles() {
+  return candidates.COMPONENT_ROLES;
+}
+
+/**
+ * The `product_category` a role must come from, or null for an unknown role.
+ *
+ * The catalog filter is expressed in ROLES and applied in CATEGORIES because
+ * the engine's vocabulary maps many-to-one (RAM -> MEMORY, SSD_BOOT and
+ * SSD_SECONDARY -> STORAGE): a client asks for the thing it builds with, and
+ * the database filters on the thing it derives. Null is the caller's 422 cue.
+ *
+ * @param {string} role a `component_role` value
+ * @returns {string|null} a `product_category` value, or null
+ */
+function categoryForRole(role) {
+  return candidates.expectedCategoryForRole(role);
 }
 
 module.exports = {
   runFullRun,
+  engineOptionsFor,
+  useCaseVocabulary,
+  catalogVersion,
+  catalogRoles,
+  categoryForRole,
   API_ENGINE_OPTIONS,
   ERROR_CODES: candidates.ERROR_CODES,
   CandidateSelectionError: candidates.CandidateSelectionError,

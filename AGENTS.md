@@ -12,7 +12,9 @@ persists the results.
 
 The engine is still a pure Node.js library plus a PostgreSQL schema, and it stays that way: the
 HTTP surface is a separate, thin layer (`apps/api/`, Decision 36) that calls the engine's public
-barrels and owns no engine logic. There is still no frontend and no authentication. The entry
+barrels and owns no engine logic. There is no frontend in THIS tree and no authentication: the
+web app lives on its own branch (`apps/web/`, Next.js + Tailwind, scaffolded 2026-10-16) and has
+not been merged. The entry
 points are the engine's public barrels (`src/recommendation/*/index.js`), the `scripts/` CLIs,
 and `apps/api/src/server.js`.
 
@@ -25,7 +27,7 @@ and `apps/api/src/server.js`.
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–45). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–50). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
    To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
@@ -71,7 +73,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `docs/GLOSSARY.md` | Load-bearing vocabulary (status vocabulary, decision ids, the `D2` vs `Decision 2` collision) |
 | `docs/TEST_MAP.md` | Which test pins which contract — check before changing pinned behavior |
 | `docs/RECIPES/` | Task checklists: add a migration/seed/scoring-model/pair-evaluator/stage/status-claim |
-| `database/migrations/` | Authoritative schema (`001`–`018`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
+| `database/migrations/` | Authoritative schema (`001`–`022`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
 | `database/seeds/` | DML-only, idempotent seed data |
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |
 | `scripts/` | CLIs: migrations, seeds, schema verifiers, engine checks |
@@ -122,19 +124,24 @@ deliberately not duplicated here.
 | `npm run verify:docs` | Verify fact-shaped doc claims vs tree (offline) or + read-only DB (`--live`) |
 | `node scripts/verify-docs.js --live` | Adds read-only live-DB checks: 15 core tables + counts (INFO), and the schema-digest gate — FAILs when `docs/SCHEMA_REFERENCE.md`'s `schema-digest:` line no longer matches the live tables/columns/enums (fix: `npm run gen:schema`) |
 | `node scripts/run-seeds.js --dry-run` | Report seed statements without executing |
-| `node scripts/run-migrations.js` | Apply PENDING migrations via the `schema_migrations` ledger (OG-14, 2026-10-03) — re-runnable; flags `--dry-run` (list pending), `--check` (exit 1 on pending), `--offline` (no DB), `--baseline` (adopt an already-migrated DB without running), `--test-db` (guarded `TEST_DATABASE_URL`). **A real apply against the shared `DATABASE_URL` REFUSES (exit 1, ledger untouched) unless `--restore-point=<id>` matches `^[A-Za-z0-9_-]{8,}$`** — it prints the pending files instead. **`--baseline` needs one too** (it writes the ledger even though it runs no SQL) and lists each filename it is about to record. `--test-db` and the read-only modes (`--dry-run` / `--check` / `--offline`) never need one. A shared apply appends one line per applied file to the tracked, append-only `database/migration-applies.jsonl` |
+| `node scripts/run-migrations.js` | Apply PENDING migrations via the `schema_migrations` ledger (OG-14, 2026-10-03) — re-runnable; flags `--dry-run` (list pending), `--check` (exit 1 on pending), `--offline` (no DB), `--baseline` (adopt an already-migrated DB without running), `--test-db` (guarded `TEST_DATABASE_URL`), `--note=<text>` (record on the audit line of a shared apply WHAT the apply was for — a blank value is refused, exit 2, and a non-blank one is kept verbatim; which DATABASE a line is about is the `target` field itself, a `db:<12 hex>` digest of the connection's normalized host and database that every shared-target run prints as `AUDIT TARGET:` before it writes anything). **A real apply against the shared `DATABASE_URL` REFUSES (exit 1, ledger untouched) unless `--restore-point=<id>` matches `^[A-Za-z0-9_-]{8,}$`** — it prints the pending files instead. **`--baseline` needs one too** (it writes the ledger even though it runs no SQL) and lists each filename it is about to record. `--test-db` and the read-only modes (`--dry-run` / `--check` / `--offline`) never need one. A shared apply appends one line per applied file to the tracked, append-only `database/migration-applies.jsonl` |
 | `node --test scripts/lib/db-url.test.js` | Guard unit tests (not in `test:unit`) |
 | `node --test scripts/lib/gap-register.test.js` | Gap-register table-shape tests (not in `test:unit`; the check itself runs in `verify:docs` as `gap-register-shape`) |
 | `node --test scripts/lib/migrations.test.js` | Applied-migrations ledger helper tests (OG-14; not in `test:unit`) |
-| `npm run test:scripts` | Every `scripts/lib/*.test.js` suite (`db-url`, `gap-register`, `migrations`, `run-migrations-cli`, `schema-diff`, `replay-harness`). `test:unit` globs `src/**/*.test.js` ONLY, so these never ran in CI until the `test:scripts` step was added — run it after touching anything in `scripts/` |
+| `npm run test:scripts` | Every `scripts/lib/*.test.js` suite (`db-url`, `gap-register`, `migrations`, `run-migrations-cli`, `schema-diff`, `replay-harness`, `model-pin`, `offer-freshness`, `generated-doc-check`, `api-role`, `pass-rows`, plus the CLI suites for `rehearse-api-role` / `apply-api-role` / `smoke-api-role` / `measure-phases` / `generate-presets`). `test:unit` globs `src/**/*.test.js` ONLY, so these never ran in CI until the `test:scripts` step was added — run it after touching anything in `scripts/` |
+| `node scripts/rehearse-api-role.js [--budget=N] [--use-case=U]` | Creates the production role `morocco_pc_api` on the **TEST branch only** (`getWriteTestDbUrl()` guard), drives the API write path as the role, asserts the 20-answer privilege self-check, proves a row-wide UPDATE is denied `42501`, then removes the role — a REHEARSAL, never the shared apply |
+| `node scripts/apply-api-role.js [--dry-run] --restore-point=<id> [--password-file=<path>]` | The OWNER-GATED shared apply. REFUSES (exit 1, nothing written) without a `^[A-Za-z0-9_-]{8,}$` restore point, refuses an existing role instead of recreating it, prints the `db:<12 hex>` audit digest beside a password-redacted plan and connects to NOTHING in `--dry-run`, and runs the self-check after the grants — a red self-check ROLLS THE ROLE BACK. Read `docs/RECIPES/provision-the-api-role.md` first |
+| `node scripts/smoke-api-role.js --confirm-shared` | Runs the API itself as `morocco_pc_api` against the SHARED database (health asserted on the BODY, one real POST that must not be a dedupe reuse and must commit >=1 build, no `42501` on the pool), then deletes its rows and asserts the six Layer 4 counts returned. `--confirm-shared` is required and nothing in CI sets it; a 0-build pass is INCONCLUSIVE, not a pass |
 | `npm run test:api` | HTTP API tests (`apps/api/test/unit/*.test.js`) — DB-free: `fastify.inject` + stubbed collaborators. Runs in the push/PR job |
 | `npm run test:api:db` | HTTP API end-to-end tests (`apps/api/test/db/*.db.test.js`) against the **`TEST_DATABASE_URL` branch**: the real engine, the real schema, residue asserted 0. The launcher fails fast (never skips) when `TEST_DATABASE_URL` is missing or targets shared, and fails on zero executed tests. Runs in `recurring-gates` + `workflow_dispatch` only |
 | `npm run start:api` | Start the HTTP API (`apps/api/src/server.js`). Write-capable: refuses to start unless the target is provably the TEST branch, or `API_ALLOW_SHARED=1` is set explicitly |
 | `npm run verify:replay` | Replays every migration into a genuinely EMPTY scratch database on the `TEST_DATABASE_URL` instance and diffs it against the live schema by definition (`pg_get_constraintdef` / `indexdef` / column type+nullability+default). `--test-db` is required so it can never create a database implicitly; `--dry-run` contacts nothing; `--keep-db` skips the drop; `--reference=<test|shared>` picks the diff target (`shared` = `DATABASE_URL`, the default; `test` = the TEST branch). Exits non-zero on any drift |
+| `node scripts/check-target-parity.js --a=<url\|env:NAME> --b=<url\|env:NAME>` | Read-only parity gate for a replayed target (Platform P1 Sprint 1): compares the `schema_migrations` ledger, the `public` table list, the full column+enum shape and row counts of the catalog + Layer 4 tables. Every difference is NAMED (first differing index/table), `RESULT: MATCH` exits 0, a DIFF or an unreadable table exits 1, usage exits 2; never prints a URL. Comparison half: `scripts/lib/target-parity.js`, pinned by `npm run test:scripts` |
+| `node scripts/check-origin-readiness.js [--app=<name>] [--origin=<url>]` | Deployed-origin preflight for the EU runbook §8.4 (P2 Sprint 2 Step 4): asserts `fly ips list` returns at least one `net.isIP`-valid address AND `GET /v1/health?probe=preflight` answers 2xx with `status: "ok"` and `db: "ok"`. Read-only (one `fly ips list`, one GET; needs flyctl + network); prints `PREFLIGHT OK - addresses:` or `FAIL preflight:`; exit 0 pass, 1 fail, 2 usage. Pinned by `scripts/lib/origin-readiness.test.js` (parsing/verdict) and `scripts/lib/origin-readiness-cli.test.js` (exit codes/messages), both in `npm run test:scripts` |
 | `npm run verify:pi1` | Decision 23 criterion 3 (PI-1) **pool independence**: inserts a probe PSU (own `product_family`, 100 kW, NULL connectors) into the TEST branch, re-runs GAMING + OFFICE, asserts no pre-existing `build_score` moved. Writes to the TEST branch, so it is not read-only; the probe is removed in a `finally` and a cleanup failure exits non-zero. Delete `psu_spec` before `product`, and `product` before `product_family` — see §7 item 11. Give any anchor row lookup an explicit `ORDER BY`: a `LIMIT 1` without one made this gate report intermittent false drift |
 | `npm run eval:scenarios` | E0 golden harness (`scripts/eval-scenarios.js`): the 20-scenario matrix x assertions A1-A9 on the TEST branch, printing a table and optionally writing `test/golden/baseline-2026-10.md`. GREEN means "no APPROVED assertion failed", NOT "every row PASS": the unchanged engine is 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN and exits 0. `--no-baseline --no-volatile` writes no files; `--filter=S03,S07`, `--with-pi1`, `--cleanup-orphans` narrow it |
 | `node scripts/check-offer-freshness.js --fail-days=14` | OG-30 offer-freshness gate: offers at/inside their blackout window. **Equals form is mandatory** — `--fail-days=N`; the space form `--fail-days 14` prints usage and exits 2. CI uses 14, not the default 7, so a nightly run warns with two weeks' lead time |
-| `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance fixtures. **Unguarded: reads and writes the shared `DATABASE_URL`, and does NOT remove what it creates** — four `TestCompat*` product rows persist in the shared catalog today, one of them (`TestCompatMotherboard`, NULL `dimm_slots` and NULL `max_memory_capacity_gb`) is the reason `check-deferred-rules.js` reports a coverage denominator of 8 motherboards instead of the 7 real ones. Registered as OG-51 with a Platform request to clean up or move the script behind the `TEST_DATABASE_URL` guard. Do not re-run it against shared until then. |
+| `node scripts/test-compatibility.js` | Layer 1 compatibility/provenance fixtures, **`TEST_DATABASE_URL` only since OG-51 (2026-10-18, C-41)**: `getWriteTestDbUrl()` refuses before connecting unless the TEST branch is configured and differs from `DATABASE_URL`, so the shared catalog can no longer be targeted (proven: a `TEST_DATABASE_URL` naming the shared host exits 1 with `must not target the shared database`, having connected to nothing). Cleanup runs in a `finally` and is scoped to the `TestCompat%` fixtures — spec rows, then `product`, then `product_family`, and the `spec_provenance` delete now follows the support rows it is about to remove instead of matching four whole target tables. Exits 1 on a failed assertion, a failed cleanup or non-zero residue, and prints `cleanup: 0 TestCompat product row(s) remain`. Verified 2026-10-18: 47 PASS / 0 FAIL on the branch, residue 0. |
 | `node scripts/test-layer3.js --verify --functional` | Layer 3 schema (flags required; needs ALL THREE Layer 3 tables empty — `store` too; non-empty on shared DB AND on the test branch as of 2026-09-28, so it cannot pass in either environment today) |
 | `node scripts/test-layer4.js` | Layer 4 canonical schema (unguarded: reads `DATABASE_URL`; writes `TestL4%` fixtures inside one transaction with final ROLLBACK; does NOT require empty Layer 4 tables) |
 | `node scripts/verify-schema.js` / `verify-constraints.js` / `verify-fks.js` | Read-only catalog checks |
@@ -154,8 +161,9 @@ Command gotchas (verified 2026-09-28):
   rows — and not against `TEST_DATABASE_URL` either: the TEST branch holds the same 2/101/101 rows
   (measured 2026-09-28; a branch is a parent snapshot/reset, never an empty database).
   The failure is clean: preflight throws before any write.
-- Only `measure-orchestrator.js` and the two `test-orchestrator-*.js` scripts use the
-  `TEST_DATABASE_URL` guard; `test-layer3.js` / `test-layer4.js` / `verify-*.js` still read `DATABASE_URL`.
+- Only `measure-orchestrator.js`, the two `test-orchestrator-*.js` scripts and
+  `test-compatibility.js` (since OG-51) use the `TEST_DATABASE_URL` guard; `test-layer3.js` /
+  `test-layer4.js` / `verify-*.js` still read `DATABASE_URL`.
 - `TEST_DATABASE_URL` went UNREACHABLE on 2026-10-01 (`password authentication failed`) and the
   branch was RE-CREATED — twice, on 2026-10-01 and again on 2026-10-02, each re-creation minting a
   NEW endpoint. So: verify with a 1-row SELECT before relying on any guarded script, and treat any
@@ -189,7 +197,7 @@ Command gotchas (verified 2026-09-28):
   `budget_floor` is a data field only, deliberately not wired into Engine 6 explanation text.
 - **The golden harness (`npm run eval:scenarios`) is GREEN when no APPROVED assertion fails, not when every row PASSes.** On the unchanged engine it is 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN and exits 0 (`RESULT: EXPECTED-RED`); a `hypothesis` failure is reported but never fatal, and an UNKNOWN escalates to HARD FAIL only once its scenario's `expect_builds_after` epic has LANDED. Never tune a threshold to make a scenario pass, and never read the 22 EXPECTED-RED as a regression (brief E0 acceptance 4).
 - **It REFUSES to run while ANY unmarked `recommendation_query` row exists** - `assertNoUnmarkedQueries` is not scoped to its own runs. It marks its rows with a `golden-eval-<runId>` `recommendation_profile` and sweeps its own killed-run leftovers at startup, but a leftover from `measure-orchestrator.js` / `test-orchestrator-*.js` / `verify-pool-independence.js` (none carry the marker) or any row predating the marker blocks the run; the 60 pre-marker rows needed a hand DELETE in FK order (`build_rejection` -> `recommendation_result` -> `build_component` -> `build_candidate` -> `recommendation_query`), done 2026-10-09. `--cleanup-orphans` runs the startup sweep alone and exits, and its short-circuit MUST sit BEFORE that gate, or the "run alone" flag throws the run preflight instead of reporting.
-- **Every comparison harness selects its scoring model by a `name@version` PIN** (`scripts/lib/model-pin.js`; default `seed-minimal-v1@1.0.0`, override `--model=<pin>` or `SCORING_MODEL_PIN`), so a two-active-model branch is measurable; the pin fails closed on a malformed, ambiguous, INACTIVE or unmatched pin and prints the active models. Verified 2026-10-09 on a real two-active branch (OG-39 CLOSED, C-36) - a pin is a SELECTOR, never an activation.
+- **Every comparison harness selects its scoring model by a `name@version` PIN** (`scripts/lib/model-pin.js`; default `seed-minimal-v1@1.0.0`, override `--model=<pin>` or `SCORING_MODEL_PIN`), so a two-active-model branch is measurable; the pin fails closed on a malformed, ambiguous, INACTIVE or unmatched pin and prints the active models. Verified 2026-10-09 on a real two-active branch (OG-39 CLOSED, C-36) - a pin is a SELECTOR, never an activation. `scripts/measure-api-pass-phases.js` joined the pinned set on 2026-10-15 (it was the last comparison harness measuring "whichever model was ACTIVE"): it now resolves the pin and measures THAT model, and because the default pin is INACTIVE on the TEST branch a run there must pass `--model=launch-v2@1.0.0` or the pin refuses before writing anything. Its CLI/pin contract is `scripts/lib/measure-phases-cli.test.js`.
 - **`--baseline=<scratch path> --no-volatile` then `diff` against the committed `test/golden/baseline-2026-10.md` is how the committed baseline is proven faithful** (byte-identical 2026-10-09, re-proven 2026-10-10 with the E3 engine at pin `launch-v2@1.0.0`). Normalise ONLY the `as_of:` line before diffing; capture diff's own exit status — piping it through `head` returns head's status, which once faked a byte-identity pass until a raw `cmp -s` re-run. The volatile sidecar is gitignored, so regenerate it, never commit it. **Updated 2026-10-14: the COMMITTED v1 file has drifted and no longer proves anything about HEAD.** `baseline-2026-10.md` was generated 2026-10-08 and its `selected` column reads 3 where today's v1-pinned engine yields 1 for every scenario, because Decision 41 replaced `selectDiverseTop` (it read the same under the E6-era engine, so this is not your change). To isolate YOUR change, diff a fresh `--baseline=<scratch>` run against the newer SCRATCH `test/golden/_scratch-v7-e6-v1-parity.md` (byte-identical except `as_of:` 2026-10-14); the committed file shows pre-existing drift that is not yours, and rebaselining it is a review-gated act (see OG-49's sibling note in Decision 43).
 - **A repeated guarded write-test run treats its FIRST run's single-build drift as noise only when a paired re-run on unchanged code/data is clean** — `verify:pi1` once reported one build 54.79 -> 54.78 (known intermittent mode) and PASSED on the immediate re-run; record both, never the first alone. The E3 scratch golden runs live in committed `test/golden/_scratch-v*.md` (ungitignored on purpose) — extend the same series, don't invent a new evidence home.
 - **`describeTarget` prints the POOLED host while `apply-seed.js` prints the DIRECT host** - `(pooled)` vs `(direct)` for the same branch is not a mismatch.
@@ -207,7 +215,7 @@ Command gotchas (verified 2026-09-28):
   no such var, so it exports an EMPTY value that shadows the one `dotenv` just loaded, and the
   failure surfaces as a bare `ERR` with an empty message.
 - Adding a decision to the log **breaks `verify-docs` by design**: `scripts/verify-docs.js` hardcodes
-  the expected heading and `Status:` counts (now 42 / 48) and derives AGENTS.md's required
+  the expected heading and `Status:` counts (now 47 / 53) and derives AGENTS.md's required
   "Decisions 1-N" from that parse. Bump both counts when you add Decision N+1, and update the
   `database/migrations/` range cited in AGENTS.md §4 or `migrations-range-documented` warns. `docs/DECISION_INDEX.md` embeds each entry's WHOLE `Status:` line, so editing that line alone (even with no heading change) makes the index stale — re-run `npm run gen:decisions`; editing only a body section does not.
 - Writing a spec-data seed: put the guard in the DML, not only the header comment. `UPDATE..FROM
@@ -229,17 +237,22 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
 `TEST_DATABASE_URL` repository secrets — CI has no `.env`, so the job exports both explicitly and
 fails fast if either is empty. It is `concurrency`-grouped with `cancel-in-progress: false` because
 the replay creates and drops one fixed scratch database name (`migrations_replay_tmp`); do not set
-that to true. A workflow job cannot be triggered on demand from here — use the Actions tab's
-"Run workflow" button to exercise it before trusting a schedule.
+that to true. A dispatch does not need the Actions tab: `gh` is absent on this box, but the REST
+`POST /repos/{owner}/{repo}/actions/workflows/ci.yml/dispatches` works with the credential the git
+remote already stores (`ref` = the branch to run on) — keep that token out of files and logs.
 
-**The scheduled job is UNVERIFIED until it has run on GitHub** (as of 2026-10-05 it had never run).
-Everything checkable locally was checked — the YAML parses, both scripts pass with the exact CI
-arguments, and every secret reference resolves — but two things can only be proven by a real run:
-that both secrets are named correctly in the repository, and that the Neon instance accepts
-connections from a GitHub runner. A failed run is expected to be a configuration problem, not a
-code problem. Note also that **scheduled workflows only run from the default branch** and GitHub
-**disables them automatically after 60 days of repository inactivity** — an idle repo silently stops
-getting the nightly gate, which is why `workflow_dispatch` is wired up too.
+**The scheduled job HAS now run, twice, on 2026-10-18** (`workflow_dispatch` on `agent/platforms`;
+runs 39119596060 and 39120485573). Both doubts that could only be settled by a real run are now
+measured, not assumed: both repository secrets exist under the right names, and the Neon instance
+accepts connections from a GitHub runner — `npm run test:api:db` answered `test:api:db: 9 passed,
+0 failed` IN CI. It is **RED, and only for the documented reason**: `verify-migrations-replay.js
+--test-db` reports 4 drift classes against shared (columns **377 vs 370**, checks **84 vs 79**,
+fks **61 vs 60**, indexes **102 vs 100**), which is exactly the objects 021 and 022 create, i.e. the
+branch-only state. That red closes with an owner-approved shared apply of 021/022, NOT with a code
+change — do not "fix" it by changing the replay's reference target. Note also that **scheduled
+workflows only run from the default branch** and GitHub **disables them automatically after 60 days
+of repository inactivity** — an idle repo silently stops getting the nightly gate, which is why
+`workflow_dispatch` is wired up too.
 
 ## 7. Verification workflow
 
@@ -258,14 +271,24 @@ getting the nightly gate, which is why `workflow_dispatch` is wired up too.
    and RE-VERIFIED 2026-10-05 through `001→015` with **0 drift by object definition** (C-30). That
    check is now the repeatable `npm run verify:replay` gate, so re-run it after any migration lands
    rather than trusting a one-off measurement. The shared and TEST databases are baselined in the
-   `schema_migrations` ledger (OG-14); both the shared DB and the TEST branch stand at **018**
-   as of 2026-10-07 (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04,
+   `schema_migrations` ledger (OG-14); the SHARED database stands at **020** and the TEST branch at
+   **022** as of 2026-10-16 — `021_recommendation_query_catalog_version.sql` (Decision 47, Platform
+   P1 Sprint 5) and `022_recommendation_preset.sql` (Decision 48, Platform P1 Sprint 6) are **BRANCH-ONLY so far**, because the API runs against the branch and a shared
+   apply is a separate owner-approved step needing a recorded restore point. So `verify:replay`'s
+   default SHARED reference legitimately reports exactly 021's and 022's new objects (the column, its
+   CHECK constraint and 022’s `recommendation_preset` table, all fresh-only - measured 2026-10-16) as drift until the shared apply
+   lands; that is the documented TEST-first state, never a broken migration
+   (`docs/RECIPES/add-a-migration.md`). Before 021, both databases stood at **020** on 2026-10-15
+   (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04,
    `015_relax_rejection_partner.sql` / OG-32, `016_og02_og03_memory_and_status.sql` / OG-02+OG-03,
    `017_offer_identity_and_provenance.sql` / OG-06, `018_build_component_offer_provenance.sql` /
-   Decision 35 — 018 applied to both on 2026-10-07). `verify:replay` diffs a fresh
-   replay against `DATABASE_URL` and reports **0 drift** (18 files replayed); no shared-first
-   trail remains. Use `npm run verify:replay -- --reference=test` for the 0-drift answer on a
-   future TEST-first migration while shared trails.
+   Decision 35 — 018 applied to both on 2026-10-07; `019_recommendation_pass_facts.sql` and
+   `020_product_identity_and_media.sql` / Decision 46 — the branch on 2026-10-14, shared on
+   2026-10-15 from restore point `br-damp-grass-axyri6yl`, so there was no branch-only trail left at
+   that point).
+   `verify:replay` diffs a fresh replay against `DATABASE_URL` and reports **0 drift** (20 files
+   replayed as of 2026-10-15; 22 files, and 0 drift again, once 021 and 022 have been applied to shared). Use `npm run verify:replay -- --test-db --reference=test` to diff against the branch
+   instead of shared.
 6. **Migration ledger (OG-14, 2026-10-04).** `run-migrations.js` is ledger-driven: it records each
    applied filename in `schema_migrations` and applies only the pending tail, so it is re-runnable
    (the bare `CREATE TYPE` in `002_enums.sql` no longer aborts a second run). A database that
@@ -339,6 +362,10 @@ getting the nightly gate, which is why `workflow_dispatch` is wired up too.
   Each applied file is recorded in the **tracked, append-only** `database/migration-applies.jsonl`
   — six whitelisted fields (`applied_at`, `filename`, `git_sha`, `note`, `restore_point`,
   `target`), unknown keys refused, and a null `restore_point` allowed only with a `note` saying why.
+  `target` must be a `db:<12 hex>` digest from `applyLogTarget` (the normalized host and database,
+  recomputable from `DATABASE_URL`, stable across the pooled/direct pair, distinct per database); the
+  `shared`/`test` role names survive only in lines written before 2026-10-15, which a reader accepts and
+  the formatter refuses to write.
   Commit that line with the apply. The log is an audit trail, not a guarantee: it records what the
   runner did and cannot prove that nothing else wrote to shared.
 - **`--baseline` writes the ledger without running any SQL, so it is guarded too.** On the shared

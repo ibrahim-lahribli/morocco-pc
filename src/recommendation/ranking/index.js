@@ -20,8 +20,8 @@
  *                            still the Decision 20 contract, no longer the showcase)
  *   MAX_PER_PAIR           -> 3 (per-pair cap, Decision 20 section 3)
  *   selectArchetypes({ ranked, budget, priority }) -> deeply frozen { archetypes, reason_codes }
- *                            (E4 / Decision 41; strategy_key persistence is
- *                            DEFERRED to Platform migration 019)
+ *                            (E4 / Decision 41; strategy_key persistence LANDED
+ *                            in Platform migration 019 - applied on both databases)
  *   PERFORMANCE_FLOOR      -> 0.85 (E4 spend threshold, Decision 41)
  *   STRATEGIES             -> frozen ['PERFORMANCE','BALANCED','VALUE']
  *   REASON_CODES           -> frozen E4 degradation vocabulary

@@ -12,6 +12,14 @@
  *      suite that a green CI run would misread as coverage.
  *   2. ZERO TESTS IS A FAILURE. A renamed file or a bad glob would otherwise
  *      exit 0 having proved nothing.
+ *   3. FILES RUN SEQUENTIALLY. All four files share ONE database, and
+ *      recommendations.db.test.js asserts on WHOLE-TABLE row counts (that is its
+ *      residue check), so a parallel file that inserts or deletes a query row
+ *      moves the number under the assertion. Node runs test FILES in parallel by
+ *      default; measured 2026-10-18: the suite is 8 passed / 1 failed with the
+ *      default and 9 passed / 0 failed with --test-concurrency=1, and the failing
+ *      assertion was a count a concurrent presets pass had shifted. The flag is
+ *      pinned here so the suite cannot go red for a reason no test owns.
  *
  * The exit status is the child's own; the helpers only add the guards on top.
  */
@@ -51,7 +59,11 @@ if (files.length === 0) {
   fail('found no *.db.test.js files under ' + DB_DIR);
 }
 
-const result = spawnSync(process.execPath, ['--test'].concat(files), { encoding: 'utf8' });
+const result = spawnSync(
+  process.execPath,
+  ['--test', '--test-concurrency=1'].concat(files),
+  { encoding: 'utf8' }
+);
 process.stdout.write(result.stdout || '');
 process.stderr.write(result.stderr || '');
 

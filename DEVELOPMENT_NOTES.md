@@ -971,3 +971,622 @@ normalization from it, so `--check` then failed on the `Generated <date>` line e
 STALE swapped for another. Apply the SAME normalization to BOTH sides. (2) The generated index's
 `(N lines)` footer is a parse-derived value; it is stable across CRLF/LF source materialization
 because the parse normalizes first, and the new test asserts that instead of assuming it.
+
+## 2026-10-15 — `TEST_DATABASE_URL` `28P01` was a STALE HOST, not a dead branch; migration 020 then applied and replayed green
+
+`TEST_DATABASE_URL` had been returning `password authentication failed for user 'neondb_owner'`
+(`28P01`) since at least 2026-10-14 — the exact error a dead or re-created branch produces — so
+`test:api:db`, `verify:pi1` and every other guarded script read as "the branch is gone". It was not
+gone. **The Neon connector answers this question in three calls, without a credential:**
+`list_projects` (project `morocco-pc`, `gentle-fog-04615130`), `list_branches --include-deleted`
+(both `production` and `test` present and `ready`, nothing deleted), then `list_branch_computes`
+per branch, which returns each branch's CURRENT host. The `.env` value for `DATABASE_URL` matched
+production's endpoint exactly; the `TEST_DATABASE_URL` host matched NO endpoint, because the `test`
+branch had been re-created after 2026-10-02 and **a re-creation mints a NEW endpoint**.
+
+**The repair is host-only, and that is the lesson.** A Neon role password belongs to the ROLE, not
+to the endpoint, so re-pointing `TEST_DATABASE_URL` at the branch's current host — password
+untouched, value never printed or echoed — connected on the FIRST attempt. Do not rotate the
+credential and do not re-create the branch for a stale endpoint. Confirm the swap with the
+prescribed 1-row SELECT through `resolveTestDbUrl`, which is also what proves the two hosts differ
+after pooler normalization — the thing that tells a real fix apart from two hosts pointing at the
+same database.
+
+**A re-created branch resets its ledger to its parent's, so "019 is applied on the branch" prose
+goes stale silently.** The repaired branch sat at ledger 18 with 0 of the 8 new columns, i.e. 019
+AND 020 were both pending, although the docs recorded "TEST ledger = 19". After ANY branch
+re-creation, re-apply the tail (`node scripts/run-migrations.js --test-db`) before trusting or
+citing branch state — and expect the branch's DATA to be the parent snapshot as of the
+re-creation, not the old branch's.
+
+Measured 2026-10-15 after the repair, each on its own exit status: `--test-db --dry-run` listed
+`019` then `020` IN ORDER; `--test-db` wrote both (ledger 18 -> 20); `--check` reported no pending;
+all 8 columns present and nullable; 020's backfill over 100 real products = 100 slugs / 100
+distinct / 100 display_names / 0 still `Seed `-prefixed / 0 format violations / 0 suffixes, with
+products and offers unchanged (no row created or destroyed); `verify:replay --test-db
+--reference=test` = **20 files, 0 drift** (columns 370/370, checks 79/79, fks 60/60, indexes
+100/100 — the +5 columns, +1 check and +1 index over the 019-era 365/78/60/99 are exactly 020's
+additions); `scripts/test-orchestrator-full-run.js` = **36 pass / 0 fail**, pass-facts read-back
+included; `npm run test:api:db` = **1 passed / 0 failed**, residue 0.
+
+## 2026-10-15 — Platform P0 Sprint 5: 019 + 020 applied to the SHARED database from a restore point, and what the guard cannot check
+
+**A restore point had to be CREATED first, and that is the lesson.** No backup branch existed - the project
+held only `production` and `test` - so the apply's precondition was unmet even though the request said "the
+restore point I provide". `br-damp-grass-axyri6yl` was created from `production` at LSN `0/4C9C840` with
+`create_branch(parent_id=production, no_compute=true)`: copy-on-write, no compute to pay for, `ready` in
+seconds, and its id is what `--restore-point` then carried. **`run-migrations.js` cannot verify that id** -
+the guard is the regex `^[A-Za-z0-9_-]{8,}$` and nothing else - so a plausible-looking string passes exactly
+as well as a real branch. The discipline is the whole control, which is why an invented id must never be
+used to get past it.
+
+**Verified after the apply, each on its own exit status.** Shared ledger 18 -> 20, one transaction per file,
+no pending migrations on either database. All 8 new columns present and nullable. The shared catalog: 104
+products, 104 `display_name`s, **104 distinct slugs, 0 NULL, 0 format violations** - the greedy generator
+needed no suffixing, exactly as the pre-flight predicted - with `chk_product_slug_format` and `uq_product_slug`
+present. `verify:replay` replayed 20 files into a genuinely empty database at **0 drift** (370/370 columns,
+79/79 checks, 60/60 fks, 100/100 indexes). `gen:schema` rewrote both generated docs and `verify-docs --live`
+matched the new digest, which also cleared the long-standing `gen-schema-reference --check` exit 1 that had
+been firing on `DATA_STATE.md` alone. `check-deferred-rules` 0 violations; `check-offer-freshness
+--fail-days=14` PASS; `verify:pi1` PASS (0 of 25 drifted in both use cases, cleanup verified); the golden
+harness 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN, exit 0; `test:scripts` 212/0 (it validates the new
+`migration-applies.jsonl` lines), `test:unit` 1149/0, `test:api` 45/0, `test:api:db` 1/0.
+
+**The read path was proven ON SHARED, read-only, by executing the repository's own statements.**
+`SELECT_QUERY_SQL` and `SELECT_BUILDS_SQL` with a random uuid: 0 rows, no error, where they previously raised
+`42703`. That is the direct proof the API can now answer against shared. It deliberately stops short of a
+POST: a write test against shared is prohibited, and a failed POST would leave an unmarked
+`recommendation_query` row that blocks the golden harness preflight.
+
+**Two honest gaps, recorded not buried.** (1) The `morocco_pc_api` role does not exist on shared, so Decision
+46 item 7's column-scoped GRANTs remain unapplied; the script is ready in `docs/API.md` Production mode. (2)
+The plan's golden leg "at the v1 pin and at `launch-v2@1.1.0`" cannot run on this instance: the only ACTIVE
+scoring model is `seed-minimal-v1@1.0.0` (the `launch-v2` models are not in this branch's data after its
+2026-10-15 re-creation reset it to the parent), and `--model=launch-v2@1.1.0` fails closed naming the active
+model - correct behaviour, not a defect.
+
+## 2026-10-15 — P3 Sprint 1 (first pass): the recurring job's ref choice, and the nightly gate is red by construction
+
+**`gh` is not installed on this box**, so dispatching `recurring-gates` is genuinely owner-side: the plan marks
+the dispatch OWNER-gated, and that is not a formality. Owner path: GitHub -> Actions -> `ci` -> "Run workflow"
+-> choose ref `agent/platforms` (NOT the default branch; see below) -> Run.
+
+**Local pre-flight of the three job steps, with the exact CI arguments** (all green today on the unchanged
+tree): `check-offer-freshness --fail-days=14` PASS (first VERIFIED expiry 18.7 days out; 101 SEED offers
+never counted as verified-fresh); `verify-migrations-replay --test-db` 0 drift (20 files into an empty
+database: columns 370/370, checks 79/79, fks 60/60, indexes 100/100); `test:api:db` 1 pass / 0 fail with
+residue 0. What CANNOT be checked from a checkout: that the two repository secrets exist and are correct,
+and that the Neon instance accepts a GitHub runner connection - a failed run is expected to be one of those
+two, not a code defect.
+
+**The ref choice is the finding, and it corrects the plan.** The first draft of `PLAN_PLATFORM_P3.md` said the
+default branch lacks the API and these CI steps. Measured against `origin/master` (`c8c16b9`): it HAS
+`apps/api`, `apps/api/test/db/recommendations.db.test.js`, the `test:api:db` step and the whole
+`recurring-gates` job. The real reason to dispatch on this branch is different: **master's migration tail
+ends at `018` while the replay's default reference (`DATABASE_URL`) stands at `020`**, and
+`verify-migrations-replay.js --test-db` diffs a fresh replay against that reference. So a default-branch
+dispatch fails the replay step with drift that is an ARTIFACT of this branch being unmerged - a false red,
+which is worse than no run because it teaches the team to ignore the gate. **Corollary: the nightly
+`schedule` runs only from the default branch, so the recurring gate is red BY CONSTRUCTION at the replay step
+until this branch merges.** Making the nightly meaningful is therefore part of the merge, not a separate
+task. The plan text was corrected and committed with this note.
+
+**Gotcha that produced a silent wrong answer first (worth remembering).** `git show origin/master:path` is
+mangled by Git Bash's MSYS argument conversion into `origin\master;path`, and because it failed, a `grep -c`
+on empty input printed `0` and read like a real "absent" result - it very nearly confirmed the false premise.
+Use `export MSYS_NO_PATHCONV=1` or name the commit SHA (`git show c8c16b9:path`), and never read a `grep -c`
+result without checking the command's own exit status.
+
+**Still owed in this sprint:** the owner dispatch and its per-step conclusion (Step 2-3), any fix if a step
+fails (Step 4), and the "UNVERIFIED in CI" wording updates (Step 5) - which stay as they are until the run is
+actually green.
+
+## 2026-10-15 - P2 Sprint 1: the API use-case vocabulary comes from the model (OG-38)
+
+**The measurement that reframed the task.** Before touching anything, the TEST
+branch held ONE `scoring_model` row: `seed-minimal-v1 1.0.0`, active. There was no
+`launch-v2` row at all - although OG-43, OG-44, OG-49 and CONTEXT.md (7f) all
+describe the branch as the place where `launch-v2` IS active, and OG-44 calls the
+seed-014/015/016 quotas "TEST branch only". So seed 013's effect had been LOST, not
+merely never applied: a branch is a parent snapshot, and a reset restores the parent
+state. Seed 013 was re-applied this session and confirmed idempotent by a real
+second apply (row set and flags byte-identical).
+
+**Applying a seed to the branch, the way that works.** `run-seeds.js` ignores
+`--test-db` and has no routing, so it would have written to the SHARED database.
+The working pattern: `getWriteTestDbUrl()` (a pg CONFIG OBJECT, never a URL string),
+`SET search_path = public` first (a client's default is `pg_temp`), then the file
+WHOLE via `client.query(rawText)` - never `split(';')`. Seed 013 is DML-only with no
+BEGIN/COMMIT, so this is safe and re-runnable.
+
+**Its measured consequence is the seed header's own warning.** With `launch-v2`
+active, `seed-minimal-v1` is INACTIVE, so comparison harnesses on the DEFAULT pin
+now fail closed on the branch: `resolvePinnedModel(branch,
+`seed-minimal-v1@1.0.0`` returns "exists but is NOT ACTIVE ... Active:
+launch-v2@1.0.0", while `launch-v2@1.0.0` resolves. That is the pin SELECTOR doing
+its job - run those harnesses on the branch with `--model=launch-v2@1.0.0` (or
+`SCORING_MODEL_PIN`). `DEFAULT_MODEL_PIN` was deliberately NOT changed: the SHARED
+database still runs v1, so moving the default would break the shared runs to fix a
+branch-only state.
+
+**One boundary rule decided the shape of the change.** `import-boundary.test.js`
+asserts that the engine is reachable from exactly ONE file under `apps/api/src`
+(`engine.js`), and that `engine.js` requires an EXACT list of stage barrels. So
+"call `listUseCases` from `meta.js`" is not implementable as written: the derivation
+became `engine.js`'s `useCaseVocabulary(configuration)` (NULL - UNKNOWN, never an
+empty list - when the configuration declares neither key), and `meta.js` was
+narrowed to take the VALUES. The exact-barrel pin went 2 -> 3 on purpose; that pin
+exists to make a reviewer notice.
+
+**A latent defect the swap closed.** The old `meta.js` returned an empty list for a
+configuration with no usable key, and the route only 503'd when the MODEL was
+missing - so a model with an unusable configuration was served as **200 with an
+empty `use_cases` array**, the exact "form nobody can submit" its own header says
+must never happen. Both verbs now answer 503 on an UNKNOWN vocabulary, on the same
+body, so a client has one state to handle.
+
+**jsonb does not preserve key order.** The served order on the branch is GAMING,
+OFFICE, WORKSTATION - not the seed's declaration order - because `jsonb` stores
+keys in its own canonical order (length, then bytes) and `listUseCases` returns
+`Object.keys` of the parsed value. A test must therefore compare the SET: the DB
+suite sorts before comparing. Do not "fix" the order by reordering the seed.
+
+**Verified (2026-10-15).** `npm run test:api` 49 pass / 0 fail (was 44).
+`npm run test:api:db` 1 pass / 0 fail with `launch-v2` active, residue 0. Through
+the real API on the branch: `GET /v1/meta/options` -> 200 GAMING / OFFICE
+("Bureautique") / WORKSTATION; `POST` OFFICE@20000 -> 201 with one build;
+`POST` STREAMING -> 422 naming the declared vocabulary, writing zero rows.
+
+## 2026-10-15 — `measure-api-pass-phases.js` pins its scoring model, and the pin exposed an 18-statement difference that was invisible
+
+It was the last comparison harness still measuring "whichever model the target
+database has ACTIVE". Every other one pins a `name@version` (`scripts/lib/model-pin.js`),
+and this one now does too: `--model=<name@version>`, else `SCORING_MODEL_PIN`, else
+`seed-minimal-v1@1.0.0`, resolved through `resolvePinnedModel` and reported as
+`scoring_model: { pin, requested, id }`. That is not cosmetic — the engine loads its
+model from `recommendation_query.scoring_model_id` (Decision 11), so the pin decides
+which model the pass actually runs, and a pin that matches nothing, is ambiguous, or
+is INACTIVE fails closed before a single row is written.
+
+The selector stayed a SEAM (`modelSelector.select`, still labelled `api.model_select`),
+so the phase table keeps its shape: one statement under the same label, only the WHERE
+clause changed — measured 1 statement / 137 ms on the pinned run, same as the baseline.
+
+**What the pin immediately exposed.** The two databases disagree about which model is
+active (shared `seed-minimal-v1@1.0.0`; TEST branch `launch-v2@1.0.0`, with
+`seed-minimal-v1` present but inactive), and the recorded 2026-10-07 baseline predates
+`launch-v2` entirely. Live on the branch: the default pin refuses (exit 1, "exists but is
+NOT ACTIVE ... Active: launch-v2@1.0.0", zero rows in all six Layer 4 tables afterwards),
+an explicit `--model=seed-minimal-v1@1.0.0` refuses identically, and
+`--model=launch-v2@1.0.0` runs green with residue 0. The pinned run reports 57 statements
+in a 9 588 ms wall, `engine.commit` at 19 statements / 2 607 ms — against the v1-era
+baseline of 75 / 12 114 / 37 / 4 906. **Read that as "the model and the code both
+changed", never as a speed-up**: the two runs are pinned differently and taken two
+releases apart. The point of the pin is that the model difference can no longer hide
+inside the number.
+
+P1 Sprint 2 Step 1 asked for exactly this measurement, and its expected figure (37
+statements, ~4.9 s) is now known to be a `seed-minimal-v1` figure that cannot be
+re-measured on the TEST branch at all, because that model is inactive there and a pin
+never activates one. The plan records the correction per pin instead of a single number.
+
+DB-free contract: `scripts/lib/measure-phases-cli.test.js` (9 tests) pins the flag forms,
+the precedence, the early refusal of a malformed or repeated pin, and that `require()`
+never starts a pass — the script exports `parseArgs` behind a `require.main === module`
+guard for that. Fail-first: 4 of those 9 passed before the implementation (they describe
+behaviour that already existed) and 5 failed on `unknown argument: --model=...`.
+Verified: `npm run test:scripts` 236 pass / 0 fail (227 before), the Node 22 leg 236/236
+with `# cancelled 0`.
+
+## 2026-10-15 — the shared-apply audit log's `target` NAMES the database (P1 Sprint 1 follow-up)
+
+Every audit line carried `target: "shared"`, and that value was not a name but an INFERENCE from the
+flag: the runner reads whichever URL `DATABASE_URL` holds, so an apply against the P1 EU project would
+have appended lines claiming `shared` while `APPLY_LOG_TARGETS = ['shared','test']` refused anything
+else. The `--note` flag was the workaround — it made the target's job the note's prose.
+
+The field now names the database:
+
+- `applyLogTarget(connectionString)` (`scripts/lib/migrations.js`) returns `db:<12 hex>` — the first 12
+  hex characters of `sha256("<normalized host>/<database>")` — via `normalizeTarget`
+  (`scripts/lib/db-url.js`), which reuses `normalizeHost`'s `-pooler` strip and `splitHost`'s database
+  read and deliberately hands out neither the parsed URL nor its `.href` (both carry the password).
+- `formatApplyLogLine` REFUSES every other shape, so an inferred role name cannot come back through a
+  write; `LEGACY_APPLY_LOG_TARGETS` keeps the four pre-existing lines readable. The log is append-only
+  and those lines are history — never rewrite them.
+- The runner prints `AUDIT TARGET: db:…` right after it connects, in every shared-target mode and
+  BEFORE the restore-point guard, so a refused apply still names its target. `--test-db` prints none
+  (it writes no audit line). It is NOT dry-run-only: the state a reviewer is in when checking an
+  existing line is the one with nothing pending, where a dry-run-only print never ran.
+- Pooled and direct hosts of one endpoint give ONE value; two databases on one endpoint (the replay
+  scratch database and the branch database) give two. Measured 2026-10-15: shared
+  `db:54ff6ea3f6e6`, TEST branch `db:798b3aa04976`, each invariant across its pooled/direct pair.
+- Disclosure, recorded rather than hidden: 48 bits of a hash whose input is a hostname is not
+  reversible in general, but someone holding a candidate hostname can CONFIRM a match. The input is not
+  a secret (hosts appear in connection errors and in the docs) and no URL, host or credential is
+  persisted — the field whitelist still refuses one.
+
+Verified: `npm run test:scripts` 227 pass / 0 fail (218 before; 9 new), the Node 22 leg 227/227 with
+`# cancelled 0` (CI pins 22 where an accidentally nested test is silently CANCELLED, not failed),
+`node scripts/run-migrations.js --check` against shared exits 0 and prints `AUDIT TARGET:`,
+`--check --test-db` prints none, `verify:docs --offline` OK. Not proven: no apply has happened against
+a database that is not shared, so the EU leg of P1 Sprint 1 Step 5 stays owner-gated, and no real line
+has yet been written with a digest target — the TEST branch is a snapshot whose ledger stands at 020,
+so nothing is ever pending on it.
+
+## 2026-10-17 — the offer-freshness gate now sees non-seed offers of ANY class (Platform P3 Sprint 5)
+
+The gate classified in SQL with one predicate — `ingestion_record_id IS NULL` is SEED, else VERIFIED — and
+decided PASS/FAIL in the same query, so a non-seed offer whose recorded provenance is not `VERIFIED` had no
+class of its own: it rode the seed informational line and could age out unseen (OG-52’s P4 clause).
+
+What landed, DB-free except the one read-only proof:
+
+- `scripts/lib/offer-freshness.js` — the pure half. `classifyOffer(row)` -> `SEED | VERIFIED | UNVERIFIED |
+  NON_SEED_UNVERIFIED`; `evaluateFreshness(rows, { failDays, asOf })` -> `{ failing, warnings, firstExpiry,
+  seedFirstExpiry, counts }`. `asOf` is REQUIRED, so it reads no clock and the same rows always give the same
+  verdict; `failing`/`warnings` are sorted by id (code-unit, never `localeCompare`).
+- `scripts/lib/offer-freshness.test.js` — 10 tests in `test:scripts` covering the plan’s scenarios 5.1-5.6.
+- `scripts/check-offer-freshness.js` now reads ROWS and delegates; its printed output and exit contract are
+  unchanged.
+
+Age basis differs by class, deliberately: a SEED row is measured from `last_checked_at` (the Stage 1 column,
+and the one seed 006 re-stamps), so the gate’s own historical numbers reproduce exactly; an INGESTED row is
+measured from `fetched_at`, the real fetch, because `last_checked_at` is maintenance state a re-stamp can move
+with no fetch having happened. A non-seed row with NULL `fetched_at` has no computable age: it is REPORTED
+(`UNKNOWN_AGE`) and never counted fresh.
+
+Schema note the plan got wrong, corrected here: `store_offer` has NO `offer_class` column. That vocabulary
+lives on `build_component` (migration 018), a SNAPSHOT of a chosen offer, while the plan listed `offer_class`
+among `store_offer`’s consumed fields. So every LIVE non-seed row classifies `NON_SEED_UNVERIFIED` — which is
+exactly the class the old gate could not separate, and which now fails on age like any other non-seed row. The
+two explicit classes (`VERIFIED` / `UNVERIFIED`) light up the moment a class is recorded, with no code change.
+
+Verified 2026-10-17:
+
+- `npm run test:scripts` 259 pass / 0 fail (249 before; 10 new).
+- `node scripts/check-offer-freshness.js --fail-days=14` — read-only, PASS: 101 offers, 101 seed, 0 expired,
+  first SEED expiry 2026-11-03 (17.2 days). The whole output diffed against the pre-change gate at HEAD on the
+  same rows is IDENTICAL except the dotenv tip text and the pg warning’s PID, so the change is inert on today’s
+  data — which is the point.
+- Both directions on fixtures, not just the happy one: a stale non-seed row of EITHER non-verified class FAILS
+  (`EXPIRED`), a fresh non-seed row passes, a NULL-`fetched_at` non-seed row WARNs, and a 400-day-old seed row
+  stays informational (`seedExpired 1`, `failing 0`).
+
+Not proven / limits: there are no live non-seed offers on either database (all 101 are seed rows), so the
+non-seed branch rests on the fixtures plus the pure helper until a real ingestion lands — which is P4’s
+retailer, not this sprint. No migration, no seed, no write.
+
+## 2026-10-17 — the production role can only be dropped after a REVOKE sweep (P3 Sprint 2 Steps 1–4)
+
+`node scripts/rehearse-api-role.js` creates `morocco_pc_api` on the TEST branch, drives the API's
+whole POST write path AS that role, asserts all 20 privilege answers against a hard-coded fixture,
+proves a row-wide UPDATE is denied, then removes the role and the rows. Green twice in a row with
+identical hard assertions (20/20 answers, 0 × `42501` across 61 statements, 25 builds, residue back
+to 0/0/0/0/0/0, role gone) — full record in `docs/API.md` § Production mode.
+
+**Tearing the role down is the part that does NOT work the obvious way.** Measured, in this order:
+
+- `DROP ROLE morocco_pc_api` → **`2BP01`** `role "..." cannot be dropped because some objects
+  depend on it`, with a DETAIL line naming every granted object (one table per line, plus
+  "privileges for schema public"). The dependencies ARE the grants: `pg_shdepend` held **44** rows
+  with `deptype = 'a'` for this role.
+- `DROP OWNED BY morocco_pc_api` → **`42501`** `permission denied to drop objects`. `DROP OWNED`
+  (like `REASSIGN OWNED`) requires MEMBERSHIP in the named role, and the owner is not a member of a
+  role it has just created — so this route is not available here at all.
+- `ALTER DEFAULT PRIVILEGES … REVOKE` alone is not enough either: the table and schema ACLs still
+  reference the role. The order that works is `REVOKE ALL ON ALL TABLES IN SCHEMA public` →
+  `REVOKE ALL ON ALL SEQUENCES IN SCHEMA public` → `REVOKE ALL ON SCHEMA public` →
+  `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES` → `DROP ROLE`. Measured:
+  `pg_shdepend` **44 → 0**, then the drop succeeds. `buildTeardownStatements()` in the rehearsal owns
+  that order and a unit test pins that the sweep contains no `DROP ROLE` inside it.
+
+**A role is a CLUSTER-scoped object, so a branch guard only guards the CONNECTION.** Neon roles are
+project-wide: the role created on the TEST endpoint was also visible from the shared endpoint while
+it existed (verified absent from BOTH after the run). Two consequences, both implemented: the
+rehearsal REFUSES to start when the role already exists — a `DROP ROLE IF EXISTS` first would
+silently destroy a role someone else created, grants and all — and it asserts the role's absence
+after its own teardown rather than trusting `DROP ROLE`'s exit code.
+
+**Two smaller traps from the same session.**
+
+- `CREATE ROLE` needs `rolcreaterole`. Measured on the branch: `neondb_owner` is `rolsuper` f,
+  `rolcreatedb` t, **`rolcreaterole` t**, so a rehearsal is possible there — but that is a separate
+  attribute from `rolcreatedb`, which is the one the replay harness documents (AGENTS.md §7 item 8).
+- dotenv 17 prints a tip banner to **STDOUT**, so any harness that prints a JSON report emits banner
+  lines first and one of them contains braces. `JSON.parse(text.slice(text.indexOf('{')))` therefore
+  lands inside the banner and throws `Expected property name`. Locate the report by its own first
+  line being exactly `{`, or strip the leading banner lines.
+
+## 2026-10-17 — fastify@5.12 DISABLES a numeric `trustProxy`, so "one hop" is not a config (P2 Sprint 2)
+
+The plan (P2 Sprint 2) was written as "set `trustProxy` to the hop count (1 on Fly.io and
+Render)". Measured against the installed `fastify@5.12.5`, a numeric hop count does NOTHING:
+`node_modules/fastify/lib/request.js` `getTrustProxyFn` returns `function () { return false }` for
+`typeof tp === 'number'`, with the comment "Hop-count-only trust cannot validate the immediate
+peer. Fail closed so direct clients cannot spoof X-Forwarded-* values by supplying enough
+hops." Its `Server.md` says the same and directs you to an IP/CIDR list, an array, or a custom
+function that validates the proxy address.
+
+Measured with `fastify.inject` (socket `127.0.0.1`), one `X-Forwarded-For: 203.0.113.9` and a
+two-entry chain `192.0.2.55, 203.0.113.9`:
+
+| `trustProxy` | single header | chained header |
+|---|---|---|
+| `false` | `127.0.0.1` | `127.0.0.1` (ignored) |
+| `1` (number) | `127.0.0.1` | `127.0.0.1` (fail-closed) |
+| `'127.0.0.1'` | `203.0.113.9` | `203.0.113.9` (prefix ignored) |
+| `true` | `203.0.113.9` | `192.0.2.55` — the CLIENT-WRITTEN prefix wins |
+
+Consequences, all implemented:
+
+- `TRUST_PROXY` is a trusted-PROXY ADDRESS list (an address, a CIDR, or proxy-addr's
+  `loopback` / `linklocal` / `uniquelocal`), comma-separated, default `false`.
+  `parseTrustProxy` in `apps/api/src/app.js` is the single owner, and `buildApp` reads
+  `env.TRUST_PROXY` exactly as it reads `ALLOWED_ORIGINS`, so `server.js` is unchanged.
+- A hop count and `true` are REFUSED at startup with a message naming the supported form. A
+  silent no-op is the worst outcome for a rate-limit key, and `true` is worse still: the table
+  above shows a client choosing its own bucket. A `/0` prefix is refused too — it is `true` in
+  CIDR spelling, and review caught that accepting it would have reopened the same bypass.
+- Naming the proxy is also the only shape that satisfies the sprint's anti-spoofing requirement:
+  with the peer trusted, Fastify stops at the first untrusted hop, so the client is the address
+  the proxy appended.
+
+Tests: `npm run test:api` **89 pass / 0 fail** (75 before; 3 bucket tests in
+`rate-limit.test.js`, 11 config tests in `trust-proxy.test.js`, which replaced the plan's
+non-existent `app.test.js`). The default is proven inert (two forwarded addresses share one
+30/min bucket) and a spoofed prefix is proven unable to mint one.
+
+Still open: Step 4 (measure the same behaviour on the deployed origin) needs P1's host. The
+concrete value is a per-host fact — `127.0.0.1` for a same-host reverse proxy, the proxy's CIDR
+for a private-network one — and none is recorded here because no host is chosen and this repo
+holds no provider evidence. Pin it from the deploy's own `request.ip` evidence; do not copy a
+range from memory. The contract is recorded as **Decision 49**.
+
+## 2026-10-18 — the commit writes three INSERTs instead of one per row (P1 Sprint 2)
+
+Measured with `node scripts/measure-api-pass-phases.js --budget=20000 --use-case=GAMING --model=launch-v2@1.0.0`
+on the TEST branch (the pin is named because `seed-minimal-v1@1.0.0` is INACTIVE there and a pin never
+activates a model). One pass: 25 assembled builds, 1 selected build of 8 components, 2 rejections.
+
+| measurement | before | after |
+|---|---|---|
+| `engine.commit` statements | 19 | **11** |
+| `engine.commit` ms | 3 331 | 1 838 |
+| whole-pass statements | 57 | 49 |
+| whole-pass wall ms | 12 435 | 12 007 |
+
+The 19 were BEGIN, the two Decision 19.2 guards, one candidate + 8 component + 1 result INSERT (one per
+row), the Decision 46 floor UPDATE, one provenance UPDATE per rank, the Decision 31 rejection DELETE, 2
+rejection INSERTs and COMMIT.
+
+**The sprint's "<= 6 statements" target counts the writers, and that set is now AT MOST 5** — 3 ranked
+INSERTs (one each for candidates, components and results) plus the unconditional rejection DELETE and one
+rejection INSERT — where the same set issued 13 for the pass measured here (1 + 8 + 1 + the two per-row
+rejection INSERTs + the DELETE). That is the set the sprint's own scenarios 2.1 and 2.4 pin (3 INSERTs for a
+3-build pass with rows 3 / 22 / 3; DELETE + 1 INSERT for 4 rejections). It is NOT the whole transaction: the
+remaining statements are BEGIN, the two guards and COMMIT (4, structural) plus `persist-pass-facts`' floor
+UPDATE and one provenance UPDATE per rank, which Decision 46 added after this sprint was written and which is
+outside its file list. Batching that writer too would put the whole commit at 12 for a 3-build pass, and is a
+separate change.
+
+Row-for-row identity was PROVEN on the branch, not asserted — and the first attempt at it was wrong in a way
+worth keeping: with no `asOf`, the transaction clock leaks into `price_checked_at` and (through offer
+freshness) into the score, and two runs of the SAME code differed by 0.01 on one build, which reads exactly
+like a regression caused by the change under test. With Decision 38's `asOf` pinned, a throwaway probe ran one
+real pass through `runRecommendationFullRun` and dumped the persisted rows ordered by rank/role/product with
+generated ids excluded (candidates; components with price, provenance and NULLs; results with rank,
+strategy_key and explanation; rejection reasons). Two runs of the ORIGINAL writers produced byte-identical
+dumps (the control), two runs of the batched writers did too, and all four dumps agree. Cleanup was by
+captured id and residue was 0 every time — an unmarked `recommendation_query` row blocks the golden harness
+preflight.
+
+Gates, all on the batched code: `npm run test:unit` **1171 pass / 0 fail / 0 cancelled on BOTH Node 24 and
+Node 22** (one pre-existing assertion in `full-run.test.js` counted result INSERTs and now counts the rows in
+the single batched statement instead); `node scripts/test-orchestrator-commit.js` **51 pass / 0 fail** — the
+batched SQL against the real schema, which is what validates the enum casts and the NULL array elements;
+`node scripts/test-orchestrator-full-run.js --model=launch-v2@1.0.0` **36 pass / 0 fail**; `npm run verify:pi1
+-- --model=launch-v2@1.0.0` **PASS** (0 drifted of 25 builds, GAMING and OFFICE); `npm run eval:scenarios --
+--no-baseline --no-volatile --model=launch-v2@1.0.0` **exit 0**, 55 PASS / 23 EXPECTED-RED / 3 UNKNOWN — and
+all 81 of its assertion rows are IDENTICAL to a control run on HEAD's writers, so the difference against the
+56 / 22 / 3 recorded in `AGENTS.md` is the pre-existing post-Decision-41 drift, not this change.
+
+One environment note: `verify:pi1`, `eval:scenarios` and `test-orchestrator-full-run.js` all default to the
+`seed-minimal-v1@1.0.0` pin and therefore REFUSE on the TEST branch until given `--model=launch-v2@1.0.0`
+(the pin fails closed and prints the active list). That is the pin behaving as documented, not a defect, but
+it means those three gates must be invoked with an explicit pin on this branch.
+
+## 2026-10-18 - the frontend-development write target is its own Neon branch
+
+The owner decided two things this session: the catalogue is **public but unlisted** for the beta
+(served to the frontend, unlinked and `noindex` until prices are `VERIFIED` - a product/SEO posture,
+not an API gate, since the API has no auth and CORS is not access control), and indicative prices MAY
+be displayed behind the API disclaimer and a beta label. That closed **P2 Sprint 3 Step 7** (doc-only:
+`docs/API.md`, `PLAN_PLATFORM_P2.md`, `PLAN_PLATFORM_STATUS.md`, `docs/OPEN_GAPS.md` OG-52); the roll-up
+now reads 14 DONE / 4 PARTIAL / 3 NOT STARTED.
+
+The same sitting created the frontend write target, because every distinct POST from a frontend leaves an
+unmarked `recommendation_query` row and `npm run eval:scenarios` refuses to run while one exists:
+
+- **Branch** `frontend-dev` (`br-proud-frog-ax80h3nv`), created from `test` (`br-odd-breeze-axklg9xd`) in
+  project `gentle-fog-04615130` on the same instance. Verified after creation: ledger tail
+  `022_recommendation_preset.sql`, `launch-v2@1.0.0` ACTIVE, 100 products, 101 offers, 0 queries.
+- **Env file** `.env.frontend-dev` (gitignored, added to `.gitignore`). `TEST_DATABASE_URL` points at the
+  new branch, `DATABASE_URL` stays the main branch so `resolveTestDbUrl` passes on distinct hosts,
+  `API_ALLOW_SHARED=0`, `PORT=3100`, `ENGINE_VERSION=frontend-dev`,
+  `ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000`.
+- **Start** `set -a; . ./.env.frontend-dev; set +a; node apps/api/src/server.js` (the shared `.env` is not
+  touched, so no other thread is affected).
+
+**The trap that cost a cleanup: an unquoted `&` in a sourced env file backgrounds the assignment.** The
+first file wrote `TEST_DATABASE_URL=postgresql://...?sslmode=require&channel_binding=require` unquoted;
+`set -a; . file` therefore backgrounded the assignment in a subshell, left `TEST_DATABASE_URL` UNSET in the
+parent, and `dotenv` inside `server.js` fell back to the main branch. Two POSTs landed on the TEST branch
+before that was noticed (1 profile, 1 query, 1 candidate, 8 components, 1 result, 2 rejections). They were
+deleted inside one transaction in FK order - `build_rejection` -> `recommendation_result` ->
+`build_component` (via its candidate) -> `build_candidate` -> `recommendation_query` ->
+`recommendation_profile` - and the TEST branch was re-measured at 0/0/0/0/0/0. Note the FK column is
+`recommendation_query.recommendation_profile_id`, NOT `profile_id`. The env file now quotes every value.
+
+**Isolation proven, not assumed** (2026-10-18, `launch-v2@1.0.0`, engine `frontend-dev`): a POST answers
+**201** in 8.3 s with 1 build / 8 components / 19 694 MAD, a repeat answers **200 `reused: true` with the
+same id** in 0.94 s, `GET /v1/recommendations/:id` answers 200 with the persisted disclaimer in 0.29 s, and
+`GET /v1/presets?use_case=GAMING&currency=MAD` answers 200 with an EMPTY list and a `catalog_version`
+(the route works; the ribbon is ungenerated). After the run: `recommendation_query` = 1 on `frontend-dev`,
+**0 on the TEST branch and 0 on shared**, with all six Layer 4 counts 0 on both.
+
+One operational note for monitors: the FIRST `/v1/health` after a cold Neon compute can report
+`db: "down"` because the ping timeout is 2 s; a warm retry answers `db: "ok"`.
+
+## 2026-10-18 - the EU co-location target exists, and the parity gate caught a replay drift
+
+Platform P1 Sprint 1 **Steps 4-6 landed** (owner-authorised): the EU Neon project, the full replay
+into it, and a parity gate that went DIFF -> MATCH only after a corrective seed existed. Steps 7-9
+(hosting account, deploy, re-measure) are untouched, and `flyctl` / `docker` are still not installed
+on this box.
+
+- **Project** `morocco-pc-eu` (`lingering-heart-20497074`), region `aws-eu-central-1` (Frankfurt),
+  Postgres **18** matching the current project, default branch `main` (`br-sweet-voice-b9fv6xx1`),
+  restore point `pre-p1-replay` (`br-delicate-frog-b9d7n793`, no compute). Created through the Neon
+  API: `list_regions` is HTTP 404 for this organization key, so the region id was passed explicitly
+  and verified from the create response. No URL is recorded in the repository.
+- **Credentials** live in a gitignored `.env.eu` (`TARGET_DATABASE_URL` pooled, `TARGET_DIRECT_URL`
+  direct) - deliberately NOT the shared `.env`, because `run-seeds.js` and the write-capable tests
+  read `DATABASE_URL` from there and would otherwise be silently retargeted at a non-dev database.
+  Values are single-quoted: the URLs carry `&`, and an unquoted `&` in a sourced file backgrounds the
+  assignment (the same trap as `.env.frontend-dev`).
+- **Replay**: 22 files MIGRATED, ledger `--check` exit 0, `AUDIT TARGET: db:2d66f26d7ddc` (distinct
+  from shared `db:54ff6ea3f6e6` and TEST `db:798b3aa04976`), then every seed file with
+  `Seed rows: products=100, offers=101, assessments=280`. The 22 audit lines are appended to the
+  tracked `database/migration-applies.jsonl`.
+
+**THE DIFF, and why it mattered.** The parity gate returned `rows:scoring_model` **2 vs 5** with
+every other check MATCH. Seeds 014-016 each INSERT a new ACTIVE `launch-v2` version (1.1.0 / 1.2.0 /
+1.3.0) and declare themselves "TEST branch only" in their own headers - but `run-seeds.js` has no
+branch awareness, so a fresh replay produces FOUR active models. The API resolves its model with
+`ORDER BY created_at DESC, id ASC LIMIT 1`, so it would have served **`launch-v2@1.3.0`** (the E3
+pair-quota experiment, `max_builds_per_pair: 1`) where the branch serves **`launch-v2@1.0.0`** -
+both measured 2026-10-18. A different scoring model under the same name, not a cosmetic count: the
+gate's "do not deploy on a DIFF" was doing its job.
+
+**The fix is seed 017** (`database/seeds/017_retire_launch_v2_experiment_models.sql`): a guarded
+DELETE of the three experiment versions, skipping any row a `recommendation_query` points at
+(`scoring_model` has exactly one referencing FK, NO ACTION). **Proven by FIRE** inside a rolled-back
+transaction: with one synthetic query referencing 1.3.0, the DELETE removed 2 rows and skipped that
+one. **Idempotent**: a full `run-seeds.js` run deletes 3; a second run deletes 0 and the end state
+stays 2 rows / 1 active. The mechanism is worth keeping: 014-016 re-INSERT on the second run (their
+guard is "this version does not exist") and 017 deletes them again in the same pass - which is why a
+new file is the fix and editing 014-016 would not have removed the rows the EU target already held.
+
+**A latent landmine on the TEST branch, closed by the same file.** The documented cure for the
+30-day offer-freshness cliff is re-applying seed 006, and `run-seeds.js` applies the whole set - so
+the next branch re-seed would silently have inserted the three experiment rows and switched the
+branch's served model to 1.3.0.
+
+**Parity after the fix: `RESULT: MATCH`, exit 0** - 22-file ledger and tail `022_recommendation_preset.sql`
+on both sides, 43 tables, shape digest `2006504971c70a90` on both, every row count equal, and the EU
+target's served model is `launch-v2@1.0.0`, the one the branch serves. `CONTEXT.md` carries a dated
+correction on the Decision 40 bullet and `docs/OPEN_GAPS.md` OG-52 records both the partial seed
+retirement and the co-location progress.
+
+**What Steps 7-9 still need:** a hosting account (Fly `fra` or Render `frankfurt`), the deploy, and
+the before/after measurement at the recorded pin - `docs/RECIPES/deploy-eu-colocation.md`, whose §7
+now effectively requires seed 017 to have run before parity can pass.
+## 2026-10-18 - a fixture cleanup that runs at the START of a run cannot survive a crash (OG-51)
+
+`scripts/test-compatibility.js` leaked four `TestCompat*` products into the shared catalog, and the
+reason is structural rather than careless: its cleanup block ran at the BEGINNING of a run, so the
+only run that can clean up is one that starts. A run killed after the inserts left the rows and
+nothing ever removed them again. The fix is a `finally`, and the first run after it is its own
+proof (`cleanup: 0 TestCompat product row(s) remain`, with residue asserted 0 in products,
+families, the manufacturer/socket/chipset/memory_type reference rows and `spec_provenance`).
+
+**Measuring it changed the shape of the fix twice.** (1) The leak was **27 rows across 7 tables**,
+not the four products the gap named: the fixture also creates four `product_family` rows, a
+manufacturer, a socket, a chipset, a `memory_type`, one spec row per product, five support rows
+and one `spec_provenance` row. A cleanup that deleted only the four `product` rows would have hit
+`ON DELETE NO ACTION` and reported success while deleting nothing - the AGENTS section 7 item 11
+trap, this time on the shared DB. (2) The legacy `DELETE FROM spec_provenance WHERE target_table
+IN (...)` was namespace-blind: it matched EVERY row of four target tables, so on a branch that
+carries real provenance a test run would have erased another product's provenance. It is now
+driven by the support-row ids it is about to delete. A fixture cleanup has to be keyed to the
+fixture's own rows, never to a table list.
+
+**Shared and the branch now agree on the counts the gate reads:** `product` 104 -> 100,
+`motherboard_spec` 8 -> 7 with all 7 carrying the dims, and `check-deferred-rules.js` prints
+`boards memory limits 7/7` where it printed 7/8. `component_assessment` 280, `store_offer` 101,
+`cpu_motherboard_support` 21 and `case_radiator_support` 59 were re-read after the delete and are
+unchanged, which is the check that the transaction removed fixtures and nothing else.
+
+**Operational notes.** The guard is `getWriteTestDbUrl()`, so refusing the shared target is a
+pre-connection throw - proven by exporting `TEST_DATABASE_URL` equal to the shared URL, which
+exits 1 with `TEST_DATABASE_URL must not target the shared database` and connects to nothing.
+Capture a URL for that kind of test with `dotenv.config({ quiet: true })`: dotenv's tip line goes
+to stdout, so a plain `node -e` inside `$(...)` yields `TEST_DATABASE_URL is not a valid URL` - a
+harness artifact that reads exactly like a guard failure. And the session opened by that config
+object reports `search_path = "$user", public` on this branch, so no `SET search_path` is needed
+here (the `pg_temp` note belongs to the manual seed-apply pattern, not to the lib).
+## 2026-10-18 - the scheduled CI job ran for the first time, and one of its two gates cannot pass yet
+
+`recurring-gates` was dispatched on `agent/platforms` - its FIRST execution ever (the schedule has
+never fired and there was no earlier `workflow_dispatch`). Measured from the run log:
+
+  * `Assert secrets are present` **PASS** - both repository secrets exist, which had been an open
+    doubt since the job was written.
+  * `check-offer-freshness.js --fail-days=14` **PASS** ("no expired VERIFIED offers and first
+    VERIFIED expiry beyond 14 days").
+  * `verify-migrations-replay.js --test-db` **FAIL** - 4 drift classes against shared: columns
+    **377 vs 370**, checks **84 vs 79**, fks **61 vs 60**, indexes **102 vs 100**. That is exactly
+    migrations 021+022 (021: +1 column, +1 CHECK; 022: +6 columns, +4 CHECKs, +1 FK, +2 indexes),
+    i.e. the DOCUMENTED branch-only state - the runbook's "red by construction" is now measured
+    rather than predicted.
+  * `npm run test:api:db` was **SKIPPED**, because the replay step failed first.
+
+**A red step must not hide an independent one.** The two gates share nothing but the checkout, so
+the api:db step now carries `if: always() && steps.deps.outcome == 'success'` - gated on the
+dependency install, because `always()` alone would run it after a failed `npm ci` and report a
+second, misleading failure. The `npm ci` step gained `id: deps` to make that condition expressible.
+
+**And the DB suite could not have passed anyway: it runs its files in PARALLEL against ONE
+database.** `apps/api/test/run-db-tests.js` spawned `node --test <files>` with Node's default file
+concurrency, while `recommendations.db.test.js` asserts on WHOLE-TABLE counts (that is its residue
+check). Measured 2026-10-18: `npm run test:api:db` = **8 passed / 1 failed** ("the new deploy wrote
+exactly one query row", 3 !== 4), and the same files with `--test-concurrency=1` = **9 passed / 0
+failed**. A step-by-step replay of steps 1a-1e (diagnostic scratch script, deleted after use) showed
+the flow itself is correct: first POST 201 and +1 query row, identical POST 200 `reused: true` and
++0 rows, different budget 201 and +1, redeploy as `db-test-sha-next` 201 and +1. The count moved
+because a concurrent `presets.db.test.js` had inserted or deleted a query row under it - so the
+launcher now pins `--test-concurrency=1`. Cost measured: 85 s for the suite instead of ~30 s.
+
+**The general lesson:** a whole-table count is a claim about the entire database, so a suite that
+asserts one cannot run concurrently with any other writer - not another test file, and not another
+agent. Order the files, or scope the count to the rows the test owns.
+
+## 2026-10-18 (2) - the second dispatch: api:db is GREEN on the runner, the replay is the only red
+
+A second `workflow_dispatch` on `agent/platforms` (run **39120485573**, SHA `671b028`) re-ran the two
+gates after the launcher and step-order fix. Result: **`unit-and-docs` success**, `recurring-gates`
+failure - and the failure is now exactly ONE step:
+
+| step | outcome |
+|---|---|
+| Assert secrets are present | PASS |
+| `npm ci` | PASS |
+| `check-offer-freshness.js --fail-days=14` | PASS |
+| `verify-migrations-replay.js --test-db` | FAIL - the same 4 drift classes (columns 377 vs 370, checks 84 vs 79, fks 61 vs 60, indexes 102 vs 100) |
+| `npm run test:api:db` | **PASS - `test:api:db: 9 passed, 0 failed`** |
+
+So `--test-concurrency=1` was the whole defect: the runner reproduced the local 9/0 exactly, and the
+`if: always() && steps.deps.outcome == 'success'` guard did what it was added for - the independent
+DB gate reported instead of being skipped. `# pass 9` / `# fail 0` are in the run log at the api:db
+step, so this is the child suite's own summary, not the launcher's opinion.
+
+The remaining red is migration-ledger drift, and it can only close by applying **021** and **022** to
+the SHARED database - an owner-approved apply that needs a recorded Neon restore point (AGENTS §8).
+Nothing in the code should be changed to make it green: switching `--reference=test` would make the
+gate compare the branch to itself, i.e. delete the check. Workaround for the interim: read the job as
+green-except-replay, because `if: always()` guarantees the api:db verdict is always present.
+
+**Worth remembering:** a downloaded job log is served as PLAIN TEXT (with a UTF-8 BOM) even though
+`curl` saves it without a `.txt` extension; `unzip` on `/actions/jobs/{id}/logs` fails with
+"End-of-central-directory signature not found" because there is no archive. Cat/grep it directly.

@@ -1,5 +1,9 @@
 'use strict';
 
+const crypto = require('node:crypto');
+
+const { normalizeTarget } = require('./db-url');
+
 // scripts/lib/migrations.js — pure helpers for the applied-migrations ledger
 // (gap OG-14, `docs/OPEN_GAPS.md`).
 //
@@ -42,10 +46,67 @@ const FILENAME_RE = /^\d+_.*\.sql$/;
 const APPLY_LOG_FIELDS = ['applied_at', 'filename', 'git_sha', 'note', 'restore_point', 'target'];
 
 /**
- * Permitted `target` values. `test` is accepted for symmetry; a TEST-branch
- * apply is deliberately NOT logged (the branch ledger is disposable).
+ * The `target` values of lines written BEFORE 2026-10-15, when the runner
+ * inferred the role from which flag was used (`--test-db` or not) and so
+ * labelled every apply `shared`. A TEST-branch apply is still deliberately NOT
+ * logged (the branch ledger is disposable).
+ *
+ * READERS must still accept these: the tracked log is append-only and its four
+ * existing lines are history, never rewritten. The FORMATTER refuses them, so
+ * a role name cannot come back in through a write.
  */
-const APPLY_LOG_TARGETS = ['shared', 'test'];
+const LEGACY_APPLY_LOG_TARGETS = ['shared', 'test'];
+
+/**
+ * How much of the digest is kept: 12 hex characters = 48 bits. Enough that
+ * distinct targets cannot collide in practice, short enough to read and to
+ * compare by eye in a log line.
+ */
+const TARGET_DIGEST_LENGTH = 12;
+
+/** The only shape a NEW audit line may carry: `db:` + 12 lowercase hex. */
+const TARGET_DIGEST_RE = /^db:[0-9a-f]{12}$/;
+
+/**
+ * The audit-log `target` for one connection: `db:<12 hex>`, the first 12
+ * characters of `sha256("<normalized host>/<database>")`.
+ *
+ * Why a digest rather than a name: the runner holds no list of known
+ * databases, so every label it writes for itself is an INFERENCE - and it was
+ * a false one the moment `DATABASE_URL` pointed somewhere else, which is
+ * exactly what P1's EU project will do. A digest is derivable from the
+ * connection string alone, so a script can recompute it from `DATABASE_URL`
+ * and decide whether a line is about THIS database, while the log still never
+ * carries a URL, a host or a credential. The database NAME is part of the
+ * input because two databases can share one Neon endpoint (the replay scratch
+ * database and the branch database do).
+ *
+ * What it costs, stated rather than hidden: this is 48 bits of a hash whose
+ * input is a hostname. A hostname is not a secret - it appears in connection
+ * errors and in the docs - and the digest is not reversible in general; but a
+ * reader holding a candidate hostname can CONFIRM a match. That is the
+ * deliberate trade for a target a script can check.
+ *
+ * @param {string} connectionString a PostgreSQL connection string
+ * @returns {string} `db:<12 hex>`, safe to persist in a tracked file
+ * @throws {TypeError} when the string is missing or its target is unidentifiable
+ */
+function applyLogTarget(connectionString) {
+  if (typeof connectionString !== 'string' || connectionString.trim() === '') {
+    throw new TypeError('applyLogTarget requires a connection string');
+  }
+  let target;
+  try {
+    target = normalizeTarget(connectionString);
+  } catch (_err) {
+    throw new TypeError('applyLogTarget could not parse a connection target');
+  }
+  if (!target.host || !target.database) {
+    throw new TypeError('applyLogTarget found no database in the connection target');
+  }
+  const digest = crypto.createHash('sha256').update(target.host + '/' + target.database).digest('hex');
+  return 'db:' + digest.slice(0, TARGET_DIGEST_LENGTH);
+}
 
 /** Audit-log line terminator — CRLF, matching the rest of the tree. */
 const APPLY_LOG_EOL = '\r\n';
@@ -146,11 +207,15 @@ function shouldRefuseSharedApply(opts) {
 }
 
 /**
- * Render ONE audit-log line: the restore point, git SHA and timestamp for a
- * single applied file. Pure, and whitelisted in both directions — unknown keys
- * are REFUSED rather than dropped, so a caller cannot smuggle a connection
- * string into a tracked file, and an entry that would be incomplete is refused
- * instead of written.
+ * Render ONE audit-log line: the restore point, git SHA, timestamp and target
+ * identity for a single applied file. Pure, and whitelisted in both directions
+ * — unknown keys are REFUSED rather than dropped, so a caller cannot smuggle a
+ * connection string into a tracked file, and an entry that would be incomplete
+ * is refused instead of written.
+ *
+ * `target` must be a digest from applyLogTarget (see it for what that leaks and
+ * why an inferred role name is no longer acceptable); the values of
+ * LEGACY_APPLY_LOG_TARGETS appear only in lines written before 2026-10-15.
  *
  * Returned WITHOUT a trailing terminator; the caller joins lines with
  * APPLY_LOG_EOL.
@@ -168,8 +233,10 @@ function formatApplyLogLine(entry) {
   if (typeof e.filename !== 'string' || !FILENAME_RE.test(e.filename)) {
     throw new TypeError('audit-log entry needs a migration filename (NNN_name.sql)');
   }
-  if (!APPLY_LOG_TARGETS.includes(e.target)) {
-    throw new TypeError(`audit-log target must be one of ${APPLY_LOG_TARGETS.join(', ')}`);
+  // A role name is refused on WRITE: accepting it would let the inference this
+  // digest replaced come back in through the formatter.
+  if (typeof e.target !== 'string' || !TARGET_DIGEST_RE.test(e.target)) {
+    throw new TypeError('audit-log target must be a database digest (db:<12 hex>) from applyLogTarget');
   }
   if (typeof e.git_sha !== 'string' || e.git_sha === '') {
     throw new TypeError('audit-log entry needs a git_sha ("unknown" when unavailable)');
@@ -201,7 +268,10 @@ module.exports = {
   LEDGER_TABLE,
   FILENAME_RE,
   APPLY_LOG_FIELDS,
-  APPLY_LOG_TARGETS,
+  LEGACY_APPLY_LOG_TARGETS,
+  TARGET_DIGEST_LENGTH,
+  TARGET_DIGEST_RE,
+  applyLogTarget,
   APPLY_LOG_EOL,
   pendingMigrations,
   staleLedgerEntries,

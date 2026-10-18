@@ -15,7 +15,12 @@ Schema change = **new sequential file**, never edit a committed one (`AGENTS.md`
    `--restore-point=<id>`** — a Neon restore point id matching `^[A-Za-z0-9_-]{8,}$`. A
    placeholder such as `<PASTE ID HERE>` fails that shape on purpose. Without a valid id the
    runner prints the pending files and exits non-zero. The id is recorded (with the git SHA and
-   a timestamp) in `database/migration-applies.jsonl`, one line per applied file.
+   a timestamp) in `database/migration-applies.jsonl`, one line per applied file. Add
+   `--note="<what this apply is for>"` whenever the target is NOT the shared dev database: the
+   log's `target` field can only be `shared` or `test`, so the note is the one field that says
+   which database the line is about (a P1 EU-project apply would otherwise be logged as
+   `shared`). The value is kept verbatim; a blank `--note=` is a usage error, exit 2. A
+   `--test-db` run writes no audit line, so the flag does nothing there.
    *Why a log file and not migration `019` adding `applied_by`/`notes` to `schema_migrations`:*
    `verify-migrations-replay.js` replays the raw files into an empty database and NEVER creates
    `schema_migrations` (the runner does), so a `019 ALTER TABLE schema_migrations` would abort
@@ -39,6 +44,24 @@ is refused rather than dropped, so a connection string, user or hostname cannot 
 tracked file. `restore_point` is `null` only for the 017 backfill — applied before the guard
 existed — and a null restore point **requires** a non-empty `note` saying why.
 
+`target` is what makes a line self-describing: `db:<12 hex>`, the first 12 hex characters of
+`sha256("<normalized host>/<database>")`, from `applyLogTarget` in the same module. It is derived from
+the connection string, so a reader RECOMPUTES it instead of trusting prose (`node
+scripts/run-migrations.js --check` prints the digest of whatever `DATABASE_URL` holds, in any mode and
+before the restore-point guard, so even a refused apply names its target). The `-pooler` suffix is
+normalized away, so the pooled and direct hosts of one endpoint give ONE value, while two databases on
+one endpoint give two.
+
+Lines written before 2026-10-15 carry the role name the runner INFERRED from the flag (`shared`, or
+`test`). Those are history and are read, never rewritten: `LEGACY_APPLY_LOG_TARGETS` accepts them and
+the formatter refuses to WRITE one, so the inference cannot come back in through a write.
+
+Recorded disclosure: this is 48 bits of a hash whose input is a hostname. The input is not a secret
+(hosts appear in connection errors and in these docs) and the digest is not reversible in general, but
+someone holding a candidate hostname can CONFIRM a match. That is the deliberate trade for a target a
+script can check, and it is why no URL, host or credential is persisted — the field whitelist still
+refuses one.
+
 The apply prints `Reminder: commit database/migration-applies.jsonl ...`; commit that line with the
 apply rather than later.
 
@@ -52,5 +75,15 @@ Verify:
 npm run gen:schema                              # regenerates both generated docs
 npm run verify:docs                             # migrations-contiguous must stay PASS
 node scripts/run-migrations.js --check          # no pending migrations (ledger gate)
+npm run verify:replay -- --test-db --reference=test   # fresh replay vs the TEST branch: 0 drift
 npm run test:unit                               # 0 failures
 ```
+
+## A TEST-first migration reports drift against the SHARED reference
+
+`verify-migrations-replay.js` diffs the fresh replay against `DATABASE_URL` unless `--reference=test` is
+passed. So a migration applied on the branch BEFORE the shared apply makes the default run report drift, and
+the nightly `recurring-gates` job fails at that step. That is the gate working, not a broken migration: with
+`--reference=test` the question is "does the tree replay cleanly and match the branch"; by default it is "does
+shared still match the tree". Clear it by landing the shared apply (with a recorded `--restore-point`), never by
+weakening the gate.

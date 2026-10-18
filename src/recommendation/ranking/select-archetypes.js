@@ -31,10 +31,14 @@ const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors')
  * leaves no gap in the sequence.
  *
  * Persistence note: Engine 5b writes recommendation_result rows from the
- * explained array; strategy_key persistence needs Platform migration 019
- * (recommendation_result.strategy_key), which does NOT exist yet. This module
- * therefore only RETURNS the strategy keys; no writer change is made in this
- * epic. REASON_CODES values are stable string identifiers, not user prose.
+ * explained array (persist-ranked.js); this module only RETURNS the strategy
+ * keys - it writes nothing, and still does not. The column it always needed,
+ * recommendation_result.strategy_key, arrived in Platform migration 019
+ * (2026-10-14; applied on the TEST branch that day and on the SHARED database 2026-10-15), and the write is owned by
+ * persist-pass-facts.js, which receives these keys as passFacts.strategyKeys
+ * through orchestrator/full-run.js and persists each one onto the rank it
+ * nominated (Decision 46). REASON_CODES values are stable string identifiers,
+ * not user prose.
  */
 
 const PERFORMANCE_FLOOR = 0.85;

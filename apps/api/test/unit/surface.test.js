@@ -2,7 +2,11 @@
 
 /**
  * apps/api/test/unit/surface.test.js - server-wide behaviour that is not a
- * route contract: the database-down health verdict and the CORS policy.
+ * route contract: the database-down health verdict.
+ *
+ * The CORS policy lives in `cors.test.js` (Platform P2 Sprint 4): it used to be
+ * two tests here, and moving them keeps one owner for one behaviour rather than
+ * two files asserting the same header.
  */
 
 const test = require('node:test');
@@ -26,28 +30,4 @@ test('health reports db down when there is no pool at all', async () => {
   const response = await app.inject({ method: 'GET', url: '/v1/health' });
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().db, 'down');
-});
-
-test('CORS is disabled when ALLOWED_ORIGINS is empty - no header at all', async () => {
-  const app = stub.createTestApp();
-  const response = await app.inject({
-    method: 'GET',
-    url: '/v1/health',
-    headers: { origin: 'https://evil.example' },
-  });
-
-  assert.equal(response.statusCode, 200);
-  assert.equal(response.headers['access-control-allow-origin'], undefined);
-});
-
-test('CORS reflects a configured origin', async () => {
-  const app = stub.createTestApp({ env: { ALLOWED_ORIGINS: 'https://shop.example' } });
-  const response = await app.inject({
-    method: 'GET',
-    url: '/v1/health',
-    headers: { origin: 'https://shop.example' },
-  });
-
-  assert.equal(response.statusCode, 200);
-  assert.equal(response.headers['access-control-allow-origin'], 'https://shop.example');
 });

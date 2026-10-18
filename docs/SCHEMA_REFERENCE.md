@@ -8,7 +8,7 @@ live database (`information_schema` / `pg_catalog`). Per `AGENTS.md` section 9,
 generated lookup so "does this column exist?" never requires reading 11 SQL files
 (the question that produced audit finding D2).
 
-<!-- schema-digest: 8f2a845486839218 -->
+<!-- schema-digest: e56483044956491d -->
 
 ## Enum vocabularies (14)
 
@@ -579,7 +579,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 
 **Indexes:** `idx_price_history_observed_at` · `idx_price_history_store_offer_observed` · `price_history_pkey`
 
-### `product` (9 columns)
+### `product` (14 columns)
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -592,10 +592,19 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `lifecycle_status` | USER-DEFINED | NO | 'ACTIVE'::lifecycle_status |
 | `created_at` | timestamp without time zone | NO | now() |
 | `updated_at` | timestamp without time zone | NO | now() |
+| `display_name` | text | YES |  |
+| `slug` | text | YES |  |
+| `image_url` | text | YES |  |
+| `image_source` | text | YES |  |
+| `image_licence_note` | text | YES |  |
 
 **Foreign keys:** `product_manufacturer_id_fkey`: `manufacturer_id` → `manufacturer.id` (ON DELETE NO ACTION) · `product_product_family_id_fkey`: `product_family_id` → `product_family.id` (ON DELETE NO ACTION)
 
-**Indexes:** `product_pkey`
+**CHECK constraints:**
+
+- `chk_product_slug_format` — CHECK ((slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text))
+
+**Indexes:** `product_pkey` · `uq_product_slug`
 
 ### `product_candidate` (16 columns)
 
@@ -727,7 +736,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 
 **Indexes:** `idx_recommendation_profile_name` · `idx_recommendation_profile_use_case` · `recommendation_profile_pkey`
 
-### `recommendation_query` (9 columns)
+### `recommendation_query` (10 columns)
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -740,6 +749,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `priority` | integer | YES |  |
 | `resolution` | text | YES |  |
 | `created_at` | timestamp with time zone | NO | now() |
+| `budget_floor` | jsonb | YES |  |
 
 **Foreign keys:** `recommendation_query_recommendation_profile_id_fkey`: `recommendation_profile_id` → `recommendation_profile.id` (ON DELETE NO ACTION) · `recommendation_query_scoring_model_id_fkey`: `scoring_model_id` → `scoring_model.id` (ON DELETE NO ACTION)
 
@@ -749,7 +759,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 
 **Indexes:** `idx_recommendation_query_profile_id` · `idx_recommendation_query_scoring_model_id` · `recommendation_query_pkey`
 
-### `recommendation_result` (6 columns)
+### `recommendation_result` (8 columns)
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -759,6 +769,8 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `rank` | integer | YES |  |
 | `explanation` | text | YES |  |
 | `created_at` | timestamp with time zone | NO | now() |
+| `engine_version` | text | YES |  |
+| `strategy_key` | text | YES |  |
 
 **Foreign keys:** `recommendation_result_build_candidate_id_fkey`: `build_candidate_id` → `build_candidate.id` (ON DELETE NO ACTION) · `recommendation_result_recommendation_query_id_fkey`: `recommendation_query_id` → `recommendation_query.id` (ON DELETE NO ACTION)
 

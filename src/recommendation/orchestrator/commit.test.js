@@ -12,6 +12,13 @@
 // and the error precedence (the transaction error always wins over a failing
 // ROLLBACK). persistRanked behaviour is covered by persist-ranked.test.js.
 //
+// Decision 46 adds one more thing the wrapper owns: the OPTIONAL 5th
+// argument `passFacts`, threaded to persistence/persist-pass-facts inside the
+// same transaction. Its tests here prove the seam, not the writer (which
+// persist-pass-facts.test.js covers): `undefined` adds nothing, a supplied
+// value writes the floor and each rank between persistRanked and COMMIT, and
+// a malformed value is refused before BEGIN so no statement is issued.
+//
 // commit.js is deliberately NOT exported by the orchestrator barrel yet: this
 // pass is independently testable first, the ./run wiring is a later step.
 // ---------------------------------------------------------------------------
@@ -34,6 +41,10 @@ const {
   DELETE_BUILD_REJECTION_SQL,
   INSERT_BUILD_REJECTION_SQL,
 } = require('../persistence/persist-rejections');
+const {
+  UPDATE_RECOMMENDATION_QUERY_FLOOR_SQL,
+  UPDATE_RECOMMENDATION_RESULT_FACTS_SQL,
+} = require('../persistence/persist-pass-facts');
 const { ERROR_CODES, CandidateSelectionError } = require('../candidates/errors');
 
 /**
@@ -494,11 +505,167 @@ test('commit.js imports exactly the error vocabulary and the writer modules', ()
   const requires = [...SOURCE.matchAll(/require\('([^']+)'\)/g)]
     .map((match) => match[1])
     .sort();
-  // OG-04 adds the rejection writer; the pin is deliberately EXACT so a new
-  // import cannot slip in unreviewed.
+  // OG-04 added the rejection writer and Decision 46 the pass-facts writer;
+  // the pin is deliberately EXACT so a new import cannot slip in unreviewed.
   assert.deepEqual(requires, [
     '../candidates/errors',
+    '../persistence/persist-pass-facts',
     '../persistence/persist-ranked',
     '../persistence/persist-rejections',
   ]);
 });
+
+// ---------------------------------------------------------------------------
+// 7. Decision 46: the additive pass-facts seam.
+//
+// The writer's own behaviour is persist-pass-facts.test.js's job. This file
+// proves only what the WRAPPER owns: where the call sits in the transaction,
+// that the 5th argument is additive (undefined adds nothing at all), that a
+// supplied value reaches the writer with the pinned query id, and that a
+// malformed value is refused before BEGIN so not even a transaction is opened.
+// ---------------------------------------------------------------------------
+
+const FLOOR = Object.freeze({ cheapest_total: 7693, within_budget: true, currency: 'MAD' });
+const PASS_FACTS = Object.freeze({
+  budgetFloor: FLOOR,
+  engineVersion: 'launch-v2@1.1.0',
+  strategyKeys: Object.freeze(['BALANCED', 'PERFORMANCE']),
+});
+/** One selected row per strategy key: the writer refuses a mismatch. */
+const PASS_FACTS_SELECTED = Object.freeze([
+  Object.freeze({ persisted_rank: 1 }),
+  Object.freeze({ persisted_rank: 2 }),
+]);
+
+test('commit: an omitted or undefined passFacts adds no statement to the existing path', async () => {
+  const three = createClient();
+  await withStubbedWriter([{ result: WRITTEN }], async () => {
+    await runRecommendationCommit(three, QUERY_ID, SELECTED);
+  });
+
+  const five = createClient();
+  await withStubbedWriter([{ result: WRITTEN }], async () => {
+    await runRecommendationCommit(five, QUERY_ID, SELECTED, undefined, undefined);
+  });
+
+  // Additive by construction: the 5th argument is invisible when it is not
+  // supplied, so every pre-046 call site is byte-identical in behaviour.
+  assert.deepEqual(sqlsOf(five), sqlsOf(three));
+  assert.deepEqual(sqlsOf(three), [
+    BEGIN_SQL,
+    LOCK_RECOMMENDATION_QUERY_SQL,
+    EXISTING_BUILD_CANDIDATES_SQL,
+    COMMIT_SQL,
+  ]);
+});
+
+test('commit: a supplied passFacts writes the floor then each rank, before COMMIT', async () => {
+  const client = createClient();
+
+  const out = await withStubbedWriter([{ result: WRITTEN }], async () =>
+    runRecommendationCommit(client, QUERY_ID, PASS_FACTS_SELECTED, undefined, PASS_FACTS)
+  );
+
+  assert.deepEqual(sqlsOf(client), [
+    BEGIN_SQL,
+    LOCK_RECOMMENDATION_QUERY_SQL,
+    EXISTING_BUILD_CANDIDATES_SQL,
+    UPDATE_RECOMMENDATION_QUERY_FLOOR_SQL,
+    UPDATE_RECOMMENDATION_RESULT_FACTS_SQL,
+    UPDATE_RECOMMENDATION_RESULT_FACTS_SQL,
+    COMMIT_SQL,
+  ]);
+
+  // The floor row is [queryId, floor] - the object passes through untouched
+  // (node-postgres JSON-encodes a plain object for jsonb; stringifying here
+  // would double-encode it).
+  assert.deepEqual(client.calls[3].params, [QUERY_ID, FLOOR]);
+  // Ranks are index + 1 over strategyKeys: the order persistRanked wrote them.
+  assert.deepEqual(client.calls[4].params, ['launch-v2@1.1.0', 'BALANCED', QUERY_ID, 1]);
+  assert.deepEqual(client.calls[5].params, ['launch-v2@1.1.0', 'PERFORMANCE', QUERY_ID, 2]);
+
+  // The return is UNCHANGED (Decision 19 seam): still the writer's own frozen
+  // result by reference. The facts are committed, not merged into this object.
+  assert.equal(out, WRITTEN);
+});
+
+test('commit: passFacts runs after persistRanked and before the rejection writer', async () => {
+  const client = createClient();
+  await withStubbedWriter([{ result: WRITTEN }], async () => {
+    // [] is an explicit "this pass rejected nothing": the rejection writer runs
+    // its replace step, so this pins the whole statement order.
+    await runRecommendationCommit(client, QUERY_ID, PASS_FACTS_SELECTED, [], PASS_FACTS);
+  });
+
+  assert.deepEqual(sqlsOf(client), [
+    BEGIN_SQL,
+    LOCK_RECOMMENDATION_QUERY_SQL,
+    EXISTING_BUILD_CANDIDATES_SQL,
+    UPDATE_RECOMMENDATION_QUERY_FLOOR_SQL,
+    UPDATE_RECOMMENDATION_RESULT_FACTS_SQL,
+    UPDATE_RECOMMENDATION_RESULT_FACTS_SQL,
+    DELETE_BUILD_REJECTION_SQL,
+    COMMIT_SQL,
+  ]);
+});
+
+test('commit: a malformed passFacts is refused before BEGIN - no statement at all', async () => {
+  for (const bad of [null, 'facts', 42, [], true]) {
+    const client = createClient();
+    await withStubbedWriter([{ result: WRITTEN }], async (stub) => {
+      await assert.rejects(
+        runRecommendationCommit(client, QUERY_ID, SELECTED, undefined, bad),
+        (error) => error instanceof CandidateSelectionError
+          && error.code === ERROR_CODES.INVALID_FIELD_VALUE
+          && error.field === 'passFacts'
+      );
+      // Not even BEGIN ran, so there is no transaction to roll back and the
+      // writer was never reached.
+      assert.equal(stub.calls.length, 0);
+    });
+    assert.deepEqual(sqlsOf(client), []);
+  }
+});
+
+test('commit: a failing pass-facts writer rolls the whole pass back', async () => {
+  const client = createClient({
+    onQuery(sql) {
+      if (sql === UPDATE_RECOMMENDATION_QUERY_FLOOR_SQL) throw RAW_DB_ERROR;
+      return undefined;
+    },
+  });
+
+  await withStubbedWriter([{ result: WRITTEN }], async () => {
+    await assert.rejects(
+      runRecommendationCommit(client, QUERY_ID, PASS_FACTS_SELECTED, undefined, PASS_FACTS),
+      (error) => error === RAW_DB_ERROR
+    );
+  });
+
+  // The builds persistRanked already inserted are undone with the facts: one
+  // transaction, one outcome.
+  assert.deepEqual(sqlsOf(client), [
+    BEGIN_SQL,
+    LOCK_RECOMMENDATION_QUERY_SQL,
+    EXISTING_BUILD_CANDIDATES_SQL,
+    UPDATE_RECOMMENDATION_QUERY_FLOOR_SQL,
+    ROLLBACK_SQL,
+  ]);
+});
+
+test('commit.js delegates the pass-facts SQL to the writer (its own DML stays at zero)', () => {
+  // The wrapper never spells the facts SQL itself; it calls the writer through
+  // the same boundary discipline as persistRanked and persistRejections.
+  assert.ok(SOURCE.includes('persistPassFacts({ client, queryId, selected, passFacts })'));
+  // The row lock remains the ONLY UPDATE keyword in this module.
+  assert.equal((SOURCE.match(/UPDATE/g) || []).length, 1);
+  assert.ok(SOURCE.includes('FOR UPDATE'));
+
+  const writer = SOURCE.indexOf('persistence.persistRanked(');
+  const facts = SOURCE.indexOf('persistPassFacts(');
+  const commit = SOURCE.indexOf('client.query(COMMIT_SQL)');
+  assert.ok(writer !== -1 && facts !== -1 && commit !== -1);
+  assert.ok(writer < facts, 'the facts must be written after the rows they describe');
+  assert.ok(facts < commit, 'the facts must be written inside the transaction');
+});
+

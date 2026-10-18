@@ -83,9 +83,17 @@ test('an oversized body is a 413', async () => {
 });
 
 test('a known query with zero builds carries reason EMPTY_CANDIDATE_POOL and a 200', async () => {
+  // The floor column is NULL here because the pass THREW in Stage 1, before
+  // Decision 27's stage 11b ever ran - so nothing wrote a floor. The fixture has
+  // to say so: serving a floor for a pass that died would be the presenter
+  // inventing one.
   const repository = stub.createRepositoryStub({
     async readRecommendationResult() {
-      return { found: true, query: stub.QUERY_ROW, rows: [] };
+      return {
+        found: true,
+        query: Object.assign({}, stub.QUERY_ROW, { budget_floor: null }),
+        rows: [],
+      };
     },
   });
   const engine = stub.createEngineStub(async () => {
@@ -98,7 +106,9 @@ test('a known query with zero builds carries reason EMPTY_CANDIDATE_POOL and a 2
   const body = response.json();
   assert.deepEqual(body.builds, []);
   assert.equal(body.reason, 'EMPTY_CANDIDATE_POOL');
-  assert.equal(body.budget_floor, null, 'decision 27 computes the floor AFTER Stage 1, so this path has none');
+  assert.equal(body.budget_floor, null, 'the persisted floor is NULL for this pass, and null is served as null');
+  assert.equal(body.engine_version, null, 'no result row was written, so no pass engine version was recorded');
+  assert.equal(body.served_by.engine_version, stub.TEST_ENGINE_VERSION);
 });
 
 test('a pinned scoring model that vanishes mid-pass is a 503', async () => {

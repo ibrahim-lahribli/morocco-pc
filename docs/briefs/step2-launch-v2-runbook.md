@@ -63,8 +63,9 @@ What it does:
   while retaining v1's row.
 - Applies to the TEST branch ONLY: `applyseed.js` routes through `getWriteTestDbUrl()` (a pg CONFIG
   OBJECT from `scripts/lib/db-url.js`, not a URL string), connects directly, and runs the file in one
-  transaction. On success the commit wrapper records one line in the tracked, append-only
-  `database/migration-applies.jsonl`. On failure the file is NOT partially applied.
+  transaction. On success the seed runner prints its own summary and writes NO audit line —
+  `database/migration-applies.jsonl` is written only by `run-migrations.js`, one line per applied
+  migration. On failure the file is NOT partially applied.
 
 What to verify after it returns 0:
 

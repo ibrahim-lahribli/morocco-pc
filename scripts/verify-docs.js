@@ -88,6 +88,16 @@ function readRepo(rel) {
 // Decision 43 (E6, 2026-10-14) adds one heading/status => 41 headings, 47 Status lines.
 // Decision 44 (E7, 2026-10-14) adds one heading/status => 42 headings, 48 Status lines.
 // Decision 45 (E8, 2026-10-14) adds one heading/status => 43 headings, 49 Status lines.
+// Decision 46 (Platform P0 / 019-020 pass facts, 2026-10-14) adds one
+// heading/status => 44 headings, 50 Status lines.
+// Decision 47 (Platform P1 Sprint 4 / catalog_version + canonical key,
+// 2026-10-16) adds one heading/status => 45 headings, 51 Status lines.
+// Decision 48 (Platform P1 Sprint 6 / recommendation_preset, 2026-10-16)
+// adds one heading/status => 46 headings, 52 Status lines.
+// Decision 49 (Platform P2 Sprint 2 / TRUST_PROXY trusted-proxy list,
+// 2026-10-17) adds one heading/status => 47 headings, 53 Status lines.
+// Decision 50 (Platform P2 Sprint 3 / read-only catalog, 2026-10-17)
+// adds one heading/status => 48 headings, 54 Status lines.
 const decisions = (function checkDecisions() {
   const raw = readRepo('docs/RECOMMENDATION_ENGINE_DECISIONS.md');
   // Line-ending tolerant: the log is stored CRLF, but a Linux checkout
@@ -104,9 +114,9 @@ const decisions = (function checkDecisions() {
     if (inEngine3 && /^### Decision \d+/.test(line)) nested += 1;
     if (/^Status:/.test(line)) status += 1;
   }
-  const ok = global === 43 && nested === 5 && status === 49;
+  const ok = global === 48 && nested === 5 && status === 54;
   if (!ok) {
-    fail('decisions-parse', 'global=' + global + ' (want 43), nested=' + nested + ' (want 5), Status:=' + status + ' (want 49)');
+    fail('decisions-parse', 'global=' + global + ' (want 48), nested=' + nested + ' (want 5), Status:=' + status + ' (want 54)');
     return null;
   }
   pass('decisions-parse', global + ' headings + ' + nested + ' nested = ' + (global + 2) + ' global, ' + status + ' Status: lines');
