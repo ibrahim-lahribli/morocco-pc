@@ -1395,3 +1395,100 @@ One environment note: `verify:pi1`, `eval:scenarios` and `test-orchestrator-full
 `seed-minimal-v1@1.0.0` pin and therefore REFUSE on the TEST branch until given `--model=launch-v2@1.0.0`
 (the pin fails closed and prints the active list). That is the pin behaving as documented, not a defect, but
 it means those three gates must be invoked with an explicit pin on this branch.
+
+## 2026-10-18 - the frontend-development write target is its own Neon branch
+
+The owner decided two things this session: the catalogue is **public but unlisted** for the beta
+(served to the frontend, unlinked and `noindex` until prices are `VERIFIED` - a product/SEO posture,
+not an API gate, since the API has no auth and CORS is not access control), and indicative prices MAY
+be displayed behind the API disclaimer and a beta label. That closed **P2 Sprint 3 Step 7** (doc-only:
+`docs/API.md`, `PLAN_PLATFORM_P2.md`, `PLAN_PLATFORM_STATUS.md`, `docs/OPEN_GAPS.md` OG-52); the roll-up
+now reads 14 DONE / 4 PARTIAL / 3 NOT STARTED.
+
+The same sitting created the frontend write target, because every distinct POST from a frontend leaves an
+unmarked `recommendation_query` row and `npm run eval:scenarios` refuses to run while one exists:
+
+- **Branch** `frontend-dev` (`br-proud-frog-ax80h3nv`), created from `test` (`br-odd-breeze-axklg9xd`) in
+  project `gentle-fog-04615130` on the same instance. Verified after creation: ledger tail
+  `022_recommendation_preset.sql`, `launch-v2@1.0.0` ACTIVE, 100 products, 101 offers, 0 queries.
+- **Env file** `.env.frontend-dev` (gitignored, added to `.gitignore`). `TEST_DATABASE_URL` points at the
+  new branch, `DATABASE_URL` stays the main branch so `resolveTestDbUrl` passes on distinct hosts,
+  `API_ALLOW_SHARED=0`, `PORT=3100`, `ENGINE_VERSION=frontend-dev`,
+  `ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000`.
+- **Start** `set -a; . ./.env.frontend-dev; set +a; node apps/api/src/server.js` (the shared `.env` is not
+  touched, so no other thread is affected).
+
+**The trap that cost a cleanup: an unquoted `&` in a sourced env file backgrounds the assignment.** The
+first file wrote `TEST_DATABASE_URL=postgresql://...?sslmode=require&channel_binding=require` unquoted;
+`set -a; . file` therefore backgrounded the assignment in a subshell, left `TEST_DATABASE_URL` UNSET in the
+parent, and `dotenv` inside `server.js` fell back to the main branch. Two POSTs landed on the TEST branch
+before that was noticed (1 profile, 1 query, 1 candidate, 8 components, 1 result, 2 rejections). They were
+deleted inside one transaction in FK order - `build_rejection` -> `recommendation_result` ->
+`build_component` (via its candidate) -> `build_candidate` -> `recommendation_query` ->
+`recommendation_profile` - and the TEST branch was re-measured at 0/0/0/0/0/0. Note the FK column is
+`recommendation_query.recommendation_profile_id`, NOT `profile_id`. The env file now quotes every value.
+
+**Isolation proven, not assumed** (2026-10-18, `launch-v2@1.0.0`, engine `frontend-dev`): a POST answers
+**201** in 8.3 s with 1 build / 8 components / 19 694 MAD, a repeat answers **200 `reused: true` with the
+same id** in 0.94 s, `GET /v1/recommendations/:id` answers 200 with the persisted disclaimer in 0.29 s, and
+`GET /v1/presets?use_case=GAMING&currency=MAD` answers 200 with an EMPTY list and a `catalog_version`
+(the route works; the ribbon is ungenerated). After the run: `recommendation_query` = 1 on `frontend-dev`,
+**0 on the TEST branch and 0 on shared**, with all six Layer 4 counts 0 on both.
+
+One operational note for monitors: the FIRST `/v1/health` after a cold Neon compute can report
+`db: "down"` because the ping timeout is 2 s; a warm retry answers `db: "ok"`.
+
+## 2026-10-18 - the EU co-location target exists, and the parity gate caught a replay drift
+
+Platform P1 Sprint 1 **Steps 4-6 landed** (owner-authorised): the EU Neon project, the full replay
+into it, and a parity gate that went DIFF -> MATCH only after a corrective seed existed. Steps 7-9
+(hosting account, deploy, re-measure) are untouched, and `flyctl` / `docker` are still not installed
+on this box.
+
+- **Project** `morocco-pc-eu` (`lingering-heart-20497074`), region `aws-eu-central-1` (Frankfurt),
+  Postgres **18** matching the current project, default branch `main` (`br-sweet-voice-b9fv6xx1`),
+  restore point `pre-p1-replay` (`br-delicate-frog-b9d7n793`, no compute). Created through the Neon
+  API: `list_regions` is HTTP 404 for this organization key, so the region id was passed explicitly
+  and verified from the create response. No URL is recorded in the repository.
+- **Credentials** live in a gitignored `.env.eu` (`TARGET_DATABASE_URL` pooled, `TARGET_DIRECT_URL`
+  direct) - deliberately NOT the shared `.env`, because `run-seeds.js` and the write-capable tests
+  read `DATABASE_URL` from there and would otherwise be silently retargeted at a non-dev database.
+  Values are single-quoted: the URLs carry `&`, and an unquoted `&` in a sourced file backgrounds the
+  assignment (the same trap as `.env.frontend-dev`).
+- **Replay**: 22 files MIGRATED, ledger `--check` exit 0, `AUDIT TARGET: db:2d66f26d7ddc` (distinct
+  from shared `db:54ff6ea3f6e6` and TEST `db:798b3aa04976`), then every seed file with
+  `Seed rows: products=100, offers=101, assessments=280`. The 22 audit lines are appended to the
+  tracked `database/migration-applies.jsonl`.
+
+**THE DIFF, and why it mattered.** The parity gate returned `rows:scoring_model` **2 vs 5** with
+every other check MATCH. Seeds 014-016 each INSERT a new ACTIVE `launch-v2` version (1.1.0 / 1.2.0 /
+1.3.0) and declare themselves "TEST branch only" in their own headers - but `run-seeds.js` has no
+branch awareness, so a fresh replay produces FOUR active models. The API resolves its model with
+`ORDER BY created_at DESC, id ASC LIMIT 1`, so it would have served **`launch-v2@1.3.0`** (the E3
+pair-quota experiment, `max_builds_per_pair: 1`) where the branch serves **`launch-v2@1.0.0`** -
+both measured 2026-10-18. A different scoring model under the same name, not a cosmetic count: the
+gate's "do not deploy on a DIFF" was doing its job.
+
+**The fix is seed 017** (`database/seeds/017_retire_launch_v2_experiment_models.sql`): a guarded
+DELETE of the three experiment versions, skipping any row a `recommendation_query` points at
+(`scoring_model` has exactly one referencing FK, NO ACTION). **Proven by FIRE** inside a rolled-back
+transaction: with one synthetic query referencing 1.3.0, the DELETE removed 2 rows and skipped that
+one. **Idempotent**: a full `run-seeds.js` run deletes 3; a second run deletes 0 and the end state
+stays 2 rows / 1 active. The mechanism is worth keeping: 014-016 re-INSERT on the second run (their
+guard is "this version does not exist") and 017 deletes them again in the same pass - which is why a
+new file is the fix and editing 014-016 would not have removed the rows the EU target already held.
+
+**A latent landmine on the TEST branch, closed by the same file.** The documented cure for the
+30-day offer-freshness cliff is re-applying seed 006, and `run-seeds.js` applies the whole set - so
+the next branch re-seed would silently have inserted the three experiment rows and switched the
+branch's served model to 1.3.0.
+
+**Parity after the fix: `RESULT: MATCH`, exit 0** - 22-file ledger and tail `022_recommendation_preset.sql`
+on both sides, 43 tables, shape digest `2006504971c70a90` on both, every row count equal, and the EU
+target's served model is `launch-v2@1.0.0`, the one the branch serves. `CONTEXT.md` carries a dated
+correction on the Decision 40 bullet and `docs/OPEN_GAPS.md` OG-52 records both the partial seed
+retirement and the co-location progress.
+
+**What Steps 7-9 still need:** a hosting account (Fly `fra` or Render `frankfurt`), the deploy, and
+the before/after measurement at the recorded pin - `docs/RECIPES/deploy-eu-colocation.md`, whose §7
+now effectively requires seed 017 to have run before parity can pass.

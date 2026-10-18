@@ -111,6 +111,17 @@ Reaching the shared dev database requires an explicit `API_ALLOW_SHARED=1`.
 Nothing in CI sets it. The guard's error messages never contain a URL, a host,
 or a credential.
 
+**A frontend-development target is a separate branch, not the TEST branch (decided 2026-10-18).**
+Every distinct POST writes rows, and `npm run eval:scenarios` refuses to run while any unmarked
+`recommendation_query` row exists - so frontend traffic on the TEST branch takes the golden harness
+down. The decision is a dedicated Neon branch (`frontend-dev`, branched from `test` at ledger 22)
+plus a gitignored `.env.frontend-dev` whose `TEST_DATABASE_URL` names it while `DATABASE_URL` stays
+the main branch; the guard passes because the hosts differ, and a reset of that branch is the whole
+cleanup. Start it with `set -a; . ./.env.frontend-dev; set +a; node apps/api/src/server.js`.
+**Values in that file MUST be single-quoted**: the connection strings carry `&`, and an unquoted
+`&` in a sourced file backgrounds the assignment and leaves the variable UNSET, which silently
+points the API at the main branch instead (measured 2026-10-18).
+
 ### Docker
 
 The build context is the **repository root**, because the API imports the engine
@@ -385,6 +396,8 @@ succeeds with the requested method and headers. A disallowed origin gets no
 CORS is a browser policy, not authentication. An EMPTY allow-list disables CORS
 entirely rather than reflecting any origin. All four behaviours are pinned by
 `apps/api/test/unit/cors.test.js`.
+
+**Exposure and price display (decided 2026-10-18).** The catalogue is **public but unlisted** for the beta: a frontend may use both catalog endpoints, but it is not linked from navigation and is `noindex` until prices are `VERIFIED`. This is a product/SEO posture, not an access control - the API has no authentication and CORS is not a gate, so anyone with the URL can read it. Indicative prices MAY be displayed, but only with the `disclaimer` the API returns and a visible beta label, and without store names or a purchase CTA while every offer is a seed fixture. One client-side detail: the **list** response carries `offer_class` per product but **no `disclaimer` field** (only the detail and recommendation responses do), so a price grid built from the list must render the disclaimer itself.
 
 **Per-IP limits behind a proxy (measured 2026-10-17, P2 Sprint 2).** The limiter
 keys on `request.ip`, and with `TRUST_PROXY` unset (the default) that is the

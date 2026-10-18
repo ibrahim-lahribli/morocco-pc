@@ -60,13 +60,13 @@ In `scripts/lib/run-migrations-cli.test.js`: a parse for `--note=a new EU projec
 
 Run: `npm run test:scripts` → expected 0 fail. Then `node scripts/run-migrations.js --dry-run` → expected: the pending list plus the `AUDIT TARGET: db:…` line the run would log (added 2026-10-15), no write (the audit log is untouched: `git --no-pager diff --stat -- database/migration-applies.jsonl` prints nothing).
 
-- [ ] **Step 4 (OWNER): create the EU Neon project, and record its id and region.**
+- [x] **Step 4 (OWNER): create the EU Neon project, and record its id and region.** DONE 2026-10-18: project `morocco-pc-eu` (`lingering-heart-20497074`), region `aws-eu-central-1` (Frankfurt), Postgres **18** matching the current project, default branch `main` (`br-sweet-voice-b9fv6xx1`). Created through the Neon API. The id and region are recorded in `DEVELOPMENT_NOTES.md`; no URL is written anywhere in the repository.
 
 **Runbook: `docs/RECIPES/deploy-eu-colocation.md`.** It turns Steps 4-9 into copy-paste commands and states the env-var mapping once: `apps/api/src/db.js` pools on `DATABASE_URL` only when `API_ALLOW_SHARED=1`, and on `TEST_DATABASE_URL` otherwise - so a deploy that keeps the plan's earlier `API_ALLOW_SHARED=0` would silently connect to `TEST_DATABASE_URL`.
 
 Target: Frankfurt, co-located with Fly's `fra` / Render's `frankfurt`. `list_regions` is **not available to this account's organization API key** (measured 2026-10-15: HTTP 404 "not allowed for organization API keys"), so confirm the region id in the Neon console rather than assuming it — `create_project` rejects an invalid id, which is the check. Record the project id and region in `DEVELOPMENT_NOTES.md`. Nothing else in this sprint can start before this exists.
 
-- [ ] **Step 5: create the restore point, then replay into the new project.**
+- [x] **Step 5: create the restore point, then replay into the new project.** DONE 2026-10-18: restore point `pre-p1-replay` (`br-delicate-frog-b9d7n793`, no compute); **22** files MIGRATED, ledger `--check` exit 0, against `AUDIT TARGET: db:2d66f26d7ddc` (distinct from the shared `db:54ff6ea3f6e6` and TEST `db:798b3aa04976` digests), then all seed files with `Seed rows: products=100, offers=101, assessments=280`. The 22 audit lines are appended to `database/migration-applies.jsonl` (tracked, uncommitted).
 
 `create_branch(parent = the new project's default branch, name = 'pre-p1-replay', no_compute = true)` → take its id. Then, with `DATABASE_URL` pointed at the new project and `scripts/lib/db-url.js`'s guard satisfied (the two URLs must have different hostnames — keep `TEST_DATABASE_URL` on the original branch):
 
@@ -74,7 +74,7 @@ Target: Frankfurt, co-located with Fly's `fra` / Render's `frankfurt`. `list_reg
 
 Expected: **22** files `MIGRATED` (the ledger moved to 022 after this plan was written; 021 and 022 are branch-only, which is why the TEST branch is the replay source), one audit line each with the note naming the EU project, and `target` = the EU project's OWN `db:<12 hex>` digest — never `shared`, because since 2026-10-15 the field names the database, so a `shared` value on a line written now means the runner wrote to the wrong one. Then run every seed: **`run-seeds.js` ignores `--test-db` and has no routing**, so point `DATABASE_URL` at the new project's DIRECT host and run it (`DATABASE_URL=<direct EU URL> node scripts/run-seeds.js`, runbook section 6); the script runs each file as it is, never split on `;`. Reset `DATABASE_URL` afterwards.
 
-- [ ] **Step 6: prove parity with `check-target-parity.js`.**
+- [x] **Step 6: prove parity with `check-target-parity.js`.** FIRST RUN 2026-10-18: **RESULT: DIFF** - `rows:scoring_model` 2 vs 5 with every other check MATCH. Cause: seeds 014-016 each INSERT a new ACTIVE `launch-v2` experiment version (1.1.0/1.2.0/1.3.0) and are "TEST branch only" BY INTENT in their own headers, but `run-seeds.js` has no branch awareness, so a fresh replay yields FOUR active models - and the API's `ORDER BY created_at DESC, id ASC LIMIT 1` then serves `launch-v2@1.3.0` (the E3 pair-quota experiment, `max_builds_per_pair: 1`) instead of the branch's `launch-v2@1.0.0`. Fixed by **seed 017** (a guarded DELETE of the three experiment rows). RE-RUN: **RESULT: MATCH, exit 0** - 22-file ledger on both sides, 43 tables, shape digest `2006504971c70a90` on both, every row count equal. This is the failure mode the gate exists for: the DIFF was a different SCORING MODEL, not a cosmetic count.
 
 `node scripts/check-target-parity.js --a="$DATABASE_URL" --b="$TARGET_DATABASE_URL"` (read-only) prints, per target: the `schema_migrations` tail and count, the table count, and row counts for `product`, `product_variant`, `store_offer`, `component_assessment`, `scoring_model`, `benchmark_result`, `store`. Also compare the schema digest lines: run `npm run gen:schema` against each and `diff` the `schema-digest:` lines. Expected: identical digest, identical counts. **A difference means stop** — every later measurement would compare two catalogs.
 
@@ -107,7 +107,27 @@ Preferred: Fly.io, region `fra` (Frankfurt). `fly.toml` sets `primary_region = "
 | 1.5 | `GET /v1/health` on the deployed origin | 200, `status: ok`, `db: ok`, an `engine_version` equal to the deployed short SHA |
 | 1.6 | The same instrument run against both targets | a statement count that is IDENTICAL (the pipeline did not change) and a lower ms/round trip |
 
-**Status 2026-10-15 — Steps 1-3 DONE and committed; Steps 4-9 remain OWNER-gated.**
+**Status 2026-10-18 — Steps 1-6 DONE; Steps 7-9 remain (hosting account, deploy, re-measure).**
+Steps 4-6 landed this session: the EU project exists (id and region in `DEVELOPMENT_NOTES.md`), the
+22-migration + full-seed replay ran through the ledger, and the parity gate returns **RESULT: MATCH**.
+Nothing is deployed and no measurement has been taken against the EU target yet. The runbook
+(`docs/RECIPES/deploy-eu-colocation.md`) is unchanged for Steps 7-9, with one correction to carry
+into §7: the replay needed a corrective seed before it could pass, and that is now permanent.
+
+**Two findings this half produced that the plan did not anticipate.**
+
+1. **The parity gate caught a real drift - which is exactly why it blocks a deploy.** Seeds 014-016
+   insert a new ACTIVE `launch-v2` version each and declare themselves "TEST branch only" in their
+   own headers, but `run-seeds.js` applies every file to whatever `DATABASE_URL` names. A fresh
+   replay therefore produced FOUR active models, and the API's `ORDER BY created_at DESC, id ASC
+   LIMIT 1` would have served the 1.3.0 pair-quota EXPERIMENT instead of the branch's 1.0.0 - a
+   different scoring model under the same name. Fixed by **seed 017**; parity is MATCH as of
+   2026-10-18, and the gate's "do not deploy on a DIFF" held.
+2. **The same drift was a latent landmine on the TEST branch itself.** The documented cure for the
+   30-day offer-freshness cliff is re-applying seed 006, and `run-seeds.js` applies the whole set -
+   so the next branch re-seed would silently have inserted the three experiment rows and switched
+   the branch's served model to 1.3.0. Seed 017 closes that too, because it runs after 014-016 in
+   filename order.
 
 **Prepared 2026-10-17 — the owner runbook exists and the parity gate is real.**
 `docs/RECIPES/deploy-eu-colocation.md` carries Steps 4-9 as runnable commands, the host comparison

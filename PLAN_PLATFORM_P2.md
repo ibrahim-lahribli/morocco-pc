@@ -165,7 +165,7 @@ limit is conditional on the proxy being named).
 - [x] **Step 4: apply the pricing rule in the response** — `price_status` derived exactly as the recommendation response derives it (`"verified"` only when every contributing offer is `VERIFIED`), with the French `disclaimer`; the seed data will therefore report `indicative`, which is correct and must not be special-cased.
 - [x] **Step 5: pin the contract** — regenerate the snapshot, run `npm run test:api` (0 fail) and `npm run test:api:db` (a real read of a real slug on the branch, residue 0).
 - [x] **Step 6: update `docs/API.md` + `docs/TEST_MAP.md` + `CONTEXT.md`, then commit.**
-- [ ] **Step 7 (owner): decide whether catalog pages may be public before any frontend is pointed at them** — this is the same beta-waiver question the recommendation endpoint answered, and it is not the implementer's call.
+- [x] **Step 7 (owner): decide whether catalog pages may be public before any frontend is pointed at them** — DECIDED 2026-10-18: **public but unlisted.** The beta frontend may use the catalogue, but it is not linked from navigation and is `noindex` until prices are `VERIFIED`. That is a frontend/SEO posture, not an API gate: the API has no auth and CORS is not access control, so a genuinely gated catalogue would be new infrastructure. The same sitting decided the price-display policy - indicative prices are allowed WITH the French disclaimer and a beta label, with no store names or purchase CTA - recorded in `docs/API.md`.
 
 **Definition of done**
 - Both endpoints are served, documented, and pinned by the committed snapshot.
@@ -183,7 +183,7 @@ limit is conditional on the proxy being named).
 | 3.5 | A product with zero offers | present in the list with `has_offer: false` |
 | 3.6 | `limit=1000` | 422 (bounded), not a slow query |
 
-**Status 2026-10-17 — Steps 1-6 DONE; Step 7 is the owner's (public exposure).**
+**Status 2026-10-18 — DONE, including the owner's Step 7 decision.** Steps 1-6 landed 2026-10-17. Step 7 was decided 2026-10-18: **public but unlisted** (served to the beta frontend, unlinked and `noindex` until prices are `VERIFIED`), with indicative prices allowed only behind the API's disclaimer and a beta label. Both are product/SEO postures, not API changes - no code moved, and no Decision entry was needed.
 
 Both endpoints are served, documented and pinned by `openapi-v1.5.json` (v1.4 was
 deleted in the same change, so exactly one snapshot remains). `test:api` went **89 -> 98**
