@@ -94,7 +94,8 @@ Environment variables (see `apps/api/.env.example` for the full list):
 | `TRUST_PROXY` | Trusted proxy address/CIDR list that makes `request.ip` the client instead of the proxy, comma-separated. **Empty (the default) ignores `X-Forwarded-For` entirely**; a hop count or `true` is REFUSED at startup — see *Per-IP limits behind a proxy*. |
 | `LOG_LEVEL`, `LOG_PRETTY` | pino level; `LOG_PRETTY=1` uses `pino-pretty` (a devDependency, feature-detected — production installs log JSON). |
 | `ENGINE_VERSION` | The value reported as `served_by.engine_version` and, since Decision 46, PERSISTED per result row as the pass's `engine_version` — the API hands it to the engine, so a stored build names the deploy that produced it. Intended to be the git short SHA; defaults to `dev`. |
-| `DATABASE_URL`, `TEST_DATABASE_URL` | Both required. The guard compares their hostnames to prove they differ. |
+| `DATABASE_URL` | The pool target when `API_ALLOW_SHARED=1` — the deployed shape, and the only variable the pool reads in it. |
+| `TEST_DATABASE_URL` | The pool target when `API_ALLOW_SHARED` is not `1` — the local/TEST shape. The guard then compares its hostname with `DATABASE_URL`'s and refuses equal hosts. UNUSED in the deployed shape, where it must be unset. |
 | `API_ALLOW_SHARED` | Must be exactly `1` to target `DATABASE_URL`. |
 
 ### Database target (write safety)
@@ -110,6 +111,12 @@ It therefore:
 Reaching the shared dev database requires an explicit `API_ALLOW_SHARED=1`.
 Nothing in CI sets it. The guard's error messages never contain a URL, a host,
 or a credential.
+
+**Both deployed environments use the `API_ALLOW_SHARED=1` shape** (Platform P3 Sprint 3): production
+points `DATABASE_URL` at the EU project, staging points it at the TEST branch, `TEST_DATABASE_URL` is
+unset on both, and the two never share a database. Staging is deliberately NOT run with
+`API_ALLOW_SHARED=0` — that value routes the pool through `TEST_DATABASE_URL` and demotes
+`DATABASE_URL` to a baseline, the inversion `docs/RECIPES/deploy-eu-colocation.md` §1 warns about.
 
 **A frontend-development target is a separate branch, not the TEST branch (decided 2026-10-18).**
 Every distinct POST writes rows, and `npm run eval:scenarios` refuses to run while any unmarked

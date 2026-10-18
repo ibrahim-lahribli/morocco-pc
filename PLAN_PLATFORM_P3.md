@@ -129,7 +129,16 @@ Five failure modes this plan's own tests do not fully cover, most likely first.
 - Produces: `deploy-staging` / `deploy-production` procedures; `ENGINE_VERSION` set to the deployed short SHA on each.
 
 - [ ] **Step 1: write the pre-flight as the first step of the deploy job** — `node scripts/run-migrations.js --check` against the environment's database, exiting non-zero when anything is pending, so a deploy cannot ship ahead of its schema. Run it locally against both targets first and record both answers.
-- [ ] **Step 2: define the environments** — staging targets the TEST branch (`API_ALLOW_SHARED=0`); production targets the chosen database with the `morocco_pc_api` role and `API_ALLOW_SHARED=1`. Never the same database for both, and never shared for staging.
+- [ ] **Step 2: define the environments** — both environments use ONE env shape and differ only in their `DATABASE_URL`: `API_ALLOW_SHARED=1` on BOTH, and `TEST_DATABASE_URL` on NEITHER.
+
+  | Environment | `DATABASE_URL` | `API_ALLOW_SHARED` | `TEST_DATABASE_URL` |
+  |---|---|---|---|
+  | staging | the **TEST branch** pooled URL | `1` | unset |
+  | production | the **EU project** pooled URL, connecting as `morocco_pc_api` | `1` | unset |
+
+  Never the same database for both, and never shared for staging. The flag is a guard bypass, not a claim that the target is shared: `apps/api/src/db.js` `resolvePoolConfig` pools on `DATABASE_URL` when it is exactly `1` and never reads `TEST_DATABASE_URL`, while with any other value the pool is `TEST_DATABASE_URL` and `DATABASE_URL` is only a hostname baseline.
+
+  **CORRECTED 2026-10-18 — this step used to say staging runs `API_ALLOW_SHARED=0`, which is not deployable.** With `0` the pool would come from `TEST_DATABASE_URL`, so staging would need a SECOND database purely to sit in `DATABASE_URL` as a baseline (the guard refuses equal hosts). That is "config B" in `docs/RECIPES/deploy-eu-colocation.md` §1, which the 2026-10-15 deploy runbook marks **do not deploy**: a script run on the host would read the wrong database. The P1 deploy would have had the same shape, and it would have answered every health check while writing to the old database.
 - [ ] **Step 3: wire the deploy** (build → pre-flight → deploy → `GET /v1/health` assertion → record `ENGINE_VERSION`), keeping the provider token in GitHub secrets.
 - [ ] **Step 4: document the rollback**: redeploy the previous image; for the database, the restore point recorded with each apply. A rollback procedure that has never been rehearsed is a paragraph, not a procedure — rehearse the image rollback once on staging and record it.
 - [ ] **Step 5: record the Decision** (environments, targets, deploy authority, rollback, and the explicit rule that a migration apply against a production database is a separate owner-gated step with its own restore point).

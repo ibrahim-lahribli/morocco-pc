@@ -57,11 +57,22 @@ So there are exactly two coherent configurations for the deployed host:
 
 | | Pool target | What the names mean on that host | Verdict |
 |---|---|---|---|
-| **A. Recommended** | `DATABASE_URL` (EU) | `DATABASE_URL` is the real target; `API_ALLOW_SHARED=1` says "this is not the dev branch". Omit `TEST_DATABASE_URL`. | Deploy this. |
+| **A. Recommended** | `DATABASE_URL` (the environment's real target) | `DATABASE_URL` is the real target; `API_ALLOW_SHARED=1` says "this is not the dev branch". Omit `TEST_DATABASE_URL`. | Deploy this. |
 | B. Guard-honouring | `TEST_DATABASE_URL` (EU) | `TEST_DATABASE_URL` is production and `DATABASE_URL` is the old database — a script run on the host would read the wrong one. | Do not deploy this. |
 
 `API_ALLOW_SHARED` is a guard bypass, not a statement that the target is shared. Nothing in the
 API writes to `DATABASE_URL` when it is the pool target; that is the point of the flag.
+
+**Both deployed environments use row A** (Platform P3 Sprint 3, `PLAN_PLATFORM_P3.md`): production
+sets `DATABASE_URL` to the EU project, staging sets it to the TEST branch's pooled URL, and both
+set `API_ALLOW_SHARED=1` with `TEST_DATABASE_URL` unset. They differ in the URL, never in the
+shape. Staging must NOT be run with `API_ALLOW_SHARED=0`: the pool would come from
+`TEST_DATABASE_URL`, leaving `DATABASE_URL` as a baseline that a host-side script would read as
+the real target — row B, exactly the inversion this section exists to prevent.
+
+A LOCAL run is the one place row B is correct: `.env.frontend-dev` sets `TEST_DATABASE_URL` to the
+frontend-dev branch and `DATABASE_URL` to the main branch, both real databases, and no script runs
+on a laptop as if it were the host. Do not "fix" that file to row A.
 
 The same inversion appears in the two local tools below — each says which variable is which.
 Copy the commands as written; do not "normalise" them.
