@@ -262,10 +262,11 @@ fly deploy --app morocco-pc-api
 Deliberately **not** set yet:
 
 - `TEST_DATABASE_URL` — absent, so the guard cannot silently select the wrong pool.
-- `TRUST_PROXY` — unset means `X-Forwarded-For` is ignored, so the rate limiter keys on Fly's
-  proxy address and every caller shares one bucket. That is the honest state until P2 Sprint 2
-  Step 4 measures the deployed origin's `request.ip` and pins the proxy range (Decision 49
-  item 6). **Every latency number from this deploy is still valid; per-IP fairness is not.**
+- `TRUST_PROXY` — unset for the FIRST deploy on purpose: with it empty, `X-Forwarded-For` is
+  ignored and every caller shares one bucket, which is safe but not truthful. Section 8.4 reads
+  the trusted addresses off the running app's own logs and proves both halves of P2 Sprint 2
+  Step 4 — do it in this same sitting. **Every latency number from this deploy is valid either
+  way; per-IP fairness is not, until 8.4 is done.**
 - `ALLOWED_ORIGINS` — empty disables CORS. Set it to the frontend origin when one exists.
 
 ### 8.3 Verify on the deployed origin (not locally)
@@ -295,6 +296,201 @@ curl -sS "$APP/v1/recommendations/$ID" | head -c 400
 
 Expected: 201 with builds, then a 200 whose builds match; `served_by.engine_version` is the
 deployed short SHA. Save the id — it is one of the rows the measurement run will add.
+
+---
+
+### 8.4 Pin `TRUST_PROXY` from the origin's own evidence (P2 Sprint 2 Step 4)
+
+The deploy in 8.2 leaves `TRUST_PROXY` unset, which is correct but not finished: with it unset,
+`request.ip` is the Fly Proxy's address, so the 30/min POST budget is 30/min for the whole
+internet. This section reads the trusted addresses off the running app, pins them, and proves
+both halves of the sprint's Step 4 — one client keeps one bucket, and a spoofed header cannot
+mint a new one.
+
+**The instrument is the existing request log, not a new endpoint.** Fastify's pino request
+serializer sets `remoteAddress: req.ip` (`fastify@5.12.5` `lib/logger-pino.js`), so every
+`fly logs` request line already prints the TRUST-RESOLVED address. That makes the log the
+evidence channel for both states:
+
+- with `TRUST_PROXY` empty, `remoteAddress` is the **proxy's** address;
+- with the proxy named, `remoteAddress` is the **caller's** address.
+
+Do not copy a proxy CIDR from anywhere: Fly publishes none, and the address to trust is
+whatever the socket peer actually is (step 1). There is one documented complication: Fly says
+the LAST `X-Forwarded-For` entry is a **shared or dedicated IP address assigned to your app**,
+the edge the client connected to ([Fly request headers](https://docs.fly.io/networking/request-headers)).
+Fastify walks the chain from the right and stops at the first UNtrusted address, so a pin that
+covers only the peer can stop on the app's own edge address: one bucket for every caller again.
+Pin both — the app addresses cost nothing when unused and are required when present.
+
+**Preflight — the origin must be real before anything is pinned.**
+
+Every later step assumes two facts about the deployed origin, so assert both instead of
+eyeballing §8.3: the app owns at least one public address, and its health route answers 2xx
+with `db: "ok"`. The check is committed (`scripts/check-origin-readiness.js`), so the
+assertions cannot drift between runs, and both halves are unit-tested —
+`scripts/lib/origin-readiness.test.js` for the parsing/verdict and
+`scripts/lib/origin-readiness-cli.test.js` for the exit codes and messages:
+
+```bash
+APP="https://morocco-pc-api.fly.dev"
+node scripts/check-origin-readiness.js --app=morocco-pc-api --origin="$APP"
+```
+
+`PREFLIGHT OK - addresses:` is the pass line and prints exactly the addresses the pin may
+contain. Any `FAIL preflight:` line exits 1 and must stop the section — a pin read from a dead
+or addressless origin is evidence of nothing; usage errors exit 2. The address list is column 1
+of `fly ips list` filtered by `net.isIP`, so a table header or the CREATED AT timestamp can
+never reach `TRUST_PROXY`, and the health verdict requires `status: "ok"` AND `db: "ok"`
+rather than a bare 2xx. It reads only (one `fly ips list`, one `GET`) and does not care which
+address family it connects over: unlike steps 1 and 3 it asserts reachability, not identity,
+so there is no `-4` here.
+
+**Step 1 — with trust OFF, read the proxy address.**
+
+```bash
+APP="https://morocco-pc-api.fly.dev"
+MY_IP=$(curl -4 -sS https://api.ipify.org); echo "my public IP: $MY_IP"
+
+# The ?probe marker is what makes the log line unambiguous: Fly's own health checks hit
+# /v1/health too, so an unfiltered tail can show the checker's line instead of yours. The
+# health route ignores unknown query parameters, so this is still a 200.
+# -4 on BOTH curls: the app answers on IPv4 and IPv6, and a probe over the other family would
+# log the other client address, which can never equal a v4 $MY_IP. For a v6-only client use -6
+# here and in step 3, and get $MY_IP from https://api64.ipify.org.
+curl -4 -sS -o /dev/null "$APP/v1/health?probe=trust-off"
+sleep 2   # `fly logs` delivers buffered lines a moment after the request
+fly logs --no-tail --app morocco-pc-api | grep 'probe=trust-off' | tail -3
+```
+
+Expected: a `"remoteAddress"` that is **not** `$MY_IP` — typically Fly's private 6PN peer
+address. If `grep` prints nothing the buffered line has not arrived yet: wait a few seconds and
+run it again. Repeat with a different probe value (`?probe=trust-off-2`), and again after a
+redeploy, noting every distinct address; that set is what the pin must cover.
+`fly logs --no-tail` returns the buffered lines and exits ([fly logs docs](https://docs.fly.io/flyctl/cmd/fly_logs));
+on an older flyctl, run `fly logs` and press Ctrl-C after the request.
+
+**Step 2 — pin it in `fly.toml` and deploy.**
+
+Only once the preflight printed `PREFLIGHT OK`. The pin has two halves: the socket peer from
+step 1, and every address the preflight listed — each of those can appear as the last
+`X-Forwarded-For` entry. Add the combined value to the existing `[env]` block (none of it is a
+secret, and the committed file is where the per-host pin belongs):
+
+```toml
+[env]
+  PORT = "3000"
+  HOST = "0.0.0.0"
+  API_ALLOW_SHARED = "1"
+  LOG_LEVEL = "info"
+  LOG_PRETTY = "0"
+  TRUST_PROXY = "<step 1 peer>,<each address the preflight printed, comma-separated>"
+```
+
+```bash
+fly deploy --app morocco-pc-api
+```
+
+A startup error here is the parser refusing the shape (a hop count, `true`, a `/0` prefix or a
+hostname); the message names the accepted form. Addresses, CIDRs and a comma-separated list are
+accepted. Trusting an address only means "skip this entry while walking the chain from the
+right"; it does not change who can connect, so listing an extra assigned address is safe.
+
+**Step 3 — prove the pin took effect.**
+
+```bash
+curl -4 -sS -o /dev/null "$APP/v1/health?probe=trust-on"
+sleep 2
+fly logs --no-tail --app morocco-pc-api | grep 'probe=trust-on' | tail -1
+```
+
+Expected: `"remoteAddress":"$MY_IP"` — the caller's public address, same family as the probe. Three outcomes, three
+meanings; do not proceed on an unproven pin:
+
+- **`$MY_IP`** — the pin covers every entry Fly appends. Record it and go to step 4.
+- **the step 1 peer address** (private) — the value never reached the process: check the
+  `[env]` block and `fly status` for a restart.
+- **a public address that is not `$MY_IP`**, usually one `fly ips list` printed — that entry is
+  untrusted, so Fastify stopped on it. Add the missing address(es) to `TRUST_PROXY`, redeploy,
+  and repeat this step.
+
+`Fly-Client-IP` carries the client too, but Fastify's `trustProxy` reads `X-Forwarded-For`
+only; switching the app to that header is a code change, not a config pin — do not do it here.
+
+**Step 4 — one client, one bucket, and a forged header cannot mint one.**
+
+The 30/min POST limit makes this cheap: the first request either runs a pass or reuses the one
+8.3 created, and the rest reuse it (same body), but every request still counts against the bucket.
+
+```bash
+BODY='{"budget_amount":20000,"currency":"MAD","use_case":"GAMING"}'
+sleep 61   # start from an empty window
+for i in $(seq 1 31); do
+  code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$APP/v1/recommendations" \
+    -H 'content-type: application/json' \
+    -H "x-forwarded-for: 198.51.100.$i" \
+    -d "$BODY")
+  echo "$i $code"
+done
+```
+
+Expected: `200` for request 1 (a `201` if no pass with that exact body exists yet), `200` for
+2–30, and **`429` for 31** — every request resolved to
+the same real client, and a different forged prefix per request changed nothing. This is the
+sprint's "a spoofed header cannot mint a bucket" half; it also shows one client keeps one bucket.
+It does **not** by itself distinguish a working pin from a disabled one (both refuse to mint), so
+step 3 and step 5 are not optional.
+
+**Step 5 — two clients, two buckets (scenario 2.5).**
+
+This is the only step that separates a working pin from a disabled one, and it does so only when
+BOTH probes fall inside ONE 60-second window: two `29`s collected minutes apart just mean each
+window was fresh, which is exactly what a broken pin also produces. Keep the gap under 50 s and
+treat a longer gap as INCONCLUSIVE (not a failure): wait 61 s and redo the pair.
+
+The second client is this machine switched to a phone's hotspot (mobile data, so the public
+address differs). Switch back and forth rather than walking away.
+
+```bash
+BODY='{"budget_amount":20000,"currency":"MAD","use_case":"GAMING"}'
+probe() {
+  date +%s
+  curl -sS -D - -o /dev/null -X POST "$APP/v1/recommendations" \
+    -H 'content-type: application/json' -d "$BODY" \
+    | grep -iE '^(HTTP/|x-ratelimit-remaining|x-ratelimit-reset)'
+}
+
+sleep 61   # the window starts empty; step 4's last request is older than this
+probe      # network A: the one steps 1-4 ran on
+# switch to the phone hotspot now, then run the SAME function:
+probe      # network B, still inside network A's window
+```
+
+Expected: `HTTP/2 200` (`201` if a pass had to run) twice, `x-ratelimit-remaining: 29` twice,
+network B's `x-ratelimit-reset` LOWER than network A's (the one shared window is counting
+down), and the two `date` values less than 50 s apart. If network B reports `28`, `0` or `429`,
+the two clients share ONE bucket and `TRUST_PROXY` is not taking effect — check step 3 again.
+If network B is `29` but its `x-ratelimit-reset` is back near the full 60, the window rolled:
+redo the pair, do not record a pass.
+
+**Step 6 — record what was proven, then update the docs.**
+
+Record in `DEVELOPMENT_NOTES.md`, dated: the deployed origin, the observed peer and app
+address(es), the pinned `TRUST_PROXY`, `$MY_IP` as seen in the log, step 4's first and last
+status codes, and the two step-5 `x-ratelimit-remaining` values with their timestamps, reset
+values and the gap between them, and the preflight's printed addresses and `PREFLIGHT OK`. Then:
+
+- tick **P2 Sprint 2 Step 4** in `PLAN_PLATFORM_P2.md` and paste the evidence beside it;
+- replace `docs/API.md`'s "not yet recorded because no host is chosen" sentence with the pinned
+  value and the date;
+- move P2 Sprint 2 from PARTIAL to DONE in `PLAN_PLATFORM_STATUS.md` (Step 4 is its only open step).
+
+**If the pin breaks after a redeploy** an address changed. Remove `TRUST_PROXY` and deploy: the
+default-off state is safe (one shared bucket, limits still enforced), then re-run the preflight
+and step 1 — a new app address also needs adding. If the observed peers span several
+addresses, pin their smallest covering CIDR rather than one `/32`, and record that. The counters
+remain per process (Decision 49 item 7), so this pin does not make the limits multi-instance
+exact.
 
 ---
 
@@ -397,9 +593,11 @@ model pin, statements per phase, ms per phase, ms per round trip, and the four H
    ```bash
    git commit -m "P1 Sprint 1: co-locate the API with an EU database and record the before/after" \
      -- fly.toml scripts/check-target-parity.js scripts/lib/target-parity.js \
-        scripts/lib/target-parity.test.js database/migration-applies.jsonl \
+        scripts/lib/target-parity.test.js scripts/check-origin-readiness.js \
+        scripts/lib/origin-readiness.js scripts/lib/origin-readiness.test.js \
+        scripts/lib/origin-readiness-cli.test.js database/migration-applies.jsonl \
         docs/API.md docs/RECIPES/deploy-eu-colocation.md \
-        DEVELOPMENT_NOTES.md PLAN_PLATFORM_P1.md PLAN_PLATFORM_STATUS.md
+        DEVELOPMENT_NOTES.md PLAN_PLATFORM_P1.md PLAN_PLATFORM_P2.md PLAN_PLATFORM_STATUS.md
    ```
 
 ---
@@ -434,7 +632,7 @@ replay, not for the project's life; export anything you need to keep before dele
 
 ---
 
-## 13. Definition of done (copy of the sprint's own)
+## 13. Definition of done (the sprint's own, plus the Step 4 record this runbook adds)
 
 - `GET /v1/health` on the deployed origin returns 200 with `status: ok` and `db: ok`, and an
   `engine_version` equal to the deployed short SHA.
@@ -443,3 +641,5 @@ replay, not for the project's life; export anything you need to keep before dele
   dates and the model pin.
 - The owner has re-derived the target from the measurement, or confirmed the roadmap's
   hypothesis: p95 ≤ 2.5 s uncached decides whether Sprints 2–3 are still required.
+- P2 Sprint 2 Step 4 is recorded too: `TRUST_PROXY` pinned from the origin's log evidence and
+  both bucket proofs captured (8.4).

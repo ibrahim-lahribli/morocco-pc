@@ -405,8 +405,12 @@ directly reachable process could be spoofed (`trustProxy: 1` measured:
 ERRORS, not silent no-ops - and so is a `/0` prefix, which trusts every peer
 exactly as `true` does. For a same-host reverse proxy the value is
 `TRUST_PROXY=127.0.0.1` (the shape the tests pin); a proxy on a private network
-is its CIDR. The concrete value is a per-host fact, pinned on the deployed
-origin (P2 Sprint 2 Steps 3–4) and not yet recorded because no host is chosen.
+is its CIDR. The concrete value is a per-host fact, pinned on the deployed origin
+(P2 Sprint 2 Step 4) and not yet recorded because no host is chosen. The evidence channel is the
+request log rather than a new route: Fastify's pino serializer sets `remoteAddress: request.ip`,
+so `fly logs` reports the proxy's address while `TRUST_PROXY` is empty and the caller's address
+once the proxy is named - the step-by-step procedure is `docs/RECIPES/deploy-eu-colocation.md`
+§8.4.
 
 **The counters live in process memory**, so they do not survive a multi-instance
 deploy: N instances allow N × the stated limit, and a restart resets every

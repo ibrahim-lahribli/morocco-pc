@@ -92,7 +92,7 @@ Preferred: Fly.io, region `fra` (Frankfurt). `fly.toml` sets `primary_region = "
 
 **Definition of done**
 - `--note=<text>` exists, is validated, and reaches the audit line; `test:scripts` 0 fail.
-- The EU project exists, carries the same schema tail (20) and the same row counts as the original target, and its schema digest matches.
+- The EU project exists, carries the same schema tail (22) and the same row counts as the original target, and its schema digest matches.
 - The API is deployed and answering `GET /v1/health` → `{"status":"ok","db":"ok",...}` on the deployed origin (a local 200 or a startup banner does not count).
 - The before/after table exists in `DEVELOPMENT_NOTES.md` with both commands, both hosts, both regions and both dates.
 - The owner has re-derived the target from the measurement, or confirmed the roadmap's hypothesis.
