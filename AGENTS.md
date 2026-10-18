@@ -235,17 +235,22 @@ No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent 
 `TEST_DATABASE_URL` repository secrets — CI has no `.env`, so the job exports both explicitly and
 fails fast if either is empty. It is `concurrency`-grouped with `cancel-in-progress: false` because
 the replay creates and drops one fixed scratch database name (`migrations_replay_tmp`); do not set
-that to true. A workflow job cannot be triggered on demand from here — use the Actions tab's
-"Run workflow" button to exercise it before trusting a schedule.
+that to true. A dispatch does not need the Actions tab: `gh` is absent on this box, but the REST
+`POST /repos/{owner}/{repo}/actions/workflows/ci.yml/dispatches` works with the credential the git
+remote already stores (`ref` = the branch to run on) — keep that token out of files and logs.
 
-**The scheduled job is UNVERIFIED until it has run on GitHub** (as of 2026-10-05 it had never run).
-Everything checkable locally was checked — the YAML parses, both scripts pass with the exact CI
-arguments, and every secret reference resolves — but two things can only be proven by a real run:
-that both secrets are named correctly in the repository, and that the Neon instance accepts
-connections from a GitHub runner. A failed run is expected to be a configuration problem, not a
-code problem. Note also that **scheduled workflows only run from the default branch** and GitHub
-**disables them automatically after 60 days of repository inactivity** — an idle repo silently stops
-getting the nightly gate, which is why `workflow_dispatch` is wired up too.
+**The scheduled job HAS now run, twice, on 2026-10-18** (`workflow_dispatch` on `agent/platforms`;
+runs 39119596060 and 39120485573). Both doubts that could only be settled by a real run are now
+measured, not assumed: both repository secrets exist under the right names, and the Neon instance
+accepts connections from a GitHub runner — `npm run test:api:db` answered `test:api:db: 9 passed,
+0 failed` IN CI. It is **RED, and only for the documented reason**: `verify-migrations-replay.js
+--test-db` reports 4 drift classes against shared (columns **377 vs 370**, checks **84 vs 79**,
+fks **61 vs 60**, indexes **102 vs 100**), which is exactly the objects 021 and 022 create, i.e. the
+branch-only state. That red closes with an owner-approved shared apply of 021/022, NOT with a code
+change — do not "fix" it by changing the replay's reference target. Note also that **scheduled
+workflows only run from the default branch** and GitHub **disables them automatically after 60 days
+of repository inactivity** — an idle repo silently stops getting the nightly gate, which is why
+`workflow_dispatch` is wired up too.
 
 ## 7. Verification workflow
 

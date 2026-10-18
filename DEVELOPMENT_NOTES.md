@@ -1561,3 +1561,32 @@ launcher now pins `--test-concurrency=1`. Cost measured: 85 s for the suite inst
 **The general lesson:** a whole-table count is a claim about the entire database, so a suite that
 asserts one cannot run concurrently with any other writer - not another test file, and not another
 agent. Order the files, or scope the count to the rows the test owns.
+
+## 2026-10-18 (2) - the second dispatch: api:db is GREEN on the runner, the replay is the only red
+
+A second `workflow_dispatch` on `agent/platforms` (run **39120485573**, SHA `671b028`) re-ran the two
+gates after the launcher and step-order fix. Result: **`unit-and-docs` success**, `recurring-gates`
+failure - and the failure is now exactly ONE step:
+
+| step | outcome |
+|---|---|
+| Assert secrets are present | PASS |
+| `npm ci` | PASS |
+| `check-offer-freshness.js --fail-days=14` | PASS |
+| `verify-migrations-replay.js --test-db` | FAIL - the same 4 drift classes (columns 377 vs 370, checks 84 vs 79, fks 61 vs 60, indexes 102 vs 100) |
+| `npm run test:api:db` | **PASS - `test:api:db: 9 passed, 0 failed`** |
+
+So `--test-concurrency=1` was the whole defect: the runner reproduced the local 9/0 exactly, and the
+`if: always() && steps.deps.outcome == 'success'` guard did what it was added for - the independent
+DB gate reported instead of being skipped. `# pass 9` / `# fail 0` are in the run log at the api:db
+step, so this is the child suite's own summary, not the launcher's opinion.
+
+The remaining red is migration-ledger drift, and it can only close by applying **021** and **022** to
+the SHARED database - an owner-approved apply that needs a recorded Neon restore point (AGENTS §8).
+Nothing in the code should be changed to make it green: switching `--reference=test` would make the
+gate compare the branch to itself, i.e. delete the check. Workaround for the interim: read the job as
+green-except-replay, because `if: always()` guarantees the api:db verdict is always present.
+
+**Worth remembering:** a downloaded job log is served as PLAIN TEXT (with a UTF-8 BOM) even though
+`curl` saves it without a `.txt` extension; `unzip` on `/actions/jobs/{id}/logs` fails with
+"End-of-central-directory signature not found" because there is no archive. Cat/grep it directly.
