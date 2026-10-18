@@ -55,7 +55,8 @@ jobs:
         run: |
           test -n "${{ secrets.DATABASE_URL }}" || { echo "::error::DATABASE_URL secret is not set"; exit 1; }
           test -n "${{ secrets.TEST_DATABASE_URL }}" || { echo "::error::TEST_DATABASE_URL secret is not set"; exit 1; }
-      - run: npm ci
+      - id: deps
+        run: npm ci
       # --fail-days=14, NOT the default 7 and NOT the space-separated form: the
       # script parses --fail-days=N and rejects "--fail-days 14" with exit 2. A
       # nightly job on a 7-day threshold would only page someone a week before the
@@ -69,7 +70,16 @@ jobs:
           TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
       # DB-backed API tests: the real engine against the TEST branch. Wired
       # 2026-10-07; UNVERIFIED in CI until a workflow_dispatch run passes.
-      - run: npm run test:api:db
+      #
+      # if: always() so the replay above cannot hide it. The two gates are
+      # independent and the replay is EXPECTED to fail while a migration is
+      # branch-only (021/022 against the shared ledger) - which is exactly when a
+      # reader needs to know whether the DB-backed suite passed. Still gated on
+      # the dependency install: always() alone would run this after a failed
+      # npm ci and report a second, misleading failure.
+      - name: DB-backed API tests
+        if: always() && steps.deps.outcome == 'success'
+        run: npm run test:api:db
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}

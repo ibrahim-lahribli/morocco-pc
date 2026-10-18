@@ -1526,3 +1526,38 @@ to stdout, so a plain `node -e` inside `$(...)` yields `TEST_DATABASE_URL is not
 harness artifact that reads exactly like a guard failure. And the session opened by that config
 object reports `search_path = "$user", public` on this branch, so no `SET search_path` is needed
 here (the `pg_temp` note belongs to the manual seed-apply pattern, not to the lib).
+## 2026-10-18 - the scheduled CI job ran for the first time, and one of its two gates cannot pass yet
+
+`recurring-gates` was dispatched on `agent/platforms` - its FIRST execution ever (the schedule has
+never fired and there was no earlier `workflow_dispatch`). Measured from the run log:
+
+  * `Assert secrets are present` **PASS** - both repository secrets exist, which had been an open
+    doubt since the job was written.
+  * `check-offer-freshness.js --fail-days=14` **PASS** ("no expired VERIFIED offers and first
+    VERIFIED expiry beyond 14 days").
+  * `verify-migrations-replay.js --test-db` **FAIL** - 4 drift classes against shared: columns
+    **377 vs 370**, checks **84 vs 79**, fks **61 vs 60**, indexes **102 vs 100**. That is exactly
+    migrations 021+022 (021: +1 column, +1 CHECK; 022: +6 columns, +4 CHECKs, +1 FK, +2 indexes),
+    i.e. the DOCUMENTED branch-only state - the runbook's "red by construction" is now measured
+    rather than predicted.
+  * `npm run test:api:db` was **SKIPPED**, because the replay step failed first.
+
+**A red step must not hide an independent one.** The two gates share nothing but the checkout, so
+the api:db step now carries `if: always() && steps.deps.outcome == 'success'` - gated on the
+dependency install, because `always()` alone would run it after a failed `npm ci` and report a
+second, misleading failure. The `npm ci` step gained `id: deps` to make that condition expressible.
+
+**And the DB suite could not have passed anyway: it runs its files in PARALLEL against ONE
+database.** `apps/api/test/run-db-tests.js` spawned `node --test <files>` with Node's default file
+concurrency, while `recommendations.db.test.js` asserts on WHOLE-TABLE counts (that is its residue
+check). Measured 2026-10-18: `npm run test:api:db` = **8 passed / 1 failed** ("the new deploy wrote
+exactly one query row", 3 !== 4), and the same files with `--test-concurrency=1` = **9 passed / 0
+failed**. A step-by-step replay of steps 1a-1e (diagnostic scratch script, deleted after use) showed
+the flow itself is correct: first POST 201 and +1 query row, identical POST 200 `reused: true` and
++0 rows, different budget 201 and +1, redeploy as `db-test-sha-next` 201 and +1. The count moved
+because a concurrent `presets.db.test.js` had inserted or deleted a query row under it - so the
+launcher now pins `--test-concurrency=1`. Cost measured: 85 s for the suite instead of ~30 s.
+
+**The general lesson:** a whole-table count is a claim about the entire database, so a suite that
+asserts one cannot run concurrently with any other writer - not another test file, and not another
+agent. Order the files, or scope the count to the rows the test owns.
