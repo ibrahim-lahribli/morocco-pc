@@ -1360,7 +1360,7 @@ The 19 were BEGIN, the two Decision 19.2 guards, one candidate + 8 component + 1
 row), the Decision 46 floor UPDATE, one provenance UPDATE per rank, the Decision 31 rejection DELETE, 2
 rejection INSERTs and COMMIT.
 
-**The sprint's "<= 6 statements" target counts the writers, and that set is now 5 for ANY pass** — 3 ranked
+**The sprint's "<= 6 statements" target counts the writers, and that set is now AT MOST 5** — 3 ranked
 INSERTs (one each for candidates, components and results) plus the unconditional rejection DELETE and one
 rejection INSERT — where the same set issued 13 for the pass measured here (1 + 8 + 1 + the two per-row
 rejection INSERTs + the DELETE). That is the set the sprint's own scenarios 2.1 and 2.4 pin (3 INSERTs for a

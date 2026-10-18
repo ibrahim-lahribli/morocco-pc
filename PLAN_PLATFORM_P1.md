@@ -210,7 +210,7 @@ Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 
 | 2.6 | Re-run the same pass twice | replace-not-append: row counts unchanged (Decision 31's idempotence holds) |
 
 **Status 2026-10-18 — DONE, measured on the TEST branch; the co-located leg rides P1 Sprint 1 Step 8.**
-`persist-ranked` and `persist-rejections` now issue **5 statements for any pass** — 3 multi-row INSERTs (one
+`persist-ranked` and `persist-rejections` now issue **at most 5 statements** — 3 multi-row INSERTs (one
 each for candidates, components and results) plus the unconditional Decision 31 rejection DELETE and one
 rejection INSERT — where they issued 13 for a 1-build/8-component pass. `engine.commit` went **19 -> 11**
 statements and 3 331 -> 1 838 ms at pin `launch-v2@1.0.0`; the whole pass 57 -> 49 statements. Row-for-row
@@ -220,7 +220,7 @@ writers (all four dumps byte-identical). Gates: `test:unit` 1171 pass / 0 fail o
 --model=launch-v2@1.0.0` 36/0, `verify:pi1 -- --model=launch-v2@1.0.0` PASS, `eval:scenarios` exit 0 with all
 81 assertion rows identical to the control).
 
-The **"<= 6" headline counts the writers (now 5), not the transaction**: BEGIN, the two Decision 19.2 guards
+The **"<= 6" headline counts the writers (now at most 5), not the transaction**: BEGIN, the two Decision 19.2 guards
 and COMMIT are structural, and `persist-pass-facts`' floor UPDATE plus one provenance UPDATE per rank —
 Decision 46, added after this sprint was written and outside its file list — is the last per-row writer.
 Only the ms comparison against the co-located target remains, and that is P1 Sprint 1 Step 8. See

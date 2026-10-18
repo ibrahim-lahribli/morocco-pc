@@ -34,7 +34,7 @@ unverified into evidence.
 | P0 | 4 — API read/wire + presenter + v1.1/v1.2 | **DONE** | Pass facts on both verbs; product identity; `openapi-v1.2.json` |
 | P0 | 5 — shared-apply gate + doc refresh + P1–P4 review | **DONE** | 019+020 applied to shared from `br-damp-grass-axyri6yl`; OG-52 registered |
 | P1 | 1 — co-locate (EU Neon + deploy + re-measure) | **PARTIAL** | Steps 1–3 committed (`--note`, audit `target` digest); **Steps 4–9 OWNER**, with a runnable runbook (`docs/RECIPES/deploy-eu-colocation.md`) and the parity gate (`scripts/check-target-parity.js`) ready |
-| P1 | 2 — batch the commit to ≤ 6 statements | **DONE** | 2026-10-18: the writer set is 5 statements for any pass (13 for the measured one); commit phase 19 → 11 statements, 3 331 → 1 838 ms at pin `launch-v2@1.0.0`; rows proven byte-identical on the branch. The co-located ms leg is P1 S1 Step 8 |
+| P1 | 2 — batch the commit to ≤ 6 statements | **DONE** | 2026-10-18: the writer set is at most 5 statements (13 for the measured one); commit phase 19 → 11 statements, 3 331 → 1 838 ms at pin `launch-v2@1.0.0`; rows proven byte-identical on the branch. The co-located ms leg is P1 S1 Step 8 |
 | P1 | 3 — reduce loader statements | NOT STARTED | 5 steps; baseline needs P1 S1 |
 | P1 | 4 — `catalog_version` + canonical key (design only) | **DONE** | Decision 47 RESOLVED 2026-10-16 and implemented by S5 (`catalogVersion(db)` + migration 021) |
 | P1 | 5 — dedupe repeated POSTs (contract change) | **DONE** | Live: 200 + `reused: true` + the original id; contract v1.3 |
