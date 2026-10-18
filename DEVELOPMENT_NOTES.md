@@ -1492,3 +1492,37 @@ retirement and the co-location progress.
 **What Steps 7-9 still need:** a hosting account (Fly `fra` or Render `frankfurt`), the deploy, and
 the before/after measurement at the recorded pin - `docs/RECIPES/deploy-eu-colocation.md`, whose §7
 now effectively requires seed 017 to have run before parity can pass.
+## 2026-10-18 - a fixture cleanup that runs at the START of a run cannot survive a crash (OG-51)
+
+`scripts/test-compatibility.js` leaked four `TestCompat*` products into the shared catalog, and the
+reason is structural rather than careless: its cleanup block ran at the BEGINNING of a run, so the
+only run that can clean up is one that starts. A run killed after the inserts left the rows and
+nothing ever removed them again. The fix is a `finally`, and the first run after it is its own
+proof (`cleanup: 0 TestCompat product row(s) remain`, with residue asserted 0 in products,
+families, the manufacturer/socket/chipset/memory_type reference rows and `spec_provenance`).
+
+**Measuring it changed the shape of the fix twice.** (1) The leak was **27 rows across 7 tables**,
+not the four products the gap named: the fixture also creates four `product_family` rows, a
+manufacturer, a socket, a chipset, a `memory_type`, one spec row per product, five support rows
+and one `spec_provenance` row. A cleanup that deleted only the four `product` rows would have hit
+`ON DELETE NO ACTION` and reported success while deleting nothing - the AGENTS section 7 item 11
+trap, this time on the shared DB. (2) The legacy `DELETE FROM spec_provenance WHERE target_table
+IN (...)` was namespace-blind: it matched EVERY row of four target tables, so on a branch that
+carries real provenance a test run would have erased another product's provenance. It is now
+driven by the support-row ids it is about to delete. A fixture cleanup has to be keyed to the
+fixture's own rows, never to a table list.
+
+**Shared and the branch now agree on the counts the gate reads:** `product` 104 -> 100,
+`motherboard_spec` 8 -> 7 with all 7 carrying the dims, and `check-deferred-rules.js` prints
+`boards memory limits 7/7` where it printed 7/8. `component_assessment` 280, `store_offer` 101,
+`cpu_motherboard_support` 21 and `case_radiator_support` 59 were re-read after the delete and are
+unchanged, which is the check that the transaction removed fixtures and nothing else.
+
+**Operational notes.** The guard is `getWriteTestDbUrl()`, so refusing the shared target is a
+pre-connection throw - proven by exporting `TEST_DATABASE_URL` equal to the shared URL, which
+exits 1 with `TEST_DATABASE_URL must not target the shared database` and connects to nothing.
+Capture a URL for that kind of test with `dotenv.config({ quiet: true })`: dotenv's tip line goes
+to stdout, so a plain `node -e` inside `$(...)` yields `TEST_DATABASE_URL is not a valid URL` - a
+harness artifact that reads exactly like a guard failure. And the session opened by that config
+object reports `search_path = "$user", public` on this branch, so no `SET search_path` is needed
+here (the `pg_temp` note belongs to the manual seed-apply pattern, not to the lib).

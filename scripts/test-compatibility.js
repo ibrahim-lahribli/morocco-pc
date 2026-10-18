@@ -1,12 +1,128 @@
+'use strict';
+
+// scripts/test-compatibility.js - Layer 1 compatibility and provenance fixtures.
+//
+// Safety contract (OG-51; the same shape as scripts/lib/db-url.js and
+// scripts/test-orchestrator-commit.js):
+//   * Target is TEST_DATABASE_URL ONLY. getWriteTestDbUrl() throws unless
+//     TEST_DATABASE_URL is set, DATABASE_URL is set, and the two name different
+//     hosts (a pooled and a direct endpoint count as the same host). The shared
+//     DATABASE_URL is therefore never contacted - before OG-51 this script read
+//     it directly and wrote fixtures into the catalog the engine scores.
+//   * Only the endpoint id and database name are printed; never credentials.
+//   * Cleanup runs in a finally, so a failed assertion or a thrown statement
+//     cannot leave rows behind. The old form cleaned up only at the START of a
+//     run, which is exactly how four TestCompat* products survived on shared.
+//   * Cleanup is SCOPED to this script's fixtures. The legacy spec_provenance
+//     delete matched every row of four target tables; it is now driven by the
+//     support-row ids that are about to be removed.
+//   * Spec rows go before product, and product before product_family - the spec
+//     tables are ON DELETE NO ACTION (AGENTS section 7 item 11).
+//
+// Run: node scripts/test-compatibility.js
+// Deliberately NOT named *.test.js: `npm run test:unit` globs src/**/*.test.js,
+// so no generic runner ever discovers a test that writes to a database.
+
 require('dotenv').config();
 const { Client } = require('pg');
-const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+const { getWriteTestDbUrl, describeTarget } = require('./lib/db-url');
+
+const FIXTURE_PRODUCT = "name LIKE 'TestCompat%'";
+const FIXTURE_FAMILIES = "('TestCPUFamily', 'TestMBBFamily', 'TestCaseFamily', 'TestCoolerFamily')";
+const FIXTURE_SPEC_TABLES = Object.freeze([
+  'cpu_spec',
+  'motherboard_spec',
+  'cooler_spec',
+  'case_spec',
+  'ram_spec',
+  'ssd_spec',
+  'psu_spec',
+]);
+
+/**
+ * Delete exactly the rows this script creates, in reverse dependency order.
+ * Idempotent: with no fixtures present every statement deletes 0 rows.
+ *
+ * @param {import('pg').Client} client connected client
+ * @returns {Promise<number>} TestCompat% product rows still present (0 = clean)
+ */
+async function clearCompatFixtures(client) {
+  // Provenance first: target_id points at the support rows below, so it can
+  // only be scoped while those rows still exist.
+  await client.query(
+    `DELETE FROM spec_provenance sp
+      WHERE (sp.target_table = 'cpu_motherboard_support'
+             AND sp.target_id IN (
+               SELECT cms.id FROM cpu_motherboard_support cms
+                WHERE cms.motherboard_product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT})
+                   OR cms.cpu_product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT})
+                   OR cms.cpu_product_family_id IN (SELECT id FROM product_family WHERE name IN ${FIXTURE_FAMILIES})
+             ))
+         OR (sp.target_table = 'cooler_socket_support'
+             AND sp.target_id IN (
+               SELECT css.id FROM cooler_socket_support css
+                WHERE css.cooler_product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT})
+             ))
+         OR (sp.target_table = 'case_motherboard_form_factor'
+             AND sp.target_id IN (
+               SELECT cff.id FROM case_motherboard_form_factor cff
+                WHERE cff.case_product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT})
+             ))
+         OR (sp.target_table = 'case_radiator_support'
+             AND sp.target_id IN (
+               SELECT crs.id FROM case_radiator_support crs
+                WHERE crs.case_product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT})
+             ))`
+  );
+
+  // Support rows, keyed by product, socket or family.
+  await client.query(`DELETE FROM cpu_motherboard_support WHERE motherboard_product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT}) OR cpu_product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT}) OR cpu_product_family_id IN (SELECT id FROM product_family WHERE name IN ${FIXTURE_FAMILIES})`);
+  await client.query(`DELETE FROM cooler_socket_support WHERE cooler_product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT}) OR socket_id IN (SELECT id FROM socket WHERE name = 'TestSocketCompat')`);
+  await client.query(`DELETE FROM case_motherboard_form_factor WHERE case_product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT})`);
+  await client.query(`DELETE FROM case_radiator_support WHERE case_product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT})`);
+
+  // Layer 2/3 dependents, then the one-to-one spec rows (ON DELETE NO ACTION).
+  await client.query(`DELETE FROM price_history WHERE store_offer_id IN (SELECT id FROM store_offer WHERE product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT}))`);
+  await client.query(`DELETE FROM store_offer WHERE product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT})`);
+  await client.query(`DELETE FROM component_assessment WHERE product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT})`);
+  await client.query(`DELETE FROM benchmark_result WHERE product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT})`);
+  await client.query(`DELETE FROM gpu_board_spec WHERE product_variant_id IN (SELECT id FROM product_variant WHERE product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT}))`);
+  await client.query(`DELETE FROM product_variant WHERE product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT})`);
+
+  for (const table of FIXTURE_SPEC_TABLES) {
+    await client.query(`DELETE FROM ${table} WHERE product_id IN (SELECT id FROM product WHERE ${FIXTURE_PRODUCT})`);
+  }
+
+  await client.query(`DELETE FROM product_candidate WHERE source_identifier LIKE 'TestCompat%'`);
+  await client.query(`DELETE FROM ingestion_record WHERE source_identifier LIKE 'TestCompat%'`);
+  await client.query(`DELETE FROM retailer_listing_alias WHERE listing_identifier LIKE 'TestCompat%'`);
+
+  // product before product_family, then the standalone reference rows.
+  await client.query(`DELETE FROM product WHERE ${FIXTURE_PRODUCT}`);
+  await client.query(`DELETE FROM product_family WHERE name IN ${FIXTURE_FAMILIES}`);
+  await client.query(`DELETE FROM chipset WHERE name = 'TestChipsetCompat'`);
+  await client.query(`DELETE FROM socket WHERE name = 'TestSocketCompat'`);
+  await client.query(`DELETE FROM memory_type WHERE name = 'TestDDR5Compat'`);
+  await client.query(`DELETE FROM manufacturer WHERE name = 'TestManufacturerCompat'`);
+
+  const residue = await client.query(`SELECT count(*)::int AS n FROM product WHERE ${FIXTURE_PRODUCT}`);
+  return residue.rows[0].n;
+}
 
 (async () => {
-  await client.connect();
+  // Throws before connecting unless TEST_DATABASE_URL is set, DATABASE_URL is
+  // set, and they name different hosts: fail closed, never retarget silently.
+  const dbConfig = getWriteTestDbUrl();
+  const target = describeTarget(dbConfig.connectionString);
+  const client = new Client({
+    connectionString: dbConfig.connectionString,
+    connectionTimeoutMillis: dbConfig.connectionTimeoutMillis,
+  });
 
   let passed = 0;
   let failed = 0;
+  let connected = false;
 
   function assert(condition, message) {
     if (condition) {
@@ -28,45 +144,16 @@ const client = new Client({ connectionString: process.env.DATABASE_URL });
   }
 
   try {
-    // ------------------------------------------------------------------
-    // Clean up any previous test data
-    // ------------------------------------------------------------------
-    await client.query(`DELETE FROM cpu_motherboard_support WHERE motherboard_product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-    await client.query(`DELETE FROM cooler_socket_support WHERE cooler_product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-    await client.query(`DELETE FROM case_motherboard_form_factor WHERE case_product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-    await client.query(`DELETE FROM case_radiator_support WHERE case_product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-// Delete one-to-one hardware spec rows that reference the TestCompat%
-    // products BEFORE deleting the products. Without this, a re-run fails on
-    // the FK from cpu_spec / motherboard_spec / cooler_spec / case_spec (and the
-    // other product_id-keyed spec tables) back to product.
-    await client.query(`DELETE FROM cpu_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-    await client.query(`DELETE FROM motherboard_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-    await client.query(`DELETE FROM cooler_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-    await client.query(`DELETE FROM case_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-    await client.query(`DELETE FROM ram_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-    await client.query(`DELETE FROM ssd_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-    await client.query(`DELETE FROM psu_spec WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-// Delete Layer 2/3 product-FK dependents (assessment / benchmark / offer /
-    // variant rows that reference TestCompat% products) BEFORE deleting the
-    // products. Prevents re-run failures on component_assessment, benchmark_result,
-    // store_offer, price_history, product_variant (and gpu_board_spec via variant).
-    await client.query(`DELETE FROM price_history WHERE store_offer_id IN (SELECT id FROM store_offer WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%'))`);
-    await client.query(`DELETE FROM store_offer WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-    await client.query(`DELETE FROM component_assessment WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-    await client.query(`DELETE FROM benchmark_result WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-    await client.query(`DELETE FROM gpu_board_spec WHERE product_variant_id IN (SELECT id FROM product_variant WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%'))`);
-    await client.query(`DELETE FROM product_variant WHERE product_id IN (SELECT id FROM product WHERE name LIKE 'TestCompat%')`);
-    await client.query(`DELETE FROM spec_provenance WHERE target_table IN ('cpu_motherboard_support', 'cooler_socket_support', 'case_motherboard_form_factor', 'case_radiator_support')`);
-    await client.query(`DELETE FROM product_candidate WHERE source_identifier LIKE 'TestCompat%'`);
-    await client.query(`DELETE FROM ingestion_record WHERE source_identifier LIKE 'TestCompat%'`);
-    await client.query(`DELETE FROM retailer_listing_alias WHERE listing_identifier LIKE 'TestCompat%'`);
-    await client.query(`DELETE FROM product WHERE name LIKE 'TestCompat%'`);
-    await client.query(`DELETE FROM product_family WHERE name IN ('TestCPUFamily', 'TestMBBFamily', 'TestCaseFamily', 'TestCoolerFamily')`);
-    await client.query(`DELETE FROM chipset WHERE name = 'TestChipsetCompat'`);
-    await client.query(`DELETE FROM socket WHERE name = 'TestSocketCompat'`);
-await client.query(`DELETE FROM memory_type WHERE name = 'TestDDR5Compat'`);
-    await client.query(`DELETE FROM manufacturer WHERE name = 'TestManufacturerCompat'`);
+    await client.connect();
+    connected = true;
+    console.log('target: TEST branch only (host: ' + target.endpointId
+      + (target.pooled ? ' (pooled)' : '') + ', database: ' + target.database + ')');
+    console.log('the shared DATABASE_URL is never contacted and never printed');
 
+    // ------------------------------------------------------------------
+    // Clean up a previous run's leftovers, then the fixtures of this run
+    // ------------------------------------------------------------------
+    await clearCompatFixtures(client);
     // ------------------------------------------------------------------
     // Seed reference data
     // ------------------------------------------------------------------
@@ -509,12 +596,32 @@ await client.query(`DELETE FROM memory_type WHERE name = 'TestDDR5Compat'`);
     // ------------------------------------------------------------------
     console.log('\n--- Summary ---');
     console.log('Passed: ' + passed);
-    console.log('Failed: ' + failed);
-
-    await client.end();
   } catch (err) {
     console.error('ERROR:', err.message);
-    if (client) await client.end();
-    process.exit(1);
+    failed++;
+  } finally {
+    // OG-51: the database's end state must not depend on the run reaching the
+    // Summary. A cleanup failure is a failure of the script, so it is folded
+    // into the exit code rather than printed and ignored.
+    if (connected) {
+      try {
+        const residue = await clearCompatFixtures(client);
+        console.log('cleanup: ' + residue + ' TestCompat product row(s) remain');
+        if (residue !== 0) failed++;
+      } catch (cleanupError) {
+        console.error('CLEANUP FAILED:', cleanupError.message);
+        failed++;
+      }
+      // end() rejects only when the socket is already gone; that is not a
+      // finding of this script.
+      await client.end().catch(() => {});
+    }
   }
+
+  console.log('Failed: ' + failed);
+  console.log('RESULT: ' + (failed === 0 ? 'PASS' : 'FAIL'));
+
+  // process.exit(code) ignores process.exitCode, so the cleanup verdict is
+  // folded into this single exit path explicitly (AGENTS section 7 item 11).
+  process.exit(failed === 0 ? 0 : 1);
 })();
