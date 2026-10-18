@@ -14,15 +14,14 @@ Passing-test counts are deliberately not restated here — see the dated entries
 
 **14 sprints done, 4 partial, 3 not started. Almost every remaining sprint of agent work is gated
 behind an owner action — most of them behind two: the EU project's hosting account and deploy (P1
-Sprint 1 - the EU project itself landed 2026-10-18) and the GitHub dispatch (P3 Sprint 1). With P1 Sprint 2 landed 2026-10-18, six of the
+Sprint 1 - the EU project itself landed 2026-10-18, and the GitHub dispatch P3 Sprint 1 is now RAN, leaving only its merge). With P1 Sprint 2 landed 2026-10-18, five of the
 seven open sprints are blocked on the co-located target, an owner decision, or an owner account.**
-**The exception is P1 Sprint 3, whose statement-count half is measurable on the TEST branch today — only
-its latency table waits for the co-located target.** The BETA engine and API surface are live on the TEST branch (contract v1.5,
+**The exceptions are P1 Sprint 3, whose statement-count half is measurable on the TEST branch (only its latency table waits for the co-located target), and P3 Sprint 1, whose only residue is the merge that starts the nightly.** The BETA engine and API surface are live on the TEST branch (contract v1.5,
 schema at ledger 22 on the branch and 20 on shared); nothing is deployed, nothing is in production, and the CI
-job that would prove the end-to-end path has never been run. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency
+job that proves the end-to-end path HAS now run twice on `agent/platforms` (2026-10-18): `test:api:db` passed 9/0 on the runner, and the replay is red only on the branch-only 021/022 objects. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency
 sprints and the deployed-host legs; **P1 Sprint 4** (DONE 2026-10-16) unblocked P1 Sprints 5–6 (both DONE 2026-10-16), and
-P2 Sprint 3 landed 2026-10-17 (Step 7 decided 2026-10-18: public but unlisted); **P3 Sprint 1** (the CI dispatch) is the only way to turn the CI claim from
-unverified into evidence.
+P2 Sprint 3 landed 2026-10-17 (Step 7 decided 2026-10-18: public but unlisted); **P3 Sprint 1** (the CI dispatch) has now turned the CI claim from
+unverified into evidence, so the only part of it left is the merge.
 
 ## Sprint completion matrix
 
@@ -44,7 +43,7 @@ unverified into evidence.
 | P2 | 3 — catalog endpoints (read-only) | **DONE** | Steps 1–6 **DONE 2026-10-17** (two read endpoints, keyset pagination on `slug`, provenance-labelled prices, contract v1.5; `test:api` 98/0, `test:api:db` 9/0 with a 100-row page walk); Step 7 **DECIDED 2026-10-18**: public but unlisted, noindex until prices are VERIFIED, indicative prices behind the disclaimer |
 | P2 | 4 — CORS allow-list + 429 contract, proven | **DONE** | 4 CORS tests + the 429 body/`Retry-After` pin, both documented (2026-10-17); `test:api` 75/0 |
 | P2 | 5 — contract-completeness gate | **DONE** | `openapi-coverage.test.js` (7 tests); the gate exposed missing 429/500 on all five routes, now declared; snapshot regenerated (2026-10-17) |
-| P3 | 1 — prove the recurring CI job | **PARTIAL** | Ref rationale recorded (commit `438ecf6`); **Step 2 dispatch OWNER**; Steps 3–6 not started |
+| P3 | 1 — prove the recurring CI job | **PARTIAL** | Steps 1–3 **DONE 2026-10-18**: two `workflow_dispatch` runs on `agent/platforms` ([39119596060](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39119596060), [39120485573](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39120485573)) — `test:api:db` **9 passed / 0 failed on the runner**; the replay is RED only on the branch-only 021/022 objects (columns 377 vs 370, checks 84 vs 79, fks 61 vs 60, indexes 102 vs 100), which closes with the shared apply and never by changing the reference; the two defects the first run exposed were fixed (serial DB test files, `if: always()` on the DB step). Steps 5–6 recorded; the nightly `schedule` starts only after merge |
 | P3 | 2 — rehearse the production DB role | **PARTIAL** | Steps 1–4 **DONE 2026-10-17** (`scripts/rehearse-api-role.js`: 20/20 privilege answers, zero `42501` as the role, row-wide UPDATE denied, residue 0, role removed); **Step 5 OWNER** (role on shared) |
 | P3 | 3 — staging + production + schema-gated deploy | NOT STARTED | 6 steps; **owner-gated** (cloud accounts); needs P1 S1 |
 | P3 | 4 — observability that pages someone | NOT STARTED | 6 steps; **owner gate** (monitoring account) |
@@ -67,7 +66,7 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 | P2 remainder of the OpenAPI snapshot surface | P2 S5 | — **DONE 2026-10-17** (the gate fails an undocumented route or a missing 429/500) |
 | P2 `meta.js` `listUseCases` swap (OG-38) | P2 S1 | — **DONE 2026-10-15** (the swap landed; OG-38's behavioural half stays open) |
 | P3 the `morocco_pc_api` role + column-scoped GRANTs | P3 S2 Step 5 | Apply the role to the shared DB (DDL on the only dev DB; needs a recorded restore point + the secret) — **the only residue of P0 Sprint 5**. PREPARED 2026-10-17: the guarded apply and the smoke test exist and are dry-run verified, with the owner runbook `docs/RECIPES/provision-the-api-role.md`; the human action is now two commands |
-| P3 CI verification of `test:api:db` | P3 S1 Step 2 | Dispatch `recurring-gates` on `agent/platforms` |
+| P3 CI verification of `test:api:db` | P3 S1 Step 2 | **DONE 2026-10-18** — dispatched on `agent/platforms`; `test:api:db` answered 9/0 on the runner. Remaining owner action: the merge to the default branch, because the nightly `schedule` fires only from there |
 | P3 error tracking | P3 S4 | A monitoring account + a DSN in the secret store |
 | P3 staging + production | P3 S3 | Two named environments + a deploy provider account |
 | P3 migration-deploy step | P3 S3 | — (agent, once the environments exist) |
@@ -81,7 +80,7 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 - *The latency half of the P1 chain* — P1 S3's before/after ms table and P2 S2 Step 4's deployed-host leg.
   Their statement counts are measurable on the TEST branch; the ms table is not.
 - *P3 S3* (staging + production) needs both the cloud accounts and P1's deployment; *P3 S4* needs a
-  monitoring account; *P3 S1* needs the GitHub dispatch; *P3 S2 Step 5* needs the DB password and a
+  monitoring account; *P3 S1* is dispatched and measured, so only the merge-to-default-branch nightly remains; *P3 S2 Step 5* needs the DB password and a
   restore point.
 
 **Startable now, no owner action (agent work):**
@@ -92,6 +91,31 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 - **P2 S4 and P2 S5** — **DONE 2026-10-17** (the CORS/429 proof and the OpenAPI-completeness gate; both DB-free).
 - **P2 S3** — **DONE 2026-10-18** (the two read-only catalog endpoints, contract v1.5, plus Step 7's public-but-unlisted decision).
 - **P2 S2 Steps 1–3** — **DONE 2026-10-17** (configurable `trustProxy`, default off, with 14 DB-free tests); only Step 4 needs the deployed host.
+
+## The frontend track (its own branch, not this one)
+
+The frontend is NOT on this branch and must not be read as platform work that is "missing".
+`apps/web/` exists only on `freebuff/review-and-web-design-guidelines-tailwind-design-s-...`
+(commit `245638d`, 25 files: Next.js scaffold, `/fr` shell, its own CI workflow and the S1–S6
+sprint board); `agent/web` is currently identical to `master` and has never been pushed. What the
+frontend consumes from here is the API contract, so the platform items that matter to it are four,
+and none of them is agent work left undone:
+
+- **A deployed origin** (P1 Sprint 1 Steps 7–9) — without it there is nothing for the web app to
+  point at, and `ALLOWED_ORIGINS` cannot name a real origin (P2 Sprint 2 Step 4).
+- **Catalogue exposure** — public but unlisted, `noindex` until prices are `VERIFIED` (P2 Sprint 3
+  Step 7, decided 2026-10-18). The list response carries `offer_class` per product but NO
+  `disclaimer` field, so a price grid built from it must render the disclaimer itself.
+- **The POST contract review** invited before merge: dedupe (200 + `reused: true`) and presets
+  (contract v1.4) change what the wizard may rely on.
+- **A write target that is not the TEST branch** — the Neon `frontend-dev` branch
+  (`br-proud-frog-ax80h3nv`) plus the gitignored `.env.frontend-dev`, because every distinct POST
+  leaves an unmarked `recommendation_query` row and `eval:scenarios` refuses to run while one
+  exists.
+
+The frontend branch carries one open defect of its own, and it is NOT a platform item: its
+Tailwind v4 build has no PostCSS (or Turbopack) integration wired, so `@theme` is never
+processed — recorded in `docs/plans/agent3-web-plan.md` §2.5 on that branch.
 
 ## Register sync
 

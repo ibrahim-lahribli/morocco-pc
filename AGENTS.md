@@ -12,7 +12,9 @@ persists the results.
 
 The engine is still a pure Node.js library plus a PostgreSQL schema, and it stays that way: the
 HTTP surface is a separate, thin layer (`apps/api/`, Decision 36) that calls the engine's public
-barrels and owns no engine logic. There is still no frontend and no authentication. The entry
+barrels and owns no engine logic. There is no frontend in THIS tree and no authentication: the
+web app lives on its own branch (`apps/web/`, Next.js + Tailwind, scaffolded 2026-10-16) and has
+not been merged. The entry
 points are the engine's public barrels (`src/recommendation/*/index.js`), the `scripts/` CLIs,
 and `apps/api/src/server.js`.
 
