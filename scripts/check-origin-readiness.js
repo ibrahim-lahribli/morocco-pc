@@ -26,8 +26,9 @@
  * Exit codes:
  *   0  both facts held; `PREFLIGHT OK - addresses:` and the address set print
  *   1  an assertion failed - fly itself failed, no address, no 2xx answer, a
- *      non-JSON body, or status/db not "ok"
- *   2  usage error (unknown flag, blank `--app`, non-http(s) `--origin`)
+ *      redirect, a non-JSON body, or status/db not "ok"
+ *   2  usage error (unknown flag, blank `--app`, non-http(s) `--origin`, an
+ *      origin embedding credentials, an origin with a query or fragment)
  *
  * The parsing and verdict live in scripts/lib/origin-readiness.js. This file is
  * the I/O half, and `main(argv, deps)` takes injectable `runFly`,
@@ -110,10 +111,18 @@ function defaultRunFly(app) {
   };
 }
 
-/** One GET, bounded so an unresponsive origin cannot hang the deploy shell. */
+/**
+ * One GET, bounded so an unresponsive origin cannot hang the deploy shell.
+ *
+ * `redirect: 'manual'` is deliberate, and matches the inline `curl -fsS` this
+ * replaced (no `-L`): the question is whether THIS origin answers. Following a
+ * redirect would let some other host's healthy body stand in for this deploy's,
+ * which is exactly the false readiness the preflight exists to prevent. A 3xx
+ * comes back with its status and fails the check.
+ */
 async function defaultFetchHealth(url) {
   const response = await fetch(url, {
-    redirect: 'follow',
+    redirect: 'manual',
     headers: { accept: 'application/json' },
     signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
   });

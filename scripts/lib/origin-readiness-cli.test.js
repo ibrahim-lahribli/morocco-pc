@@ -10,9 +10,12 @@
  * check never reaches the second one (no health GET, no addresses printed).
  *
  * `main(argv, deps)` takes injected `runFly` / `fetchHealth` / writers, so this
- * is DB-free, network-free and flyctl-free. A stub `fly` on PATH would have
- * tested the stub; a local HTTP server would have tested the socket. The live
- * run is the owner's, in the runbook.
+ * is DB-free, network-free and flyctl-free: a stub `fly` on PATH would have
+ * tested the stub, and an injected `fetchHealth` covers every verdict. The one
+ * exception is the redirect test at the end, which must exercise the REAL
+ * `defaultFetchHealth` option against two loopback servers - no injected
+ * collaborator can pin `redirect: 'manual'`. The live origin is the owner's
+ * run, in the runbook.
  *
  * NOT part of `npm run test:unit`; run with:
  *   npm run test:scripts
@@ -24,6 +27,7 @@ const assert = require('node:assert/strict');
 const {
   parseArgs,
   normalizeOrigin,
+  defaultFetchHealth,
   main,
   USAGE,
   DEFAULT_APP,
@@ -211,4 +215,63 @@ test('normalizeOrigin accepts http(s) and strips trailing slashes', () => {
   assert.equal(normalizeOrigin('https://example.test///'), 'https://example.test');
   assert.equal(normalizeOrigin('http://127.0.0.1:8099'), 'http://127.0.0.1:8099');
   assert.throws(() => normalizeOrigin('ftp://example.test'), /http\(s\)/);
+});
+
+/** Listen on a free loopback port, so the test never depends on a fixed one. */
+function listen(server) {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+}
+
+function close(server) {
+  return new Promise((resolve) => {
+    if (!server || !server.listening) {
+      resolve();
+      return;
+    }
+    server.close(() => resolve());
+  });
+}
+
+/**
+ * The real fetch must not follow a redirect. The inline `curl -fsS` this replaced
+ * had no `-L`, and following one would let another host's healthy body pass for
+ * this deploy's - the false readiness the preflight exists to prevent.
+ */
+test('the health probe does not follow redirects: a 3xx is a failure', async () => {
+  const http = require('node:http');
+  let targetHits = 0;
+  let target = null;
+  let redirector = null;
+  try {
+    target = http.createServer((_request, response) => {
+      targetHits += 1;
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end('{"status":"ok","db":"ok"}');
+    });
+    await listen(target);
+    const healthyUrl = 'http://127.0.0.1:' + target.address().port + '/v1/health';
+
+    redirector = http.createServer((_request, response) => {
+      response.writeHead(302, { location: healthyUrl });
+      response.end();
+    });
+    await listen(redirector);
+
+    const response = await defaultFetchHealth(
+      'http://127.0.0.1:' + redirector.address().port + '/v1/health?probe=preflight'
+    );
+    assert.equal(response.status, 302);
+    assert.equal(targetHits, 0, 'the redirect target must never be fetched');
+
+    const h = harness({ fetchHealth: async () => response });
+    assert.equal(await main([], h.deps), 1);
+    assert.match(h.err(), /did not answer 2xx \(HTTP 302\)/);
+    assert.doesNotMatch(h.out(), /PREFLIGHT OK/);
+  } finally {
+    await close(redirector);
+    await close(target);
+  }
 });

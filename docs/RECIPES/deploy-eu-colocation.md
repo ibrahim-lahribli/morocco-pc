@@ -346,6 +346,11 @@ rather than a bare 2xx. It reads only (one `fly ips list`, one `GET`) and does n
 address family it connects over: unlike steps 1 and 3 it asserts reachability, not identity,
 so there is no `-4` here.
 
+**A redirect is a failure, not a pass.** The probe asks whether *this* origin answers, so it does
+not follow redirects (the inline `curl -fsS` it replaced had no `-L`). Following one would let
+some other host's healthy body stand in for this deploy's. A `301`/`302` therefore prints
+`did not answer 2xx (HTTP 301)`; pass the `https://` origin, which `$APP` above already is.
+
 **Step 1 — with trust OFF, read the proxy address.**
 
 ```bash
