@@ -173,23 +173,23 @@ untouched.
 - Consumes: `persistRanked(client, { queryId, selected })` and `persistRejections(client, { queryId, rejections })` — **both signatures stay unchanged**; only the SQL and the parameter shape change.
 - Produces: the same rows, in the same order, with the same NULLs. Any later module sees no difference.
 
-- [ ] **Step 1: measure first, on the current code.**
+- [x] **Step 1: measure first, on the current code.**
 
 `node scripts/measure-api-pass-phases.js --budget=20000 --use-case=GAMING --model=<name@version>` against the co-located target. Record the commit phase's statement count and ms **together with the pin**. The roadmap's 37 statements / ~4.9 s is a `seed-minimal-v1` figure — it predates `launch-v2` (created 2026-10-15) — and the pin is what stops the difference from being silent: the same command pinned to `launch-v2@1.0.0` on 2026-10-15 measured 19 statements / 2 607 ms for `engine.commit` on the same branch, against the v1-era 37 / 4 906. Both the model and the code changed between those two runs, so the pin removes ONE variable, not both. Expect the figure to be confirmed or corrected PER PIN, and note that a v1 comparison is not measurable on the TEST branch at all (`seed-minimal-v1` is inactive there; a pin never activates a model).
 
-- [ ] **Step 2: write the failing statement-count tests.**
+- [x] **Step 2: write the failing statement-count tests.**
 
 In `persist-ranked.test.js`, drive a recording fake client with a 3-build fixture (3 selected entries; one build with 8 components, one with 8, one with 6) and assert **exactly three** `INSERT INTO` statements total, with parameter arrays whose row counts are 3 / 22 / 3. In `persist-rejections.test.js`, assert exactly two statements (`DELETE`, then one `INSERT`) for 4 rejections. Run: `npm run test:unit`. Expected: FAIL with the current per-row counts (10 and 5).
 
-- [ ] **Step 3: implement the multi-row INSERTs.**
+- [x] **Step 3: implement the multi-row INSERTs.**
 
 Use `INSERT INTO ... SELECT * FROM UNNEST($1::uuid[], $2::uuid[], ...)`, one row per array element, in the fixture's order. Keep the existing column list and the existing `ON CONFLICT`-free replace semantics exactly; keep the `build_component` → `build_candidate` ordering dependency explicit by inserting candidates before components and components before results.
 
-- [ ] **Step 4: run the tests and prove row-for-row identity.**
+- [x] **Step 4: run the tests and prove row-for-row identity.**
 
 `npm run test:unit` → 0 fail. Then, on the branch, `node scripts/test-orchestrator-commit.js` (TEST_DATABASE_URL only): the same pass must persist the same rows. Capture the rows before the change and after (`SELECT ... ORDER BY rank, component_role, product_id`), and `diff` the two dumps — byte-identical is the acceptance, because the golden harness compares ranked output.
 
-- [ ] **Step 5: re-measure and commit.**
+- [x] **Step 5: re-measure and commit.**
 
 Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 Sprint 2: batch the commit's INSERTs to <=6 statements" -- src/recommendation/persistence/persist-ranked.js src/recommendation/persistence/persist-ranked.test.js src/recommendation/persistence/persist-rejections.js src/recommendation/persistence/persist-rejections.test.js src/recommendation/orchestrator/commit.test.js`.
 
@@ -208,6 +208,23 @@ Re-run Step 1's command; record the new commit-phase counts. `git commit -m "P1 
 | 2.4 | 4 rejections | 2 statements (DELETE then one INSERT) |
 | 2.5 | Real branch pass, rows dumped before/after | `diff` empty |
 | 2.6 | Re-run the same pass twice | replace-not-append: row counts unchanged (Decision 31's idempotence holds) |
+
+**Status 2026-10-18 — DONE, measured on the TEST branch; the co-located leg rides P1 Sprint 1 Step 8.**
+`persist-ranked` and `persist-rejections` now issue **5 statements for any pass** — 3 multi-row INSERTs (one
+each for candidates, components and results) plus the unconditional Decision 31 rejection DELETE and one
+rejection INSERT — where they issued 13 for a 1-build/8-component pass. `engine.commit` went **19 -> 11**
+statements and 3 331 -> 1 838 ms at pin `launch-v2@1.0.0`; the whole pass 57 -> 49 statements. Row-for-row
+identity was PROVEN on the branch with Decision 38's `asOf` pinned, against a control run of the pre-change
+writers (all four dumps byte-identical). Gates: `test:unit` 1171 pass / 0 fail on Node 24 AND Node 22
+(`test-orchestrator-commit.js` 51/0 against the real schema, `test-orchestrator-full-run.js
+--model=launch-v2@1.0.0` 36/0, `verify:pi1 -- --model=launch-v2@1.0.0` PASS, `eval:scenarios` exit 0 with all
+81 assertion rows identical to the control).
+
+The **"<= 6" headline counts the writers (now 5), not the transaction**: BEGIN, the two Decision 19.2 guards
+and COMMIT are structural, and `persist-pass-facts`' floor UPDATE plus one provenance UPDATE per rank —
+Decision 46, added after this sprint was written and outside its file list — is the last per-row writer.
+Only the ms comparison against the co-located target remains, and that is P1 Sprint 1 Step 8. See
+`DEVELOPMENT_NOTES.md`, 2026-10-18.
 
 ---
 

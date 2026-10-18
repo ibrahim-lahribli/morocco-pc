@@ -1342,3 +1342,56 @@ concrete value is a per-host fact — `127.0.0.1` for a same-host reverse proxy,
 for a private-network one — and none is recorded here because no host is chosen and this repo
 holds no provider evidence. Pin it from the deploy's own `request.ip` evidence; do not copy a
 range from memory. The contract is recorded as **Decision 49**.
+
+## 2026-10-18 — the commit writes three INSERTs instead of one per row (P1 Sprint 2)
+
+Measured with `node scripts/measure-api-pass-phases.js --budget=20000 --use-case=GAMING --model=launch-v2@1.0.0`
+on the TEST branch (the pin is named because `seed-minimal-v1@1.0.0` is INACTIVE there and a pin never
+activates a model). One pass: 25 assembled builds, 1 selected build of 8 components, 2 rejections.
+
+| measurement | before | after |
+|---|---|---|
+| `engine.commit` statements | 19 | **11** |
+| `engine.commit` ms | 3 331 | 1 838 |
+| whole-pass statements | 57 | 49 |
+| whole-pass wall ms | 12 435 | 12 007 |
+
+The 19 were BEGIN, the two Decision 19.2 guards, one candidate + 8 component + 1 result INSERT (one per
+row), the Decision 46 floor UPDATE, one provenance UPDATE per rank, the Decision 31 rejection DELETE, 2
+rejection INSERTs and COMMIT.
+
+**The sprint's "<= 6 statements" target counts the writers, and that set is now 5 for ANY pass** — 3 ranked
+INSERTs (one each for candidates, components and results) plus the unconditional rejection DELETE and one
+rejection INSERT — where the same set issued 13 for the pass measured here (1 + 8 + 1 + the two per-row
+rejection INSERTs + the DELETE). That is the set the sprint's own scenarios 2.1 and 2.4 pin (3 INSERTs for a
+3-build pass with rows 3 / 22 / 3; DELETE + 1 INSERT for 4 rejections). It is NOT the whole transaction: the
+remaining statements are BEGIN, the two guards and COMMIT (4, structural) plus `persist-pass-facts`' floor
+UPDATE and one provenance UPDATE per rank, which Decision 46 added after this sprint was written and which is
+outside its file list. Batching that writer too would put the whole commit at 12 for a 3-build pass, and is a
+separate change.
+
+Row-for-row identity was PROVEN on the branch, not asserted — and the first attempt at it was wrong in a way
+worth keeping: with no `asOf`, the transaction clock leaks into `price_checked_at` and (through offer
+freshness) into the score, and two runs of the SAME code differed by 0.01 on one build, which reads exactly
+like a regression caused by the change under test. With Decision 38's `asOf` pinned, a throwaway probe ran one
+real pass through `runRecommendationFullRun` and dumped the persisted rows ordered by rank/role/product with
+generated ids excluded (candidates; components with price, provenance and NULLs; results with rank,
+strategy_key and explanation; rejection reasons). Two runs of the ORIGINAL writers produced byte-identical
+dumps (the control), two runs of the batched writers did too, and all four dumps agree. Cleanup was by
+captured id and residue was 0 every time — an unmarked `recommendation_query` row blocks the golden harness
+preflight.
+
+Gates, all on the batched code: `npm run test:unit` **1171 pass / 0 fail / 0 cancelled on BOTH Node 24 and
+Node 22** (one pre-existing assertion in `full-run.test.js` counted result INSERTs and now counts the rows in
+the single batched statement instead); `node scripts/test-orchestrator-commit.js` **51 pass / 0 fail** — the
+batched SQL against the real schema, which is what validates the enum casts and the NULL array elements;
+`node scripts/test-orchestrator-full-run.js --model=launch-v2@1.0.0` **36 pass / 0 fail**; `npm run verify:pi1
+-- --model=launch-v2@1.0.0` **PASS** (0 drifted of 25 builds, GAMING and OFFICE); `npm run eval:scenarios --
+--no-baseline --no-volatile --model=launch-v2@1.0.0` **exit 0**, 55 PASS / 23 EXPECTED-RED / 3 UNKNOWN — and
+all 81 of its assertion rows are IDENTICAL to a control run on HEAD's writers, so the difference against the
+56 / 22 / 3 recorded in `AGENTS.md` is the pre-existing post-Decision-41 drift, not this change.
+
+One environment note: `verify:pi1`, `eval:scenarios` and `test-orchestrator-full-run.js` all default to the
+`seed-minimal-v1@1.0.0` pin and therefore REFUSE on the TEST branch until given `--model=launch-v2@1.0.0`
+(the pin fails closed and prints the active list). That is the pin behaving as documented, not a defect, but
+it means those three gates must be invoked with an explicit pin on this branch.

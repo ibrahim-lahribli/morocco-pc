@@ -6,16 +6,18 @@
 plans. The plans own the HOW; the register owns the open-item ledger; this page owns the
 where-are-we.
 
-**Date:** 2026-10-17 · **Branch:** `agent/platforms` · **Rules:** [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md).
+**Date:** 2026-10-18 · **Branch:** `agent/platforms` · **Rules:** [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md).
 Passing-test counts are deliberately not restated here — see the dated entries in
 `DEVELOPMENT_NOTES.md`.
 
 ## Verdict
 
-**12 sprints done, 5 partial, 4 not started. Almost every remaining sprint of agent work is gated
+**13 sprints done, 4 partial, 4 not started. Almost every remaining sprint of agent work is gated
 behind an owner action — most of them behind two: the EU Neon project + hosting account (P1
-Sprint 1) and the GitHub dispatch (P3 Sprint 1). No agent-only sprint remains: every one of the
-nine open sprints is blocked on the co-located target, an owner decision, or an owner account.** The BETA engine and API surface are live on the TEST branch (contract v1.5,
+Sprint 1) and the GitHub dispatch (P3 Sprint 1). With P1 Sprint 2 landed 2026-10-18, seven of the
+eight open sprints are blocked on the co-located target, an owner decision, or an owner account.**
+**The exception is P1 Sprint 3, whose statement-count half is measurable on the TEST branch today — only
+its latency table waits for the co-located target.** The BETA engine and API surface are live on the TEST branch (contract v1.5,
 schema at ledger 22 on the branch and 20 on shared); nothing is deployed, nothing is in production, and the CI
 job that would prove the end-to-end path has never been run. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency
 sprints and the deployed-host legs; **P1 Sprint 4** (DONE 2026-10-16) unblocked P1 Sprints 5–6 (both DONE 2026-10-16), and
@@ -32,7 +34,7 @@ unverified into evidence.
 | P0 | 4 — API read/wire + presenter + v1.1/v1.2 | **DONE** | Pass facts on both verbs; product identity; `openapi-v1.2.json` |
 | P0 | 5 — shared-apply gate + doc refresh + P1–P4 review | **DONE** | 019+020 applied to shared from `br-damp-grass-axyri6yl`; OG-52 registered |
 | P1 | 1 — co-locate (EU Neon + deploy + re-measure) | **PARTIAL** | Steps 1–3 committed (`--note`, audit `target` digest); **Steps 4–9 OWNER**, with a runnable runbook (`docs/RECIPES/deploy-eu-colocation.md`) and the parity gate (`scripts/check-target-parity.js`) ready |
-| P1 | 2 — batch the commit to ≤ 6 statements | NOT STARTED | 5 steps; needs the co-located target to measure |
+| P1 | 2 — batch the commit to ≤ 6 statements | **DONE** | 2026-10-18: the writer set is 5 statements for any pass (13 for the measured one); commit phase 19 → 11 statements, 3 331 → 1 838 ms at pin `launch-v2@1.0.0`; rows proven byte-identical on the branch. The co-located ms leg is P1 S1 Step 8 |
 | P1 | 3 — reduce loader statements | NOT STARTED | 5 steps; baseline needs P1 S1 |
 | P1 | 4 — `catalog_version` + canonical key (design only) | **DONE** | Decision 47 RESOLVED 2026-10-16 and implemented by S5 (`catalogVersion(db)` + migration 021) |
 | P1 | 5 — dedupe repeated POSTs (contract change) | **DONE** | Live: 200 + `reused: true` + the original id; contract v1.3 |
@@ -48,7 +50,7 @@ unverified into evidence.
 | P3 | 4 — observability that pages someone | NOT STARTED | 6 steps; **owner gate** (monitoring account) |
 | P3 | 5 — freshness gate sees real offers | **DONE** | Pure helper + tests (2026-10-17); every non-seed offer evaluated by age, SEED stays informational |
 
-**Totals:** 21 sprints — 12 DONE, 5 PARTIAL, 4 NOT STARTED.
+**Totals:** 21 sprints — 13 DONE, 4 PARTIAL, 4 NOT STARTED.
 
 ## Owner-gated backlog (from OG-52, mapped to sprints)
 
@@ -76,8 +78,8 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 ## What is blocked vs. what can start now
 
 **Blocked on an owner action (do not start; prepare the exact command):**
-- *Everything down the P1 co-location chain* — P1 S2, P1 S3 (their measurement baseline is the
-  co-located target), and P2 S2 Step 4's deployed-host leg.
+- *The latency half of the P1 chain* — P1 S3's before/after ms table and P2 S2 Step 4's deployed-host leg.
+  Their statement counts are measurable on the TEST branch; the ms table is not.
 - *P3 S3* (staging + production) needs both the cloud accounts and P1's deployment; *P3 S4* needs a
   monitoring account; *P3 S1* needs the GitHub dispatch; *P3 S2 Step 5* needs the DB password and a
   restore point.
@@ -85,6 +87,7 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 
 **Startable now, no owner action (agent work):**
 - **P1 S4** — DONE 2026-10-16 (Decision 47; implemented by S5). It no longer gates anything here.
+- **P1 S3** — its statement-count half is agent work against the TEST branch (as P1 S2's was); the latency table waits for P1 S1.
 - **P3 S2 Steps 1–4** — **DONE 2026-10-17** (the role is rehearsed end to end on the TEST branch); only Step 5, the shared apply, still touches shared.
 - **P3 S5** — **DONE 2026-10-17** (the gate covers non-seed provenance; no migration, no write).
 - **P2 S4 and P2 S5** — **DONE 2026-10-17** (the CORS/429 proof and the OpenAPI-completeness gate; both DB-free).

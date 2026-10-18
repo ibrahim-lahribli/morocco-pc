@@ -4,9 +4,9 @@
  * Engine 5b - rejection-reason persistence (OG-04).
  *
  * The sibling of ./persist-ranked: same Decision 19 transaction discipline,
- * same boundary (DML only - no BEGIN/COMMIT/ROLLBACK, no SELECT, no pool, no
- * clock), same parameterized-only rule. It records WHY a pass rejected the
- * candidates it rejected, which is the half of the "why was nothing
+ * same boundary (DML only - no BEGIN/COMMIT/ROLLBACK, no SELECT of a table, no
+ * pool, no clock), same parameterized-only rule. It records WHY a pass rejected
+ * the candidates it rejected, which is the half of the "why was nothing
  * recommended?" story that Decision 27's budget_floor explicitly does not
  * cover: the floor sums per-role cheapest prices and ignores partners
  * entirely, so it can say "the emptiness is compatibility, not budget" but
@@ -32,10 +32,11 @@
  * Idempotency — replace semantics (Decision 31, OG-33): every call REPLACES
  * the query's rejection set. It issues one scoped
  * `DELETE FROM build_rejection WHERE recommendation_query_id = $1` first, then
- * one INSERT per REJECT verdict, all inside the commit wrapper's transaction.
- * Committing the same pass twice therefore converges to the same rows instead
- * of duplicating them, and a later pass whose verdicts differ REPLACES the old
- * set rather than leaving stale diagnostics behind.
+ * ONE multi-row INSERT carrying this pass's REJECT verdicts, all inside the
+ * commit wrapper's transaction. Committing the same pass twice therefore
+ * converges to the same rows instead of duplicating them, and a later pass
+ * whose verdicts differ REPLACES the old set rather than leaving stale
+ * diagnostics behind.
  *
  * Why the writer owns this and not the guard: the commit wrapper's guard 2
  * (Decision 19.2) keys on `build_candidate` ONLY, so a ZERO-BUILD pass that
@@ -71,9 +72,16 @@
  *     problem an ON CONFLICT key would inherit from the (id, NULL)
  *     product-keyed rows (OG-32).
  *
- * Parameterization: one parameterized DELETE (scoped to this query) plus one
- * parameterized INSERT with a fixed arity, called once per rejected candidate.
- * SQL is never built by concatenation and no value is interpolated.
+ * Parameterization (P1 Sprint 2 - batched): one parameterized DELETE (scoped to
+ * this query) plus ONE parameterized multi-row INSERT whose row source is
+ * `SELECT * FROM UNNEST($1::uuid[], ...)`. One parameter per COLUMN, one array
+ * element per REJECT verdict, so the statement TEXT is fixed for any number of
+ * rejections - SQL is never built by concatenation and no value is
+ * interpolated. `$3::component_role[]` carries the enum cast (text has no
+ * implicit assignment cast to an enum in an INSERT ... SELECT); the uuid casts
+ * are what let UNNEST type its arguments at all. A NULL array element stays a
+ * real NULL through the cast, which is what keeps the product-keyed rows
+ * (id, NULL) storable.
  */
 
 const { randomUUID } = require('node:crypto');
@@ -96,7 +104,8 @@ const INSERT_BUILD_REJECTION_SQL =
   'INSERT INTO build_rejection ('
   + 'id, recommendation_query_id, component_role, product_id, product_variant_id, '
   + 'partner_product_id, partner_product_variant_id, reason_code'
-  + ') VALUES ($1,$2,$3,$4,$5,$6,$7,$8)';
+  + ') SELECT * FROM UNNEST($1::uuid[], $2::uuid[], $3::component_role[], $4::uuid[], '
+  + '$5::uuid[], $6::uuid[], $7::uuid[], $8::text[])';
 
 /**
  * Decision 31 replace step: clear THIS query's rejection rows before
@@ -163,22 +172,40 @@ async function persistRejections({ client, queryId, rejections }) {
   }
 
   const buildRejectionIds = [];
+  // One parameter per column, one element per REJECT verdict, pushed in the
+  // validation order so the stored set keeps the input order.
+  const queryIds = [];
+  const componentRoles = [];
+  const productIds = [];
+  const productVariantIds = [];
+  const partnerProductIds = [];
+  const partnerProductVariantIds = [];
+  const reasonCodes = [];
+
   for (const row of rows) {
     // Deterministic id: the crypto module, never Math.random (which the
     // sibling boundary test bans outright as non-reproducible).
     const id = randomUUID();
-    await client.query(INSERT_BUILD_REJECTION_SQL, [
-      id,
-      queryId,
-      row.component_role,
-      row.product_id,
-      row.product_variant_id,
-      row.partner_product_id,
-      row.partner_product_variant_id,
-      row.reason_code,
-    ]);
     buildRejectionIds.push(id);
+    queryIds.push(queryId);
+    componentRoles.push(row.component_role);
+    productIds.push(row.product_id);
+    productVariantIds.push(row.product_variant_id);
+    partnerProductIds.push(row.partner_product_id);
+    partnerProductVariantIds.push(row.partner_product_variant_id);
+    reasonCodes.push(row.reason_code);
   }
+
+  await client.query(INSERT_BUILD_REJECTION_SQL, [
+    buildRejectionIds,
+    queryIds,
+    componentRoles,
+    productIds,
+    productVariantIds,
+    partnerProductIds,
+    partnerProductVariantIds,
+    reasonCodes,
+  ]);
 
   return Object.freeze({
     query_id: queryId,

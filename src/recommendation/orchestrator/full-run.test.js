@@ -618,9 +618,15 @@ test('full-run + REAL writers: the floor and every rank get their facts inside t
     'DELETE FROM build_rejection WHERE recommendation_query_id = $1',
   ]);
 
-  // And the pass itself really persisted its two ranks.
+  // And the pass itself really persisted its two ranks. P1 Sprint 2: the result
+  // writer is ONE multi-row statement, so the persisted ROW count is the length
+  // of its parameter arrays - the number of INSERTs is 1 for any number of
+  // ranks, and asserting on that count would pin the batching, not the rows.
   assert.deepEqual(out.persisted_ranks, [1, 2]);
-  assert.equal(out.persisted_ranks.length, sqls.filter((s) => s.startsWith('INSERT INTO recommendation_result')).length);
+  const resultInserts = client.calls.filter((call) => call.sql.startsWith('INSERT INTO recommendation_result'));
+  assert.equal(resultInserts.length, 1, 'the result rows are one batched statement');
+  assert.equal(out.persisted_ranks.length, resultInserts[0].params[0].length);
+  assert.deepEqual(resultInserts[0].params[3], [1, 2], 'one rank per row, in persisted order');
 });
 
 test('full-run + REAL writers: a ZERO-BUILD pass still records its floor, and writes no result row', async () => {
