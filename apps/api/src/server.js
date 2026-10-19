@@ -18,6 +18,11 @@
  * pino-pretty, which is a devDependency - the require is wrapped so a
  * production install (`npm ci --omit=dev`) simply logs JSON instead of
  * crashing. Request bodies are never logged.
+ *
+ * Monitoring: OPTIONAL and DSN-gated (`monitoring.js`). With no `SENTRY_DSN` the
+ * process behaves exactly as it did before monitoring existed; with one,
+ * unexpected 5xx errors are captured with the request id and nothing else. The
+ * SDK is required lazily, so a deployment that never sets a DSN never loads it.
  */
 
 require('dotenv').config();
@@ -26,6 +31,7 @@ const { createPool } = require('./db');
 const { buildApp } = require('./app');
 const repository = require('./repository');
 const engine = require('./engine');
+const { createCapture } = require('./monitoring');
 
 /** pino options for the current environment. Never logs a body or a URL. */
 function buildLoggerOptions(env) {
@@ -50,10 +56,13 @@ function buildLoggerOptions(env) {
 async function start(env) {
   const source = env || process.env;
   const pool = createPool(source);
+  // Off unless SENTRY_DSN is set; null keeps buildApp's no-op capture.
+  const captureError = createCapture(source);
   const app = buildApp({
     pool,
     repository,
     engine,
+    captureError,
     env: source,
     logger: buildLoggerOptions(source),
   });
@@ -77,7 +86,10 @@ async function start(env) {
   const port = Number(source.PORT) || 3000;
   const host = source.HOST || '0.0.0.0';
   await app.listen({ port, host });
-  app.log.info({ port, host }, 'morocco-pc API listening');
+  app.log.info(
+    { port, host, monitoring: captureError === null ? 'disabled' : 'sentry' },
+    'morocco-pc API listening'
+  );
   return app;
 }
 

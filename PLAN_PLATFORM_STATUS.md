@@ -12,7 +12,7 @@ Passing-test counts are deliberately not restated here — see the dated entries
 
 ## Verdict
 
-**15 sprints done, 3 partial, 3 not started. PR #3 landed `agent/platforms` on `master` as `b2fe64a` on 2026-10-18, with identical content on both sides, so what remains is owner actions rather than agent work.**
+**15 sprints done, 4 partial, 2 not started. PR #3 landed `agent/platforms` on `master` as `b2fe64a` on 2026-10-18, with identical content on both sides, so what remains is owner actions rather than agent work.**
 **The recurring gates now run from the default branch, and the verdict is measured: `unit-and-docs` is green on `master`, and `recurring-gates` fails at exactly ONE step, `verify-migrations-replay`, with freshness and `test:api:db` passing.** That red is not code: the replay diffs a 22-file tree against a shared database at ledger 20, so it reports the 021/022 objects as fresh-only and closes only by applying them to shared (owner-gated, one restore point). **P1 Sprint 3**'s statement-count half is still measurable on the TEST branch (only its latency table waits for the co-located target). The BETA engine and API surface are live on the TEST branch (contract v1.5, schema at ledger 22 on the branch and 20 on shared); nothing is deployed and nothing is in production. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency sprints and the deployed-host legs; **P1 Sprint 4** (DONE 2026-10-16) unblocked P1 Sprints 5–6 (both DONE 2026-10-16), and P2 Sprint 3 landed 2026-10-17 (Step 7 decided 2026-10-18: public but unlisted); **P3 Sprint 1** is now DONE because the nightly fires from `master` and its per-step result is recorded.
 
 ## Sprint completion matrix
@@ -38,10 +38,10 @@ Passing-test counts are deliberately not restated here — see the dated entries
 | P3 | 1 — prove the recurring CI job | **DONE** | Steps 1–3 **DONE 2026-10-18**: two `workflow_dispatch` runs on `agent/platforms` ([39119596060](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39119596060), [39120485573](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39120485573)) — `test:api:db` **9 passed / 0 failed on the runner**; the replay was RED only on the branch-only 021/022 objects. **Step 4 DONE 2026-10-19**: PR #3 merged the branch into `master` as `b2fe64a`; the push run is green, and dispatch run [39123812237](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39123812237) on `master` fails ONLY at `verify-migrations-replay` (freshness PASS, `test:api:db` PASS, `unit-and-docs` PASS). The remaining red is the shared database sitting at ledger 20 — the P3 S2 Step 5 owner apply, not a sprint step. Steps 5–6 recorded in `DEVELOPMENT_NOTES.md` 2026-10-19 |
 | P3 | 2 — rehearse the production DB role | **PARTIAL** | Steps 1–4 **DONE 2026-10-17** (`scripts/rehearse-api-role.js`: 20/20 privilege answers, zero `42501` as the role, row-wide UPDATE denied, residue 0, role removed); **Step 5 OWNER** (role on shared) |
 | P3 | 3 — staging + production + schema-gated deploy | NOT STARTED | 6 steps; **owner-gated** (cloud accounts); needs P1 S1 |
-| P3 | 4 — observability that pages someone | NOT STARTED | 6 steps; **owner gate** (monitoring account) |
+| P3 | 4 — observability that pages someone | **PARTIAL** | Steps 1–2 **DONE 2026-10-19**: DSN-gated `@sentry/node` capture behind an injected `captureError` (`apps/api/src/monitoring.js`, lazy require), 13 new tests (`test:api` 111/0 on Node 22 and 24), request data stripped in `beforeSend`; **Steps 3–6 remain** (a delivered event needs the deployed host + a DSN, then the body-asserting monitor, the retention decision and the commit) |
 | P3 | 5 — freshness gate sees real offers | **DONE** | Pure helper + tests (2026-10-17); every non-seed offer evaluated by age, SEED stays informational |
 
-**Totals:** 21 sprints — 15 DONE, 3 PARTIAL, 3 NOT STARTED.
+**Totals:** 21 sprints — 15 DONE, 4 PARTIAL, 2 NOT STARTED.
 
 ## Owner-gated backlog (from OG-52, mapped to sprints)
 
@@ -59,7 +59,7 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 | P2 `meta.js` `listUseCases` swap (OG-38) | P2 S1 | — **DONE 2026-10-15** (the swap landed; OG-38's behavioural half stays open) |
 | P3 the `morocco_pc_api` role + column-scoped GRANTs | P3 S2 Step 5 | Apply the role to the shared DB (DDL on the only dev DB; needs a recorded restore point + the secret) — **the only residue of P0 Sprint 5**. PREPARED 2026-10-17: the guarded apply and the smoke test exist and are dry-run verified, with the owner runbook `docs/RECIPES/provision-the-api-role.md`; the human action is now two commands |
 | P3 CI verification of `test:api:db` | P3 S1 Step 2 | **DONE 2026-10-18, PROVEN ON MASTER 2026-10-19** — dispatched on `agent/platforms`; `test:api:db` answered 9/0 on the runner. PR #3 then merged the branch into `master` as `b2fe64a`; the push run is green and dispatch run 39123812237 has `unit-and-docs` and `test:api:db` passing with `recurring-gates` failing only at the replay, which is the shared-apply item above, not a CI gap |
-| P3 error tracking | P3 S4 | A monitoring account + a DSN in the secret store |
+| P3 error tracking | P3 S4 | **CODE LANDED 2026-10-19, DELIVERY OWNER-GATED**: the DSN-gated capture is wired and unit-tested; a monitoring account + a DSN in the secret store are still what turns it from wired into proven (Step 3) |
 | P3 staging + production | P3 S3 | Two named environments + a deploy provider account |
 | P3 migration-deploy step | P3 S3 | — (agent, once the environments exist) |
 | P4 H2 retailer with readable terms | — (no P4 plan file) | A real retailer; blocks all P4 real-data work |

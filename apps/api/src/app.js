@@ -24,6 +24,10 @@
  *     limiter keys on `request.ip`, so without it every caller behind a platform
  *     proxy shares one bucket; trusting the whole chain instead would let every
  *     caller write its own key. See `parseTrustProxy` below.
+ *   - Error capture is INJECTED (`captureError`) and defaults to a no-op, so the
+ *     HTTP layer never imports a monitoring SDK. `server.js` decides whether one
+ *     exists (see `monitoring.js`), which keeps the unit suites network-free and
+ *     makes "one 500 is one event" assertable with a plain function.
  *   - Routes are registered INSIDE a plugin so they are added after
  *     `@fastify/rate-limit` and `@fastify/swagger` have loaded - both attach
  *     `onRoute` hooks, and a route added before them would be invisible to
@@ -46,6 +50,13 @@ const { registerDocsRoutes } = require('./routes/docs');
 
 /** The whole request body is five scalars; see the header. */
 const BODY_LIMIT_BYTES = 10 * 1024;
+
+/**
+ * What runs when the caller injects no capture collaborator. A 500 path must
+ * not branch on whether monitoring is configured; `server.js` passes either the
+ * real capture or null, and the unit suites pass a stub or nothing.
+ */
+function noopCapture() {}
 
 /**
  * `ALLOWED_ORIGINS` is a comma-separated list. Unset/empty disables CORS
@@ -202,6 +213,7 @@ function validationDetails(error) {
 function buildApp(options) {
   const opts = options || {};
   const env = opts.env || process.env;
+  const captureError = typeof opts.captureError === 'function' ? opts.captureError : noopCapture;
 
   const trustProxy = parseTrustProxy(
     opts.trustProxy === undefined ? env.TRUST_PROXY : opts.trustProxy
@@ -298,6 +310,14 @@ function buildApp(options) {
     // Unexpected: log the detail, return a generic body plus the request id.
     // Never echo the error message - it can carry a SQL fragment or a host.
     request.log.error({ err: error }, 'unhandled request error');
+    // Capture ONLY the unexpected path, and only the error plus the request id.
+    // A monitoring sink must never change what the client receives: a failing
+    // capture is logged and swallowed, because the 500 is already the outcome.
+    try {
+      captureError(error, String(request.id));
+    } catch (captureFailure) {
+      request.log.warn({ err: captureFailure }, 'error capture failed');
+    }
     return reply.code(500).send({
       error: 'INTERNAL_ERROR',
       message: 'Internal server error',
