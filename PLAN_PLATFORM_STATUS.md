@@ -6,22 +6,14 @@
 plans. The plans own the HOW; the register owns the open-item ledger; this page owns the
 where-are-we.
 
-**Date:** 2026-10-18 · **Branch:** `agent/platforms` · **Rules:** [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md).
+**Date:** 2026-10-19 · **Branch:** `master` (PR #3 merged `agent/platforms` as `b2fe64a`) · **Rules:** [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md).
 Passing-test counts are deliberately not restated here — see the dated entries in
 `DEVELOPMENT_NOTES.md`.
 
 ## Verdict
 
-**14 sprints done, 4 partial, 3 not started. Almost every remaining sprint of agent work is gated
-behind an owner action — most of them behind two: the EU project's hosting account and deploy (P1
-Sprint 1 - the EU project itself landed 2026-10-18, and the GitHub dispatch P3 Sprint 1 is now RAN, leaving only its merge). With P1 Sprint 2 landed 2026-10-18, five of the
-seven open sprints are blocked on the co-located target, an owner decision, or an owner account.**
-**The exceptions are P1 Sprint 3, whose statement-count half is measurable on the TEST branch (only its latency table waits for the co-located target), and P3 Sprint 1, whose only residue is the merge that starts the nightly.** The BETA engine and API surface are live on the TEST branch (contract v1.5,
-schema at ledger 22 on the branch and 20 on shared); nothing is deployed, nothing is in production, and the CI
-job that proves the end-to-end path HAS now run twice on `agent/platforms` (2026-10-18): `test:api:db` passed 9/0 on the runner, and the replay is red only on the branch-only 021/022 objects. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency
-sprints and the deployed-host legs; **P1 Sprint 4** (DONE 2026-10-16) unblocked P1 Sprints 5–6 (both DONE 2026-10-16), and
-P2 Sprint 3 landed 2026-10-17 (Step 7 decided 2026-10-18: public but unlisted); **P3 Sprint 1** (the CI dispatch) has now turned the CI claim from
-unverified into evidence, so the only part of it left is the merge.
+**15 sprints done, 3 partial, 3 not started. PR #3 landed `agent/platforms` on `master` as `b2fe64a` on 2026-10-18, with identical content on both sides, so what remains is owner actions rather than agent work.**
+**The recurring gates now run from the default branch, and the verdict is measured: `unit-and-docs` is green on `master`, and `recurring-gates` fails at exactly ONE step, `verify-migrations-replay`, with freshness and `test:api:db` passing.** That red is not code: the replay diffs a 22-file tree against a shared database at ledger 20, so it reports the 021/022 objects as fresh-only and closes only by applying them to shared (owner-gated, one restore point). **P1 Sprint 3**'s statement-count half is still measurable on the TEST branch (only its latency table waits for the co-located target). The BETA engine and API surface are live on the TEST branch (contract v1.5, schema at ledger 22 on the branch and 20 on shared); nothing is deployed and nothing is in production. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency sprints and the deployed-host legs; **P1 Sprint 4** (DONE 2026-10-16) unblocked P1 Sprints 5–6 (both DONE 2026-10-16), and P2 Sprint 3 landed 2026-10-17 (Step 7 decided 2026-10-18: public but unlisted); **P3 Sprint 1** is now DONE because the nightly fires from `master` and its per-step result is recorded.
 
 ## Sprint completion matrix
 
@@ -43,13 +35,13 @@ unverified into evidence, so the only part of it left is the merge.
 | P2 | 3 — catalog endpoints (read-only) | **DONE** | Steps 1–6 **DONE 2026-10-17** (two read endpoints, keyset pagination on `slug`, provenance-labelled prices, contract v1.5; `test:api` 98/0, `test:api:db` 9/0 with a 100-row page walk); Step 7 **DECIDED 2026-10-18**: public but unlisted, noindex until prices are VERIFIED, indicative prices behind the disclaimer |
 | P2 | 4 — CORS allow-list + 429 contract, proven | **DONE** | 4 CORS tests + the 429 body/`Retry-After` pin, both documented (2026-10-17); `test:api` 75/0 |
 | P2 | 5 — contract-completeness gate | **DONE** | `openapi-coverage.test.js` (7 tests); the gate exposed missing 429/500 on all five routes, now declared; snapshot regenerated (2026-10-17) |
-| P3 | 1 — prove the recurring CI job | **PARTIAL** | Steps 1–3 **DONE 2026-10-18**: two `workflow_dispatch` runs on `agent/platforms` ([39119596060](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39119596060), [39120485573](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39120485573)) — `test:api:db` **9 passed / 0 failed on the runner**; the replay is RED only on the branch-only 021/022 objects (columns 377 vs 370, checks 84 vs 79, fks 61 vs 60, indexes 102 vs 100), which closes with the shared apply and never by changing the reference; the two defects the first run exposed were fixed (serial DB test files, `if: always()` on the DB step). Steps 5–6 recorded; the nightly `schedule` starts only after merge |
+| P3 | 1 — prove the recurring CI job | **DONE** | Steps 1–3 **DONE 2026-10-18**: two `workflow_dispatch` runs on `agent/platforms` ([39119596060](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39119596060), [39120485573](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39120485573)) — `test:api:db` **9 passed / 0 failed on the runner**; the replay was RED only on the branch-only 021/022 objects. **Step 4 DONE 2026-10-19**: PR #3 merged the branch into `master` as `b2fe64a`; the push run is green, and dispatch run [39123812237](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39123812237) on `master` fails ONLY at `verify-migrations-replay` (freshness PASS, `test:api:db` PASS, `unit-and-docs` PASS). The remaining red is the shared database sitting at ledger 20 — the P3 S2 Step 5 owner apply, not a sprint step. Steps 5–6 recorded in `DEVELOPMENT_NOTES.md` 2026-10-19 |
 | P3 | 2 — rehearse the production DB role | **PARTIAL** | Steps 1–4 **DONE 2026-10-17** (`scripts/rehearse-api-role.js`: 20/20 privilege answers, zero `42501` as the role, row-wide UPDATE denied, residue 0, role removed); **Step 5 OWNER** (role on shared) |
 | P3 | 3 — staging + production + schema-gated deploy | NOT STARTED | 6 steps; **owner-gated** (cloud accounts); needs P1 S1 |
 | P3 | 4 — observability that pages someone | NOT STARTED | 6 steps; **owner gate** (monitoring account) |
 | P3 | 5 — freshness gate sees real offers | **DONE** | Pure helper + tests (2026-10-17); every non-seed offer evaluated by age, SEED stays informational |
 
-**Totals:** 21 sprints — 14 DONE, 4 PARTIAL, 3 NOT STARTED.
+**Totals:** 21 sprints — 15 DONE, 3 PARTIAL, 3 NOT STARTED.
 
 ## Owner-gated backlog (from OG-52, mapped to sprints)
 
@@ -66,7 +58,7 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 | P2 remainder of the OpenAPI snapshot surface | P2 S5 | — **DONE 2026-10-17** (the gate fails an undocumented route or a missing 429/500) |
 | P2 `meta.js` `listUseCases` swap (OG-38) | P2 S1 | — **DONE 2026-10-15** (the swap landed; OG-38's behavioural half stays open) |
 | P3 the `morocco_pc_api` role + column-scoped GRANTs | P3 S2 Step 5 | Apply the role to the shared DB (DDL on the only dev DB; needs a recorded restore point + the secret) — **the only residue of P0 Sprint 5**. PREPARED 2026-10-17: the guarded apply and the smoke test exist and are dry-run verified, with the owner runbook `docs/RECIPES/provision-the-api-role.md`; the human action is now two commands |
-| P3 CI verification of `test:api:db` | P3 S1 Step 2 | **DONE 2026-10-18** — dispatched on `agent/platforms`; `test:api:db` answered 9/0 on the runner. Remaining owner action: the merge to the default branch, because the nightly `schedule` fires only from there |
+| P3 CI verification of `test:api:db` | P3 S1 Step 2 | **DONE 2026-10-18, PROVEN ON MASTER 2026-10-19** — dispatched on `agent/platforms`; `test:api:db` answered 9/0 on the runner. PR #3 then merged the branch into `master` as `b2fe64a`; the push run is green and dispatch run 39123812237 has `unit-and-docs` and `test:api:db` passing with `recurring-gates` failing only at the replay, which is the shared-apply item above, not a CI gap |
 | P3 error tracking | P3 S4 | A monitoring account + a DSN in the secret store |
 | P3 staging + production | P3 S3 | Two named environments + a deploy provider account |
 | P3 migration-deploy step | P3 S3 | — (agent, once the environments exist) |
@@ -80,8 +72,10 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 - *The latency half of the P1 chain* — P1 S3's before/after ms table and P2 S2 Step 4's deployed-host leg.
   Their statement counts are measurable on the TEST branch; the ms table is not.
 - *P3 S3* (staging + production) needs both the cloud accounts and P1's deployment; *P3 S4* needs a
-  monitoring account; *P3 S1* is dispatched and measured, so only the merge-to-default-branch nightly remains; *P3 S2 Step 5* needs the DB password and a
-  restore point.
+  monitoring account; *P3 S2 Step 5* needs the DB password and a restore point. *P3 S1* is no longer
+  in this list: it is merged and measured on `master`, and the one remaining red
+  (`verify-migrations-replay`) needs the same shared apply, i.e. the same restore point as *P3 S2
+  Step 5*.
 
 **Startable now, no owner action (agent work):**
 - **P1 S4** — DONE 2026-10-16 (Decision 47; implemented by S5). It no longer gates anything here.
