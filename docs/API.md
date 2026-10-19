@@ -35,18 +35,14 @@ unique `slug`, every price beside its Decision 35 provenance class, and a
 product page carrying its spec row, its eligible offers and the French
 disclaimer. See *GET /v1/catalog/products*.
 
-**`catalog_version` is served on both databases, but only the branch RECORDS it
-so far.** Migration 021 is applied to the TEST branch and not yet to the shared
-database, so against shared every reply serves `catalog_version: null`
-(not recorded - NULL means UNKNOWN here) and reuse is simply always a miss. A
-miss is a correct answer; the degradation is by design, not a failure mode.
-
-**`GET /v1/presets` has no such fallback.** Migration 022
-(`recommendation_preset`) is likewise TEST-branch-only so far, and unlike a null
-`catalog_version` there is no graceful miss: against a database without the
-table the route's read fails `42P01` and the request answers the generic `500
-INTERNAL_ERROR`. The ribbon is served from the branch only until the shared
-apply of 021 and 022 lands.
+**`catalog_version` and the preset ribbon are served on BOTH databases since 2026-10-19.**
+Migrations 021 and 022 were applied to the shared database that day from restore point
+`br-ancient-cake-axh57vpj` (shared ledger 20 -> 22), so the two degradation modes this section
+used to document are gone: `catalog_version` is recorded and reuse hits, and `GET /v1/presets`
+reads a real table. The fallbacks still describe an OLDER database: against one below 021 every
+reply serves `catalog_version: null` (not recorded - NULL means UNKNOWN here) and reuse is
+always a miss, which is a correct answer; against one below 022 the preset read fails `42P01`
+and answers the generic `500 INTERNAL_ERROR`, with no graceful miss.
 
 **Schema prerequisite - SATISFIED on BOTH databases (2026-10-15).** Migrations 019
 and 020 are applied on the TEST branch AND on the shared database: both ledgers read
@@ -58,12 +54,13 @@ component read fails `42703` on `recommendation_query.budget_floor`, and below 0
 a client sees is the generic `500 INTERNAL_ERROR` with a request id - an undefined
 column is an UNEXPECTED error, so `503` is NOT the answer (`503` on this API means only
 "no active scoring model"). That is why the shared apply was the prerequisite for
-`API_ALLOW_SHARED=1`; it is now met. Two notes that still hold: a failed POST is not
+`API_ALLOW_SHARED=1`; it is now met. Two things to know: a failed POST is not
 free, because `createRecommendationQuery` commits the profile and query rows BEFORE the
 engine runs, so it leaves an unmarked `recommendation_query` row behind and the golden
 harness refuses to run while ANY unmarked row exists (delete them in FK order); and the
-`morocco_pc_api` role does not exist on the shared database yet, so the column-scoped
-GRANTs in *Production mode* remain unapplied. Step 5 is no longer improvised: `node
+`morocco_pc_api` role now EXISTS on the shared database, applied 2026-10-19 from the same
+restore point with a 20/20 self-check, so the column-scoped GRANTs in *Production mode* are
+live there. Step 5 is no longer improvised: `node
 scripts/apply-api-role.js` applies the block under a restore-point guard that refuses without
 one, and `node scripts/smoke-api-role.js --confirm-shared` proves the API itself runs as the
 role; the owner procedure is `docs/RECIPES/provision-the-api-role.md`.
@@ -143,11 +140,19 @@ the unprivileged `node` user. There is deliberately **no `apps/api/package.json`
 the engine's own `require('pg')` / `require('dotenv')` resolve upward, so a
 single root `node_modules` is what makes both the engine and the API work.
 
-## Production mode (designed 2026-10-07, not yet applied)
+## Production mode (designed 2026-10-07; role applied to shared 2026-10-19)
 
 The beta runs against the TEST branch. Pointing the API at the shared Neon
 project (`API_ALLOW_SHARED=1` + `DATABASE_URL`) is a production decision, and
 the facts below govern it.
+
+**APPLIED 2026-10-19.** The role, its 20-grant block and its self-check ran on the shared
+database from restore point `br-ancient-cake-axh57vpj` (HEAD `3f0c166`, audit target
+`db:54ff6ea3f6e6`): 8 statements, self-check 20/20. `node scripts/smoke-api-role.js
+--confirm-shared` then ran the API itself as `morocco_pc_api` - health `db:"ok"`, POST
+`201` with 1 build in 52 statements, no `42501`, and all six Layer 4 tables back at 0.
+What has NOT happened is a DEPLOY: there is still no hosted origin, and the EU project is a
+separate database this apply never touched.
 
 ### The database role
 

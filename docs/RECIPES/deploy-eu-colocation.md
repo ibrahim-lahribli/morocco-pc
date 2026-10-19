@@ -18,7 +18,7 @@ measurement runs.
 | Decision | Value | Why |
 |---|---|---|
 | Database region | Neon `aws-eu-central-1` (Frankfurt) | Fly's `fra` and Render's `frankfurt` are the same metro. Neon's only other EU region is `aws-eu-west-2` (London). |
-| Replay source | the **TEST branch**, not the shared database | The branch carries the API's contract (ledger 22). Shared stands at ledger 20 and lacks `catalog_version` and `recommendation_preset`, so a replay from shared would produce an API that cannot serve a request. |
+| Replay source | the **TEST branch**, not the shared database | Both carry the API's contract (ledger 22 on each since 2026-10-19), so either replays an API that can serve. The branch stays the source because the shared dev database accumulates local test rows. |
 | Host | **Fly.io `fra`** (recommended); Render `frankfurt` as the alternative | See the comparison below. Both build `apps/api/Dockerfile` with the repository root as context. |
 | Contract version at deploy | v1.5 | The served OpenAPI document names it; `/v1/docs/json` is the check. |
 

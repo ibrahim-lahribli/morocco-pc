@@ -8,7 +8,7 @@ live database (`information_schema` / `pg_catalog`). Per `AGENTS.md` section 9,
 generated lookup so "does this column exist?" never requires reading 11 SQL files
 (the question that produced audit finding D2).
 
-<!-- schema-digest: e56483044956491d -->
+<!-- schema-digest: 2006504971c70a90 -->
 
 ## Enum vocabularies (14)
 
@@ -29,7 +29,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `ssd_form_factor` | M_2_2280 \| M_2_2242 \| M_2_2260 \| M_2_22110 \| SATA_25 \| SATA_35 \| U_2 \| PCIE_CARD \| MSATA \| NGFF |
 | `support_status` | ACTIVE \| DISCONTINUED \| END_OF_LIFE |
 
-## Tables (42)
+## Tables (43)
 
 ### `benchmark` (17 columns)
 
@@ -721,6 +721,30 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 
 **Indexes:** `ram_spec_pkey`
 
+### `recommendation_preset` (6 columns)
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `use_case` 🔑 | text | NO |  |
+| `currency` 🔑 | text | NO |  |
+| `catalog_version` 🔑 | text | NO |  |
+| `budget_amount` 🔑 | numeric | NO |  |
+| `query_id` | uuid | NO |  |
+| `generated_at` | timestamp with time zone | NO | now() |
+
+**Foreign keys:** `recommendation_preset_query_id_fkey`: `query_id` → `recommendation_query.id` (ON DELETE CASCADE)
+
+**CHECK constraints:**
+
+- `chk_recommendation_preset_budget_positive` — CHECK ((budget_amount > (0)::numeric))
+- `chk_recommendation_preset_catalog_version_format` — CHECK ((catalog_version ~ '^[0-9a-f]{32}$'::text))
+- `chk_recommendation_preset_currency_shape` — CHECK ((currency ~ '^[A-Z]{3}$'::text))
+- `chk_recommendation_preset_use_case_not_blank` — CHECK ((btrim(use_case) <> ''::text))
+
+**UNIQUE constraints:** `uq_recommendation_preset_query`
+
+**Indexes:** `pk_recommendation_preset` · `uq_recommendation_preset_query`
+
 ### `recommendation_profile` (8 columns)
 
 | Column | Type | Null | Default |
@@ -736,7 +760,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 
 **Indexes:** `idx_recommendation_profile_name` · `idx_recommendation_profile_use_case` · `recommendation_profile_pkey`
 
-### `recommendation_query` (10 columns)
+### `recommendation_query` (11 columns)
 
 | Column | Type | Null | Default |
 |---|---|---|---|
@@ -750,12 +774,14 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `resolution` | text | YES |  |
 | `created_at` | timestamp with time zone | NO | now() |
 | `budget_floor` | jsonb | YES |  |
+| `catalog_version` | text | YES |  |
 
 **Foreign keys:** `recommendation_query_recommendation_profile_id_fkey`: `recommendation_profile_id` → `recommendation_profile.id` (ON DELETE NO ACTION) · `recommendation_query_scoring_model_id_fkey`: `scoring_model_id` → `scoring_model.id` (ON DELETE NO ACTION)
 
 **CHECK constraints:**
 
 - `chk_recommendation_query_budget_positive` — CHECK ((budget_amount > (0)::numeric))
+- `chk_recommendation_query_catalog_version_format` — CHECK (((catalog_version IS NULL) OR (catalog_version ~ '^[0-9a-f]{32}$'::text)))
 
 **Indexes:** `idx_recommendation_query_profile_id` · `idx_recommendation_query_scoring_model_id` · `recommendation_query_pkey`
 

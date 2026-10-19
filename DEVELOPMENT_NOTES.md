@@ -1679,3 +1679,54 @@ a deployed host carries a DSN and one forced 500 arrives with its request id, th
 unit-proven - not proven in production. The uptime check must assert the health BODY
 (`db == "ok"`), because `/v1/health` answers `200` with `db: "down"`; that contract and the log
 retention decision are Steps 4-5.
+
+## 2026-10-19 (3) - the shared apply of 021/022 and the `morocco_pc_api` role both landed; the replay is 0 drift
+
+Two owner-approved DDL steps on the shared dev database, both from ONE recorded restore point,
+in this order: the migrations first (the API's code needs 021/022, and the smoke test refuses a
+behind-schema target), then the production role.
+
+**Restore point.** `br-ancient-cake-axh57vpj`, parent `br-proud-salad-axs4rxib` (the default
+branch of project `gentle-fog-04615130`, `aws-us-east-2`), created with `no_compute` - zero
+computes, so it cannot be connected to and costs nothing. Same pattern as `pre-019-020`.
+
+**Migration apply.** `node scripts/run-migrations.js --restore-point=br-ancient-cake-axh57vpj
+--note="021+022 shared apply (Decision 47 / Decision 48)"`, HEAD `3f0c166`, `AUDIT TARGET:
+db:54ff6ea3f6e6` printed BEFORE anything was written. Two files MIGRATED (021, 022); shared is
+now ledger **22**, tail `022_recommendation_preset.sql`; both lines are in
+`database/migration-applies.jsonl` with `git_sha 3f0c166d...`, one timestamp and the restore
+point. Consequences measured, not assumed:
+
+- `run-migrations.js --check` exit 0, nothing pending.
+- `npm run verify:replay` -> **0 drift over 22 files** (columns, checks, fks and indexes all
+  equal). The `recurring-gates` red closed at its cause; no reference target was changed.
+- `npm run gen:schema` regenerated `docs/SCHEMA_REFERENCE.md` + `docs/DATA_STATE.md`; the digest
+  moved to `2006504971c70a90`, i.e. shared now equals the TEST branch and the EU project, and
+  `verify-docs --live` passes against it.
+
+**Production role.** `node scripts/apply-api-role.js --restore-point=br-ancient-cake-axh57vpj
+--password-file=<gitignored>`, same sha and digest: 8 statements, self-check **20/20** (a red
+self-check rolls the role back). `node scripts/smoke-api-role.js --confirm-shared` then ran the
+API ITSELF as `morocco_pc_api` on the shared database: `SMOKE OK: the API ran as morocco_pc_api
+on db:54ff6ea3f6e6 (health db=ok, POST 201 with 1 build, 52 statements, residue back to its
+pre-run counts).` Re-read afterwards: `pg_roles` lists the role and all six Layer 4 tables are
+back at 0.
+
+**What this changes.** No branch override is needed for the REST degradations any more:
+`catalog_version` is recorded on shared and `GET /v1/presets` reads a real table, so both
+"branch-only so far" caveats are gone. A production connection as the role is now possible (it
+still needs `API_ALLOW_SHARED=1` plus a `DATABASE_URL` authenticating as the role). The EU
+project is a SEPARATE database this apply never touched; its role apply is still ahead.
+
+**Doc propagation in the same change.** `docs/API.md` (both degradation paragraphs, the role's
+status, the Production-mode heading + an APPLIED block), `AGENTS.md` (the CI paragraph and §7
+item 5's ledger paragraph), `CONTEXT.md` (the Environment line and Decisions 46/47/48's
+"still gated" clauses), `PLAN_PLATFORM_STATUS.md` (verdict, matrix, totals 16/3/2, owner
+backlog, blocked list), `PLAN_PLATFORM_P3.md` Step 5, `PLAN_PLATFORM_P1.md`'s replay-source
+note, `docs/OPEN_GAPS.md` OG-52, and both recipes (deploy §0's replay-source row, the role
+recipe's new APPLIED banner + its post-apply checklist). Gates after the edits:
+`gen-decision-index --check` clean, `verify-docs` (offline and `--live`) OK.
+
+**Still open after this.** No deployed origin (no Fly account, `flyctl` absent), no Sentry DSN
+(no event delivered), no retailer. The next `recurring-gates` run is the first that can be
+wholly green; if it is not, read the failure as new rather than as this red.

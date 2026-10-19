@@ -245,11 +245,13 @@ remote already stores (`ref` = the branch to run on) — keep that token out of 
 runs 39119596060 and 39120485573). Both doubts that could only be settled by a real run are now
 measured, not assumed: both repository secrets exist under the right names, and the Neon instance
 accepts connections from a GitHub runner — `npm run test:api:db` answered `test:api:db: 9 passed,
-0 failed` IN CI. It is **RED, and only for the documented reason**: `verify-migrations-replay.js
---test-db` reports 4 drift classes against shared (columns **377 vs 370**, checks **84 vs 79**,
-fks **61 vs 60**, indexes **102 vs 100**), which is exactly the objects 021 and 022 create, i.e. the
-branch-only state. That red closes with an owner-approved shared apply of 021/022, NOT with a code
-change — do not "fix" it by changing the replay's reference target. Note also that **scheduled
+0 failed` IN CI. It was **RED, and only for the documented reason**: `verify-migrations-replay.js --test-db`
+reported 4 drift classes against shared (columns **377 vs 370**, checks **84 vs 79**, fks
+**61 vs 60**, indexes **102 vs 100**), exactly the objects 021 and 022 create, i.e. the
+branch-only state. **CLOSED 2026-10-19** by the owner-approved shared apply of 021/022
+(restore point `br-ancient-cake-axh57vpj`, ledger 20 -> 22), after which the same command
+reports **0 drift**. A future replay red of that shape is real drift, never something to "fix"
+by changing the replay's reference target. Note also that **scheduled
 workflows only run from the default branch** and GitHub **disables them automatically after 60 days
 of repository inactivity** — an idle repo silently stops getting the nightly gate, which is why
 `workflow_dispatch` is wired up too.
@@ -271,13 +273,13 @@ of repository inactivity** — an idle repo silently stops getting the nightly g
    and RE-VERIFIED 2026-10-05 through `001→015` with **0 drift by object definition** (C-30). That
    check is now the repeatable `npm run verify:replay` gate, so re-run it after any migration lands
    rather than trusting a one-off measurement. The shared and TEST databases are baselined in the
-   `schema_migrations` ledger (OG-14); the SHARED database stands at **020** and the TEST branch at
-   **022** as of 2026-10-16 — `021_recommendation_query_catalog_version.sql` (Decision 47, Platform
-   P1 Sprint 5) and `022_recommendation_preset.sql` (Decision 48, Platform P1 Sprint 6) are **BRANCH-ONLY so far**, because the API runs against the branch and a shared
-   apply is a separate owner-approved step needing a recorded restore point. So `verify:replay`'s
-   default SHARED reference legitimately reports exactly 021's and 022's new objects (the column, its
-   CHECK constraint and 022’s `recommendation_preset` table, all fresh-only - measured 2026-10-16) as drift until the shared apply
-   lands; that is the documented TEST-first state, never a broken migration
+   `schema_migrations` ledger (OG-14); BOTH databases stand at **022** as of 2026-10-19 —
+   `021_recommendation_query_catalog_version.sql` (Decision 47, Platform P1 Sprint 5) and
+   `022_recommendation_preset.sql` (Decision 48, Platform P1 Sprint 6) were branch-first and were
+   applied to shared on 2026-10-19 from restore point `br-ancient-cake-axh57vpj` (the same restore
+   point the production role used). `verify:replay`'s default SHARED reference therefore reports
+   **0 drift**; a fresh-only drift of exactly 021's or 022's objects now means a NEW migration is
+   waiting for its shared apply, never a broken replay
    (`docs/RECIPES/add-a-migration.md`). Before 021, both databases stood at **020** on 2026-10-15
    (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04,
    `015_relax_rejection_partner.sql` / OG-32, `016_og02_og03_memory_and_status.sql` / OG-02+OG-03,
@@ -286,8 +288,9 @@ of repository inactivity** — an idle repo silently stops getting the nightly g
    `020_product_identity_and_media.sql` / Decision 46 — the branch on 2026-10-14, shared on
    2026-10-15 from restore point `br-damp-grass-axyri6yl`, so there was no branch-only trail left at
    that point).
-   `verify:replay` diffs a fresh replay against `DATABASE_URL` and reports **0 drift** (20 files
-   replayed as of 2026-10-15; 22 files, and 0 drift again, once 021 and 022 have been applied to shared). Use `npm run verify:replay -- --test-db --reference=test` to diff against the branch
+   `verify:replay` diffs a fresh replay against `DATABASE_URL` and reports **0 drift** over all
+   22 files (re-run 2026-10-19 after the shared apply; the 20-file measurement of 2026-10-15 was
+   the previous tail). Use `npm run verify:replay -- --test-db --reference=test` to diff against the branch
    instead of shared.
 6. **Migration ledger (OG-14, 2026-10-04).** `run-migrations.js` is ledger-driven: it records each
    applied filename in `schema_migrations` and applies only the pending tail, so it is re-runnable

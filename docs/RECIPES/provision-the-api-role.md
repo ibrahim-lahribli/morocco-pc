@@ -19,6 +19,13 @@ branch rehearsal (`scripts/rehearse-api-role.js`). If you need to change a grant
 `npm run test:scripts` pins the fixture, the statements and the satisfiability of every `true`
 answer.
 
+**APPLIED 2026-10-19 on the shared database** — restore point `br-ancient-cake-axh57vpj` (parent
+`br-proud-salad-axs4rxib`, no compute), HEAD `3f0c166`, audit target `db:54ff6ea3f6e6`: 8
+statements, self-check 20/20, then `smoke-api-role.js --confirm-shared` green (health
+`db:"ok"`, POST 201 with 1 build, 52 statements, residue 0). The steps below are the procedure as
+it was run; the recorded outcome is `DEVELOPMENT_NOTES.md` 2026-10-19 (3). The recipe is kept for
+the NEXT environment — the EU project is a different database, so its role apply is still ahead.
+
 ## Prerequisites
 
 1. `git status` first — shared checkout. Note the HEAD sha; the apply records it.
@@ -146,9 +153,10 @@ restore point (see `docs/RECIPES/add-a-migration.md`), then this recipe.
    * `DEVELOPMENT_NOTES.md`: a dated entry with the restore point, the git sha, the digest, the
      self-check result (20/20) and the smoke test's line. The apply's
      `record_for_development_notes` field is written to be pasted here.
-   * `docs/API.md` § Production mode: the section is titled "designed 2026-10-07, not yet applied"
-     — change that, state the apply date and the digest, and drop the claim that the
-     `morocco_pc_api` role does not exist on the shared database.
+   * `docs/API.md` § Production mode: retitle the section (it read "designed 2026-10-07, not yet
+     applied"), state the apply date and the digest, and drop the claim that the
+     `morocco_pc_api` role does not exist on the shared database. **Done 2026-10-19** for the
+     shared apply; the same four files must be updated again for the EU project.
    * `CONTEXT.md`, `docs/OPEN_GAPS.md` (OG-52's P3 clause), `PLAN_PLATFORM_P3.md` Step 5 and
      `PLAN_PLATFORM_STATUS.md` — the same commit as the evidence.
    * Grep the tree for the old claim in the same commit:
