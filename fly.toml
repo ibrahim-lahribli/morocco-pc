@@ -1,0 +1,33 @@
+app = "morocco-pc-api"
+primary_region = "fra"
+
+[build]
+  # Context is the repository root; the image copies src/, apps/api/ and scripts/lib/db-url.js.
+  dockerfile = "apps/api/Dockerfile"
+
+[env]
+  PORT = "3000"
+  HOST = "0.0.0.0"
+  # Pool target = DATABASE_URL (see section 1). Not a secret.
+  API_ALLOW_SHARED = "1"
+  LOG_LEVEL = "info"
+  LOG_PRETTY = "0"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # Always-on: a stopped machine makes the p95 measurement meaningless.
+  auto_start_machines = true
+  auto_stop_machines = false
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/v1/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

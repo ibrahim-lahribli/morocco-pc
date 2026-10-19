@@ -1590,3 +1590,53 @@ green-except-replay, because `if: always()` guarantees the api:db verdict is alw
 **Worth remembering:** a downloaded job log is served as PLAIN TEXT (with a UTF-8 BOM) even though
 `curl` saves it without a `.txt` extension; `unzip` on `/actions/jobs/{id}/logs` fails with
 "End-of-central-directory signature not found" because there is no archive. Cat/grep it directly.
+
+## 2026-10-19 - PR #3 is merged: the nightly fires from master and is red at exactly one step
+
+`agent/platforms` was merged into the default branch as **`b2fe64a`** ("Merge pull request #3 from
+ibrahim-lahribli/agent/platforms", a real merge of `2cd967d`). `git diff origin/master
+origin/agent/platforms` is empty, so the branch and master carry identical content; the local
+checkout is still on `agent/platforms` at `2cd967d` (0 ahead / 0 behind its origin), which now feeds
+nothing - **cut new branches from `origin/master`**.
+
+What the merge changed: which job runs where (`unit-and-docs` is skipped on `schedule` and runs on
+push/PR/dispatch, while `recurring-gates` runs only on `schedule`/`workflow_dispatch`), so the
+nightly now has a default branch to fire from. What it did NOT change: any database state. The
+replay diffs the tree's migration files against `DATABASE_URL` (shared), and shared still sits at
+ledger 20.
+
+| run | ref | event | outcome |
+|---|---|---|---|
+| [39123812237](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39123812237) | `b2fe64a` | workflow_dispatch | `unit-and-docs` success; `recurring-gates` **failure at step 7 only** (`verify-migrations-replay`), with freshness PASS and `test:api:db` PASS |
+| push on `b2fe64a` | master | push | success (`unit-and-docs` only) |
+| 2026-10-16 / 17 / 18 | `c8c16b9` | schedule | failure at the same step |
+| 2026-10-15 | `c8c16b9` | schedule | success |
+
+The pre-merge schedule failures are the **mirror image** of today's: `c8c16b9` carried 18 migration
+files while shared was at 20, so the replay reported 019/020 as shared-only; `b2fe64a` carries 22
+while shared is at 20, so it reports 021/022 as fresh-only. Same root cause (shared is behind the
+tree), same fix (the shared apply), opposite sign - do not read either red as a code regression.
+
+Re-measured locally today, against content identical to `master`:
+
+- `verify:replay` -> `RESULT: 4 class(es) drift`, every object from 021/022 (columns 377 vs 370,
+  checks 84 vs 79, fks 61 vs 60, indexes 102 vs 100); the scratch database was dropped.
+- shared `db:54ff6ea3f6e6` ledger 20, `--check` exit 1 (pending 021, 022); TEST branch
+  `db:798b3aa04976` ledger 22; EU project `db:2d66f26d7ddc` ledger 22, `check-target-parity`
+  `RESULT: MATCH` against TEST.
+- `verify-docs --live` PASS (digest `e56483044956491d`); `gen-decision-index --check` clean;
+  `test:unit` 1171/0, `test:api` 98/0, `test:scripts` 348/0 on both Node 24 and Node 22.
+- `fly.toml` is ABSENT from `master`: the recipe's step-9 commit never happened because the PR
+  merged first. It exists only as an untracked working file, so it must land on a new branch off
+  master.
+- `morocco_pc_api` is still absent on shared; `apply-api-role.js --dry-run` prints
+  `db:54ff6ea3f6e6` and the 8 statements.
+
+**Operational trick:** the repository is public, so
+`api.github.com/repos/ibrahim-lahribli/morocco-pc/actions/runs?branch=master` and
+`/actions/runs/{id}/jobs` answer anonymously and give the per-step verdict. No token is needed to
+read CI, and no token belongs in a file or a log to do it. (The git remote carries no embedded
+credential.)
+
+**Worth remembering:** a merged branch does not move a database. "PR merged" and "gate green" are
+independent facts, and in this repo only the second one is still red.
