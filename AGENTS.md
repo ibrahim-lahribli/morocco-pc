@@ -250,7 +250,8 @@ reported 4 drift classes against shared (columns **377 vs 370**, checks **84 vs 
 **61 vs 60**, indexes **102 vs 100**), exactly the objects 021 and 022 create, i.e. the
 branch-only state. **CLOSED 2026-10-19** by the owner-approved shared apply of 021/022
 (restore point `br-ancient-cake-axh57vpj`, ledger 20 -> 22), after which the same command
-reports **0 drift**. A future replay red of that shape is real drift, never something to "fix"
+reports **0 drift**, and a dispatched `recurring-gates` run (39207745723, `master` at `3f0c166`)
+completed with every step PASS. A future replay red of that shape is real drift, never something to "fix"
 by changing the replay's reference target. Note also that **scheduled
 workflows only run from the default branch** and GitHub **disables them automatically after 60 days
 of repository inactivity** — an idle repo silently stops getting the nightly gate, which is why

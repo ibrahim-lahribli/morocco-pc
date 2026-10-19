@@ -1730,3 +1730,28 @@ recipe's new APPLIED banner + its post-apply checklist). Gates after the edits:
 **Still open after this.** No deployed origin (no Fly account, `flyctl` absent), no Sentry DSN
 (no event delivered), no retailer. The next `recurring-gates` run is the first that can be
 wholly green; if it is not, read the failure as new rather than as this red.
+
+## 2026-10-19 (4) - the dispatched `recurring-gates` run is wholly GREEN
+
+`POST /repos/{owner}/{repo}/actions/workflows/ci.yml/dispatches` with `ref: master` (the token is
+in `.env`; no token, header or URL is echoed anywhere), run
+[39207745723](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39207745723), event
+`workflow_dispatch`, head `3f0c166`, conclusion **success**. First wholly green `recurring-gates`
+in the record, and both jobs together:
+
+- `unit-and-docs` - `test:unit`, `test:scripts`, `test:api`, `gen-decision-index --check`,
+  `verify-docs --offline`: every step PASS.
+- `recurring-gates` - secrets assert, `check-offer-freshness --fail-days=14`,
+  **`verify-migrations-replay --test-db`**, `test:api:db`: every step PASS.
+
+The two red runs before it on `master` (39204059438 at 05:20:42Z and 39205063272 at 05:32:10Z)
+each failed at exactly ONE step, `verify-migrations-replay --test-db`, and both predate the
+05:42Z shared apply - the documented branch-behind cause, not a new defect. 39207745723 is the
+first green, so the step's history now reads red-at-the-pending-apply, then green-with-no-code
+change.
+
+**Worth remembering:** that step's verdict is a pure function of (migration files in the tree,
+shared ledger). It is not a test of the code under review. It went red the moment the tree reached
+22 while shared sat at 20, stayed red across several dispatches, and flipped green from a
+DATABASE apply alone - the same lesson as "a merged branch does not move a database", seen from
+the other side. A red there means "read the two ledger tails", not "find the regression".
