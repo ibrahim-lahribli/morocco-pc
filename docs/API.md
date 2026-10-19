@@ -839,6 +839,31 @@ omits its `429`/`500` response. The exemption list is asserted to match real
 routes, so it cannot go stale. The snapshot pins the bytes; this gate pins
 completeness. Adding a route without documenting it is now a red suite.
 
+## Observability
+
+Error capture is OPTIONAL and DSN-gated. With no `SENTRY_DSN` the API behaves
+exactly as it did before the integration existed: no client, no transport, no
+outbound socket, and `@sentry/node` is never imported. With a DSN set:
+
+- **Captured:** unexpected failures only - the path that answers the generic
+  `500 INTERNAL_ERROR` - tagged with the same `request_id` the client is given,
+  so a report maps to a response.
+- **Never captured:** `422` validation failures, `413` payloads, `429` rate
+  limits, `404` misses and the mapped `503 SCORING_MODEL_UNAVAILABLE`. Those are
+  responses, not incidents.
+- **Never sent:** request bodies, query strings, headers and cookies. `beforeSend`
+  deletes the whole `request` object before an event leaves the process,
+  `sendDefaultPii` is off and tracing is off (`tracesSampleRate: 0`).
+
+`SENTRY_ENVIRONMENT` and `SENTRY_RELEASE` are optional; `release` falls back to
+`ENGINE_VERSION`, which every deploy already sets. A failing sink is logged at
+`warn` and never changes the response a client receives.
+
+**Not yet proven end to end.** The capture path is unit-tested, but no event has
+been delivered to a real project: P3 Sprint 4 Step 3 needs a deployed origin and
+a DSN. The uptime check must assert the health BODY (`db == "ok"`), not the
+status code, because `/v1/health` answers `200` with `db: "down"` (Step 4, open).
+
 ## Testing
 
 | Suite | Command | Needs a DB | Runs in |

@@ -49,7 +49,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | Area | Actual |
 |---|---|
 | Language | Node.js, CommonJS (`require`, `'use strict'`), no TypeScript, no build step |
-| Runtime deps | Engine: `pg`, `dotenv`. API: `fastify`, `@fastify/cors`, `@fastify/rate-limit`, `@fastify/swagger`, `@sinclair/typebox` — all at the ROOT `package.json` (no nested package.json; the engine resolves `pg`/`dotenv` from the root `node_modules`). `pino-pretty` is a devDependency |
+| Runtime deps | Engine: `pg`, `dotenv`. API: `fastify`, `@fastify/cors`, `@fastify/rate-limit`, `@fastify/swagger`, `@sinclair/typebox`, `@sentry/node` — all at the ROOT `package.json` (no nested package.json; the engine resolves `pg`/`dotenv` from the root `node_modules`). `pino-pretty` is a devDependency |
 | Database | PostgreSQL on Neon (cloud); single shared dev DB, NOT disposable |
 | Data access | Raw parameterized SQL via `pg`; no ORM |
 | Engine | Pure-JS modules under `src/recommendation/` |

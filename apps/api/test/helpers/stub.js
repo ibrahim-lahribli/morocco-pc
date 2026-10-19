@@ -300,6 +300,10 @@ function createTestApp(options) {
     // TRUST_PROXY from env), so a stub that passed `false` here would hide a
     // broken env path.
     trustProxy: opts.trustProxy,
+    // Forwarded, never defaulted: `undefined` is the production default (a
+    // no-op capture, i.e. monitoring off), so a stub must not impose its own
+    // spy and make a "nothing was captured" test pass for the wrong reason.
+    captureError: opts.captureError,
     env: Object.assign({ ENGINE_VERSION: TEST_ENGINE_VERSION, ALLOWED_ORIGINS: '' }, opts.env),
     logger: false,
   });

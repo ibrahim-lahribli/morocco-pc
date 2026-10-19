@@ -178,3 +178,114 @@ test('a malformed id is a 404, not a PostgreSQL 22P02 reaching the client as a 5
   const response = await app.inject({ method: 'GET', url: '/v1/recommendations/not-a-uuid' });
   assert.equal(response.statusCode, 404);
 });
+test('an unexpected 500 is captured exactly once, with the request id and nothing else', async () => {
+  const captures = [];
+  const engine = stub.createEngineStub(async () => {
+    throw new Error('relation "secret_table" does not exist');
+  });
+  const app = stub.createTestApp({
+    engine,
+    captureError: (error, requestId) => captures.push({ error, requestId }),
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/recommendations?token=super-secret',
+    payload: stub.validBody(),
+  });
+
+  assert.equal(response.statusCode, 500);
+  assert.equal(captures.length, 1, 'one 500 is one event, not one per log line');
+  assert.deepEqual(Object.keys(captures[0]).sort(), ['error', 'requestId'],
+    'the capture payload is the error and the id: no request, no body, no query string');
+  assert.equal(captures[0].requestId, response.json().request_id,
+    'the tag is the SAME id the client is given, so a report maps to a response');
+  assert.ok(captures[0].error instanceof Error, 'the error object is forwarded, not its message');
+});
+
+test('a 422 is never captured', async () => {
+  const captures = [];
+  const app = stub.createTestApp({ captureError: (error, requestId) => captures.push(requestId) });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/recommendations',
+    payload: { budget_amount: 20000, currency: 'MAD' },
+  });
+
+  assert.equal(response.statusCode, 422);
+  assert.deepEqual(captures, [], 'a validation failure is a client error, not an incident');
+});
+
+test('a 413 is never captured', async () => {
+  const captures = [];
+  const app = stub.createTestApp({ captureError: (error, requestId) => captures.push(requestId) });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/recommendations',
+    payload: stub.validBody({ padding: 'x'.repeat(20000) }),
+  });
+
+  assert.equal(response.statusCode, 413);
+  assert.deepEqual(captures, []);
+});
+
+test('a handled 503 is never captured', async () => {
+  const captures = [];
+  const engine = stub.createEngineStub(async () => {
+    throw errorWithCode('SCORING_MODEL_UNAVAILABLE');
+  });
+  const app = stub.createTestApp({ engine, captureError: (error, requestId) => captures.push(requestId) });
+
+  const response = await app.inject({ method: 'POST', url: '/v1/recommendations', payload: stub.validBody() });
+
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual(captures, [], 'a known, mapped condition is a response, not an incident');
+});
+
+test('a 404 is never captured', async () => {
+  const captures = [];
+  const repository = stub.createRepositoryStub({
+    async readRecommendationResult() {
+      return { found: false };
+    },
+  });
+  const app = stub.createTestApp({ repository, captureError: (error, requestId) => captures.push(requestId) });
+
+  const response = await app.inject({ method: 'GET', url: '/v1/recommendations/99999999-9999-4999-8999-999999999999' });
+
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(captures, []);
+});
+
+test('a 429 from the rate limiter is never captured', async () => {
+  const captures = [];
+  const app = stub.createTestApp({ captureError: (error, requestId) => captures.push(requestId) });
+
+  let lastStatus = 0;
+  for (let index = 0; index <= 30; index += 1) {
+    const response = await app.inject({ method: 'POST', url: '/v1/recommendations', payload: stub.validBody() });
+    lastStatus = response.statusCode;
+  }
+
+  assert.equal(lastStatus, 429);
+  assert.deepEqual(captures, [], 'being rate limited is expected traffic control, not an incident');
+});
+
+test('a failing capture cannot change the response a client gets', async () => {
+  const engine = stub.createEngineStub(async () => {
+    throw new Error('boom');
+  });
+  const app = stub.createTestApp({
+    engine,
+    captureError: () => {
+      throw new Error('sink unreachable');
+    },
+  });
+
+  const response = await app.inject({ method: 'POST', url: '/v1/recommendations', payload: stub.validBody() });
+
+  assert.equal(response.statusCode, 500);
+  assert.equal(response.json().error, 'INTERNAL_ERROR', 'the error envelope survives a broken sink');
+});

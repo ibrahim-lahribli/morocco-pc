@@ -1640,3 +1640,42 @@ credential.)
 
 **Worth remembering:** a merged branch does not move a database. "PR merged" and "gate green" are
 independent facts, and in this repo only the second one is still red.
+
+## 2026-10-19 (2) - optional error capture is wired behind a DSN gate; no event has left the process yet
+
+Platform P3 Sprint 4 Steps 1-2. `@sentry/node@^11.8.0` is installed and wired, and the whole
+integration is OFF unless `SENTRY_DSN` is set.
+
+**The shape.** `apps/api/src/monitoring.js` owns the decision and the config:
+`sentryEnabled(env)` accepts only a non-blank STRING DSN; `buildSentryOptions(env)` is PURE (tracing
+`0`, `sendDefaultPii: false`, `release` falling back to `ENGINE_VERSION`); `createCapture(env)`
+returns null when disabled, and otherwise requires `@sentry/node` LAZILY, initialises once and
+returns a `(error, requestId) => void`. `app.js` takes that function as an injected `captureError`
+(no-op when absent) and calls it only in the generic-500 branch; `server.js` passes the real capture
+or null and logs `monitoring: disabled|sentry` at startup. No route imports an SDK, so the unit
+suites stay network-free.
+
+**Why the module rather than "initialise in server.js".** The plan asked for the init in
+`server.js`; the DSN gate, the options and the wrapper are exactly what the tests must assert, and
+`server.js` runs `dotenv.config()` and builds a pool on import. A separate module keeps the test
+import side-effect-free and still never loads the SDK outside a real DSN. The plan records the
+deviation.
+
+**What is never sent.** `beforeSend` deletes the WHOLE `request` object, so no query string, body,
+header or cookie can reach a sink even if a future integration attaches one. Only unexpected 5xx are
+captured; 422, 413, 429, 404 and the mapped 503 are responses, not incidents. A capture function
+that throws is logged at `warn` and cannot change the response.
+
+**Evidence.** Tests written first and seen RED (`Cannot find module ../../src/monitoring`, plus an
+uncalled stub), then green: `test:api` **111 pass / 0 fail** on Node 24 AND `node@22` (CI pin),
+`test:unit` and `test:scripts` 0 fail, `verify-docs` OK, `gen-decision-index --check` clean,
+`npm ci --dry-run` up to date. The DSN path cannot be exercised without an account, so it was
+probed once in a scratch process with a NO-OP transport: the client initialised, the options were
+accepted (`tracesSampleRate 0`, `sendDefaultPii false`, `release deadbee`), `withScope` applied the
+`request_id` tag, and nothing was sent.
+
+**Still open, and it is the point of Step 3:** no event has been delivered to a real project. Until
+a deployed host carries a DSN and one forced 500 arrives with its request id, this is wired and
+unit-proven - not proven in production. The uptime check must assert the health BODY
+(`db == "ok"`), because `/v1/health` answers `200` with `db: "down"`; that contract and the log
+retention decision are Steps 4-5.
