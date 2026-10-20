@@ -83,11 +83,15 @@ referenced by no sprint and `OD3` is unused; they are not invented here.
 next to it:** S2 extracts palette, type scale, spacing, radii and component states into
 `@theme` tokens, and S3 implements the eight kit components to their Figma frames.
 
-**Access state, measured 2026-10-20:** the Figma REST API answered **429 rate-limited** (starter
-plan, retry window ~17 h), so the file has **not been read** and no token has been extracted.
-The source is registered so the next session reads it instead of re-deciding the design; the
-first S2 action is a successful fetch, and nothing in this repo may cite a token value from
-that file until one exists.
+**Access state, measured TWICE on 2026-10-20 (08:14Z and 08:20Z).** Both `get_figma_data` calls
+on file `OwaMKYnDfH2AQqj7y0bn2H` / node `0:1` answered **429 rate-limited** (starter plan), the
+second with `retry after 63338` s — i.e. not before **2026-10-21T01:55Z**. The file has therefore
+**not been read**: no frame seen, no style listed, no token extracted. The source stays registered
+so the next session retries the SAME file key rather than re-deciding the design, and nothing in
+this repo may cite a token value from that file until one exists. The retry is one
+`get_figma_data(fileKey, nodeId)` call; what it must produce is S2's token map (palette, type
+scale, spacing, radii, component states — each with the node id it came from) plus S3's
+inventory of the eight kit components.
 
 The design work is a **two-pass review before code** (S2): EXTRACT the design from Figma first,
 then critique the extraction against the principles below — before any component is written.
