@@ -78,10 +78,10 @@ The board's 7 sizes map onto Tailwind's default scale; the tokens name the role.
 | `--text-micro` | 11 / 1.45 / 400 | §2, mono labels |
 
 Fonts: `--font-sans` = Inter and `--font-mono` = Geist Mono, both compiled in
-`app/[locale]/layout.tsx`; `--font-arabic` = IBM Plex Sans Arabic (S5 compiles
-the `arabic` subset and its class is on `<html>` for BOTH locales, so the token
-resolves on `/fr/tokens` too — see [I18N.md](I18N.md) §5). Amounts use
-`.num-tabular` (board §2, "12 500 MAD").
+`app/[locale]/layout.tsx` (only Inter is preloaded; mono loads where it is
+painted). `--font-arabic` = IBM Plex Sans Arabic, self-hosted from
+`public/fonts/` and preloaded for `ar` alone — see [I18N.md](I18N.md) §5, which
+also explains why. Amounts use `.num-tabular` (board §2, "12 500 MAD").
 
 **Board inconsistency recorded, not hidden:** the label for the 16 px body says
 line-height 1.5, while the sample element uses `leading-relaxed` (1.625). The

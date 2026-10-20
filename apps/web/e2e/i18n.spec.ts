@@ -12,42 +12,15 @@
  *   3. Money and dates come from Intl with the ROUTE's locale, and money carries
  *      a narrow no-break space plus the unit the product uses ("DH").
  *   4. The Arabic page actually loads IBM Plex Sans Arabic, and the French page
- *      does not apply it.
+ *      does not apply it; the Arabic face is preloaded on `ar` only, and the mono
+ *      face — an eyebrow label plus the token sheet — is preloaded nowhere.
  *   5. Cumulative Layout Shift is 0 while the fonts swap — the point of
  *      `next/font`'s metric-adjusted fallbacks, measured rather than assumed.
  */
 
 import { test, expect, type Page } from "@playwright/test";
 
-declare global {
-  interface Window {
-    __cls?: number;
-    __shifts?: Array<{ value: number; node: string }>;
-  }
-}
-
-/** Record layout shifts from the first paint, before any app code runs. */
-async function trackCls(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    window.__cls = 0;
-    window.__shifts = [];
-    new PerformanceObserver((list) => {
-      for (const entry of list.getEntries() as Array<
-        PerformanceEntry & { value: number; hadRecentInput: boolean }
-      >) {
-        if (entry.hadRecentInput) continue;
-        window.__cls = (window.__cls ?? 0) + entry.value;
-        if (entry.value > 0) {
-          const source = (entry as unknown as { sources?: Array<{ node?: Node }> }).sources?.[0]?.node;
-          window.__shifts?.push({
-            value: entry.value,
-            node: source instanceof Element ? source.outerHTML.slice(0, 80) : "unknown",
-          });
-        }
-      }
-    }).observe({ type: "layout-shift", buffered: true });
-  });
-}
+import { trackCls } from "./cls";
 
 test.describe("locale routing", () => {
   test("/ar is Arabic and RTL in the first byte of HTML", async ({ page }) => {
@@ -217,6 +190,43 @@ test.describe("fonts", () => {
       ),
     );
     expect(specimenLoaded).toBe(true);
+  });
+
+  test("the mono face is fetched only where it is painted, and never preloaded", async ({
+    page,
+  }) => {
+    // The mono face is an eyebrow label plus the token sheet — nothing else — so a
+    // document-level preload paid 23 KB on `/fr` and `/ar`, pages that never paint
+    // it. `preload: false` leaves the `@font-face` in the stylesheet: a page that
+    // does use `font-mono` still fetches it lazily, one that does not fetches
+    // nothing. Asserted as "never loaded" rather than by URL, because the file is
+    // a hashed build asset whose name says nothing about which face it holds.
+    const loadedMonoFaces = () =>
+      page.evaluate(
+        () =>
+          [...document.fonts].filter(
+            (face) => face.family === "Geist Mono" && face.status === "loaded",
+          ).length,
+      );
+
+    for (const route of ["/fr", "/ar"]) {
+      await page.goto(route);
+      await page.evaluate(() => document.fonts.ready);
+      expect(await loadedMonoFaces(), `${route} must not fetch the mono face`).toBe(0);
+    }
+
+    // Exactly one font preload survives on a French page: Inter. A second one is
+    // the regression this pins (a `preload` flag flip puts mono back on every
+    // page).
+    await page.goto("/fr");
+    expect(await fontPreloads(page)).toHaveLength(1);
+
+    // And the face is not lost: the token sheet paints mono labels, so it loads
+    // the file — on demand, without a preload tag.
+    await page.goto("/fr/tokens");
+    await page.evaluate(() => document.fonts.ready);
+    expect(await loadedMonoFaces()).toBeGreaterThan(0);
+    expect(await fontPreloads(page)).toHaveLength(1);
   });
 
   test("the Arabic page loads IBM Plex Sans Arabic; the French page does not apply it", async ({

@@ -18,27 +18,40 @@ import "../globals.css";
  * a client effect: the direction has to be right in the FIRST byte of HTML, or
  * an Arabic page paints in the wrong direction and then flips.
  *
- * Fonts: Inter (`--font-sans`) and Geist Mono (`--font-mono`) come from
- * `next/font`, because they are the document's faces for BOTH locales and their
- * preload is never wasted. The Arabic face does not: it is self-hosted from
- * `public/fonts/ibm-plex-sans-arabic/` with an `@font-face` in `globals.css`, and
- * the preload below is conditional on the direction.
+ * Fonts: THREE faces, and exactly ONE of them is preloaded on every document.
+ * Inter (`--font-sans`) is, because both locales paint it. The other two are not,
+ * for the same reason `preload` is a document-level decision: a document that
+ * does not paint a face should not fetch it.
+ *
+ *  - **Geist Mono** (`--font-mono`) stays on `next/font` with `preload: false`.
+ *    Only the eyebrow labels and the token sheet use it, so its preload paid
+ *    23 KB on `/fr` and `/ar`, which never paint it — measured 2026-10-20: `/fr`
+ *    70 KB → 47 KB in one request. The `@font-face` still ships in the
+ *    stylesheet, so the pages that DO use `font-mono` fetch the file on demand.
+ *  - **IBM Plex Sans Arabic** is self-hosted from
+ *    `public/fonts/ibm-plex-sans-arabic/` with an `@font-face` in `globals.css`,
+ *    because `next/font` has no way to preload conditionally at all and this
+ *    face is needed by `ar` alone.
  *
  * Why it is not `next/font` too: `next/font` preloads every face whose module is
  * evaluated, and this single layout serves `/fr` and `/ar`, so its Arabic face put
  * four subset files on every French page — measured 2026-10-20, `/fr` fetched
  * 206 KB of fonts to render one Latin family. Two repairs were measured and
  * rejected: a dynamic import of the face's module still leaves it in the layout's
- * build graph (the preloads remained), and `preload: false` loses CLS 0, because
- * the face then swaps after first layout and the switcher's Arabic label reflows
- * its neighbours by 3 px. Owning the file means owning the URL, so the preload
- * follows `dir`.
+ * build graph (the preloads remained), and `preload: false` on THAT face loses
+ * CLS 0, because it then swaps after first layout and the switcher's Arabic label
+ * reflows its neighbours by 3 px. Mono is the opposite case and is why the flag
+ * is not a general rule: no element on `/fr` or `/ar` paints it, so nothing can
+ * move when it arrives late. Owning the file means owning the URL, so the Arabic
+ * preload follows `dir`.
  *
- * After the change, measured on the production build: `/fr` downloads 70 KB
- * (Inter + Mono, no Arabic), `/ar` downloads 201 KB (three preloaded Arabic
- * weights + Inter + Mono), and `/fr/tokens` pulls ONE Arabic file on demand
- * because its type specimen really displays Arabic. `e2e/i18n.spec.ts` pins both
- * halves: CLS 0 on `/ar`, and zero Arabic preloads on `/fr`.
+ * After the change, measured on the production build at 360×800: `/fr` downloads
+ * 47 KB in ONE request (Inter, no mono, no Arabic), `/ar` 178 KB in four (Inter
+ * plus three preloaded Arabic weights), and `/fr/tokens` 112 KB in three — the
+ * token sheet is the one French page that paints both the Arabic specimen and
+ * the mono labels, so it pulls both files on demand. `e2e/i18n.spec.ts` pins the
+ * split: CLS 0 on `/ar`, zero Arabic preloads on every French page, and the mono
+ * face loaded only where it is painted.
  *
  * `globals.css` still scopes the BODY face to `html[lang="ar"]`, so a French page
  * paints in Inter and never switches.
@@ -54,6 +67,13 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
   display: "swap",
+  // NOT preloaded: only this app's eyebrow labels and the token sheet use the
+  // mono face, so a document-level preload pays 23 KB on pages that never paint
+  // it (`/fr`, `/ar`). The @font-face still ships in the stylesheet, so a page
+  // that does use `font-mono` fetches it lazily, and `next/font`'s
+  // metric-adjusted fallback absorbs the swap — measured CLS 0 on `/fr/tokens`,
+  // `/fr/kit` and `/fr/format`, which is what `e2e/i18n.spec.ts` pins.
+  preload: false,
 });
 
 /**

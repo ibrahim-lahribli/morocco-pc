@@ -211,7 +211,7 @@ proof sheet. `docs/design/I18N.md` is the reference. Four deviations, each delib
    `generateStaticParams` + `notFound()`: serving French documentation under `lang="ar"` would
    mispronounce it. S20 translates product screens, not design documentation.
 
-Measured: 53/53 Playwright specs (14 S5); `check:i18n` exit 0 on 21 files, RED on all four rule
+Measured: 55/55 Playwright specs (16 S5); `check:i18n` exit 0 on 21 files, RED on all four rule
 types; `check:tokens` exit 0 on 23 files; `build` exit 0, 6 prerendered routes (`/fr`, `/ar`,
 `/fr/format`, `/ar/format`, `/fr/kit`, `/fr/tokens`, 9 static pages reported); `typecheck` exit 0.
 
@@ -228,12 +228,14 @@ and `app/[locale]/layout.tsx` preloads three weights with React 19's `preload()`
 `dir === "rtl"`. Per-locale root layouts were the other candidate and were not needed.
 
 **Measured, HEAD worktree vs working tree (same probe, production build, 360×800):** `/fr` 206 KB of
-fonts in 6 requests → **70 KB in 2** (the four Arabic files and 136 KB are gone; `/fr/format` and
-`/fr/kit` likewise emit 0 Arabic preloads). `/ar` 248 KB → **201 KB** (3 preloaded Arabic weights).
-`/fr/tokens` 219 KB → **112 KB** (one 42 KB Arabic file, on demand). CLS stays 0 on `/ar` across five
-consecutive production runs, and `e2e/i18n.spec.ts` now pins the split: 3 Arabic preloads on `/ar`,
-zero on `/fr`, `/fr/format` and `/fr/kit`. The remaining per-locale waste is small and named:
-Geist Mono (23 KB) is preloaded on both locales although only the token sheet uses it.
+fonts in 6 requests → **47 KB in 1** (the four Arabic files and 136 KB are gone, and so is the mono
+file with `preload: false`; `/fr/format` and `/fr/kit` likewise emit 0 Arabic preloads). `/ar` 248 KB
+→ **178 KB** (4 requests). `/fr/tokens` 219 KB → **112 KB** (one 42 KB Arabic file and the mono file,
+both on demand). CLS stays 0 on every route unthrottled, and `e2e/i18n.spec.ts` now pins the split:
+3 Arabic preloads on `/ar`, zero on `/fr`, `/fr/format` and `/fr/kit`, and the mono face loaded only
+where it is painted. Under a 400 kbps CDP throttle the numbers are no longer all zero (worst 0.00181
+on `/ar/format`) — and they are identical with the mono preload restored, so that residue belongs to
+preloaded faces arriving after first paint, not to this change (I18N.md §5 has the breakdown).
 
 #### S6 — CI + budgets (1.5 h)
 **Goal:** A dedicated `apps/web` CI job: lint, typecheck, unit tests, Playwright at 360 px,

@@ -20,6 +20,8 @@ import path from "node:path";
 
 import { test, expect } from "@playwright/test";
 
+import { trackCls } from "./cls";
+
 type Rgb = [number, number, number];
 
 function oklchToRgb(value: string): Rgb {
@@ -144,6 +146,30 @@ test.describe("the token page renders them", () => {
 
     const robots = await page.locator('meta[name="robots"]').getAttribute("content");
     expect(robots).toContain("noindex");
+  });
+
+  test("the mono face arrives without a preload and still shifts nothing", async ({ page }) => {
+    // This page PAINTS the mono face (token names, the eyebrow, the specimen
+    // note) and does not preload it, so the file arrives after first layout and
+    // swaps in. The swap must not move anything: next/font's metric-adjusted
+    // fallback covers it until the real face lands.
+    await trackCls(page);
+    await page.goto("/fr/tokens");
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(400);
+
+    const result = await page.evaluate(() => ({
+      cls: window.__cls ?? 0,
+      shifts: window.__shifts ?? [],
+      monoLoaded: [...document.fonts].some(
+        (face) => face.family === "Geist Mono" && face.status === "loaded",
+      ),
+    }));
+
+    // Without this the test could pass by never loading the font at all.
+    expect(result.monoLoaded).toBe(true);
+    expect(result.shifts).toEqual([]);
+    expect(result.cls).toBe(0);
   });
 
   test("the body background is the page token, not a literal", async ({ page }) => {
