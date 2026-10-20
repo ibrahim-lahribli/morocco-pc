@@ -6,6 +6,12 @@
  * users get the same behaviour as every other radio group on the web. Only the
  * styling is custom.
  *
+ * One thing this component CANNOT do for its caller: name the group. That is a
+ * `<fieldset>` with a `<legend>` around the cards — the element a screen reader
+ * announces before "1 sur 3" — and it belongs to the screen, because only the
+ * screen knows what the options are about. `/fr/kit` and `/fr/tokens` show the
+ * pattern; without it the wizard's first question is three unlabelled options.
+ *
  * The label is a `group` and every styled descendant reads the input's state
  * through `group-has-[:checked|:focus-visible|:disabled]`. `peer-*` would only
  * reach the card, not the dot and the title inside it, because peer variants
@@ -16,8 +22,13 @@
  * selected, which would nudge every card below it. The radio dot is filled only
  * when checked, and the whole card is the label, so the touch target is the
  * full width rather than the 20 px dot.
+ *
+ * Uncontrolled by default (`defaultChecked`), like the native element it wraps.
+ * S7 added the controlled pair (`checked` + `onChange`) because a wizard's
+ * answers live in the URL: the screen passes the selected value down and writes
+ * the new one back, and the component still holds no state of its own.
  */
-import type { ReactNode } from "react";
+import type { ChangeEventHandler, ReactNode } from "react";
 
 import { cn } from "./cn";
 
@@ -27,6 +38,9 @@ export interface ChoiceCardProps {
   title: string;
   description?: string;
   defaultChecked?: boolean;
+  /** Controlled selection. Pass with `onChange`; do not mix with `defaultChecked`. */
+  checked?: boolean;
+  onChange?: ChangeEventHandler<HTMLInputElement>;
   disabled?: boolean;
   /** Renders inside the card, under the description (e.g. a price badge). */
   children?: ReactNode;
@@ -38,6 +52,8 @@ export function ChoiceCard({
   title,
   description,
   defaultChecked,
+  checked,
+  onChange,
   disabled,
   children,
 }: ChoiceCardProps) {
@@ -48,6 +64,8 @@ export function ChoiceCard({
         name={name}
         value={value}
         defaultChecked={defaultChecked}
+        checked={checked}
+        onChange={onChange}
         disabled={disabled}
         className="peer sr-only"
       />

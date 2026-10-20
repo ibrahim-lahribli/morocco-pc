@@ -1,9 +1,9 @@
 # Component kit (S3)
 
-**What this file is.** The reference for the eight components in
-`apps/web/components/ui/`: what board section each one reproduces, the geometry
-it was built to, the small API it exposes, and the accessibility contract the
-tests pin. It is the per-state record S3's definition of done asks for; the
+**What this file is.** The reference for the kit in `apps/web/components/ui/`:
+the eight primitives S3 built (what board section each reproduces, the geometry it
+was built to, the small API it exposes, the accessibility contract the tests pin)
+and the two wrappers S7 added. It is the per-state record S3's definition of done asks for; the
 pixels themselves are on `/fr/kit` (a `noindex` proof sheet), and the assertions
 are in `apps/web/e2e/kit.spec.ts`.
 
@@ -35,17 +35,23 @@ has `"use client"`.
   without a type submits any form it lands in; that default has caused more bugs
   than any styling decision here. `ghost` keeps a 48 px target: the board's "lien
   / texte" is a full-width row, not a 20 px text link.
-- **TextField** is a labelled `<input>`; the unit inside the field is
-  `aria-hidden`, because a screen reader should hear "Votre enveloppe cible,
-  8 500 DH" once, not "MAD MAD". Error replaces hint rather than stacking, so
-  `aria-describedby` never points at two competing sentences.
+- **TextField** is a labelled `<input>`. The unit painted inside the field is
+  `aria-hidden`, but the label carries an `sr-only` copy of it, so the
+  accessible name is "Votre enveloppe cible MAD" — the unit is announced once,
+  and never only through the hint (which an error state replaces). Error replaces
+  hint rather than stacking, so `aria-describedby` never points at two
+  competing sentences.
 - **Slider** is `<input type="range">`. Arrow keys, Home/End, PageUp/PageDown,
   `aria-valuemin|max|now` are the browser's. The component adds the two things
   native does not: an accessible name, and `aria-valuetext` ("8 500 DH"
   instead of "8500"). `app/globals.css` styles only the track and thumb.
 - **ChoiceCard** is a native radio, `sr-only` but focusable, inside a `<label>`
-  that is the whole card. Arrow keys move the selection; the ring is painted on
-  the card because the input is invisible.
+  that is the whole card. It is uncontrolled by default and takes `checked` +
+  `onChange` when the screen owns the value (S7's answers live in the URL). Arrow keys move the selection; the ring is painted on
+  the card because the input is invisible. The group's NAME belongs to the
+  caller: cards must sit in a `<fieldset>` with a `<legend>`, which is what a
+  screen reader announces before "1 sur 3" — a heading above the cards is not a
+  name. `/fr/kit` and `/fr/tokens` both show the pattern.
 - **Badge** is a `<span>`: it is a status, not a control, so it has no role and
   no tab stop. Three tones, each with its own word AND its own icon shape, so
   the states survive greyscale and a screen reader.
@@ -78,6 +84,16 @@ has `"use client"`.
 | Badge padding | 10 px inline, 4 px block, 14 px icon | board §9 |
 | Progress rail | 10 px tall, pill radius | board §10 |
 | Focus ring | 2 px `primary`, 2 px offset, everywhere | board §4 |
+
+## Two wrappers S7 added
+
+Neither is a board frame; both exist because a screen kept getting something wrong
+by hand.
+
+| Component | What it is | Why |
+|---|---|---|
+| `ChoiceGroup` | A `<fieldset>` whose `<legend>` is the question, containing `ChoiceCard`s for a `{ value, label }` list | The GROUP is the question and only a legend gives a group its name. Its `options` is the shape `GET /v1/meta/options` returns, so a list maps straight in and no screen derives a label from an enum |
+| `LinkButton` | `next/link` with the button's base/size/variant classes | A link that navigates must be a link (open-in-new-tab, context menu, honest role). The classes have one owner, so it cannot drift from `Button`; `disabled` is absent by design |
 
 ## Money is formatted, not typed
 

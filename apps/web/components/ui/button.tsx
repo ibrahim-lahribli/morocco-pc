@@ -14,7 +14,8 @@
  * accessibility floor rather than the board's 48, and it is only for secondary
  * controls. Primary actions stay 48 px.
  */
-import type { ButtonHTMLAttributes } from "react";
+import Link from "next/link";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 import { cn } from "./cn";
 
@@ -42,6 +43,40 @@ const VARIANTS: Record<ButtonVariant, string> = {
   ghost: "bg-transparent text-primary hover:underline disabled:text-muted/70",
   whatsapp: "bg-whatsapp text-surface active:bg-whatsapp/90",
 };
+
+export interface LinkButtonProps {
+  href: string;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  className?: string;
+  children: ReactNode;
+}
+
+/**
+ * LinkButton — the same geometry and variants, on an `<a>` (S7).
+ *
+ * A link that navigates must BE a link: a `<button onClick={router.push}>` loses
+ * open-in-new-tab, the context menu, and the status-bar preview, and it lies to
+ * a screen reader about what will happen. So the wizard's entry point on the
+ * home page is a `next/link` that borrows the button's classes instead of the
+ * button itself — one owner of the styles, two elements.
+ *
+ * `disabled` has no meaning here and is therefore not in the props: a link that
+ * cannot be followed should not be rendered as one.
+ */
+export function LinkButton({
+  href,
+  variant = "primary",
+  size = "default",
+  className,
+  children,
+}: LinkButtonProps) {
+  return (
+    <Link href={href} className={cn(BASE, SIZES[size], VARIANTS[variant], className)}>
+      {children}
+    </Link>
+  );
+}
 
 export function Button({
   variant = "primary",

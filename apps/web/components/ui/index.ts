@@ -1,5 +1,7 @@
 /**
- * The base component kit (S3) — eight components, one import path.
+ * The base component kit (S3) — eight primitives, plus the two wrappers S7
+ * added: `ChoiceGroup` (the fieldset/legend a radio group needs) and
+ * `LinkButton` (the button's geometry on a link). One import path.
  *
  * Every component is a plain function: no hooks, no context, no `"use client"`.
  * That keeps them usable in server components, and it means the only stateful
@@ -7,7 +9,7 @@
  * element underneath (a native radio, a native range, a native button), which is
  * also where keyboard support and the accessibility tree come from.
  *
- * Rules that hold for all eight, enforced by `npm run check:tokens` and the
+ * Rules that hold for all of them, enforced by `npm run check:tokens` and the
  * specs in `e2e/kit.spec.ts`:
  *   - token classes only — no colour literal, no raw palette utility (the gate
  *     scans this file too, so the rule cannot be written as an example here);
@@ -18,8 +20,16 @@
  */
 export { Alert, type AlertProps, type AlertTone } from "./alert";
 export { Badge, type BadgeProps, type BadgeTone } from "./badge";
-export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from "./button";
+export {
+  Button,
+  LinkButton,
+  type ButtonProps,
+  type ButtonSize,
+  type ButtonVariant,
+  type LinkButtonProps,
+} from "./button";
 export { ChoiceCard, type ChoiceCardProps } from "./choice-card";
+export { ChoiceGroup, type ChoiceGroupOption, type ChoiceGroupProps } from "./choice-group";
 export { cn } from "./cn";
 export { ProgressBar, type ProgressBarProps, type ProgressTone } from "./progress-bar";
 export { Skeleton, SkeletonCard } from "./skeleton";

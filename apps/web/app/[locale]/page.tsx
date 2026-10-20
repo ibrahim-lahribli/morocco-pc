@@ -2,14 +2,20 @@ import { hasLocale } from "next-intl";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 
+import { LinkButton } from "@/components/ui";
 import { routing } from "@/i18n/routing";
+import { localePath } from "@/lib/i18n/paths";
 
 /**
  * The home page: the shell's proof that copy comes from messages, not JSX.
  *
- * It is deliberately short. S7–S9 replace it with the wizard, and when they do
- * the only thing they keep is the rule this page demonstrates: no sentence that
- * a translator would need lives in a component.
+ * It is deliberately short, and what it does is route: the wizard lives at
+ * `/configurer` (S7), so this page's job is to send someone there — with a
+ * LINK, not a button that pushes a route, because a navigation must be a link
+ * to keep open-in-new-tab and an honest role.
+ *
+ * The rule this page demonstrates has not changed: no sentence a translator
+ * would need lives in a component.
  */
 export default async function HomePage({
   params,
@@ -24,7 +30,9 @@ export default async function HomePage({
     <section>
       <h1 className="text-2xl font-semibold text-balance">{t("title")}</h1>
       <p className="mt-4 max-w-prose">{t("intro")}</p>
-      <p className="mt-4 max-w-prose text-compact text-muted">{t("note")}</p>
+      <div className="mt-6">
+        <LinkButton href={localePath(locale, "/configurer")}>{t("cta")}</LinkButton>
+      </div>
     </section>
   );
 }

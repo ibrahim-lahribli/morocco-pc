@@ -1,0 +1,100 @@
+import type { Metadata } from "next";
+import { hasLocale } from "next-intl";
+import { getTranslations } from "next-intl/server";
+import { notFound } from "next/navigation";
+import { Suspense } from "react";
+
+import { Skeleton } from "@/components/ui";
+import { routing } from "@/i18n/routing";
+import type { AppLocale } from "@/lib/i18n/format";
+import type { WizardCopy } from "@/lib/wizard/copy";
+import { Wizard } from "./wizard";
+
+/**
+ * `/fr/configurer` — the wizard (S7).
+ *
+ * The route is STATIC: it reads `params` (a build-time fact) and nothing from
+ * the request. The step and the answers live in the query string, which the
+ * client component reads with `useSearchParams`; that hook needs a Suspense
+ * boundary during prerender, so the static HTML is the skeleton below and the
+ * wizard takes over on hydration. The alternative — reading `searchParams` on
+ * the server — would make the page dynamic and every step a server round trip,
+ * for a screen whose whole value is instant.
+ *
+ * The name is `configurer`, not `config`, because S11 owns `/fr/config/[id]` for
+ * a committed result; keeping the wizard's URL distinct means no route is both
+ * "the form" and "the parent of a result".
+ *
+ * Copy is read here, on the server, and handed to the client as one plain
+ * object: no message catalogue reaches the browser (see `lib/wizard/copy.ts`).
+ */
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const safe = hasLocale(routing.locales, locale) ? locale : routing.defaultLocale;
+  const t = await getTranslations({ locale: safe, namespace: "wizard" });
+  return {
+    title: `morocco-pc — ${t("title")}`,
+    description: t("intro"),
+  };
+}
+
+function Fallback() {
+  return (
+    <div className="mt-6 space-y-3">
+      <Skeleton className="h-4 w-28 rounded" />
+      <Skeleton className="h-control w-full rounded-card" />
+      <Skeleton className="h-control w-full rounded-card" />
+      <Skeleton className="h-control w-full rounded-card" />
+    </div>
+  );
+}
+
+export default async function ConfigurerPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  if (!hasLocale(routing.locales, locale)) notFound();
+
+  const t = await getTranslations({ locale, namespace: "wizard" });
+  const copy: WizardCopy = {
+    title: t("title"),
+    intro: t("intro"),
+    progress: t("progress"),
+    next: t("next"),
+    back: t("back"),
+    finish: t("finish"),
+    submitNote: t("submitNote"),
+    loading: t("loading"),
+    optionsError: t("optionsError"),
+    retry: t("retry"),
+    budgetLabel: t("budgetLabel"),
+    budgetHint: t("budgetHint"),
+    budgetError: t("budgetError"),
+    steps: {
+      usage: { label: t("steps.usage.label"), legend: t("steps.usage.legend") },
+      budget: { label: t("steps.budget.label"), legend: t("steps.budget.legend") },
+      resolution: {
+        label: t("steps.resolution.label"),
+        legend: t("steps.resolution.legend"),
+      },
+      priority: { label: t("steps.priority.label"), legend: t("steps.priority.legend") },
+    },
+  };
+
+  return (
+    <section>
+      <h1 className="text-heading text-ink">{copy.title}</h1>
+      <p className="mt-3 max-w-prose text-body text-muted">{copy.intro}</p>
+      <Suspense fallback={<Fallback />}>
+        <Wizard copy={copy} locale={locale as AppLocale} />
+      </Suspense>
+    </section>
+  );
+}

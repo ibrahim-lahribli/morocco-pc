@@ -32,11 +32,13 @@ export interface ProgressBarProps {
   /** Small print under the bar, e.g. the engaged total — also `formatMoney` output. */
   caption?: string;
   /**
-   * What a screen reader reads instead of the raw number. Pass a localized
-   * string (`formatPercent`) once the screen knows its locale; the default is the
-   * percentage as the bar computes it.
+   * What a screen reader reads instead of the raw number: a localized
+   * `formatPercent()` string. REQUIRED, and deliberately not defaulted — any
+   * default here would be a hand-formatted percentage in one locale's
+   * punctuation, which is what `lib/i18n/format.ts` exists to prevent (French
+   * separates the sign with U+00A0, Arabic wraps it in LRM marks).
    */
-  valueText?: string;
+  valueText: string;
 }
 
 const FILL: Record<ProgressTone, string> = {
@@ -65,7 +67,6 @@ export function ProgressBar({
   // The attribute must stay legal (see the header comment); the truth is in
   // `aria-valuetext`.
   const now = Math.max(0, Math.min(max, value));
-  const readOut = valueText ?? `${Math.round(ratio)} %`;
 
   return (
     <div>
@@ -82,7 +83,7 @@ export function ProgressBar({
         aria-valuemin={0}
         aria-valuemax={max}
         aria-valuenow={now}
-        aria-valuetext={readOut}
+        aria-valuetext={valueText}
         className="mt-1.5 h-2.5 w-full overflow-hidden rounded-pill bg-track"
       >
         <div

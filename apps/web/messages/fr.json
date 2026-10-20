@@ -14,7 +14,7 @@
   "home": {
     "title": "Configurez votre PC, pièce par pièce",
     "intro": "morocco-pc vous propose des configurations compatibles, adaptées à votre budget et à votre usage, avec des prix en dirhams.",
-    "note": "Le squelette bilingue est en place : le français est la langue par défaut, l’arabe est servi en RTL depuis les mêmes composants."
+    "cta": "Configurer mon PC"
   },
   "formats": {
     "eyebrow": "Squelette i18n · S5",
@@ -24,5 +24,38 @@
     "dateLabel": "Dernière vérification",
     "numberLabel": "Nombre brut",
     "percentLabel": "Part du budget"
+  },
+  "wizard": {
+    "title": "Configurez votre PC",
+    "intro": "Quatre étapes, puis des configurations compatibles avec votre budget. Vous pourrez revenir en arrière à tout moment.",
+    "progress": "Étape {current} sur {total}",
+    "next": "Suivant",
+    "back": "Retour",
+    "finish": "Voir mes configurations",
+    "submitNote": "La génération des configurations n'est pas encore disponible.",
+    "loading": "Chargement des options…",
+    "optionsError": "Les options n'ont pas pu être chargées. Vérifiez votre connexion, puis réessayez.",
+    "retry": "Réessayer",
+    "budgetLabel": "Votre enveloppe cible (MAD)",
+    "budgetHint": "Un montant entier, de {min} à {max}.",
+    "budgetError": "Saisissez un montant entier entre {min} et {max}.",
+    "steps": {
+      "usage": {
+        "label": "Usage",
+        "legend": "Quel est votre usage principal ?"
+      },
+      "budget": {
+        "label": "Budget",
+        "legend": "Quel budget visez-vous ?"
+      },
+      "resolution": {
+        "label": "Écran",
+        "legend": "Quelle résolution visez-vous ?"
+      },
+      "priority": {
+        "label": "Priorités",
+        "legend": "Qu'est-ce qui compte le plus ?"
+      }
+    }
   }
 }

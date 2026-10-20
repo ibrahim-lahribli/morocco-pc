@@ -80,6 +80,16 @@ catch them: its money rule needs a grouped thousand (`500 DH` alone does not mat
 blind spot is named here rather than papered over. A stricter rule would also flag the legitimate
 step copy (`paliers de 500 MAD`), so it stays as it is until a rule can tell a step from a price.
 
+**Review (2026-10-20, second pass).** The page had also drifted from the kit it introduces: written
+before S3, it hand-copied Button, ChoiceCard, Badge, ProgressBar and Alert. The copies had lost the
+price badges' icons (leaving colour as the only signal between the three states) and had kept the
+literal 2 px border S3 replaced to avoid a 1 px layout shift. It now imports `@/components/ui`: 98
+lines of hand-copied markup became component calls (the file is 15 lines shorter overall, because
+each call states one prop per line), and every state on it now comes from the kit. The same pass
+gave the radio groups a real name — `<fieldset>` + `<legend>` on `/fr/kit` and `/fr/tokens`, and a
+line in `COMPONENTS.md` saying the group label is the caller's job — because a heading above three
+cards is not a name, and S7 will copy whichever pattern it finds.
+
 #### S3 — Base component kit + a11y primitives (2 h)
 **Goal:** The small accessible kit the wizard/results need — Button, TextField, Slider,
 ChoiceCard, Badge, ProgressBar, Skeleton, Alert — implemented to the Stitch components, not
@@ -129,6 +139,20 @@ writes `8 500 MAD`. The formatter wins; S5 owns the final money format.
 Measured: 39/39 Playwright specs at the time (10 S3; S5 later took the total to 51); `check:tokens`
 exit 0 on 20 files, RED on the three rule types; `build` exit 0, 7/7 static routes; `typecheck`
 exit 0.
+
+**Review (2026-10-20, second pass).** Three defects, all fixed and re-measured. (1) `ProgressBar`
+defaulted `aria-valuetext` to a hand-written `${Math.round(ratio)} %` — a percentage in ASCII
+punctuation, which is the one thing `formatPercent` exists to prevent (French separates the sign
+with U+00A0; Arabic wraps it in LRM marks). `valueText` is now REQUIRED, both callers pass
+`formatPercent`, and the spec asserts the helper's output instead of a literal. (2) A typed budget
+that was not a multiple of the step desynced the two controls: the range input snapped its own DOM
+value to 500 (4 123 → 4 000) while the slider kept announcing the typed 4 123, so it described a
+thumb position it was not on. `commitDraft` now snaps to the step — verified live: field, slider and
+`aria-valuetext` all read 4 000. (3) `TextField`'s unit reached a screen reader only through the
+hint, and an error state replaces the hint (measured: "Votre enveloppe cible, 1 500" with no unit
+anywhere); the label now carries an `sr-only` unit, so the accessible name is "Votre enveloppe cible
+MAD". `typecheck`, `build`, `check:tokens`, `check:i18n` exit 0 and Playwright is 55/55 after the
+fixes.
 
 #### S4 — Typed API client + fixtures + mock server (2 h)
 **Goal:** A typed client generated from a committed `/v1/docs/json` snapshot, plus a fixture
@@ -237,6 +261,12 @@ where it is painted. Under a 400 kbps CDP throttle the numbers are no longer all
 on `/ar/format`) — and they are identical with the mono preload restored, so that residue belongs to
 preloaded faces arriving after first paint, not to this change (I18N.md §5 has the breakdown).
 
+**Review (2026-10-20, second pass).** next-intl's middleware wrote `NEXT_LOCALE` on every redirect
+(measured: `GET /de` → 307 with `set-cookie`), although nothing reads it — with a prefix on every
+URL the cookie is state with no owner, and I18N.md §7 already claimed the URL is the preference.
+`i18n/routing.ts` now sets `localeCookie: false`; the same redirect is header-clean and the specs
+are unchanged.
+
 #### S6 — CI + budgets (1.5 h)
 **Goal:** A dedicated `apps/web` CI job: lint, typecheck, unit tests, Playwright at 360 px,
 Lighthouse CI budgets — without disturbing the engine's existing jobs.
@@ -270,6 +300,41 @@ Lighthouse CI budgets — without disturbing the engine's existing jobs.
 2. Browser back from step 3 → step 2 with values intact (state never out of sync with URL).
 3. `meta/options` 503 → friendly error + retry (never an empty form).
 4. Keyboard-only completion of step 1.
+
+**Status: DONE 2026-10-20 — as built.** The route is `/fr/configurer` (`/ar/configurer`), and it is
+STATIC: the page reads `params` only, so the build still lists it as SSG. The step and the four
+answers live in the query string, and the client component derives everything from them. That is the
+decision worth naming: **there is no wizard state in React.** `etape`, `use_case`,
+`budget_amount`, `resolution` and `priority` are read on every render by `readState()`, so a
+refresh, Back and Forward take the same code path as a first visit and there is no second copy of the
+state to fall out of sync. Three consequences:
+
+1. **Steps are NAMED, not numbered** (`?etape=budget`, not `?etape=2`). S9 makes the flow length
+   depend on the profile (resolution exists only for gaming), at which point a number would mean
+   different screens for different users; the visible "Étape 2 sur 4" is computed from the applicable
+   list at render time, where it is a property of what the user sees.
+2. **Answers use the contract's own field names**, so the URL, the model and the future POST body are
+   one vocabulary — `toRequest()` already returns the exact body S10 sends.
+3. **Answers use `router.replace`, steps use `router.push`.** Editing a field must not add history
+   entries (Back would walk the user's keystrokes); moving a step must, because this DoD asks Back to
+   return to the previous step with its values.
+
+The repair rule is `firstInvalidStepBefore`: a deep link that skips an unanswered step is moved to
+that step, and it looks BACKWARDS only, so it never fights a field someone is typing in. `meta/options`
+is fetched through S4's typed client with a skeleton, an `AbortController` and a retryable error — a
+503 renders a message and "Réessayer", never an empty form.
+
+Two kit additions were needed, both recorded in COMPONENTS.md: `ChoiceGroup` (the fieldset/legend a
+radio group needs — the wrapper the earlier review named) and `LinkButton` (the button's geometry on
+a link, for the home page's entry point). `ChoiceCard` also gained the controlled pair
+(`checked`/`onChange`), because the answers live in the URL.
+
+Measured: **76/76** Playwright specs (12 wizard + 9 model); `check:tokens` 28 files,
+`check:i18n` 26 files, `typecheck`/`lint`/`build` exit 0, and the build still reports
+`/fr/configurer` and `/ar/configurer` as ● SSG (8 prerendered routes, 11 static pages). The specs
+INTERCEPT `**/v1/meta/options`: `NEXT_PUBLIC_*` is inlined at build time, so no test can point the
+browser at the fixture server at runtime, and a 503 has to be produced on demand. The fixture body is
+imported from `mock/fixtures.mjs`, not copied.
 
 #### S8 — Budget step: slider + numeric field (1.5 h)
 **Goal:** Budget input with 500 MAD slider steps, free numeric entry (OD2), fr-MA display.

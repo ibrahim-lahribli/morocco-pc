@@ -2,10 +2,12 @@
  * TextField — board §8's budget field, generalised.
  *
  * The board's field is 48 px tall, 8 px radius, `page` fill, 16 px bold tabular
- * figures, with the unit inside the field at 14 px/600 (`MAD`). The suffix is
- * `aria-hidden` and `pointer-events-none`: it is a visual unit, and a screen
- * reader gets the same fact from the label ("Votre enveloppe cible (MAD)") —
- * duplicated, it reads as the unit twice.
+ * figures, with the unit inside the field at 14 px/600 (`MAD`). The VISIBLE
+ * suffix is `aria-hidden` and `pointer-events-none` so the unit is not painted
+ * twice, but the label carries an `sr-only` copy of it: the accessible name is
+ * "Votre enveloppe cible MAD". Without it the unit reaches a screen reader only
+ * through the hint, and an error state REPLACES the hint — measured in review:
+ * "Votre enveloppe cible, 1 500" with no unit anywhere.
  *
  * Error beats hint: while `error` is set, the hint is not rendered at all, so
  * `aria-describedby` never points at two competing sentences. The input keeps
@@ -44,6 +46,7 @@ export function TextField({
         className="block text-caption font-semibold uppercase tracking-wider text-muted"
       >
         {label}
+        {suffix ? <span className="sr-only"> {suffix}</span> : null}
       </label>
 
       <div className="relative mt-1.5 flex items-center">

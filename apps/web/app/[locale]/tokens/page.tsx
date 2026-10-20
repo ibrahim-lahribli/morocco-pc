@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { formatDate, formatMoney } from "@/lib/i18n/format";
+import { Alert, Badge, Button, ChoiceCard, ProgressBar } from "@/components/ui";
+import { formatDate, formatMoney, formatPercent } from "@/lib/i18n/format";
 
 /**
  * The S2 proof sheet: every token in `globals.css`, rendered.
@@ -9,6 +10,16 @@ import { formatDate, formatMoney } from "@/lib/i18n/format";
  * It is not a product screen and is not linked from navigation - it exists so
  * the tokens can be seen and so `e2e/tokens.spec.ts` has something real to
  * measure. S3's component kit gets its own story route with per-state frames.
+ *
+ * **The states below are the KIT's, not copies of it.** This page used to
+ * re-implement Button, ChoiceCard, Badge, ProgressBar and Alert as raw markup,
+ * because it was written before those components existed. The copies drifted
+ * almost immediately: the price pills lost their icons (leaving colour as the
+ * only signal between démo / indicatif / vérifié), and the selected card used a
+ * literal 2 px border, reintroducing the 1 px layout shift S3 rejected. A token
+ * sheet that demonstrates a component which is not the component is worse than
+ * no demonstration, so the page now imports `@/components/ui` and shows what
+ * ships.
  *
  * Rules this page obeys because the whole app must:
  *   - no raw hex and no raw palette class (`stone-200`, `white`, `black`);
@@ -108,6 +119,7 @@ export default async function TokensPage({
         Extrait du tableau de design Stitch et rendu ici pour être mesuré. Les
         ratios de contraste ne sont pas estimés : ils sont calculés par
         <span className="font-mono text-compact text-ink"> e2e/tokens.spec.ts</span>.
+        Les états ci-dessous sont les composants du kit, importés — pas des copies.
       </p>
 
       <Section id="brand" title="Marque">
@@ -165,134 +177,107 @@ export default async function TokensPage({
 
       <Section id="controls" title="Commandes">
         <div className="space-y-3 rounded-card border border-border bg-surface p-3.5">
-          <button className="h-control w-full rounded-control bg-primary px-4 text-body font-medium text-surface active:bg-primary-hover">
-            Continuer
-          </button>
-          <button className="h-control w-full rounded-control border border-border bg-surface px-4 text-body font-medium text-ink active:bg-page">
+          <Button className="w-full">Continuer</Button>
+          <Button variant="secondary" className="w-full">
             Retour
-          </button>
-          <button
-            disabled
-            className="h-control w-full cursor-not-allowed rounded-control border border-border bg-subtle px-4 text-body font-medium text-muted/70"
-          >
+          </Button>
+          <Button disabled className="w-full">
             Indisponible
-          </button>
+          </Button>
           <p className="text-caption text-muted">
             Hauteur 48 px. Anneau de focus 2 px, décalé de 2 px (voir le bouton
             au clavier).
           </p>
         </div>
 
-        <ul className="mt-3 space-y-2.5">
-          <li className="flex min-h-control items-start gap-3 rounded-card border-2 border-primary bg-primary-soft p-3.5">
-            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-primary bg-primary">
-              <span className="h-2 w-2 rounded-full bg-surface" />
-            </span>
-            <span>
-              <span className="block text-body font-semibold text-primary">Jeu</span>
-              <span className="block text-caption text-muted">Vidéo, photo et 3D.</span>
-            </span>
-          </li>
-          <li className="flex min-h-control items-start gap-3 rounded-card border border-border bg-surface p-3.5">
-            <span className="mt-0.5 h-5 w-5 shrink-0 rounded-full border-2 border-border" />
-            <span>
-              <span className="block text-body font-medium text-ink">Bureau</span>
-              <span className="block text-caption text-muted">Traitement de texte, navigation.</span>
-            </span>
-          </li>
-          <li className="flex min-h-control cursor-not-allowed items-start gap-3 rounded-card border border-dashed border-border bg-subtle p-3.5 opacity-60">
-            <span className="mt-0.5 h-5 w-5 shrink-0 rounded-full border border-muted/40 bg-track" />
-            <span>
-              <span className="block text-body font-medium text-muted">Station de travail</span>
-              <span className="block text-caption text-muted">Non applicable avec vos critères.</span>
-            </span>
-          </li>
-        </ul>
+        {/* A radio group needs a NAME, not just a heading above it: the
+            <legend> is what a screen reader announces before "1 sur 3". */}
+        <fieldset className="mt-3 space-y-2.5">
+          <legend className="mb-1.5 font-mono text-micro text-muted">
+            Sélection — un seul choix
+          </legend>
+          <ChoiceCard
+            name="tokens-usage"
+            value="jeu"
+            title="Jeu"
+            description="Vidéo, photo et 3D."
+            defaultChecked
+          />
+          <ChoiceCard
+            name="tokens-usage"
+            value="bureau"
+            title="Bureau"
+            description="Traitement de texte, navigation."
+          />
+          <ChoiceCard
+            name="tokens-usage"
+            value="station"
+            title="Station de travail"
+            description="Non applicable avec vos critères."
+            disabled
+          />
+        </fieldset>
       </Section>
 
       <Section id="price" title="Badges de prix">
         <ul className="space-y-2 rounded-card border border-border bg-surface p-3.5">
           <li>
-            <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border border-dashed border-muted/60 bg-subtle px-2.5 py-1 text-caption font-medium text-muted">
-              Démo
-            </span>
+            <Badge tone="demo">Démo</Badge>
           </li>
           <li>
-            <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border border-warning/30 bg-warning-soft px-2.5 py-1 text-caption font-medium text-warning">
-              Indicatif
-            </span>
+            <Badge tone="indicative">Indicatif</Badge>
           </li>
           <li>
-            <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border border-success/30 bg-success-soft px-2.5 py-1 text-caption font-medium text-success">
-              Vérifié · {formatDate("2026-10-12T09:00:00.000Z", "fr", {
+            <Badge tone="verified">
+              Vérifié ·{" "}
+              {formatDate("2026-10-12T09:00:00.000Z", "fr", {
                 day: "numeric",
                 month: "short",
                 year: "numeric",
               })}
-            </span>
+            </Badge>
           </li>
         </ul>
       </Section>
 
       <Section id="budget" title="Barre de budget">
         <div className="space-y-4 rounded-card border border-border bg-surface p-3.5">
-          <div>
-            <div className="flex items-baseline justify-between text-caption">
-              <span className="font-medium text-ink">Normal (79 %)</span>
-              <span className="num-tabular font-semibold text-success">
-                Reste {formatMoney(2100, "fr")}
-              </span>
-            </div>
-            <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-pill bg-track">
-              <div className="h-full w-[79%] rounded-pill bg-primary" />
-            </div>
-          </div>
-          <div>
-            <div className="flex items-baseline justify-between text-caption">
-              <span className="font-medium text-ink">Avertissement (99 %)</span>
-              <span className="num-tabular font-semibold text-warning">
-                Reste {formatMoney(100, "fr")}
-              </span>
-            </div>
-            <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-pill bg-track">
-              <div className="h-full w-[99%] rounded-pill bg-warning" />
-            </div>
-          </div>
-          <div>
-            <div className="flex items-baseline justify-between text-caption">
-              <span className="font-medium text-ink">Dépassement (104 %)</span>
-              <span className="num-tabular font-semibold text-error">
-                Dépasse de {formatMoney(400, "fr")}
-              </span>
-            </div>
-            <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-pill bg-track">
-              <div className="h-full w-full rounded-pill bg-error" />
-            </div>
-          </div>
+          <ProgressBar
+            label="Normal (79 %)"
+            value={79}
+            tone="normal"
+            valueText={formatPercent(79 / 100, "fr")}
+            detail={`Reste ${formatMoney(2100, "fr")}`}
+          />
+          <ProgressBar
+            label="Avertissement (99 %)"
+            value={99}
+            tone="warning"
+            valueText={formatPercent(99 / 100, "fr")}
+            detail={`Reste ${formatMoney(100, "fr")}`}
+          />
+          <ProgressBar
+            label="Dépassement (104 %)"
+            value={10400}
+            max={10000}
+            tone="over"
+            valueText={formatPercent(10400 / 10000, "fr")}
+            detail={`Dépasse de ${formatMoney(400, "fr")}`}
+          />
         </div>
       </Section>
 
       <Section id="alerts" title="Bannières">
-        <ul className="space-y-2">
-          <li className="flex items-start gap-2.5 rounded-control border border-info/20 bg-info-soft p-3">
-            <span aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 rounded-full bg-info" />
-            <p className="text-caption text-ink">
-              Douze configurations correspondent à votre budget.
-            </p>
-          </li>
-          <li className="flex items-start gap-2.5 rounded-control border border-warning/20 bg-warning-soft p-3">
-            <span aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 rounded-full bg-warning" />
-            <p className="text-caption text-ink">
-              Prix indicatifs : la dernière vérification date du 12 octobre.
-            </p>
-          </li>
-          <li className="flex items-start gap-2.5 rounded-control border border-error/20 bg-error-soft p-3">
-            <span aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 rounded-full bg-error" />
-            <p className="text-caption text-ink">
-              Aucune configuration compatible. Augmentez le budget pour continuer.
-            </p>
-          </li>
-        </ul>
+        <div className="space-y-2">
+          <Alert tone="info">Douze configurations correspondent à votre budget.</Alert>
+          <Alert tone="warning">
+            Prix indicatifs : dernière vérification le{" "}
+            {formatDate("2026-10-12T09:00:00.000Z", "fr", { day: "numeric", month: "long" })}.
+          </Alert>
+          <Alert tone="error">
+            Aucune configuration compatible. Augmentez le budget pour continuer.
+          </Alert>
+        </div>
       </Section>
 
       <Section id="rtl" title="Mise en page RTL">

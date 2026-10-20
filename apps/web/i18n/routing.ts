@@ -16,6 +16,10 @@ export const routing = defineRouting({
   locales: ["fr", "ar"],
   defaultLocale: "fr",
   localePrefix: "always",
+  // No cookie. next-intl writes NEXT_LOCALE on a redirect by default, but with a
+  // prefix on every URL nothing ever reads it: the URL IS the preference
+  // (I18N.md §7). A cookie the app does not use is state with no owner.
+  localeCookie: false,
 });
 
 export type AppLocale = (typeof routing.locales)[number];

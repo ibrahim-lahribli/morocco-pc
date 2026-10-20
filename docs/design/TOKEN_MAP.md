@@ -106,13 +106,13 @@ measured.
 |---|---|
 | Primary button | 48 px tall, 8 px radius, `primary` fill, `surface` text, 16 px/500; pressed → `primary-hover` (§4) |
 | Secondary button | `surface` fill, 1 px `border`, `ink` text (§4) |
-| Disabled | `subtle` fill, `muted` text at 70 %, `cursor-not-allowed` (§4) |
+| Disabled | `primary` → `track` fill plus a 1 px `border`, `secondary` → `subtle` fill, `muted` text at 70 %, `cursor-not-allowed` (§4) |
 | Focus | 2 px `primary` outline, 2 px offset, everywhere (§4) |
 | Option card | 12 px radius, 1 px border; selected: `primary-soft` + 2 px `primary` (§6) |
 | Segmented control | `track` container, 48 px tall, active segment `surface` + `primary` text (§7) |
 | Budget field | 48 px tall, 8 px radius, `page` fill, `MAD` suffix inside the field (§8) |
 | Price badge | pill, 12 px/500, icon + text, `nowrap`; démo = dashed `muted`, indicatif = `warning-soft`, vérifié = `success-soft` + date (§9) |
-| Budget bar | 10 px rail `track`, 8 px radius; normal `primary`, warning `warning`, over `error` (§10) |
+| Budget bar | 10 px rail `track`, pill radius (as drawn); normal `primary`, warning `warning`, over `error` (§10) |
 | Component row | 32 px icon tile on `subtle`, 14 px name, 12 px detail, right-aligned tabular price (§11) |
 | Strategy card | 16 px padding, 12 px radius, 12 px uppercase `primary` eyebrow, 18 px name, 20 px total (§12) |
 | Disclosure | `<details>` summary 48 px min, 16 px/600, chevron `primary` rotating (§13) |

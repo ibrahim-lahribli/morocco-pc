@@ -15,6 +15,8 @@
 
 import { test, expect, type Locator, type Page } from "@playwright/test";
 
+import { formatPercent } from "../lib/i18n/format";
+
 async function heightOf(locator: Locator): Promise<number> {
   const box = await locator.boundingBox();
   if (box === null) throw new Error("element has no box");
@@ -245,8 +247,11 @@ test.describe("the kit at 360 px", () => {
     const over = bars.nth(2);
     await expect(over).toHaveAttribute("aria-valuenow", "10000");
     await expect(over).toHaveAttribute("aria-valuemax", "10000");
-    await expect(over).toHaveAttribute("aria-valuetext", "104 %");
-    await expect(bars.nth(0)).toHaveAttribute("aria-valuetext", "79 %");
+    // The accessible text is the SAME helper the screen uses, not a literal:
+    // the helper separates the sign with U+00A0 and Arabic wraps it in LRM marks,
+    // so "104 %" typed by hand is wrong in both locales.
+    await expect(over).toHaveAttribute("aria-valuetext", formatPercent(1.04, "fr"));
+    await expect(bars.nth(0)).toHaveAttribute("aria-valuetext", formatPercent(0.79, "fr"));
     const fillWidth = await over
       .locator("div")
       .first()

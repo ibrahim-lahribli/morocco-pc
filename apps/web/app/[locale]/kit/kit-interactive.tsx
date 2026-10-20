@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 
 import { ProgressBar, Slider, TextField } from "@/components/ui";
-import { formatMoney, formatNumber } from "@/lib/i18n/format";
+import { formatMoney, formatNumber, formatPercent } from "@/lib/i18n/format";
 
 /**
  * The one stateful block on the story route: board §8's field ↔ slider sync,
@@ -27,6 +27,17 @@ function clamp(value: number): number {
   return Math.min(MAX, Math.max(MIN, value));
 }
 
+/**
+ * Snap to the board's 500 MAD step. Clamping alone left the two controls
+ * disagreeing: `<input type="range">` snaps its own DOM value to the nearest
+ * step (4 123 → 4 000) while the slider's `aria-valuetext` kept announcing the
+ * typed 4 123, i.e. it described a thumb position it was not on. Snapping where
+ * free text is accepted keeps both controls on one number.
+ */
+function snap(value: number): number {
+  return clamp(MIN + Math.round((value - MIN) / STEP) * STEP);
+}
+
 export function KitInteractive() {
   const [budget, setBudget] = useState(8500);
   const [draft, setDraft] = useState(formatNumber(8500, "fr"));
@@ -43,7 +54,7 @@ export function KitInteractive() {
 
   function commitDraft(): void {
     const digits = draft.replace(/[^\d]/g, "");
-    const next = clamp(Number(digits));
+    const next = snap(Number(digits));
     setBudget(next);
     setDraft(formatNumber(next, "fr"));
   }
@@ -84,6 +95,7 @@ export function KitInteractive() {
         value={engaged}
         max={budget}
         tone={tone}
+        valueText={formatPercent(engaged / budget, "fr")}
         detail={detail}
         caption={`${formatMad(budget)} disponibles · paliers de ${STEP} MAD`}
       />

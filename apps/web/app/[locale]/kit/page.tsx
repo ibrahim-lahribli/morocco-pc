@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { Alert, Badge, Button, ChoiceCard, ProgressBar, Skeleton, SkeletonCard, TextField } from "@/components/ui";
-import { formatDate, formatMoney, formatNumber } from "@/lib/i18n/format";
+import { formatDate, formatMoney, formatNumber, formatPercent } from "@/lib/i18n/format";
 import { KitInteractive } from "./kit-interactive";
 
 /**
@@ -163,8 +163,12 @@ export default async function KitPage({
       </Section>
 
       <Section id="choice-cards" title="Cartes d’option" source="Tableau §6 — radio natif · 48 px minimum">
-        <div className="space-y-2.5">
-          <StateLabel>groupe radio — flèches pour changer, Tab pour sortir</StateLabel>
+        {/* The group's NAME comes from a <legend>, not from the paragraph a
+            sighted user reads above it. This is the pattern S7 must copy. */}
+        <fieldset className="space-y-2.5">
+          <legend className="mb-1.5 font-mono text-micro text-muted">
+            Usage — flèches pour changer, Tab pour sortir
+          </legend>
           <ChoiceCard
             name="kit-usage"
             value="jeu"
@@ -180,7 +184,7 @@ export default async function KitPage({
             description="Non applicable avec vos critères précédents."
             disabled
           />
-        </div>
+        </fieldset>
       </Section>
 
       <Section id="badges" title="Badges de prix" source="Tableau §9 — pilule · icône + texte">
@@ -214,6 +218,7 @@ export default async function KitPage({
             label="Normal (79 %)"
             value={79}
             tone="normal"
+            valueText={formatPercent(79 / 100, "fr")}
             detail={`Reste ${mad(2100)}`}
             caption={`${mad(7900)} engagés · budget ${mad(10000)}`}
           />
@@ -221,6 +226,7 @@ export default async function KitPage({
             label="Avertissement (99 %)"
             value={99}
             tone="warning"
+            valueText={formatPercent(99 / 100, "fr")}
             detail={`Reste ${mad(100)}`}
             caption={`${mad(9900)} engagés · budget ${mad(10000)}`}
           />
@@ -229,6 +235,7 @@ export default async function KitPage({
             value={10400}
             max={10000}
             tone="over"
+            valueText={formatPercent(10400 / 10000, "fr")}
             detail={`Dépasse de ${mad(400)}`}
             caption={`${mad(10400)} engagés · budget ${mad(10000)}`}
           />

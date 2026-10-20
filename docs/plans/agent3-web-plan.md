@@ -8,8 +8,9 @@ separate plan. Everything here is scoped to `apps/web/`, a standalone package wi
 and lockfile (OD4) that does not touch the engine or root CI (V14).
 
 **Status (2026-10-20).** PLAN REGISTERED, with the design registered as the S2/S3 source
-(§3 — Stitch, not Figma: the Figma copy is an unread export target). **W0 has five sprints done
-(S1–S5, all green — measured in §6) and one not started (S6); W1–W5 and the M3 gate are not started.**
+(§3 — Stitch, not Figma: the Figma copy is an unread export target). **W0 has five sprints
+done (S1–S5, all green — measured in §6) and one not started (S6); W1 has S7 done (the wizard
+shell, measured in the sprint board); W2–W5 and the M3 gate are not started.**
 The design tokens now exist as CODE (`apps/web/app/globals.css`, Tailwind v4 `@theme`, OKLCH) with
 a grep gate and a measured contrast matrix; their provenance and the four deliberate deviations are in
 [docs/design/TOKEN_MAP.md](../design/TOKEN_MAP.md). The eight base components are built on those
@@ -191,7 +192,10 @@ performance) mapped to 1–5**.
 Two rules outrank the visuals here: show only the inputs the contract says are **applied**
 (`inputs_applied`), and never render the word "Seed" — use `display_name`.
 
-**Today:** not started (S7–S10).
+**Today:** **S7 done** — the shell, the URL state machine and the `meta/options` step at
+`/fr/configurer`, with the answers in the query string (see the sprint board). S8–S10 not started:
+the budget step is a plain field until S8 adds the slider, and the last step's primary action is
+disabled with an honest note until S10 owns the POST.
 
 ### W2 — results
 
@@ -251,13 +255,13 @@ Run in `apps/web` on the rebased branch, Node 24 locally (CI pins 22):
 | Check | Result |
 |---|---|
 | `npm ci` | exit 0 |
-| `npm run build` | exit 0 — `next build` (Turbopack), 6 prerendered routes across `/fr` and `/ar` (the build reports 9 static pages), **no CSS parse warning** |
+| `npm run build` | exit 0 — `next build` (Turbopack), 8 prerendered routes across `/fr` and `/ar` (the build reports 11 static pages), **no CSS parse warning**; `/fr/configurer` and `/ar/configurer` stay ● SSG despite `useSearchParams`, because the hook sits behind a Suspense boundary |
 | `npm run lint` | exit 0 — 0 errors, 1 warning (`postcss.config.mjs` anonymous default export) |
 | `npm run typecheck` | exit 0, and also exit 0 with `next-env.d.ts` removed (the clean-CI order is safe) |
 | `npm run check:api-types` | exit 0 — contract 1.5.0, 7 paths, `schema.d.ts` byte-identical to the generator |
-| `npm run check:tokens` | exit 0 — 0 hex literals, 0 palette utilities, 0 physical side classes across `app/` + `components/` + `lib/` (23 files); proven RED on each of the three rule types before being trusted |
-| `npm run check:i18n` | exit 0 — no inline `Intl`, no runtime-locale method, no hand-written amount/date in 21 files; proven RED on all four rule types before being trusted |
-| `npm test` (Playwright, 360×800) | 55/55 pass — the 3 shell specs, S4's 19 (every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, one for a non-JSON 200), S2's 8 (palette count, 15 text contrast pairs, 3 UI pairs, then the rendered page: 360 px, noindex, alias chain, 48 px control + 2 px ring, `ms-auto` mirroring, the mono face's late swap), S3's 10 (per-component geometry, roles, keyboard, reduced motion) and S5's 15 (lang/dir, switcher, formatting, fonts, the per-locale Arabic preload, the mono preload that is not there, CLS) |
+| `npm run check:tokens` | exit 0 — 0 hex literals, 0 palette utilities, 0 physical side classes across `app/` + `components/` + `lib/` (28 files); proven RED on each of the three rule types before being trusted |
+| `npm run check:i18n` | exit 0 — no inline `Intl`, no runtime-locale method, no hand-written amount/date in 26 files; proven RED on all four rule types before being trusted |
+| `npm test` (Playwright, 360×800) | 76/76 pass — the 3 shell specs, S4's 19 (every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, one for a non-JSON 200), S2's 8 (palette count, 15 text contrast pairs, 3 UI pairs, then the rendered page: 360 px, noindex, alias chain, 48 px control + 2 px ring, `ms-auto` mirroring, the mono face's late swap), S3's 10 (per-component geometry, roles, keyboard, reduced motion), S5's 15 (lang/dir, switcher, formatting, fonts, the per-locale Arabic preload, the mono preload that is not there, CLS) and S7's 21 (12 wizard: labels from `meta/options`, keyboard-only step 1, deep link, repair, Back with values, Enter advancing the form, the last step's honest disabled action, 503 + retry, 360 px/legend/targets, Arabic, the home link; 9 model: URL parsing, ranges, backwards-only repair, round-trip, request body) |
 | Tailwind actually processed | yes — the emitted CSS chunk contains `text-2xl`, `mx-auto`, `max-w-5xl`, `sr-only` and the `focus:` variants |
 
 **S5's evidence (2026-10-20).** next-intl 4.14.9, `/fr` and `/ar`, both statically rendered (6
