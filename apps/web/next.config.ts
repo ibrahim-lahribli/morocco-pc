@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
 import path from "node:path";
 
 const nextConfig: NextConfig = {
@@ -9,4 +10,10 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
 };
 
-export default nextConfig;
+// next-intl resolves `next-intl/config` at build time by aliasing it to this
+// file (S5). Without the plugin the alias points at a stub that throws
+// "Couldn't find next-intl config file" — the default path is the same, but the
+// alias has to be created by the plugin.
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
+
+export default withNextIntl(nextConfig);

@@ -8,8 +8,13 @@ separate plan. Everything here is scoped to `apps/web/`, a standalone package wi
 and lockfile (OD4) that does not touch the engine or root CI (V14).
 
 **Status (2026-10-20).** PLAN REGISTERED, with the design registered as the S2/S3 source
-(§3 — Stitch, not Figma: the Figma copy is an unread export target). **W0 has two sprints done
-(S1 and S4, both green — measured in §6) and four not started (S2, S3, S5, S6); W1–W5 and the M3 gate are not started.**
+(§3 — Stitch, not Figma: the Figma copy is an unread export target). **W0 has five sprints done
+(S1–S5, all green — measured in §6) and one not started (S6); W1–W5 and the M3 gate are not started.**
+The design tokens now exist as CODE (`apps/web/app/globals.css`, Tailwind v4 `@theme`, OKLCH) with
+a grep gate and a measured contrast matrix; their provenance and the four deliberate deviations are in
+[docs/design/TOKEN_MAP.md](../design/TOKEN_MAP.md). The eight base components are built on those
+tokens and proven at [/fr/kit](../../apps/web/app/[locale]/kit/page.tsx) — reference in
+[docs/design/COMPONENTS.md](../design/COMPONENTS.md).
 `apps/web` now HAS a typed client and a fixture mock server, so the contract is exercised
 end-to-end against fixtures; it has still never called a REAL API, because nothing is deployed
 (P1 Sprint 1 Steps 7–9).
@@ -63,7 +68,7 @@ referenced by no sprint and `OD3` is unused; they are not invented here.
 | V6 | A price is two facts — `offer_class` and `price_status` — and showing one without the other misleads | both in the contract |
 | V9 | `hreflang` for `ar` cannot be emitted before the `ar` routes exist | deferred to S20 by design |
 | V10 | 429 must be a first-class state with `Retry-After`, not a generic error | contract declares it |
-| V11 | Money and dates must go through `Intl` (`fr-MA`), never hand-formatted | not started |
+| V11 | Money and dates must go through `Intl` (`fr-MA`), never hand-formatted | **DONE (S5)** — `lib/i18n/format.ts`; `npm run check:i18n` fails on inline Intl, a runtime-locale method, a hand-written amount or a literal date |
 | V12 | The budget input needs both a 500 MAD slider and a free numeric field, clamped honestly | not started |
 | V13 | `builds[]` is 1..N, not always 3; the results page must not render empty slots | not started |
 | V14 | `apps/web` is a separate package: own manifest, own lockfile, own workflow, root CI untouched | done in S1 |
@@ -99,14 +104,21 @@ key in an `X-Goog-Api-Key` header; without the key it is a 401 whose body names 
 credential. The design lives in `projects/3530106450258598180` ("ConfigPC Mobile Design System", 16
 screen instances, 12 listed). `get_screen` returns `htmlCode` and `screenshot` as download URLs that
 MUST be fetched WITH the same key header (401 without it) and answer `{ dataString }` — HTML, and
-base64 PNG. So S2 reads the design-system board screen (`e137bd84…`) over MCP: no zip, no Figma.
+base64 PNG. So S2 reads the design-system board screen (`b4659f8e…`) over MCP: no zip, no Figma.
+That id matters: the two HIDDEN board screens (`e137bd84…` and `f5cf4af7…`) are byte-identical
+duplicates of each other, and the visible board is the newer, larger copy (39 877 vs 38 523
+characters), so S2 measured the one that is actually shown.
 
 The board already yields a CANDIDATE token map from its own `tailwind.config` block: primary
 `#3730A3` (soft `#EEF2FF`, hover `#312E81`), saffron `#F59E0B`/`#FEF3C7`, neutrals `#FAFAF9` /
 `#FFFFFF` / `#E7E5E4` / `#57534E` / `#1C1917`, success `#15803D`, warning `#B45309`, error
 `#B91C1C`, info `#1D4ED8`, WhatsApp `#075E54`, fonts Inter + IBM Plex Sans Arabic, `card-1`/`card-2`
-shadows and a 2px `#3730A3` focus ring. S2 still has to verify and convert these to OKLCH and to a
-committed token file — nothing here is a shipped token yet.
+shadows and a 2px `#3730A3` focus ring. **S2 has since shipped this palette as OKLCH tokens**
+(2026-10-20, §6); the values below are what the board declares, and every one of them survived
+verification. Four DELIBERATE deviations are recorded in the token map: the warning budget bar uses
+`#B45309` rather than saffron (measured 1.71:1 against the rail); there is no dark palette, because
+none was designed; components use logical properties, because the board's Arabic screens are
+physical; and its neutral utilities become role tokens, so no component names a palette.
 
 **`DESIGN.md` does not exist for this project.** Its `designTheme` is empty and `list_design_systems`
 returns no systems, so the token truth is the screen HTML rather than a theme asset. (A downloaded
@@ -122,9 +134,10 @@ document: the design was created in Stitch, and Figma was only an export destina
 the Figma retry S2's gate.** The key stays here as a dated record; nothing in this repo may cite a
 token value from it until a token exists.
 
-**S2 is unblocked.** The only human step left is minting the Stitch API key; the extraction itself is
-`get_screen` over MCP. The scratch pull used for this verification is in `tmp/stitch/` (untracked); S2
-promotes it to `design/stitch/` together with the verified token map.
+**S2 is DONE (2026-10-20), and `design/stitch/` is still empty on purpose.** The scratch pull stays
+in `tmp/stitch/` (untracked) because nothing under `apps/web/` imports an export: the token map at
+[docs/design/TOKEN_MAP.md](../design/TOKEN_MAP.md) cites the board screen id instead, so there is one
+source of truth and no copy that can drift. Re-deriving a value is one `get_screen` call.
 
 The design work is a **two-pass review before code** (S2): EXTRACT the design from the
 Stitch export first, then critique the extraction against the principles below — before any
@@ -238,12 +251,56 @@ Run in `apps/web` on the rebased branch, Node 24 locally (CI pins 22):
 | Check | Result |
 |---|---|
 | `npm ci` | exit 0 |
-| `npm run build` | exit 0 — `next build` (Turbopack), 5/5 static pages, **no CSS parse warning** |
+| `npm run build` | exit 0 — `next build` (Turbopack), 6 prerendered routes across `/fr` and `/ar` (the build reports 9 static pages), **no CSS parse warning** |
 | `npm run lint` | exit 0 — 0 errors, 1 warning (`postcss.config.mjs` anonymous default export) |
 | `npm run typecheck` | exit 0, and also exit 0 with `next-env.d.ts` removed (the clean-CI order is safe) |
 | `npm run check:api-types` | exit 0 — contract 1.5.0, 7 paths, `schema.d.ts` byte-identical to the generator |
-| `npm test` (Playwright, 360×800) | 22/22 pass — the 3 shell specs above, plus S4's 19: every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, and one for a non-JSON 200 |
+| `npm run check:tokens` | exit 0 — 0 hex literals, 0 palette utilities, 0 physical side classes across `app/` + `components/` + `lib/` (23 files); proven RED on each of the three rule types before being trusted |
+| `npm run check:i18n` | exit 0 — no inline `Intl`, no runtime-locale method, no hand-written amount/date in 21 files; proven RED on all four rule types before being trusted |
+| `npm test` (Playwright, 360×800) | 52/52 pass — the 3 shell specs, S4's 19 (every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, one for a non-JSON 200), S2's 7 (palette count, 15 text contrast pairs, 3 UI pairs, then the rendered page: 360 px, noindex, alias chain, 48 px control + 2 px ring, `ms-auto` mirroring), S3's 10 (per-component geometry, roles, keyboard, reduced motion) and S5's 13 (lang/dir, switcher, formatting, fonts, CLS) |
 | Tailwind actually processed | yes — the emitted CSS chunk contains `text-2xl`, `mx-auto`, `max-w-5xl`, `sr-only` and the `focus:` variants |
+
+**S5's evidence (2026-10-20).** next-intl 4.14.9, `/fr` and `/ar`, both statically rendered (6
+prerendered routes, 9 static pages; no dynamic route). The locale comes from `next/root-params`, never a cookie or header, and
+`lang`/`dir` are in the server HTML — a test asserts them before hydration is relevant. Three
+findings worth keeping:
+
+1. **next-intl's `Link` is a client component that calls `useLocale()` unconditionally.** Using it
+   in a server layout demands `NextIntlClientProvider`, which ships the whole message catalogue to
+   the browser so two links can know the language. The app uses `next/link` + one `localePath()`
+   helper instead, and the switcher takes `active` as a prop: the client bundle has no i18n runtime.
+2. **The formatting scenario and the locale disagree, and the helper settles it.** CLDR writes
+   `fr-MA` grouping as a full stop (`7.300`), which a French reader parses as a decimal separator.
+   `formatMoney` rebuilds from `formatToParts` and uses U+202F, so the output is `7 300 DH` — the
+   narrow space the scenario asks for, with the unit the product uses. `ar-MA` keeps Latin digits:
+   that is CLDR for Morocco, not a broken font.
+3. **CLS is 0 through the font swap, measured.** A `layout-shift` observer installed before any app
+   code runs records nothing on `/ar`; `next/font`'s metric-adjusted fallbacks do their job. This is
+   the metric Lighthouse aggregates, measured directly — Lighthouse itself is S6.
+
+**S3's evidence (2026-10-20).** Eight components on `@/components/ui`, no `"use client"` in any of
+them: the interactivity is a native button, a native radio and a native range, so keyboard support
+and the accessibility tree come from the platform. The specs assert what pixels cannot: 48 px / 44 px
+targets, `progressbar` values that stay truthful past 100 % while the fill clamps at the rail, one
+`alert` and one `status` rather than a page full of live regions, an arrow key that moves both the
+slider and the field beside it, and a skeleton whose pulse collapses under `prefers-reduced-motion`.
+Three decisions are worth naming: `ChoiceCard` paints selection as border + ring instead of the
+board's literal 2 px border so selecting a card does not shift the list; every amount goes through
+`Intl` with `fr-MA`, which groups with a point, so the proof sheet prints `8.500 MAD` while the
+board's copy writes spaces (S5 owns the final call); and the gate now also scans `components/`,
+which is why its file count went 7 → 20.
+
+**S2's evidence (2026-10-20).** The board was read over the Stitch MCP and every literal it declares is
+in the token file as OKLCH, with the hex kept in the map because that is what a designer pastes.
+**Contrast is COMPUTED, not eyeballed:** the spec parses the `oklch()` values back out of
+`globals.css`, converts OKLab → sRGB and applies the WCAG relative-luminance formula, asserting 4.5:1
+for 15 text pairs and 3:1 for 3 graphical ones. That measurement is what caught the one real defect
+in the board: its saffron warning bar is **1.71:1** against the rail, so the token takes `#B45309`
+(4.00:1) and saffron stays a fill-only accent. The two thin margins are named rather than rounded
+away — `warning` on `warning-soft` is 4.51:1 and `success` on `success-soft` 4.57:1 — with the tested
+darker replacements recorded if either ever needs room. RTL is asserted, not asserted-by-review:
+`ms-auto` is measured on both sides of a live `dir` flip. The gate itself was proven red first
+(a hex literal, a `bg-stone-200`, an `ml-2`), because a check that has never failed is not a check.
 
 **S4's evidence (2026-10-20).** The drift gate was proven RED four ways and restored to PASS after
 each: a hand-edited `schema.d.ts` (stale types, named at the first differing line), a MUTATED

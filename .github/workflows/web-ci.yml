@@ -31,6 +31,12 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      # S2/S3 token gate: fails on a raw hex literal, a raw palette utility, or a
+      # physical direction class in app/, components/ or lib/.
+      - run: npm run check:tokens
+      # S5 formatting gate: fails on inline Intl, runtime-locale methods, or a
+      # hand-written amount/date outside lib/i18n/format.ts.
+      - run: npm run check:i18n
       # S4 contract gate: fails when the committed types drift from the API snapshot,
       # when the snapshot leaves 1.5.0, or when the path set changes.
       - run: npm run check:api-types

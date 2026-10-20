@@ -1,26 +1,217 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * ConfigPC design tokens (S2).
+ *
+ * Source: the Stitch "Design System Board (360px)" screen
+ * (`projects/3530106450258598180/screens/b4659f8eea5c410791a48ad27cc1fb93`).
+ * Its own `tailwind.config` block supplies the palette and the two card
+ * shadows; the board's 16 documented sections supply the type scale, radii and
+ * component states. Provenance, the contrast matrix and the two deliberate
+ * deviations are in `docs/design/TOKEN_MAP.md` - do not edit a value here
+ * without updating it there.
+ *
+ * Three layers, and a component may only use the semantic layer:
+ *   brand      - the palette as designed (primary, accent, neutrals)
+ *   semantic   - what a surface means (background, foreground, verified, warn)
+ *   component  - a decision the design made once (control height, card radius)
+ *
+ * No raw hex anywhere below the first block, and none at all in a component:
+ * `npm run check:tokens` fails on a hex literal or a physical direction class.
+ */
+
+@theme {
+  /* brand: the palette exactly as the board defines it */
+  --color-primary: oklch(39.84% 0.1773 277.37); /* #3730A3 */
+  --color-primary-soft: oklch(96.19% 0.0179 272.31); /* #EEF2FF */
+  --color-primary-hover: oklch(35.88% 0.1354 278.70); /* #312E81 */
+  --color-accent: oklch(76.86% 0.1647 70.08); /* #F59E0B, saffron */
+  --color-accent-soft: oklch(96.19% 0.0580 95.62); /* #FEF3C7 */
+  --color-whatsapp: oklch(43.35% 0.0754 182.23); /* #075E54 */
+
+  /* brand neutrals: the board's ramp IS Tailwind's stone scale */
+  --color-page: oklch(98.48% 0.0013 106.42); /* #FAFAF9, stone-50 */
+  --color-surface: oklch(100.00% 0.0000 89.88); /* #FFFFFF */
+  --color-subtle: oklch(96.99% 0.0013 106.42); /* #F5F5F4, stone-100 */
+  --color-track: oklch(92.32% 0.0026 48.72); /* #E7E5E4, stone-200 */
+  --color-muted: oklch(44.44% 0.0096 73.64); /* #57534E, stone-600 */
+  --color-ink: oklch(21.61% 0.0061 56.04); /* #1C1917, stone-900 */
+  --color-placeholder: oklch(71.61% 0.0091 56.26); /* #A8A29E, stone-400 */
+
+  /* semantic states */
+  --color-success: oklch(52.73% 0.1371 150.07); /* #15803D */
+  --color-success-soft: oklch(96.24% 0.0434 156.74); /* #DCFCE7 */
+  --color-warning: oklch(55.53% 0.1455 49.00); /* #B45309 */
+  --color-warning-soft: oklch(96.19% 0.0580 95.62); /* #FEF3C7 */
+  --color-error: oklch(50.54% 0.1905 27.52); /* #B91C1C */
+  --color-error-soft: oklch(93.56% 0.0309 17.72); /* #FEE2E2 */
+  --color-info: oklch(48.82% 0.2172 264.38); /* #1D4ED8 */
+  --color-info-soft: oklch(93.19% 0.0316 255.59); /* #DBEAFE */
+
+  /* semantic aliases: the names a component is allowed to use */
+  --color-background: var(--color-page);
+  --color-foreground: var(--color-ink);
+  --color-border: var(--color-track);
+  --color-ring: var(--color-primary);
+  --color-verified: var(--color-success);
+  --color-warn: var(--color-warning);
+  --color-danger: var(--color-error);
+
+  /* type: the board's 7-step scale, as drawn */
+  --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-arabic: var(--font-plex-arabic), "IBM Plex Sans Arabic", "Inter", ui-sans-serif,
+    sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --text-display: 1.875rem; /* 30px */
+  --text-display--line-height: 1.25;
+  --text-display--font-weight: 700;
+  --text-heading: 1.5rem; /* 24px */
+  --text-heading--line-height: 1.25;
+  --text-heading--font-weight: 700;
+  --text-title: 1.25rem; /* 20px */
+  --text-title--line-height: 1.25;
+  --text-title--font-weight: 700;
+  --text-subtitle: 1.125rem; /* 18px */
+  --text-subtitle--line-height: 1.375;
+  --text-subtitle--font-weight: 600;
+  --text-body: 1rem; /* 16px */
+  --text-body--line-height: 1.5;
+  --text-compact: 0.875rem; /* 14px */
+  --text-compact--line-height: 1.43;
+  --text-caption: 0.75rem; /* 12px */
+  --text-caption--line-height: 1.33;
+  --text-micro: 0.6875rem; /* 11px */
+  --text-micro--line-height: 1.45;
+
+  /* radii: 8px control, 12px card, pill */
+  --radius-control: 0.5rem;
+  --radius-card: 0.75rem;
+  --radius-pill: 9999px;
+
+  /* elevation: borders carry the structure; shadows are ambient only */
+  --shadow-card-1: 0 1px 2px 0 rgb(28 25 23 / 0.05);
+  --shadow-card-2: 0 4px 6px -1px rgb(28 25 23 / 0.08);
+
+  /* component decisions the board fixed once */
+  --spacing-control: 3rem; /* 48px minimum touch target */
+  --spacing-tap: 2.75rem; /* 44px floor, the accessibility minimum */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+/*
+ * Base layer. Logical properties only: `start`/`end`, never `left`/`right`, so
+ * the Arabic pass (S20) is a translation and a direction flip, not a rewrite.
+ * The design is light-only, so there is no prefers-color-scheme block: a dark
+ * palette does not exist and inventing one here would be fiction.
+ */
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * Arabic pages render in the Arabic face. `--font-plex-arabic` is applied
+   * by the locale layout only when the locale is `ar`, so a French page never
+   * applies (or downloads) the Arabic file. The token keeps its own fallback
+   * chain for the case where the variable is absent.
+   */
+  html[lang="ar"] body {
+    font-family: var(--font-arabic);
+  }
+
+  /* One focus treatment for the whole app: 2px ring, 2px offset (board §4). */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-primary-soft);
+    color: var(--color-ink);
+  }
+
+  /* Amounts use tabular figures so prices never shift width (board §2). */
+  .num-tabular {
+    font-variant-numeric: tabular-nums;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/*
+ * Range input (board §8). Visual only: the element is a native
+ * <input type="range">, so keyboard support, touch behaviour and the
+ * accessibility tree are the browser's. The thumb is 24 px on an 8 px rail,
+ * inside a 24 px box that the Slider pads up to a 48 px row.
+ */
+@layer components {
+  .range-input {
+    width: 100%;
+    height: 2.75rem; /* 44 px hit area; the rail and thumb stay 8 / 24 px */
+    background: transparent;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .range-input::-webkit-slider-runnable-track {
+    height: 0.5rem;
+    border-radius: var(--radius-pill);
+    background: var(--color-track);
+  }
+
+  .range-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    margin-top: -0.5rem; /* (8 px track - 24 px thumb) / 2 */
+    height: 1.5rem;
+    width: 1.5rem;
+    border: 2px solid var(--color-surface);
+    border-radius: var(--radius-pill);
+    background: var(--color-primary);
+    box-shadow: var(--shadow-card-2);
+  }
+
+  .range-input::-moz-range-track {
+    height: 0.5rem;
+    border-radius: var(--radius-pill);
+    background: var(--color-track);
+  }
+
+  .range-input::-moz-range-thumb {
+    height: 1.5rem;
+    width: 1.5rem;
+    border: 2px solid var(--color-surface);
+    border-radius: var(--radius-pill);
+    background: var(--color-primary);
+    box-shadow: var(--shadow-card-2);
+  }
+
+  .range-input:disabled {
+    cursor: not-allowed;
+  }
+
+  .range-input:disabled::-webkit-slider-thumb,
+  .range-input:disabled::-moz-range-thumb {
+    background: var(--color-muted);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

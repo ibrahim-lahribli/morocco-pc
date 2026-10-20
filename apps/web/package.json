@@ -14,10 +14,13 @@
     "test": "playwright test",
     "gen:api-types": "openapi-typescript ../api/test/unit/openapi-v1.5.json -o lib/api/schema.d.ts",
     "check:api-types": "node scripts/check-api-types.mjs",
+    "check:tokens": "node scripts/check-tokens.mjs",
+    "check:i18n": "node scripts/check-i18n.mjs",
     "mock:api": "node mock/server.mjs"
   },
   "dependencies": {
     "next": "16.4.2",
+    "next-intl": "^4.14.9",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

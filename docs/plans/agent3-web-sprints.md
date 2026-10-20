@@ -32,6 +32,7 @@ locale, strict TS, Tailwind v4, and its own package manifest (OD4).
 §3's principles before any component code. The frontend-design two-pass is now **EXTRACT →
 critique**, not invent → critique.
 **Depends on:** S1, and a readable DESIGN EXPORT (plan §3 records why the Figma copy is not it).
+RESOLVED: the Stitch MCP is the source; the Figma copy was never needed.
 **Definition of done:**
 - Palette, type scale, spacing, radii and component states are EXTRACTED from the Stitch export
   (the exported screen cited per token group) into an in-repo token map, and that extraction
@@ -46,11 +47,45 @@ critique**, not invent → critique.
    (≥ 4.5:1) — measured, not eyeballed.
 3. `dir="rtl"` on the sample page mirrors layout correctly (no physical `left/right` classes).
 
+**Status: DONE 2026-10-20 — as built.** `apps/web/app/globals.css` is the token file: a Tailwind v4
+`@theme` block with three layers (brand → semantic → component), 21 raw OKLCH colours plus 7
+semantic aliases, an 8-step type scale, three radii, the board's two card shadows and two spacing
+decisions. `docs/design/TOKEN_MAP.md` carries the provenance (board screen id), the contrast matrix
+and the deviations. `app/[locale]/tokens/page.tsx` renders every token at 360 px so the values can be
+seen and measured; `e2e/tokens.spec.ts` measures them; `scripts/check-tokens.mjs` (`npm run
+check:tokens`, in `web-ci.yml`) is scenario 1. Three things are worth recording:
+
+1. **The board contains one accessibility defect, and the token map does not reproduce it.** It paints
+   the warning budget bar in saffron, which measures 1.71:1 against the track. The token is
+   `warning` `#B45309` (4.00:1); saffron survives as `--color-accent` for chip fills.
+2. **The board's screens are physically-classed.** Its Arabic screen carries 26 `ml-/mr-` and zero
+   logical utilities, so copying it makes the Arabic pass (S20) a rewrite. The gate rejects
+   `ml-/mr-/pl-/pr-/left-/right-/text-left/text-right`; components use `ms/me/ps/pe/start/end`.
+3. **Dark mode was removed, not invented.** The scaffold's `prefers-color-scheme` block went away
+   because the design is light-only; a palette nobody designed is fiction.
+
+Two scenarios are satisfied differently than the sprint text implies. Scenario 1's grep gate is
+STRICTER than asked (it also fails palette utilities and physical sides, not only `#` literals, and it
+scans `lib/` as well as components). Scenario 2's "sample page" is a real route, `/fr/tokens`, set to
+`noindex` so a design artifact can never be indexed.
+
+Measured: 29/29 Playwright specs (7 of them S2's); the token gate exit 0 on 7 files and RED on a
+hex literal, a palette class and a physical side before being trusted; `build` exit 0 with no CSS
+parse warning.
+
+**Review (2026-10-20).** Two amounts on the proof sheet were typed by hand — `Reste 100 MAD` and
+`Dépasse de 400 MAD` — beside a third bar in the same block that did use `formatMoney`. Both now
+go through the helper (`Reste 100 DH`), which is what the page's own rule says. The gate did not
+catch them: its money rule needs a grouped thousand (`500 DH` alone does not match), so the
+blind spot is named here rather than papered over. A stricter rule would also flag the legitimate
+step copy (`paliers de 500 MAD`), so it stays as it is until a rule can tell a step from a price.
+
 #### S3 — Base component kit + a11y primitives (2 h)
 **Goal:** The small accessible kit the wizard/results need — Button, TextField, Slider,
 ChoiceCard, Badge, ProgressBar, Skeleton, Alert — implemented to the Stitch components, not
 invented alongside them.
 **Depends on:** S2 (tokens) and the exported frames for these eight components.
+RESOLVED: S2 shipped the tokens first, so the kit was built only from them.
 **Definition of done:**
 - Each component reproduces its exported frame's states (default / hover / focus / disabled /
   error) with token-driven classes — no raw hex, no bespoke spacing — and the story route
@@ -65,6 +100,35 @@ invented alongside them.
    `aria-valuenow`/`aria-valuetext`.
 3. Icon-only controls carry `aria-label`; decorative icons are `aria-hidden`.
 4. `prefers-reduced-motion: reduce` disables the Skeleton shimmer.
+
+**Status: DONE 2026-10-20 — as built.** `apps/web/components/ui/` holds the eight components plus a
+barrel (`@/components/ui`); `app/[locale]/kit/page.tsx` is the `noindex` proof sheet with every state
+labelled by the board section that defines it, and `docs/design/COMPONENTS.md` is the per-state
+record (geometry, API, accessibility contract). `e2e/kit.spec.ts` is 10 specs. Three deviations
+and two decisions:
+
+1. **Selected cards use a 1 px border plus a 1 px ring, not a literal 2 px border.** Same 2 px
+   edge, zero layout shift when a card is selected — the board's version nudges every card below
+   it by a pixel.
+2. **`ghost` keeps a 48 px height.** The board's "Bouton Lien / Texte" is a full-width row; a
+   20 px text link would have been the obvious reading and the wrong target size.
+3. **No `"use client"` in any component.** Behaviour is the native element's; state lives in the
+   screen. That is why the story route needs exactly one client island.
+
+Two DoD items are satisfied differently than the text implies. "Records a per-state visual diff
+against the frame" is recorded as **specifications plus role and keyboard assertions**, not pixel
+snapshots: a baseline image proves only that a page did not change, while these assertions prove
+the states exist and the keyboard works — and they survive a font or antialiasing change. The
+per-state geometry table in `COMPONENTS.md` is the frame record. And "no bespoke spacing" is
+enforced by the token gate, which now also scans `components/` (7 → 20 files).
+
+One visible consequence worth recording: every amount goes through `Intl` with `fr-MA` (plan §2
+V11), which groups with a point, so the proof sheet prints `8.500 MAD` where the board's copy
+writes `8 500 MAD`. The formatter wins; S5 owns the final money format.
+
+Measured: 39/39 Playwright specs at the time (10 S3; S5 later took the total to 51); `check:tokens`
+exit 0 on 20 files, RED on the three rule types; `build` exit 0, 7/7 static routes; `typecheck`
+exit 0.
 
 #### S4 — Typed API client + fixtures + mock server (2 h)
 **Goal:** A typed client generated from a committed `/v1/docs/json` snapshot, plus a fixture
@@ -104,8 +168,9 @@ runs in `web-ci.yml` between typecheck and build. Two deliberate deviations from
    names come from `display_name` is asserted where it can actually regress: the contract spec
    checks a recommendation body contains no `display_name`.
 
-Measured: 22/22 Playwright specs; the drift gate red on a mutated type file, a raised version and a
-changed path set, PASS after each restore.
+Measured: 29/29 Playwright specs at the time of writing (19 are S4's; S2 added 7; S3 later took the
+total to 39); the drift gate red on a mutated type file, a raised version and a changed path set,
+PASS after each restore.
 
 #### S5 — i18n skeleton + fonts (1.5 h)
 **Goal:** next-intl with fr default and an ar (RTL) locale shell, fr-MA formatting helpers,
@@ -122,6 +187,43 @@ and Latin+Arabic font subsets with zero CLS.
 2. `formatMoney(7300)` → contains a non-breaking/narrow space and "DH" (both locales).
 3. Lighthouse CLS = 0 on a font-heavy fixture page (fonts must not shift layout).
 4. No hardcoded date/number strings in components (lint rule or grep gate).
+
+**Status: DONE 2026-10-20 — as built.** `i18n/routing.ts` (two locales, prefix always),
+`i18n/request.ts` (locale from `next/root-params`, so every route stays static), `proxy.ts` (Next
+16's rename of middleware, `/` → `/fr`), `messages/{fr,ar}.json`, `lib/i18n/format.ts`,
+`lib/i18n/paths.ts`, `components/locale-switcher.tsx`, and `app/[locale]/format` as the formatting
+proof sheet. `docs/design/I18N.md` is the reference. Four deviations, each deliberate:
+
+1. **No `NextIntlClientProvider`.** next-intl's `Link` is a client component calling `useLocale()`;
+   using it in the layout would ship the message catalogue to the browser. Plain `next/link` +
+   `localePath()` instead, and the switcher receives the active locale as a prop. The switch is a
+   full document load — correct for a different `lang`/`dir`, and it keeps the client bundle free of
+   i18n runtime. `i18n/navigation.ts` was written and then deleted for the same reason.
+2. **Scenario 2 is satisfied by normalizing, not by accepting CLDR.** `fr-MA` and `ar-MA` both group
+   with a full stop; `formatMoney(7300)` returns `7 300 DH` with U+202F and a no-break space before
+   the unit, because a full stop reads as a decimal separator in French. The currency LABEL is `DH`,
+   not `Intl`'s `MAD` currency style (which adds cents nobody quotes).
+3. **Scenario 3's Lighthouse CLS is measured with the layout-shift API, not by running Lighthouse.**
+   CLS = 0 on `/ar` after `document.fonts.ready`, and no individual shift is recorded. Lighthouse
+   itself belongs to S6's budgets; claiming "Lighthouse CLS = 0" from a Playwright observer would
+   be an overreach.
+4. **The French proof sheets are fr-only.** `/ar/kit` and `/ar/tokens` 404 via page-level
+   `generateStaticParams` + `notFound()`: serving French documentation under `lang="ar"` would
+   mispronounce it. S20 translates product screens, not design documentation.
+
+Measured: 52/52 Playwright specs (13 S5); `check:i18n` exit 0 on 21 files, RED on all four rule
+types; `check:tokens` exit 0 on 23 files; `build` exit 0, 6 prerendered routes (`/fr`, `/ar`,
+`/fr/format`, `/ar/format`, `/fr/kit`, `/fr/tokens`, 9 static pages reported); `typecheck` exit 0.
+
+**Review (2026-10-20).** Two font findings, one fixed and one recorded as a cost. Fixed: the Arabic
+variable class was applied only for `ar`, so `font-arabic` was an undefined `var()` on a French page
+and the `/fr/tokens` type specimen labelled "IBM Plex Sans Arabic" actually rendered in Inter; the
+class is now on `<html>` for both locales (it defines a variable, it downloads nothing by itself).
+Recorded, not fixed: `preload` is a document-level decision and there is one root layout, so `/fr`
+preloads four IBM Plex subset files (~137 KB) it never uses. `preload: false` was measured and
+rejected — it saves the bytes but the face then swaps after first layout and the switcher's Arabic
+label reflows its neighbours by 3 px, i.e. 0.0007 CLS, and scenario 3 pins 0. The fix is per-locale
+root layouts or a self-hosted face with a known URL, which is S6 budget work (I18N.md §5).
 
 #### S6 — CI + budgets (1.5 h)
 **Goal:** A dedicated `apps/web` CI job: lint, typecheck, unit tests, Playwright at 360 px,
