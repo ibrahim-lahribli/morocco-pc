@@ -80,7 +80,9 @@ test("step 1 is completable from the keyboard alone", async ({ page }) => {
 
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/etape=budget/);
-  await expect(page.getByText("Étape 2 sur 4")).toBeVisible();
+  // "Bureau" is an office profile, and S9 gives it three steps: the
+  // resolution question is a gaming one. Keyboard completion is unchanged.
+  await expect(page.getByText("Étape 2 sur 3")).toBeVisible();
 });
 
 test("a deep link with valid state lands on its step", async ({ page }) => {

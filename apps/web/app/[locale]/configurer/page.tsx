@@ -82,6 +82,7 @@ export default async function ConfigurerPage({
     budgetSnapNote: t("budgetSnapNote"),
     budgetClampMin: t("budgetClampMin"),
     budgetClampMax: t("budgetClampMax"),
+    storedNotApplied: t("storedNotApplied"),
     steps: {
       usage: { label: t("steps.usage.label"), legend: t("steps.usage.legend") },
       budget: { label: t("steps.budget.label"), legend: t("steps.budget.legend") },

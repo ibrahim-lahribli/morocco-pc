@@ -11,7 +11,7 @@
  * `priority`) beside the step (`etape`), and every screen derives what it shows
  * from them. There is no second copy of the state to fall out of sync.
  *
- * Two deliberate choices:
+ * Three deliberate choices:
  *
  * 1. **Steps are NAMED, not numbered.** The sprint text allows `?etape=2`, but
  *    S9 makes the flow length depend on the profile (resolution exists only for
@@ -24,9 +24,19 @@
  *    `use_case`, `resolution`, `priority` are the names S10 posts; keeping one
  *    vocabulary from URL to request body means there is no renaming layer where
  *    a typo turns into a field the API silently ignores.
+ *
+ * 3. **The flow is a FUNCTION of the answers (S9), not a constant.** `STEPS` is
+ *    the superset in canonical order; `stepsFor()` is what a given profile
+ *    actually walks. Two things narrow it: the use case (resolution is a gaming
+ *    question) and the contract's `inputs_applied` truth, which — once the
+ *    contract serves it — hides a question it has declared inert instead of
+ *    asking it and storing the answer. `normalizeAnswers()` is the other half of
+ *    that rule: an answer whose step is not in the flow is dropped, so the URL,
+ *    the progress line and the request body cannot disagree about the flow.
  */
+import type { AppliedInput, AppliedInputs } from "./applied";
 
-/** The four steps, in order. S9 narrows this list for non-gaming profiles. */
+/** The superset, in canonical order. `stepsFor()` narrows it per profile. */
 export const STEPS = ["usage", "budget", "resolution", "priority"] as const;
 
 export type WizardStep = (typeof STEPS)[number];
@@ -74,12 +84,30 @@ export function clampBudget(amount: number): { amount: number; clamped: BudgetCl
   return { amount, clamped: null };
 }
 
-/**
- * The currency the wizard sends. The market is Morocco and the contract
+/** The currency the wizard sends. The market is Morocco and the contract
  * requires a three-letter code, but there is no currency picker: a control with
  * exactly one option is a control that lies about being a choice.
  */
 export const CURRENCY = "MAD";
+
+/**
+ * The three priorities the wizard offers (S9), in display order: price first,
+ * balanced, performance first.
+ *
+ * The API accepts 1..5 and advertises all five, so this is a DELIBERATE
+ * narrowing rather than a copy of the contract: 2 and 4 are amplitudes of the
+ * same axis, and a question with five answers where three mean "somewhere in
+ * between" is harder to answer than the underlying decision is. The choice is
+ * the model's, not the response's, so only 1/3/5 can ever reach the URL or the
+ * POST body — `isStepValid` rejects anything else and `toRequest` cannot produce
+ * one. Labels still come from `meta/options`, never from this file.
+ */
+export const PRIORITY_CHOICES = [1, 3, 5] as const;
+
+/** Whether a number is one of the three the wizard offers. */
+export function isPriorityChoice(value: number): boolean {
+  return (PRIORITY_CHOICES as readonly number[]).includes(value);
+}
 
 /** The answers, all optional because a deep link may carry a prefix of them. */
 export interface Answers {
@@ -134,7 +162,7 @@ function isStep(value: string | null): value is WizardStep {
  * wizard is a tool, and a stale bookmark should land somewhere usable, not on a
  * dead end. An unknown answer value is kept as-is and simply fails validation
  * (or matches no option), which is what makes the "invalid state" redirect in
- * `firstInvalidStepBefore` possible.
+ * `resolveStep` possible.
  */
 export function readState(search: SearchParamsLike): WizardState {
   const rawStep = search.get("etape");
@@ -148,6 +176,84 @@ export function readState(search: SearchParamsLike): WizardState {
       resolution: nonEmpty(search.get("resolution")),
       priority: parseInteger(search.get("priority")),
     },
+  };
+}
+
+/**
+ * Whether a use case asks the resolution question (S9).
+ *
+ * The contract's use-case vocabulary is DATA — the active scoring model's
+ * `use_case_profiles` keys — so this module cannot enumerate it, and a hardcoded
+ * list of "gaming use cases" would silently stop matching the day a model spells
+ * one differently. The rule is therefore the prefix the vocabulary already uses:
+ * `GAMING` and any `GAMING_*` variant ask where the picture goes; office, work,
+ * creation and ML profiles do not.
+ *
+ * WHAT THIS IS NOT: a claim that the answer changes anything. It decides whether
+ * the question is worth asking; `inputs_applied` decides whether asking it is
+ * honest, and a use case the vocabulary adds later that is gaming by another
+ * name is CD-1's job to describe, not something this prefix should guess.
+ */
+export function isGamingFamily(useCase: string | undefined): boolean {
+  return useCase !== undefined && useCase.startsWith("GAMING");
+}
+
+/**
+ * Whether the contract says an answer is actually read (`inputs_applied`).
+ *
+ * A SILENT contract (null — today's, CD-1 is not served yet) is not the same as
+ * "nothing is applied": silence means we do not know, so the question is asked
+ * and the copy says the answer is stored rather than used (OD1). A contract that
+ * DOES answer is taken at its word and the question is not shown.
+ */
+function applies(input: AppliedInput, applied: AppliedInputs): boolean {
+  return applied === null ? true : applied.has(input);
+}
+
+/**
+ * The steps one profile actually walks, in order.
+ *
+ * `usage` and `budget` are always there: `use_case` is required by the POST body
+ * and the budget is the query itself, so neither can be dropped however inert
+ * the contract says they are. They are also the two answers every profile needs
+ * before any of the rest is meaningful.
+ *
+ * While the use case is still UNANSWERED the flow is the full one. Nothing has
+ * narrowed it yet, so the alternative — guessing the short flow — would make the
+ * first screen say "Étape 1 sur 3" and rewrite itself to "sur 4" the moment the
+ * user picked gaming. A wizard whose length changes before the answer that
+ * decides it is a wizard that lied once.
+ */
+export function stepsFor(answers: Answers, applied: AppliedInputs = null): WizardStep[] {
+  return STEPS.filter((step) => {
+    switch (step) {
+      case "usage":
+      case "budget":
+        return true;
+      case "resolution":
+        return (answers.use_case === undefined || isGamingFamily(answers.use_case)) &&
+          applies("resolution", applied);
+      case "priority":
+        return applies("priority", applied);
+    }
+  });
+}
+
+/**
+ * Drop the answers whose step this profile does not walk.
+ *
+ * The other half of `stepsFor`. Without it a profile that changes use case (or a
+ * contract that starts declaring an input inert) keeps a committed answer in the
+ * URL that nothing asks for any more — and `toRequest` would either send it or,
+ * worse, omit it while the URL still showed it as answered.
+ */
+export function normalizeAnswers(answers: Answers, applied: AppliedInputs = null): Answers {
+  const steps = stepsFor(answers, applied);
+  return {
+    use_case: answers.use_case,
+    budget_amount: answers.budget_amount,
+    resolution: steps.includes("resolution") ? answers.resolution : undefined,
+    priority: steps.includes("priority") ? answers.priority : undefined,
   };
 }
 
@@ -166,49 +272,81 @@ export function isStepValid(step: WizardStep, answers: Answers): boolean {
     case "resolution":
       return answers.resolution !== undefined && answers.resolution.length > 0;
     case "priority":
-      return (
-        answers.priority !== undefined &&
-        Number.isInteger(answers.priority) &&
-        answers.priority >= 1 &&
-        answers.priority <= 5
-      );
+      return answers.priority !== undefined && isPriorityChoice(answers.priority);
   }
 }
 
-/** The first step the flow cannot pass, or null when every step is answerable. */
-export function firstInvalidStep(answers: Answers): WizardStep | null {
-  return STEPS.find((step) => !isStepValid(step, answers)) ?? null;
+/** The first step THIS profile cannot pass, or null when it is answerable. */
+export function firstInvalidStep(answers: Answers, applied: AppliedInputs = null): WizardStep | null {
+  return stepsFor(answers, applied).find((step) => !isStepValid(step, answers)) ?? null;
 }
 
-export function stepIndex(step: WizardStep): number {
-  return STEPS.indexOf(step);
+/** The position of a step in this profile's flow, or -1 when it is not one. */
+export function stepIndex(
+  step: WizardStep,
+  answers: Answers,
+  applied: AppliedInputs = null,
+): number {
+  return stepsFor(answers, applied).indexOf(step);
 }
 
-export function nextStep(step: WizardStep): WizardStep | null {
-  return STEPS[stepIndex(step) + 1] ?? null;
+export function nextStep(
+  step: WizardStep,
+  answers: Answers,
+  applied: AppliedInputs = null,
+): WizardStep | null {
+  const steps = stepsFor(answers, applied);
+  const index = steps.indexOf(step);
+  return index < 0 ? null : steps[index + 1] ?? null;
 }
 
-export function previousStep(step: WizardStep): WizardStep | null {
-  return stepIndex(step) === 0 ? null : STEPS[stepIndex(step) - 1];
+export function previousStep(
+  step: WizardStep,
+  answers: Answers,
+  applied: AppliedInputs = null,
+): WizardStep | null {
+  const index = stepIndex(step, answers, applied);
+  return index <= 0 ? null : stepsFor(answers, applied)[index - 1];
 }
 
 /**
  * The step a deep link should be MOVED to, or null when the current one is
  * reachable.
  *
- * Only steps BEFORE the current one are checked: landing on step 2 with no
- * answer is a broken link and gets corrected, while sitting on step 1 with no
- * answer is just… step 1. Checking the current step too would fight the user the
- * instant they clear a field — the point of this function is to repair a URL,
- * not to police a form in progress.
+ * Two repairs, in this order:
+ *
+ * 1. **A step this profile does not walk.** `?etape=resolution` on an office
+ *    profile is not an invalid answer, it is a URL from a different flow, and
+ *    the honest landing place is the first step at or after that position in
+ *    the canonical order — the user was heading forwards.
+ * 2. **A step that skips an unanswered earlier step.** Only steps BEFORE the
+ *    current one are checked: sitting on step 1 with no answer is just step 1,
+ *    and policing the current step would fight the user the instant they clear a
+ *    field. The point of this function is to repair a URL, not a form in
+ *    progress.
  */
+export function resolveStep(
+  step: WizardStep,
+  answers: Answers,
+  applied: AppliedInputs = null,
+): WizardStep | null {
+  const steps = stepsFor(answers, applied);
+  if (!steps.includes(step)) {
+    const position = STEPS.indexOf(step);
+    return steps.find((candidate) => STEPS.indexOf(candidate) >= position) ?? steps[steps.length - 1];
+  }
+  return firstInvalidStepBefore(step, answers, applied);
+}
+
+/** The step a deep link should be moved BACK to, or null when none is skipped. */
 export function firstInvalidStepBefore(
   step: WizardStep,
   answers: Answers,
+  applied: AppliedInputs = null,
 ): WizardStep | null {
-  const invalid = firstInvalidStep(answers);
+  const invalid = firstInvalidStep(answers, applied);
   if (invalid === null) return null;
-  return stepIndex(invalid) < stepIndex(step) ? invalid : null;
+  return stepIndex(invalid, answers, applied) < stepIndex(step, answers, applied) ? invalid : null;
 }
 
 /** The canonical query string for a state, `etape` first so URLs diff readably. */
@@ -239,20 +377,32 @@ export function toHref(pathname: string, state: WizardState): string {
  * The body S10 will POST, or null while the flow is incomplete. Kept here so
  * the request shape is a property of the state machine rather than of whichever
  * component happens to own the submit button.
+ *
+ * An answer whose step this profile does not walk is OMITTED rather than sent:
+ * `resolution` for an office profile is not "no answer", it is a question that
+ * was never asked (S9).
  */
-export function toRequest(answers: Answers): {
+export function toRequest(
+  answers: Answers,
+  applied: AppliedInputs = null,
+): {
   budget_amount: number;
   currency: string;
   use_case: string;
   resolution?: string;
   priority?: number;
 } | null {
-  if (firstInvalidStep(answers) !== null) return null;
+  if (firstInvalidStep(answers, applied) !== null) return null;
+  const steps = stepsFor(answers, applied);
   return {
     budget_amount: answers.budget_amount as number,
     currency: CURRENCY,
     use_case: answers.use_case as string,
-    ...(answers.resolution === undefined ? {} : { resolution: answers.resolution }),
-    ...(answers.priority === undefined ? {} : { priority: answers.priority }),
+    ...(steps.includes("resolution") && answers.resolution !== undefined
+      ? { resolution: answers.resolution }
+      : {}),
+    ...(steps.includes("priority") && answers.priority !== undefined
+      ? { priority: answers.priority }
+      : {}),
   };
 }

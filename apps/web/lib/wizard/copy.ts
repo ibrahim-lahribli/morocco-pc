@@ -53,6 +53,12 @@ export interface WizardCopy {
   budgetClampMin: string;
   /** Guidance after a clamp, naming the bound: "{max}". */
   budgetClampMax: string;
+  /**
+   * Shown with a question whose answer the contract does not say it reads (OD1,
+   * CD-1). It is a HINT on the group, not an error: the answer is stored, and saying
+   * so is the honest alternative to hiding the question or pretending it matters.
+   */
+  storedNotApplied: string;
   steps: Record<WizardStep, StepCopy>;
 }
 

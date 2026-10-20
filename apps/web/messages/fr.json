@@ -27,7 +27,7 @@
   },
   "wizard": {
     "title": "Configurez votre PC",
-    "intro": "Quatre étapes, puis des configurations compatibles avec votre budget. Vous pourrez revenir en arrière à tout moment.",
+    "intro": "Quelques questions, puis des configurations compatibles avec votre budget. Vous pourrez revenir en arrière à tout moment.",
     "progress": "Étape {current} sur {total}",
     "next": "Suivant",
     "back": "Retour",
@@ -44,6 +44,7 @@
     "budgetSnapNote": "Le curseur avance par paliers de {step} DH : il s'arrête sur {snapped}, tandis que {exact} reste le montant retenu.",
     "budgetClampMin": "Le minimum est {min} : le montant a été ramené à {min}.",
     "budgetClampMax": "Le maximum est {max} : le montant a été ramené à {max}.",
+    "storedNotApplied": "Ce choix est enregistré, mais il ne change pas encore les configurations proposées.",
     "steps": {
       "usage": {
         "label": "Usage",

@@ -403,6 +403,49 @@ governed by the contract's applied-inputs truth (V3/OD1).
    both steps; a rendering snapshot pins that copy.
 4. With a mock contract that marks priority applied → label disappears (feature-check works).
 
+**Status: DONE 2026-10-20 — as built.** S9 changes what the wizard IS: the flow is now a function
+of the answers rather than a constant, and the two optional questions say what the contract actually
+does with them. `STEPS` (the canonical order) stays; `stepsFor()` is what a profile walks, and
+`normalizeAnswers()` drops an answer whose step is not in that flow, so the URL, the progress line
+and the request body cannot disagree.
+
+**The resolution question is a use-case question.** `isGamingFamily()` is the `GAMING` prefix of the
+contract's own vocabulary (the vocabulary is DATA — the scoring model's `use_case_profiles` keys —
+so a hardcoded list of gaming use cases would stop matching the day a model spelled one
+differently). An office profile therefore walks three steps and never sees the resolution step; a
+URL that names it (`?etape=resolution&use_case=OFFICE`) is resolved FORWARDS to the first step at
+or after that position, because the user was heading that way. And while the use case is still
+unanswered the flow is the FULL one: a first screen that guessed the short flow would say "Étape 1
+sur 3" and rewrite itself to "sur 4" the moment the user picked gaming.
+
+**Priority is three of the contract's five.** `PRIORITY_CHOICES` = 1/3/5, and the narrowing is the
+model's: labels still come from `meta/options` (never from a table here), and 2 and 4 are dropped by
+VALUE. The API accepts and advertises all five, so a spec feeds the wizard the real 1..5 list and
+asserts three radios — a filter that stopped working would show five. `isStepValid` rejects anything
+outside 1/3/5, so only those three can reach the URL or the POST body.
+
+**OD1's honest label is the fallback, not the whole mechanism (CD-1).** `inputs_applied` is absent
+from contract v1, so the wizard asks both questions and says so: the label is the group's
+`aria-describedby` description, not a separate paragraph, so a screen reader hears the question and
+the caveat together. `lib/wizard/applied.ts` is the ONE place that reads the absent field (through
+`unknown`, since a field outside `schema.d.ts` must otherwise be a compile error), and it answers
+three values, not two: SILENCE is not an empty list. Silence keeps both questions; a response that
+names its applied inputs hides the step it did not name. Both paths are driven through `page.route`,
+so the feature check is a test: `inputs_applied: ["priority"]` turns the caveat off on the priority
+step and removes the resolution step entirely, while the required use-case step stays (the POST body
+cannot exist without it).
+
+One copy correction came with the narrowing: the wizard's intro said "Quatre étapes", which became
+false the moment an office profile walked three. It now says "Quelques questions" in both languages.
+
+Measured: **97/97** Playwright specs (6 step specs plus 6 model checks added), `check:tokens` 30
+files, `check:i18n` 28 files, `typecheck`/`lint`/`build` exit 0, `/fr/configurer` still ● SSG. Two
+failures met and fixed rather than worked around: the first draft deep-linked to the priority step
+without a resolution, so the (correct) backwards repair moved it to resolution — the SPEC was wrong,
+and it now carries the answer its profile requires; and the priority interaction used
+`locator.check()`, which waits forever on the kit's `sr-only` native radio, so it drives the group
+from the keyboard like every other wizard spec.
+
 #### S10 — Submit path: POST lifecycle, loading, errors, latency budget (2 h)
 **Goal:** The wizard→results hand-off: validated POST, progress skeleton, full error mapping,
 and a latency budget that reflects measured reality (V1).

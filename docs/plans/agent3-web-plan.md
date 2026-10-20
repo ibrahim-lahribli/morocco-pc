@@ -9,9 +9,9 @@ and lockfile (OD4) that does not touch the engine or root CI (V14).
 
 **Status (2026-10-20).** PLAN REGISTERED, with the design registered as the S2/S3 source
 (§3 — Stitch, not Figma: the Figma copy is an unread export target). **W0 has five sprints
-done (S1–S5, all green — measured in §6) and one not started (S6); W1 has S7 and S8 done (the
-wizard shell and the budget step, measured in the sprint board); W2–W5 and the M3 gate are not
-started.**
+done (S1–S5, all green — measured in §6) and one not started (S6); W1 has S7–S9 done (the
+wizard shell, the budget step and the profile-gated step flow, measured in the sprint board);
+W2–W5 and the M3 gate are not started.**
 The design tokens now exist as CODE (`apps/web/app/globals.css`, Tailwind v4 `@theme`, OKLCH) with
 a grep gate and a measured contrast matrix; their provenance and the four deliberate deviations are in
 [docs/design/TOKEN_MAP.md](../design/TOKEN_MAP.md). The eight base components are built on those
@@ -47,7 +47,7 @@ the API catches up.
 
 | ID | What it is | Status 2026-10-20 |
 |---|---|---|
-| CD-1 | `inputs_applied` — which of `use_case` / `resolution` / `priority` actually changed the result | **ABSENT from the contract.** `resolution` and `priority` are inert in v1 (OG-38), so S9 ships the honest label instead of a step that silently does nothing |
+| CD-1 | `inputs_applied` — which of `use_case` / `resolution` / `priority` actually changed the result | **ABSENT from the contract.** `resolution` and `priority` are inert in v1 (OG-38), so S9 ships the honest label instead of a step that silently does nothing — and the gate is built and tested behind it: the moment a response carries `inputs_applied`, an input it does not name is no longer asked at all |
 | CD-2 | `reasons[]` — structured reason codes per build | **NOT SERVED.** `explainSelection` text is what the API returns; Decision 44's `deriveReasons()` exists but is additive and unwired, so S13 renders `explanation` and keeps the code path ready |
 | CD-4 | `GET /v1/presets` — the landing ribbon | **SHIPPED** (contract v1.4, Decision 48) |
 | CD-5 | `GET /v1/catalog/products` and `/…/{slug}` | **SHIPPED** (contract v1.5, Decision 50) |
@@ -186,18 +186,21 @@ defaults), the component kit, `next-intl` and the Arabic subset (only Latin Geis
 
 ### W1 — wizard
 
-Single-column, four steps: **use case → budget (slider + numeric field, 500 MAD steps, fr-MA
-formatting) → resolution (only for gaming) → priority as three labelled choices (price / balanced /
-performance) mapped to 1–5**.
+Single-column, two to four steps — the length is the profile's (S9): **use case → budget (slider
++ numeric field, 500 MAD steps, fr-MA formatting) → resolution (only for gaming) → priority as
+three labelled choices (price / balanced / performance) mapped to 1, 3 and 5 of the contract's
+1–5 axis**.
 
 Two rules outrank the visuals here: show only the inputs the contract says are **applied**
 (`inputs_applied`), and never render the word "Seed" — use `display_name`.
 
-**Today:** **S7 and S8 done** — the shell, the URL state machine, the `meta/options` step and the
-budget step (exact field plus a 500 MAD slider) at `/fr/configurer`, with the answers in the query
-string (see the sprint board). S9–S10 not started: resolution and priority already render from
-`meta/options` but are not yet gated by `inputs_applied`, and the last step's primary action is
-disabled with an honest note until S10 owns the POST.
+**Today:** **S7–S9 done** — the shell, the URL state machine, the `meta/options` step, the budget
+step (exact field plus a 500 MAD slider) and the profile-gated resolution/priority steps at
+`/fr/configurer`, with the answers in the query string (see the sprint board). The flow is
+DERIVED (`stepsFor`): an office profile walks three steps because the resolution question is a
+gaming one, and a response that ever serves `inputs_applied` stops a question it has declared
+inert — until then both questions carry an honest "stored, not yet used" label. S10 not started:
+the last step's primary action is disabled with an honest note until S10 owns the POST.
 
 ### W2 — results
 
@@ -261,9 +264,15 @@ Run in `apps/web` on the rebased branch, Node 24 locally (CI pins 22):
 | `npm run lint` | exit 0 — 0 errors, 1 warning (`postcss.config.mjs` anonymous default export) |
 | `npm run typecheck` | exit 0, and also exit 0 with `next-env.d.ts` removed (the clean-CI order is safe) |
 | `npm run check:api-types` | exit 0 — contract 1.5.0, 7 paths, `schema.d.ts` byte-identical to the generator |
-| `npm run check:tokens` | exit 0 — 0 hex literals, 0 palette utilities, 0 physical side classes across `app/` + `components/` + `lib/` (29 files); proven RED on each of the three rule types before being trusted |
-| `npm run check:i18n` | exit 0 — no inline `Intl`, no runtime-locale method, no hand-written amount/date in 27 files; proven RED on all four rule types before being trusted |
-| `npm test` (Playwright, 360×800) | 85/85 pass — the 3 shell specs, S4's 19 (every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, one for a non-JSON 200), S2's 8 (palette count, 15 text contrast pairs, 3 UI pairs, then the rendered page: 360 px, noindex, alias chain, 48 px control + 2 px ring, `ms-auto` mirroring, the mono face's late swap), S3's 10 (per-component geometry, roles, keyboard, reduced motion), S5's 15 (lang/dir, switcher, formatting, fonts, the per-locale Arabic preload, the mono preload that is not there, CLS) and S7's 21 (12 wizard: labels from `meta/options`, keyboard-only step 1, deep link, repair, Back with values, Enter advancing the form, the last step's honest disabled action, 503 + retry, 360 px/legend/targets, Arabic, the home link; 9 model: URL parsing, ranges, backwards-only repair, round-trip, request body) and S8's 9 (7 budget: the snap note, the min and max clamps with their notices, the slider's 500 steps and both ends, Enter settling before it advances, 360 px with a 44 px rail and a real legend, the Arabic clamp; 2 model: the 500 grid with its top-of-range arithmetic, and `clampBudget` naming the bound) |
+| `npm run check:tokens` | exit 0 — 0 hex literals, 0 palette utilities, 0 physical side classes across `app/` + `components/` + `lib/` (30 files); proven RED on each of the three rule types before being trusted |
+| `npm run check:i18n` | exit 0 — no inline `Intl`, no runtime-locale method, no hand-written amount/date in 28 files; proven RED on all four rule types before being trusted |
+| `npm test` (Playwright, 360×800) | 97/97 pass — the 3 shell specs, S4's 19 (every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, one for a non-JSON 200), S2's 8 (palette count, 15 text contrast pairs, 3 UI pairs, then the rendered page: 360 px, noindex, alias chain, 48 px control + 2 px ring, `ms-auto` mirroring, the mono face's late swap), S3's 10 (per-component geometry, roles, keyboard, reduced motion), S5's 15 (lang/dir, switcher, formatting, fonts, the per-locale Arabic preload, the mono preload that is not there, CLS) and S7's 21 (12 wizard: labels from `meta/options`, keyboard-only step 1, deep link, repair, Back with values, Enter advancing the form, the last step's honest disabled action, 503 + retry, 360 px/legend/targets, Arabic, the home link; 9 model: URL parsing, ranges, backwards-only repair, round-trip, request body) and S8's 9 (7 budget: the snap note, the min and max clamps with their notices, the slider's 500 steps and both ends, Enter settling before it advances, 360 px with a 44 px rail and a real legend, the Arabic clamp; 2 model: the 500 grid with its top-of-range arithmetic, and `clampBudget` naming the bound) and S9's 12 (6 steps: the gaming/office flow lengths, a URL
+naming the step an office profile does not have, the three-of-five priority list driven from the
+contract's own five labels, the stored-not-applied label as the group's description in both
+languages, and a contract that marks priority applied turning the label off and dropping the
+resolution step; 6 model: the profile's flow, the dropped answer and the request body, the
+forwards repair, the 1/3/5 priority narrowing, and `readAppliedInputs` distinguishing silence
+from an empty list) |
 | Tailwind actually processed | yes — the emitted CSS chunk contains `text-2xl`, `mx-auto`, `max-w-5xl`, `sr-only` and the `focus:` variants |
 
 **S5's evidence (2026-10-20).** next-intl 4.14.9, `/fr` and `/ar`, both statically rendered (6

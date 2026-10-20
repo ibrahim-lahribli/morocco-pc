@@ -110,6 +110,23 @@ amount — the sentence itself is the message catalogue's. It runs on BLUR and n
 so a half-typed number is not rewritten under the caret. The pair sits in one `<fieldset>` whose
 `<legend>` is the question, because a label on the field alone would name half the answer.
 
+## The flow is derived, not fixed (S9)
+
+`/fr/configurer` has two to four steps, and the number is a property of the answers. `stepsFor()`
+in `lib/wizard/model.ts` returns the list a profile walks — the resolution question is a gaming one,
+and a question the contract has declared inert is not asked — while `normalizeAnswers()` drops an
+answer whose step is not in that list. That pair is the whole rule: the progress line, the step
+indicator, the Back/Next targets and the POST body all read the same list, so none of them can drift
+from another.
+
+Two consequences worth keeping. A URL that names a step the profile does not have is resolved
+FORWARDS (the user was heading that way) rather than reset to the beginning. And while the use case
+is unanswered the flow stays FULL, because a wizard that shortens itself before the answer that
+decides its length will have to rewrite what it just said.
+
+When a question IS asked but the contract does not say the answer is read, the caveat goes on the
+group as its `hint` — `ChoiceGroup` already renders that as `aria-describedby`, so the question and
+the caveat are one utterance for a screen reader instead of two unrelated sentences.
 ## Money is formatted, not typed
 
 Every amount on the proof sheet goes through `formatMoney` from
