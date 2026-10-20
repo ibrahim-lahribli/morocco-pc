@@ -238,10 +238,15 @@ test.describe("the kit at 360 px", () => {
     await expect(bars.nth(0)).toHaveAttribute("aria-valuemax", "100");
     await expect(bars.nth(0)).toHaveAttribute("aria-label", "Normal (79 %)");
 
-    // Over budget: the number stays true, the fill stops at the rail's edge.
+    // Over budget: `aria-valuenow` must stay inside [min, max] — a browser
+    // CLAMPS an out-of-range value in the accessibility tree, so 10400 there
+    // would be announced as 10000 anyway. The real percentage travels in
+    // `aria-valuetext`, and the fill stops at the rail's edge.
     const over = bars.nth(2);
-    await expect(over).toHaveAttribute("aria-valuenow", "10400");
+    await expect(over).toHaveAttribute("aria-valuenow", "10000");
     await expect(over).toHaveAttribute("aria-valuemax", "10000");
+    await expect(over).toHaveAttribute("aria-valuetext", "104 %");
+    await expect(bars.nth(0)).toHaveAttribute("aria-valuetext", "79 %");
     const fillWidth = await over
       .locator("div")
       .first()

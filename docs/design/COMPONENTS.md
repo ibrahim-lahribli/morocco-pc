@@ -50,9 +50,13 @@ has `"use client"`.
   no tab stop. Three tones, each with its own word AND its own icon shape, so
   the states survive greyscale and a screen reader.
 - **ProgressBar** is a `div[role="progressbar"]` with an explicit `aria-label`
-  (the sentence that says WHAT is being measured), the real `aria-valuenow`
-  (104 % stays 104) and a fill clamped to 100 % so nothing paints outside the
-  rail.
+  (the sentence that says WHAT is being measured), an `aria-valuenow` clamped to
+  `[min, max]` and the real percentage in `aria-valuetext`, plus a fill clamped
+  to 100 % so nothing paints outside the rail. The clamp is not cosmetic: ARIA
+  forbids an out-of-range `aria-valuenow` and browsers clamp it in the
+  accessibility tree anyway (measured in review: 104 % of 10 000 was announced as
+  10 000), so passing the excess through `aria-valuetext` is the only way a
+  screen reader hears it.
 - **Skeleton** is `aria-hidden` decoration. Progress is announced by the
   screen's own live region, not by each shimmering rectangle.
 - **Alert** is a `div` whose role depends on tone: `error` is `role="alert"`
