@@ -52,6 +52,9 @@ const CORS_HEADERS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET,POST,OPTIONS",
   "access-control-allow-headers": "content-type,x-mock-state",
+  // Models the API (apps/api/src/app.js): a browser cannot read these
+  // otherwise, so the 429 countdown and the 500 reference would look broken.
+  "access-control-expose-headers": "retry-after,x-request-id",
 };
 
 function send(res, status, body, headers = {}) {

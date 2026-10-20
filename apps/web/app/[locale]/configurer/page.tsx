@@ -70,7 +70,6 @@ export default async function ConfigurerPage({
     next: t("next"),
     back: t("back"),
     finish: t("finish"),
-    submitNote: t("submitNote"),
     loading: t("loading"),
     optionsError: t("optionsError"),
     retry: t("retry"),
@@ -83,6 +82,21 @@ export default async function ConfigurerPage({
     budgetClampMin: t("budgetClampMin"),
     budgetClampMax: t("budgetClampMax"),
     storedNotApplied: t("storedNotApplied"),
+    submitAnnouncement: t("submitAnnouncement"),
+    submitProgressLabel: t("submitProgressLabel"),
+    submitProgressValueText: t("submitProgressValueText"),
+    submitElapsed: t("submitElapsed"),
+    errorTooLarge: t("errorTooLarge"),
+    errorRateLimited: t("errorRateLimited"),
+    errorRateLimitedNoWait: t("errorRateLimitedNoWait"),
+    errorUnavailable: t("errorUnavailable"),
+    errorServer: t("errorServer"),
+    errorRequestId: t("errorRequestId"),
+    errorFieldUnknown: t("errorFieldUnknown"),
+    // One raw read, because the numbers are data: a catalogue that grows a
+    // field must not need a code change, and an unknown one falls back in the
+    // component.
+    fieldErrors: t.raw("fieldErrors") as Record<string, string>,
     steps: {
       usage: { label: t("steps.usage.label"), legend: t("steps.usage.legend") },
       budget: { label: t("steps.budget.label"), legend: t("steps.budget.legend") },

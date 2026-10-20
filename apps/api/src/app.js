@@ -238,7 +238,17 @@ function buildApp(options) {
   app.decorate('engineVersion', opts.engineVersion || env.ENGINE_VERSION || 'dev');
 
   const origins = parseOrigins(env.ALLOWED_ORIGINS);
-  app.register(cors, { origin: origins.length > 0 ? origins : false });
+  app.register(cors, {
+    origin: origins.length > 0 ? origins : false,
+    // A browser can only read a NON-simple response header when the server
+    // lists it here. Without these two, a cross-origin web client cannot see
+    // `Retry-After` (the 429 countdown, V10) or `X-Request-Id` (the support
+    // handle on a 500) at all: `fetch` returns them as null, which looks
+    // exactly like the API never sending them. `request_id` in the error
+    // BODY still works either way; the header is what a proxy or an
+    // intermediary sets, so both paths have to reach the client.
+    exposedHeaders: ['Retry-After', 'X-Request-Id'],
+  });
   app.register(rateLimit, { global: false });
   app.register(swagger, {
     openapi: {

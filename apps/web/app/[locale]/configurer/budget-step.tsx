@@ -47,9 +47,11 @@ export interface BudgetStepProps {
   copy: WizardCopy;
   locale: AppLocale;
   onCommit: (value: number | undefined) => void;
+  /** A sentence the service sent back about this field (S10's 422). */
+  serverError?: string;
 }
 
-export function BudgetStep({ saved, copy, locale, onCommit }: BudgetStepProps) {
+export function BudgetStep({ saved, copy, locale, onCommit, serverError }: BudgetStepProps) {
   // The draft is the only local state: what the user has typed, which may be a
   // half-finished number or out of range. It becomes an answer only through
   // `onCommit`, and only when it is an integer inside the range.
@@ -118,7 +120,12 @@ export function BudgetStep({ saved, copy, locale, onCommit }: BudgetStepProps) {
           autoComplete="off"
           value={draft}
           hint={fill(copy.budgetHint, bounds)}
-          error={touched && parsed === null ? fill(copy.budgetError, bounds) : undefined}
+          // The service's refusal wins over the local message: it is the newer
+          // fact, and `TextField` shows one sentence rather than two.
+          error={
+            serverError ??
+            (touched && parsed === null ? fill(copy.budgetError, bounds) : undefined)
+          }
           onChange={(event) => {
             const raw = event.target.value;
             setDraft(raw);

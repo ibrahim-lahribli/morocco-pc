@@ -127,6 +127,25 @@ decides its length will have to rewrite what it just said.
 When a question IS asked but the contract does not say the answer is read, the caveat goes on the
 group as its `hint` — `ChoiceGroup` already renders that as `aria-describedby`, so the question and
 the caveat are one utterance for a screen reader instead of two unrelated sentences.
+## The submit states (S10)
+
+The last step's button posts the body `toRequest()` describes, and `SubmitPanel` renders what comes
+back. Two rules are worth keeping.
+
+**One action.** A failure turns the primary button into "Réessayer" rather than adding a second
+retry control: the countdown applies to the one button the user is already looking at. The failure
+kinds are `fields | too-large | rate-limited | unavailable | server` (`lib/wizard/submit.ts`), and
+the words for each live in the catalogue, never in the component.
+
+**The bar does not predict.** `POST` reports nothing until it answers, so the progress bar moves
+only between the two observable facts — sent (50) and answered (100) — and carries that in
+`aria-valuetext`. The proof that the page is alive is the elapsed-seconds caption, which is a real
+measurement. A bar that creeps toward 90 % would be a number nobody can check, which is the same
+reason `budget_floor` is never invented and a NULL price is never drawn as `0`.
+
+`ChoiceGroup` grew an `error` prop for the 422 case, with the kit's existing rule applied: an error
+beats the hint, so `aria-describedby` points at the fix rather than at two competing sentences,
+and the group's selection is never cleared.
 ## Money is formatted, not typed
 
 Every amount on the proof sheet goes through `formatMoney` from

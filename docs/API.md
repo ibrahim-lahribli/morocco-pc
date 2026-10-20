@@ -824,6 +824,11 @@ One envelope for every non-2xx body:
 }
 ```
 
+Cross-origin clients need two of these headers and the CORS safelist does not include them, so
+the API lists `Retry-After` and `X-Request-Id` in `Access-Control-Expose-Headers`: without that
+a browser's `fetch` returns both as null, and a 429 countdown or a support handle silently
+disappears even though the server sent them. `apps/api/test/unit/cors.test.js` pins it.
+
 `INTERNAL_ERROR` returns a generic message plus `request_id` and **never** echoes
 the underlying error, which can carry a SQL fragment or a host; the detail is
 logged under that same request id. `NOT_FOUND` never reveals whether an id

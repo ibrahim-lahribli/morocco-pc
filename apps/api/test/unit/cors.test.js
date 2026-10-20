@@ -66,6 +66,29 @@ test('an allowed origin is echoed exactly, and its preflight succeeds', async ()
   assert.match(options.headers['access-control-allow-headers'], /content-type/, 'and the request headers');
 });
 
+test('the headers a browser must READ are exposed, not just the ones it may send', async () => {
+  // A browser filters response headers: only the CORS-safelisted ones are
+  // readable unless `Access-Control-Expose-Headers` names the rest. The 429
+  // countdown (V10) and the 500 support handle are both HEADERS, so without
+  // this a cross-origin client sees null and silently degrades to a plain
+  // retry - which is what S10 found the first time it rendered the countdown.
+  const app = stub.createTestApp({ env: { ALLOWED_ORIGINS: ALLOWED } });
+
+  const response = await app.inject({ method: 'GET', url: '/v1/health', headers: { origin: ALLOWED } });
+  const exposed = String(response.headers['access-control-expose-headers'] ?? '').toLowerCase();
+  assert.match(exposed, /retry-after/, 'the 429 countdown needs Retry-After');
+  assert.match(exposed, /x-request-id/, 'the support handle needs X-Request-Id');
+
+  // And a disallowed origin is granted nothing it could read either: the
+  // expose header rides on the ACAO decision, it does not stand alone.
+  const other = await app.inject({
+    method: 'GET',
+    url: '/v1/health',
+    headers: { origin: 'https://evil.example' },
+  });
+  assert.equal(other.headers['access-control-allow-origin'], undefined);
+});
+
 test('a disallowed origin gets NO ACAO header, and the request is still served', async () => {
   const app = stub.createTestApp({ env: { ALLOWED_ORIGINS: ALLOWED } });
 

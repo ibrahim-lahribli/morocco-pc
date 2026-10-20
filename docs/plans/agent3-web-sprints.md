@@ -468,6 +468,73 @@ and a latency budget that reflects measured reality (V1).
 4. Zero-build 200 → navigates to `/fr/config/[id]` zero-build state.
 5. Double-tap submit sends exactly one request (idempotent UX).
 
+**Status: DONE 2026-10-20 — as built.** The last step is now a request, and the screen owns
+everything that can happen to one. Three decisions did the work.
+
+**Validation mirrors the CONTRACT, not the wizard.** `lib/wizard/submit.ts` `validateRequest()` is
+a copy of `apps/api/src/contracts/recommendations.js`: `budget_amount` is a NUMBER (0 < n <= 1 000
+000), `currency` is exactly three characters, `use_case` non-empty, `priority` an integer 1..5,
+unknown fields REJECTED by name. The wizard's own narrowing (500 MAD floor, priorities 1/3/5) is
+stricter and lives in `model.ts` — deliberately, because this check is the last line before the
+wire and must agree with the thing that will judge it. Scenario 1 is a unit test: a body carrying
+`"7300"` never reaches the network and is reported exactly like the 422 it would have been.
+
+**Every failure is a MEANING.** `mapSubmitFailure()` returns one of five states — field refusal,
+too large, rate limited, unavailable, server — so no component switches on a status code and
+forgets 503. Two mappings are judgement calls: a NETWORK failure is `unavailable` (from the user's
+seat an outage and a dropped connection are the same event, and both deserve a retry), and a 422
+with no `details[]` is still a field failure with an EMPTY list, so the screen falls back to its
+general sentence instead of inventing which field was wrong. A 422 that names a field moves the
+user BACK to the step that owns it (`stepForField`), renders the sentence under that control and
+focuses it: a message about a screen three steps away is a message nobody can act on. `currency`
+has no control anywhere (the wizard fixes it to MAD), so it is the one refusal that is a sentence
+instead of a jump.
+
+**One action, not two.** After a failure the primary button becomes "Réessayer" and re-posts; a
+second retry control beside it would be one request behind two buttons, and the user would have to
+guess which one a countdown applied to. A 429 disables that button for exactly the seconds the API
+gave in `Retry-After`, counts them down in the API's own number (formatted by `lib/i18n/format.ts`,
+never typed), and says "Réessayez dans un instant" once the number runs out rather than leaving a
+stale 0.
+
+**The progress bar does not predict.** `POST` is one request with no progress channel, so a
+creeping percentage would be invented. The bar moves only between the two facts the client can
+observe — request handed to the network (50), answer received (100) — and says so in
+`aria-valuetext`, which is what a screen reader reads instead of the number. What proves the page
+is alive is the CLOCK: a real elapsed-seconds caption under the bar, which is a fact. That pairing
+is the honest reading of "determinate progress". The polite `role="status"` line exists before the
+text it announces (a live region mounted with its message is a coin toss), errors go through
+`Alert`'s `role="alert"`, and success needs no announcement because it is a navigation — the
+router announces the new page.
+
+A double submit is stopped by a REF, not by state: two clicks in one tick both see the button
+enabled, so only a synchronous guard holds the line. A zero-build 200 navigates like any other
+result (V2 — S14 owns what that page then says).
+
+**Two things were added that the DoD did not name.** (1) `/fr/config/[id]` — a hand-off page, not
+the results page: it shows the id the POST produced and says the detailed screen is the next step,
+`noindex`, dynamic by construction. Without it S10 would hand a user who just pressed the primary
+button a 404 on success. S11 replaces it wholesale. (2) An API change, because a browser could not
+read the header this sprint depends on: `apps/api/src/app.js` now lists `Retry-After` and
+`X-Request-Id` in CORS `exposedHeaders`. Chrome filters non-safelisted response headers on a
+cross-origin fetch, so without it `retryAfterSeconds` is null and the countdown silently degrades
+to a plain retry — the first 429 spec failed for exactly that reason, against a mock that had not
+modelled the header either. The mock and the specs now send it, and `apps/api/test/unit/cors.test.js`
+pins it on the server side.
+
+Measured: **114/114** Playwright specs (10 submit plus 7 model checks added), `check:tokens` 33
+files, `check:i18n` 31 files, `typecheck`/`lint`/`build` exit 0 (`/fr/configurer` still ● SSG,
+`/fr/config/[id]` reported ƒ Dynamic), `npm run test:api` 112 pass with the new CORS assertion.
+Budget note, unchanged and still open (V1): the 300 ms claim is measured in the spec, the 15 s P95
+is NOT — there is no staging origin, so nothing here reports a latency number as a fact, and the
+3 s target stays recorded as pending API/engine work rather than as a gate.
+
+One deviation from the scenario text, recorded rather than hidden: scenario 2 describes an 8 s slow
+mock and the spec delays 2.5 s. Nothing in the state machine is time-dependent — the progress block
+is asserted under 300 ms, the bar carries no fake percentage, and the clock is pinned at one second
+and two seconds — so eight seconds would only lengthen the suite. If a real timeout ever enters the
+code, the 15 s budget above is where it belongs, not in a test fixture.
+
 ### Phase W2 — Results
 
 #### S11 — Results page: SSR + strategy cards + component list + budget bar (2 h)

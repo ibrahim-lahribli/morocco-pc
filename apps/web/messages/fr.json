@@ -32,7 +32,6 @@
     "next": "Suivant",
     "back": "Retour",
     "finish": "Voir mes configurations",
-    "submitNote": "La génération des configurations n'est pas encore disponible.",
     "loading": "Chargement des options…",
     "optionsError": "Les options n'ont pas pu être chargées. Vérifiez votre connexion, puis réessayez.",
     "retry": "Réessayer",
@@ -44,6 +43,24 @@
     "budgetSnapNote": "Le curseur avance par paliers de {step} DH : il s'arrête sur {snapped}, tandis que {exact} reste le montant retenu.",
     "budgetClampMin": "Le minimum est {min} : le montant a été ramené à {min}.",
     "budgetClampMax": "Le maximum est {max} : le montant a été ramené à {max}.",
+    "submitAnnouncement": "Recherche des configurations en cours…",
+    "submitProgressLabel": "Recherche des configurations",
+    "submitProgressValueText": "Demande envoyée, réponse en attente",
+    "submitElapsed": "Depuis {seconds} s",
+    "errorTooLarge": "La demande est trop volumineuse pour être acceptée. Réessayez dans un instant.",
+    "errorRateLimited": "Trop de demandes en peu de temps. Réessayez dans {seconds} s.",
+    "errorRateLimitedNoWait": "Trop de demandes en peu de temps. Réessayez dans un instant.",
+    "errorUnavailable": "Le service est momentanément indisponible. Réessayez dans un instant.",
+    "errorServer": "Une erreur inattendue s'est produite. Réessayez ; si elle persiste, signalez la référence ci-dessous.",
+    "errorRequestId": "Référence : {id}",
+    "errorFieldUnknown": "Une valeur de votre demande a été refusée. Vérifiez vos réponses.",
+    "fieldErrors": {
+      "budget_amount": "Le budget a été refusé. Vérifiez le montant.",
+      "currency": "La devise de la demande n'est pas acceptée.",
+      "use_case": "Cet usage n'a pas été reconnu par le service. Choisissez-en un autre.",
+      "resolution": "Cette résolution n'a pas été reconnue. Choisissez-en une autre.",
+      "priority": "Cette priorité n'a pas été reconnue. Choisissez-en une autre."
+    },
     "storedNotApplied": "Ce choix est enregistré, mais il ne change pas encore les configurations proposées.",
     "steps": {
       "usage": {
@@ -63,5 +80,12 @@
         "legend": "Qu'est-ce qui compte le plus ?"
       }
     }
+  },
+  "result": {
+    "title": "Votre configuration",
+    "stored": "Votre demande est enregistrée.",
+    "pending": "L'écran détaillé des configurations arrive à l'étape suivante.",
+    "idLabel": "Identifiant",
+    "back": "Revenir au configurateur"
   }
 }

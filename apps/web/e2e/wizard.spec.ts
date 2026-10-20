@@ -159,10 +159,10 @@ test("Enter in the budget field advances, because the step is a form", async ({ 
   await expect(page).toHaveURL(/etape=resolution/);
 });
 
-test("the last step is honest: the action is disabled and says why", async ({ page }) => {
+test("the last step is real: the action submits, and the honest note is gone", async ({ page }) => {
   await serveMeta(page);
   await page.goto(
-    "/fr/configurer?etape=priority&use_case=GAMING&budget_amount=7300&resolution=1440p",
+    "/fr/configurer?etape=priority&use_case=GAMING&budget_amount=7300&resolution=1440p&priority=3",
   );
 
   await expect(page.getByText("Étape 4 sur 4")).toBeVisible();
@@ -170,11 +170,11 @@ test("the last step is honest: the action is disabled and says why", async ({ pa
     page.getByRole("group", { name: "Qu'est-ce qui compte le plus ?" }),
   ).toBeVisible();
 
-  // S10 owns the POST, so the action must not pretend: disabled, with the note.
-  await expect(page.getByRole("button", { name: "Voir mes configurations" })).toBeDisabled();
-  await expect(
-    page.getByText("La génération des configurations n'est pas encore disponible."),
-  ).toBeVisible();
+  // S10 wired the POST, so the action is a real button now — its request is
+  // `wizard-submit.spec.ts`'s subject, not this one's — and the placeholder
+  // note that said the feature was unavailable is gone rather than softened.
+  await expect(page.getByRole("button", { name: "Voir mes configurations" })).toBeEnabled();
+  await expect(page.getByText(/n'est pas encore disponible/)).toHaveCount(0);
 });
 
 test("a 503 from meta/options is a retryable message, never an empty form", async ({ page }) => {

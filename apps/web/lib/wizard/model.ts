@@ -257,6 +257,29 @@ export function normalizeAnswers(answers: Answers, applied: AppliedInputs = null
   };
 }
 
+/**
+ * The step that owns a contract field, or null when no control sets it.
+ *
+ * Used by a 422 (S10): the API names the field it refused, and the screen has
+ * to put the user where that field lives. `currency` has no answer here — the
+ * wizard fixes it to MAD — so it returns null and the failure is reported as a
+ * sentence instead of a jump.
+ */
+export function stepForField(field: string): WizardStep | null {
+  switch (field) {
+    case "use_case":
+      return "usage";
+    case "budget_amount":
+      return "budget";
+    case "resolution":
+      return "resolution";
+    case "priority":
+      return "priority";
+    default:
+      return null;
+  }
+}
+
 /** Whether one step's own answer is present and admissible. */
 export function isStepValid(step: WizardStep, answers: Answers): boolean {
   switch (step) {

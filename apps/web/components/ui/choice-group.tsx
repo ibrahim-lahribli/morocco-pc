@@ -38,6 +38,13 @@ export interface ChoiceGroupProps {
   onChange: (value: string) => void;
   /** Optional supporting sentence, announced with the group. */
   hint?: string;
+  /**
+   * Optional error sentence (S10). ERROR BEATS HINT, like `TextField`: while a
+   * field is refused, `aria-describedby` points at the fix rather than at two
+   * competing sentences. The group's own options stay untouched, so an error
+   * never clears a selection.
+   */
+  error?: string;
 }
 
 export function ChoiceGroup({
@@ -47,13 +54,20 @@ export function ChoiceGroup({
   value,
   onChange,
   hint,
+  error,
 }: ChoiceGroupProps) {
   const hintId = useId();
+  const errorId = useId();
+  const describedBy = error !== undefined ? errorId : hint === undefined ? undefined : hintId;
 
   return (
-    <fieldset aria-describedby={hint === undefined ? undefined : hintId}>
+    <fieldset aria-describedby={describedBy}>
       <legend className="text-body font-semibold text-ink">{legend}</legend>
-      {hint === undefined ? null : (
+      {error !== undefined ? (
+        <p id={errorId} className="mt-1 text-caption text-error">
+          {error}
+        </p>
+      ) : hint === undefined ? null : (
         <p id={hintId} className="mt-1 text-caption text-muted">
           {hint}
         </p>
