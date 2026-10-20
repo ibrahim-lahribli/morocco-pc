@@ -88,20 +88,29 @@ artifact, and each token group cites the exported screen it was measured on.
 
 Stitch's Export menu offers Preview (HTML + images), AI Studio, **Figma**, MCP (preview), Netlify,
 Lovable, Bolt, **zip.**, **Code to Clipboard**, **Project Brief** and **Stitch React App**. For S2
-only two matter: **zip.** (the whole project as HTML + assets, committed under `design/stitch/`)
-and **Code to Clipboard** (one screen's HTML/CSS, for per-frame measurements). *Project Brief*
-supplies intent and copy; *Stitch React App* and the hosting targets (Netlify / Lovable / Bolt) are
-reference only, because S3 owns those components. If the **MCP** export option yields a working
-endpoint, that would give agents the structural access `figma-context` was meant to provide —
-unverified today, so the zip remains the source of truth.
+the **MCP** endpoint matters first (verified below); **zip.** (the whole project as HTML + assets)
+and **Code to Clipboard** (one screen's HTML/CSS) are the fallbacks. *Project Brief* supplies intent
+and copy; *Stitch React App* and the hosting targets (Netlify / Lovable / Bolt) are reference only,
+because S3 owns those components.
 
-**Two unexplored paths, ranked (researched 2026-10-20).** (1) **Stitch MCP**: Stitch publishes an
-MCP setup page (`stitch.withgoogle.com/docs/mcp/setup`) and Google's design-to-code codelab shows
-an agent listing Stitch projects and fetching palette/typography with a Stitch API key — the direct
-replacement for `figma-context`. The endpoint itself was not readable from here, so it is UNVERIFIED
-until one connection succeeds. (2) **`DESIGN.md`**: a Stitch design-system document whose frontmatter
-is reported to carry token-grade values; prefer it when the project exports one, and use the zip's
-CSS as the implementation check rather than as the only source.
+**Access state: RESOLVED 2026-10-20 — the Stitch MCP is the source.** `https://stitch.googleapis.com/mcp`
+answers `initialize` and `tools/list` (15 tools) unauthenticated, and `tools/call` with a Stitch API
+key in an `X-Goog-Api-Key` header; without the key it is a 401 whose body names the missing
+credential. The design lives in `projects/3530106450258598180` ("ConfigPC Mobile Design System", 16
+screen instances, 12 listed). `get_screen` returns `htmlCode` and `screenshot` as download URLs that
+MUST be fetched WITH the same key header (401 without it) and answer `{ dataString }` — HTML, and
+base64 PNG. So S2 reads the design-system board screen (`e137bd84…`) over MCP: no zip, no Figma.
+
+The board already yields a CANDIDATE token map from its own `tailwind.config` block: primary
+`#3730A3` (soft `#EEF2FF`, hover `#312E81`), saffron `#F59E0B`/`#FEF3C7`, neutrals `#FAFAF9` /
+`#FFFFFF` / `#E7E5E4` / `#57534E` / `#1C1917`, success `#15803D`, warning `#B45309`, error
+`#B91C1C`, info `#1D4ED8`, WhatsApp `#075E54`, fonts Inter + IBM Plex Sans Arabic, `card-1`/`card-2`
+shadows and a 2px `#3730A3` focus ring. S2 still has to verify and convert these to OKLCH and to a
+committed token file — nothing here is a shipped token yet.
+
+**`DESIGN.md` does not exist for this project.** Its `designTheme` is empty and `list_design_systems`
+returns no systems, so the token truth is the screen HTML rather than a theme asset. (A downloaded
+screen is the only export that matters; the zip is now a convenience, not a requirement.)
 
 **Why Figma is NOT the source — measured three times on 2026-10-20 (08:14Z, 08:20Z, 10:26Z).**
 Every `get_figma_data` call on file `OwaMKYnDfH2AQqj7y0bn2H` / node `0:1` answered **429
@@ -113,9 +122,9 @@ document: the design was created in Stitch, and Figma was only an export destina
 the Figma retry S2's gate.** The key stays here as a dated record; nothing in this repo may cite a
 token value from it until a token exists.
 
-**The export is a human step.** It is run in Stitch; until the zip is committed, S2 stays blocked
-rather than inventing a palette. So the retry that replaces waiting is not another
-`get_figma_data` call — it is `unzip design/stitch/*.zip` and reading the CSS.
+**S2 is unblocked.** The only human step left is minting the Stitch API key; the extraction itself is
+`get_screen` over MCP. The scratch pull used for this verification is in `tmp/stitch/` (untracked); S2
+promotes it to `design/stitch/` together with the verified token map.
 
 The design work is a **two-pass review before code** (S2): EXTRACT the design from the
 Stitch export first, then critique the extraction against the principles below — before any
