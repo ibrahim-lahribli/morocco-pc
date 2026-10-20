@@ -1755,3 +1755,51 @@ shared ledger). It is not a test of the code under review. It went red the momen
 22 while shared sat at 20, stayed red across several dispatches, and flipped green from a
 DATABASE apply alone - the same lesson as "a merged branch does not move a database", seen from
 the other side. A red there means "read the two ledger tails", not "find the regression".
+## 2026-10-19 (5) - the remote is two branches, and the browser contract is proven DB-free
+
+**Repository state.** `git fetch --prune` + `git ls-remote --heads origin` now return exactly two
+heads: `master` (`e95e873`) and `frontend` (`245638d`). No tags exist. Master was fast-forwarded from
+`3f0c166` through the two commits that had only ever lived on `agent/shared-apply-021-022`
+(`d0f3222` the 021/022 shared apply, `e95e873` the green-run record) - a fast-forward, so the linear
+history is intact. Six branches were then deleted from the remote, each one proven an ancestor of
+the new master first (`agent/api-sentry-capture`, `agent/engine`, `agent/platform-status`,
+`agent/platforms`, `agent/shared-apply-021-022`, and the long
+`freebuff/review-and-web-design-guidelines-...` name); `agent/web` was never pushed and no longer
+exists. The frontend branch was renamed to `frontend` at its ORIGINAL commit, not rebased - it is
+based on `c8c16b9` and is 48 commits behind master, purely additive (`apps/web/`, a path-filtered
+`web-ci.yml`, `docs/plans/`), so a later rebase is expected to be conflict-free.
+
+**CI on the pushed tip, not inferred.** The push itself triggered run
+[39231281632](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39231281632) on
+`e95e873`: `unit-and-docs` success (12 steps, 0 failures), `recurring-gates` SKIPPED - the designed
+trigger split (schedule/dispatch only), so a push run skipping it is not a gap.
+
+**Gates before the push** (on the merged tree, only two files touched):
+`gen-decision-index --check` clean, `verify-docs` offline OK.
+
+**The browser contract, measured 2026-10-19 (DB-free, real `buildApp` + the unit stubs).** This is
+the platform half of "can the frontend talk to the API" - the frontend half is a separate branch and
+was NOT reviewed:
+
+- preflight `OPTIONS /v1/recommendations` from an allow-listed origin -> **204**, `ACAO` echoed
+  EXACTLY (never `*`);
+- `POST` from that origin -> **201** with `ACAO` present;
+- `POST` from a non-listed origin -> **201 with NO `ACAO`** - served, but unreadable cross-origin,
+  which is the intended posture (CORS is a browser policy, not authentication);
+- an invalid body -> **422 `VALIDATION_ERROR`** naming the field (`budget_amount: must be > 0`);
+- `/v1/docs/json` -> OpenAPI **3.0.3**, `info.version 1.5.0`, exactly seven paths:
+  `/v1/health`, `/v1/meta/options`, `/v1/presets`, `/v1/recommendations` (POST),
+  `/v1/recommendations/{id}` (GET), `/v1/catalog/products`, `/v1/catalog/products/{slug}`.
+
+**The finding that matters:** `apps/web` at `245638d` makes **no API call at all** -
+`git grep` finds no `fetch`, no client library, no API base URL anywhere under `apps/web/`. So the
+two apps have never spoken, and cannot be said to "communicate" yet; what IS verified is that the
+API will accept the browser once an origin exists to list. The first real test needs a deployed
+origin (P1 S1 Steps 7-9) and the web host added to `ALLOWED_ORIGINS`.
+
+**Doc fix in the same pass.** `docs/RECIPES/deploy-eu-colocation.md` §8.1 still said `fly.toml`
+"does not exist yet"; the file IS committed (PR #3, `8800422`) and reproduces the recipe block byte
+for byte (verified by diffing the two, CRLF-normalised).
+
+**Still open (unchanged by this pass):** no deployed origin, no hosting account, no Sentry DSN, no
+retailer. P1 S1 Steps 7-9, P1 S3's latency table, P2 S2 Step 4 and P3 S3/S4 remain owner-gated.

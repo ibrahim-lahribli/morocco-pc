@@ -215,8 +215,9 @@ difference.
 
 ### 8.1 The app definition
 
-`fly.toml` does not exist yet. Create it at the repository root with exactly this content (it is
-committed by step 9):
+`fly.toml` is COMMITTED at the repository root (2026-10-19) and reproduces the block below byte for
+byte, so §8.1 is a verification step: diff the file against this block rather than retyping it. (It
+was authored here and landed with PR #3, `8800422`.)
 
 ```toml
 app = "morocco-pc-api"

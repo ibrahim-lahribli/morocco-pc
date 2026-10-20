@@ -75,6 +75,15 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
   monitoring account. *P3 S2 Step 5* and the `verify-migrations-replay` red are DONE 2026-10-19
   (shared ledger 22 + the production role), and *P3 S1* is merged and measured on `master`.
 
+**The host itself is still unchosen, and that is the root of every item above.** P1 S1 Steps 7-9 need
+a hosting account, and `fly.toml` is written for Fly.io, which is a PAID service - so the committed
+config is a candidate, not a decision. Two constraints bound the choice, both already in the runbook:
+the API needs the repository root as its Docker context (`apps/api/Dockerfile` imports the engine),
+and the latency sprints need an ALWAYS-ON instance - `fly.toml` sets `min_machines_running = 1`
+precisely because a machine that sleeps makes p95 meaningless, which rules out the free sleeping tiers
+(Render free spins down after 15 minutes) for the MEASUREMENT even though it is fine for development.
+§12 of the runbook (Render) is the documented non-Fly fallback; a free-tier survey was done 2026-10-19
+but the choice stays the owner's, so no host is written into this page as decided.
 **Startable now, no owner action (agent work):**
 - **P1 S4** — DONE 2026-10-16 (Decision 47; implemented by S5). It no longer gates anything here.
 - **P1 S3** — its statement-count half is agent work against the TEST branch (as P1 S2's was); the latency table waits for P1 S1.
@@ -87,9 +96,12 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 ## The frontend track (its own branch, not this one)
 
 The frontend is NOT on this branch and must not be read as platform work that is "missing".
-`apps/web/` exists only on `freebuff/review-and-web-design-guidelines-tailwind-design-s-...`
-(commit `245638d`, 25 files: Next.js scaffold, `/fr` shell, its own CI workflow and the S1–S6
-sprint board); `agent/web` is currently identical to `master` and has never been pushed. What the
+`apps/web/` exists only on the **`frontend`** branch (`origin/frontend` at `245638d`; master is
+`e95e873`), 25 files: Next.js scaffold, `/fr` shell, its own CI workflow and the S1–S6
+sprint board. **Renamed 2026-10-19:** the old name was
+`freebuff/review-and-web-design-guidelines-tailwind-design-s-618a232c-...`; the six other merged
+remote branches were deleted the same day, after each was proven an ancestor of master. `agent/web`
+was never pushed and no longer exists on the remote. What the
 frontend consumes from here is the API contract, so the platform items that matter to it are four,
 and none of them is agent work left undone:
 
@@ -98,6 +110,15 @@ and none of them is agent work left undone:
 - **Catalogue exposure** — public but unlisted, `noindex` until prices are `VERIFIED` (P2 Sprint 3
   Step 7, decided 2026-10-18). The list response carries `offer_class` per product but NO
   `disclaimer` field, so a price grid built from it must render the disclaimer itself.
+- **CORS is already proven, DB-free (measured 2026-10-19).** Driven through the real app with the
+  stub collaborators: an allow-listed origin gets `ACAO` echoed EXACTLY on both the preflight (204)
+  and the served POST (201), a non-listed origin is still served but gets no `ACAO` header, and an
+  invalid body answers 422 `VALIDATION_ERROR` with a per-field `details` array. The served OpenAPI
+  document is 3.0.3 / `info.version 1.5.0` with exactly seven paths. So the browser contract is ready;
+  what is missing is an origin to list, not a capability. `apps/web` at `245638d` still makes NO API
+  call (no `fetch`/client library anywhere under `apps/web/`), so "can it talk to the API" is untested
+  on the frontend side by construction, and the two hosts must agree on `ALLOWED_ORIGINS` before the
+  first request is attempted.
 - **The POST contract review** invited before merge: dedupe (200 + `reused: true`) and presets
   (contract v1.4) change what the wizard may rely on.
 - **A write target that is not the TEST branch** — the Neon `frontend-dev` branch

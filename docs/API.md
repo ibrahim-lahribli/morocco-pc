@@ -886,8 +886,10 @@ profile id is captured before the query is deleted).
 
 ## Known limitations
 
-- **`test:api:db` is wired but unverified in CI** until a `workflow_dispatch` run
-  passes. Everything checkable locally is green.
+- **`test:api:db` is VERIFIED in CI since 2026-10-19**, on both a dispatched run and a push:
+  run 39120485573 answered `9 passed / 0 failed` on a GitHub runner, and dispatch run 39207745723
+  on `master` completed with every `recurring-gates` step PASS. What remains OPEN is the opposite
+  direction: the API has never been deployed, so no CI run has exercised it against a DEPLOYED origin.
 - **CI pins Node 22 with no matrix.** The API suites were verified locally on
   Node 22 and on the default Node 24; only 22 runs in CI.
 - **No pagination on `builds`.** The engine persists at most
