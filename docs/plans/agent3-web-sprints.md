@@ -27,14 +27,15 @@ locale, strict TS, Tailwind v4, and its own package manifest (OD4).
 4. Lighthouse smoke on `/fr` runs in CI (budgets added in S6).
 
 #### S2 — Design direction + design tokens (1.5 h)
-**Goal:** Turn the Figma design (registered in the plan §3) into Tailwind v4 CSS-first
+**Goal:** Turn the Stitch design (registered in the plan §3) into Tailwind v4 CSS-first
 `@theme` tokens — brand → semantic → component hierarchy — and critique the extraction against
 §3's principles before any component code. The frontend-design two-pass is now **EXTRACT →
 critique**, not invent → critique.
-**Depends on:** S1, and a READABLE Figma file (the plan §3 records the URL and its access state).
+**Depends on:** S1, and a readable DESIGN EXPORT (plan §3 records why the Figma copy is not it).
 **Definition of done:**
-- Palette, type scale, spacing, radii and component states are EXTRACTED from the Figma file
-  (node ids cited per token group) into an in-repo token map, and that extraction is critiqued
+- Palette, type scale, spacing, radii and component states are EXTRACTED from the Stitch export
+  (the exported screen cited per token group) into an in-repo token map, and that extraction
+  is critiqued
   against §3's principles before code is written.
 - `@theme` block defines semantic tokens (background, foreground, primary, muted, border, ring,
   radius, verified/warn) in OKLCH-compatible form; **no raw hex in components**.
@@ -47,11 +48,11 @@ critique**, not invent → critique.
 
 #### S3 — Base component kit + a11y primitives (2 h)
 **Goal:** The small accessible kit the wizard/results need — Button, TextField, Slider,
-ChoiceCard, Badge, ProgressBar, Skeleton, Alert — implemented to the Figma components, not
+ChoiceCard, Badge, ProgressBar, Skeleton, Alert — implemented to the Stitch components, not
 invented alongside them.
-**Depends on:** S2 (tokens) and the Figma frames for these eight components.
+**Depends on:** S2 (tokens) and the exported frames for these eight components.
 **Definition of done:**
-- Each component reproduces its Figma frame's states (default / hover / focus / disabled /
+- Each component reproduces its exported frame's states (default / hover / focus / disabled /
   error) with token-driven classes — no raw hex, no bespoke spacing — and the story route
   records a per-state visual diff against the frame.
 - Each component: variants via token-driven classes, `:focus-visible` ring, ≥ 44 px touch
@@ -85,6 +86,26 @@ mock server covering every contract state the web consumes — including the pro
 3. Drift check: mutate the snapshot → CI step goes red.
 4. Contract fields used anywhere in `apps/web/` are all present in the snapshot (grep gate for
    `inputs_applied`/`reasons`/`display_name` usage must route through the fallback layer).
+
+**Status: DONE 2026-10-20 — as built.** `npm run gen:api-types` generates `lib/api/schema.d.ts` from
+`apps/api/test/unit/openapi-v1.5.json`; `lib/api/client.ts` is the single fetch path (typed
+`ApiError`, `details[]`, `retryAfterSeconds`); `lib/api/compile-gate.ts` makes a contract
+regression a `tsc` failure; `mock/server.mjs` + `mock/fixtures.mjs` serve every state listed above
+plus the dedupe path, the zero-build-with-no-floor case and an open CORS policy; `check:api-types`
+runs in `web-ci.yml` between typecheck and build. Two deliberate deviations from this DoD:
+
+1. **The snapshot is not committed a second time.** It is the API's gated file, read in place. A copy
+   under `apps/web` would be two plausible contracts in one tree with nothing to say which one the
+   service serves — the exact hazard this repo keeps closing elsewhere.
+2. **Scenario 4's grep gate was not built, because a type gate subsumes it.** Every field the app can
+   reference now comes from `schema.d.ts`, so `inputs_applied`, `reasons` or a component
+   `display_name` is a COMPILE error (pinned by the `@ts-expect-error` probes in
+   `compile-gate.ts`), not something a text grep would have to notice. The V5 rule that catalogue
+   names come from `display_name` is asserted where it can actually regress: the contract spec
+   checks a recommendation body contains no `display_name`.
+
+Measured: 22/22 Playwright specs; the drift gate red on a mutated type file, a raised version and a
+changed path set, PASS after each restore.
 
 #### S5 — i18n skeleton + fonts (1.5 h)
 **Goal:** next-intl with fr default and an ar (RTL) locale shell, fr-MA formatting helpers,

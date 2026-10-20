@@ -27,10 +27,21 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    command: "npm run start",
-    url: "http://localhost:3210/fr",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  // Two servers for two jobs: the app under test (3210, needs a prior
+  // `npm run build`) and the fixture mock API (3211, zero deps). The mock is
+  // listed second so a failing app never hides a failing mock.
+  webServer: [
+    {
+      command: "npm run start",
+      url: "http://localhost:3210/fr",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      command: "npm run mock:api",
+      url: "http://localhost:3211/v1/health",
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+  ],
 });

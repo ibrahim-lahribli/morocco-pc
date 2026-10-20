@@ -31,6 +31,9 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      # S4 contract gate: fails when the committed types drift from the API snapshot,
+      # when the snapshot leaves 1.5.0, or when the path set changes.
+      - run: npm run check:api-types
       - run: npm run build
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium

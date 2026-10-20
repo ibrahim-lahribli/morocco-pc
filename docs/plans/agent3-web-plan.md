@@ -7,10 +7,12 @@ breakdown (S1–S26, each with its definition of done and test scenarios) lives 
 separate plan. Everything here is scoped to `apps/web/`, a standalone package with its own manifest
 and lockfile (OD4) that does not touch the engine or root CI (V14).
 
-**Status (2026-10-20).** PLAN REGISTERED, with the Figma design registered as the S2/S3 source
-(§3 — not yet readable: API rate-limited). **W0 has one sprint done (S1, green — measured in §6) and
-five not started (S2–S6); W1–W5 and the M3 gate are not started.** No `apps/web` code makes an API
-call yet, so nothing here has been exercised against a real API.
+**Status (2026-10-20).** PLAN REGISTERED, with the design registered as the S2/S3 source
+(§3 — Stitch, not Figma: the Figma copy is an unread export target). **W0 has two sprints done
+(S1 and S4, both green — measured in §6) and four not started (S2, S3, S5, S6); W1–W5 and the M3 gate are not started.**
+`apps/web` now HAS a typed client and a fixture mock server, so the contract is exercised
+end-to-end against fixtures; it has still never called a REAL API, because nothing is deployed
+(P1 Sprint 1 Steps 7–9).
 
 ## 1. Product shape and stack
 
@@ -77,24 +79,47 @@ referenced by no sprint and `OD3` is unused; they are not invented here.
 
 ## 3. Design direction
 
-**Design source (registered 2026-10-20).** The visual design lives in Figma:
-<https://www.figma.com/design/OwaMKYnDfH2AQqj7y0bn2H/Untitled?node-id=0-1> — file
-`OwaMKYnDfH2AQqj7y0bn2H`, node `0:1`. **S2 and S3 are DERIVED from that file, not invented
-next to it:** S2 extracts palette, type scale, spacing, radii and component states into
-`@theme` tokens, and S3 implements the eight kit components to their Figma frames.
+**Design source (CORRECTED 2026-10-20).** The visual design was created in **Google Stitch**,
+and Stitch is the S2/S3 source. **S2 and S3 are DERIVED from the Stitch export, not invented next
+to it:** S2 extracts palette, type scale, spacing, radii and component states from the exported
+HTML + CSS into `@theme` tokens, and S3 implements the eight kit components to their exported
+frames. Nothing under `apps/web/` imports the export: it lands in `design/stitch/` as a review
+artifact, and each token group cites the exported screen it was measured on.
 
-**Access state, measured TWICE on 2026-10-20 (08:14Z and 08:20Z).** Both `get_figma_data` calls
-on file `OwaMKYnDfH2AQqj7y0bn2H` / node `0:1` answered **429 rate-limited** (starter plan), the
-second with `retry after 63338` s — i.e. not before **2026-10-21T01:55Z**. The file has therefore
-**not been read**: no frame seen, no style listed, no token extracted. The source stays registered
-so the next session retries the SAME file key rather than re-deciding the design, and nothing in
-this repo may cite a token value from that file until one exists. The retry is one
-`get_figma_data(fileKey, nodeId)` call; what it must produce is S2's token map (palette, type
-scale, spacing, radii, component states — each with the node id it came from) plus S3's
-inventory of the eight kit components.
+Stitch's Export menu offers Preview (HTML + images), AI Studio, **Figma**, MCP (preview), Netlify,
+Lovable, Bolt, **zip.**, **Code to Clipboard**, **Project Brief** and **Stitch React App**. For S2
+only two matter: **zip.** (the whole project as HTML + assets, committed under `design/stitch/`)
+and **Code to Clipboard** (one screen's HTML/CSS, for per-frame measurements). *Project Brief*
+supplies intent and copy; *Stitch React App* and the hosting targets (Netlify / Lovable / Bolt) are
+reference only, because S3 owns those components. If the **MCP** export option yields a working
+endpoint, that would give agents the structural access `figma-context` was meant to provide —
+unverified today, so the zip remains the source of truth.
 
-The design work is a **two-pass review before code** (S2): EXTRACT the design from Figma first,
-then critique the extraction against the principles below — before any component is written.
+**Two unexplored paths, ranked (researched 2026-10-20).** (1) **Stitch MCP**: Stitch publishes an
+MCP setup page (`stitch.withgoogle.com/docs/mcp/setup`) and Google's design-to-code codelab shows
+an agent listing Stitch projects and fetching palette/typography with a Stitch API key — the direct
+replacement for `figma-context`. The endpoint itself was not readable from here, so it is UNVERIFIED
+until one connection succeeds. (2) **`DESIGN.md`**: a Stitch design-system document whose frontmatter
+is reported to carry token-grade values; prefer it when the project exports one, and use the zip's
+CSS as the implementation check rather than as the only source.
+
+**Why Figma is NOT the source — measured three times on 2026-10-20 (08:14Z, 08:20Z, 10:26Z).**
+Every `get_figma_data` call on file `OwaMKYnDfH2AQqj7y0bn2H` / node `0:1` answered **429
+rate-limited** (starter plan), most recently with `retry after 55861` s. The token itself is
+accepted — a bad token is 403, not 429 — so this is a quota, not a credentials defect, and waiting
+it out costs up to a day per attempt. The registered file is also titled **"Untitled" at node
+`0:1`**, the default page of a newly created file, so a successful retry may return an EMPTY
+document: the design was created in Stitch, and Figma was only an export destination. **Do not make
+the Figma retry S2's gate.** The key stays here as a dated record; nothing in this repo may cite a
+token value from it until a token exists.
+
+**The export is a human step.** It is run in Stitch; until the zip is committed, S2 stays blocked
+rather than inventing a palette. So the retry that replaces waiting is not another
+`get_figma_data` call — it is `unzip design/stitch/*.zip` and reading the CSS.
+
+The design work is a **two-pass review before code** (S2): EXTRACT the design from the
+Stitch export first, then critique the extraction against the principles below — before any
+component is written.
 
 Those principles, and they are the checklist S2 is graded against:
 
@@ -121,11 +146,18 @@ Those principles, and they are the checklist S2 is graded against:
 Scaffold; CI (lint, typecheck, Playwright at a **360 px** viewport, Lighthouse CI budgets); mock
 server built from fixtures; design tokens; i18n skeleton; Latin + Arabic font subsets.
 
-**Today:** S1 done; S2–S6 not started, and **S2 is blocked on reading the Figma file** (§3).
-What exists: `next build`, `eslint`, `tsc --noEmit` and the 3
+**Today:** S1 and S4 done; S2, S3, S5 and S6 not started, and **S2 is blocked on the design
+export** (§3). What exists: `next build`, `eslint`, `tsc --noEmit`, `check:api-types` and the 22
 Playwright specs all pass, Tailwind compiles real utilities, and `web-ci.yml` runs lint → typecheck →
-build → Playwright path-filtered to `apps/web/**` and itself. What does not: Lighthouse CI budgets,
-the fixture mock server, the typed client, the token system (today's tokens are create-next-app
+**check:api-types** → build → Playwright, path-filtered to `apps/web/**` and itself.
+
+S4's pieces: `lib/api/schema.d.ts` (generated, committed), `lib/api/client.ts` (the one fetch path),
+`lib/api/compile-gate.ts` (contract probes that only `tsc` can see), `mock/server.mjs` +
+`mock/fixtures.mjs` (zero-dependency, every contract state) and `scripts/check-api-types.mjs` (the
+drift gate). The snapshot is NOT copied into `apps/web`: the generator reads the API's own gated
+`apps/api/test/unit/openapi-v1.5.json`, so the tree keeps ONE contract instead of two.
+
+What does not exist yet: Lighthouse CI budgets, the token system (today's tokens are create-next-app
 defaults), the component kit, `next-intl` and the Arabic subset (only Latin Geist is loaded).
 
 ### W1 — wizard
@@ -200,8 +232,25 @@ Run in `apps/web` on the rebased branch, Node 24 locally (CI pins 22):
 | `npm run build` | exit 0 — `next build` (Turbopack), 5/5 static pages, **no CSS parse warning** |
 | `npm run lint` | exit 0 — 0 errors, 1 warning (`postcss.config.mjs` anonymous default export) |
 | `npm run typecheck` | exit 0, and also exit 0 with `next-env.d.ts` removed (the clean-CI order is safe) |
-| `npm test` (Playwright, 360×800) | 3/3 pass — shell renders with no horizontal scroll, `/` redirects to `/fr`, skip link takes focus and moves to `#main` |
+| `npm run check:api-types` | exit 0 — contract 1.5.0, 7 paths, `schema.d.ts` byte-identical to the generator |
+| `npm test` (Playwright, 360×800) | 22/22 pass — the 3 shell specs above, plus S4's 19: every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, and one for a non-JSON 200 |
 | Tailwind actually processed | yes — the emitted CSS chunk contains `text-2xl`, `mx-auto`, `max-w-5xl`, `sr-only` and the `focus:` variants |
+
+**S4's evidence (2026-10-20).** The drift gate was proven RED four ways and restored to PASS after
+each: a hand-edited `schema.d.ts` (stale types, named at the first differing line), a MUTATED
+SNAPSHOT (the sprint DoD's literal scenario — red at line 438, with the fix named), a raised
+`EXPECTED_VERSION` (the snapshot is 1.5.0), and a removed `EXPECTED_PATHS` entry (a path set that
+changed). The comparison normalizes line endings, because this box runs `core.autocrlf=true` and a
+CRLF checkout of the same content is not drift: proven PASS on a CRLF copy and FAIL on a CRLF copy
+with one changed line, and `.gitattributes` pins `schema.d.ts` to LF so the artifact stays stable.
+The contract spec drives the SHIPPING client, not a second implementation: 201 (both
+`price_status` values, both `offer_class` values), 200 dedupe (`reused: true`), zero-build with a
+computed floor, zero-build with a `null` floor and `missing_roles`, 422 with `details[]`, 413, 429
+(`retryAfterSeconds` from `Retry-After`), 503, slow mode, and an unreachable API as
+`NETWORK_ERROR` rather than a crash. A 19th spec pins the FIXTURES' own arithmetic — a build's
+`total_price` equals its components' sum, a floor repeats the response budget, and `strategy_key`
+is a Decision 41 archetype — after review found `PRICE` (not a key) and two totals that did not add
+up.
 
 **Superseded finding.** This file previously held only one section, §2.5, reporting that the scaffold
 had **no Tailwind v4 integration**: no `@tailwindcss/postcss`, no `postcss.config.*`, and a build that
@@ -215,8 +264,14 @@ it.
 
 - **No web host is chosen.** Hosting "close to users" is a requirement without a decision, and it
   gates the M3 staging run.
-- **`/v1/docs/json` is the only contract source**, and the web package has no committed snapshot
-  yet — S4's drift gate cannot exist until it does.
-- **`apps/web` has never spoken to the API.** There is no fetch, no client library and no API base
-  URL in the package, so "the frontend talks to the API" is unproven by construction, not merely
-  unverified.
+- **`/v1/docs/json` is the only contract source, and it is pinned one level up.** S4 generates the
+  client types from the API's committed `apps/api/test/unit/openapi-v1.5.json` rather than copying it
+  into `apps/web`, so the tree holds one contract; the cost is that the web package's drift gate
+  reads a sibling package's file and cannot run from `apps/web` alone.
+- **The pinned contract can still be BEHIND the deployed one.** The gate compares the snapshot to the
+  generated types, never to a running service; a deployed API one version ahead is invisible to it.
+  Comparison-before-first-request is a P1 item (a deployed origin), not an S4 defect.
+- **`apps/web` has never spoken to a DEPLOYED API.** Since S4 there is a client, a base-URL
+  environment variable (`NEXT_PUBLIC_API_BASE_URL`) and 19 specs (6 driving the client, 13 driving the mock) — but all of them
+  point at the local fixture mock. No real origin exists to call, so CORS-to-server, real latency and
+  real 429 behaviour are unproven rather than merely untested.

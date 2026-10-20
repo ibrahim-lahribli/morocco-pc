@@ -115,10 +115,12 @@ and none of them is agent work left undone:
   and the served POST (201), a non-listed origin is still served but gets no `ACAO` header, and an
   invalid body answers 422 `VALIDATION_ERROR` with a per-field `details` array. The served OpenAPI
   document is 3.0.3 / `info.version 1.5.0` with exactly seven paths. So the browser contract is ready;
-  what is missing is an origin to list, not a capability. `apps/web` at `245638d` still makes NO API
-  call (no `fetch`/client library anywhere under `apps/web/`), so "can it talk to the API" is untested
-  on the frontend side by construction, and the two hosts must agree on `ALLOWED_ORIGINS` before the
-  first request is attempted.
+  what is missing is an origin to list, not a capability. `apps/web` at `245638d` made NO API call
+  (no `fetch`/client library anywhere under `apps/web/`); **S4 (2026-10-20, on the `frontend`
+  branch) closed that half** — a typed client generated from this API's committed 1.5.0 snapshot, a
+  fixture mock, and 19 specs (6 driving the client, 13 driving the mock)
+  against it. What S4 cannot prove is anything that needs a real server, so the two hosts must still agree on `ALLOWED_ORIGINS` before the first real
+  request, and "can it talk to the API" stays UNVERIFIED until one is attempted.
 - **The POST contract review** invited before merge: dedupe (200 + `reused: true`) and presets
   (contract v1.4) change what the wizard may rely on.
 - **A write target that is not the TEST branch** — the Neon `frontend-dev` branch

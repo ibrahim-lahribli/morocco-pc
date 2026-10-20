@@ -14,3 +14,5 @@ AGENTS.md text eol=lf
 *.js text eol=lf
 *.yml text eol=lf
 *.json text eol=lf
+# A GENERATED artifact compared byte-for-byte by apps/web/scripts/check-api-types.mjs.
+apps/web/lib/api/schema.d.ts text eol=lf
