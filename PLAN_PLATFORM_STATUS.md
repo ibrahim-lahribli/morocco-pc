@@ -96,8 +96,8 @@ but the choice stays the owner's, so no host is written into this page as decide
 ## The frontend track (its own branch, not this one)
 
 The frontend is NOT on this branch and must not be read as platform work that is "missing".
-`apps/web/` exists only on the **`frontend`** branch (`origin/frontend` at `245638d`; master is
-`e95e873`), 25 files: Next.js scaffold, `/fr` shell, its own CI workflow and the S1–S6
+`apps/web/` exists only on the **`frontend`** branch (`origin/frontend` at `245638d`; the LOCAL branch is
+rebased onto master `992558c` as `e784add` and is **not pushed**), 25 files: Next.js scaffold, `/fr` shell, its own CI workflow and the S1–S6
 sprint board. **Renamed 2026-10-19:** the old name was
 `freebuff/review-and-web-design-guidelines-tailwind-design-s-618a232c-...`; the six other merged
 remote branches were deleted the same day, after each was proven an ancestor of master. `agent/web`
@@ -126,9 +126,13 @@ and none of them is agent work left undone:
   leaves an unmarked `recommendation_query` row and `eval:scenarios` refuses to run while one
   exists.
 
-The frontend branch carries one open defect of its own, and it is NOT a platform item: its
-Tailwind v4 build has no PostCSS (or Turbopack) integration wired, so `@theme` is never
-processed — recorded in `docs/plans/agent3-web-plan.md` §2.5 on that branch.
+The Tailwind defect that used to be listed here is **SUPERSEDED (2026-10-20, measured)**: the
+committed scaffold ships `postcss.config.mjs` registering `@tailwindcss/postcss`, and `next build`
+emits real Tailwind utilities (`text-2xl`, `mx-auto`, `sr-only`) with no CSS warning, while lint,
+typecheck and the 3 Playwright specs pass. The old claim ("no PostCSS or Turbopack integration
+wired, so `@theme` is never processed") described an uncommitted working tree, not the branch. The
+frontend's real open items are the unfunded W0 sprints and the unchosen web host - see the plan
+file's §6 and §7 on that branch.
 
 ## Register sync
 
