@@ -7,7 +7,8 @@ breakdown (S1–S26, each with its definition of done and test scenarios) lives 
 separate plan. Everything here is scoped to `apps/web/`, a standalone package with its own manifest
 and lockfile (OD4) that does not touch the engine or root CI (V14).
 
-**Status (2026-10-20).** PLAN REGISTERED. **W0 has one sprint done (S1, green — measured in §6) and
+**Status (2026-10-20).** PLAN REGISTERED, with the Figma design registered as the S2/S3 source
+(§3 — not yet readable: API rate-limited). **W0 has one sprint done (S1, green — measured in §6) and
 five not started (S2–S6); W1–W5 and the M3 gate are not started.** No `apps/web` code makes an API
 call yet, so nothing here has been exercised against a real API.
 
@@ -76,8 +77,20 @@ referenced by no sprint and `OD3` is unused; they are not invented here.
 
 ## 3. Design direction
 
-The design work is a **two-pass review before code** (S2): a written plan first — palette hex values,
-type roles, wireframes, principles — critiqued against the principles below, then implemented.
+**Design source (registered 2026-10-20).** The visual design lives in Figma:
+<https://www.figma.com/design/OwaMKYnDfH2AQqj7y0bn2H/Untitled?node-id=0-1> — file
+`OwaMKYnDfH2AQqj7y0bn2H`, node `0:1`. **S2 and S3 are DERIVED from that file, not invented
+next to it:** S2 extracts palette, type scale, spacing, radii and component states into
+`@theme` tokens, and S3 implements the eight kit components to their Figma frames.
+
+**Access state, measured 2026-10-20:** the Figma REST API answered **429 rate-limited** (starter
+plan, retry window ~17 h), so the file has **not been read** and no token has been extracted.
+The source is registered so the next session reads it instead of re-deciding the design; the
+first S2 action is a successful fetch, and nothing in this repo may cite a token value from
+that file until one exists.
+
+The design work is a **two-pass review before code** (S2): EXTRACT the design from Figma first,
+then critique the extraction against the principles below — before any component is written.
 
 Those principles, and they are the checklist S2 is graded against:
 
@@ -104,7 +117,8 @@ Those principles, and they are the checklist S2 is graded against:
 Scaffold; CI (lint, typecheck, Playwright at a **360 px** viewport, Lighthouse CI budgets); mock
 server built from fixtures; design tokens; i18n skeleton; Latin + Arabic font subsets.
 
-**Today:** S1 done, S2–S6 not started. What exists: `next build`, `eslint`, `tsc --noEmit` and the 3
+**Today:** S1 done; S2–S6 not started, and **S2 is blocked on reading the Figma file** (§3).
+What exists: `next build`, `eslint`, `tsc --noEmit` and the 3
 Playwright specs all pass, Tailwind compiles real utilities, and `web-ci.yml` runs lint → typecheck →
 build → Playwright path-filtered to `apps/web/**` and itself. What does not: Lighthouse CI budgets,
 the fixture mock server, the typed client, the token system (today's tokens are create-next-app

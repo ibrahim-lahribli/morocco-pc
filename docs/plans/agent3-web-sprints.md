@@ -27,12 +27,15 @@ locale, strict TS, Tailwind v4, and its own package manifest (OD4).
 4. Lighthouse smoke on `/fr` runs in CI (budgets added in S6).
 
 #### S2 — Design direction + design tokens (1.5 h)
-**Goal:** The two-pass design plan (§3) reviewed against the brief and implemented as Tailwind
-v4 CSS-first `@theme` tokens — brand → semantic → component hierarchy.
-**Depends on:** S1
+**Goal:** Turn the Figma design (registered in the plan §3) into Tailwind v4 CSS-first
+`@theme` tokens — brand → semantic → component hierarchy — and critique the extraction against
+§3's principles before any component code. The frontend-design two-pass is now **EXTRACT →
+critique**, not invent → critique.
+**Depends on:** S1, and a READABLE Figma file (the plan §3 records the URL and its access state).
 **Definition of done:**
-- Written design plan (palette hex values, type roles, wireframes, principles) exists in-repo
-  and has been critiqued against §3's principles before code (frontend-design two-pass).
+- Palette, type scale, spacing, radii and component states are EXTRACTED from the Figma file
+  (node ids cited per token group) into an in-repo token map, and that extraction is critiqued
+  against §3's principles before code is written.
 - `@theme` block defines semantic tokens (background, foreground, primary, muted, border, ring,
   radius, verified/warn) in OKLCH-compatible form; **no raw hex in components**.
 - Logical-properties policy documented and applied in base styles (RTL-safe).
@@ -43,10 +46,14 @@ v4 CSS-first `@theme` tokens — brand → semantic → component hierarchy.
 3. `dir="rtl"` on the sample page mirrors layout correctly (no physical `left/right` classes).
 
 #### S3 — Base component kit + a11y primitives (2 h)
-**Goal:** The small accessible kit the wizard/results need: Button, TextField, Slider,
-ChoiceCard, Badge, ProgressBar, Skeleton, Alert.
-**Depends on:** S2
+**Goal:** The small accessible kit the wizard/results need — Button, TextField, Slider,
+ChoiceCard, Badge, ProgressBar, Skeleton, Alert — implemented to the Figma components, not
+invented alongside them.
+**Depends on:** S2 (tokens) and the Figma frames for these eight components.
 **Definition of done:**
+- Each component reproduces its Figma frame's states (default / hover / focus / disabled /
+  error) with token-driven classes — no raw hex, no bespoke spacing — and the story route
+  records a per-state visual diff against the frame.
 - Each component: variants via token-driven classes, `:focus-visible` ring, ≥ 44 px touch
   targets, labels wired (`htmlFor`/`aria-label`), reduced-motion safe.
 - Slider is keyboard-operable (arrows/Home/End) and announces its value.
