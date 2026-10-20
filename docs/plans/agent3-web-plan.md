@@ -257,7 +257,7 @@ Run in `apps/web` on the rebased branch, Node 24 locally (CI pins 22):
 | `npm run check:api-types` | exit 0 — contract 1.5.0, 7 paths, `schema.d.ts` byte-identical to the generator |
 | `npm run check:tokens` | exit 0 — 0 hex literals, 0 palette utilities, 0 physical side classes across `app/` + `components/` + `lib/` (23 files); proven RED on each of the three rule types before being trusted |
 | `npm run check:i18n` | exit 0 — no inline `Intl`, no runtime-locale method, no hand-written amount/date in 21 files; proven RED on all four rule types before being trusted |
-| `npm test` (Playwright, 360×800) | 52/52 pass — the 3 shell specs, S4's 19 (every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, one for a non-JSON 200), S2's 7 (palette count, 15 text contrast pairs, 3 UI pairs, then the rendered page: 360 px, noindex, alias chain, 48 px control + 2 px ring, `ms-auto` mirroring), S3's 10 (per-component geometry, roles, keyboard, reduced motion) and S5's 13 (lang/dir, switcher, formatting, fonts, CLS) |
+| `npm test` (Playwright, 360×800) | 53/53 pass — the 3 shell specs, S4's 19 (every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, one for a non-JSON 200), S2's 7 (palette count, 15 text contrast pairs, 3 UI pairs, then the rendered page: 360 px, noindex, alias chain, 48 px control + 2 px ring, `ms-auto` mirroring), S3's 10 (per-component geometry, roles, keyboard, reduced motion) and S5's 14 (lang/dir, switcher, formatting, fonts, the per-locale font preload, CLS) |
 | Tailwind actually processed | yes — the emitted CSS chunk contains `text-2xl`, `mx-auto`, `max-w-5xl`, `sr-only` and the `focus:` variants |
 
 **S5's evidence (2026-10-20).** next-intl 4.14.9, `/fr` and `/ar`, both statically rendered (6
@@ -275,8 +275,10 @@ findings worth keeping:
    narrow space the scenario asks for, with the unit the product uses. `ar-MA` keeps Latin digits:
    that is CLDR for Morocco, not a broken font.
 3. **CLS is 0 through the font swap, measured.** A `layout-shift` observer installed before any app
-   code runs records nothing on `/ar`; `next/font`'s metric-adjusted fallbacks do their job. This is
-   the metric Lighthouse aggregates, measured directly — Lighthouse itself is S6.
+   code runs records nothing on `/ar`; the preloaded face is on screen before first layout. This is
+   the metric Lighthouse aggregates, measured directly — Lighthouse itself is S6. Since the review
+   the Arabic face is self-hosted and preloaded only for `dir="rtl"`, so the same 0 no longer costs
+   French pages 136 KB (I18N.md §5 has the before/after numbers).
 
 **S3's evidence (2026-10-20).** Eight components on `@/components/ui`, no `"use client"` in any of
 them: the interactivity is a native button, a native radio and a native range, so keyboard support

@@ -211,19 +211,29 @@ proof sheet. `docs/design/I18N.md` is the reference. Four deviations, each delib
    `generateStaticParams` + `notFound()`: serving French documentation under `lang="ar"` would
    mispronounce it. S20 translates product screens, not design documentation.
 
-Measured: 52/52 Playwright specs (13 S5); `check:i18n` exit 0 on 21 files, RED on all four rule
+Measured: 53/53 Playwright specs (14 S5); `check:i18n` exit 0 on 21 files, RED on all four rule
 types; `check:tokens` exit 0 on 23 files; `build` exit 0, 6 prerendered routes (`/fr`, `/ar`,
 `/fr/format`, `/ar/format`, `/fr/kit`, `/fr/tokens`, 9 static pages reported); `typecheck` exit 0.
 
-**Review (2026-10-20).** Two font findings, one fixed and one recorded as a cost. Fixed: the Arabic
-variable class was applied only for `ar`, so `font-arabic` was an undefined `var()` on a French page
-and the `/fr/tokens` type specimen labelled "IBM Plex Sans Arabic" actually rendered in Inter; the
-class is now on `<html>` for both locales (it defines a variable, it downloads nothing by itself).
-Recorded, not fixed: `preload` is a document-level decision and there is one root layout, so `/fr`
-preloads four IBM Plex subset files (~137 KB) it never uses. `preload: false` was measured and
-rejected — it saves the bytes but the face then swaps after first layout and the switcher's Arabic
-label reflows its neighbours by 3 px, i.e. 0.0007 CLS, and scenario 3 pins 0. The fix is per-locale
-root layouts or a self-hosted face with a known URL, which is S6 budget work (I18N.md §5).
+**Review (2026-10-20).** Three font findings; all three fixed. (1) The Arabic variable class was
+applied only for `ar`, so `font-arabic` was an undefined `var()` on a French page and the
+`/fr/tokens` type specimen labelled "IBM Plex Sans Arabic" actually rendered in Inter — worse, the
+label was Latin text, which the face's `unicode-range` would never paint anyway. The specimen is now
+Arabic copy in the face, named in Latin beside it. (2) `preload` was a document-level decision and
+there was one root layout, so `/fr` preloaded four IBM Plex subset files (~136 KB) it never used;
+`preload: false` was rejected (the face then swaps after first layout and the switcher's Arabic label
+reflows its neighbours by 3 px, 0.0007 CLS, against a pinned 0). (3) Fixed by OWNING the file: the
+face is now self-hosted (`public/fonts/ibm-plex-sans-arabic/`, OFL beside it), so its URL is stable
+and `app/[locale]/layout.tsx` preloads three weights with React 19's `preload()` only when
+`dir === "rtl"`. Per-locale root layouts were the other candidate and were not needed.
+
+**Measured, HEAD worktree vs working tree (same probe, production build, 360×800):** `/fr` 206 KB of
+fonts in 6 requests → **70 KB in 2** (the four Arabic files and 136 KB are gone; `/fr/format` and
+`/fr/kit` likewise emit 0 Arabic preloads). `/ar` 248 KB → **201 KB** (3 preloaded Arabic weights).
+`/fr/tokens` 219 KB → **112 KB** (one 42 KB Arabic file, on demand). CLS stays 0 on `/ar` across five
+consecutive production runs, and `e2e/i18n.spec.ts` now pins the split: 3 Arabic preloads on `/ar`,
+zero on `/fr`, `/fr/format` and `/fr/kit`. The remaining per-locale waste is small and named:
+Geist Mono (23 KB) is preloaded on both locales although only the token sheet uses it.
 
 #### S6 — CI + budgets (1.5 h)
 **Goal:** A dedicated `apps/web` CI job: lint, typecheck, unit tests, Playwright at 360 px,

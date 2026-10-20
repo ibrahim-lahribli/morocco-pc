@@ -181,7 +181,11 @@ test.describe("the token page renders them", () => {
   test("ms-auto mirrors under dir=rtl", async ({ page }) => {
     await page.goto("/fr/tokens");
     const positions = await page.evaluate(async () => {
-      const container = document.querySelector('[dir="rtl"]') as HTMLElement;
+      // Scoped to the RTL section by its label, not "the first [dir=rtl] in the
+      // document": the type specimen is an Arabic run with its own `dir`, and a
+      // document-wide query silently started measuring THAT when it appeared.
+      const section = document.querySelector('section[aria-labelledby="rtl-title"]') as HTMLElement;
+      const container = section.querySelector('[dir="rtl"]') as HTMLElement;
       const badge = [...container.querySelectorAll("span")].find(
         (span) => span.textContent === "ms-auto",
       ) as HTMLElement;

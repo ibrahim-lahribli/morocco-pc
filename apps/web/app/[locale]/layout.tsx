@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { Geist_Mono, IBM_Plex_Sans_Arabic, Inter } from "next/font/google";
+import { Geist_Mono, Inter } from "next/font/google";
 import { hasLocale } from "next-intl";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
+import { preload } from "react-dom";
 
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { routing } from "@/i18n/routing";
@@ -17,26 +18,30 @@ import "../globals.css";
  * a client effect: the direction has to be right in the FIRST byte of HTML, or
  * an Arabic page paints in the wrong direction and then flips.
  *
- * Fonts: Inter for Latin, IBM Plex Sans Arabic for Arabic. All three are
- * compiled by `next/font`, which self-hosts the files and injects
- * `size-adjust` fallback metrics (that is what makes the swap shift nothing).
+ * Fonts: Inter (`--font-sans`) and Geist Mono (`--font-mono`) come from
+ * `next/font`, because they are the document's faces for BOTH locales and their
+ * preload is never wasted. The Arabic face does not: it is self-hosted from
+ * `public/fonts/ibm-plex-sans-arabic/` with an `@font-face` in `globals.css`, and
+ * the preload below is conditional on the direction.
  *
- * One cost is deliberate and KNOWN, measured 2026-10-20: there is one root
- * layout for both locales, so `preload` is decided for the document, not the
- * language. `/fr` therefore carries the Arabic face's preload tags — four subset
- * files, ~137 KB — for a page that renders no Arabic. Turning `preload` off was
- * tried and rejected in this review: it saves those bytes, but it also lets the
- * face swap AFTER first layout, and the Arabic label in the switcher then
- * reflows its neighbours by 3 px. `e2e/i18n.spec.ts` pins CLS at 0 (S5 scenario
- * 3), and a preloaded face is what makes that true. Closing the bytes needs
- * per-locale root layouts or a self-hosted face whose URL we can preload
- * conditionally; both are S6 budget work, not a one-line option.
+ * Why it is not `next/font` too: `next/font` preloads every face whose module is
+ * evaluated, and this single layout serves `/fr` and `/ar`, so its Arabic face put
+ * four subset files on every French page — measured 2026-10-20, `/fr` fetched
+ * 206 KB of fonts to render one Latin family. Two repairs were measured and
+ * rejected: a dynamic import of the face's module still leaves it in the layout's
+ * build graph (the preloads remained), and `preload: false` loses CLS 0, because
+ * the face then swaps after first layout and the switcher's Arabic label reflows
+ * its neighbours by 3 px. Owning the file means owning the URL, so the preload
+ * follows `dir`.
  *
- * The variable class is applied for BOTH locales so the `--font-arabic` token
- * always resolves — without it, `font-arabic` is an undefined `var()` and silently
- * inherits Inter, which is what `/fr/tokens`' "IBM Plex Sans Arabic" specimen did
- * before this review. The BODY face stays locale-scoped in `globals.css`
- * (`html[lang="ar"] body`), so a French page paints in Inter.
+ * After the change, measured on the production build: `/fr` downloads 70 KB
+ * (Inter + Mono, no Arabic), `/ar` downloads 201 KB (three preloaded Arabic
+ * weights + Inter + Mono), and `/fr/tokens` pulls ONE Arabic file on demand
+ * because its type specimen really displays Arabic. `e2e/i18n.spec.ts` pins both
+ * halves: CLS 0 on `/ar`, and zero Arabic preloads on `/fr`.
+ *
+ * `globals.css` still scopes the BODY face to `html[lang="ar"]`, so a French page
+ * paints in Inter and never switches.
  */
 
 const inter = Inter({
@@ -51,15 +56,18 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
-const plexArabic = IBM_Plex_Sans_Arabic({
-  variable: "--font-plex-arabic",
-  subsets: ["arabic"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-  // Preloaded on BOTH locales because one layout serves both — 4 subset files,
-  // ~137 KB, on every French page. See the header comment: removing `preload`
-  // costs 0.0007 CLS, which the pinned scenario forbids.
-});
+/**
+ * The Arabic face's preload list, by weight. `globals.css` declares all four
+ * weights of the self-hosted face; 400 / 500 / 600 are the ones the shell paints
+ * (body text, the `font-medium` switcher, the `font-semibold` brand and heading),
+ * so they are fetched while the HTML is parsed and the face is ready before the
+ * first layout. 700 is declared for display type and nothing on an Arabic page
+ * uses it yet, so it loads on demand rather than costing every visitor.
+ *
+ * These paths are stable (a `public/` file, not a hashed build asset), which is
+ * the whole reason the face was vendored — see the header comment.
+ */
+const ARABIC_PRELOAD = ["400", "500", "600"] as const;
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
@@ -91,9 +99,22 @@ export default async function LocaleLayout({
 
   const t = await getTranslations({ locale, namespace: "shell" });
   const dir = locale === "ar" ? "rtl" : "ltr";
-  // Both locales get all three classes: the Arabic class only defines a CSS
-  // variable, and a face is downloaded only where an element uses the family.
-  const fonts = [inter.variable, geistMono.variable, plexArabic.variable].join(" ");
+  const fonts = [inter.variable, geistMono.variable].join(" ");
+  // React 19's resource API: emits ONE <link rel="preload"> in <head>.
+  // Rendering <link> in the tree instead emits a second copy (measurable in the
+  // built HTML), because React hoists the element and keeps its own as well.
+  // Same-origin font fetches are CORS-mode, so `crossOrigin: "anonymous"` is
+  // what makes the preload share its cache entry with the @font-face — a
+  // mismatch downloads every file twice.
+  if (dir === "rtl") {
+    for (const weight of ARABIC_PRELOAD) {
+      preload(`/fonts/ibm-plex-sans-arabic/ibm-plex-sans-arabic-${weight}.woff2`, {
+        as: "font",
+        type: "font/woff2",
+        crossOrigin: "anonymous",
+      });
+    }
+  }
 
   return (
     <html lang={locale} dir={dir} className={`${fonts} h-full antialiased`}>

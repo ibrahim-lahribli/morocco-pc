@@ -180,6 +180,45 @@ test.describe("formatting", () => {
 });
 
 test.describe("fonts", () => {
+  /** Every `<link rel="preload">` for a font, as the server sent it. */
+  async function fontPreloads(page: Page): Promise<string[]> {
+    await page.waitForLoadState("domcontentloaded");
+    return page.evaluate(() =>
+      [...document.querySelectorAll('link[rel="preload"][as="font"]')].map(
+        (link) => link.getAttribute("href") ?? "",
+      ),
+    );
+  }
+
+  test("the Arabic face is preloaded on /ar and never on a French page", async ({ page }) => {
+    // The saving this pins: the face is self-hosted so its preload can follow the
+    // locale. A regression is one `next/font` declaration away, and it would put
+    // four subset files (~136 KB) back on every French page.
+    await page.goto("/ar");
+    const arabic = (await fontPreloads(page)).filter((href) => href.includes("ibm-plex"));
+    expect(arabic).toHaveLength(3);
+    expect(arabic.every((href) => href.endsWith(".woff2"))).toBe(true);
+
+    for (const frenchRoute of ["/fr", "/fr/format", "/fr/kit"]) {
+      await page.goto(frenchRoute);
+      const leaks = (await fontPreloads(page)).filter((href) => href.includes("ibm-plex"));
+      expect(leaks, `${frenchRoute} must not preload the Arabic face`).toEqual([]);
+    }
+
+    // The face is still declared where it is used — the absence of a preload is
+    // not the absence of a font: `/fr/tokens` displays Arabic and loads it on
+    // demand, with no preload tag.
+    await page.goto("/fr/tokens");
+    expect((await fontPreloads(page)).filter((href) => href.includes("ibm-plex"))).toEqual([]);
+    await page.evaluate(() => document.fonts.ready);
+    const specimenLoaded = await page.evaluate(() =>
+      [...document.fonts].some(
+        (face) => face.family === "IBM Plex Sans Arabic" && face.status === "loaded",
+      ),
+    );
+    expect(specimenLoaded).toBe(true);
+  });
+
   test("the Arabic page loads IBM Plex Sans Arabic; the French page does not apply it", async ({
     page,
   }) => {

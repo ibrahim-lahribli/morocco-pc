@@ -147,8 +147,17 @@ export default async function TokensPage({
             ))}
           </ul>
           <p className="mt-3 border-t border-border pt-3 text-compact text-muted">
-            Inter (latin) · <span className="font-arabic text-ink">IBM Plex Sans Arabic</span>{" "}
-            (arabe) ·            <span className="num-tabular text-ink">{formatMoney(12500, "fr")}</span> en chiffres
+            Inter (latin) ·{" "}
+            {/* The specimen must be ARABIC text: the family's `unicode-range`
+                covers the Arabic block only, so the Latin string "IBM Plex Sans
+                Arabic" would render in Inter and prove nothing. This span is the
+                one place on a French page that pulls the Arabic file — on demand,
+                with no preload. */}
+            <span lang="ar" dir="rtl" className="font-arabic text-ink">
+              ميزانيتكم الحالية
+            </span>{" "}
+            (IBM Plex Sans Arabic) ·{" "}
+            <span className="num-tabular text-ink">{formatMoney(12500, "fr")}</span> en chiffres
             tabulaires.
           </p>
         </div>
