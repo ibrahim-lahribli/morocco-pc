@@ -584,6 +584,10 @@ The read-only landing-page ribbon (Platform P1 Sprint 6 / Decision 48):
   catalog version runs no pass and writes nothing. `--cleanup` removes the
   preset rows with their passes — generated passes are unmarked
   `recommendation_query` rows and block `npm run eval:scenarios` until removed.
+  That command also needs `--model=<name@version>`: on the TEST branch the
+  default pin `seed-minimal-v1@1.0.0` is NOT ACTIVE, so the bare `--commit`
+  refuses before writing anything - pass `--model=launch-v2@1.0.0` (measured
+  2026-10-20: exit 1, nothing written).
 
 ### GET /v1/catalog/products
 
