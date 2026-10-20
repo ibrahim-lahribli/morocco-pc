@@ -36,9 +36,14 @@
     "loading": "جارٍ تحميل الخيارات…",
     "optionsError": "تعذّر تحميل الخيارات. تحقّق من اتصالك ثم أعد المحاولة.",
     "retry": "إعادة المحاولة",
-    "budgetLabel": "الميزانية المستهدفة (درهم)",
+    "budgetLabel": "الميزانية المستهدفة",
+    "budgetSuffix": "DH",
     "budgetHint": "مبلغ صحيح، من {min} إلى {max}.",
     "budgetError": "أدخل مبلغًا صحيحًا بين {min} و{max}.",
+    "budgetSliderLabel": "ضبط سريع",
+    "budgetSnapNote": "يتحرك المؤشر بخطوات من {step} درهم: يتوقف عند {snapped}، بينما يبقى {exact} هو المبلغ المعتمد.",
+    "budgetClampMin": "الحد الأدنى هو {min}: تم إرجاع المبلغ إلى {min}.",
+    "budgetClampMax": "الحد الأعلى هو {max}: تم إرجاع المبلغ إلى {max}.",
     "steps": {
       "usage": {
         "label": "الاستخدام",

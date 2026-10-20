@@ -107,7 +107,7 @@ test("typing a budget keeps the field usable, and Back restores it", async ({ pa
   await serveMeta(page);
   await page.goto("/fr/configurer?etape=budget&use_case=GAMING");
 
-  const field = page.getByLabel("Votre enveloppe cible (MAD)");
+  const field = page.getByLabel("Votre enveloppe cible");
   await field.fill("");
   // Character by character on purpose: committing each valid keystroke to the
   // URL must not remount the field or move the caret.
@@ -126,13 +126,15 @@ test("typing a budget keeps the field usable, and Back restores it", async ({ pa
   await expect(page.getByRole("button", { name: "Suivant" })).toBeEnabled();
 });
 
-test("an out-of-range amount removes the answer and explains the bounds", async ({ page }) => {
+test("an empty amount removes the answer and explains the bounds", async ({ page }) => {
   await serveMeta(page);
   await page.goto("/fr/configurer?etape=budget&use_case=GAMING");
 
-  const field = page.getByLabel("Votre enveloppe cible (MAD)");
+  // An amount that PARSES but is out of range is clamped, not an error — that
+  // is S8's rule and `wizard-budget.spec.ts` owns it. What stays an error here
+  // is the genuinely unimplemented answer: no digits at all.
+  const field = page.getByLabel("Votre enveloppe cible");
   await field.fill("");
-  await field.pressSequentially("50");
   await field.blur();
 
   await expect(page.getByText(/Saisissez un montant entier entre/)).toBeVisible();
@@ -144,7 +146,7 @@ test("Enter in the budget field advances, because the step is a form", async ({ 
   await serveMeta(page);
   await page.goto("/fr/configurer?etape=budget&use_case=GAMING");
 
-  const field = page.getByLabel("Votre enveloppe cible (MAD)");
+  const field = page.getByLabel("Votre enveloppe cible");
   await field.fill("");
   await field.pressSequentially("7300");
   // The app's own promise first: a valid amount enables the step. Only then is

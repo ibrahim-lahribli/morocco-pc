@@ -40,6 +40,41 @@ export const BUDGET_MIN = 500;
 export const BUDGET_MAX = 1_000_000;
 
 /**
+ * The slider's granularity (S8), in MAD. It lives here for the same reason the
+ * bounds do: the slider, the snap note and the tests must agree by construction.
+ */
+export const BUDGET_STEP = 500;
+
+/** Which bound moved an amount, or null when it was already inside the range. */
+export type BudgetClamp = "min" | "max" | null;
+
+/**
+ * Round an amount onto the slider's grid, then clamp it into the range.
+ *
+ * Rounding is `Math.round`, so a tie goes up (7 250 → 7 500). The clamp matters
+ * after the round too: an amount at the top of the range must land exactly on
+ * `BUDGET_MAX`, and 1 000 000 is on the grid (500 + 1999 × 500), so a slider at
+ * End reaches the true maximum rather than 999 500.
+ */
+export function snapToStep(amount: number): number {
+  const snapped = Math.round(amount / BUDGET_STEP) * BUDGET_STEP;
+  return Math.min(BUDGET_MAX, Math.max(BUDGET_MIN, snapped));
+}
+
+/**
+ * Bring an amount into [min, max] and NAME the bound that moved it.
+ *
+ * The name is the point: S8 requires that clamping is guidance rather than a
+ * silent reset, so the caller needs to know it happened — and which end it was —
+ * to say so. The wording lives in the message catalogue, not here.
+ */
+export function clampBudget(amount: number): { amount: number; clamped: BudgetClamp } {
+  if (amount < BUDGET_MIN) return { amount: BUDGET_MIN, clamped: "min" };
+  if (amount > BUDGET_MAX) return { amount: BUDGET_MAX, clamped: "max" };
+  return { amount, clamped: null };
+}
+
+/**
  * The currency the wizard sends. The market is Morocco and the contract
  * requires a three-letter code, but there is no currency picker: a control with
  * exactly one option is a control that lies about being a choice.

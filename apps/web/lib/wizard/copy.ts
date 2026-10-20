@@ -36,9 +36,23 @@ export interface WizardCopy {
   optionsError: string;
   retry: string;
   budgetLabel: string;
+  /** The unit painted inside the field AND announced after the label (S8). */
+  budgetSuffix: string;
   /** "{min} to {max}", formatted by the caller. */
   budgetHint: string;
   budgetError: string;
+  /** The slider's accessible name — it is the second way to set the one answer. */
+  budgetSliderLabel: string;
+  /**
+   * Shown when the typed amount is not on the slider's grid: "{step}",
+   * "{snapped}" and "{exact}", formatted by the caller. Never an error — the
+   * typed amount is kept, and saying where the thumb sits is the honest part.
+   */
+  budgetSnapNote: string;
+  /** Guidance after a clamp, naming the bound: "{min}". */
+  budgetClampMin: string;
+  /** Guidance after a clamp, naming the bound: "{max}". */
+  budgetClampMax: string;
   steps: Record<WizardStep, StepCopy>;
 }
 

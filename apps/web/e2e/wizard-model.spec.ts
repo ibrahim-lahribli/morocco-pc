@@ -12,12 +12,15 @@ import { test, expect } from "@playwright/test";
 import {
   BUDGET_MAX,
   BUDGET_MIN,
+  BUDGET_STEP,
   STEPS,
+  clampBudget,
   firstInvalidStep,
   firstInvalidStepBefore,
   isStepValid,
   parseAmount,
   readState,
+  snapToStep,
   toHref,
   toRequest,
   toSearch,
@@ -60,6 +63,30 @@ test("the budget range is the model's, not the input's", () => {
   expect(at(BUDGET_MIN - 1)).toBe(false);
   expect(at(BUDGET_MAX + 1)).toBe(false);
   expect(at(7300.5)).toBe(false);
+});
+
+test("the slider's grid rounds up, clamps, and lands exactly on the maximum", () => {
+  expect(BUDGET_STEP).toBe(500);
+  expect(snapToStep(7300)).toBe(7500);
+  expect(snapToStep(7249)).toBe(7000);
+  expect(snapToStep(7250)).toBe(7500);
+  expect(snapToStep(250)).toBe(BUDGET_MIN); // clamped, not 0
+  // Nearest point wins: 999 600 is closer to 999 500 than to the top.
+  expect(snapToStep(999_600)).toBe(999_500);
+  expect(snapToStep(999_800)).toBe(BUDGET_MAX);
+  // End must reach the TRUE maximum, which only holds because the max is on the
+  // grid: 500 + 1 999 × 500.
+  expect((BUDGET_MAX - BUDGET_MIN) % BUDGET_STEP).toBe(0);
+});
+
+test("clampBudget names the bound that moved the amount", () => {
+  // S8: clamping is guidance, so it has to say which end it was — the copy
+  // chooses the words, the model only reports the fact.
+  expect(clampBudget(50)).toEqual({ amount: BUDGET_MIN, clamped: "min" });
+  expect(clampBudget(2_000_000)).toEqual({ amount: BUDGET_MAX, clamped: "max" });
+  expect(clampBudget(7300)).toEqual({ amount: 7300, clamped: null });
+  expect(clampBudget(BUDGET_MIN)).toEqual({ amount: BUDGET_MIN, clamped: null });
+  expect(clampBudget(BUDGET_MAX)).toEqual({ amount: BUDGET_MAX, clamped: null });
 });
 
 test("a numeric string is not a budget: the contract takes a number", () => {

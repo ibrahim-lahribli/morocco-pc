@@ -42,9 +42,10 @@ has `"use client"`.
   hint rather than stacking, so `aria-describedby` never points at two
   competing sentences.
 - **Slider** is `<input type="range">`. Arrow keys, Home/End, PageUp/PageDown,
-  `aria-valuemin|max|now` are the browser's. The component adds the two things
-  native does not: an accessible name, and `aria-valuetext` ("8 500 DH"
-  instead of "8500"). `app/globals.css` styles only the track and thumb.
+  `aria-valuemin|max|now` and `step` are the browser's: the component adds
+  only what native does not — an accessible name, and `aria-valuetext` (the
+  amount with its currency through the caller's `format`, instead of a bare
+  8500). `app/globals.css` styles only the track and thumb.
 - **ChoiceCard** is a native radio, `sr-only` but focusable, inside a `<label>`
   that is the whole card. It is uncontrolled by default and takes `checked` +
   `onChange` when the screen owns the value (S7's answers live in the URL). Arrow keys move the selection; the ring is painted on
@@ -94,6 +95,20 @@ by hand.
 |---|---|---|
 | `ChoiceGroup` | A `<fieldset>` whose `<legend>` is the question, containing `ChoiceCard`s for a `{ value, label }` list | The GROUP is the question and only a legend gives a group its name. Its `options` is the shape `GET /v1/meta/options` returns, so a list maps straight in and no screen derives a label from an enum |
 | `LinkButton` | `next/link` with the button's base/size/variant classes | A link that navigates must be a link (open-in-new-tab, context menu, honest role). The classes have one owner, so it cannot drift from `Button`; `disabled` is absent by design |
+
+## The budget pair (S8)
+
+`/fr/configurer`'s budget step is the first screen that needed two controls for one answer, and the
+rule it settled is worth keeping: **the slider never owns the value.** `TextField` keeps the typed
+draft, `Slider` renders that same draft through `snapToStep` (the model's 500 MAD grid), and a
+slider move writes back into both. The URL keeps the TYPED amount, so a 7 300 DH answer survives a
+refresh while the thumb sits on 7 500; a `role="status"` note under the rail says where the thumb
+is and which number is kept, instead of leaving the mismatch to read as a defect.
+
+Clamping is `clampBudget` in `lib/wizard/model.ts`, which returns the bound that moved the
+amount — the sentence itself is the message catalogue's. It runs on BLUR and never on a keystroke,
+so a half-typed number is not rewritten under the caret. The pair sits in one `<fieldset>` whose
+`<legend>` is the question, because a label on the field alone would name half the answer.
 
 ## Money is formatted, not typed
 

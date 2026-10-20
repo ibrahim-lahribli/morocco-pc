@@ -75,8 +75,13 @@ export default async function ConfigurerPage({
     optionsError: t("optionsError"),
     retry: t("retry"),
     budgetLabel: t("budgetLabel"),
+    budgetSuffix: t("budgetSuffix"),
     budgetHint: t("budgetHint"),
     budgetError: t("budgetError"),
+    budgetSliderLabel: t("budgetSliderLabel"),
+    budgetSnapNote: t("budgetSnapNote"),
+    budgetClampMin: t("budgetClampMin"),
+    budgetClampMax: t("budgetClampMax"),
     steps: {
       usage: { label: t("steps.usage.label"), legend: t("steps.usage.legend") },
       budget: { label: t("steps.budget.label"), legend: t("steps.budget.legend") },

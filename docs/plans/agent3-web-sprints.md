@@ -350,6 +350,42 @@ imported from `mock/fixtures.mjs`, not copied.
 3. Type `2000000` → clamps to 1 000 000 with inline message stating the fix.
 4. Arrow keys on the slider move 500 DH; Home → 500; End → 1 000 000.
 5. Enter on the numeric field advances to the next step (form semantics, no `div` handlers).
+**Status: DONE 2026-10-20 — as built.** The budget is ONE answer with two controls, so S8 is really
+a synchronisation rule: the field keeps what was typed (any integer), the slider renders that same
+draft snapped onto its 500 MAD grid, and a slider move writes back into both. The URL always holds
+the TYPED amount — 7 300 stays 7 300 — which is why the note under the slider exists: instead of
+letting the thumb sit on 7 500 and read as a bug, it says where the thumb is and which number is
+kept. `snapToStep` rounds to nearest (a tie goes up) and clamps, so `snapToStep(999_600)` is
+999 500 because 999 600 is nearer to it than to the top; End reaches the true 1 000 000 only because
+the maximum is ON the grid (500 + 1 999 x 500), and a unit check pins that arithmetic.
+
+Clamping is `clampBudget`, which returns the amount AND the bound that moved it (`min` / `max`),
+so the guidance is a message-catalogue sentence rather than a string in the component. It runs on
+BLUR, not on keystroke: a half-typed "2" on the way to "20000" must not become 500 under the caret.
+Enter settles an out-of-range draft first and refuses that press — the guidance would otherwise be
+read after the flow had already moved on — so the second Enter advances.
+
+Two smaller decisions. The step is a `<fieldset>` whose `<legend>` is the question, so both
+controls share one accessible name; a label on the field alone would name half the answer. And the
+field's label lost its hand-written "(MAD)" in favour of the `suffix` copy: the S7 review had made
+the accessible name read "... (MAD) MAD", and the suffix is now the locale's own word, so French
+says `MAD` and Arabic says `DH`, matching every other formatted amount on the page (S20 still owns
+whether Arabic switches to `د.م.`).
+
+Measured: **85/85** Playwright specs (7 budget specs plus 2 model checks added), `check:tokens` 29
+files, `check:i18n` 27 files, `typecheck`/`lint`/`build` exit 0. One old spec was REPAIRED rather
+than weakened: "an out-of-range amount removes the answer" described S7 and is now "an empty amount
+removes the answer", because S8 turns a parseable-but-out-of-range amount into a clamp, and the
+clamp path has its own specs. The first draft of the Enter spec raced the navigation (its second
+press could land before the settled answer reached the flow); that was fixed in the SPEC by waiting
+on the app's own promise, with `--repeat-each=3` used to prove it stable.
+
+Known limitation, recorded rather than papered over: the slider is LINEAR over 500 -> 1 000 000,
+exactly as this DoD asks (Home = 500, End = 1 000 000, arrows = 500), so on a 360 px track the first
+7 000 MAD occupy roughly 0.7 % of the rail and every realistic budget sits under the first
+thumb-width. A curve-mapped position (exponential thumb, still 500 MAD steps in value) is the fix,
+and it needs its own sprint because it redefines what an arrow key means.
+
 
 #### S9 — Resolution + priority steps with the inputs_applied gate (2 h)
 **Goal:** Resolution (gaming only) and priority (three choices → 1/3/5) steps, with visibility

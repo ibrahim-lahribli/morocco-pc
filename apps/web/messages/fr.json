@@ -36,9 +36,14 @@
     "loading": "Chargement des options…",
     "optionsError": "Les options n'ont pas pu être chargées. Vérifiez votre connexion, puis réessayez.",
     "retry": "Réessayer",
-    "budgetLabel": "Votre enveloppe cible (MAD)",
+    "budgetLabel": "Votre enveloppe cible",
+    "budgetSuffix": "MAD",
     "budgetHint": "Un montant entier, de {min} à {max}.",
     "budgetError": "Saisissez un montant entier entre {min} et {max}.",
+    "budgetSliderLabel": "Réglage rapide",
+    "budgetSnapNote": "Le curseur avance par paliers de {step} DH : il s'arrête sur {snapped}, tandis que {exact} reste le montant retenu.",
+    "budgetClampMin": "Le minimum est {min} : le montant a été ramené à {min}.",
+    "budgetClampMax": "Le maximum est {max} : le montant a été ramené à {max}.",
     "steps": {
       "usage": {
         "label": "Usage",
