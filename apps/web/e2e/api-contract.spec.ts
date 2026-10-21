@@ -185,10 +185,13 @@ test.describe("the mock serves every contract state", () => {
 
   test("presets serve a list, and an empty list is a 200 with generated_at null", async ({ request }) => {
     const full = await (await request.get("/v1/presets?use_case=GAMING&currency=MAD")).json();
-    expect(full.presets).toHaveLength(2);
+    // Three presets since S16: 9000 (indicative), 15000 and 20000 (verified).
+    // Every entry points at a pass this mock actually serves.
+    expect(full.presets).toHaveLength(3);
     expect(full.presets.map((preset: { price_status: unknown }) => preset.price_status)).toEqual([
+      "indicative",
       "verified",
-      null,
+      "verified",
     ]);
 
     const empty = await (await request.get("/v1/presets?state=empty&use_case=GAMING&currency=MAD")).json();
@@ -289,7 +292,7 @@ test.describe("the typed client maps the mock exactly", () => {
 
   test("presets and a 404 keep their shapes", async () => {
     const presets = await getPresets({ use_case: "GAMING", currency: "MAD" });
-    expect(presets.presets).toHaveLength(2);
+    expect(presets.presets).toHaveLength(3);
 
     await expect(
       getRecommendation("missing", { headers: { "x-mock-state": "404" } })

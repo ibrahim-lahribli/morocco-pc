@@ -324,6 +324,61 @@ export async function getPresets(
   return (await request<PresetsResponse>(`/v1/presets?${search.toString()}`, init)).body;
 }
 
+/**
+ * GET /v1/presets, on the SERVER, for the preset pages (S16).
+ *
+ * Two differences from `getPresets`, both deliberate:
+ *
+ *   - it targets `serverApiBaseUrl()`, so a deployment can keep the engine on an
+ *     internal address while the browser keeps the public origin;
+ *   - it caches for `revalidate` seconds instead of being `no-store`. That is the
+ *     whole of ISR here: a preset page is a function of the ribbon, and the ribbon
+ *     changes when it is regenerated (Decision 48), not per visitor. The option is
+ *     `next: { revalidate }`, NOT `cache` — a `cache: "no-store"` fetch would opt
+ *     the route out of revalidation and turn every preset visit into an API call.
+ *
+ * `signal` is the caller's timeout: a build must not hang on a black-holed host.
+ */
+export async function getPresetsForServer(
+  query: PresetsQuery,
+  init: { revalidate: number; signal?: AbortSignal },
+): Promise<PresetsResponse> {
+  const search = new URLSearchParams({
+    use_case: query.use_case,
+    currency: query.currency,
+  });
+  return (
+    await request<PresetsResponse>(
+      `/v1/presets?${search.toString()}`,
+      { next: { revalidate: init.revalidate }, signal: init.signal },
+      serverApiBaseUrl(),
+    )
+  ).body;
+}
+
+/**
+ * GET /v1/recommendations/:id, cached for `revalidate` seconds (S16).
+ *
+ * The results page reads a pass with `no-store` because its id names one
+ * person's query and a stale copy would be worse than a slow page. A preset is
+ * the opposite case: it is a PUBLIC landing page whose pass is a shared fixture of
+ * the ribbon, so it is cached — and revalidated — as data, not read per visitor.
+ * `getRecommendationForServer` stays the no-store read for `/config/[id]`; sharing
+ * one function between the two would silently pick one of those policies.
+ */
+export async function getRecommendationForStatic(
+  id: string,
+  init: { revalidate: number; signal?: AbortSignal },
+): Promise<RecommendationResponse> {
+  return (
+    await request<RecommendationResponse>(
+      `/v1/recommendations/${encodeURIComponent(id)}`,
+      { next: { revalidate: init.revalidate }, signal: init.signal },
+      serverApiBaseUrl(),
+    )
+  ).body;
+}
+
 export async function listCatalogProducts(
   query: CatalogListQuery = {},
   init?: RequestInit

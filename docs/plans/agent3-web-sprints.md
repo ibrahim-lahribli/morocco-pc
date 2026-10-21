@@ -886,6 +886,58 @@ ISR, fixtures-first; noindex until real prices exist.
 3. `noindex` present on every preset page while prices are unverified.
 4. Invalid budget slug → 404, not a crash.
 
+**Status: DONE 2026-10-21 — as built.** `/fr/config-pc-gamer-{budget}-dh` exists for both locales
+and is generated at build/ISR time from the ribbon: `generateStaticParams` prerenders the two
+committed fixture budgets, `revalidate = 3600` (the literal Next requires) caches the result, and
+`dynamicParams` stays at its default so a budget the ribbon gains later is rendered on first
+request and then cached. The route segment is GENERIC — `app/[locale]/[presetSlug]` — because Next
+has no partial dynamic segment and `/config-pc-gamer/9000/dh` is not the URL the DoD pins. The slug
+grammar (`lib/presets/model.ts`) is one closed pattern built from the family list, and anything it
+refuses is `notFound()`; that also means a single-segment typo inside a locale now reaches the same
+styled locale 404 the catch-all produced. Concrete siblings (`/configurer`, `/config/[id]`, `/kit`)
+still win, because a static segment outranks a dynamic one.
+
+**The feature check is two paths, and both are proven.** At BUILD time the API is consulted only
+when an API base is explicitly named (`API_BASE_URL` / `NEXT_PUBLIC_API_BASE_URL`): CI has neither,
+so `next build` prerenders the committed fixtures deterministically and offline (the build reports
+exactly four preset routes — two budgets × two locales). At REQUEST time the ribbon is always tried,
+which is what makes `/fr/config-pc-gamer-20000-dh` — a budget `lib/presets/fixtures.ts` deliberately
+omits — render on demand from `GET /v1/presets` and pass its own browser assertions. A named preset
+whose pass read then fails PROPAGATES rather than falling back to demo data, so a failed ISR
+revalidation keeps the last good page; the fixture fallback covers a budget the ribbon did not name
+and a build that could not reach the API at all.
+
+**noindex follows the DATA, in both directions.** `presetIndexable(source, builds)` allows an index
+only for a page served by the API whose every build is `verified` — the same `priceProvenance()` the
+S12 badge shows and the S19 gate refuses — so the two fixture pages are `noindex, follow` while the
+API-served all-verified 20 000 page is not. That is W3's "noindex until real prices exist" as a
+predicate rather than a deadline, and S18's sitemap can consume the same function.
+
+**It reuses the results page, and feeds it.** Every build is S11's `BuildCard` (badge, budget bar,
+component list, explanation) measured against the SLUG's budget; the page prints the pass's own
+`disclaimer` and, when recorded, the calculation date. The ways forward are pre-filled: "Configurer
+mon PC" opens the budget step with `use_case` and `budget_amount`, and "Voir la configuration
+complète" links the ordinary pass the preset points at (Decision 48).
+
+**One fixture defect was repaired, not routed around.** `PRESETS_OK` named a 6 000 budget with a
+15 000 pass and an 8 000 id that did not exist, so any consumer would have shown a heading and a bar
+that disagreed. The ribbon is now three resolvable, budget-matching entries (9 000 indicative,
+15 000 verified, 20 000 verified), the third backed by a new all-VERIFIED GAMING pass; the
+`api-contract` spec's preset counts moved 2 → 3 with it.
+
+**S19's last open item is closed.** The preset page joined `lighthouserc.cjs`, and the harness now
+probes EVERY configured URL for a 200 at its own path instead of only the first — the old
+`const [measuredUrl]` destructuring would have budgeted one page and passed for the other.
+
+Measured: **193/193** Playwright specs (7 preset-model + 10 preset-page checks added), `typecheck`
+(also under Node 22.23.3), `lint` (0 errors, the one pre-existing `postcss.config.mjs` warning),
+`check:tokens` (49 files), `check:i18n` (47 files) and `check:api-types` all exit 0, `npm run build`
+exit 0 with the preset route reported `●` for exactly `fr` + `ar` × 9 000 + 15 000. Lighthouse on
+the 9 000 page: LCP median **2334 ms** (samples 2332.34 / 2475.94 / 2334.02), CLS **0**, script
+transfer **150 545 B** of the 174 080 B budget, performance 0.98 — both measured pages green under
+the `error`/median assertions. The suite itself ran on the local Node 24; CI pins 22 and the
+typecheck was re-run there.
+
 #### S17 — Component pages + editorial guides (H6) (2 h)
 **Goal:** Component detail pages from the catalog endpoints (CD-5) plus the editorial guide
 content type (MDX), both fixtures-first.
@@ -958,9 +1010,12 @@ reported. Restored to 2500 ms every assertion passes (one run: 2326.6 / 2329.6 /
 median 2329.6 ms, CLS 0, script transfer 145 981 B). DoD scenario 2 by construction: the
 threshold was the injected regression, and it turned the run red (exit 1).
 
-**Still open:** DoD scenario 3 names a PRESET page, and presets are S16's (`preset` routes do
-not exist yet), so the 170 KB script budget is measured today on the fixture RESULT page —
-the one this sprint changes. S18 adds the crawl surface; neither blocks the gate above.
+**CLOSED 2026-10-21 (S16):** DoD scenario 3 named a PRESET page, and presets were S16's — the
+`preset` route did not exist when this sprint landed, so the 170 KB script budget was measured on
+the fixture RESULT page. S16 added `/fr/config-pc-gamer-9000-dh` to `lighthouserc.cjs` and made the
+harness probe every configured URL, so the budget is now enforced on a real preset page too
+(median LCP 2334 ms, CLS 0, 150 545 B of script). S18 still owns the crawl surface; nothing here
+blocks it.
 
 ### Phase W4 — Hardening
 

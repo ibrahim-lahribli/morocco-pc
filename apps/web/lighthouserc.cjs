@@ -1,12 +1,17 @@
 /**
  * apps/web/lighthouserc.cjs — S6's performance budgets, expressed in the repo.
  *
- * The URL is a FIXTURE RESULT page, not the home shell: the budgets exist to
- * protect the page people actually share, and its id is imported from the mock
- * (the same constant `share.spec.ts` and `result.spec.ts` use) so the two cannot
- * drift apart. `scripts/lighthouse-ci.mjs` starts the built app and the mock
- * before this config is read — `lhci autorun` on its own would measure whatever
- * happens to be listening, which is how a budget quietly becomes a lie.
+ * The URLs are FIXTURE pages, not the home shell: the budgets exist to protect
+ * the pages people actually land on and share. The result page's id is imported
+ * from the mock (the same constant `share.spec.ts` and `result.spec.ts` use) so
+ * the two cannot drift apart; S16 added the preset page, which is where the
+ * sprint's 170 KB script budget was always meant to be measured. Its budget is a
+ * literal because this file is CommonJS and the committed preset fixtures are
+ * TypeScript — but the harness probes every URL below for a 200 at its own path,
+ * so a fixture whose budget moved fails loudly instead of measuring a 404.
+ * `scripts/lighthouse-ci.mjs` starts the built app and the mock before this
+ * config is read — `lhci autorun` on its own would measure whatever happens to
+ * be listening, which is how a budget quietly becomes a lie.
  *
  * ENFORCED, per S19: all three assertions are `error`, so a regression fails the
  * web job instead of only decorating its artifact. They were `warn` from S6
@@ -30,7 +35,12 @@ const APP_ORIGIN = "http://localhost:3210";
 module.exports = {
   ci: {
     collect: {
-      url: [`${APP_ORIGIN}/fr/config/${IDS.threeBuilds}`],
+      url: [
+        `${APP_ORIGIN}/fr/config/${IDS.threeBuilds}`,
+        // S16: a PRESET page (the 9000 MAD committed fixture), so the DoD's
+        // script budget is enforced on the SEO surface too.
+        `${APP_ORIGIN}/fr/config-pc-gamer-9000-dh`,
+      ],
       // Three runs, so the assertion can take a median instead of one unlucky
       // sample (see the header: `optimistic` would report the best run).
       numberOfRuns: 3,

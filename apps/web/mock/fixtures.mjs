@@ -52,6 +52,15 @@ export const IDS = {
    * and structured data still may not claim it (S19).
    */
   indicative: "6f2d9a41-3c8b-4e7d-9f15-8a2b6c4d0e93",
+  /**
+   * The pass behind the newest preset (S16): GAMING at 20 000 MAD, every
+   * component VERIFIED. Deliberately ABSENT from the web app's committed
+   * preset fixtures (`lib/presets/fixtures.ts`), so the only way
+   * `/fr/config-pc-gamer-20000-dh` can exist is a request-time read of
+   * `GET /v1/presets` — the on-demand half of S16's feature check, provable
+   * in a browser rather than only asserted in a unit test.
+   */
+  presetApiOnly: "2c8e5f1d-7a4b-4c3e-8d2f-9b6a5e4d3c21",
   /** A build carrying provisional `reasons[]` (CD-2) — the S13 panel. */
   withReasons: "8c4d1e7f-2b9a-4f6c-9d3e-5a1b7c8d9e0f",
   /** A total past the query budget — the bar's overflow state. */
@@ -443,6 +452,54 @@ export const RECOMMENDATION_INDICATIVE = baseResponse({
 });
 
 /**
+ * The 20 000 MAD GAMING pass behind the newest preset (S16).
+ *
+ * Two builds and every component VERIFIED, so the page served from the API is
+ * INDEXABLE while every fixture page stays noindex — the indexability rule
+ * proven in both directions. `build()` derives each total from its own parts,
+ * so the fixture cannot describe a total its components contradict.
+ */
+export const RECOMMENDATION_PRESET_API_ONLY = baseResponse({
+  id: IDS.presetApiOnly,
+  budget_amount: 20000,
+  budget_floor: { ...BUDGET_FLOOR_COMPLETE, budget_amount: 20000, within_budget: true },
+  builds: [
+    build({
+      rank: 1,
+      strategy_key: "BALANCED",
+      price_status: "verified",
+      explanation: "Configuration équilibrée : processeur récent et carte graphique dédiée.",
+      components: [
+        COMPONENT_CPU_VERIFIED,
+        COMPONENT_GPU_VERIFIED,
+        COMPONENT_RAM_VERIFIED,
+        COMPONENT_MOTHERBOARD,
+        COMPONENT_SSD,
+        COMPONENT_PSU,
+        COMPONENT_CASE,
+        COMPONENT_COOLER,
+      ],
+    }),
+    build({
+      rank: 2,
+      strategy_key: "PERFORMANCE",
+      price_status: "verified",
+      explanation: "Configuration performance : carte graphique plus puissante.",
+      components: [
+        COMPONENT_CPU_VERIFIED,
+        COMPONENT_GPU_HIGH,
+        COMPONENT_RAM_VERIFIED,
+        COMPONENT_MOTHERBOARD,
+        COMPONENT_SSD,
+        COMPONENT_PSU,
+        COMPONENT_CASE,
+        COMPONENT_COOLER,
+      ],
+    }),
+  ],
+});
+
+/**
  * A total PAST the query budget. The engine aims to stay inside the budget, so
  * this state is defensive rather than expected - but a persisted pass is not
  * re-derived against a new budget, and the page must not paint 114 % of a budget
@@ -540,6 +597,7 @@ export const RECOMMENDATIONS_BY_ID = {
   [IDS.oneBuild]: RECOMMENDATION_ONE_BUILD,
   [IDS.demo]: RECOMMENDATION_DEMO,
   [IDS.indicative]: RECOMMENDATION_INDICATIVE,
+  [IDS.presetApiOnly]: RECOMMENDATION_PRESET_API_ONLY,
   [IDS.withReasons]: RECOMMENDATION_WITH_REASONS,
   [IDS.overBudget]: RECOMMENDATION_OVER_BUDGET,
   [IDS.zeroBuild]: RECOMMENDATION_ZERO_BUILD,
@@ -547,22 +605,40 @@ export const RECOMMENDATIONS_BY_ID = {
   [IDS.zeroBuildFloorAbsent]: RECOMMENDATION_ZERO_BUILD_FLOOR_ABSENT,
 };
 
-/** GET 200 for the presets ribbon: `generated_at` null for an empty list. */
+/**
+ * GET 200 for the presets ribbon: `generated_at` null for an empty list.
+ *
+ * Every entry is a POINTER at a pass this mock actually serves, and its
+ * `budget_amount` equals that pass's own budget — Decision 48 keys a preset by
+ * budget, so a ribbon entry naming a 15 000 pass at 6 000 would describe a page
+ * whose bar and heading disagree. (The first version of this fixture did
+ * exactly that, plus an id that did not exist; repaired in S16.)
+ *
+ * Cheapest budget first, as `GET /v1/presets` serves it. The 20 000 entry is
+ * the one the web app does NOT prerender from fixtures, which is what makes
+ * the on-demand ISR path observable in a browser.
+ */
 export const PRESETS_OK = {
   catalog_version: CATALOG_VERSION,
   generated_at: GENERATED_AT,
   presets: [
     {
-      budget_amount: 6000,
-      recommendation_id: "b6f1c0a5-0f2f-4f2a-9c0f-2b1f5f2f6a10",
-      build_score: 61.25,
+      budget_amount: 9000,
+      recommendation_id: IDS.indicative,
+      build_score: null,
+      price_status: "indicative",
+    },
+    {
+      budget_amount: 15000,
+      recommendation_id: IDS.threeBuilds,
+      build_score: null,
       price_status: "verified",
     },
     {
-      budget_amount: 8000,
-      recommendation_id: "c7f2d1b6-1a3b-4e5f-8d9e-3c2a6b7c8d91",
+      budget_amount: 20000,
+      recommendation_id: IDS.presetApiOnly,
       build_score: null,
-      price_status: null,
+      price_status: "verified",
     },
   ],
 };

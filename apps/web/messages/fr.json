@@ -163,6 +163,14 @@
       "waTextPlain": "Ma configuration PC sur morocco-pc : {url}"
     }
   },
+  "presets": {
+    "title": "Config PC gamer à {budget}",
+    "description": "Une configuration PC gamer assemblée pour un budget de {budget} : composants, prix et état de chaque prix.",
+    "intro": "Cette configuration a été assemblée pour un budget de {budget}. L'état de chaque prix est indiqué sur la configuration ci-dessous.",
+    "cta": "Configurer mon PC",
+    "viewPass": "Voir la configuration complète",
+    "computedAt": "Calculée le {date}"
+  },
   "notFound": {
     "eyebrow": "Erreur 404",
     "title": "Page introuvable",

@@ -12,9 +12,10 @@
  *   2. refuses to start without a production build, because `next start` would
  *      otherwise serve a stale `.next` or fail late;
  *   3. starts the fixture mock and the built app, waits until BOTH answer, and
- *      requires the measured page ITSELF to answer 200 without a redirect (a
- *      404 or a redirect collects happily and every budget passes on the wrong
- *      page, which is the same lie as measuring a dev server);
+ *      requires EVERY measured page to answer 200 without a redirect (a 404 or a
+ *      redirect collects happily and every budget passes on the wrong page,
+ *      which is the same lie as measuring a dev server). S16 added a second
+ *      measured page, so this probes the whole list instead of its first entry);
  *   4. runs `lhci autorun` (the config is `lighthouserc.cjs`);
  *   5. stops both servers even when Lighthouse fails or the run is interrupted,
  *      and frees the ports.
@@ -156,12 +157,12 @@ function dumpAssertions() {
 }
 
 async function main() {
-  // The page to measure comes FROM the config, not from a second copy of the
-  // URL: the route the budgets name and the route this harness proves is up
-  // have to be the same string, or the proof is about some other page.
+  // The pages to measure come FROM the config, not from a second copy of the
+  // URLs: the routes the budgets name and the routes this harness proves are up
+  // have to be the same strings, or the proof is about some other page.
   const configPath = path.join(ROOT, "lighthouserc.cjs");
   const { default: config } = await import(pathToFileURL(configPath).href);
-  const [measuredUrl] = config.ci.collect.url;
+  const measuredUrls = config.ci.collect.url;
 
   if (!fs.existsSync(path.join(ROOT, ".next", "BUILD_ID"))) {
     throw new Error(
@@ -193,16 +194,26 @@ async function main() {
   await waitForReady(`${APP_ORIGIN}/fr`, app);
 
   // Lighthouse reports the FINAL url, so a redirect is a quiet way to budget the
-  // wrong page; both checks run before the three runs are spent.
-  const bare = (url) => url.replace(/\/+$/, "");
-  const probe = await fetch(measuredUrl, { signal: AbortSignal.timeout(10_000) });
-  if (!probe.ok || bare(probe.url) !== bare(measuredUrl)) {
-    throw new Error(
-      `${measuredUrl} did not answer 200 at its own path (status ${probe.status}, final ${probe.url}) — the budgets would measure the wrong page.`,
-    );
+  // wrong page. EVERY configured page is probed before the three runs are spent:
+  // a page that 404s still collects, and its budgets pass on nothing.
+  const bare = (url) => {
+    let out = url;
+    while (out.endsWith("/")) out = out.slice(0, -1);
+    return out;
+  };
+  for (const measuredUrl of measuredUrls) {
+    const probe = await fetch(measuredUrl, { signal: AbortSignal.timeout(10_000) });
+    if (!probe.ok || bare(probe.url) !== bare(measuredUrl)) {
+      throw new Error(
+        `${measuredUrl} did not answer 200 at its own path (status ${probe.status}, final ${probe.url}) — the budgets would measure the wrong page.`,
+      );
+    }
   }
 
-  console.log(`Measuring ${measuredUrl} (fixture mock on ${MOCK_PORT}), enforced budgets from lighthouserc.cjs`);
+  console.log(
+    `Measuring ${measuredUrls.length} page(s) (fixture mock on ${MOCK_PORT}), enforced budgets from lighthouserc.cjs:`,
+  );
+  for (const measuredUrl of measuredUrls) console.log(`  ${measuredUrl}`);
   const result = spawnSync(process.execPath, [LHCI_CLI, "autorun"], {
     cwd: ROOT,
     stdio: "inherit",
