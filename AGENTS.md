@@ -248,15 +248,24 @@ untouched). On `push`/`pull_request` touching `apps/web/**` (and `workflow_dispa
 `schedule`), a `web` job runs in `apps/web`: `npm ci`, then `typecheck`, `lint`, `check:tokens`,
 `check:i18n`, `check:api-types` (the S4 contract-drift gate, so the triggers also include
 `apps/api/test/unit/openapi-v1.5.json`), `build`, `playwright install --with-deps chromium`,
-`npm test` and `test:lighthouse` (S6's WARNING-FIRST budgets on a fixture result page) on Node 22
+`npm test` and `test:lighthouse` (the ENFORCED budgets on a fixture result page — `error` level,
+median of three, since S19) on Node 22
 — uploading `apps/web/test-results` when a run fails and `apps/web/.lighthouseci` always. It
 replaces the scaffold-era `web-ci.yml`, deleted in the same change, so a web push runs one job, not
 two. It needs NO secrets and NO database: `playwright.config.ts` starts the app on 3210 and the fixture mock on
 3211 itself, and `scripts/lighthouse-ci.mjs` starts and stops both for the budget run (refusing to
-measure a server already on 3210, or a result route that does not answer 200 as itself). Verified 2026-10-21 from a fresh `npm ci` under Node 22.23.3
-with `CI=true` — 168/168 specs, LCP 2.32–2.34 s / CLS 0 / 145 981 B of script on the fixture route;
-the first real GitHub run is the remaining proof, and S19 promotes the three `warn` assertions to
-`error`.
+measure a server already on 3210, or a result route that does not answer 200 as itself). Verified locally 2026-10-21 from a fresh `npm ci` under Node 22.23.3 with `CI=true` (168/168 specs,
+LCP 2.32–2.34 s / CLS 0 / 145 981 B of script) and then on GitHub itself: runs 39618370244 (push)
+and 39618455093 (dispatch) green, then 39619019100 green after the artifact fix — 168/168 specs in
+26.1 s, CI Lighthouse LCP 1.79–2.40 s / CLS 0 / 145 981 B, and a 1.37 MB `web-lighthouse-report`
+artifact carrying three LHRs; the first run on `master` itself (39620417164) is green with the
+same artifact. A deliberate type error on a throwaway ref (run 39619535613) turned
+the typecheck step red and skipped every later step, so the gate does fire. One trap that run
+recorded: the upload needed `include-hidden-files: true` because `.lighthouseci` is a DOT
+directory and `upload-artifact` skips hidden files by default — without it the step reports
+success and stores nothing. S19 then promoted the three assertions to `error` with
+`aggregationMethod: "median"` (2026-10-21), and added the verified-price JSON-LD gate in
+`apps/web/lib/result/structured-data.ts`.
 
 **The scheduled job HAS now run, twice, on 2026-10-18** (`workflow_dispatch` on `agent/platforms`;
 runs 39119596060 and 39120485573). Both doubts that could only be settled by a real run are now

@@ -30,7 +30,7 @@ Run them from `apps/web`. Node 22 or newer.
 | `npm run build` | Production build; `npm test` needs it to have run |
 | `npm run start` | Serve the production build on 3210 |
 | `npm test` | Playwright at 360×800 — starts `next start` (3210) and the mock API (3211) |
-| `npm run test:lighthouse` | Lighthouse budgets on a fixture result page (warning-first, S6) — needs `npm run build`, starts both servers itself, writes `.lighthouseci/` |
+| `npm run test:lighthouse` | Lighthouse budgets on a fixture result page (enforced since S19: `error`, median of three) — needs `npm run build`, starts both servers itself, writes `.lighthouseci/` |
 | `npm run mock:api` | The fixture mock API on 3211; states via `?state=` (see `mock/server.mjs`) |
 | `npm run lint` / `npm run typecheck` | ESLint / `tsc --noEmit` |
 | `npm run check:api-types` | Fails when `lib/api/schema.d.ts` drifts from the OpenAPI snapshot |

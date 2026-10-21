@@ -12,6 +12,7 @@ import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
 import { orderBuilds, priceProvenance, zeroBuildAdvice } from "@/lib/result/model";
 import { loadRecommendationCached } from "@/lib/result/load";
+import { asVerifiedPricedBuild, jsonLdScript, productJsonLd } from "@/lib/result/structured-data";
 import { absoluteResultUrl, originFromHeaders, waMeHref } from "@/lib/result/share";
 import { toHref, type Answers } from "@/lib/wizard/model";
 
@@ -238,8 +239,49 @@ export default async function ConfigPage({
     : t("share.waTextPlain", { url: shareUrl });
   const whatsappHref = waMeHref(waText);
 
+  /**
+   * S19's structured data — the one place a price may become markup for a
+   * crawler. Two gates are already decided above: the primary build's
+   * provenance must be `verified` (not the API's `price_status`, which cannot
+   * tell an all-seed pass from a half-quoted one), and the currency must be a
+   * three-letter code. A malformed currency is a data bug, so the block is
+   * skipped rather than teaching a crawler a currency this page does not mean.
+   * `asVerifiedPricedBuild()` is the only way into the serializer, and it
+   * throws on anything else — a demo price is unrepresentable, not merely
+   * undisplayed.
+   *
+   * The name reuses the og:title's own sentence, so the card a chat app
+   * unfurls and the block a crawler reads cannot advertise different amounts.
+   */
+  const currency = recommendation.currency;
+  const structuredData =
+    primary !== undefined &&
+    provenance === "verified" &&
+    currency !== null &&
+    /^[A-Z]{3}$/.test(currency)
+      ? productJsonLd(asVerifiedPricedBuild(primary), {
+          name: priced
+            ? t("share.ogTitle", {
+                total: totalLabel as string,
+                budget: budgetLabel as string,
+                word: wordLabel as string,
+              })
+            : t("share.ogTitlePlain"),
+          description: t("share.ogDescription"),
+          currency,
+        })
+      : null;
+
   return (
     <section>
+      {/* `jsonLdScript()` escapes `<`, so no localized string can close this
+          element early. The payload is JSON, not HTML. */}
+      {structuredData === null ? null : (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(structuredData) }}
+        />
+      )}
       <header>
         <h1 className="text-heading text-ink">{t("title")}</h1>
         {budget === null ? null : (

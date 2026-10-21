@@ -282,8 +282,8 @@ Lighthouse CI budgets — without disturbing the engine's existing jobs.
 2. LHCI runs on a fixture route and uploads results as CI artifacts.
 3. The engine's `test:unit` job is unchanged and green on the same commit.
 
-**The dedicated job and the warning-first budgets landed 2026-10-21 — only the promotion to
-failure is left.** `.github/workflows/web.yml` is the S6 job: its own workflow (the engine's
+**The dedicated job and the warning-first budgets landed 2026-10-21; S19 promoted them to
+failures the same day.** `.github/workflows/web.yml` is the S6 job: its own workflow (the engine's
 `ci.yml` jobs untouched), no secrets, no database. It replaces the scaffold-era `web-ci.yml`,
 deleted here: the same gates, budgets included, one job per web push instead of two. On
 `push`/`pull_request` touching
@@ -301,9 +301,17 @@ both servers, refuses to measure a dev server already on 3210 (or a result route
 not answer 200 as itself), and stops them even when Lighthouse fails, so the number is the
 BUILT app. Measured locally 2026-10-21 (3 runs): LCP
 2.32–2.34 s, CLS 0, script transfer 145 981 B (142.6 KB), performance 98; an impossible budget
-produced a warning assertion with exit code 0, which is what warning-first means. **Still
-open:** DoD scenarios 1–2 need a real GitHub run (red-on-typecheck proof, artifact upload), and
-S19 promotes the three assertions to `error`.
+produced a warning assertion with exit code 0, which is what warning-first means. **Proven on
+GitHub the same day:** run 39618370244 (push) and 39618455093 (dispatch) were green end to end,
+168/168 specs in 26.1 s; after the artifact fix, run 39619019100 attached a 1.37 MB
+`web-lighthouse-report` with three LHRs (CI: LCP 1.79–2.40 s, CLS 0, 145 981 B). Uploading needed
+`include-hidden-files: true` — the first two runs reported success and stored nothing, because
+`upload-artifact` skips dot-directories such as `.lighthouseci` by default. DoD scenario 1 is
+proven too: a deliberate type error on a throwaway ref (run 39619535613) failed the typecheck step
+and skipped the rest. **On `master` now:** pushing 3e1a4e7 ran both workflows and the web run
+(39620417164) was green step for step, report artifact attached; the engine's `ci` job was green
+on the same commit. S19 has since promoted the three assertions to `error` with a median
+aggregation (see S19 below).
 
 ### Phase W1 — Wizard
 
@@ -702,7 +710,7 @@ per-build fact, the disclaimer is the pass-wide one, and neither is invented whe
 Measured: **141/141** Playwright specs (6 badge specs plus 1 model check added), `check:tokens` 39
 files, `check:i18n` 37 files, `typecheck`/`lint`/`build` exit 0. The JSON-LD half of scenario 3 is
 asserted as an ABSENCE on the demo and mixed pages (`application/ld+json` never appears in the raw
-HTML); S19 owns emitting it, and only for `verified`.
+HTML); S19 has since shipped the emitting half, and only for `verified`.
 
 #### S13 — "Pourquoi ce choix" panel (2 h)
 **Goal:** The explanation panel: `explanation` text today, code-driven copy from `reasons[]`
@@ -925,6 +933,34 @@ prices — and the W3 performance budgets enforced in CI.
 2. LHCI red when a budget is exceeded (prove with an injected regression).
 3. JS budget: initial bundle measured ≤ 170 KB gzip on a preset page (CI check).
 4. Structured-data validation passes on the verified fixture (schema.org types correct).
+
+**Landing 2026-10-21: the budgets are `error`, and the result page carries the gate.**
+`lib/result/structured-data.ts` makes "a demo price marked up" UNREPRESENTABLE rather than
+guarded: `asVerifiedPricedBuild()` is the only constructor of the branded
+`VerifiedPricedBuild` that `productJsonLd()` accepts, and it refuses a demo price, an
+indicative one, and a verified build with no total. The gate reuses `priceProvenance()`
+(the three-state answer the badge shows), not `price_status` — the API's status cannot tell
+an all-SEED_UNVERIFIED pass from a half-quoted one, and it is vacuous for a build with no
+components. The page emits ONE `Product`+`Offer` for the rank-1 verified build, priced with
+its own unformatted `total_price` in MAD; names come from the localized og:title sentence, so
+the unfurled card and the crawled block cannot advertise different amounts. `jsonLdScript()`
+escapes `<`, so a product name cannot close the script element. Pinned by
+`e2e/structured-data.spec.ts` (8 specs: three refusals, the serializer's own shape, the
+escaping, and three page assertions over RAW HTML) plus S12's badge spec.
+
+**`aggregationMethod: "median"` is part of the enforcement.** LHCI's default is `optimistic`
+— the MINIMUM of the three runs for a max-assertion — so on master a 3.09 s sample passed the
+2.5 s budget because two samples were 2.36 s. Under `median` the aggregate is the middle
+sample. **Proven, not asserted:** with the threshold temporarily set to 2000 ms the harness
+exited 1 and the assertion reported `found: 2337.2086` from samples 2331.1704 / 2337.2086 /
+2476.5688 — the MEDIAN, not the 2331.17 minimum an `optimistic` aggregate would have
+reported. Restored to 2500 ms every assertion passes (one run: 2326.6 / 2329.6 / 2341.8 ms,
+median 2329.6 ms, CLS 0, script transfer 145 981 B). DoD scenario 2 by construction: the
+threshold was the injected regression, and it turned the run red (exit 1).
+
+**Still open:** DoD scenario 3 names a PRESET page, and presets are S16's (`preset` routes do
+not exist yet), so the 170 KB script budget is measured today on the fixture RESULT page —
+the one this sprint changes. S18 adds the crawl surface; neither blocks the gate above.
 
 ### Phase W4 — Hardening
 

@@ -60,12 +60,11 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm test
-      # S6's budgets, WARNING-FIRST: the three assertions in lighthouserc.cjs are
-      # `warn`, so a regression is printed and stored as an artifact instead of
-      # failing a PR while W3 has not landed. S19 owns promoting them to `error`.
-      # The harness starts the built app (3210) and the fixture mock (3211) itself
-      # and refuses to measure a dev server that already holds the port.
-      - name: Lighthouse CI (fixture route, warning-first)
+      # S19's budgets, ENFORCED: the three assertions in lighthouserc.cjs are
+      # `error` and aggregate by MEDIAN of the three runs, so a regression fails
+      # this job. The harness starts the built app (3210) and the fixture mock
+      # (3211) itself and refuses to measure a dev server already on the port.
+      - name: Lighthouse CI (fixture route, enforced budgets)
         run: npm run test:lighthouse
       - name: Upload Lighthouse report
         if: always()

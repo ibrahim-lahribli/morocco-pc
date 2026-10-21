@@ -45,6 +45,13 @@ export const IDS = {
    * which is exactly why the third state is the client's to compute.
    */
   demo: "5b7e2f9a-4c1d-4a3e-9b8f-7d6c5b4a3928",
+  /**
+   * A rank-1 build that is INDICATIVE but not demo: one VERIFIED offer and one
+   * SEED_UNVERIFIED placeholder. The API derives `price_status: "indicative"`,
+   * and the client's third state does not apply — so the total may be shown,
+   * and structured data still may not claim it (S19).
+   */
+  indicative: "6f2d9a41-3c8b-4e7d-9f15-8a2b6c4d0e93",
   /** A build carrying provisional `reasons[]` (CD-2) — the S13 panel. */
   withReasons: "8c4d1e7f-2b9a-4f6c-9d3e-5a1b7c8d9e0f",
   /** A total past the query budget — the bar's overflow state. */
@@ -417,6 +424,25 @@ export const RECOMMENDATION_DEMO = baseResponse({
 });
 
 /**
+ * A rank-1 INDICATIVE pass: one real offer, one placeholder. The page shows
+ * the total and the Indicatif badge; the JSON-LD gate must emit nothing.
+ */
+export const RECOMMENDATION_INDICATIVE = baseResponse({
+  id: IDS.indicative,
+  budget_amount: 9000,
+  budget_floor: { ...BUDGET_FLOOR_COMPLETE, budget_amount: 9000 },
+  builds: [
+    build({
+      rank: 1,
+      strategy_key: "BALANCED",
+      price_status: "indicative",
+      explanation: "Configuration équilibrée : mémoire non vérifiée.",
+      components: [COMPONENT_CPU_VERIFIED, COMPONENT_RAM_SEED],
+    }),
+  ],
+});
+
+/**
  * A total PAST the query budget. The engine aims to stay inside the budget, so
  * this state is defensive rather than expected - but a persisted pass is not
  * re-derived against a new budget, and the page must not paint 114 % of a budget
@@ -513,6 +539,7 @@ export const RECOMMENDATIONS_BY_ID = {
   [IDS.threeBuilds]: RECOMMENDATION_THREE_BUILDS,
   [IDS.oneBuild]: RECOMMENDATION_ONE_BUILD,
   [IDS.demo]: RECOMMENDATION_DEMO,
+  [IDS.indicative]: RECOMMENDATION_INDICATIVE,
   [IDS.withReasons]: RECOMMENDATION_WITH_REASONS,
   [IDS.overBudget]: RECOMMENDATION_OVER_BUDGET,
   [IDS.zeroBuild]: RECOMMENDATION_ZERO_BUILD,

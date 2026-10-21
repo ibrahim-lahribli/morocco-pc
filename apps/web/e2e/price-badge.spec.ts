@@ -29,6 +29,7 @@ import { DISCLAIMER, GENERATED_AT, IDS } from "../mock/fixtures.mjs";
 
 const THREE = `/fr/config/${IDS.threeBuilds}`;
 const DEMO = `/fr/config/${IDS.demo}`;
+const INDICATIVE = `/fr/config/${IDS.indicative}`;
 
 test("an all-seed build is Démo: the dashed muted pill, and no date", async ({ page }) => {
   await page.goto(DEMO);
@@ -75,10 +76,10 @@ test("no structured data is emitted for a demo or indicative price (S19's gate)"
   request,
 }) => {
   // Structured data is gated on truth: only `verified` may ever carry JSON-LD.
-  // S19 owns emitting it, so this pins the other half — the raw HTML a crawler
-  // reads must contain none, on the demo page and on the page whose rank 2 is
-  // indicative.
-  for (const path of [DEMO, THREE]) {
+  // The verified half is `structured-data.spec.ts`'s; this pins the refusals —
+  // the all-seed page and the rank-1 INDICATIVE one, whose total is partly real
+  // and therefore may be SHOWN without being marked up.
+  for (const path of [DEMO, INDICATIVE]) {
     const html = await (await request.get(path)).text();
     expect(html, path).not.toContain("application/ld+json");
   }

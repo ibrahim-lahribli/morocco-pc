@@ -19,10 +19,14 @@
  *   5. stops both servers even when Lighthouse fails or the run is interrupted,
  *      and frees the ports.
  *
- * Exit code is Lighthouse's: `warn`-level budget misses keep it 0 (S6 is
- * warning-first), while a collect failure or a CI-level `error` assertion does
- * not. Server output is buffered and printed only when something goes wrong, so
- * a green run stays readable.
+ * Exit code is Lighthouse's: since S19 the assertions are `error`, so a budget
+ * miss fails this script (and the web job) — a collect failure and a `warn`-level
+ * miss are non-zero too. Server output is buffered and printed only when
+ * something goes wrong, so a green run stays readable.
+ *
+ * On a failure `assertion-results.json` is printed as well: LHCI's own summary
+ * names the assertion but not the aggregate it compared against, and "the median
+ * of three" is the entire reason the number is trustworthy.
  */
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -132,6 +136,25 @@ function dumpLogs() {
   }
 }
 
+// LHCI's summary says "expected <= 2500, found > 2500" and stops there. The
+// aggregate it actually compared is only in the JSON, and under a median
+// aggregation that number is the one to argue with.
+function dumpAssertions() {
+  const file = path.join(ROOT, ".lighthouseci", "assertion-results.json");
+  try {
+    if (!fs.existsSync(file)) return;
+    const results = JSON.parse(fs.readFileSync(file, "utf8"));
+    for (const result of results) {
+      if (result.passed) continue;
+      const actual =
+        result.actual === undefined ? "" : " (aggregate: " + String(result.actual) + ")";
+      console.error(`--- assertion ${result.level}: ${result.auditId}${actual} ---`);
+    }
+  } catch (error) {
+    console.error(`could not read assertion results: ${error.message}`);
+  }
+}
+
 async function main() {
   // The page to measure comes FROM the config, not from a second copy of the
   // URL: the route the budgets name and the route this harness proves is up
@@ -179,7 +202,7 @@ async function main() {
     );
   }
 
-  console.log(`Measuring ${measuredUrl} (fixture mock on ${MOCK_PORT}), warning-first budgets from lighthouserc.cjs`);
+  console.log(`Measuring ${measuredUrl} (fixture mock on ${MOCK_PORT}), enforced budgets from lighthouserc.cjs`);
   const result = spawnSync(process.execPath, [LHCI_CLI, "autorun"], {
     cwd: ROOT,
     stdio: "inherit",
@@ -203,7 +226,10 @@ try {
   exitCode = 1;
 } finally {
   await stopServers();
-  if (exitCode !== 0) dumpLogs();
+  if (exitCode !== 0) {
+    dumpAssertions();
+    dumpLogs();
+  }
 }
 
 process.exit(exitCode);

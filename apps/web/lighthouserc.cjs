@@ -8,10 +8,15 @@
  * before this config is read — `lhci autorun` on its own would measure whatever
  * happens to be listening, which is how a budget quietly becomes a lie.
  *
- * WARNING-FIRST, per S6: all three assertions are `warn`, so a regression is
- * printed and stored under `.lighthouseci/` without turning a PR red while W3
- * has not landed yet. S19 promotes them to `error` and owns the preset-page JS
- * budget; this file is the one place those numbers live.
+ * ENFORCED, per S19: all three assertions are `error`, so a regression fails the
+ * web job instead of only decorating its artifact. They were `warn` from S6
+ * until the budgets had run on a few real runners (2026-10-21).
+ *
+ * `aggregationMethod: "median"` is part of the enforcement, not a detail: with
+ * LHCI's default (`optimistic`, the MINIMUM of three runs for a max-assertion)
+ * one 3.09 s sample passed a 2.5 s budget because two samples were 2.36 s. A
+ * budget that reports its best run is not a budget. The median of the three is
+ * what the next sample most resembles.
  *
  * 170 KB is 174 080 bytes — S6's hypothesis, measured as TRANSFER size (so
  * compression counts). `resource-summary:script:size` is the closest audit LHCI
@@ -26,9 +31,8 @@ module.exports = {
   ci: {
     collect: {
       url: [`${APP_ORIGIN}/fr/config/${IDS.threeBuilds}`],
-      // Three runs, so the artifact carries a median instead of one unlucky
-      // sample; assertions aggregate optimistically (LHCI's default), which is
-      // the right bias for a budget that only warns today.
+      // Three runs, so the assertion can take a median instead of one unlucky
+      // sample (see the header: `optimistic` would report the best run).
       numberOfRuns: 3,
       settings: {
         // S6's profile is the product's own: a 360 px phone on throttled 4G.
@@ -46,10 +50,13 @@ module.exports = {
       },
     },
     assert: {
+      // One aggregation for all three, so no assertion can drift back to the
+      // optimistic default on its own.
+      aggregationMethod: "median",
       assertions: {
-        "largest-contentful-paint": ["warn", { maxNumericValue: 2500 }],
-        "cumulative-layout-shift": ["warn", { maxNumericValue: 0.1 }],
-        "resource-summary:script:size": ["warn", { maxNumericValue: 174080 }],
+        "largest-contentful-paint": ["error", { maxNumericValue: 2500 }],
+        "cumulative-layout-shift": ["error", { maxNumericValue: 0.1 }],
+        "resource-summary:script:size": ["error", { maxNumericValue: 174080 }],
       },
     },
     upload: {
