@@ -45,6 +45,8 @@ export const IDS = {
    * which is exactly why the third state is the client's to compute.
    */
   demo: "5b7e2f9a-4c1d-4a3e-9b8f-7d6c5b4a3928",
+  /** A build carrying provisional `reasons[]` (CD-2) — the S13 panel. */
+  withReasons: "8c4d1e7f-2b9a-4f6c-9d3e-5a1b7c8d9e0f",
   /** A total past the query budget — the bar's overflow state. */
   overBudget: "4c8d2e6f-1a3b-4d5e-9f7a-6b2c8d4e0f1a",
   /** A pass that assembled nothing, with a priced floor. */
@@ -440,6 +442,42 @@ export const RECOMMENDATION_ZERO_BUILD_NO_FLOOR = baseResponse({
 });
 
 /**
+ * A build carrying `reasons[]` — the PROVISIONAL contract state S13 is built for.
+ *
+ * The field is not in contract v1.5 (CD-2): Decision 44's `deriveReasons()`
+ * exists in the engine, but no route serves it yet, so the real API omits it and
+ * the page falls back to `explanation`. The mock serves it on this id alone so
+ * the reasons path is exercised end to end — the results page is server-
+ * rendered, so a browser `page.route` cannot substitute a body here.
+ *
+ * The list is the engine's own `{ code, value }` shape, in Decision 44's
+ * REASON_ORDER, plus one code this client does not know: an unknown code becomes
+ * a generic line and must never reach the screen raw (S13 scenario 3).
+ */
+export const RECOMMENDATION_WITH_REASONS = baseResponse({
+  id: IDS.withReasons,
+  builds: [
+    {
+      ...RECOMMENDATION_THREE_BUILDS.builds[0],
+      reasons: [
+        { code: "STRATEGY", value: "BALANCED" },
+        { code: "BUDGET_USED_PCT", value: 57.29333333333334 },
+        { code: "GPU_SHARE", value: 0.3723 },
+        { code: "DOMINANT_ROLE", value: "GPU" },
+        { code: "BIOS_UPDATE_REQUIRED", value: ["1.2.3"] },
+        { code: "UNKNOWN_SPEC", value: ["CPU_COOLER"] },
+        {
+          code: "INPUT_APPLIED",
+          value: { use_case: "GAMING", resolution: "1440p", priority: 3, gpu_policy: null },
+        },
+        { code: "LIMITED_CATALOG", value: ["FEWER_THAN_THREE_DISTINCT_ARCHETYPES"] },
+        { code: "FUTURE_REASON", value: "not-yet-known" },
+      ],
+    },
+  ],
+});
+
+/**
  * The map the mock answers `GET /v1/recommendations/:id` from.
  *
  * An id that is not here is a 404, as the real API's is: a result id is a
@@ -451,6 +489,7 @@ export const RECOMMENDATIONS_BY_ID = {
   [IDS.threeBuilds]: RECOMMENDATION_THREE_BUILDS,
   [IDS.oneBuild]: RECOMMENDATION_ONE_BUILD,
   [IDS.demo]: RECOMMENDATION_DEMO,
+  [IDS.withReasons]: RECOMMENDATION_WITH_REASONS,
   [IDS.overBudget]: RECOMMENDATION_OVER_BUDGET,
   [IDS.zeroBuild]: RECOMMENDATION_ZERO_BUILD,
   [IDS.zeroBuildNoFloor]: RECOMMENDATION_ZERO_BUILD_NO_FLOOR,

@@ -118,6 +118,18 @@
       "verified": "Vérifié",
       "verifiedDated": "Vérifié · calculé le {date}"
     },
+    "whySummary": "Pourquoi ce choix",
+    "reasons": {
+      "strategy": "Profil retenu : {strategy}.",
+      "budget": "{percent} du budget utilisé.",
+      "gpuShare": "La carte graphique pèse {percent} du prix.",
+      "dominantRole": "Poste le plus contributif : {role}.",
+      "bios": "Mise à jour du BIOS requise : {versions}.",
+      "unknownSpec": "Caractéristiques non vérifiées : {roles}.",
+      "inputs": "Les réglages de la recherche (usage, résolution, priorité) ont été pris en compte.",
+      "limitedCatalog": "Le catalogue ne contenait pas assez de profils distincts pour varier davantage.",
+      "unknown": "Un autre facteur a pesé sur ce choix."
+    },
     "zeroTitle": "Aucune configuration pour ce budget",
     "zeroBody": "Nous n'avons trouvé aucune configuration compatible avec ce budget. Augmentez le budget ou changez d'usage, puis relancez la recherche.",
     "zeroBack": "Modifier mon budget",

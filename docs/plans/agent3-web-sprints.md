@@ -696,6 +696,45 @@ the moment CD-2 lands (V4), with French strings in i18n files ready for Arabic.
 3. Unknown reason code → generic fallback line, no crash, no raw code shown to the user.
 4. Disclosure is operable by keyboard and announces expanded/collapsed state.
 
+**Status: DONE 2026-10-21 — as built.** Every build card ends with a native `<details>` disclosure.
+The panel shows the committed explanation while the contract is silent, and catalogue lines the
+moment `reasons[]` is served.
+
+**The feature check is the sprint, and it lives in one module.** `reasons[]` is not in contract v1.5
+(CD-2), so `lib/result/reasons.ts` reads it through `unknown` — the second and last place allowed to
+name a field outside `schema.d.ts`, after `lib/wizard/applied.ts` does it for `inputs_applied` — and
+turns each `{ code, value }` into a typed view. Three rules: absent or empty yields `[]` and the UI
+renders `build.explanation` VERBATIM (never a paraphrase, never an invented reason); an unknown code
+becomes ONE generic line at the end, never the raw code; and a KNOWN code carrying a malformed value
+is treated the same way, so a percentage served as a string cannot become "NaN %". Entries that are
+not `{ code, value }` records at all are ignored rather than counted as facts we failed to name.
+
+**The copy never prints vocabulary.** Eight codes, eight catalogue sentences (`result.reasons.*` in
+both languages): strategy and dominant role are translated through `strategies.*` / `roles.*`, the
+two percentages go through `formatPercent` from a ratio (the component never divides), BIOS versions
+are verbatim strings, and `INPUT_APPLIED` / `LIMITED_CATALOG` are GENERIC sentences on purpose —
+their values are contract vocabulary (`GAMING`, `1440p`, E4's `FEWER_THAN_THREE…`) and the results
+page has no `meta/options` labels to translate them with. Printing them raw would be the V5 failure
+in a new place, so those two say what happened without naming the code.
+
+**Native disclosure, no client island.** `<details>`/`<summary>` is collapsed in the SERVER HTML,
+opens with Enter or Space, and exposes its own state: the accessibility tree reports a focusable
+`DisclosureTriangle "Pourquoi ce choix"`. A hand-rolled ARIA disclosure would be a second state
+machine to keep in sync with the first, so the specs assert the DOM's `open` attribute and real key
+presses rather than a class name, and the browser's own role is what announces expanded/collapsed.
+
+**The fixture is provisional, and says so.** The mock serves `reasons[]` on one id (`withReasons`),
+in Decision 44's `REASON_ORDER` plus a code this client does not know. It has to live in the mock
+rather than a `page.route` override because the results page is server-rendered (S11's lesson), so
+the suite exercises the shipping path. Every other fixture stays reasons-free, which is the other
+branch: the explanation string, verbatim.
+
+V4 stays open on purpose: the persisted trace is still prose only, and this sprint does not change
+that — it makes the API's eventual `reasons[]` a data change, not a UI change.
+
+Measured: **152/152** Playwright specs (5 explanation specs plus 6 reason-line checks added),
+`check:tokens` 41 files, `check:i18n` 39 files, `typecheck`/`lint`/`build` exit 0.
+
 #### S14 — Zero-build + empty/error/rate-limited states (1.5 h)
 **Goal:** The zero-build experience per V2 (both floor-present and floor-absent), plus the
 shared state components W4 will reuse.

@@ -228,10 +228,18 @@ performed. The tones are the kit's unchanged — démo dashed muted, indicatif w
 success — and a card's `data-tone` is the BUDGET tone, which is why the badge carries its own
 `data-tone` on its own element.
 
+**The explanation is a native disclosure (S13).** `BuildExplanation` is a `<details>`/`<summary>`
+pair, collapsed in the server HTML: the element owns its expanded state, its Enter/Space
+operation and the announcement of both, so there is no client island and no ARIA to keep in sync
+with the DOM. It renders the committed `explanation` verbatim while the contract is silent
+(CD-2) and switches to catalogue lines the moment `reasons[]` is served; the parser
+(`lib/result/reasons.ts`) never prints a code, and a malformed value gets the same generic line
+an unknown code does.
+
 ## Not in the kit
 
-- The step indicator (§5), disclosure (§13) and share bar (§14) are composition, not
-  primitives — they belong to the screens that own them. The component row (§11) and
-  the strategy card (§12) are now built, at `components/result/`.
+- The step indicator (§5) and share bar (§14) are composition, not primitives — they belong
+  to the screens that own them. The component row (§11), the strategy card (§12) and the
+  explanation disclosure (§13) are now built, at `components/result/`.
 - The `ar` locale, its font subset and the locale switcher (S5, S20).
 - Dark mode: no board defines one, so no component pretends to support it.

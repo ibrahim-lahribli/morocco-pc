@@ -30,6 +30,11 @@
  * `Alert` with the warning tone says what happened AND by how much, which a pill
  * cannot.
  *
+ * **The explanation is a disclosure, not a paragraph of prose nobody reads.**
+ * `BuildExplanation` renders the committed `explanation` verbatim until the
+ * contract serves `reasons[]` (CD-2), then switches to catalogue lines; it owns
+ * that feature check so this card keeps composing and does not parse.
+ *
  * **The price badge is the provenance, and only `verified` carries a date.**
  * `priceProvenance()` folds the build's derived `price_status` and its
  * components' `offer_class` into the board's three states, so an all-seed build
@@ -57,6 +62,7 @@ import {
   type PriceProvenance,
 } from "@/lib/result/model";
 
+import { BuildExplanation } from "./build-explanation";
 import { ComponentRow } from "./component-row";
 
 export interface BuildCardProps {
@@ -169,6 +175,8 @@ export async function BuildCard({
           />
         ))}
       </ul>
+
+      <BuildExplanation build={build} locale={locale} />
     </article>
   );
 }
