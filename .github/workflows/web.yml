@@ -73,8 +73,15 @@ jobs:
         with:
           name: web-lighthouse-report
           path: apps/web/.lighthouseci
+          # `.lighthouseci` is a DOT directory and upload-artifact skips hidden
+          # files by default: without this the step reported success and uploaded
+          # nothing (measured on runs 39618370244 / 39618455093).
+          include-hidden-files: true
           retention-days: 7
-          if-no-files-found: ignore
+          # `warn`, not `ignore`: on a job that failed before Lighthouse ran there
+          # is legitimately nothing to upload, and an annotation says so instead
+          # of a silent no-op that looks like a stored report.
+          if-no-files-found: warn
       # Traces, screenshots and videos (trace: on-first-retry) only exist on a
       # failed run; a green run has nothing to upload.
       - name: Upload Playwright traces
