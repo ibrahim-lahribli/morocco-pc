@@ -36,9 +36,18 @@
  * change with — and it is a constant here rather than a magic number in JSX, so
  * changing it is one edit and one test.
  *
- * What this file deliberately does NOT do: format anything. Money, numbers and
- * percentages go through `lib/i18n/format.ts` at the call site, because this
- * module has no locale.
+ * ## 5. A price's state is derived from BOTH columns, never from `price_status`
+ *
+ * `price_status` is the API's derived two-state fact ("verified" only when every
+ * component's `offer_class` is VERIFIED), and it cannot express "nothing here is
+ * a quote": an all-SEED_UNVERIFIED pass derives the SAME `indicative` as a pass
+ * with one real offer and one placeholder. `priceProvenance()` adds the third
+ * state the badge shows — "démo" — and it must be decided FIRST, because the
+ * all-seed build's `price_status` is already `indicative`.
+ *
+ * What this file deliberately does NOT do: format anything. Money, numbers,
+ * percentages and dates go through `lib/i18n/format.ts` at the call site,
+ * because this module has no locale.
  */
 import type { RecommendationResponse } from "@/lib/api/client";
 
@@ -92,6 +101,41 @@ export function roleLabel(role: string): string {
  */
 export function strategyLabel(key: string | null): string {
   return key !== null && (STRATEGY_KEYS as readonly string[]).includes(key) ? key : OTHER_KEY;
+}
+
+/** The three price states the badge shows (V6, S12). */
+export type PriceProvenance = "demo" | "indicative" | "verified";
+
+/**
+ * Which of the three price states a build is in.
+ *
+ * The API derives `price_status` from the components: `verified` only when EVERY
+ * one is `VERIFIED`, `indicative` otherwise. That two-state fact cannot tell a
+ * pass whose prices are all placeholders from a pass with one real offer and one
+ * seed, so the third state is computed here:
+ *
+ *   - `demo` — every component is `SEED_UNVERIFIED`, and there is at least one:
+ *     nothing on the card is a quote.
+ *   - `verified` — the API says every price came from a VERIFIED offer.
+ *   - `indicative` — everything else: a mix, a class this module does not know,
+ *     or no components at all (nothing is known, so it cannot be "verified").
+ *
+ * The demo test runs FIRST and outranks `price_status` on purpose: an all-seed
+ * build's derived status IS `indicative`, so a check ordered the other way would
+ * silently never reach this state.
+ */
+export function priceProvenance(
+  build: Pick<Build, "price_status" | "components">,
+): PriceProvenance {
+  const components = build.components;
+  // No components means no price to vouch for. The API's `price_status` would
+  // be `verified` here (every() over an empty list), which is exactly the
+  // vacuous claim this guard refuses to repeat.
+  if (components.length === 0) return "indicative";
+  if (components.every((component) => component.offer_class === "SEED_UNVERIFIED")) {
+    return "demo";
+  }
+  return build.price_status === "verified" ? "verified" : "indicative";
 }
 
 /**

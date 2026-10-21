@@ -647,6 +647,40 @@ hold the render — a deployment concern, recorded rather than patched inside S1
 2. Badge text includes the formatted date; snapshot pins the exact French phrasing.
 3. JSON-LD is NOT emitted anywhere for démo/indicatif (cross-check S19).
 
+**Status: DONE 2026-10-21 — as built.** Every build card now carries the price badge, and the three
+states are computed from BOTH columns rather than read off one.
+
+**The third state is the client's, and it is decided FIRST.** `price_status` is derived by the API
+as "verified" only when EVERY component's `offer_class` is VERIFIED, "indicative" otherwise — so an
+all-seed pass and a pass with one seed part are INDISTINGUISHABLE to it (both `indicative`).
+`priceProvenance()` in `lib/result/model.ts` adds the third state: every component `SEED_UNVERIFIED`
+→ `demo`; `price_status = verified` → `verified`; everything else → `indicative`. The demo test runs
+first for exactly that reason, and an empty component list is `indicative` rather than the vacuous
+`verified` the API's `every()` over no components would produce. The mock gained a `demo` id whose
+one build is made only of seed prices, so all three states have a fixture of their own.
+
+**The date says what it dates.** CD-6: `generated_at` is when the pass RAN, not when a shop surveyed
+a price, and the contract has no per-offer observed date. So the badge reads "Vérifié · calculé le
+16 octobre 2026", NOT the board's "prix constatés le" — a label that would claim a survey nobody
+performed. The date comes from `formatDate` (never a hand-written string), appears for `verified`
+alone (the kit's rule: the success pair is the only tone allowed to carry a date), and a verified
+build with a NULL `generated_at` drops the date rather than inventing one. A spec asserts the badge
+never contains "constat", so restoring the board's phrasing is a test failure, not a copy edit.
+
+**One deviation from the scenario text.** It asks for a "démo badge (warn token)"; the kit's tone
+map (`TOKEN_MAP.md` §9, pinned by `e2e/kit.spec.ts`) is démo = dashed MUTED, indicatif = the warning
+pair, vérifié = success. That is the better reading and it is used unchanged: warning already means
+"a price exists but is stale", while a demo price is the LEAST-known state — and the three states
+stay distinguishable by shape and word, not only by colour.
+
+The API's `disclaimer` is still printed once at the foot, as the DoD asks: the badge is the
+per-build fact, the disclaimer is the pass-wide one, and neither is invented where the other belongs.
+
+Measured: **141/141** Playwright specs (6 badge specs plus 1 model check added), `check:tokens` 39
+files, `check:i18n` 37 files, `typecheck`/`lint`/`build` exit 0. The JSON-LD half of scenario 3 is
+asserted as an ABSENCE on the demo and mixed pages (`application/ld+json` never appears in the raw
+HTML); S19 owns emitting it, and only for `verified`.
+
 #### S13 — "Pourquoi ce choix" panel (2 h)
 **Goal:** The explanation panel: `explanation` text today, code-driven copy from `reasons[]`
 the moment CD-2 lands (V4), with French strings in i18n files ready for Arabic.

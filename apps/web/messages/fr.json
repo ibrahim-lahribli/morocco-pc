@@ -112,6 +112,12 @@
       "OTHER": "Autre"
     },
     "priceUnknown": "Prix non disponible",
+    "provenance": {
+      "demo": "Démo",
+      "indicative": "Indicatif",
+      "verified": "Vérifié",
+      "verifiedDated": "Vérifié · calculé le {date}"
+    },
     "zeroTitle": "Aucune configuration pour ce budget",
     "zeroBody": "Nous n'avons trouvé aucune configuration compatible avec ce budget. Augmentez le budget ou changez d'usage, puis relancez la recherche.",
     "zeroBack": "Modifier mon budget",

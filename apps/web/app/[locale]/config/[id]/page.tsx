@@ -40,9 +40,12 @@ import { toHref, type Answers } from "@/lib/wizard/model";
  *     page deliberately does not invent that number.
  *   - a total past the budget is drawn as over (the bar's `over` tone plus an
  *     alert), never as a full-but-fine bar.
- *   - the API's own `disclaimer` is printed once, at the foot of the list: a
- *     price is two facts (V6), and the badge that names the per-build provenance
- *     state is S12's. Until then the sentence the API sends is the honest label.
+ *   - a price is two facts (V6), and this page shows both: each card carries the
+ *     `démo | indicatif | vérifié` badge (S12) derived from `price_status` AND
+ *     the components' `offer_class`, while the response's own `disclaimer` is
+ *     printed once at the foot. The badge dates the CALCULATION (`generated_at`)
+ *     and only for `verified`; the contract has no per-offer observed date, so
+ *     nothing here claims a shop surveyed that price on that day (CD-6).
  */
 export async function generateMetadata({
   params,
@@ -144,6 +147,7 @@ export default async function ConfigPage({
               <BuildCard
                 build={build}
                 budget={budget}
+                generatedAt={recommendation.generated_at}
                 position={index + 1}
                 primary={index === 0}
                 locale={appLocale}

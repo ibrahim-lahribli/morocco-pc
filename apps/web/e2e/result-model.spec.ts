@@ -23,6 +23,7 @@ import {
   hasBar,
   orderBuilds,
   overBudgetBy,
+  priceProvenance,
   remainingBudget,
   roleLabel,
   showsVariant,
@@ -30,7 +31,11 @@ import {
 } from "../lib/result/model";
 import ar from "../messages/ar.json";
 import fr from "../messages/fr.json";
-import { RECOMMENDATION_OVER_BUDGET, RECOMMENDATION_THREE_BUILDS } from "../mock/fixtures.mjs";
+import {
+  RECOMMENDATION_DEMO,
+  RECOMMENDATION_OVER_BUDGET,
+  RECOMMENDATION_THREE_BUILDS,
+} from "../mock/fixtures.mjs";
 
 test("builds are rendered in RANK order, whatever order they arrive in", () => {
   const [first, second, third] = RECOMMENDATION_THREE_BUILDS.builds;
@@ -99,6 +104,40 @@ test("the over-budget fixture really is over its own budget", () => {
   const build = RECOMMENDATION_OVER_BUDGET.builds[0];
   expect(build.total_price).toBeGreaterThan(RECOMMENDATION_OVER_BUDGET.budget_amount);
   expect(budgetTone(build.total_price, RECOMMENDATION_OVER_BUDGET.budget_amount)).toBe("over");
+});
+
+test("the price badge maps BOTH columns to three states", () => {
+  const verified = RECOMMENDATION_THREE_BUILDS.builds[0];
+  const mixed = RECOMMENDATION_THREE_BUILDS.builds[1];
+  const demo = RECOMMENDATION_DEMO.builds[0];
+
+  const cases = [
+    { build: demo, expected: "demo", why: "every component is a seed price" },
+    { build: mixed, expected: "indicative", why: "one verified part, one seed part" },
+    { build: verified, expected: "verified", why: "every component is VERIFIED" },
+  ] as const;
+  for (const { build, expected } of cases) {
+    expect(priceProvenance(build), expected).toBe(expected);
+  }
+
+  // The derived `price_status` cannot tell the first two apart - both are
+  // `indicative` - which is the whole reason the third state is computed here.
+  expect(demo.price_status).toBe("indicative");
+  expect(mixed.price_status).toBe("indicative");
+  expect(priceProvenance(demo)).not.toBe(priceProvenance(mixed));
+
+  // Nothing known is not "verified": an empty list holds no verified price.
+  expect(priceProvenance({ ...verified, components: [] })).toBe("indicative");
+  // And an offer class this client does not know is not promoted either.
+  expect(
+    priceProvenance({
+      ...mixed,
+      components: mixed.components.map((component: { offer_class: string }) => ({
+        ...component,
+        offer_class: "MANUAL",
+      })),
+    }),
+  ).toBe("indicative");
 });
 
 test("every role and every strategy has a label, and nothing else leaks", () => {

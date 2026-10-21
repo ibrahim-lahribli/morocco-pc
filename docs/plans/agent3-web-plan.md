@@ -51,7 +51,7 @@ the API catches up.
 | CD-2 | `reasons[]` — structured reason codes per build | **NOT SERVED.** `explainSelection` text is what the API returns; Decision 44's `deriveReasons()` exists but is additive and unwired, so S13 renders `explanation` and keeps the code path ready |
 | CD-4 | `GET /v1/presets` — the landing ribbon | **SHIPPED** (contract v1.4, Decision 48) |
 | CD-5 | `GET /v1/catalog/products` and `/…/{slug}` | **SHIPPED** (contract v1.5, Decision 50) |
-| CD-6 | An honest per-price obsolescence label | **PARTIAL.** The recommendation response carries `generated_at` (when the pass ran), which is NOT when a price was observed, and the API has no per-offer observed-on date — so any "prix constatés le …" label must say what it is actually dating |
+| CD-6 | An honest per-price obsolescence label | **PARTIAL, resolved as far as the contract allows (S12).** `generated_at` dates the PASS, not a shop survey, so the verified badge says "Vérifié · calculé le …" instead of "prix constatés le …". A true per-price observation date is still absent, and the badge must not pretend to have one |
 | CD-7 | `budget_floor` present on the GET revisit | **SHIPPED** (migration 019 + Decision 46; both verbs carry it) |
 | CD-8 | A swap endpoint | **NOT BUILT**, and no platform sprint owns it. S24 ships the disabled control with an explanation rather than a simulated swap |
 
@@ -67,7 +67,7 @@ referenced by no sprint and `OD3` is unused; they are not invented here.
 | V3 | `resolution` / `priority` may be inert (OG-38), and the UI must not imply otherwise | open on the API side |
 | V4 | Explanation text is a string today, so copy cannot be composed from codes | open (CD-2) |
 | V5 | Catalogue names carry a `Seed ` prefix; the UI must use `display_name` and never render "Seed", `SEED_UNVERIFIED` or `TestCompat` | `display_name` available since v1.2 |
-| V6 | A price is two facts — `offer_class` and `price_status` — and showing one without the other misleads | both in the contract |
+| V6 | A price is two facts — `offer_class` and `price_status` — and showing one without the other misleads | **DONE (S12)** — each card derives démo/indicatif/vérifié from BOTH columns, so an all-seed pass no longer hides inside "indicatif" |
 | V9 | `hreflang` for `ar` cannot be emitted before the `ar` routes exist | deferred to S20 by design |
 | V10 | 429 must be a first-class state with `Retry-After`, not a generic error | **DONE (S10)** — the countdown, the disable, and the re-enable. S10 also found the header was unreadable cross-origin: the API now lists `Retry-After` and `X-Request-Id` in its CORS `exposedHeaders`, without which `fetch` returns both as null |
 | V11 | Money and dates must go through `Intl` (`fr-MA`), never hand-formatted | **DONE (S5)** — `lib/i18n/format.ts`; `npm run check:i18n` fails on inline Intl, a runtime-locale method, a hand-written amount or a literal date |
@@ -216,12 +216,12 @@ progress.
 so the wizard's real number is unknown and the sprint board deliberately keeps it out of the gate
 until staging exists.
 
-**Today:** **S11 done** (2026-10-20) — `/fr/config/[id]` is the results page: an SSR read of
-`GET /v1/recommendations/:id`, rank-ordered strategy cards whose first is primary, a component list
-per card, a total-vs-budget bar whose `aria-valuetext` carries the real amounts, a styled 404, and a
-thin zero-build state. S12–S15 are not started: the price-provenance badge (S12), the "pourquoi ce
-choix" panel (S13), the `budget_floor` advice (S14) and sharing (S15). See the sprint board's S11
-status for the two recorded deviations and the SSR-testing mechanics.
+**Today:** **S11 and S12 done** (2026-10-20/21) — `/fr/config/[id]` is the results page: an SSR
+read of `GET /v1/recommendations/:id`, rank-ordered strategy cards whose first is primary, a
+component list per card, a total-vs-budget bar whose `aria-valuetext` carries the real amounts, a
+démo/indicatif/vérifié price badge per card, a styled 404, and a thin zero-build state. S13–S15 are
+not started: the "pourquoi ce choix" panel (S13), the `budget_floor` advice (S14) and sharing
+(S15). See the sprint board's S11 and S12 statuses for the recorded deviations and mechanics.
 
 ### W3 — SEO surface
 
@@ -273,7 +273,7 @@ Run in `apps/web` on the rebased branch, Node 24 locally (CI pins 22):
 | `npm run check:api-types` | exit 0 — contract 1.5.0, 7 paths, `schema.d.ts` byte-identical to the generator |
 | `npm run check:tokens` | exit 0 — 0 hex literals, 0 palette utilities, 0 physical side classes across `app/` + `components/` + `lib/` (39 files); proven RED on each of the three rule types before being trusted |
 | `npm run check:i18n` | exit 0 — no inline `Intl`, no runtime-locale method, no hand-written amount/date in 37 files; proven RED on all four rule types before being trusted |
-| `npm test` (Playwright, 360×800) | 134/134 pass — the 3 shell specs, S4's 19 (every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, one for a non-JSON 200), S2's 8 (palette count, 15 text contrast pairs, 3 UI pairs, then the rendered page: 360 px, noindex, alias chain, 48 px control + 2 px ring, `ms-auto` mirroring, the mono face's late swap), S3's 10 (per-component geometry, roles, keyboard, reduced motion), S5's 15 (lang/dir, switcher, formatting, fonts, the per-locale Arabic preload, the mono preload that is not there, CLS) and S7's 21 (12 wizard: labels from `meta/options`, keyboard-only step 1, deep link, repair, Back with values, Enter advancing the form, the last step's honest disabled action, 503 + retry, 360 px/legend/targets, Arabic, the home link; 9 model: URL parsing, ranges, backwards-only repair, round-trip, request body) and S8's 9 (7 budget: the snap note, the min and max clamps with their notices, the slider's 500 steps and both ends, Enter settling before it advances, 360 px with a 44 px rail and a real legend, the Arabic clamp; 2 model: the 500 grid with its top-of-range arithmetic, and `clampBudget` naming the bound) and S9's 12 (6 steps: the gaming/office flow lengths, a URL
+| `npm test` (Playwright, 360×800) | 141/141 pass — the 3 shell specs, S4's 19 (every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, one for a non-JSON 200), S2's 8 (palette count, 15 text contrast pairs, 3 UI pairs, then the rendered page: 360 px, noindex, alias chain, 48 px control + 2 px ring, `ms-auto` mirroring, the mono face's late swap), S3's 10 (per-component geometry, roles, keyboard, reduced motion), S5's 15 (lang/dir, switcher, formatting, fonts, the per-locale Arabic preload, the mono preload that is not there, CLS) and S7's 21 (12 wizard: labels from `meta/options`, keyboard-only step 1, deep link, repair, Back with values, Enter advancing the form, the last step's honest disabled action, 503 + retry, 360 px/legend/targets, Arabic, the home link; 9 model: URL parsing, ranges, backwards-only repair, round-trip, request body) and S8's 9 (7 budget: the snap note, the min and max clamps with their notices, the slider's 500 steps and both ends, Enter settling before it advances, 360 px with a 44 px rail and a real legend, the Arabic clamp; 2 model: the 500 grid with its top-of-range arithmetic, and `clampBudget` naming the bound) and S9's 12 (6 steps: the gaming/office flow lengths, a URL
 naming the step an office profile does not have, the three-of-five priority list driven from the
 contract's own five labels, the stored-not-applied label as the group's description in both
 languages, and a contract that marks priority applied turning the label off and dropping the
@@ -295,7 +295,7 @@ states, the zero-build state with its pre-filled way back and no invented floor 
 RTL page, and a 503 rendered as "indisponible" with a retrying DOCUMENT navigation rather than a
 404; 7 model: rank ordering with its stable tie-break and an unmutated input, the NULL-vs-0 bar
 gate, the tone thresholds including the 90 % edge, remaining/over arithmetic, the over fixture's
-own invariant, label coverage for every role and archetype, and the variant de-duplication) |
+own invariant, label coverage for every role and archetype, and the variant de-duplication), and S12's 7 (6 badge specs: the demo, indicative and verified states each asserted once, per-build scope on one response, the API disclaimer, no JSON-LD for a non-verified price, and the Arabic copy; plus one table-driven model check of the two-column mapping) |
 | Tailwind actually processed | yes — the emitted CSS chunk contains `text-2xl`, `mx-auto`, `max-w-5xl`, `sr-only` and the `focus:` variants |
 
 **S5's evidence (2026-10-20).** next-intl 4.14.9, `/fr` and `/ar`, both statically rendered (6

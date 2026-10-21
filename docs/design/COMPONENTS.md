@@ -185,7 +185,7 @@ and these components are built only from those tokens.
 | Component | First real use |
 |---|---|
 | `Button`, `TextField`, `Slider`, `ChoiceCard` | S7–S9 (wizard steps) |
-| `Badge` | S12 (the price-provenance badge) — the three tones are pinned, not yet rendered on the results page |
+| `Badge` | **S12** — the price-provenance pill on every build card (démo / indicatif / vérifié) |
 | `ProgressBar` | **S11** — the total-vs-budget bar on every build card |
 | `Alert`, `Skeleton` | S10, S11 (the over-budget warning and the unavailable state), S14 (zero-result, errors) |
 
@@ -218,6 +218,15 @@ deliberately not a fourth `Badge` tone, because those three tones are the price-
 instead of `next/link`, because a router push to the URL already in the address bar is a no-op and
 the unavailable state's "Réessayer" would look like one. It is the only place in the app that wants a
 document navigation, and it is documented on the prop.
+
+**The price badge dates the CALCULATION, not a survey (S12).** `priceProvenance()` folds the
+build's derived `price_status` and its components' `offer_class` into the board's three states, so an
+all-seed pass says "démo" instead of hiding inside "indicatif" — the API's two-state field cannot
+tell those apart. Only `verified` carries a date, and it reads "calculé le {generated_at}": the
+contract has no per-offer observed date (CD-6), so "prix constatés le" would claim a survey nobody
+performed. The tones are the kit's unchanged — démo dashed muted, indicatif warning, vérifié
+success — and a card's `data-tone` is the BUDGET tone, which is why the badge carries its own
+`data-tone` on its own element.
 
 ## Not in the kit
 

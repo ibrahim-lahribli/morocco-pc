@@ -39,6 +39,12 @@ export const IDS = {
   threeBuilds: "3f5a1c7e-8b2d-4e6f-9a01-5c3d7e9f1a2b",
   /** One build: 1..N is a range (V13), not a layout of three. */
   oneBuild: "1d9e4b2c-6a3f-4c5d-8e7f-2b0a9c8d7e6f",
+  /**
+   * Every component is SEED_UNVERIFIED: the "démo" price state S12 adds. The
+   * API's derived `price_status` cannot express it (it folds into "indicative"),
+   * which is exactly why the third state is the client's to compute.
+   */
+  demo: "5b7e2f9a-4c1d-4a3e-9b8f-7d6c5b4a3928",
   /** A total past the query budget — the bar's overflow state. */
   overBudget: "4c8d2e6f-1a3b-4d5e-9f7a-6b2c8d4e0f1a",
   /** A pass that assembled nothing, with a priced floor. */
@@ -97,6 +103,18 @@ const COMPONENT_CPU_VALUE = {
   price_used: 899,
   offer_class: "VERIFIED",
   store_offer_id: "99999999-9999-4999-8999-999999999911",
+};
+
+/** The same part with NO store offer: the seed price the demo state is made of. */
+const COMPONENT_CPU_SEED = {
+  role: "CPU",
+  product_id: "11111111-1111-4111-8111-111111111113",
+  name: "Ryzen 5 5600G",
+  slug: null,
+  variant: null,
+  price_used: 899,
+  offer_class: "SEED_UNVERIFIED",
+  store_offer_id: null,
 };
 
 const COMPONENT_GPU_VERIFIED = {
@@ -365,6 +383,28 @@ export const RECOMMENDATION_ONE_BUILD = baseResponse({
 });
 
 /**
+ * Every price is a SEED_UNVERIFIED placeholder, so nothing in the pass is a
+ * quote: the card must say "démo", not "indicatif" (V6, S12). The API's own
+ * derived `price_status` is `indicative` for this build — the third state exists
+ * only on the client, which is why the fixture is needed.
+ */
+export const RECOMMENDATION_DEMO = baseResponse({
+  id: IDS.demo,
+  budget_amount: 8000,
+  budget_floor: { ...BUDGET_FLOOR_COMPLETE, budget_amount: 8000 },
+  use_case: "OFFICE",
+  builds: [
+    build({
+      rank: 1,
+      strategy_key: "VALUE",
+      price_status: "indicative",
+      explanation: "Configuration au meilleur prix : tous les prix sont des estimations.",
+      components: [COMPONENT_CPU_SEED, COMPONENT_RAM_SEED],
+    }),
+  ],
+});
+
+/**
  * A total PAST the query budget. The engine aims to stay inside the budget, so
  * this state is defensive rather than expected - but a persisted pass is not
  * re-derived against a new budget, and the page must not paint 114 % of a budget
@@ -410,6 +450,7 @@ export const RECOMMENDATIONS_BY_ID = {
   [IDS.ok]: RECOMMENDATION_OK,
   [IDS.threeBuilds]: RECOMMENDATION_THREE_BUILDS,
   [IDS.oneBuild]: RECOMMENDATION_ONE_BUILD,
+  [IDS.demo]: RECOMMENDATION_DEMO,
   [IDS.overBudget]: RECOMMENDATION_OVER_BUDGET,
   [IDS.zeroBuild]: RECOMMENDATION_ZERO_BUILD,
   [IDS.zeroBuildNoFloor]: RECOMMENDATION_ZERO_BUILD_NO_FLOOR,

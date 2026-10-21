@@ -25,24 +25,36 @@
  *
  * **Over budget is an Alert, not a Badge — a documented deviation.** The sprint
  * asks for a "warning badge"; `Badge`'s three tones are the PRICE-PROVENANCE
- * states and are pinned by `e2e/kit.spec.ts` and S12, so adding a fourth tone
- * would make one component say two unrelated things. An `Alert` with the
- * warning tone says what happened AND by how much, which a pill cannot.
+ * states (rendered below the heading, S12) and are pinned by `e2e/kit.spec.ts`,
+ * so adding a fourth tone would make one component say two unrelated things. An
+ * `Alert` with the warning tone says what happened AND by how much, which a pill
+ * cannot.
  *
+ * **The price badge is the provenance, and only `verified` carries a date.**
+ * `priceProvenance()` folds the build's derived `price_status` and its
+ * components' `offer_class` into the board's three states, so an all-seed build
+ * says "démo" instead of hiding inside "indicatif". The date is
+ * `generated_at` — when this pass ran — so the badge says `calculé le`, NOT the
+ * board's "prix constatés le": the API has no per-offer observed date (CD-6),
+ * and a label claiming the shop surveyed its price that day would be a lie.
+ *
+
  * The card is a server component: it fetches its translations itself and holds
  * no state, so nothing here ships to the browser.
  */
 import { getTranslations } from "next-intl/server";
 
-import { Alert, ProgressBar, cn } from "@/components/ui";
-import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
+import { Alert, Badge, ProgressBar, cn } from "@/components/ui";
+import { formatDate, formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import {
   barFigures,
   budgetTone,
   overBudgetBy,
+  priceProvenance,
   remainingBudget,
   strategyLabel,
   type Build,
+  type PriceProvenance,
 } from "@/lib/result/model";
 
 import { ComponentRow } from "./component-row";
@@ -51,6 +63,8 @@ export interface BuildCardProps {
   build: Build;
   /** The query's budget, or null when the pass did not record one. */
   budget: number | null;
+  /** When this pass ran, or null — the only date the contract carries (CD-6). */
+  generatedAt: string | null;
   /** 1-based position in the rendered list. Display only — `rank` is the data. */
   position: number;
   /** Rank 1: the card the eye lands on first. */
@@ -58,7 +72,21 @@ export interface BuildCardProps {
   locale: AppLocale;
 }
 
-export async function BuildCard({ build, budget, position, primary, locale }: BuildCardProps) {
+/** The catalogue key for each state, so no key is built by concatenation. */
+const BADGE_KEY: Record<PriceProvenance, string> = {
+  demo: "provenance.demo",
+  indicative: "provenance.indicative",
+  verified: "provenance.verified",
+};
+
+export async function BuildCard({
+  build,
+  budget,
+  generatedAt,
+  position,
+  primary,
+  locale,
+}: BuildCardProps) {
   const t = await getTranslations({ locale, namespace: "result" });
   const headingId = `build-${position}-heading`;
 
@@ -67,6 +95,13 @@ export async function BuildCard({ build, budget, position, primary, locale }: Bu
   const tone = budgetTone(total, budget);
   const over = overBudgetBy(total, budget);
   const remaining = remainingBudget(total, budget);
+  const provenance = priceProvenance(build);
+  // The date belongs to `verified` alone; an indicative or demo price has no
+  // observation date to print, and inventing one is what CD-6 forbids.
+  const badgeText =
+    provenance === "verified" && generatedAt !== null
+      ? t("provenance.verifiedDated", { date: formatDate(generatedAt, locale) })
+      : t(BADGE_KEY[provenance]);
 
   return (
     <article
@@ -91,6 +126,10 @@ export async function BuildCard({ build, budget, position, primary, locale }: Bu
         {total === null ? null : (
           <p className="num-tabular shrink-0 text-title text-ink">{formatMoney(total, locale)}</p>
         )}
+      </div>
+
+      <div className="mt-2">
+        <Badge tone={provenance}>{badgeText}</Badge>
       </div>
 
       {bar === null ? null : (
