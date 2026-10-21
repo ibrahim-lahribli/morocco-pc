@@ -21,9 +21,11 @@ import {
   PRESET_FAMILIES,
   PRESET_REVALIDATE_SECONDS,
   parsePresetSlug,
+  presetBudget,
   presetIndexable,
   presetSlug,
 } from "../lib/presets/model";
+import { BUDGET_MAX } from "../lib/wizard/model";
 import { PRESETS_OK } from "../mock/fixtures.mjs";
 
 const FAMILY = PRESET_FAMILIES[0];
@@ -81,8 +83,22 @@ test("every malformed slug is refused, so it becomes a 404 rather than a page", 
 });
 
 test("presetSlug refuses a budget it could not put in a URL", () => {
-  for (const budget of [0, -1, 1.5, Number.NaN]) {
+  // The ceiling is the parser's, so every slug this function emits is one the
+  // page accepts — otherwise `generateStaticParams` would prerender a 404.
+  for (const budget of [0, -1, 1.5, Number.NaN, BUDGET_MAX + 1]) {
     expect(() => presetSlug(budget)).toThrow(RangeError);
+  }
+  expect(parsePresetSlug(presetSlug(BUDGET_MAX))?.budget).toBe(BUDGET_MAX);
+});
+
+test("presetBudget is the one rule the parser, the builder and the ribbon share", () => {
+  for (const usable of [1, 9000, BUDGET_MAX]) {
+    expect(presetBudget(usable)).toBe(usable);
+  }
+  // An API that serves a zero, a fraction or an out-of-range budget must lose the
+  // entry, not crash the build inside `presetSlug`.
+  for (const unusable of [0, -1, 1.5, Number.NaN, Infinity, BUDGET_MAX + 1, "9000", null, undefined]) {
+    expect(presetBudget(unusable)).toBeNull();
   }
 });
 

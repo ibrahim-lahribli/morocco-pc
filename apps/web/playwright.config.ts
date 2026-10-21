@@ -27,9 +27,11 @@ export default defineConfig({
       },
     },
   ],
-  // Two servers for two jobs: the app under test (3210, needs a prior
-  // `npm run build`) and the fixture mock API (3211, zero deps). The mock is
-  // listed second so a failing app never hides a failing mock.
+  // Three servers for three jobs: the app under test (3210, needs a prior
+  // `npm run build`), the fixture mock API the SERVER reads (3211, zero deps),
+  // and a second instance of that mock on the port the BROWSER calls by default
+  // (3000 — see `apiBaseUrl()`; no `NEXT_PUBLIC_API_BASE_URL` is inlined in a CI
+  // build). The app is listed first so a failing app never hides a failing mock.
   //
   // `API_BASE_URL` is the SERVER-side API root (S11). The results page fetches
   // in a server component, where a browser route interception does not exist, so
@@ -46,6 +48,16 @@ export default defineConfig({
     {
       command: "npm run mock:api",
       url: "http://localhost:3211/v1/health",
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
+      // The browser's default API base. Started through `env` because a
+      // `MOCK_API_PORT=3000 npm run …` prefix does not work through the shell
+      // Playwright spawns on Windows.
+      command: "npm run mock:api",
+      url: "http://localhost:3000/v1/health",
+      env: { MOCK_API_PORT: "3000" },
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
     },

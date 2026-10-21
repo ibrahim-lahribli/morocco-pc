@@ -566,6 +566,18 @@ is asserted under 300 ms, the bar carries no fake percentage, and the clock is p
 and two seconds — so eight seconds would only lengthen the suite. If a real timeout ever enters the
 code, the 15 s budget above is where it belongs, not in a test fixture.
 
+**The browser→API leg was stubbed, and is now driven (2026-10-21).** Every spec above intercepts
+`**/v1/**`, because `NEXT_PUBLIC_*` is inlined at BUILD time — so the suite proved the form against a
+stub, and the results page against the server's own base, but never a real submit between them.
+`playwright.config.ts` now also starts the fixture mock on port **3000**, the base `apiBaseUrl()`
+falls back to when no build-time env names one, and `e2e/wizard-browser-api.spec.ts` drives the same
+last step with NO route interception: a real 201 from `http://localhost:3000`, the hand-off, and the
+SSR read-back that follows it. The spec is opt-in (`E2E_BROWSER_API=1`, set by `web.yml` and by
+nothing else) because a developer machine may hold the real, write-capable API on that port. The build
+deliberately does NOT set `NEXT_PUBLIC_API_BASE_URL`: `lib/presets/load.ts` reads it as a CONFIGURED
+API base, so a build-time value would make `next build` consult the API and end S16's offline,
+fixture-only prerender.
+
 ### Phase W2 — Results
 
 #### S11 — Results page: SSR + strategy cards + component list + budget bar (2 h)
@@ -929,7 +941,7 @@ that disagreed. The ribbon is now three resolvable, budget-matching entries (9 0
 probes EVERY configured URL for a 200 at its own path instead of only the first — the old
 `const [measuredUrl]` destructuring would have budgeted one page and passed for the other.
 
-Measured: **193/193** Playwright specs (7 preset-model + 10 preset-page checks added), `typecheck`
+Measured: **194/194** Playwright specs (8 preset-model + 10 preset-page checks added), `typecheck`
 (also under Node 22.23.3), `lint` (0 errors, the one pre-existing `postcss.config.mjs` warning),
 `check:tokens` (49 files), `check:i18n` (47 files) and `check:api-types` all exit 0, `npm run build`
 exit 0 with the preset route reported `●` for exactly `fr` + `ar` × 9 000 + 15 000. Lighthouse on
@@ -937,6 +949,14 @@ the 9 000 page: LCP median **2334 ms** (samples 2332.34 / 2475.94 / 2334.02), CL
 transfer **150 545 B** of the 174 080 B budget, performance 0.98 — both measured pages green under
 the `error`/median assertions. The suite itself ran on the local Node 24; CI pins 22 and the
 typecheck was re-run there.
+
+**A rebuilt app can still serve a PRE-BUILD page (measured 2026-10-21).** `next start` keeps the ISR
+route cache under `.next/server/route-cache`, and `next build` does not clear it: a page generated
+on demand (the 20 000 budget) kept answering with the HTML the PREVIOUS server had written, so a new
+assertion about that page failed against a stale copy while the compiled chunk already carried the
+change. CI builds from an empty `.next`, so it never sees this; locally, remove `.next` before a
+verification run that depends on an on-demand page's output, and never diagnose that failure as a
+code defect.
 
 #### S17 — Component pages + editorial guides (H6) (2 h)
 **Goal:** Component detail pages from the catalog endpoints (CD-5) plus the editorial guide

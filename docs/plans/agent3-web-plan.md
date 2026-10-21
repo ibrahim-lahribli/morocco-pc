@@ -7,12 +7,12 @@ breakdown (S1–S26, each with its definition of done and test scenarios) lives 
 separate plan. Everything here is scoped to `apps/web/`, a standalone package with its own manifest
 and lockfile (OD4) that does not touch the engine or root CI (V14).
 
-**Status (2026-10-20).** PLAN REGISTERED, with the design registered as the S2/S3 source
-(§3 — Stitch, not Figma: the Figma copy is an unread export target). **W0 has five sprints
-done (S1–S5, all green — measured in §6) and one not started (S6); W1 is COMPLETE — S7–S10 are
-done (the wizard shell, the budget step, the profile-gated step flow and the POST hand-off,
-measured in the sprint board); W2 is COMPLETE (S11–S15) and W3's first sprint is DONE (S16, and
-S19's gating); W4–W5 and the M3 gate are not started.**
+**Status (2026-10-21).** PLAN REGISTERED, with the design registered as the S2/S3 source
+(§3 — Stitch, not Figma: the Figma copy is an unread export target). **W0 is COMPLETE — S1–S6 are
+done, including the dedicated `web.yml` job and its Lighthouse budgets, which were proven on
+GitHub on 2026-10-21; W1 is COMPLETE (S7–S10, the wizard shell, the budget step, the
+profile-gated step flow and the POST hand-off); W2 is COMPLETE (S11–S15); W3 has S16 and S19's
+gating DONE, with S17 next and S18 not started; W4–W5 and the M3 gate are not started.**
 The design tokens now exist as CODE (`apps/web/app/globals.css`, Tailwind v4 `@theme`, OKLCH) with
 a grep gate and a measured contrast matrix; their provenance and the four deliberate deviations are in
 [docs/design/TOKEN_MAP.md](../design/TOKEN_MAP.md). The eight base components are built on those
@@ -171,10 +171,14 @@ Those principles, and they are the checklist S2 is graded against:
 Scaffold; CI (lint, typecheck, Playwright at a **360 px** viewport, Lighthouse CI budgets); mock
 server built from fixtures; design tokens; i18n skeleton; Latin + Arabic font subsets.
 
-**Today:** S1 and S4 done; S2, S3, S5 and S6 not started, and **S2 is blocked on the design
-export** (§3). What exists: `next build`, `eslint`, `tsc --noEmit`, `check:api-types` and the 22
-Playwright specs all pass, Tailwind compiles real utilities, and `web.yml` runs lint → typecheck →
-**check:api-types** → build → Playwright, path-filtered to `apps/web/**` and itself.
+**Today:** **W0 complete — S1–S6 done.** The scaffold, the token system (S2 — the design export
+was unblocked by registering Stitch as the source, §3), the eight base components (S3), the typed
+client + fixture mock (S4), `next-intl` fr/ar with the Arabic subset (S5) and the dedicated
+`web.yml` job with Lighthouse budgets (S6 — warning-first on 2026-10-21, promoted to `error` by
+S19 the same day) all exist. `next build`, `eslint`, `tsc --noEmit`, `check:tokens`, `check:i18n`,
+`check:api-types` and the Playwright suite pass, and `web.yml` runs them in that order plus
+`npm test` and `test:lighthouse`, path-filtered to `apps/web/**`, the API's OpenAPI snapshot and
+itself.
 
 S4's pieces: `lib/api/schema.d.ts` (generated, committed), `lib/api/client.ts` (the one fetch path),
 `lib/api/compile-gate.ts` (contract probes that only `tsc` can see), `mock/server.mjs` +
@@ -221,9 +225,10 @@ until staging exists.
 read of `GET /v1/recommendations/:id`, rank-ordered strategy cards whose first is primary, a
 component list per card, a total-vs-budget bar whose `aria-valuetext` carries the real amounts, a
 démo/indicatif/vérifié price badge per card, a "pourquoi ce choix" disclosure that switches from
-the explanation string to reason codes, a styled 404, and a thin zero-build state. S14–S15 are not
-started: the `budget_floor` advice (S14) and sharing (S15). See the sprint board's S11–S13
-statuses for the recorded deviations and mechanics.
+the explanation string to reason codes, a styled 404, and and the budget floor's own advice. **S14 and S15 landed after them (2026-10-21)**, so W2 is
+COMPLETE: the zero-build/error/rate-limited states built on `budget_floor` with its lower-bound
+caveat, and the share surface (one canonical URL, WhatsApp, Web Share API, copy-link). See the
+sprint board's S11–S15 statuses for the recorded deviations and mechanics.
 
 ### W3 — SEO surface
 

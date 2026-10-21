@@ -97,6 +97,20 @@ export interface ParsedPresetSlug {
 }
 
 /**
+ * The budget a slug may carry, or null when the value is not one.
+ *
+ * One rule, three callers: the parser (does this URL name a page?), the slug
+ * builder (may I produce this URL?) and the ribbon reader (may this API value
+ * become a page at all?). Splitting them is how a page ends up generated at a
+ * URL the grammar refuses, or a build crashing on a bad API number.
+ */
+export function presetBudget(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) return null;
+  if (value <= 0 || value > BUDGET_MAX) return null;
+  return value;
+}
+
+/**
  * The family and budget a slug names, or null when it names nothing this app
  * owns. Null is a 404, never a crash: the route segment is generic, so every
  * single-segment path inside a locale lands here.
@@ -106,8 +120,8 @@ export function parsePresetSlug(slug: string): ParsedPresetSlug | null {
   if (match === null) return null;
   const family = PRESET_FAMILIES.find((entry) => entry.slug === match[1]);
   if (family === undefined) return null;
-  const budget = Number(match[2]);
-  if (!Number.isSafeInteger(budget) || budget > BUDGET_MAX) return null;
+  const budget = presetBudget(Number(match[2]));
+  if (budget === null) return null;
   return { family, budget };
 }
 
@@ -117,8 +131,12 @@ export function parsePresetSlug(slug: string): ParsedPresetSlug | null {
  * error, not a user input.
  */
 export function presetSlug(budget: number, family: PresetFamily = PRESET_FAMILIES[0]): string {
-  if (!Number.isSafeInteger(budget) || budget <= 0) {
-    throw new RangeError(`presetSlug: ${String(budget)} is not a positive integer budget`);
+  // The same ceiling as the parser: a slug this function emits is one
+  // `parsePresetSlug()` accepts, so a caller cannot generate a page that 404s.
+  if (presetBudget(budget) === null) {
+    throw new RangeError(
+      `presetSlug: ${String(budget)} is not a positive integer budget the slug grammar accepts`,
+    );
   }
   return `${family.slug}-${budget}-${PRESET_SLUG_SUFFIX}`;
 }

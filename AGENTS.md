@@ -12,11 +12,12 @@ persists the results.
 
 The engine is still a pure Node.js library plus a PostgreSQL schema, and it stays that way: the
 HTTP surface is a separate, thin layer (`apps/api/`, Decision 36) that calls the engine's public
-barrels and owns no engine logic. There is no frontend in THIS tree and no authentication: the
-web app lives on its own branch (`apps/web/`, Next.js + Tailwind, scaffolded 2026-10-16) and has
-not been merged. The entry
-points are the engine's public barrels (`src/recommendation/*/index.js`), the `scripts/` CLIs,
-and `apps/api/src/server.js`.
+barrels and owns no engine logic. The frontend is the second such layer: `apps/web/` (Next.js 16
+App Router + Tailwind v4, sprints S1-S19, merged on `master`) is a standalone package with its own
+manifest, lockfile and workflow; it consumes the API through generated contract types and owns no
+engine logic either. There is still no authentication anywhere in the tree. The entry points are
+the engine's public barrels (`src/recommendation/*/index.js`), the `scripts/` CLIs,
+`apps/api/src/server.js`, and `apps/web`'s own `npm run build` / `npm test`.
 
 ## 2. Read in this order
 
@@ -80,6 +81,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `scripts/lib/db-url.js` | `TEST_DATABASE_URL` guard for write-capable tests |
 | `src/recommendation/` | ALL engine application code — the pipeline stages |
 | `apps/api/` | The HTTP API (Decision 36): Fastify routes, TypeBox contracts, the SQL repository, a Dockerfile. TEST DB only unless `API_ALLOW_SHARED=1`; no engine logic, no frontend |
+| `apps/web/` | The web app (Next.js 16 App Router, Tailwind v4 tokens, next-intl fr/ar): wizard, results, preset, component and guide routes, a zero-dependency fixture mock, and its own gates (`typecheck`, `lint`, `check:tokens`, `check:i18n`, `check:api-types`, Playwright at 360 px, Lighthouse budgets). Own `package.json`/lockfile and `.github/workflows/web.yml`; no secrets, no database, no engine logic |
 
 `src/recommendation/` has one directory per pipeline stage: `compatibility`, `candidates`,
 `offers`, `filtering`, `retention`, `assembly`, `scoring`, `query`, `ranking`, `persistence`,

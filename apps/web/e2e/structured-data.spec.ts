@@ -21,8 +21,10 @@ import {
   productJsonLd,
   type ProductJsonLd,
 } from "../lib/result/structured-data";
+import { orderBuilds } from "../lib/result/model";
 import {
   IDS,
+  RECOMMENDATIONS_BY_ID,
   RECOMMENDATION_DEMO,
   RECOMMENDATION_THREE_BUILDS,
 } from "../mock/fixtures.mjs";
@@ -30,6 +32,10 @@ import {
 const VERIFIED = `/fr/config/${IDS.threeBuilds}`;
 const DEMO = `/fr/config/${IDS.demo}`;
 const INDICATIVE = `/fr/config/${IDS.indicative}`;
+/** The only preset the API names with every price verified — so, indexable. */
+const API_PRESET = "/fr/config-pc-gamer-20000-dh";
+/** A committed fixture preset: a demonstration, therefore noindex. */
+const FIXTURE_PRESET = "/fr/config-pc-gamer-15000-dh";
 
 /** The fixture's rank-1 build, all eight components VERIFIED. */
 const VERIFIED_BUILD = RECOMMENDATION_THREE_BUILDS.builds[0];
@@ -136,6 +142,35 @@ test("the demo and rank-1 indicative pages emit no structured data", async ({ re
     const html = await response.text();
     expect(jsonLdBlocks(html), path).toHaveLength(0);
     expect(html, path).not.toContain("application/ld+json");
+  }
+});
+
+test("the indexable preset page carries ONE block, and a fixture preset carries none", async ({
+  request,
+}) => {
+  // This is the page type that can actually RANK: API-served, every build
+  // verified. Before this gate it was the one indexable page emitting no
+  // structured data at all, while the noindex result page emitted one.
+  const apiPass = RECOMMENDATIONS_BY_ID[IDS.presetApiOnly];
+  const ranked = orderBuilds(apiPass.builds);
+  const response = await request.get(API_PRESET);
+  expect(response.status()).toBe(200);
+  const blocks = jsonLdBlocks(await response.text());
+
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]["@type"]).toBe("Product");
+  expect(blocks[0].offers.price).toBe(ranked[0].total_price);
+  expect(blocks[0].offers.priceCurrency).toBe("MAD");
+  // The name is the page's own h1 sentence, so the crawled block cannot
+  // advertise a budget the heading does not.
+  expect(blocks[0].name).toContain(formatMoney(20000, "fr"));
+
+  // The SAME predicate answers `robots` and this gate, so a fixture page is out
+  // of the index AND unmarked — one rule, two consequences.
+  for (const path of [FIXTURE_PRESET, "/fr/config-pc-gamer-9000-dh"]) {
+    const html = await (await request.get(path)).text();
+    expect(html, path).toMatch(/<meta name="robots" content="[^"]*noindex/);
+    expect(jsonLdBlocks(html), path).toHaveLength(0);
   }
 });
 

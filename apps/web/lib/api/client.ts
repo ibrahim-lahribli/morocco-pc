@@ -278,14 +278,38 @@ export async function createRecommendation(
   return { status: result.status, body: result.body };
 }
 
+/** `/v1/recommendations/:id`. The id is DATA, so it is encoded here, once. */
+function recommendationPath(id: string): string {
+  return `/v1/recommendations/${encodeURIComponent(id)}`;
+}
+
+/** `/v1/presets?…` — one ribbon query, built in one place. */
+function presetsPath(query: PresetsQuery): string {
+  const search = new URLSearchParams({
+    use_case: query.use_case,
+    currency: query.currency,
+  });
+  return `/v1/presets?${search.toString()}`;
+}
+
+/**
+ * One GET whose BODY is the answer, so no getter repeats `.body` or the path
+ * maths. `base` is the caller's decision (browser vs server) — never a default
+ * that happens to be right for one of them.
+ */
+async function getJson<T>(
+  path: string,
+  init: RequestInit = {},
+  base: string = apiBaseUrl(),
+): Promise<T> {
+  return (await request<T>(path, init, base)).body;
+}
+
 export async function getRecommendation(
   id: string,
   init?: RequestInit
 ): Promise<RecommendationResponse> {
-  return (await request<RecommendationResponse>(
-    `/v1/recommendations/${encodeURIComponent(id)}`,
-    init
-  )).body;
+  return getJson<RecommendationResponse>(recommendationPath(id), init);
 }
 
 /**
@@ -304,24 +328,18 @@ export async function getRecommendationForServer(
   id: string,
   init?: RequestInit
 ): Promise<RecommendationResponse> {
-  return (
-    await request<RecommendationResponse>(
-      `/v1/recommendations/${encodeURIComponent(id)}`,
-      { cache: "no-store", ...init },
-      serverApiBaseUrl()
-    )
-  ).body;
+  return getJson<RecommendationResponse>(
+    recommendationPath(id),
+    { cache: "no-store", ...init },
+    serverApiBaseUrl()
+  );
 }
 
 export async function getPresets(
   query: PresetsQuery,
   init?: RequestInit
 ): Promise<PresetsResponse> {
-  const search = new URLSearchParams({
-    use_case: query.use_case,
-    currency: query.currency,
-  });
-  return (await request<PresetsResponse>(`/v1/presets?${search.toString()}`, init)).body;
+  return getJson<PresetsResponse>(presetsPath(query), init);
 }
 
 /**
@@ -343,17 +361,11 @@ export async function getPresetsForServer(
   query: PresetsQuery,
   init: { revalidate: number; signal?: AbortSignal },
 ): Promise<PresetsResponse> {
-  const search = new URLSearchParams({
-    use_case: query.use_case,
-    currency: query.currency,
-  });
-  return (
-    await request<PresetsResponse>(
-      `/v1/presets?${search.toString()}`,
-      { next: { revalidate: init.revalidate }, signal: init.signal },
-      serverApiBaseUrl(),
-    )
-  ).body;
+  return getJson<PresetsResponse>(
+    presetsPath(query),
+    { next: { revalidate: init.revalidate }, signal: init.signal },
+    serverApiBaseUrl(),
+  );
 }
 
 /**
@@ -370,13 +382,11 @@ export async function getRecommendationForStatic(
   id: string,
   init: { revalidate: number; signal?: AbortSignal },
 ): Promise<RecommendationResponse> {
-  return (
-    await request<RecommendationResponse>(
-      `/v1/recommendations/${encodeURIComponent(id)}`,
-      { next: { revalidate: init.revalidate }, signal: init.signal },
-      serverApiBaseUrl(),
-    )
-  ).body;
+  return getJson<RecommendationResponse>(
+    recommendationPath(id),
+    { next: { revalidate: init.revalidate }, signal: init.signal },
+    serverApiBaseUrl(),
+  );
 }
 
 export async function listCatalogProducts(

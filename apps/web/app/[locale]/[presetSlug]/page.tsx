@@ -11,6 +11,7 @@ import { localePath } from "@/lib/i18n/paths";
 import { loadPresetCached, presetsForBuild } from "@/lib/presets/load";
 import { parsePresetSlug, presetIndexable } from "@/lib/presets/model";
 import { orderBuilds } from "@/lib/result/model";
+import { asVerifiedPricedBuild, jsonLdScript, productJsonLd } from "@/lib/result/structured-data";
 import { toHref, type Answers } from "@/lib/wizard/model";
 
 /**
@@ -112,6 +113,40 @@ export default async function PresetPage({
   const budgetLabel = formatMoney(page.budget, appLocale);
 
   /**
+   * S19's gate, on the page type that can actually rank.
+   *
+   * The predicate is `presetIndexable()` — the SAME one `generateMetadata`
+   * hands to `robots` — so a page can never be readable by a crawler while its
+   * price is unmarked, or marked up while it is noindexed. It is the conjunction
+   * of "served by the API" and "every build verified"; a fixture page is a
+   * demonstration and stays both out of the index and out of structured data.
+   *
+   * Two guards sit on top of the predicate, both taken from the results page
+   * (S19) for the same reasons: a verified build with no recorded total must not
+   * reach `asVerifiedPricedBuild()` (which throws — a crash is worse than no
+   * markup), and a currency that is not a three-letter code is a data bug rather
+   * than something to teach a crawler. The build itself still renders either way;
+   * the gate is about the CLAIM.
+   */
+  const indexable = presetIndexable(page.source, builds);
+  const primary = builds[0];
+  const currency = page.recommendation.currency ?? page.family.currency;
+  const structuredData =
+    indexable &&
+    primary !== undefined &&
+    typeof primary.total_price === "number" &&
+    Number.isFinite(primary.total_price) &&
+    /^[A-Z]{3}$/.test(currency)
+      ? productJsonLd(asVerifiedPricedBuild(primary), {
+          // The page's own title sentence, so the crawled block and the h1 can
+          // never advertise different budgets.
+          name: t("title", { budget: budgetLabel }),
+          description: t("description", { budget: budgetLabel }),
+          currency,
+        })
+      : null;
+
+  /**
    * The way forward is the wizard, pre-filled with this page's own answers, so a
    * reader can adjust the budget they arrived with instead of starting over. The
    * budget we pre-fill is the SLUG's — the number the page promised in its title
@@ -124,6 +159,14 @@ export default async function PresetPage({
 
   return (
     <section>
+      {/* `jsonLdScript()` escapes `<`, so no localized string can close the
+          element early; the payload is JSON, not HTML (S19). */}
+      {structuredData === null ? null : (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(structuredData) }}
+        />
+      )}
       <h1 className="text-heading text-ink">{t("title", { budget: budgetLabel })}</h1>
       <p className="mt-2 max-w-prose text-body text-muted">
         {t("intro", { budget: budgetLabel })}

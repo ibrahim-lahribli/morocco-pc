@@ -54,12 +54,18 @@ jobs:
       # triggers above include that snapshot's path.
       - run: npm run check:api-types
       # `playwright.config.ts`'s webServer runs `next start`, so the build has to
-      # exist first. The same config starts the app on 3210 and the fixture mock on
-      # 3211 with API_BASE_URL pointed at the mock, so the SERVER-side fetch path is
-      # what the suite exercises — a browser route interception would not be.
+      # exist first. The same config starts the app on 3210, the fixture mock on
+      # 3211 with API_BASE_URL pointed at it (the SERVER-side path), and a second
+      # mock on 3000 for the BROWSER-side path — which is opt-in per spec, because
+      # on a developer machine that port may hold the real API.
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      # `E2E_BROWSER_API=1` opts into the un-stubbed browser→API spec: the config
+      # starts a SECOND fixture mock on port 3000 (the client's default base), so
+      # a real fetch with its CORS preflight is exercised here and nowhere else.
       - run: npm test
+        env:
+          E2E_BROWSER_API: "1"
       # S19's budgets, ENFORCED: the three assertions in lighthouserc.cjs are
       # `error` and aggregate by MEDIAN of the three runs, so a regression fails
       # this job. The harness starts the built app (3210) and the fixture mock

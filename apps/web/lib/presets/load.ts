@@ -47,6 +47,7 @@ import {
   PRESET_REVALIDATE_SECONDS,
   parsePresetSlug,
   presetSlug,
+  presetBudget,
   type PresetFamily,
   type PresetSource,
 } from "./model";
@@ -93,10 +94,14 @@ async function readRibbon(family: PresetFamily, timeoutMs: number): Promise<Ribb
       { use_case: family.useCase, currency: family.currency },
       { revalidate: PRESET_REVALIDATE_SECONDS, signal: AbortSignal.timeout(timeoutMs) },
     );
+    // A budget the slug grammar cannot express is dropped here, not carried into
+    // `generateStaticParams`: `presetSlug()` throws on it and the grammar would
+    // reject the URL it produced, so an API typo would crash a build that its own
+    // contract says never throws.
     const entries = body.presets.flatMap((preset) =>
-      typeof preset.budget_amount === "number" && Number.isFinite(preset.budget_amount)
-        ? [{ budget: preset.budget_amount, recommendationId: preset.recommendation_id }]
-        : [],
+      presetBudget(preset.budget_amount) === null
+        ? []
+        : [{ budget: preset.budget_amount, recommendationId: preset.recommendation_id }],
     );
     entries.sort((a, b) => a.budget - b.budget);
     return { kind: "ok", entries };
