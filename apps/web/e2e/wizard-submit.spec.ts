@@ -103,8 +103,12 @@ test("the last step posts the contract's body and lands on the result", async ({
     resolution: "1440p",
     priority: 3,
   });
-  // The hand-off page shows the identifier the response produced.
-  await expect(page.getByText(RECOMMENDATION_OK.id)).toBeVisible();
+  // The destination READS the pass back by id (S11 SSR), so a landing that
+  // renders builds is also proof the id in the response is the one the API can
+  // serve: the wizard hands over a reference, not a cached body.
+  await expect(page).toHaveURL(new RegExp(`/fr/config/${RECOMMENDATION_OK.id}$`));
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Vos configurations");
+  await expect(page.locator("article")).toHaveCount(RECOMMENDATION_OK.builds.length);
 });
 
 test("the progress block beats 300 ms, and its clock is real", async ({ page }) => {
@@ -332,11 +336,13 @@ test("a zero-build 200 is a result, not an error", async ({ page }) => {
   await page.goto(LAST_STEP);
   await submitButton(page).click();
 
-  // V2: an empty pass is legitimate. S14 owns the zero-build experience; S10
-  // must simply not dress it up as a failure on the way there.
+  // V2: an empty pass is legitimate. S11 renders that state; S10 must simply
+  // not dress it up as a failure on the way there.
   await expect(page).toHaveURL(new RegExp(`/fr/config/${RECOMMENDATION_ZERO_BUILD.id}$`));
-  // The hand-off page is what it says it is...
-  await expect(page.getByText("Votre demande est enregistrée.")).toBeVisible();
+  // The destination says it in a state of its own, not as an error...
+  await expect(page.getByRole("heading", { level: 2 })).toHaveText(
+    "Aucune configuration pour ce budget",
+  );
   // ...and no failure copy came with it. Scoped by text on purpose: Next's
   // route announcer is ALSO a role="alert", so a bare role count would fail
   // on a page that has nothing wrong with it.

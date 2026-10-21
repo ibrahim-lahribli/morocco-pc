@@ -23,9 +23,37 @@
  *     (a real pass carries all eight), so the totals are those lists' sums.
  *   - `strategy_key` is a Decision 41 archetype: PERFORMANCE | BALANCED |
  *     VALUE. There is no `PRICE` key; the cheap build is `VALUE`.
+ *   - Each state has its OWN id, and `RECOMMENDATIONS_BY_ID` is the map the
+ *     mock answers `GET /v1/recommendations/:id` from. That is what makes an
+ *     SSR result page testable: the page fetches by the id in its URL, so the
+ *     id IS the state selector once no browser is involved to set a header.
  */
 
 export const CATALOG_VERSION = "9f0c5a1b2d3e4f5061728394a5b6c7d8";
+
+/** Every recommendation id the mock serves. A real id is a UUID, so these are too. */
+export const IDS = {
+  /** POST 201's body: two builds, one verified and one indicative. */
+  ok: "b6f1c0a5-0f2f-4f2a-9c0f-2b1f5f2f6a10",
+  /** Three builds, all eight roles on the first — the board's drawn case. */
+  threeBuilds: "3f5a1c7e-8b2d-4e6f-9a01-5c3d7e9f1a2b",
+  /** One build: 1..N is a range (V13), not a layout of three. */
+  oneBuild: "1d9e4b2c-6a3f-4c5d-8e7f-2b0a9c8d7e6f",
+  /** A total past the query budget — the bar's overflow state. */
+  overBudget: "4c8d2e6f-1a3b-4d5e-9f7a-6b2c8d4e0f1a",
+  /** A pass that assembled nothing, with a priced floor. */
+  zeroBuild: "7a2b5c8d-3e4f-4a6b-8c9d-0e1f2a3b4c5d",
+  /** The same, with a role missing: the floor is UNKNOWN, never 0. */
+  zeroBuildNoFloor: "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+  /** Not served: the 404 the results page turns into its own 404. */
+  missing: "00000000-0000-4000-8000-000000000404",
+  /**
+   * A read that FAILS with 503 rather than 404. The id may be perfectly valid
+   * and the engine unavailable, and the results page must be able to tell the
+   * two apart: the mock serves this one an error, not a body and not a 404.
+   */
+  unavailable: "00000000-0000-4000-8000-000000005030",
+};
 export const DISCLAIMER = "Prix indicatifs, non actualisés.";
 export const GENERATED_AT = "2026-10-16T09:00:00.000Z";
 export const ENGINE_VERSION = "mock-0.0.0";
@@ -60,6 +88,17 @@ const COMPONENT_CPU_VERIFIED = {
   store_offer_id: "99999999-9999-4999-8999-999999999901",
 };
 
+const COMPONENT_CPU_VALUE = {
+  role: "CPU",
+  product_id: "11111111-1111-4111-8111-111111111112",
+  name: "Ryzen 5 5600G",
+  slug: "ryzen-5-5600g",
+  variant: null,
+  price_used: 899,
+  offer_class: "VERIFIED",
+  store_offer_id: "99999999-9999-4999-8999-999999999911",
+};
+
 const COMPONENT_GPU_VERIFIED = {
   role: "GPU",
   product_id: "22222222-2222-4222-8222-222222222222",
@@ -69,6 +108,28 @@ const COMPONENT_GPU_VERIFIED = {
   price_used: 3200,
   offer_class: "VERIFIED",
   store_offer_id: "99999999-9999-4999-8999-999999999902",
+};
+
+const COMPONENT_GPU_HIGH = {
+  role: "GPU",
+  product_id: "22222222-2222-4222-8222-222222222223",
+  name: "RTX 4070 12GB",
+  slug: "rtx-4070-12gb",
+  variant: "12GB",
+  price_used: 4499,
+  offer_class: "VERIFIED",
+  store_offer_id: "99999999-9999-4999-8999-999999999912",
+};
+
+const COMPONENT_RAM_VERIFIED = {
+  role: "RAM",
+  product_id: "33333333-3333-4333-8333-333333333331",
+  name: "Kit DDR5 16 Go",
+  slug: "kit-ddr5-16-go",
+  variant: "2 × 8 Go",
+  price_used: 349,
+  offer_class: "VERIFIED",
+  store_offer_id: "99999999-9999-4999-8999-999999999903",
 };
 
 const COMPONENT_RAM_SEED = {
@@ -81,6 +142,81 @@ const COMPONENT_RAM_SEED = {
   offer_class: "SEED_UNVERIFIED",
   store_offer_id: null,
 };
+
+const COMPONENT_MOTHERBOARD = {
+  role: "MOTHERBOARD",
+  product_id: "44444444-4444-4444-8444-444444444444",
+  name: "B650M",
+  slug: "b650m",
+  variant: null,
+  price_used: 749,
+  offer_class: "VERIFIED",
+  store_offer_id: "99999999-9999-4999-8999-999999999904",
+};
+
+const COMPONENT_SSD = {
+  role: "SSD_BOOT",
+  product_id: "55555555-5555-4555-8555-555555555555",
+  name: "NVMe 1 To",
+  slug: "nvme-1-to",
+  variant: "1 To",
+  price_used: 599,
+  offer_class: "VERIFIED",
+  store_offer_id: "99999999-9999-4999-8999-999999999905",
+};
+
+const COMPONENT_PSU = {
+  role: "PSU",
+  product_id: "66666666-6666-4666-8666-666666666666",
+  name: "Alimentation 650 W",
+  slug: "alimentation-650-w",
+  variant: "650 W",
+  price_used: 599,
+  offer_class: "VERIFIED",
+  store_offer_id: "99999999-9999-4999-8999-999999999906",
+};
+
+const COMPONENT_CASE = {
+  role: "CASE",
+  product_id: "77777777-7777-4777-8777-777777777777",
+  name: "Boîtier moyen tour",
+  slug: "boitier-moyen-tour",
+  variant: null,
+  price_used: 849,
+  offer_class: "VERIFIED",
+  store_offer_id: "99999999-9999-4999-8999-999999999907",
+};
+
+const COMPONENT_COOLER = {
+  role: "CPU_COOLER",
+  product_id: "88888888-8888-4888-8888-888888888888",
+  name: "Ventirad 120 mm",
+  slug: "ventirad-120-mm",
+  variant: null,
+  price_used: 350,
+  offer_class: "VERIFIED",
+  store_offer_id: "99999999-9999-4999-8999-999999999908",
+};
+
+/**
+ * A build whose `total_price` is DERIVED from its components, so the fixture
+ * cannot describe a total its own parts contradict (the contract spec checks the
+ * same invariant against the mock).
+ */
+function build({ rank, strategy_key, price_status, explanation, components }) {
+  const total_price = components.reduce((sum, component) => sum + component.price_used, 0);
+  return {
+    rank,
+    engine_version: ENGINE_VERSION,
+    strategy_key,
+    total_price,
+    build_score: null,
+    compatibility_status: "PASS",
+    explanation,
+    price_status,
+    components,
+  };
+}
 
 /** A floor with every role priced: a buildable-ish minimum, not a promise. */
 const BUDGET_FLOOR_COMPLETE = {
@@ -113,7 +249,7 @@ const BUDGET_FLOOR_INCOMPLETE = {
 
 function baseResponse(overrides) {
   return {
-    id: "b6f1c0a5-0f2f-4f2a-9c0f-2b1f5f2f6a10",
+    id: IDS.ok,
     budget_amount: 15000,
     currency: "MAD",
     use_case: "GAMING",
@@ -165,10 +301,88 @@ export const RECOMMENDATION_REUSED = baseResponse({
 });
 
 /**
+ * Three builds with the category names the board draws, all eight roles on the
+ * first: the card's component list is only proven against a full build. Rank 2
+ * carries a SEED_UNVERIFIED part, so both price states appear in one response.
+ */
+export const RECOMMENDATION_THREE_BUILDS = baseResponse({
+  id: IDS.threeBuilds,
+  builds: [
+    build({
+      rank: 1,
+      strategy_key: "BALANCED",
+      price_status: "verified",
+      explanation: "Configuration équilibrée : processeur récent et carte graphique dédiée.",
+      components: [
+        COMPONENT_CPU_VERIFIED,
+        COMPONENT_GPU_VERIFIED,
+        COMPONENT_RAM_VERIFIED,
+        COMPONENT_MOTHERBOARD,
+        COMPONENT_SSD,
+        COMPONENT_PSU,
+        COMPONENT_CASE,
+        COMPONENT_COOLER,
+      ],
+    }),
+    build({
+      rank: 2,
+      strategy_key: "VALUE",
+      price_status: "indicative",
+      explanation: "Configuration au meilleur prix : mémoire non vérifiée.",
+      components: [
+        COMPONENT_CPU_VALUE,
+        COMPONENT_RAM_SEED,
+        COMPONENT_MOTHERBOARD,
+        COMPONENT_SSD,
+        COMPONENT_PSU,
+        COMPONENT_CASE,
+        COMPONENT_COOLER,
+      ],
+    }),
+    build({
+      rank: 3,
+      strategy_key: "PERFORMANCE",
+      price_status: "verified",
+      explanation: "Configuration performance : carte graphique plus puissante.",
+      components: [
+        COMPONENT_CPU_VERIFIED,
+        COMPONENT_GPU_HIGH,
+        COMPONENT_RAM_VERIFIED,
+        COMPONENT_MOTHERBOARD,
+        COMPONENT_SSD,
+        COMPONENT_PSU,
+        COMPONENT_CASE,
+        COMPONENT_COOLER,
+      ],
+    }),
+  ],
+});
+
+/** One build: the page must render one card, not three with two holes (V13). */
+export const RECOMMENDATION_ONE_BUILD = baseResponse({
+  id: IDS.oneBuild,
+  builds: [RECOMMENDATION_THREE_BUILDS.builds[0]],
+});
+
+/**
+ * A total PAST the query budget. The engine aims to stay inside the budget, so
+ * this state is defensive rather than expected - but a persisted pass is not
+ * re-derived against a new budget, and the page must not paint 114 % of a budget
+ * as if it were fine.
+ */
+export const RECOMMENDATION_OVER_BUDGET = baseResponse({
+  id: IDS.overBudget,
+  budget_amount: 5000,
+  budget_floor: { ...BUDGET_FLOOR_COMPLETE, budget_amount: 5000, within_budget: true },
+  builds: [RECOMMENDATION_THREE_BUILDS.builds[0]],
+});
+
+/**
  * A pass that assembled nothing, with the floor still computed. `builds: []` is
  * a legitimate outcome (Decision 17.2), not an error.
  */
 export const RECOMMENDATION_ZERO_BUILD = baseResponse({
+  id: IDS.zeroBuild,
   budget_amount: 6000,
   // The floor repeats the response's budget (computeBudgetFloor copies it in).
   budget_floor: { ...BUDGET_FLOOR_COMPLETE, budget_amount: 6000, within_budget: true },
@@ -178,11 +392,28 @@ export const RECOMMENDATION_ZERO_BUILD = baseResponse({
 
 /** Zero builds with an UNKNOWN floor: the UI must show copy, never a number. */
 export const RECOMMENDATION_ZERO_BUILD_NO_FLOOR = baseResponse({
+  id: IDS.zeroBuildNoFloor,
   budget_amount: 3000,
   budget_floor: BUDGET_FLOOR_INCOMPLETE,
   reason: "EMPTY_CANDIDATE_POOL",
   builds: [],
 });
+
+/**
+ * The map the mock answers `GET /v1/recommendations/:id` from.
+ *
+ * An id that is not here is a 404, as the real API's is: a result id is a
+ * durable reference, and a server that invented a body for one would hide the
+ * page's own not-found path.
+ */
+export const RECOMMENDATIONS_BY_ID = {
+  [IDS.ok]: RECOMMENDATION_OK,
+  [IDS.threeBuilds]: RECOMMENDATION_THREE_BUILDS,
+  [IDS.oneBuild]: RECOMMENDATION_ONE_BUILD,
+  [IDS.overBudget]: RECOMMENDATION_OVER_BUDGET,
+  [IDS.zeroBuild]: RECOMMENDATION_ZERO_BUILD,
+  [IDS.zeroBuildNoFloor]: RECOMMENDATION_ZERO_BUILD_NO_FLOOR,
+};
 
 /** GET 200 for the presets ribbon: `generated_at` null for an empty list. */
 export const PRESETS_OK = {

@@ -555,6 +555,83 @@ code, the 15 s budget above is where it belongs, not in a test fixture.
 3. Total > budget fixture → bar overflow state + warning badge.
 4. Rendered text never contains "seed"/"SEED_UNVERIFIED"/"TestCompat" (V5).
 
+**Status: DONE 2026-10-20 — as built.** The hand-off page is gone; `/fr/config/[id]` reads
+`GET /v1/recommendations/:id` on the server and renders it.
+
+**The fetch IS the sprint.** It happens in a server component, so this is the first screen in the
+app whose data a browser route cannot fake. Two consequences were worked through rather than
+worked around. (1) A server-side API root: `lib/api/client.ts` gained `serverApiBaseUrl()` and
+`getRecommendationForServer()`. `API_BASE_URL` is read at request time and is deliberately NOT
+`NEXT_PUBLIC_`, so a deployment can point the server at an internal address while the browser keeps
+the public origin; `playwright.config.ts` points the Next process at the fixture mock, which is what
+makes the specs exercise the shipping path instead of replacing it. (2) An id that selects the state:
+with no browser left to set a header, each fixture carries its own id and the mock's `GET` is a
+lookup in `RECOMMENDATIONS_BY_ID` that answers 404 for anything else, as the real API does. S10's
+landing assertions were re-pointed at this page, and one fixture defect came out of it: the
+zero-build fixture shared the 2-build fixture's id, so revisiting the URL a zero-build POST returned
+would have rendered two builds — the opposite of what was just submitted.
+
+**Three outcomes, and a 404 that is not a 503.** `lib/result/load.ts` narrows a read into
+`ok | missing | unavailable`: 404 or 400 is `missing` and becomes `notFound()`, which renders
+`app/[locale]/not-found.tsx` — with `app/[locale]/[...rest]/page.tsx` beside it, so an unknown path
+inside a locale is the same styled page rather than Next's default English one. Anything else (5xx,
+refused, non-JSON) is `unavailable`: HTTP 200 with an alert and a retry, because telling someone
+their link is dead while our engine is down would both lie and remove their reason to retry. The
+retry is a DOCUMENT navigation (`LinkButton reload`) — a router push to the URL already in the
+address bar is a no-op that would leave the error on screen looking like a retry.
+
+**Rank is data; position is display.** `orderBuilds()` sorts by `rank` (stable, the API's own order
+as the tie-break) instead of trusting the array, and `builds[]` is mapped, never padded (V13): one
+build is one card, and zero builds never reach the card component at all.
+
+**The bar is two numbers or nothing.** `barFigures()` returns the pair only when both are positive
+and finite, so a NULL total draws no bar rather than a 0 % one. `budgetTone()` is arithmetic above
+budget (`over`) and a 90 % band below it (`warning`) — exactly-on-budget is `warning`, not
+`over`, because the build is affordable with nothing left. `aria-valuetext` carries the real
+sentence (total, "sur", budget) because the browser CLAMPS `aria-valuenow` for an over-budget build
+— measured here: 8 594 against 5 000 is announced as 5 000 — so the clamped number alone would read
+"exactly on budget".
+
+**Two deviations, recorded rather than hidden.** (1) The DoD asks for a "warning badge" on an
+over-budget build; the page uses an `Alert` with the warning tone, because `Badge`'s three tones
+are the PRICE-PROVENANCE states (S12 owns them) and a fourth would make one component say two
+unrelated things — and a pill cannot say by how much. (2) The component list is a
+`<ul aria-label="Composants">` of rows, and the variant is printed only when `display_name` does
+not already contain it: the fixture proved that necessary, because the GPU's name ends in "8GB" and
+its `variant` is "8GB". `offer_class` is never rendered — `SEED_UNVERIFIED` on screen is a V5
+failure — and the API's own `disclaimer` is printed once at the foot of the list until S12 ships
+the badge.
+
+Zero-build is deliberately THIN here: a heading, a sentence, and a CTA back to the budget step
+pre-filled from the pass. The `budget_floor` advice ("budget minimum conseillé" and its
+lower-bound caveat) is S14's DoD; inventing the number now would mean writing it twice, two ways.
+
+Measured: **134/134** Playwright specs (13 result-page and 7 result-model checks added, S10's landing
+assertions re-pointed), `check:tokens` 39 files, `check:i18n` 37 files,
+`typecheck`/`lint`/`build` exit 0 (`/fr/config/[id]` ƒ Dynamic, `/[locale]/[...rest]` ƒ
+Dynamic, `/fr/configurer` still ● SSG). SSR is asserted three ways: the raw response body contains
+the builds, no browser request reaches `/v1/recommendations`, and the over-budget arithmetic is read
+off the rendered `aria-*` attributes. Not run, by scope: `test:api:db` and `verify:replay` — no
+API contract or schema changed.
+**Review (2026-10-21).** One real defect, fixed. `ROLE_ORDER` — the vocabulary `roleLabel()`
+validates — listed eight roles and omitted `SSD_SECONDARY`, which IS a valid `component_role`
+(migration 011; the enum's one non-singular storage role, and `persistence/`'s tests persist one).
+No current assembly step emits it, so nothing on screen was wrong yet, but a stored build carrying
+one would have been labelled "Autre". The array now follows the enum's declaration order, and its
+comment names the enum instead of a non-existent `candidates/roles.js` `EXPANSION_ORDER` (the real
+constant is `assembly/assemble.js`'s, in a different order and unused here). fr/ar gained "SSD
+secondaire" / "قرص إضافي", and the model spec now pins a label for every role and strategy in BOTH
+catalogues, so the vocabulary and the copy cannot drift apart again. Two documentation counts were
+wrong and are corrected: S11 added 13 page specs and 7 model specs (20), not 15.
+
+Two things were checked and deliberately NOT changed. (1) The 404's server response is Next's
+error shell for BOTH an unknown id and an unknown path — `<html id="__next_error__">`, no
+`lang`/`dir`, the styled tree only in the RSC payload. In a browser it renders correctly (404
+status, French or Arabic copy, right `dir`, a working CTA), which is the DoD; a JS-disabled reader
+sees nothing, and changing that means restructuring the locale-owning root layout. (2)
+`getRecommendationForServer` has no request timeout, so a blackholed (as opposed to refused) API can
+hold the render — a deployment concern, recorded rather than patched inside S11.
+
 #### S12 — Price provenance badge (démo / indicatif / vérifié + date) (1.5 h)
 **Goal:** The pinned three-state badge (V6) with honest date labelling and the API's
 `disclaimer` surfaced.

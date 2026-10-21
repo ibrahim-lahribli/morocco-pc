@@ -185,13 +185,44 @@ and these components are built only from those tokens.
 | Component | First real use |
 |---|---|
 | `Button`, `TextField`, `Slider`, `ChoiceCard` | S7–S9 (wizard steps) |
-| `Badge`, `ProgressBar` | S10–S11 (results, build cards) |
-| `Alert`, `Skeleton` | S10, S14 (loading, zero-result, errors) |
+| `Badge` | S12 (the price-provenance badge) — the three tones are pinned, not yet rendered on the results page |
+| `ProgressBar` | **S11** — the total-vs-budget bar on every build card |
+| `Alert`, `Skeleton` | S10, S11 (the over-budget warning and the unavailable state), S14 (zero-result, errors) |
+
+## The results composition (S11)
+
+`/fr/config/[id]` is where the kit's parts are composed for the first time, and the composition
+lives in `apps/web/components/result/` rather than in the kit: a build card (§12) and a component
+row (§11) are shapes a screen owns, not primitives.
+
+**Rank is data, position is display.** `lib/result/model.ts` `orderBuilds()` sorts by the API's
+`rank` with a stable tie-break, and the page maps `builds[]` without padding it — one build renders
+one card (V13). The first card is primary by a 1 px border plus a 1 px ring and the board's ambient
+shadow, so nothing reflows when the count changes.
+
+**The bar is drawn only from two positive numbers.** `barFigures()` refuses a NULL total or budget,
+which is why the page has no bar to draw for an unrecorded price and never paints 0 %. The bar's
+`aria-valuetext` is the SENTENCE the DoD asks for — the total, "sur", the budget — because ARIA
+clamps `aria-valuenow` to the maximum: an over-budget build would otherwise be announced as exactly
+on budget. The over state is the `over` tone plus an `Alert` that names the excess; it is
+deliberately not a fourth `Badge` tone, because those three tones are the price-provenance states
+(S12) and a pill cannot say by how much.
+
+**Roles and variants are words.** The component row translates the engine's role enum
+(`roleLabel()`, with "Autre" for anything it does not know) and prints `variant` only when
+`display_name` does not already contain it — the fixture's GPU is named "RTX 4060 8GB" with
+`variant: "8GB"`, which would otherwise read "8GB · 8GB". `offer_class` is never rendered:
+`SEED_UNVERIFIED` on screen is the V5 failure this page exists to avoid.
+
+**A retry must re-run the server.** `LinkButton` gained `reload`: it renders a plain `<a>`
+instead of `next/link`, because a router push to the URL already in the address bar is a no-op and
+the unavailable state's "Réessayer" would look like one. It is the only place in the app that wants a
+document navigation, and it is documented on the prop.
 
 ## Not in the kit
 
-- The step indicator (§5), component row (§11), strategy card (§12), disclosure
-  (§13) and share bar (§14) are composition, not primitives — they belong to the
-  screens that own them.
+- The step indicator (§5), disclosure (§13) and share bar (§14) are composition, not
+  primitives — they belong to the screens that own them. The component row (§11) and
+  the strategy card (§12) are now built, at `components/result/`.
 - The `ar` locale, its font subset and the locale switcher (S5, S20).
 - Dark mode: no board defines one, so no component pretends to support it.

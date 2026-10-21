@@ -17,7 +17,8 @@
  *     ?state=non-json           200 with an HTML body (a proxy page, not JSON)
  *     ?state=422 | 413 | 429 | 503
  *
- *   GET /v1/recommendations/:id   ?state=ok | 404
+ *   GET /v1/recommendations/:id   the fixture whose `id` matches, else 404
+ *                                 (?state=404 forces the 404 for any id)
  *   GET /v1/presets               ?state=ok | empty | 503
  *   GET /v1/catalog/products      ?state=ok | 503
  *   GET /v1/catalog/products/:slug ?state=ok | 404
@@ -36,9 +37,11 @@ import {
   CATALOG_PRODUCT_OK,
   ERRORS,
   HEALTH_OK,
+  IDS,
   META_OPTIONS,
   PRESETS_EMPTY,
   PRESETS_OK,
+  RECOMMENDATIONS_BY_ID,
   RECOMMENDATION_OK,
   RECOMMENDATION_REUSED,
   RECOMMENDATION_ZERO_BUILD,
@@ -182,10 +185,18 @@ async function handle(req, res) {
     return send(res, 201, RECOMMENDATION_OK);
   }
 
+  // The id IS the state selector for a read: an SSR page has no browser left to
+  // set a header or add a query parameter, so each fixture carries its own id.
   const recommendationMatch = path.match(/^\/v1\/recommendations\/([^/]+)$/);
   if (req.method === "GET" && recommendationMatch !== null) {
     if (state === "404") return sendError(res, "notFound");
-    send(res, 200, { ...RECOMMENDATION_OK, id: decodeURIComponent(recommendationMatch[1]) });
+    const id = decodeURIComponent(recommendationMatch[1]);
+    if (id === IDS.unavailable) return sendError(res, "unavailable");
+    const fixture = RECOMMENDATIONS_BY_ID[id];
+    // An unknown id is a 404, as the real API's is: inventing a body for it
+    // would hide the results page's own not-found path.
+    if (fixture === undefined) return sendError(res, "notFound");
+    send(res, 200, fixture);
     return;
   }
 

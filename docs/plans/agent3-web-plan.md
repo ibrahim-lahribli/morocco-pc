@@ -63,7 +63,7 @@ referenced by no sprint and `OD3` is unused; they are not invented here.
 | ID | Finding | Status |
 |---|---|---|
 | V1 | The API's POST latency is unproven, so the wizard cannot promise 3 s | open; needs a deployed origin |
-| V2 | A zero-build pass is a legitimate outcome and must be explained, not shown as an error | contract has `budget_floor`; UI not built |
+| V2 | A zero-build pass is a legitimate outcome and must be explained, not shown as an error | **PARTIAL (S11)** — the zero-build state and its pre-filled way back render; S14 owns the floor advice |
 | V3 | `resolution` / `priority` may be inert (OG-38), and the UI must not imply otherwise | open on the API side |
 | V4 | Explanation text is a string today, so copy cannot be composed from codes | open (CD-2) |
 | V5 | Catalogue names carry a `Seed ` prefix; the UI must use `display_name` and never render "Seed", `SEED_UNVERIFIED` or `TestCompat` | `display_name` available since v1.2 |
@@ -72,7 +72,7 @@ referenced by no sprint and `OD3` is unused; they are not invented here.
 | V10 | 429 must be a first-class state with `Retry-After`, not a generic error | **DONE (S10)** — the countdown, the disable, and the re-enable. S10 also found the header was unreadable cross-origin: the API now lists `Retry-After` and `X-Request-Id` in its CORS `exposedHeaders`, without which `fetch` returns both as null |
 | V11 | Money and dates must go through `Intl` (`fr-MA`), never hand-formatted | **DONE (S5)** — `lib/i18n/format.ts`; `npm run check:i18n` fails on inline Intl, a runtime-locale method, a hand-written amount or a literal date |
 | V12 | The budget input needs both a 500 MAD slider and a free numeric field, clamped honestly | not started |
-| V13 | `builds[]` is 1..N, not always 3; the results page must not render empty slots | not started |
+| V13 | `builds[]` is 1..N, not always 3; the results page must not render empty slots | **DONE (S11)** — the array is mapped in rank order, never padded |
 | V14 | `apps/web` is a separate package: own manifest, own lockfile, own workflow, root CI untouched | done in S1 |
 
 ### 2.3 Owner decisions (OD-*)
@@ -201,8 +201,8 @@ sprint board). The flow is DERIVED (`stepsFor`): an office profile walks three s
 resolution question is a gaming one, and a response that ever serves `inputs_applied` stops a
 question it has declared inert — until then both questions carry an honest "stored, not yet
 used" label. The last step now POSTs, maps every failure the API can send, and hands off to
-`/fr/config/[id]` — which today is a one-page hand-off (the id, and a sentence saying the
-detailed screen is next), because S11 owns the results page itself.
+`/fr/config/[id]` — the results page S11 built (see W2), which reads the pass back by id and
+renders its cards, budget bar and zero-build state.
 
 ### W2 — results
 
@@ -216,7 +216,12 @@ progress.
 so the wizard's real number is unknown and the sprint board deliberately keeps it out of the gate
 until staging exists.
 
-**Today:** not started (S11–S15).
+**Today:** **S11 done** (2026-10-20) — `/fr/config/[id]` is the results page: an SSR read of
+`GET /v1/recommendations/:id`, rank-ordered strategy cards whose first is primary, a component list
+per card, a total-vs-budget bar whose `aria-valuetext` carries the real amounts, a styled 404, and a
+thin zero-build state. S12–S15 are not started: the price-provenance badge (S12), the "pourquoi ce
+choix" panel (S13), the `budget_floor` advice (S14) and sharing (S15). See the sprint board's S11
+status for the two recorded deviations and the SSR-testing mechanics.
 
 ### W3 — SEO surface
 
@@ -262,13 +267,13 @@ Run in `apps/web` on the rebased branch, Node 24 locally (CI pins 22):
 | Check | Result |
 |---|---|
 | `npm ci` | exit 0 |
-| `npm run build` | exit 0 — `next build` (Turbopack), 8 prerendered routes across `/fr` and `/ar` (the build reports 11 static pages), **no CSS parse warning**; `/fr/configurer` and `/ar/configurer` stay ● SSG despite `useSearchParams`, because the hook sits behind a Suspense boundary, and `/fr/config/[id]` is reported ƒ Dynamic because an id is whatever the API minted |
+| `npm run build` | exit 0 — `next build` (Turbopack), 8 prerendered routes across `/fr` and `/ar` (the build reports 11 static pages), **no CSS parse warning**; `/fr/configurer` and `/ar/configurer` stay ● SSG despite `useSearchParams`, because the hook sits behind a Suspense boundary, and `/fr/config/[id]` is reported ƒ Dynamic because an id is whatever the API minted, and `/[locale]/[...rest]` is ƒ Dynamic beside it so an unknown path inside a locale renders the locale's own 404 |
 | `npm run lint` | exit 0 — 0 errors, 1 warning (`postcss.config.mjs` anonymous default export) |
 | `npm run typecheck` | exit 0, and also exit 0 with `next-env.d.ts` removed (the clean-CI order is safe) |
 | `npm run check:api-types` | exit 0 — contract 1.5.0, 7 paths, `schema.d.ts` byte-identical to the generator |
-| `npm run check:tokens` | exit 0 — 0 hex literals, 0 palette utilities, 0 physical side classes across `app/` + `components/` + `lib/` (33 files); proven RED on each of the three rule types before being trusted |
-| `npm run check:i18n` | exit 0 — no inline `Intl`, no runtime-locale method, no hand-written amount/date in 31 files; proven RED on all four rule types before being trusted |
-| `npm test` (Playwright, 360×800) | 114/114 pass — the 3 shell specs, S4's 19 (every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, one for a non-JSON 200), S2's 8 (palette count, 15 text contrast pairs, 3 UI pairs, then the rendered page: 360 px, noindex, alias chain, 48 px control + 2 px ring, `ms-auto` mirroring, the mono face's late swap), S3's 10 (per-component geometry, roles, keyboard, reduced motion), S5's 15 (lang/dir, switcher, formatting, fonts, the per-locale Arabic preload, the mono preload that is not there, CLS) and S7's 21 (12 wizard: labels from `meta/options`, keyboard-only step 1, deep link, repair, Back with values, Enter advancing the form, the last step's honest disabled action, 503 + retry, 360 px/legend/targets, Arabic, the home link; 9 model: URL parsing, ranges, backwards-only repair, round-trip, request body) and S8's 9 (7 budget: the snap note, the min and max clamps with their notices, the slider's 500 steps and both ends, Enter settling before it advances, 360 px with a 44 px rail and a real legend, the Arabic clamp; 2 model: the 500 grid with its top-of-range arithmetic, and `clampBudget` naming the bound) and S9's 12 (6 steps: the gaming/office flow lengths, a URL
+| `npm run check:tokens` | exit 0 — 0 hex literals, 0 palette utilities, 0 physical side classes across `app/` + `components/` + `lib/` (39 files); proven RED on each of the three rule types before being trusted |
+| `npm run check:i18n` | exit 0 — no inline `Intl`, no runtime-locale method, no hand-written amount/date in 37 files; proven RED on all four rule types before being trusted |
+| `npm test` (Playwright, 360×800) | 134/134 pass — the 3 shell specs, S4's 19 (every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, one for a non-JSON 200), S2's 8 (palette count, 15 text contrast pairs, 3 UI pairs, then the rendered page: 360 px, noindex, alias chain, 48 px control + 2 px ring, `ms-auto` mirroring, the mono face's late swap), S3's 10 (per-component geometry, roles, keyboard, reduced motion), S5's 15 (lang/dir, switcher, formatting, fonts, the per-locale Arabic preload, the mono preload that is not there, CLS) and S7's 21 (12 wizard: labels from `meta/options`, keyboard-only step 1, deep link, repair, Back with values, Enter advancing the form, the last step's honest disabled action, 503 + retry, 360 px/legend/targets, Arabic, the home link; 9 model: URL parsing, ranges, backwards-only repair, round-trip, request body) and S8's 9 (7 budget: the snap note, the min and max clamps with their notices, the slider's 500 steps and both ends, Enter settling before it advances, 360 px with a 44 px rail and a real legend, the Arabic clamp; 2 model: the 500 grid with its top-of-range arithmetic, and `clampBudget` naming the bound) and S9's 12 (6 steps: the gaming/office flow lengths, a URL
 naming the step an office profile does not have, the three-of-five priority list driven from the
 contract's own five labels, the stored-not-applied label as the group's description in both
 languages, and a contract that marks priority applied turning the label off and dropping the
@@ -280,7 +285,17 @@ it, the 422 about a field with no control, 413, the 429 countdown from `Retry-Af
 sentence and its retry, the 500 reference, one request from a double tap, and a zero-build 200 that is a result; 7 model: the
 body the wizard builds passing its own contract check, the numeric-string refusal, the ceilings
 and ranges, unknown fields in contract order, and the failure map including silence-vs-empty
-`details[]`) |
+`details[]`) and S11's 20 (13 result-page: three cards with the first visually primary, a component row
+carrying the translated role plus name, variant and price used, one build rendered as one card,
+the bar's measured width and its `aria-valuetext` carrying the real amounts, an over-budget total
+whose `aria-valuenow` is clamped while the sentence keeps the excess, a 404 status with a CTA that
+works, an unknown path inside a locale reaching the same page, the builds present in the raw SSR
+response body, no browser request to `/v1/recommendations`, the seed vocabulary absent from four
+states, the zero-build state with its pre-filled way back and no invented floor number, the Arabic
+RTL page, and a 503 rendered as "indisponible" with a retrying DOCUMENT navigation rather than a
+404; 7 model: rank ordering with its stable tie-break and an unmutated input, the NULL-vs-0 bar
+gate, the tone thresholds including the 90 % edge, remaining/over arithmetic, the over fixture's
+own invariant, label coverage for every role and archetype, and the variant de-duplication) |
 | Tailwind actually processed | yes — the emitted CSS chunk contains `text-2xl`, `mx-auto`, `max-w-5xl`, `sr-only` and the `focus:` variants |
 
 **S5's evidence (2026-10-20).** next-intl 4.14.9, `/fr` and `/ar`, both statically rendered (6

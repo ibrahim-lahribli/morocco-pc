@@ -96,10 +96,38 @@ export class ApiError extends Error {
   }
 }
 
-/** The API root. Trailing slashes are stripped so callers may pass either form. */
-export function apiBaseUrl(): string {
-  const raw = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+const DEFAULT_API_BASE_URL = "http://localhost:3000";
+
+/** Trailing slashes are stripped so callers may pass either form. */
+function normalizeBase(raw: string): string {
   return raw.replace(/\/+$/, "");
+}
+
+/**
+ * The API root a BROWSER uses: the public one, inlined at build time.
+ *
+ * `NEXT_PUBLIC_*` is compiled into the bundle, so changing it is a rebuild —
+ * which is the point: a client cache and a server may not disagree about where
+ * the public API lives.
+ */
+export function apiBaseUrl(): string {
+  return normalizeBase(process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL);
+}
+
+/**
+ * The API root a Next SERVER uses (S11's SSR fetch).
+ *
+ * `API_BASE_URL` is deliberately NOT `NEXT_PUBLIC_`: it is read at request time
+ * and never inlined into a browser bundle, so a deployment can point the server
+ * at an internal address (a service name on a private network) while the browser
+ * keeps the public origin. When it is unset — every local run, and the tests —
+ * the server falls back to the public URL, so there is one place to look when
+ * both halves are the same host.
+ */
+export function serverApiBaseUrl(): string {
+  return normalizeBase(
+    process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL,
+  );
 }
 
 function parseRetryAfter(response: Response): number | undefined {
@@ -176,10 +204,14 @@ interface ApiResult<T> {
  * One request. Throws `ApiError` for a non-2xx, a network failure, or a body
  * that is not JSON; a caller never sees a raw `Response`.
  */
-async function request<T>(path: string, init: RequestInit = {}): Promise<ApiResult<T>> {
+async function request<T>(
+  path: string,
+  init: RequestInit = {},
+  base: string = apiBaseUrl(),
+): Promise<ApiResult<T>> {
   let response: Response;
   try {
-    response = await fetch(apiBaseUrl() + path, {
+    response = await fetch(base + path, {
       ...init,
       headers: {
         accept: "application/json",
@@ -254,6 +286,31 @@ export async function getRecommendation(
     `/v1/recommendations/${encodeURIComponent(id)}`,
     init
   )).body;
+}
+
+/**
+ * GET /v1/recommendations/:id, on the SERVER (S11's results page).
+ *
+ * Two differences from `getRecommendation`, both deliberate:
+ *
+ *   - it targets `serverApiBaseUrl()`, so a deployment can keep the engine on an
+ *     internal address while the browser keeps the public origin;
+ *   - it is `cache: "no-store"`. A result id is a durable reference to one
+ *     committed pass, and a cached copy would keep serving a body after the data
+ *     behind it changed. There is nothing to revalidate: the page is dynamic by
+ *     construction (its id is data), so every visit is one read.
+ */
+export async function getRecommendationForServer(
+  id: string,
+  init?: RequestInit
+): Promise<RecommendationResponse> {
+  return (
+    await request<RecommendationResponse>(
+      `/v1/recommendations/${encodeURIComponent(id)}`,
+      { cache: "no-store", ...init },
+      serverApiBaseUrl()
+    )
+  ).body;
 }
 
 export async function getPresets(

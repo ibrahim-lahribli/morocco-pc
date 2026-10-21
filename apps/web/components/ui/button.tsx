@@ -49,6 +49,13 @@ export interface LinkButtonProps {
   variant?: ButtonVariant;
   size?: ButtonSize;
   className?: string;
+  /**
+   * Render a plain `<a>` instead of `next/link`, so following it re-runs the
+   * SERVER render (S11's retry). A `Link` to the URL already in the address bar
+   * is a router no-op: it would leave an error state on screen while looking
+   * like a retry. Use it only where a document navigation is the point.
+   */
+  reload?: boolean;
   children: ReactNode;
 }
 
@@ -69,10 +76,19 @@ export function LinkButton({
   variant = "primary",
   size = "default",
   className,
+  reload = false,
   children,
 }: LinkButtonProps) {
+  const classes = cn(BASE, SIZES[size], VARIANTS[variant], className);
+  if (reload) {
+    return (
+      <a href={href} className={classes}>
+        {children}
+      </a>
+    );
+  }
   return (
-    <Link href={href} className={cn(BASE, SIZES[size], VARIANTS[variant], className)}>
+    <Link href={href} className={classes}>
       {children}
     </Link>
   );

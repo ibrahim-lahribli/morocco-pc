@@ -82,10 +82,48 @@
     }
   },
   "result": {
-    "title": "Votre configuration",
-    "stored": "Votre demande est enregistrée.",
-    "pending": "L'écran détaillé des configurations arrive à l'étape suivante.",
-    "idLabel": "Identifiant",
+    "title": "Vos configurations",
+    "intro": "Budget visé : {budget}.",
+    "rank": "N° {position}",
+    "strategies": {
+      "PERFORMANCE": "Performance",
+      "BALANCED": "Équilibré",
+      "VALUE": "Meilleur prix",
+      "OTHER": "Configuration"
+    },
+    "bar": {
+      "label": "Prix de la configuration",
+      "valueText": "{total} sur {budget}",
+      "remaining": "Reste {amount}",
+      "over": "Dépassement de {amount}"
+    },
+    "overBudget": "Cette configuration dépasse votre budget de {amount}.",
+    "componentsLabel": "Composants",
+    "roles": {
+      "CPU": "Processeur",
+      "GPU": "Carte graphique",
+      "RAM": "Mémoire",
+      "MOTHERBOARD": "Carte mère",
+      "SSD_BOOT": "SSD système",
+      "SSD_SECONDARY": "SSD secondaire",
+      "PSU": "Alimentation",
+      "CASE": "Boîtier",
+      "CPU_COOLER": "Refroidissement",
+      "OTHER": "Autre"
+    },
+    "priceUnknown": "Prix non disponible",
+    "zeroTitle": "Aucune configuration pour ce budget",
+    "zeroBody": "Nous n'avons trouvé aucune configuration compatible avec ce budget. Augmentez le budget ou changez d'usage, puis relancez la recherche.",
+    "zeroBack": "Modifier mon budget",
+    "errorTitle": "Configuration indisponible",
+    "errorBody": "Le service n'a pas pu être joint. Votre configuration est enregistrée ; réessayez dans un instant.",
+    "errorRetry": "Réessayer",
     "back": "Revenir au configurateur"
+  },
+  "notFound": {
+    "eyebrow": "Erreur 404",
+    "title": "Page introuvable",
+    "body": "Cette adresse ne correspond à aucune page. Le lien est peut-être incomplet, ou la configuration n'existe plus.",
+    "cta": "Configurer mon PC"
   }
 }

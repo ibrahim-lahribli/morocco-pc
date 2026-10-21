@@ -30,10 +30,16 @@ export default defineConfig({
   // Two servers for two jobs: the app under test (3210, needs a prior
   // `npm run build`) and the fixture mock API (3211, zero deps). The mock is
   // listed second so a failing app never hides a failing mock.
+  //
+  // `API_BASE_URL` is the SERVER-side API root (S11). The results page fetches
+  // in a server component, where a browser route interception does not exist, so
+  // the Next process itself has to be pointed at the fixture mock — that is the
+  // only way the SSR path is exercised by the suite rather than replaced by it.
   webServer: [
     {
       command: "npm run start",
       url: "http://localhost:3210/fr",
+      env: { API_BASE_URL: "http://localhost:3211" },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
