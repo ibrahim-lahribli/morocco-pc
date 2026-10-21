@@ -142,7 +142,26 @@
     "errorTitle": "التجميعة غير متاحة",
     "errorBody": "تعذّر الوصول إلى الخدمة. طلبك محفوظ؛ أعد المحاولة بعد لحظة.",
     "errorRetry": "إعادة المحاولة",
-    "back": "العودة إلى الإعداد"
+    "back": "العودة إلى الإعداد",
+    "share": {
+      "group": "مشاركة هذه التجميعة",
+      "whatsapp": "مشاركة عبر واتساب",
+      "copy": "نسخ الرابط",
+      "native": "مشاركة",
+      "copied": "تم نسخ الرابط.",
+      "words": {
+        "demo": "عرض تجريبي",
+        "indicative": "استرشادي",
+        "verified": "مُتحقق منه"
+      },
+      "ogTitle": "تجميعتي: {total} ضمن ميزانية {budget} ({word})",
+      "ogTitlePlain": "تجميعتي على morocco-pc",
+      "ogDescription": "تجميعة متوافقة من morocco-pc للسوق المغربي. الأسعار بالدرهم (DH).",
+      "text": "تجميعتي: {total} ضمن ميزانية {budget} ({word}).",
+      "textPlain": "تجميعتي على morocco-pc.",
+      "waText": "تجميعتي: {total} ضمن ميزانية {budget} ({word}) — {url}",
+      "waTextPlain": "تجميعتي على morocco-pc: {url}"
+    }
   },
   "notFound": {
     "eyebrow": "خطأ 404",

@@ -801,6 +801,36 @@ channels.
 3. Meta tags present on a shared link: `og:title`, `og:description`, `og:image`, `noindex`.
 4. Preview image renders within budget (explicit width/height, no CLS).
 
+**Status: DONE 2026-10-21 — as built.** One canonical URL serves all three channels:
+`absoluteResultUrl()` derives it from the REQUEST origin (`originFromHeaders()`, x-forwarded-first)
+and re-encodes the id in the path, so an id can never become part of the authority and a wa.me
+link, the Web Share payload and the og:url cannot disagree. The wa.me anchor is a real `<a>`
+(target/rel noopener) built SERVER-side with the fr-formatted total and badge word, so it works
+before any JS.
+
+**Web Share is a feature check, not a sniff.** `ShareBar` (the page's ONE client island) reveals
+the native-share button through `useSyncExternalStore` — server snapshot `false`, client
+snapshot `navigator.share` present, no-op subscribe — so a device with the API gets its third
+button with no hydration mismatch and no setState-in-effect cascade, and everything else keeps
+WhatsApp + copy. The DoD fallback works both ways: success through the share sheet announces
+NOTHING (no false "copied"), a failure copies the canonical URL and announces "Lien copié."
+through a live region that exists EMPTY from the first render; a clipboard write without a
+secure context falls to the textarea/execCommand path. The share surface is only rendered for
+a pass that has builds: a zero-build page has nothing honest to advertise.
+
+**The meta is the badge's vocabulary.** og:title says the REAL total of the RANK-1 build with
+its `priceProvenance()` word, computed from the SAME request-scoped loader (`cache()` in
+load.ts — `loadRecommendationCached` shares one API read between metadata, page and card;
+metadataBase is the BARE origin — a base with a path hollowed og:image out of its own segment
+and is pinned by a spec). A pass without a priced primary build shares a numberless sentence;
+noindex stays. The og:image is a `next/og` factory (1200x630, Next 16's promised `params`,)
+drawing the same total/word — its hex values are the compiled token constants, annotated per
+ingredient, and `check:tokens` exempts ONLY the hex rule for that one file (Satori knows no
+CSS). The Arabic card stays brand-level until S20 loads a face into Satori.
+
+Measured: **166/166** Playwright specs (8 share + URL-model checks added), `check:tokens`
+44 files, `check:i18n` 42 files, `typecheck`/`lint`/`build` exit 0; the og:image route answers
+image/png in 34 KB.
 ### Phase W3 — SEO surface
 
 #### S16 — Preset pages from GET /v1/presets (ISR) (2 h)

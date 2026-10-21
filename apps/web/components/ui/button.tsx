@@ -71,6 +71,16 @@ export interface LinkButtonProps {
  * `disabled` has no meaning here and is therefore not in the props: a link that
  * cannot be followed should not be rendered as one.
  */
+/**
+ * The classes for one (variant, size) pair, exported so a composition may put
+ * the button's geometry on an element button.tsx does not own — an external
+ * anchor with a target attribute, for instance (S15's WhatsApp link). The two
+ * components call it, so two owners of the styles stay one owner.
+ */
+export function buttonClasses(variant: ButtonVariant, size: ButtonSize = "default"): string {
+  return cn(BASE, SIZES[size], VARIANTS[variant]);
+}
+
 export function LinkButton({
   href,
   variant = "primary",
@@ -79,7 +89,7 @@ export function LinkButton({
   reload = false,
   children,
 }: LinkButtonProps) {
-  const classes = cn(BASE, SIZES[size], VARIANTS[variant], className);
+  const classes = cn(buttonClasses(variant, size), className);
   if (reload) {
     return (
       <a href={href} className={classes}>

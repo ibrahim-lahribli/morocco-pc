@@ -72,16 +72,29 @@ function walk(dir, out = []) {
   return out;
 }
 
+/**
+ * The ONE file allowed a raw hex outside globals.css: the OG share card
+ * (S15), whose renderer (Satori) knows neither CSS nor Tailwind - its hex
+ * literals ARE the token values globals.css compiles to, named in the
+ * card's own header. Only the hex rule exempts it; the palette and
+ * physical-side rules still read the file.
+ */
+const HEX_EXEMPT = new Set([
+  path.join(ROOT, "app", "[locale]", "config", "[id]", "opengraph-image.tsx"),
+]);
+
 const files = TARGETS.flatMap((target) => walk(path.join(ROOT, target)));
 const violations = [];
 
 for (const file of files) {
+  const hexExempt = HEX_EXEMPT.has(file);
   const lines = fs.readFileSync(file, "utf8").split("\n");
   lines.forEach((line, index) => {
     for (const rule of RULES) {
       rule.pattern.lastIndex = 0;
       const match = rule.pattern.exec(line);
       if (match === null) continue;
+      if (hexExempt && rule.id === "hex-literal") continue;
       violations.push({
         file: path.relative(ROOT, file).split(path.sep).join("/"),
         line: index + 1,

@@ -188,6 +188,7 @@ and these components are built only from those tokens.
 | `Badge` | **S12** — the price-provenance pill on every build card (démo / indicatif / vérifié) |
 | `ProgressBar` | **S11** — the total-vs-budget bar on every build card |
 | `Alert`, `Skeleton` | S10, S11 (the over-budget warning and the unavailable state), S14 (zero-result, errors) |
+| `buttonClasses` | **S15** — the share bar's external wa.me `<a>` on the kit's WhatsApp variant |
 
 ## The results composition (S11)
 
@@ -253,6 +254,22 @@ re-implement the wizard's ticking countdown (S10). A 429 without a usable `Retry
 no number at all, and 503 keeps the generic retry. Both live in the same error-state `Alert`,
 and the ways out are the `LinkButton reload` links result.spec.ts pins.
 
+## The share bar (S15)
+
+`The results page shares a result through ONE canonical URL (`absoluteResultUrl()` in
+`lib/result/share.ts`), three channels and one composition: a wa.me `<a>` built server-side, a
+copy `Button` and — revealed only where `navigator.share` exists — a native-share button
+(`useSyncExternalStore`, no effect-set cascade). The strings arrive as props because the
+layout ships no client catalogue; `buttonClasses()` (exported from the kit) puts the button's
+geometry on the external anchor so two owners of the styles stay one owner.
+
+The copy path writes the canonical URL and announces it in a live region that exists EMPTY
+from the first render; success through the share sheet announces nothing, because no false
+"copied" is better than an announcing copy. `og:`/`twitter:` meta and the 1200x630 `next/og`
+card draw the RANK-1 build's total and the badge's own word, from a request-scoped
+`cache()`d read so one visitor request is one API call; a pass with no priced primary build
+gets a numberless preview, never a 0. `check:tokens` exempts the card's hex literals only,
+because Satori speaks neither CSS nor Tailwind.
 ## Not in the kit
 
 - The step indicator (§5) and share bar (§14) are composition, not primitives — they belong

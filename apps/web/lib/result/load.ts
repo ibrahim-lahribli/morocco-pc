@@ -24,8 +24,16 @@
  * instead of a stack trace. What it must never do is fall through to "not found"
  * for a 503 — telling someone their link is dead because our engine is down is a
  * lie that also removes their reason to retry.
+ *
+ * S15 adds `loadRecommendationCached`: generateMetadata, the page body and the
+ * opengraph-image factory all need the SAME pass in one request (one for the
+ * title's provenance, one for the cards, one for the preview image's number).
+ * `cache()` scopes one read to the render, so a visitor request hits the API
+ * once; a crawler fetching the image separately stays its own request, since a
+ * cache entry has no business surviving across HTTP requests.
  */
 import { ApiError, getRecommendationForServer, type RecommendationResponse } from "@/lib/api/client";
+import { cache } from "react";
 
 export type RecommendationOutcome =
   | { kind: "ok"; recommendation: RecommendationResponse }
@@ -55,3 +63,6 @@ export async function loadRecommendation(id: string): Promise<RecommendationOutc
     };
   }
 }
+
+/** The request-scoped memo of `loadRecommendation` (see the header note). */
+export const loadRecommendationCached = cache(loadRecommendation);

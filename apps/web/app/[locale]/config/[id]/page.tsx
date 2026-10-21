@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { hasLocale } from "next-intl";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 
 import { Alert, LinkButton } from "@/components/ui";
 import { BuildCard } from "@/components/result/build-card";
+import { ShareBar } from "@/components/result/share-bar";
 import { routing } from "@/i18n/routing";
 import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
-import { orderBuilds, zeroBuildAdvice } from "@/lib/result/model";
-import { loadRecommendation } from "@/lib/result/load";
+import { orderBuilds, priceProvenance, zeroBuildAdvice } from "@/lib/result/model";
+import { loadRecommendation, loadRecommendationCached } from "@/lib/result/load";
+import { absoluteResultUrl, originFromHeaders, waMeHref } from "@/lib/result/share";
 import { toHref, type Answers } from "@/lib/wizard/model";
 
 /**
@@ -54,15 +57,75 @@ export async function generateMetadata({
 }: {
   params: Promise<{ locale: string; id: string }>;
 }): Promise<Metadata> {
-  const { locale } = await params;
+  const { locale, id } = await params;
   const safe = hasLocale(routing.locales, locale) ? locale : routing.defaultLocale;
   const t = await getTranslations({ locale: safe, namespace: "result" });
+  const appLocale: AppLocale = safe === "ar" ? "ar" : "fr";
+
+  // The shared preview needs the pass's own facts (S15), so it reads the SAME
+  // request-scoped loader the page body calls again: one API read per render,
+  // and one canonical URL the og:url and every share button agree on.
+  const outcome = await loadRecommendationCached(id);
+
+  // The og:title says the REAL total with the badge's honesty word, per the
+  // DoD — a preview advertising numbers it cannot answer is the V6 lie in
+  // another room. No priced primary build, no number and no word (a missing
+  // price must not read as 0, and a zero-build pass has none to vouch for).
+  // One origin for BOTH decisions that need it: metadataBase (image route
+  // resolution) must be the bare origin, not the long result URL — a base
+  // with a path would resolve Next's relative image reference against the
+  // result path and hollow the og:image out of its own segment.
+  const origin = originFromHeaders(await headers());
+  const url = absoluteResultUrl(origin, locale, id);
+  const primary = outcome.kind === "ok" ? orderBuilds(outcome.recommendation.builds)[0] : undefined;
+  const total =
+    primary !== undefined && typeof primary.total_price === "number"
+      ? primary.total_price
+      : null;
+  const budget =
+    outcome.kind === "ok"
+      ? outcome.recommendation.budget_amount ?? outcome.recommendation.budget_floor?.budget_amount ?? null
+      : null;
+  const word =
+    primary !== undefined
+      ? t("share.words." + priceProvenance(primary))
+      : null;
+  const ogTitle =
+    total !== null && budget !== null && word !== null
+      ? t("share.ogTitle", {
+          total: formatMoney(total, appLocale),
+          budget: formatMoney(budget, appLocale),
+          word,
+        })
+      : t("share.ogTitlePlain");
+  const ogDescription =
+    outcome.kind === "ok" ? t("share.ogDescription") : t("errorBody");
+  const robots = { index: false, follow: false };
+
+  // `description` is set here so the layout's HOME intro cannot leak onto
+  // a searched result page, and metadataBase is the ONE origin every
+  // absolute preview URL resolves from (S15's own origin decision).
   return {
+    metadataBase: new URL(origin),
     title: `morocco-pc — ${t("title")}`,
-    robots: { index: false, follow: false },
+    description: ogDescription,
+    robots,
+    openGraph: {
+      siteName: "morocco-pc",
+      type: "website",
+      locale: appLocale === "ar" ? "ar_MA" : "fr_MA",
+      alternateLocale: appLocale === "ar" ? "fr_MA" : "ar_MA",
+      url,
+      title: ogTitle,
+      description: ogDescription,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: ogTitle,
+      description: ogDescription,
+    },
   };
 }
-
 export default async function ConfigPage({
   params,
 }: {
@@ -142,6 +205,39 @@ export default async function ConfigPage({
   const wizardAt = (step: "usage" | "budget") =>
     toHref(localePath(locale, "/configurer"), { step, answers });
 
+  /**
+   * The share surface (S15): one canonical URL for every channel, the
+   * badge's OWN honesty word for the primary build, and every amount
+   * formatted by the helper. A pass whose primary build carries no price
+   * shares a numberless sentence — the payload cannot advertise what the
+   * cards cannot answer.
+   */
+  const origin = originFromHeaders(await headers());
+  const shareUrl = absoluteResultUrl(origin, locale, id);
+  const primary = builds[0];
+  const provenance = primary !== undefined ? priceProvenance(primary) : null;
+  const primaryTotal =
+    primary !== undefined && typeof primary.total_price === "number"
+      ? primary.total_price
+      : null;
+  const totalLabel =
+    primaryTotal !== null && budget !== null ? formatMoney(primaryTotal, appLocale) : null;
+  const budgetLabel = budget !== null ? formatMoney(budget, appLocale) : null;
+  const wordLabel = provenance !== null ? t("share.words." + provenance) : null;
+  const priced = totalLabel !== null && budgetLabel !== null && wordLabel !== null;
+  const shareText = priced
+    ? t("share.text", { total: totalLabel as string, budget: budgetLabel as string, word: wordLabel as string })
+    : t("share.textPlain");
+  const waText = priced
+    ? t("share.waText", {
+        total: totalLabel as string,
+        budget: budgetLabel as string,
+        word: wordLabel as string,
+        url: shareUrl,
+      })
+    : t("share.waTextPlain", { url: shareUrl });
+  const whatsappHref = waMeHref(waText);
+
   return (
     <section>
       <header>
@@ -196,6 +292,23 @@ export default async function ConfigPage({
           ))}
         </ol>
       )}
+
+      {builds.length > 0 ? (
+        <div className="mt-6">
+          <ShareBar
+            shareUrl={shareUrl}
+            whatsappHref={whatsappHref}
+            shareText={shareText}
+            labels={{
+              label: t("share.group"),
+              whatsapp: t("share.whatsapp"),
+              copy: t("share.copy"),
+              share: t("share.native"),
+              copied: t("share.copied"),
+            }}
+          />
+        </div>
+      ) : null}
 
       <p className="mt-4 text-micro text-muted">{recommendation.disclaimer}</p>
 
