@@ -249,8 +249,9 @@ untouched). On `push`/`pull_request` touching `apps/web/**` (and `workflow_dispa
 `check:i18n`, `check:api-types` (the S4 contract-drift gate, so the triggers also include
 `apps/api/test/unit/openapi-v1.5.json`), `build`, `playwright install --with-deps chromium`,
 `npm test` and `test:lighthouse` (S6's WARNING-FIRST budgets on a fixture result page) on Node 22
-— uploading `apps/web/test-results` when a run fails and `apps/web/.lighthouseci` always. It needs
-NO secrets and NO database: `playwright.config.ts` starts the app on 3210 and the fixture mock on
+— uploading `apps/web/test-results` when a run fails and `apps/web/.lighthouseci` always. It
+replaces the scaffold-era `web-ci.yml`, deleted in the same change, so a web push runs one job, not
+two. It needs NO secrets and NO database: `playwright.config.ts` starts the app on 3210 and the fixture mock on
 3211 itself, and `scripts/lighthouse-ci.mjs` starts and stops both for the budget run (refusing to
 measure a server already on 3210, or a result route that does not answer 200 as itself). Verified 2026-10-21 from a fresh `npm ci` under Node 22.23.3
 with `CI=true` — 168/168 specs, LCP 2.32–2.34 s / CLS 0 / 145 981 B of script on the fixture route;

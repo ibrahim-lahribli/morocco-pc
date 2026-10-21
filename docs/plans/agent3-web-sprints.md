@@ -53,7 +53,7 @@ semantic aliases, an 8-step type scale, three radii, the board's two card shadow
 decisions. `docs/design/TOKEN_MAP.md` carries the provenance (board screen id), the contrast matrix
 and the deviations. `app/[locale]/tokens/page.tsx` renders every token at 360 px so the values can be
 seen and measured; `e2e/tokens.spec.ts` measures them; `scripts/check-tokens.mjs` (`npm run
-check:tokens`, in `web-ci.yml`) is scenario 1. Three things are worth recording:
+check:tokens`, in `web.yml`) is scenario 1. Three things are worth recording:
 
 1. **The board contains one accessibility defect, and the token map does not reproduce it.** It paints
    the warning budget bar in saffron, which measures 1.71:1 against the track. The token is
@@ -180,7 +180,7 @@ mock server covering every contract state the web consumes — including the pro
 `ApiError`, `details[]`, `retryAfterSeconds`); `lib/api/compile-gate.ts` makes a contract
 regression a `tsc` failure; `mock/server.mjs` + `mock/fixtures.mjs` serve every state listed above
 plus the dedupe path, the zero-build-with-no-floor case and an open CORS policy; `check:api-types`
-runs in `web-ci.yml` between typecheck and build. Two deliberate deviations from this DoD:
+runs in `web.yml` between typecheck and build. Two deliberate deviations from this DoD:
 
 1. **The snapshot is not committed a second time.** It is the API's gated file, read in place. A copy
    under `apps/web` would be two plausible contracts in one tree with nothing to say which one the
@@ -284,7 +284,9 @@ Lighthouse CI budgets — without disturbing the engine's existing jobs.
 
 **The dedicated job and the warning-first budgets landed 2026-10-21 — only the promotion to
 failure is left.** `.github/workflows/web.yml` is the S6 job: its own workflow (the engine's
-`ci.yml` jobs untouched), no secrets, no database. On `push`/`pull_request` touching
+`ci.yml` jobs untouched), no secrets, no database. It replaces the scaffold-era `web-ci.yml`,
+deleted here: the same gates, budgets included, one job per web push instead of two. On
+`push`/`pull_request` touching
 `apps/web/**` it runs, in `apps/web`, `npm ci`, `typecheck`, `lint`, `check:tokens`,
 `check:i18n`, `check:api-types` (the S4 drift gate, which is why the triggers also include
 `apps/api/test/unit/openapi-v1.5.json`), `build`, Playwright (`--with-deps chromium`), `npm test`

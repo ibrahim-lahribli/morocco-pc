@@ -172,7 +172,7 @@ server built from fixtures; design tokens; i18n skeleton; Latin + Arabic font su
 
 **Today:** S1 and S4 done; S2, S3, S5 and S6 not started, and **S2 is blocked on the design
 export** (§3). What exists: `next build`, `eslint`, `tsc --noEmit`, `check:api-types` and the 22
-Playwright specs all pass, Tailwind compiles real utilities, and `web-ci.yml` runs lint → typecheck →
+Playwright specs all pass, Tailwind compiles real utilities, and `web.yml` runs lint → typecheck →
 **check:api-types** → build → Playwright, path-filtered to `apps/web/**` and itself.
 
 S4's pieces: `lib/api/schema.d.ts` (generated, committed), `lib/api/client.ts` (the one fetch path),

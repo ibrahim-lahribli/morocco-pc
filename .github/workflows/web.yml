@@ -1,9 +1,10 @@
 name: web
 
 # apps/web is a standalone package (OD4): own manifest, own lockfile, own workflow,
-# so the engine's `ci.yml` jobs stay untouched. Without this job every web gate was
-# local-only — typecheck, lint, the token/i18n greps, the Next build and the
-# Playwright suite all ran only on a developer's machine.
+# so the engine's `ci.yml` jobs stay untouched. This REPLACES the scaffold-era
+# `.github/workflows/web-ci.yml`, deleted here: same gates, plus Lighthouse budgets,
+# artifacts and a least-privilege token — one job per web push, not two copies of
+# the same eight gates racing each other.
 #
 # No secrets and no database: the suite drives the committed fixture mock
 # (`apps/web/mock/server.mjs`), and playwright.config.ts starts both servers.

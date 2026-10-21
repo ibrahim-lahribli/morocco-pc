@@ -148,7 +148,7 @@ test.describe("the token page renders them", () => {
     expect(robots).toContain("noindex");
   });
 
-  test("the mono face arrives without a preload and still shifts nothing", async ({ page }) => {
+  test("the mono face arrives without a preload and shifts nothing visible", async ({ page }) => {
     // This page PAINTS the mono face (token names, the eyebrow, the specimen
     // note) and does not preload it, so the file arrives after first layout and
     // swaps in. The swap must not move anything: next/font's metric-adjusted
@@ -168,8 +168,16 @@ test.describe("the token page renders them", () => {
 
     // Without this the test could pass by never loading the font at all.
     expect(result.monoLoaded).toBe(true);
-    expect(result.shifts).toEqual([]);
-    expect(result.cls).toBe(0);
+
+    // A sub-pixel residue is allowed, and only a sub-pixel one. next/font
+    // metric-adjusts a local fallback, but Chromium on the CI runner resolves
+    // that fallback through a different font set than a developer machine, and
+    // the mono swap moved a line box by 0.00079 there (measured 2026-10-21,
+    // web-ci run 39582929177) - invisible at 360 px and far below the 0.1 CLS
+    // budget. The threshold stays an order of magnitude under that budget, so
+    // a swap that actually moves something still fails.
+    expect(result.shifts.filter((shift) => shift.value >= 0.01)).toEqual([]);
+    expect(result.cls).toBeLessThan(0.01);
   });
 
   test("the body background is the page token, not a literal", async ({ page }) => {
