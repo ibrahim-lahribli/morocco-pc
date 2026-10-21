@@ -15,13 +15,14 @@
  *      a bounded byte cost.
  *
  * The model half pins the URL math without a browser: the id is never allowed
- * to become part of the authority.
+ * to become part of the authority, and the origin is the request's first
+ * forwarded hop — trimmed, validated, and never able to throw.
  */
 
 import { test, expect } from "@playwright/test";
 
 import { formatMoney } from "../lib/i18n/format";
-import { absoluteResultUrl, waMeHref } from "../lib/result/share";
+import { absoluteResultUrl, originFromHeaders, waMeHref } from "../lib/result/share";
 import { IDS, RECOMMENDATION_OVER_BUDGET, RECOMMENDATION_THREE_BUILDS } from "../mock/fixtures.mjs";
 
 const money = (amount: number) => formatMoney(amount, "fr");
@@ -48,6 +49,25 @@ test("the canonical URL is locale-absolute and the id can never become the autho
   // The wa.me intent encodes the whole text, once.
   const text = "Salut / ? é:https://x";
   expect(waMeHref(text)).toBe("https://wa.me/?text=Salut%20%2F%20%3F%20%C3%A9%3Ahttps%3A%2F%2Fx");
+});
+
+test("the origin is the request's first forwarded hop, and an unusable Host falls back", () => {
+  const h = (entries: Record<string, string>) => new Headers(entries);
+
+  // A proxy that appends ", edge" and pads its own value must not leak the pad:
+  // an untrimmed hop made og:url resolve as a RELATIVE url.
+  expect(
+    originFromHeaders(
+      h({ "x-forwarded-host": "machin.ma , edge", "x-forwarded-proto": "https, http" }),
+    ),
+  ).toBe("https://machin.ma");
+  // No proxy: `host` is the truth; loopback is plain http, a public host https.
+  expect(originFromHeaders(h({ host: "127.0.0.1:3210" }))).toBe("http://127.0.0.1:3210");
+  expect(originFromHeaders(h({ host: "morocco-pc.example" }))).toBe("https://morocco-pc.example");
+  // A Host header is DATA. One Next cannot turn into a URL gets the local origin
+  // instead of throwing inside generateMetadata, which used to drop every
+  // og/twitter tag from a page that still answered 200.
+  expect(originFromHeaders(h({ host: "a b" }))).toBe("http://localhost:3000");
 });
 
 // ---------------------------------------------------------------------------
@@ -178,6 +198,19 @@ test("the shared link carries og/twitter meta with the real total and the word, 
   // The words the badge would shout, not enums, not seed vocabulary.
   expect(html).not.toContain("SEED_UNVERIFIED");
   expect(html).not.toContain("indiquatif");
+});
+
+test("a padded forwarded host cannot mangle the canonical og:url", async ({ request }) => {
+  const response = await request.get(THREE, {
+    headers: { "x-forwarded-host": "machin.ma , edge", "x-forwarded-proto": "https, http" },
+  });
+  expect(response.status()).toBe(200);
+  const html = await response.text();
+  expect(html).toContain(
+    `property="og:url" content="https://machin.ma/fr/config/${IDS.threeBuilds}"`,
+  );
+  // The failure mode: the padded hop became part of the path of a relative url.
+  expect(html).not.toContain("https:/machin.ma");
 });
 
 // ---------------------------------------------------------------------------

@@ -13,6 +13,12 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    // @lhci/cli LOADS this file with require(), so CommonJS is the only shape
+    // it can have; the rule exists for app code that could import instead.
+    files: ["lighthouserc.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 ]);
 
 export default eslintConfig;

@@ -30,6 +30,7 @@ Run them from `apps/web`. Node 22 or newer.
 | `npm run build` | Production build; `npm test` needs it to have run |
 | `npm run start` | Serve the production build on 3210 |
 | `npm test` | Playwright at 360×800 — starts `next start` (3210) and the mock API (3211) |
+| `npm run test:lighthouse` | Lighthouse budgets on a fixture result page (warning-first, S6) — needs `npm run build`, starts both servers itself, writes `.lighthouseci/` |
 | `npm run mock:api` | The fixture mock API on 3211; states via `?state=` (see `mock/server.mjs`) |
 | `npm run lint` / `npm run typecheck` | ESLint / `tsc --noEmit` |
 | `npm run check:api-types` | Fails when `lib/api/schema.d.ts` drifts from the OpenAPI snapshot |
@@ -39,11 +40,15 @@ Run them from `apps/web`. Node 22 or newer.
 
 `npm test` reuses an already-running server when one holds the port, so stop a
 stale `npm run start` after a rebuild if the specs look out of date.
+`npm run test:lighthouse` does the opposite on purpose: it REFUSES to run when
+anything already answers on 3210, because measuring a `next dev` server would
+budget a build that never ships.
 
 ## Routes today
 
 `/fr`, `/ar` (shell and the wizard's entry point), `/fr/configurer` and
 `/ar/configurer` (the wizard, S7 — a static route whose answers live in the query
-string), `/fr/format` and `/ar/format` (formatting proof sheet), `/fr/kit`
-(component kit proof sheet) and `/fr/tokens` (token proof sheet) — the proof sheets
-are `noindex` and French-only by design. Results (W2) are not built yet.
+string), `/fr/config/[id]` and `/ar/config/[id]` (the results page and its share
+surface, S11–S15, `noindex` permanently), `/fr/format` and `/ar/format`
+(formatting proof sheet), `/fr/kit` (component kit proof sheet) and `/fr/tokens`
+(token proof sheet). The proof sheets are `noindex` and French-only by design.

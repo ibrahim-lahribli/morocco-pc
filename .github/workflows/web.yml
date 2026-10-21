@@ -1,0 +1,86 @@
+name: web
+
+# apps/web is a standalone package (OD4): own manifest, own lockfile, own workflow,
+# so the engine's `ci.yml` jobs stay untouched. Without this job every web gate was
+# local-only — typecheck, lint, the token/i18n greps, the Next build and the
+# Playwright suite all ran only on a developer's machine.
+#
+# No secrets and no database: the suite drives the committed fixture mock
+# (`apps/web/mock/server.mjs`), and playwright.config.ts starts both servers.
+
+on:
+  push:
+    paths:
+      - "apps/web/**"
+      # The web client's types are generated from THIS committed snapshot (S4), so
+      # a contract change is a web change even when no file under apps/web moved.
+      - "apps/api/test/unit/openapi-v1.5.json"
+      - ".github/workflows/web.yml"
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - "apps/api/test/unit/openapi-v1.5.json"
+      - ".github/workflows/web.yml"
+  workflow_dispatch:
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    # Read-only: this job builds and tests, it never writes to the repo.
+    permissions:
+      contents: read
+    defaults:
+      run:
+        # Every step below is a package script of the web app; a `uses:` step is
+        # unaffected by this, which is why the artifact path stays repo-relative.
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      # The static gates run first: each is seconds, and each names the rule it
+      # breaks, so a failure here reads better than a Playwright trace.
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run check:tokens
+      - run: npm run check:i18n
+      # The S4 drift gate: the committed schema.d.ts must still be byte-identical
+      # to what the generator produces from the API's snapshot. It is why the
+      # triggers above include that snapshot's path.
+      - run: npm run check:api-types
+      # `playwright.config.ts`'s webServer runs `next start`, so the build has to
+      # exist first. The same config starts the app on 3210 and the fixture mock on
+      # 3211 with API_BASE_URL pointed at the mock, so the SERVER-side fetch path is
+      # what the suite exercises — a browser route interception would not be.
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      # S6's budgets, WARNING-FIRST: the three assertions in lighthouserc.cjs are
+      # `warn`, so a regression is printed and stored as an artifact instead of
+      # failing a PR while W3 has not landed. S19 owns promoting them to `error`.
+      # The harness starts the built app (3210) and the fixture mock (3211) itself
+      # and refuses to measure a dev server that already holds the port.
+      - name: Lighthouse CI (fixture route, warning-first)
+        run: npm run test:lighthouse
+      - name: Upload Lighthouse report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-lighthouse-report
+          path: apps/web/.lighthouseci
+          retention-days: 7
+          if-no-files-found: ignore
+      # Traces, screenshots and videos (trace: on-first-retry) only exist on a
+      # failed run; a green run has nothing to upload.
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-playwright-test-results
+          path: apps/web/test-results
+          retention-days: 7
+          if-no-files-found: ignore

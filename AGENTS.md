@@ -229,7 +229,9 @@ Command gotchas (verified 2026-09-28):
   valid Engine 2A selection input (all 8 `EXPANSION_ORDER` roles, `RAM` not `MEMORY`); each failure
   mode raises its own missing-field error, which is the fastest way to discover the contract.
 
-No build, lint, typecheck, format, or E2E/browser commands exist. Do not invent or add them.
+At the REPO ROOT (the engine) no build, lint, typecheck, format or browser command exists — do not
+invent one. `apps/web` is its own package and the exception: `npm run typecheck|lint|build|test` plus
+`check:tokens|check:i18n|check:api-types` live there (`apps/web/package.json`).
 
 **CI (`.github/workflows/ci.yml`)** has two jobs with disjoint triggers. `unit-and-docs` runs on
 `push`/`pull_request` (and `workflow_dispatch`) and skips `schedule`. `recurring-gates` runs only on
@@ -240,6 +242,20 @@ the replay creates and drops one fixed scratch database name (`migrations_replay
 that to true. A dispatch does not need the Actions tab: `gh` is absent on this box, but the REST
 `POST /repos/{owner}/{repo}/actions/workflows/ci.yml/dispatches` works with the credential the git
 remote already stores (`ref` = the branch to run on) — keep that token out of files and logs.
+
+**`apps/web` has its OWN workflow** (`.github/workflows/web.yml`, per OD4 — the two jobs above are
+untouched). On `push`/`pull_request` touching `apps/web/**` (and `workflow_dispatch`; never
+`schedule`), a `web` job runs in `apps/web`: `npm ci`, then `typecheck`, `lint`, `check:tokens`,
+`check:i18n`, `check:api-types` (the S4 contract-drift gate, so the triggers also include
+`apps/api/test/unit/openapi-v1.5.json`), `build`, `playwright install --with-deps chromium`,
+`npm test` and `test:lighthouse` (S6's WARNING-FIRST budgets on a fixture result page) on Node 22
+— uploading `apps/web/test-results` when a run fails and `apps/web/.lighthouseci` always. It needs
+NO secrets and NO database: `playwright.config.ts` starts the app on 3210 and the fixture mock on
+3211 itself, and `scripts/lighthouse-ci.mjs` starts and stops both for the budget run (refusing to
+measure a server already on 3210, or a result route that does not answer 200 as itself). Verified 2026-10-21 from a fresh `npm ci` under Node 22.23.3
+with `CI=true` — 168/168 specs, LCP 2.32–2.34 s / CLS 0 / 145 981 B of script on the fixture route;
+the first real GitHub run is the remaining proof, and S19 promotes the three `warn` assertions to
+`error`.
 
 **The scheduled job HAS now run, twice, on 2026-10-18** (`workflow_dispatch` on `agent/platforms`;
 runs 39119596060 and 39120485573). Both doubts that could only be settled by a real run are now

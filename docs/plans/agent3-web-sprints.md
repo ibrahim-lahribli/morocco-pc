@@ -282,6 +282,27 @@ Lighthouse CI budgets — without disturbing the engine's existing jobs.
 2. LHCI runs on a fixture route and uploads results as CI artifacts.
 3. The engine's `test:unit` job is unchanged and green on the same commit.
 
+**The dedicated job and the warning-first budgets landed 2026-10-21 — only the promotion to
+failure is left.** `.github/workflows/web.yml` is the S6 job: its own workflow (the engine's
+`ci.yml` jobs untouched), no secrets, no database. On `push`/`pull_request` touching
+`apps/web/**` it runs, in `apps/web`, `npm ci`, `typecheck`, `lint`, `check:tokens`,
+`check:i18n`, `check:api-types` (the S4 drift gate, which is why the triggers also include
+`apps/api/test/unit/openapi-v1.5.json`), `build`, Playwright (`--with-deps chromium`), `npm test`
+at 360×800 through the existing `mobile-360` project, then `npm run test:lighthouse` — uploading
+`test-results/` on failure and `.lighthouseci/` always. Verified locally from a fresh `npm ci`
+under Node 22.23.3 with `CI=true`: **168/168** specs.
+
+**The budgets are `warn`, and they are genuinely evaluated.** `lighthouserc.cjs` measures the
+fixture result page (`IDS.threeBuilds`) at 360 px with simulated 4G throttling: LCP ≤ 2500 ms,
+CLS ≤ 0.1, script transfer ≤ 174 080 B (the 170 KB hypothesis). `scripts/lighthouse-ci.mjs` owns
+both servers, refuses to measure a dev server already on 3210 (or a result route that does
+not answer 200 as itself), and stops them even when Lighthouse fails, so the number is the
+BUILT app. Measured locally 2026-10-21 (3 runs): LCP
+2.32–2.34 s, CLS 0, script transfer 145 981 B (142.6 KB), performance 98; an impossible budget
+produced a warning assertion with exit code 0, which is what warning-first means. **Still
+open:** DoD scenarios 1–2 need a real GitHub run (red-on-typecheck proof, artifact upload), and
+S19 promotes the three assertions to `error`.
+
 ### Phase W1 — Wizard
 
 #### S7 — Wizard shell + step state machine (2 h)
@@ -804,7 +825,11 @@ channels.
 **Status: DONE 2026-10-21 — as built.** One canonical URL serves all three channels:
 `absoluteResultUrl()` derives it from the REQUEST origin (`originFromHeaders()`, x-forwarded-first)
 and re-encodes the id in the path, so an id can never become part of the authority and a wa.me
-link, the Web Share payload and the og:url cannot disagree. The wa.me anchor is a real `<a>`
+link, the Web Share payload and the og:url cannot disagree. The ORIGIN is validated before it
+is used: the first forwarded hop is trimmed and parsed, and a Host that cannot name a URL falls
+back to the local default rather than throwing inside generateMetadata (which silently dropped
+every og/twitter tag from a page that still answered 200; a padded hop once made og:url resolve
+as a relative url). The wa.me anchor is a real `<a>`
 (target/rel noopener) built SERVER-side with the fr-formatted total and badge word, so it works
 before any JS.
 
@@ -828,9 +853,10 @@ drawing the same total/word — its hex values are the compiled token constants,
 ingredient, and `check:tokens` exempts ONLY the hex rule for that one file (Satori knows no
 CSS). The Arabic card stays brand-level until S20 loads a face into Satori.
 
-Measured: **166/166** Playwright specs (8 share + URL-model checks added), `check:tokens`
+Measured: **168/168** Playwright specs (10 share + URL-model checks added), `check:tokens`
 44 files, `check:i18n` 42 files, `typecheck`/`lint`/`build` exit 0; the og:image route answers
 image/png in 34 KB.
+
 ### Phase W3 — SEO surface
 
 #### S16 — Preset pages from GET /v1/presets (ISR) (2 h)

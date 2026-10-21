@@ -256,7 +256,7 @@ and the ways out are the `LinkButton reload` links result.spec.ts pins.
 
 ## The share bar (S15)
 
-`The results page shares a result through ONE canonical URL (`absoluteResultUrl()` in
+The results page shares a result through ONE canonical URL (`absoluteResultUrl()` in
 `lib/result/share.ts`), three channels and one composition: a wa.me `<a>` built server-side, a
 copy `Button` and — revealed only where `navigator.share` exists — a native-share button
 (`useSyncExternalStore`, no effect-set cascade). The strings arrive as props because the
@@ -270,6 +270,7 @@ card draw the RANK-1 build's total and the badge's own word, from a request-scop
 `cache()`d read so one visitor request is one API call; a pass with no priced primary build
 gets a numberless preview, never a 0. `check:tokens` exempts the card's hex literals only,
 because Satori speaks neither CSS nor Tailwind.
+
 ## Not in the kit
 
 - The step indicator (§5) and share bar (§14) are composition, not primitives — they belong

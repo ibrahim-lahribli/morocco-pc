@@ -161,25 +161,6 @@
       "textPlain": "Ma configuration PC sur morocco-pc.",
       "waText": "Ma configuration PC : {total} sur un budget de {budget} ({word}) — {url}",
       "waTextPlain": "Ma configuration PC sur morocco-pc : {url}"
-    },
-    "share": {
-      "group": "Partager cette configuration",
-      "whatsapp": "Partager sur WhatsApp",
-      "copy": "Copier le lien",
-      "native": "Partager",
-      "copied": "Lien copié.",
-      "words": {
-        "demo": "démo",
-        "indicative": "indicatif",
-        "verified": "vérifié"
-      },
-      "ogTitle": "Ma configuration PC : {total} sur un budget de {budget} ({word})",
-      "ogTitlePlain": "Ma configuration PC sur morocco-pc",
-      "ogDescription": "Configuration compatible générée par morocco-pc pour le marché marocain. Prix en dirhams (DH).",
-      "text": "Ma configuration PC : {total} sur un budget de {budget} ({word}).",
-      "textPlain": "Ma configuration PC sur morocco-pc.",
-      "waText": "Ma configuration PC : {total} sur un budget de {budget} ({word}) — {url}",
-      "waTextPlain": "Ma configuration PC sur morocco-pc : {url}"
     }
   },
   "notFound": {

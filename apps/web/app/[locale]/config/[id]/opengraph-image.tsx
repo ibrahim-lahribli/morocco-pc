@@ -24,7 +24,7 @@
  */
 import { ImageResponse } from "next/og";
 
-import { priceProvenance, type PriceProvenance } from "@/lib/result/model";
+import { orderBuilds, priceProvenance, type PriceProvenance } from "@/lib/result/model";
 import { loadRecommendationCached } from "@/lib/result/load";
 import { formatMoney, type AppLocale } from "@/lib/i18n/format";
 
@@ -63,17 +63,17 @@ export default async function Image({
   const { locale, id } = await params;
   const appLocale: AppLocale = locale === "ar" ? "ar" : "fr";
   const outcome = await loadRecommendationCached(id);
-  const builds = outcome.kind === "ok" ? outcome.recommendation.builds : [];
+  // The card and the og:title must name the SAME build, so the primary is the
+  // one the page draws first: rank order, never the response's array order
+  // (lib/result/model.ts rule 1). Two call sites, one rule.
+  const primary = outcome.kind === "ok" ? orderBuilds(outcome.recommendation.builds)[0] : undefined;
   const total =
-    builds.length > 0 && typeof builds[0].total_price === "number" ? builds[0].total_price : null;
+    primary !== undefined && typeof primary.total_price === "number" ? primary.total_price : null;
   const budget =
     outcome.kind === "ok"
       ? outcome.recommendation.budget_amount ?? outcome.recommendation.budget_floor?.budget_amount ?? null
       : null;
-  const word =
-    builds.length > 0 && typeof builds[0].price_status === "string"
-      ? WORD[priceProvenance(builds[0])]
-      : null;
+  const word = primary !== undefined ? WORD[priceProvenance(primary)] : null;
 
   const headline =
     total !== null && budget !== null

@@ -11,7 +11,7 @@ import { routing } from "@/i18n/routing";
 import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
 import { orderBuilds, priceProvenance, zeroBuildAdvice } from "@/lib/result/model";
-import { loadRecommendation, loadRecommendationCached } from "@/lib/result/load";
+import { loadRecommendationCached } from "@/lib/result/load";
 import { absoluteResultUrl, originFromHeaders, waMeHref } from "@/lib/result/share";
 import { toHref, type Answers } from "@/lib/wizard/model";
 
@@ -137,7 +137,7 @@ export default async function ConfigPage({
   const appLocale = locale as AppLocale;
   const t = await getTranslations({ locale, namespace: "result" });
 
-  const outcome = await loadRecommendation(id);
+  const outcome = await loadRecommendationCached(id);
   if (outcome.kind === "missing") notFound();
 
   if (outcome.kind === "unavailable") {
