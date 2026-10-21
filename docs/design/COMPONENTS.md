@@ -236,6 +236,23 @@ with the DOM. It renders the committed `explanation` verbatim while the contract
 (`lib/result/reasons.ts`) never prints a code, and a malformed value gets the same generic line
 an unknown code does.
 
+## The zero-build and error states (S14)
+
+A zero-build pass has one heading and three sentences, and `lib/result/model.ts`
+`zeroBuildAdvice()` chooses which: a priced floor renders "Budget minimum conseillé : {montant}"
+plus the caveat "Estimation minimale, non garantie : c'est un plancher, pas une configuration
+réalisable.", an unpriced floor (`cheapest_total: null`, roles missing) renders guidance WITHOUT
+a number, and a floor absent entirely (`budget_floor: null`, a GET revisit of a pass committed
+before CD-7) renders the generic "Budget insuffisant". All three share one `Alert` primitive,
+tone `warning`, and none can show a 0 — the narrowing refuses 0, negative and non-finite the
+same way it refuses NULL (NULL != 0).
+
+A 429 read keeps the API's `Retry-After` seconds as a STATIC sentence ("Réessayez dans
+{seconds} s."): the results page is a server component, so it has no client timer and does not
+re-implement the wizard's ticking countdown (S10). A 429 without a usable `Retry-After` shows
+no number at all, and 503 keeps the generic retry. Both live in the same error-state `Alert`,
+and the ways out are the `LinkButton reload` links result.spec.ts pins.
+
 ## Not in the kit
 
 - The step indicator (§5) and share bar (§14) are composition, not primitives — they belong

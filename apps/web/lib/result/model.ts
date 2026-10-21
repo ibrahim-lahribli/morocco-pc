@@ -44,6 +44,28 @@
  * with one real offer and one placeholder. `priceProvenance()` adds the third
  * state the badge shows — "démo" — and it must be decided FIRST, because the
  * all-seed build's `price_status` is already `indicative`.
+ * * ## 6. A zero-build's copy follows the floor, and a NULL is never a 0 (S14, V2)
+ *
+ * `budget_floor` has three states on a zero-build pass, and each gets its own
+ * copy: a priced `cheapest_total` becomes the "budget minimum conseillé"
+ * advice with its lower-bound caveat; a floor that could not be priced (missing
+ * roles, `cheapest_total: null`) becomes guidance WITHOUT a number — printing
+ * 0 or "0 DH" would repeat the standing NULL != 0 rule; and a floor absent
+ * entirely (a GET revisit of a pass committed before CD-7) becomes the generic
+ * "budget insuffisant". `zeroBuildAdvice()` makes that a typed decision so the
+ * page cannot fall through to the floor number without passing through this
+ * narrowing.
+ * * ## 6. A zero-build's copy follows the floor, and a NULL is never a 0 (S14, V2)
+ *
+ * `budget_floor` has three states on a zero-build pass, and each gets its own
+ * copy: a priced `cheapest_total` becomes the "budget minimum conseillé"
+ * advice with its lower-bound caveat; a floor that could not be priced (missing
+ * roles, `cheapest_total: null`) becomes guidance WITHOUT a number — printing
+ * 0 or "0 DH" would repeat the standing NULL != 0 rule; and a floor absent
+ * entirely (a GET revisit of a pass committed before CD-7) becomes the generic
+ * "budget insuffisant". `zeroBuildAdvice()` makes that a typed decision so the
+ * page cannot fall through to the floor number without passing through this
+ * narrowing.
  *
  * What this file deliberately does NOT do: format anything. Money, numbers,
  * percentages and dates go through `lib/i18n/format.ts` at the call site,
@@ -217,6 +239,47 @@ export function remainingBudget(total: number | null, budget: number | null): nu
   if (pair === null) return null;
   const left = pair.budget - pair.total;
   return left >= 0 ? left : null;
+}
+
+/**
+ * The contract's budget floor, as the schema serves it.
+ *
+ * The field is nullable overall (a pass committed before CD-7, or one the
+ * engine could not compute), so the page passes the value as-is and
+ * `zeroBuildAdvice()` does the narrowing.
+ */
+export type BudgetFloor = NonNullable<RecommendationResponse["budget_floor"]>;
+
+/** What a zero-build pass tells the reader, decided once (S14, V2). */
+export type ZeroBuildAdvice =
+  /** A priced floor: the advice carries the number and its lower-bound caveat. */
+  | { kind: "floor"; cheapestTotal: number }
+  /**
+   * A floor the engine could not price (`cheapest_total: null`): guidance only,
+   * never a number — and never a 0.
+   */
+  | { kind: "unknown-floor" }
+  /**
+   * A floor absent entirely (a GET revisit of a pass committed before CD-7):
+   * the generic "budget insuffisant" copy.
+   */
+  | { kind: "no-floor" };
+
+/**
+ * Which zero-build copy a pass's floor leads to.
+ *
+ * The narrowing is strict about what counts as a number: a `cheapest_total`
+ * that is null, not finite, or not positive is the SAME state as missing — NULL
+ * != 0, and a 0 floor is not a free build, it is one nobody priced. The page
+ * formats money itself; this module has no locale.
+ */
+export function zeroBuildAdvice(floor: RecommendationResponse["budget_floor"]): ZeroBuildAdvice {
+  if (floor === null) return { kind: "no-floor" };
+  const cheapest = floor.cheapest_total;
+  if (typeof cheapest !== "number" || !Number.isFinite(cheapest) || cheapest <= 0) {
+    return { kind: "unknown-floor" };
+  }
+  return { kind: "floor", cheapestTotal: cheapest };
 }
 
 /**

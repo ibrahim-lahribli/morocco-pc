@@ -753,6 +753,38 @@ shared state components W4 will reuse.
 3. `cheapest_total: null` fixture → no numeric advice, guidance copy only.
 4. 429 state renders countdown; 503 state offers retry — both keyboard reachable.
 
+**Status: DONE 2026-10-21 — as built.** The zero-build state is one heading and THREE sentences,
+chosen by `zeroBuildAdvice()` in `lib/result/model.ts` from the floor's own shape: a priced
+`cheapest_total` (the fixture's 4 477 DH) becomes "Budget minimum conseillé : {montant}." with
+the caveat "Estimation minimale, non garantie : c'est un plancher, pas une configuration
+réalisable."; a floor the engine could not price (`cheapest_total: null` — missing roles)
+becomes guidance WITHOUT a number; and a floor absent entirely (`budget_floor: null`, the
+GET-revisit shape of a pass committed before CD-7) becomes the generic "Budget insuffisant :"
+copy. All three render in the SAME `Alert` primitive (tone `warning`), and every variant keeps
+the pre-filled way back to the budget step.
+
+**The no-number rule has teeth.** The three states are one typed union, so the page cannot print
+the floor without the narrowing handing it a number — and the narrowing refuses 0, negative and
+non-finite `cheapest_total` exactly like NULL: a 0 floor is not a free build, it is one nobody
+priced (the standing NULL != 0 rule). The browser regression tests pin it in every zero-build
+fixture: no `[^0-9]0 DH` anywhere in the visible text, a check written as a regex because
+"6 000 DH" contains the substring "0 DH".
+
+**Scenario 4's "countdown" is the API's fact, statically.** The results page is a server
+component (S11), so there is no client timer to tick: a 429 read renders "Réessayez dans
+{seconds} s." from the `Retry-After` the client already parsed (`loadRecommendation` now
+carries `status` and `retryAfterSeconds` in its `unavailable` outcome), and shows no seconds at
+all when the API served none — the wizard's live countdown (S10) remains the ticking one, and
+this state does not re-implement it. 503 keeps the generic retry, and both ways out are the
+same `LinkButton reload` links result.spec.ts already proved are keyboard-operable document
+navigations.
+
+Measured: **158/158** Playwright specs (6 zero-state and model checks added; S11's zero-build
+spec now asserts the advice S14 renders in place of its old absence assertion, superseded,
+not deleted), `check:tokens` 41 files, `check:i18n` 39 files, `typecheck`/`lint`/`build`
+exit 0. The mock grew the `zeroBuildFloorAbsent` fixture and a reserved `rateLimited` id the
+GET route serves as a real 429 with `Retry-After: 30`.
+
 #### S15 — Share: WhatsApp, Web Share API, copy-link + share previews (1.5 h)
 **Goal:** One-tap sharing of `/fr/config/[id]` (noindex page, rich preview) across the three
 channels.

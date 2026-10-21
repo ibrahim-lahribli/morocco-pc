@@ -222,7 +222,8 @@ test("a zero-build pass is a state, not an empty page (V2)", async ({ page }) =>
   await expect(page.locator("article")).toHaveCount(0);
 
   // The way back carries the answers this pass was made with, and lands on the
-  // step that can fix it. S14 owns the floor advice; no number is invented here.
+  // step that can fix it. The floor ADVICE is asserted in zero-states.spec.ts;
+  // this page-level spec keeps only the navigation it owns.
   const back = page.getByRole("link", { name: "Modifier mon budget" });
   const href = await back.getAttribute("href");
   expect(href).toContain("/fr/configurer?");
@@ -230,9 +231,11 @@ test("a zero-build pass is a state, not an empty page (V2)", async ({ page }) =>
   expect(href).toContain("budget_amount=6000");
   expect(href).toContain("use_case=GAMING");
 
-  // The floor is a LOWER BOUND, not a quoted price: nothing on this screen
-  // presents it as an achievable build.
-  await expect(page.getByText(/budget minimum conseillé/i)).toHaveCount(0);
+  // The floor is the priced fact S14 renders (the fixture prices it 4 477 DH),
+  // with its lower-bound caveat. S11's old "no advice here" assertion is
+  // superseded: the state now carries its number and says what it is.
+  await expect(page.getByText(`Budget minimum conseillé : ${money(4477)}.`)).toBeVisible();
+  await expect(page.getByText(/Estimation minimale, non garantie/)).toBeVisible();
 });
 
 test("the Arabic page is RTL and its labels are translated", async ({ page }) => {

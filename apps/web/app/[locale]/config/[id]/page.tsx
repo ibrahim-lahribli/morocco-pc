@@ -6,9 +6,9 @@ import { notFound } from "next/navigation";
 import { Alert, LinkButton } from "@/components/ui";
 import { BuildCard } from "@/components/result/build-card";
 import { routing } from "@/i18n/routing";
-import { formatMoney, type AppLocale } from "@/lib/i18n/format";
+import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
-import { orderBuilds } from "@/lib/result/model";
+import { orderBuilds, zeroBuildAdvice } from "@/lib/result/model";
 import { loadRecommendation } from "@/lib/result/load";
 import { toHref, type Answers } from "@/lib/wizard/model";
 
@@ -35,9 +35,11 @@ import { toHref, type Answers } from "@/lib/wizard/model";
  *     order comes from `orderBuilds()` rather than from the response's own
  *     ordering, because "the first card" must mean rank 1.
  *   - a zero-build pass is a RESULT, not an error (V2): it renders its own state
- *     with a way back to the budget step, pre-filled from the pass. S14 owns the
- *     `budget_floor` advice ("budget minimum conseillé") and its caveat; this
- *     page deliberately does not invent that number.
+ *     with a way back to the budget step, pre-filled from the pass. The
+ *     `budget_floor` advice ("budget minimum conseillé") and its caveat are S14's
+ *     `zeroBuildAdvice()` decision: the RECORDED number only, and guidance
+ *     without a number where the floor could not be priced or was never
+     *     computed.
  *   - a total past the budget is drawn as over (the bar's `over` tone plus an
  *     alert), never as a full-but-fine bar.
  *   - a price is two facts (V6), and this page shows both: each card carries the
@@ -78,11 +80,23 @@ export default async function ConfigPage({
   if (outcome.kind === "unavailable") {
     // Logged where it is actionable, never rendered: the user gets a sentence.
     console.error("result: could not load recommendation", id, outcome.cause);
+    // The 429 keeps the numbers the API served (S14 scenario 4): Retry-After is
+    // rendered as the countdown seconds, statically — a server component has no
+    // client timer, and the honest fact is the moment the API named, not an
+    // invented ticking one. No usable Retry-After, no number. 503 and every
+    // other failure get the generic retry. Both render in the SAME Alert
+    // primitive, and both ways out are links (keyboard reachable by nature).
+    const body =
+      outcome.status === 429
+        ? outcome.retryAfterSeconds === null
+          ? t("rateLimitedNoWait")
+          : t("rateLimitedBody", { seconds: formatNumber(outcome.retryAfterSeconds, appLocale) })
+        : t("errorBody");
     return (
       <section>
         <h1 className="text-heading text-ink">{t("errorTitle")}</h1>
         <div className="mt-4 max-w-prose">
-          <Alert tone="error">{t("errorBody")}</Alert>
+          <Alert tone="error">{body}</Alert>
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
           {/* A retry must re-run this render, so it is a document navigation
@@ -104,6 +118,13 @@ export default async function ConfigPage({
 
   const recommendation = outcome.recommendation;
   const builds = orderBuilds(recommendation.builds);
+
+  /**
+   * Which zero-build copy the floor leads to (S14). Decided by the model, so
+   * the page can neither print the floor where none was priced nor repeat the
+   * 0 that NULL must never become.
+   */
+  const advice = zeroBuildAdvice(recommendation.budget_floor);
 
   /**
    * The budget the bar is measured against. `budget_amount` is the query's own
@@ -135,7 +156,26 @@ export default async function ConfigPage({
       {builds.length === 0 ? (
         <div className="mt-6 rounded-card border border-border bg-subtle p-4">
           <h2 className="text-subtitle text-ink">{t("zeroTitle")}</h2>
-          <p className="mt-2 max-w-prose text-body text-ink">{t("zeroBody")}</p>
+          {/* One Alert primitive for every zero-build voice (DoD): the priced
+              floor shows its number and the lower-bound caveat, an unpriced
+              floor talks instead of inventing one, and an absent floor is the
+              generic "budget insuffisant". Only the priced floor repeats the
+              general zero-body guidance after it. */}
+          <div className="mt-3 max-w-prose">
+            {advice.kind === "floor" ? (
+              <Alert tone="warning">
+                <p>{t("zeroFloorAdvice", { amount: formatMoney(advice.cheapestTotal, appLocale) })}</p>
+                <p>{t("zeroFloorCaveat")}</p>
+              </Alert>
+            ) : advice.kind === "unknown-floor" ? (
+              <Alert tone="warning">{t("zeroNoFloorGuidance")}</Alert>
+            ) : (
+              <Alert tone="warning">{t("zeroNoAdvice")}</Alert>
+            )}
+          </div>
+          {advice.kind === "floor" ? (
+            <p className="mt-3 max-w-prose text-body text-ink">{t("zeroBody")}</p>
+          ) : null}
           <div className="mt-4">
             <LinkButton href={wizardAt("budget")}>{t("zeroBack")}</LinkButton>
           </div>

@@ -18,7 +18,10 @@
  *     ?state=422 | 413 | 429 | 503
  *
  *   GET /v1/recommendations/:id   the fixture whose `id` matches, else 404
- *                                 (?state=404 forces the 404 for any id)
+ *                                 (?state=404 forces the 404 for any id; the two
+ *                                 reserved ids - unavailable (503) and rateLimited
+ *                                 (429) - are error states an SSR page can select
+ *                                 through the id alone)
  *   GET /v1/presets               ?state=ok | empty | 503
  *   GET /v1/catalog/products      ?state=ok | 503
  *   GET /v1/catalog/products/:slug ?state=ok | 404
@@ -192,6 +195,7 @@ async function handle(req, res) {
     if (state === "404") return sendError(res, "notFound");
     const id = decodeURIComponent(recommendationMatch[1]);
     if (id === IDS.unavailable) return sendError(res, "unavailable");
+    if (id === IDS.rateLimited) return sendError(res, "rateLimited");
     const fixture = RECOMMENDATIONS_BY_ID[id];
     // An unknown id is a 404, as the real API's is: inventing a body for it
     // would hide the results page's own not-found path.

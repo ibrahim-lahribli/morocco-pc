@@ -14,6 +14,10 @@
  *   - **unavailable** — anything else: a 5xx, a timeout, a refused connection, a
  *     2xx body that is not JSON. The page renders the "indisponible" state with a
  *     retry, because the reference may well be fine and the service may not be.
+ *     When the failure IS a 429, the outcome carries the status and the
+ *     `Retry-After` seconds the client parsed (S14): the page folds them into
+ *     its copy instead of re-deriving them, and never invents a countdown it
+ *     was not given.
  *
  * The error is carried in the outcome rather than swallowed: the page logs it
  * server-side, where a failed fetch is actionable, and the USER gets a sentence
@@ -26,7 +30,14 @@ import { ApiError, getRecommendationForServer, type RecommendationResponse } fro
 export type RecommendationOutcome =
   | { kind: "ok"; recommendation: RecommendationResponse }
   | { kind: "missing" }
-  | { kind: "unavailable"; cause: unknown };
+  | {
+    kind: "unavailable";
+    cause: unknown;
+    /** HTTP status, or 0 when the request never reached a server. */
+    status: number;
+    /** Seconds from `Retry-After` (a 429 only), or null when none was served. */
+    retryAfterSeconds: number | null;
+  };
 
 export async function loadRecommendation(id: string): Promise<RecommendationOutcome> {
   try {
@@ -35,6 +46,12 @@ export async function loadRecommendation(id: string): Promise<RecommendationOutc
     if (error instanceof ApiError && (error.status === 404 || error.status === 400)) {
       return { kind: "missing" };
     }
-    return { kind: "unavailable", cause: error };
+    const facts = error instanceof ApiError ? error : null;
+    return {
+      kind: "unavailable",
+      cause: error,
+      status: facts ? facts.status : 0,
+      retryAfterSeconds: facts ? facts.retryAfterSeconds : null,
+    };
   }
 }

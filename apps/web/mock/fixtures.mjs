@@ -53,6 +53,16 @@ export const IDS = {
   zeroBuild: "7a2b5c8d-3e4f-4a6b-8c9d-0e1f2a3b4c5d",
   /** The same, with a role missing: the floor is UNKNOWN, never 0. */
   zeroBuildNoFloor: "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+  /**
+   * The same pass again with NO floor object at all — the GET-revisit shape of
+   * a pass committed before CD-7 (`budget_floor` null, not merely unpriced).
+   */
+  zeroBuildFloorAbsent: "e9d8b7c6-5a4f-4e3d-9c2b-1a0f8e7d6c5b",
+  /**
+   * A read that FAILS with 429 rather than 503: the results page's throttled
+   * state, which keeps the API's Retry-After as the countdown seconds (S14).
+   */
+  rateLimited: "00000000-0000-4000-8000-000000000429",
   /** Not served: the 404 the results page turns into its own 404. */
   missing: "00000000-0000-4000-8000-000000000404",
   /**
@@ -442,6 +452,20 @@ export const RECOMMENDATION_ZERO_BUILD_NO_FLOOR = baseResponse({
 });
 
 /**
+ * A zero-build pass with NO floor object at all: `budget_floor` is null, the
+ * GET-revisit shape of a pass the engine could not (or did not) compute a
+ * floor for. The page must show the generic copy and invent no floor number
+ * for a field the response does not carry (S14 scenario 2).
+ */
+export const RECOMMENDATION_ZERO_BUILD_FLOOR_ABSENT = baseResponse({
+  id: IDS.zeroBuildFloorAbsent,
+  budget_amount: 4000,
+  budget_floor: null,
+  reason: "EMPTY_CANDIDATE_POOL",
+  builds: [],
+});
+
+/**
  * A build carrying `reasons[]` — the PROVISIONAL contract state S13 is built for.
  *
  * The field is not in contract v1.5 (CD-2): Decision 44's `deriveReasons()`
@@ -493,6 +517,7 @@ export const RECOMMENDATIONS_BY_ID = {
   [IDS.overBudget]: RECOMMENDATION_OVER_BUDGET,
   [IDS.zeroBuild]: RECOMMENDATION_ZERO_BUILD,
   [IDS.zeroBuildNoFloor]: RECOMMENDATION_ZERO_BUILD_NO_FLOOR,
+  [IDS.zeroBuildFloorAbsent]: RECOMMENDATION_ZERO_BUILD_FLOOR_ABSENT,
 };
 
 /** GET 200 for the presets ribbon: `generated_at` null for an empty list. */
