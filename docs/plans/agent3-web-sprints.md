@@ -972,6 +972,80 @@ content type (MDX), both fixtures-first.
 3. Long product names truncate gracefully at 360 px (no overflow).
 4. Internal links between guides and preset pages resolve (link checker in CI).
 
+**Status: DONE 2026-10-21 — as built.** `/fr|ar/composants/{slug}` reads
+`GET /v1/catalog/products/:slug` (CD-5) on the SERVER, cached for an hour, and renders the
+display name, the category as a word, the spec row, every offer with its provenance class, the
+same disclaimer the results page prints, and a derived "Apparaît dans" list. `/fr/guides` and
+`/fr/guides/{slug}` render committed MDX through `@next/mdx`, from a registry that also owns each
+guide's title, description and content date.
+
+**The component route is ISR, and getting there cost one real correction.** A dynamic segment with
+`revalidate` but NO `generateStaticParams` is rendered fully DYNAMIC by Next (measured: `no-store`
+in the response while the preset pages served `s-maxage=3600`). Declaring an EMPTY param list with
+`dynamicParams` left at its default is the documented "render on first request, then cache" shape,
+so the first visitor populates the entry and the next ones are served the cached page. The route
+still prerenders nothing — CI builds with no API — and `e2e/catalog.spec.ts` pins the
+`s-maxage=3600` so a regression to `no-store` is red rather than silent.
+
+**Indexability follows the prices, and the strict half is not `price_status`.** `componentIndexable()`
+requires at least one offer, `price_status === "verified"` AND every offer class VERIFIED — the last
+clause repeats the API's own derivation on purpose, because an index entry outlives the render that
+made it. The verified fixture is indexable; the all-seed GPU and the offer-less RAM kit are
+`noindex, follow`. That is S16's rule applied to the catalogue, and S18's sitemap can consume it.
+
+**Appearances are DERIVED, not fetched.** The contract has no "where is this part used" endpoint,
+so the page walks the presets the site already serves (`presetsForBuild()` → the request-memoized
+`loadPresetCached`) and keeps the builds whose components carry this product's slug. The claim is
+therefore narrower than "every build the engine assembled" — it is "a build on a preset page we
+serve" — and that is what the page says. Each appearance links its preset page, which is also the
+internal-link surface the DoD's link checker exercises.
+
+**The spec list is a module, not a template.** `lib/catalog/specs.ts` owns four rules: NULL is
+omitted (never `0 mm` — the standing rule), every `*_id` is skipped (a reference, not a
+specification), units come from the column's own naming (`_watts`, `_mm`, `_mtps`, `_mhz`), and a
+fraction is NOT rounded (`width_slots: 3.5` rendered as "4" was the first defect found; integers
+use the default formatter, non-integers two decimals). An unmapped key is shown verbatim rather
+than hidden, so a new column is a visible copy gap; every key the fixtures serve has a label in
+both locales, and `catalog.spec.ts` asserts no snake_case, no uuid and no engine word reaches the
+page.
+
+**The mock had to stop echoing slugs.** `GET /v1/catalog/products/:slug` answered 200 for ANY
+slug, replaying one fixture body with the requested slug patched in, so "unknown product → 404"
+was untestable and a component page could describe a product nobody serves. It now reads a
+three-entry `CATALOG_PRODUCTS_BY_SLUG` map (verified GPU, offer-less RAM kit, 60-character GPU
+name) and returns the real 404. The same defect class as S16's ribbon: a fixture that answers
+questions it has no data for.
+
+**MDX: what the pipeline actually required.** `@next/mdx` + `@mdx-js/loader` in `apps/web` only,
+`createMDX({})` with NO plugins (Turbopack can only take plugin NAMES as strings, and nothing here
+needs a transform), `pageExtensions` widened, and `mdx-components.tsx` at the package root — the
+App Router convention, which re-exports the real map from `components/guides/mdx-components.tsx` so
+the file that carries the classes stays inside `check:tokens`. That map is where logical properties
+(`ps-5`, `border-s-2`) and the token scale live; it also downgrades a stray `#` to an `h2`, because
+the PAGE owns the single `h1` and a body must not create a second one.
+
+**The registry split is a test constraint, not a style choice.** `lib/guides/manifest.ts` holds the
+metadata (pure TS) and `registry.ts` joins it to the compiled `.mdx` bodies. A spec cannot import
+the registry: Playwright's TypeScript transform has no MDX loader, and it failed exactly that way
+before the split (`Missing semicolon` at line 1 of the guide, from esbuild reading MDX as JS).
+
+**Guides are French-only, and the Arabic side says so.** `/ar/guides` renders an Arabic note and
+the link to `/fr/guides`, `noindex` (thin, and not translated); `/ar/guides/{slug}` is a 404 rather
+than an Arabic frame around French prose. S20 owns the translation and the `hreflang ar` alternates
+that S18 will then be able to emit.
+
+Measured: **208/208** Playwright specs (7 catalogue + 5 guide checks added), `typecheck` (also
+under Node 22), `lint` (0 errors, the one pre-existing `postcss.config.mjs` warning), `check:tokens`
+(57 files), `check:i18n` (55 files), `check:api-types` and `npm run build` exit 0 — the build
+reports `/[locale]/guides/{slug}` as `●` for exactly `fr` × 2 guides, `/[locale]/composants/[slug]`
+as `●` with no params, and the four preset routes unchanged. `test:lighthouse` exit 0 with all
+three assertions green on both fixture URLs (LCP 2.32–2.35 s, CLS 0). The link checker (spec
+scenario 4) follows every internal href on the index and on both guides and fails on any non-200.
+
+Not done here, deliberately: the canonical origin for prerendered pages, `sitemap.xml`, `robots.txt`,
+`hreflang` and the preset/guide OG images are S18's; component names inside `BuildCard` are NOT
+linked to these pages (that would re-open S11/S12/S15's pinned cards).
+
 #### S18 — sitemap, robots, canonical + hreflang, OG images (1.5 h)
 **Goal:** The crawl surface: sitemap.xml, robots.txt, canonical URLs, hreflang (per V9), and
 OG image generation for preset/guide pages.

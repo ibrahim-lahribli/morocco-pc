@@ -202,14 +202,20 @@ test.describe("the mock serves every contract state", () => {
   test("catalog reads serve a page and a 404 for an unknown slug", async ({ request }) => {
     const list = await (await request.get("/v1/catalog/products")).json();
     expect(list.next_cursor).toBeNull();
-    expect(list.products).toHaveLength(2);
+    expect(list.products).toHaveLength(3);
     expect(list.products[1].has_offer).toBe(false);
     expect(list.products[1].offer_class).toBeNull();
+    // S17: a product with no offer is still listed (has_offer false), and the
+    // list is derived from the same map the detail route reads.
+    expect(list.products[2].display_name.length).toBeGreaterThan(40);
 
     const detail = await request.get("/v1/catalog/products/rtx-4060-8gb");
     expect(detail.status()).toBe(200);
     expect((await detail.json()).disclaimer).toContain("indicatif");
 
+    // S17: an UNKNOWN slug is a 404 on its own, without asking for one. Before
+    // this the route echoed the requested slug inside a single fixture body.
+    expect((await request.get("/v1/catalog/products/pas-un-produit")).status()).toBe(404);
     expect((await request.get("/v1/catalog/products/x?state=404")).status()).toBe(404);
   });
 

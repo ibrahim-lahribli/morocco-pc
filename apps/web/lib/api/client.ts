@@ -401,12 +401,34 @@ export async function listCatalogProducts(
   return (await request<CatalogListResponse>(`/v1/catalog/products${suffix}`, init)).body;
 }
 
+/** `/v1/catalog/products/:slug`. The slug is DATA, so it is encoded here. */
+function catalogProductPath(slug: string): string {
+  return `/v1/catalog/products/${encodeURIComponent(slug)}`;
+}
+
 export async function getCatalogProduct(
   slug: string,
   init?: RequestInit
 ): Promise<CatalogProductResponse> {
-  return (await request<CatalogProductResponse>(
-    `/v1/catalog/products/${encodeURIComponent(slug)}`,
-    init
-  )).body;
+  return getJson<CatalogProductResponse>(catalogProductPath(slug), init);
+}
+
+/**
+ * GET /v1/catalog/products/:slug, on the SERVER (S17 component pages).
+ *
+ * Same two differences as `getPresetsForServer`, and for the same reasons: the
+ * server base (a deployment may keep the API internal) and `next.revalidate`
+ * instead of `no-store` — a component page is public, cached catalogue data, not
+ * one person's pass. `signal` is the caller's timeout, so a request never hangs
+ * on a black-holed host.
+ */
+export async function getCatalogProductForServer(
+  slug: string,
+  init: { revalidate: number; signal?: AbortSignal },
+): Promise<CatalogProductResponse> {
+  return getJson<CatalogProductResponse>(
+    catalogProductPath(slug),
+    { next: { revalidate: init.revalidate }, signal: init.signal },
+    serverApiBaseUrl(),
+  );
 }

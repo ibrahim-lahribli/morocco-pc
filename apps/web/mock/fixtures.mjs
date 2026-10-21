@@ -649,37 +649,87 @@ export const PRESETS_EMPTY = {
   presets: [],
 };
 
+/**
+ * The catalogue, by slug (S17).
+ *
+ * Before S17 the mock answered 200 for ANY slug, echoing the requested one back
+ * inside a single fixture body — which made "an unknown product is a 404"
+ * untestable and would have let a component page render a product nobody
+ * serves. This map is the fix. The three entries are chosen for their SPECS, not
+ * for coverage: a verified GPU (the indexable path), a RAM kit with no offer
+ * (nothing to price, so nothing to index), and a GPU whose display name is long
+ * enough to prove the 360 px truncation rule.
+ *
+ * `specs` is an OPEN object in the contract — its keys are the spec table's
+ * columns minus the ids and timestamps the API strips — so one entry here also
+ * carries a NULL (`height_mm`) and one a foreign key (`memory_type_id`), which
+ * the page must omit and never print respectively.
+ */
+export const CATALOG_PRODUCTS_BY_SLUG = {
+  "rtx-4060-8gb": {
+    slug: "rtx-4060-8gb",
+    display_name: "RTX 4060 8GB",
+    category: "GPU",
+    specs: { board_tgp_watts: 115, width_slots: 2, height_mm: 40, length_mm: 245 },
+    offers: [{ price: 3200, currency: "MAD", offer_class: "VERIFIED" }],
+    price_status: "verified",
+    disclaimer: DISCLAIMER,
+  },
+  "kit-ddr5-16-go": {
+    slug: "kit-ddr5-16-go",
+    display_name: "Kit DDR5 16 Go",
+    category: "MEMORY",
+    specs: {
+      module_count: 2,
+      capacity_per_module_gb: 16,
+      rated_speed_mtps: 6000,
+      voltage_v: 1.35,
+      memory_type_id: "8c3f0b7e-6a2d-4f1e-9b55-0d7c4a1e2f30",
+    },
+    offers: [],
+    price_status: null,
+    disclaimer: DISCLAIMER,
+  },
+  /**
+   * The long name: 60 characters, which is what a real vendor SKU looks like and
+   * what a 360 px heading has to survive without scrolling the page sideways.
+   */
+  "rtx-4060-ti-gaming-oc-16-go": {
+    slug: "rtx-4060-ti-gaming-oc-16-go",
+    display_name: "GeForce RTX 4060 Ti Gaming OC 16 Go Édition Ventus 3X Blanc",
+    category: "GPU",
+    specs: {
+      board_tgp_watts: 165,
+      width_slots: 3.5,
+      length_mm: 336,
+      height_mm: null,
+      recommended_psu_watts: 650,
+      required_power_connectors: { eps: 0, pcie_8pin: 2, "12vhpwr": 0, sata: 0 },
+    },
+    offers: [{ price: 4499, currency: "MAD", offer_class: "SEED_UNVERIFIED" }],
+    price_status: "indicative",
+    disclaimer: DISCLAIMER,
+  },
+};
+
+/** The list page, derived from the map so the two cannot disagree (S17). */
 export const CATALOG_LIST_OK = {
-  products: [
-    {
-      slug: "rtx-4060-8gb",
-      display_name: "RTX 4060 8GB",
-      category: "GPU",
-      from_price: 3200,
-      offer_class: "VERIFIED",
-      has_offer: true,
-    },
-    {
-      slug: "kit-ddr5-16-go",
-      display_name: "Kit DDR5 16 Go",
-      category: "MEMORY",
-      from_price: null,
-      offer_class: null,
-      has_offer: false,
-    },
-  ],
+  products: Object.values(CATALOG_PRODUCTS_BY_SLUG).map((product) => ({
+    slug: product.slug,
+    display_name: product.display_name,
+    category: product.category,
+    from_price:
+      product.offers.length === 0
+        ? null
+        : Math.min(...product.offers.map((offer) => offer.price)),
+    offer_class: product.offers.length === 0 ? null : product.offers[0].offer_class,
+    has_offer: product.offers.length > 0,
+  })),
   next_cursor: null,
 };
 
-export const CATALOG_PRODUCT_OK = {
-  slug: "rtx-4060-8gb",
-  display_name: "RTX 4060 8GB",
-  category: "GPU",
-  specs: { board_tgp_watts: 115, width_slots: 2, height_mm: 40 },
-  offers: [{ price: 3200, currency: "MAD", offer_class: "VERIFIED" }],
-  price_status: "verified",
-  disclaimer: DISCLAIMER,
-};
+/** The fixture slug every catalogue spec starts from: verified, so indexable. */
+export const CATALOG_PRODUCT_OK = CATALOG_PRODUCTS_BY_SLUG["rtx-4060-8gb"];
 
 export const HEALTH_OK = { status: "ok", db: "ok", engine_version: ENGINE_VERSION };
 

@@ -24,7 +24,7 @@
  *                                 through the id alone)
  *   GET /v1/presets               ?state=ok | empty | 503
  *   GET /v1/catalog/products      ?state=ok | 503
- *   GET /v1/catalog/products/:slug ?state=ok | 404
+ *   GET /v1/catalog/products/:slug ?state=ok | 404 (an unknown slug is a 404)
  *   GET /v1/meta/options          ?state=ok | 503
  *   GET /v1/health                always 200
  *
@@ -37,7 +37,7 @@ import http from "node:http";
 
 import {
   CATALOG_LIST_OK,
-  CATALOG_PRODUCT_OK,
+  CATALOG_PRODUCTS_BY_SLUG,
   ERRORS,
   HEALTH_OK,
   IDS,
@@ -219,8 +219,13 @@ async function handle(req, res) {
 
   const productMatch = path.match(/^\/v1\/catalog\/products\/([^/]+)$/);
   if (req.method === "GET" && productMatch !== null) {
-    if (state === "404") return sendError(res, "notFound");
-    send(res, 200, { ...CATALOG_PRODUCT_OK, slug: decodeURIComponent(productMatch[1]) });
+    // S17: an unknown slug is a MISS, like the real API. This route used to
+    // echo the requested slug back inside ONE fixture body, which made the
+    // 404 path untestable and let a page render a product nothing serves.
+    const slug = decodeURIComponent(productMatch[1]);
+    const product = CATALOG_PRODUCTS_BY_SLUG[slug];
+    if (state === "404" || product === undefined) return sendError(res, "notFound");
+    send(res, 200, product);
     return;
   }
 
