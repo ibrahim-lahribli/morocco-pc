@@ -89,9 +89,32 @@ const LIST_PAGE_LIMIT = 100;
 const LIST_PAGE_CAP = 20;
 
 /**
+ * How many product reads the confirmation phase may have in flight, and how long
+ * the whole walk may take.
+ *
+ * `4` is chosen against the API, not against the catalogue. Both catalogue
+ * routes are rate-limited to 120 requests a minute (`CATALOG_RATE_LIMIT`), so a
+ * pool wide enough to finish a few hundred products quickly would spend the walk
+ * collecting 429s. Four turns a cold read of ~100 products into 25 rounds of
+ * latency instead of 100 — measured against a fake API that answers each detail
+ * read in 200 ms, 40 products: 8.4 s for the same reads sequentially against
+ * 2.2 s for the whole `/sitemap.xml` — while staying inside one minute's
+ * allowance. The walk also STOPS at the first 429 rather than firing the rest of
+ * the list into a limiter that is already refusing it.
+ *
+ * The budget bounds the WALL CLOCK, not the catalogue size: the walk stops
+ * STARTING work at the deadline, and a read already in flight has its own
+ * `REQUEST_TIMEOUT_MS`, so the worst case is this budget plus one timeout rather
+ * than "however long 2 000 products happen to take". On a warm cache the budget
+ * is irrelevant — every read under the walk is `revalidate`-cached.
+ */
+const DETAIL_CONCURRENCY = 4;
+const SITEMAP_BUDGET_MS = 15_000;
+
+/**
  * The catalogue slugs whose pages may be indexed — S18's sitemap input.
  *
- * Three rules, and each one is a way the obvious shortcut lies:
+ * Four rules, and each one is a way the obvious shortcut lies:
  *
  *   1. **No API configured means no catalogue pages.** The component routes are
  *      ISR with an EMPTY param list: a build with no API renders none of them, so
@@ -110,18 +133,33 @@ const LIST_PAGE_CAP = 20;
  *      one slug. Throwing would either fail a build over an optional API or hand
  *      a crawler a 500, and a shorter sitemap is the honest degradation. The
  *      mechanism is therefore "only indexable pages", never "everything".
+ *   4. **The work is BOUNDED.** The confirmation reads run four at a time inside
+ *      ONE wall-clock budget shared with the listing pages, and the walk gives up
+ *      on the first 429 instead of hammering a limiter (`confirmIndexable()`).
+ *      Before that, a 2 000-product catalogue meant 2 000 sequential reads in a
+ *      single request — the crawl times out, and the prettiest sitemap is the one
+ *      nobody receives.
  *
- * Order is the API's keyset order (by slug), so two regenerations of an unchanged
- * catalogue emit the same document.
+ * Order is the API's keyset order (by slug) — the pool writes results by
+ * POSITION, never by completion — so an unchanged catalogue emits the same
+ * document. Only a truncated walk (budget or 429) can shorten it, and every
+ * truncation is logged with the number of products left unverified.
  */
 export async function indexableComponentSlugs(): Promise<string[]> {
   if (!isApiConfigured()) return [];
 
+  const deadline = Date.now() + SITEMAP_BUDGET_MS;
   const candidates = new Set<string>();
   let cursor: string | null = null;
-  let truncated = false;
+  let pageCapHit = false;
+  let listingBudgetHit = false;
 
   for (let page = 0; page < LIST_PAGE_CAP; page += 1) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      listingBudgetHit = true;
+      break;
+    }
     let body: CatalogListResponse;
     try {
       body = await listCatalogProductsForServer(
@@ -129,7 +167,9 @@ export async function indexableComponentSlugs(): Promise<string[]> {
         { limit: String(LIST_PAGE_LIMIT), ...(cursor === null ? {} : { cursor }) },
         {
           revalidate: CATALOG_REVALIDATE_SECONDS,
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          // A page never waits longer than one request may, and never longer
+          // than the walk has left.
+          signal: AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, remaining)),
         },
       );
     } catch (cause) {
@@ -148,30 +188,91 @@ export async function indexableComponentSlugs(): Promise<string[]> {
 
     if (body.next_cursor === null || body.next_cursor === "") break;
     cursor = body.next_cursor;
-    if (page === LIST_PAGE_CAP - 1) truncated = true;
+    if (page === LIST_PAGE_CAP - 1) pageCapHit = true;
   }
 
-  if (truncated) {
+  if (pageCapHit) {
     console.warn(
       `sitemap: catalogue listing stopped after ${LIST_PAGE_CAP} pages; the sitemap is incomplete`,
     );
   }
-
-  const slugs: string[] = [];
-  for (const slug of candidates) {
-    try {
-      // The SAME predicate the product page hands to its `robots` tag, so the
-      // listed set and the tag are one decision rather than two.
-      if (componentPageIndexable(await loadCatalogProductCached(slug))) slugs.push(slug);
-    } catch (cause) {
-      console.warn(
-        "sitemap: could not verify a catalogue product; leaving it out",
-        slug,
-        cause instanceof Error ? cause.message : cause,
-      );
-    }
+  if (listingBudgetHit) {
+    console.warn(
+      `sitemap: catalogue listing stopped at its ${SITEMAP_BUDGET_MS} ms budget; the sitemap is incomplete`,
+    );
   }
-  return slugs;
+
+  return confirmIndexable([...candidates], deadline);
+}
+
+/**
+ * Confirm the candidate slugs with a small concurrency pool, in list order.
+ *
+ * Two properties this function exists to keep:
+ *
+ *   - **Order is the WALK's, not completion's.** A result is written into an
+ *     array indexed by candidate POSITION and filtered at the end, so four reads
+ *     landing in any order still emit the keyset order the sitemap's
+ *     determinism depends on.
+ *   - **The walk gives up instead of piling up.** No new read starts once the
+ *     deadline has passed, and none starts after a worker has seen a 429: the
+ *     catalogue route allows 120 requests a minute, so the honest answer to a
+ *     rate limit is a SHORTER sitemap plus one warning naming how many products
+ *     went unverified — not the rest of the list thrown at a closed door.
+ *     Because workers consume indexes in order, giving up yields a PREFIX of the
+ *     catalogue rather than a scatter, which is what makes a truncated document
+ *     still readable as "the first N products, and a warning".
+ *
+ * One failing read (404, timeout, 5xx) costs that product alone, which is rule 3
+ * of the walk; each skip is logged with its slug.
+ */
+async function confirmIndexable(
+  candidates: readonly string[],
+  deadline: number,
+): Promise<string[]> {
+  const indexable = new Array<boolean>(candidates.length).fill(false);
+  let next = 0;
+  let attempted = 0;
+  let rateLimited = false;
+
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      if (index >= candidates.length) return;
+      if (rateLimited || Date.now() >= deadline) return;
+      const slug = candidates[index];
+      attempted += 1;
+      try {
+        // The SAME predicate the product page hands to its `robots` tag, so the
+        // listed set and the tag are one decision rather than two.
+        indexable[index] = componentPageIndexable(await loadCatalogProductCached(slug));
+      } catch (cause) {
+        if (cause instanceof ApiError && cause.status === 429) rateLimited = true;
+        console.warn(
+          "sitemap: could not verify a catalogue product; leaving it out",
+          slug,
+          cause instanceof Error ? cause.message : cause,
+        );
+      }
+    }
+  };
+
+  const workers = Math.min(DETAIL_CONCURRENCY, candidates.length);
+  await Promise.all(Array.from({ length: workers }, worker));
+
+  const skipped = candidates.length - attempted;
+  if (rateLimited) {
+    console.warn(
+      `sitemap: the catalogue API rate-limited the walk; ${skipped} product(s) went unverified`,
+    );
+  } else if (skipped > 0) {
+    console.warn(
+      `sitemap: the catalogue walk hit its ${SITEMAP_BUDGET_MS} ms budget; ${skipped} product(s) went unverified`,
+    );
+  }
+
+  return candidates.filter((_, index) => indexable[index]);
 }
 
 /**

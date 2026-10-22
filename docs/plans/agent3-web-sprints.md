@@ -1173,6 +1173,22 @@ is: set the variable for `next build` and let `next start` inherit it — the he
 `apps/web/.env.example` now say so, and `e2e/seo.spec.ts` cannot catch it because the suite builds
 and serves from one environment.
 
+**The catalogue walk is bounded (same day, measured).** `indexableComponentSlugs()` used to confirm
+candidates ONE read at a time inside a single request — 2 000 products meant 2 000 sequential reads,
+and a crawl that times out before it receives anything. It now runs four reads at a time inside ONE
+15 s wall-clock budget shared with the listing pages, keeps keyset order by writing each result at
+the candidate's POSITION rather than in completion order, and stops starting work at the first 429
+instead of firing the rest of the list into a limiter that allows 120 requests a minute — four, not
+forty, is chosen against that limit. Measured against a contract-shaped fake API: 40 products at
+200 ms each -> 45 URLs in 2.2 s (the same reads sequentially: 8.4 s), entries contiguous
+`produit-000..039`; 120 products at 800 ms each -> 81 URLs, HTTP 200, a contiguous prefix
+`produit-000..075`, and `sitemap: the catalogue walk hit its 15000 ms budget; 44 product(s) went
+unverified` in the log; a fake that answers 429 after 8 reads leaves 13 URLs (`produit-000..007`),
+`sitemap: the catalogue API rate-limited the walk; 28 product(s) went unverified`, HTTP 200. The
+worst case is the budget plus one in-flight read (which keeps its own 5 s timeout),
+independent of catalogue size. Not pinned by a spec: the fixture mock serves three
+products, so this bound is verified by that harness rather than by CI.
+
 #### S19 — JSON-LD gating + performance budgets (2 h)
 **Goal:** Product + Offer JSON-LD (MAD) only when `price_status` is verified — never demo
 prices — and the W3 performance budgets enforced in CI.

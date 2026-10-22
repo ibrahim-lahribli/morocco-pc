@@ -44,7 +44,10 @@
  * that does not yet exist, frozen until the next deploy. `force-dynamic` renders
  * it per request instead, and the reads UNDER it are still cached for
  * `CATALOG_REVALIDATE_SECONDS` / `PRESET_REVALIDATE_SECONDS`, so a crawl costs a
- * few cached API reads, not a fresh pipeline. It also cannot 500 on an API blip:
+ * few cached API reads, not a fresh pipeline. The catalogue walk is BOUNDED as
+ * well — one wall-clock budget and four product reads at a time
+ * (`indexableComponentSlugs`) — so a large catalogue shortens this document
+ * instead of holding a crawler's request open. It also cannot 500 on an API blip:
  * both loaders degrade to fewer entries (see `indexableComponentSlugs` and
  * `presetsForBuild`) rather than throwing, and a shorter list is the honest
  * failure for a document whose whole contract is "only what is indexable".
