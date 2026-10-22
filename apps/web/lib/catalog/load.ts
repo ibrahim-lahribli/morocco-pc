@@ -307,3 +307,88 @@ export async function componentAppearances(productSlug: string): Promise<Appeara
 
 /** Same memo, so the body and its metadata never pay for two walks. */
 export const componentAppearancesCached = cache(componentAppearances);
+
+/** Keyset page size for the compare picker’s one listing read. */
+const CANDIDATE_PAGE_LIMIT = 100;
+
+/** One catalogue listing entry, as the compare picker needs it (S23). */
+export type CatalogCandidate = CatalogListResponse["products"][number];
+
+/**
+ * Same-category candidates for the compare view (S23).
+ *
+ * The listing route filters by `role`, whose vocabulary is the ENGINE’s
+ * (`CPU_COOLER`, `RAM`) while a catalogue product carries the `product_category`
+ * enum (`COOLER`, `MEMORY`). Rather than restate that mapping in the web layer — a
+ * second vocabulary that can drift — one page of the listing is read and filtered
+ * by `category` here, which is the same value the component page already renders.
+ * The cost is honest and bounded: candidates come from the first 100 products by
+ * slug, not from an exhaustive scan.
+ *
+ * A failed read yields NO candidates, never a failed page: the picker is a
+ * convenience, and the products already selected still render without it.
+ */
+export async function catalogCandidates(
+  category: string | null,
+  exclude: readonly string[],
+  limit = 6,
+): Promise<CatalogCandidate[]> {
+  if (!isApiConfigured()) return [];
+
+  try {
+    const body = await listCatalogProductsForServer(
+      { limit: String(CANDIDATE_PAGE_LIMIT) },
+      {
+        revalidate: CATALOG_REVALIDATE_SECONDS,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      },
+    );
+    return body.products
+      .filter(
+        (product) =>
+          (category === null || product.category === category) &&
+          !exclude.includes(product.slug),
+      )
+      .slice(0, limit);
+  } catch (cause) {
+    console.warn(
+      "compare: catalogue candidates unavailable; the picker is empty",
+      cause instanceof Error ? cause.message : cause,
+    );
+    return [];
+  }
+}
+
+/**
+ * One product for the compare view, where a failure is a STATE rather than a
+ * thrown error (S23).
+ *
+ * The component page propagates a non-404 failure so ISR keeps its last good
+ * copy (`loadCatalogProduct`). A compare page is dynamic — there is no cached copy
+ * to fall back to — and its subject is a selection of two or three products, so
+ * one unreadable sibling must not take the other two down with it. `unavailable`
+ * is therefore its own outcome, reported in words on the page, and distinct from
+ * `missing` because "the catalogue says this does not exist" and "the catalogue
+ * did not answer" are different things to tell a reader.
+ */
+export type CompareOutcome =
+  | { kind: "ok"; product: CatalogProductResponse }
+  | { kind: "missing" }
+  | { kind: "unavailable" };
+
+export async function loadProductForCompare(slug: string): Promise<CompareOutcome> {
+  try {
+    const outcome = await loadCatalogProduct(slug);
+    return outcome.kind === "ok" ? outcome : { kind: "missing" };
+  } catch (cause) {
+    console.warn(
+      "compare: a catalogue product could not be read; it is left out of the comparison",
+      slug,
+      cause instanceof Error ? cause.message : cause,
+    );
+    return { kind: "unavailable" };
+  }
+}
+
+/** The request-scoped memo: the page’s own read of a slug happens once. */
+export const loadProductForCompareCached = cache(loadProductForCompare);

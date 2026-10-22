@@ -7,12 +7,11 @@ keyboard-reachable with visible focus, no raw API enum text rendered, fr copy in
 Contract dependencies (CD-*) and findings (V*) are defined in the plan §2 — the API and engine
 are in progress, so every contract-dependent sprint has a fixtures-first path.
 
-**Board state, 2026-10-22.** 27 sprints, and the path to M3 is complete apart from its own
-verification run: **23 DONE** (S1–S22 and S27, whose status lines below carry the evidence),
-**3 NOT STARTED** (S23–S25 — W5/post-beta, deliberately outside the M3 gate) and **1 BLOCKED**
-(S26, which needs a deployed API and a chosen web host). W5 is not one block: S23 is unblocked,
-S24 waits on CD-8, and S25 is two halves — its saved builds are ready and its price history has no
-data source.
+**Board state, 2026-10-22 (S23 landed).** 27 sprints: **24 DONE** (S1–S23 and S27, whose status
+lines below carry the evidence), **2 NOT STARTED** (S24 and S25 — W5/post-beta, deliberately
+outside the M3 gate) and **1 BLOCKED** (S26, which needs a deployed API and a chosen web host).
+What is left is not one block: S24 waits on CD-8, S25 is two halves whose saved-builds half is
+ready while its price history has no data source, and only S26 needs a deployment.
 
 ## Sprints
 
@@ -1496,11 +1495,43 @@ RTL-safe; spec diffs highlighted with text (not colour alone).
 **Test scenarios:** compare URL shared → renders identical selection; diff highlighting has a
 text equivalent; 360px compare falls back to stacked cards.
 
-**Status: NOT STARTED 2026-10-22 — unblocked, and the cheapest remaining sprint.** Both
-dependencies are satisfied: S17 shipped `/{locale}/composants/{slug}`, and CD-5
-(`GET /v1/catalog/products` and `/…/{slug}`) shipped in contract v1.5, so *v2* is depth on a page
-that already exists plus a compare view whose state is client-side and URL-held — no new API field,
-no host and no deploy.
+**Status: DONE 2026-10-22 — as built.** `/{locale}/composants/comparer?slugs=a,b` compares two or
+three products, and the URL is the whole state: no cookie, no store and no client JavaScript, so
+every control is a link and the Back button undoes an addition. The comparison is ONE semantic
+table — a caption, `scope="col"` headers and a `scope="row"` header per fact — and below 640 px
+the rows STACK as CSS on that same DOM. The per-value labels that appear in the stack are
+`hidden`, not `sr-only`, at wide widths, so a wide screen reader does not hear each product’s name
+once per cell on top of the column header. A difference carries the WORD « Diffère » (Arabic
+«مختلف») and a count line, never colour alone, and a fact only one product publishes reads
+« Non renseigné » rather than `0` or a dash — `presentSpecs()` still owns the formatting, so the
+two views cannot disagree about a value.
+
+The component page gained the ENTRY POINT, which is what made "v2 depth" a real deliverable: a
+« Comparer des composants » section lists same-category siblings as `?slugs=this,that` links, and
+« Ouvrir la comparaison » starts a one-product view that the picker (and the whole catalogue, when
+the selection is empty) can grow. Two rules stop the view from lying: only the SAME category can
+be compared — a GPU beside a RAM kit would render every row as "unknown" and call it a comparison
+— and every wrong selection is answered in words rather than by disappearing: a repeated slug, a
+fourth slug, a slug the catalogue does not serve, and a catalogue read that FAILED (reported per
+product, so one sibling’s hiccup cannot take the view down).
+
+Two smaller decisions worth keeping. **The summary sentence avoids plural agreement** — « Écarts :
+4 sur 5. Identiques : 1. » — because "1 identiques" is wrong, and ICU plurals with Arabic’s six
+categories is more machinery than the sentence needs. **The candidates come from one page of the
+listing**, filtered by `category` in the web layer: the route’s `role` filter speaks the ENGINE’s
+vocabulary (`CPU_COOLER`, `RAM`) while a product carries `product_category` (`COOLER`, `MEMORY`),
+and restating that mapping here would be a second vocabulary that can drift.
+
+Measured: **10** compare specs and **318/318** in the full suite with `E2E_BROWSER_API=1`;
+`typecheck` and `build` exit 0 (the route reports `ƒ` dynamic, `[slug]` keeps `●`), `lint` 0 errors
+(the pre-existing `postcss.config.mjs` warning), `check:tokens` 72 files, `check:i18n` 70 files + 2
+catalogues, and `e2e/a11y.spec.ts` is now **49** checks — the compare route is audited in BOTH
+locales at 360 px, i.e. in the stacked layout, which is why the table’s roles are explicit: a
+display change is exactly where table semantics go missing. The fixture gained a SECOND GPU
+(`rtx-4070-12gb`) that shares `width_slots` with the first and differs on the rest, plus one fact
+the first does not publish, so the diff, the identity and the unknown cell are all real data.
+The RTL spec asserts the mirror GEOMETRICALLY: column one sits at the inline start, which is the
+right edge on `/ar`, while the DOM order stays A then B.
 
 #### S24 — Swap within a build (2 h, post-beta, CD-8)
 **Goal:** Component swap inside a build card, driven by the Platform swap endpoint (CD-8).
@@ -1642,7 +1673,7 @@ component's own arithmetic.
   2026-10-22) — each 1–2 h of agent work. Nominal sums: W0–W4 + exit ≈ 40 h, W5 ≈ 6 h,
   S27 ≈ 1.5 h.
 
-**State, 2026-10-22:** every node on this map through S22 is DONE, and so is S27, which sits
-outside it. The hard order's only remaining node is S26, and a deployment gates it. Of the three W5
-sprints, S23 starts immediately; S25's saved-builds half starts immediately and its chart half waits
+**State, 2026-10-22 (S23 landed):** every node on this map through S22 is DONE, and so are S27 and
+S23, which sit outside it. The hard order’s only remaining node is S26, and a deployment gates it.
+Of the two open W5 sprints, S25’s saved-builds half can start immediately and its chart half waits
 on an API route; S24 waits on CD-8, which nobody has scheduled.

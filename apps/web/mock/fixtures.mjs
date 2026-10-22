@@ -655,10 +655,12 @@ export const PRESETS_EMPTY = {
  * Before S17 the mock answered 200 for ANY slug, echoing the requested one back
  * inside a single fixture body — which made "an unknown product is a 404"
  * untestable and would have let a component page render a product nobody
- * serves. This map is the fix. The three entries are chosen for their SPECS, not
- * for coverage: a verified GPU (the indexable path), a RAM kit with no offer
- * (nothing to price, so nothing to index), and a GPU whose display name is long
- * enough to prove the 360 px truncation rule.
+ * serves. This map is the fix. The entries are chosen for their SPECS, not for
+ * coverage: a verified GPU (the indexable path), a RAM kit with no offer
+ * (nothing to price, so nothing to index), a GPU whose display name is long
+ * enough to prove the 360 px truncation rule, and — since S23 — a SECOND GPU
+ * that shares some facts with the first and differs on the rest, which is what
+ * gives a comparison something to compare.
  *
  * `specs` is an OPEN object in the contract — its keys are the spec table's
  * columns minus the ids and timestamps the API strips — so one entry here also
@@ -672,6 +674,28 @@ export const CATALOG_PRODUCTS_BY_SLUG = {
     category: "GPU",
     specs: { board_tgp_watts: 115, width_slots: 2, height_mm: 40, length_mm: 245 },
     offers: [{ price: 3200, currency: "MAD", offer_class: "VERIFIED" }],
+    price_status: "verified",
+    disclaimer: DISCLAIMER,
+  },
+  /**
+   * S23’s comparison partner: same category as `rtx-4060-8gb`, two shared facts
+   * (`width_slots` is 2 on both) and three differences (`board_tgp_watts`,
+   * `length_mm`, `height_mm`), plus `recommended_psu_watts`, which the first
+   * product does not publish at all — so the compare specs can prove a mutation,
+   * an identity and a "one of them publishes this, the other does not" row.
+   */
+  "rtx-4070-12gb": {
+    slug: "rtx-4070-12gb",
+    display_name: "RTX 4070 12GB",
+    category: "GPU",
+    specs: {
+      board_tgp_watts: 200,
+      width_slots: 2,
+      height_mm: 41,
+      length_mm: 244,
+      recommended_psu_watts: 650,
+    },
+    offers: [{ price: 6100, currency: "MAD", offer_class: "VERIFIED" }],
     price_status: "verified",
     disclaimer: DISCLAIMER,
   },

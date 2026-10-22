@@ -14,17 +14,10 @@ GitHub on 2026-10-21; W1 is COMPLETE (S7–S10, the wizard shell, the budget ste
 profile-gated step flow and the POST hand-off); W2 is COMPLETE (S11–S15); W3 is COMPLETE
 (S16, S17, S18 and S19's gating are DONE); W4 is COMPLETE — S20 (the Arabic/RTL pass), S21 (the
 WCAG AA audit) and S22 (legal pages, analytics, states) are DONE 2026-10-22 — and S27, the
-post-M3 slider curve, is DONE 2026-10-22, so 23 of the 27 sprints are done. What remains is W5
-(S23–S25, outside the M3 gate on purpose) and S26, the M3 verification run, which is BLOCKED on
-deployment: no web host is chosen and no API origin is deployed.**
-The design tokens now exist as CODE (`apps/web/app/globals.css`, Tailwind v4 `@theme`, OKLCH) with
-a grep gate and a measured contrast matrix; their provenance and the four deliberate deviations are in
-[docs/design/TOKEN_MAP.md](../design/TOKEN_MAP.md). The eight base components are built on those
-tokens and proven at [/fr/kit](../../apps/web/app/[locale]/kit/page.tsx) — reference in
-[docs/design/COMPONENTS.md](../design/COMPONENTS.md).
-`apps/web` now HAS a typed client and a fixture mock server, so the contract is exercised
-end-to-end against fixtures; it has still never called a REAL API, because nothing is deployed
-(P1 Sprint 1 Steps 7–9).
+post-M3 slider curve, and S23, the compare view, are DONE 2026-10-22, so 24 of the 27 sprints are
+done. What remains is the rest of W5 (S24 and S25, outside the M3 gate on purpose) and S26, the
+M3 verification run, which is BLOCKED on deployment: no web host is chosen and no API origin is
+deployed.**
 
 ## 1. Product shape and stack
 
@@ -301,15 +294,15 @@ measurement, the copy review and the state inventory are in
 
 Component detail v2 and compare, swap inside a build (needs CD-8), price history, saved builds.
 
-**Today (2026-10-22): none of the three is started, and all three stay outside the M3 gate on
-purpose — but they are not equally blocked.** **S23** (component detail v2 + compare) is ready:
-S17 and CD-5 both shipped, and its compare state is URL-held on the client. **S24** (swap inside a
-build) waits on **CD-8**, the swap endpoint, which is not built and which no platform sprint owns;
-only its disabled-with-an-explanation control is buildable, and the DoD forbids simulating a swap.
-**S25** is two halves with different answers: saved builds are `localStorage`-only and can ship
-now, while price history has no data source — `price_history` exists since migration 009 but no API
-route reads it, so the chart would plot fixtures. The sprint board carries a status line per
-sprint.
+**Today (2026-10-22): S23 is DONE** — the compare view ships at
+`/{locale}/composants/comparer?slugs=a,b`, with the component page as its entry point; the board’s
+S23 status carries what landed and what it measured. **The other two are not started, and they stay
+outside the M3 gate on purpose.** **S24** (swap inside a build) waits on **CD-8**, the swap
+endpoint, which is not built and which no platform sprint owns; only its
+disabled-with-an-explanation control is buildable, and the DoD forbids simulating a swap. **S25** is
+two halves with different answers: saved builds are `localStorage`-only and can ship now, while
+price history has no data source — `price_history` exists since migration 009 but no API route
+reads it, so the chart would plot fixtures.
 
 ## 5. M3 exit gate
 

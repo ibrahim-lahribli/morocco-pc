@@ -72,6 +72,7 @@ const ROUTES: readonly Route[] = [
   { name: "guides / budget", path: "/guides/budget-pc-gamer" },
   { name: "guides / gpu", path: "/guides/choisir-un-gpu" },
   { name: "component", path: "/composants/rtx-4060-8gb" },
+  { name: "compare", path: "/composants/comparer?slugs=rtx-4060-8gb,rtx-4070-12gb" },
   { name: "kit", path: "/kit", frenchOnly: true },
   { name: "tokens", path: "/tokens", frenchOnly: true },
   { name: "format", path: "/format" },

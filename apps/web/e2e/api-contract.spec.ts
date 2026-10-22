@@ -18,6 +18,7 @@
 import { test, expect } from "@playwright/test";
 
 import { ApiError, createRecommendation, getPresets, getRecommendation } from "../lib/api/client";
+import { CATALOG_PRODUCTS_BY_SLUG } from "../mock/fixtures.mjs";
 
 const MOCK = "http://localhost:3211";
 
@@ -200,14 +201,25 @@ test.describe("the mock serves every contract state", () => {
   });
 
   test("catalog reads serve a page and a 404 for an unknown slug", async ({ request }) => {
-    const list = await (await request.get("/v1/catalog/products")).json();
+    // Typed here because the mock serves JSON: an untyped body turns every
+    // callback below into an implicit any type.
+    const list: {
+      next_cursor: string | null;
+      products: { display_name: string; has_offer: boolean; offer_class: string | null }[];
+    } = await (await request.get("/v1/catalog/products")).json();
     expect(list.next_cursor).toBeNull();
-    expect(list.products).toHaveLength(3);
-    expect(list.products[1].has_offer).toBe(false);
-    expect(list.products[1].offer_class).toBeNull();
-    // S17: a product with no offer is still listed (has_offer false), and the
-    // list is derived from the same map the detail route reads.
-    expect(list.products[2].display_name.length).toBeGreaterThan(40);
+    // The list is DERIVED from the same map the detail route reads (S17), so its
+    // shape follows the fixtures instead of pinning an index that a new product
+    // silently shifts (S23 added a second GPU).
+    expect(list.products).toHaveLength(Object.keys(CATALOG_PRODUCTS_BY_SLUG).length);
+    // A product with no offer is still listed (has_offer false), with no class.
+    const withoutOffer = list.products.find((product) => product.has_offer === false);
+    expect(withoutOffer, "a product with no offer must still be listed").toBeTruthy();
+    expect(withoutOffer?.offer_class).toBeNull();
+    // And the long SKU is present, whatever position it holds.
+    expect(
+      list.products.some((product) => product.display_name.length > 40),
+    ).toBe(true);
 
     const detail = await request.get("/v1/catalog/products/rtx-4060-8gb");
     expect(detail.status()).toBe(200);

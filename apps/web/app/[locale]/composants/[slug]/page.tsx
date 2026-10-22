@@ -12,8 +12,11 @@ import {
   componentPageIndexable,
   fromPrice,
   offerProvenance,
+  PROVENANCE_MESSAGE_KEY,
 } from "@/lib/catalog/model";
 import { componentAppearancesCached, loadCatalogProductCached } from "@/lib/catalog/load";
+import { catalogCandidates } from "@/lib/catalog/load";
+import { comparePath } from "@/lib/catalog/compare";
 import { presentSpecs, SPEC_LABEL_KEYS, type SpecCopy } from "@/lib/catalog/specs";
 import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
@@ -64,13 +67,6 @@ export const revalidate = 3600;
 export function generateStaticParams() {
   return [];
 }
-
-/** The three badge words come from the results page's namespace (S12/S17). */
-const BADGE_KEY = {
-  demo: "provenance.demo",
-  indicative: "provenance.indicative",
-  verified: "provenance.verified",
-} as const;
 
 export async function generateMetadata({
   params,
@@ -141,6 +137,13 @@ export default async function ComponentPage({
   const price = fromPrice(product);
   const appearances = await componentAppearancesCached(product.slug);
 
+  // S23: the same-category products this page can be compared with. The section
+  // renders even when there are none, because its "Ouvrir la comparaison" link is
+  // how a comparison is started at all.
+  const comparisons = (await catalogCandidates(product.category, [product.slug]))
+    .slice(0, 3)
+    .map((candidate) => ({ slug: candidate.slug, name: candidate.display_name }));
+
   return (
     <section>
       <p className="text-micro tracking-wide text-muted uppercase">{categoryLabel}</p>
@@ -160,7 +163,7 @@ export default async function ComponentPage({
       </h1>
 
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <Badge tone={provenance}>{tResult(BADGE_KEY[provenance])}</Badge>
+        <Badge tone={provenance}>{tResult(PROVENANCE_MESSAGE_KEY[provenance])}</Badge>
         {price === null ? (
           <span className="text-compact text-muted">{t("noPrice")}</span>
         ) : (
@@ -169,6 +172,33 @@ export default async function ComponentPage({
           </span>
         )}
       </div>
+
+      <section className="mt-6">
+        <h2 className="text-subtitle text-ink">{t("compare.title")}</h2>
+        <p className="mt-2 text-compact text-muted">{t("compare.hint")}</p>
+        {comparisons.length === 0 ? null : (
+          <ul className="mt-3 space-y-2">
+            {comparisons.map((entry) => (
+              <li key={entry.slug}>
+                <Link
+                  href={comparePath(locale, [product.slug, entry.slug])}
+                  className="text-compact text-primary underline-offset-4 hover:underline"
+                >
+                  {t("compare.with", { name: entry.name })}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-3">
+          <Link
+            href={comparePath(locale, [product.slug])}
+            className="text-compact text-primary underline-offset-4 hover:underline"
+          >
+            {t("compare.open")}
+          </Link>
+        </p>
+      </section>
 
       <section className="mt-6">
         <h2 className="text-subtitle text-ink">{t("specs.title")}</h2>
@@ -208,7 +238,7 @@ export default async function ComponentPage({
                 {/* The class is an enum; the badge is its word. `SEED_UNVERIFIED`
                     is never a thing a reader should see. */}
                 <Badge tone={offerProvenance(offer.offer_class)}>
-                  {tResult(BADGE_KEY[offerProvenance(offer.offer_class)])}
+                  {tResult(PROVENANCE_MESSAGE_KEY[offerProvenance(offer.offer_class)])}
                 </Badge>
               </li>
             ))}
