@@ -81,7 +81,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `scripts/lib/db-url.js` | `TEST_DATABASE_URL` guard for write-capable tests |
 | `src/recommendation/` | ALL engine application code — the pipeline stages |
 | `apps/api/` | The HTTP API (Decision 36): Fastify routes, TypeBox contracts, the SQL repository, a Dockerfile. TEST DB only unless `API_ALLOW_SHARED=1`; no engine logic, no frontend |
-| `apps/web/` | The web app (Next.js 16 App Router, Tailwind v4 tokens, next-intl fr/ar): wizard, results, preset, component and guide routes, its own crawl surface (`sitemap.xml`, `robots.txt`, canonical + `fr`/`x-default` `hreflang`, per-preset OG cards, all off a configured `NEXT_PUBLIC_SITE_URL`), a zero-dependency fixture mock, and its own gates (`typecheck`, `lint`, `check:tokens`, `check:i18n`, `check:api-types`, Playwright at 360 px, Lighthouse budgets). Own `package.json`/lockfile and `.github/workflows/web.yml`; no secrets, no database, no engine logic |
+| `apps/web/` | The web app (Next.js 16 App Router, Tailwind v4 tokens, next-intl fr/ar): wizard, results, preset, component, guide and saved-builds (`/{locale}/enregistrements`, footer-linked on every page) routes, its own crawl surface (`sitemap.xml`, `robots.txt`, canonical + `fr`/`x-default` `hreflang`, per-preset OG cards, all off a configured `NEXT_PUBLIC_SITE_URL`), a zero-dependency fixture mock, and its own gates (`typecheck`, `lint`, `check:tokens`, `check:i18n`, `check:api-types`, Playwright at 360 px, Lighthouse budgets). Own `package.json`/lockfile and `.github/workflows/web.yml`; no secrets, no database, no engine logic |
 
 `src/recommendation/` has one directory per pipeline stage: `compatibility`, `candidates`,
 `offers`, `filtering`, `retention`, `assembly`, `scoring`, `query`, `ranking`, `persistence`,
@@ -270,13 +270,18 @@ success and stores nothing. S19 then promoted the three assertions to `error` wi
 `apps/web/lib/result/structured-data.ts`. S17 then added the component and guide routes, S18 the
 crawl surface (`e2e/seo.spec.ts`, 7 specs) and S20 the Arabic pass (`e2e/rtl.spec.ts`, 21 specs,
 Arabic guide bodies, `ar` hreflang + sitemap entries, and a locale key/placeholder parity rule in
-`check:i18n`), S21 the axe audit (`e2e/a11y.spec.ts`, 47 checks) and S22 the legal pages, analytics
-and states (`e2e/legal.spec.ts`, `e2e/analytics.spec.ts`, `e2e/states.spec.ts`): the suite is
-**305/305** in CI on the 2026-10-22 tree with `E2E_BROWSER_API=1` (304 passed + the pre-existing
-skip without it),
-`next build` reports the four per-preset OG images as `●` and `/sitemap.xml` + `/robots.txt` as
-`ƒ` (dynamic on purpose — see the sprint board), and the job's command list is unchanged because
-the new spec runs inside `npm test`. S22 landed in `5d76c30` (legal pages, analytics, states) plus
+`check:i18n`), S21 the axe audit (`e2e/a11y.spec.ts`, 51 checks), S22 the legal pages, analytics and
+states (`e2e/legal.spec.ts`, `e2e/analytics.spec.ts`, `e2e/states.spec.ts`), S23 the compare view
+(`e2e/compare.spec.ts`, 11 specs) and S25's saved builds at `/{locale}/enregistrements`
+(`e2e/saved.spec.ts` 11, `e2e/saved-model.spec.ts` 12, plus 2 footer-entry specs in
+`e2e/shell.spec.ts`): the suite is **346/346**, measured 2026-10-23 on `6af052f` with
+`E2E_BROWSER_API=1` (345 passed + the pre-existing skip without it). The last CI evidence for this
+job is the S22 runs listed below — S23 and S25 are local commits, not pushed, so their figures are
+a local measurement, not a CI run.
+`next build` reports the four per-preset OG images as `●`, the shelf as `●` per locale, and
+`/sitemap.xml` + `/robots.txt` as `ƒ` (dynamic on purpose — see the sprint board), and the job's
+command list is unchanged because the new specs run inside `npm test`. S22 landed in `5d76c30`
+(legal pages, analytics, states) plus
 `e599c1c` (final-step event), `f8e0a85` (throwing provider) and `0b40c56` (malformed event); web
 runs 39779063058, 39781059639, 39784490562 and 39785866828 are green.
 
