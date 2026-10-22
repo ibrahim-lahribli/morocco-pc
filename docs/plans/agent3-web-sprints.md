@@ -1377,6 +1377,41 @@ full FR flow at 360 px.
    errors announce and receive focus.
 4. Contrast ratios of every token pair measured ≥ 4.5:1 (automated).
 
+**Status: DONE 2026-10-22 — as built.** `apps/web/e2e/a11y.spec.ts` is 47 checks and runs in
+`npm test`, so CI already runs it: 40 axe runs (20 routes × 2 locales), 3 zoom checks, and 4
+interface-guideline checks. `@axe-core/playwright` `^4.14.0` is a devDependency; the workflow
+needed no new command. **0 violations.** The audit record — method, route matrix, the manual
+table with the spec that pins each line, the three deliberate breaks that proved the gate
+fires, and the limits — is [docs/design/ACCESSIBILITY_AUDIT.md](../design/ACCESSIBILITY_AUDIT.md).
+
+Four decisions are worth keeping:
+
+1. **The route table is written out, and every audited route also asserts its STATUS and a
+   non-empty `h1`.** The first version had neither, and `/ar/kit` + `/ar/tokens` failed it:
+   they answer 404 because S20 left those style sheets French-only. The fix is not to drop
+   them but to say so — the Arabic URL is asserted to be a 404, so "French-only" stays a
+   decision. Without the status/h1 assertion a route that fell through to an error shell
+   would pass an axe run that never looked at the page it named.
+2. **`document.fonts.ready` precedes every run.** axe measures contrast from what is
+   PAINTED, and a fallback face mid-swap is a different pixel value from the shipped one.
+3. **The two source anti-patterns are checked as source, not as DOM.** "No click handler on
+   a non-interactive element" and "no `transition: all`" cannot be observed in a rendered
+   page, so the spec scans `app/` + `components/` — the first matching a tag's attribute list
+   up to its closing `>`, so a handler written on its own line is still caught.
+4. **Zoom is browser zoom, i.e. a CSS-pixel change.** "200 %" is the layout at half the
+   width: 640 px for a 1280 desktop. Asserted on the wizard (both locales) and a result page:
+   no horizontal scroll, and `main` + `banner` + `contentinfo` still in the layout.
+
+Proven RED three times, each reverted: an `<img>` without `alt` failed BOTH home tests and no
+other route (`image-alt [critical]`); a 900 px fieldset made the zoom test fail with **276 px**
+of overflow at 640 px; a `<div onClick>` failed the static check naming
+`app/[locale]/page.tsx:50`. Measured: 47/47 in the spec, no violation reported anywhere.
+
+**The honest gap: no screen reader was driven.** The DoD's "screen-reader smoke" is satisfied
+as the DOM contract those tools consume (names, roles, `aria-live`, `aria-valuetext`, focus
+movement), each pinned by an S7/S10 spec; no NVDA/VoiceOver/TalkBack session was run, and the
+audit record says so instead of implying otherwise. That is the next step, not a passed one.
+
 #### S22 — Legal pages, analytics, final states (1.5 h)
 **Goal:** Legal pages (H4) wired in header/footer, analytics integrated behind one module
 (OD5), and the empty/error/rate-limited states finalized across the app.

@@ -12,8 +12,8 @@ and lockfile (OD4) that does not touch the engine or root CI (V14).
 done, including the dedicated `web.yml` job and its Lighthouse budgets, which were proven on
 GitHub on 2026-10-21; W1 is COMPLETE (S7–S10, the wizard shell, the budget step, the
 profile-gated step flow and the POST hand-off); W2 is COMPLETE (S11–S15); W3 is COMPLETE
-(S16, S17, S18 and S19's gating are DONE); W4 is IN PROGRESS — S20 (the Arabic/RTL pass) is
-DONE 2026-10-22, and S21/S22 remain — and W5 and
+(S16, S17, S18 and S19's gating are DONE); W4 is IN PROGRESS — S20 (the Arabic/RTL pass) and
+S21 (the WCAG AA audit) are DONE 2026-10-22, and S22 remains — and W5 and
 the M3 gate are not started.**
 The design tokens now exist as CODE (`apps/web/app/globals.css`, Tailwind v4 `@theme`, OKLCH) with
 a grep gate and a measured contrast matrix; their provenance and the four deliberate deviations are in
@@ -282,8 +282,12 @@ phase used to list shipped in S14, which is W2.)
 
 **Today:** **S20 is DONE (2026-10-22)** — both locales render every shipped route, the guides
 have Arabic bodies, the `hreflang` set is `fr` + `ar` + `x-default` and the sitemap lists the
-`ar` pair, and `check:i18n` fails on a locale key/placeholder mismatch. **S21 (WCAG AA + Web
-Interface Guidelines audit) and S22 (legal pages, analytics) are not started.**
+`ar` pair, and `check:i18n` fails on a locale key/placeholder mismatch. **S21 is DONE
+(2026-10-22)**: `e2e/a11y.spec.ts` runs axe (WCAG 2.0/2.1/2.2 A+AA) over 20 routes × 2 locales
+plus zoom and interface-guideline checks — 0 violations — and the manual half, its limits and
+the proofs that the gate fires are recorded in
+[docs/design/ACCESSIBILITY_AUDIT.md](../design/ACCESSIBILITY_AUDIT.md). **S22 (legal pages,
+analytics) is not started.**
 
 ### W5 — post-beta (excluded from M3)
 
