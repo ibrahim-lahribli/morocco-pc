@@ -45,13 +45,19 @@
  * `NEXT_PUBLIC_*` convention, and `e2e/seo.spec.ts` cannot catch the split
  * because it builds and serves from one environment.
  *
- * ## hreflang today: fr + x-default, and no ar
+ * ## hreflang: fr + ar + x-default (S20 closed V9)
  *
- * V9: `ar` alternates cannot be advertised before the `ar` pages exist for every
- * advertised URL — a `hreflang` pointing at a 404 is worse than no annotation at
- * all. Every route this app serves in `ar` also exists in `fr`, so the pair
- * emitted here is `fr` plus `x-default`, both naming the French page. S20 owns
- * the Arabic translations and the `ar` alternates that become legal with them.
+ * The rule is unchanged and it is the reason V9 stayed open for two sprints: a
+ * `hreflang` must never name a route that 404s, because the annotation is a claim
+ * that the pair is a translation of one document. S17 shipped French-only guides,
+ * so the honest set was `fr` + `x-default`.
+ *
+ * S20 translated the guide bodies and made every remaining route bilingual, so
+ * the set is now `fr`, `ar` and `x-default` — one entry per locale this app
+ * actually serves, plus the default for anyone else. `e2e/seo.spec.ts` enforces
+ * the precondition rather than trusting this comment: it FETCHES every annotated
+ * URL and requires 200, so a future French-only page cannot ship an `ar`
+ * alternate — the gate goes red on the 404.
  *
  * The URLs are ABSOLUTE even though `metadataBase` is set in the layout: an
  * absolute string cannot be resolved against the wrong base by a future refactor,
@@ -109,6 +115,30 @@ export interface PageAlternates {
   languages: Record<string, string>;
 }
 
+/** The app's locales, and its default — mirroring `i18n/routing.ts` as data. */
+export const CONTENT_LOCALES = ["fr", "ar"] as const;
+const DEFAULT_LOCALE = "fr";
+
+/**
+ * The hreflang set for one page, from its path WITHOUT a locale prefix: one
+ * entry per locale (`localePath`, so there is exactly one prefixing rule), plus
+ * `x-default` on the default locale.
+ *
+ * Shared by `pageAlternates()` and by the sitemap's per-entry `alternates`, so
+ * the document and the HTML cannot advertise different pairs.
+ */
+export function localeAlternates(
+  path: string,
+  env: Record<string, string | undefined> = process.env,
+): Record<string, string> {
+  const languages: Record<string, string> = {};
+  for (const locale of CONTENT_LOCALES) {
+    languages[locale] = absoluteUrl(localePath(locale, path), env);
+  }
+  languages["x-default"] = languages[DEFAULT_LOCALE];
+  return languages;
+}
+
 /**
  * The canonical + hreflang set for one page, from its LOCALE and its path
  * WITHOUT a locale prefix (`/`, `/configurer`, `/guides/budget-pc-gamer`).
@@ -116,16 +146,16 @@ export interface PageAlternates {
  * `localePath()` (S5) is the only thing that adds a prefix, so a page cannot
  * build a canonical with a second, subtly different rule. The canonical is the
  * page ITSELF — self-referencing is what makes two spellings of one address
- * converge — while both `hreflang` entries name the French page (see the header).
+ * converge — while the `hreflang` set names each locale's own URL (see the
+ * header for why that is now legal).
  */
 export function pageAlternates(
   locale: string,
   path: string,
   env: Record<string, string | undefined> = process.env,
 ): PageAlternates {
-  const french = absoluteUrl(localePath("fr", path), env);
   return {
     canonical: absoluteUrl(localePath(locale, path), env),
-    languages: { fr: french, "x-default": french },
+    languages: localeAlternates(path, env),
   };
 }

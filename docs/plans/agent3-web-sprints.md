@@ -1029,7 +1029,8 @@ metadata (pure TS) and `registry.ts` joins it to the compiled `.mdx` bodies. A s
 the registry: Playwright's TypeScript transform has no MDX loader, and it failed exactly that way
 before the split (`Missing semicolon` at line 1 of the guide, from esbuild reading MDX as JS).
 
-**Guides are French-only, and the Arabic side says so.** `/ar/guides` renders an Arabic note and
+**Guides are French-only, and the Arabic side says so.** (SUPERSEDED 2026-10-22 by S20, which
+translated both bodies and translated the index; the paragraph below is S17's record.) `/ar/guides` renders an Arabic note and
 the link to `/fr/guides`, `noindex` (thin, and not translated); `/ar/guides/{slug}` is a 404 rather
 than an Arabic frame around French prose. S20 owns the translation and the `hreflang ar` alternates
 that S18 will then be able to emit.
@@ -1086,7 +1087,8 @@ than a document with a configured home. The three internal design pages (`kit`, 
 stay canonical-free: they are `noindex` style sheets, not crawl surface, and their metadata is
 static.
 
-**hreflang is `fr` + `x-default`, both naming the FRENCH page (V9).** Not the page's own locale:
+**hreflang is `fr` + `x-default`, both naming the FRENCH page (V9).** (SUPERSEDED 2026-10-22 by
+S20: `ar` is now emitted and names its own URL.) Not the page's own locale:
 before S20 the Arabic side is not a translated surface, and `/ar/guides/{slug}` is a 404, so an
 `ar` alternate would annotate a route that does not exist. `e2e/seo.spec.ts` fetches every
 annotated URL and requires a 200 — the "no hreflang to a 404" half of the DoD is a live assertion,
@@ -1107,7 +1109,8 @@ same CALL the page's `robots` tag makes rather than a second spelling of it. The
 carries ONE `offer_class` per product, so it only nominates candidates, and a per-candidate
 product read decides — a product with one verified and one placeholder offer is indexable-looking
 in the list and not indexable in fact. `/config/` is excluded permanently and asserted absent.
-URLs are French only; `ar` URLs and `ar` alternates are S20's, on the same V9 boundary.
+URLs are French only; `ar` URLs and `ar` alternates are S20's, on the same V9 boundary. (S20
+landed 2026-10-22: both locales are listed, each entry carrying its `xhtml:link` pair.)
 
 **robots.txt disallows nothing, deliberately.** The obvious candidate — `/config/[id]` — answers
 `noindex, follow` in its own HTML, and a `Disallow` would hide that tag from the crawler, which is
@@ -1254,6 +1257,96 @@ blocks it.
    bidi corruption.
 4. Numbers remain Western Arabic numerals with `Intl` formatting in `ar-MA` (per product
    choice — pinned by a test).
+
+**Status: DONE 2026-10-22 — as built.** Every shipped route renders in both locales, the guides are
+translated prose rather than an Arabic frame around French text, and the crawl surface advertises
+the pair. **V9 is CLOSED.**
+
+**The guides' `ar` story WAS the decision, and translating them was the cheap half.** S17 shipped
+two French `.mdx` bodies and a deliberate 404 under `ar`; the alternative — an Arabic heading
+around French prose — was worse than saying so plainly. S20 wrote `content/guides/*.ar.mdx` and
+made the LOCALE a dimension of the registry instead of a branch in the route: `manifest.ts` carries
+`{ title, description, updated }` per locale, and `registry.ts` joins `{ fr: body, ar: body }` per
+slug, throwing at module load with the slug AND the locale in the message if either is missing.
+That check in both directions is what lets `pageAlternates()` emit an `ar` alternate for every
+guide: the route prerenders the CROSS PRODUCT (`guideStaticParams()`), `dynamicParams` stays false,
+the build lists four `●` guide routes, and the index is ONE list rendered in the route's language —
+the `ar` note, its `noindex` and the three `frOnly*` message keys are gone.
+
+**The date is per locale.** `GuideText.updated` is the date THAT prose changed, so the Arabic
+bodies read 2026-10-22 while the French text still reads 2026-10-21. One shared date would claim
+the French guide changed the day it was translated; a build timestamp would claim both change on
+every deploy. `app/sitemap.ts` takes `lastModified` per locale for the same reason.
+
+**hreflang is `fr` + `ar` + `x-default`, and the sitemap emits the same map.** `localeAlternates(path)`
+is the single source now: `pageAlternates()` calls it for the `<head>`, and the sitemap calls it per
+listed page for the per-entry `xhtml:link` set, so the document and the HTML cannot advertise
+different pairs. V9's precondition is ENFORCED, not commented: `e2e/seo.spec.ts` fetches every
+annotated URL and requires 200 — the assertion that goes red if a French-only page ever ships an
+`ar` alternate. Each page's `fr` and `ar` entries come from one `perLocale()` call, so listing one
+sibling without the other is not expressible. Measured on the fixture site: **14 `<loc>` entries**,
+`xmlns:xhtml` on the urlset, three alternates on every entry.
+
+**RTL needed two code changes and no stylesheet.** S2's logical-property policy had already done
+the work: `app|components|lib` contain no `ml-/mr-/pl-/pr-/left-/right-/border-l-/border-r-/`
+`rounded-l-/rounded-r-/text-left/text-right`, no `space-x-`/`divide-x-`, and no inline
+`dir="ltr"`; `check:tokens` (62 files) passes unchanged. What the screenshots DID find was bidi
+ownership: a Latin product name must resolve its own direction, and putting `dir="auto"` on the
+component page's `h1` left-aligned that one heading on `/ar`. The fix is the standard one — the
+attribute moved to a `<span>` INSIDE the heading — so the name keeps LTR ordering while the block
+keeps the page's alignment. `dir="auto"` also went on `ComponentRow`'s name and on the spec-value
+`dd`s, and the component page is the reference case: "RTX 4060 8GB" under a right-aligned Arabic
+eyebrow.
+
+**Numbers: Western digits, unit `DH` in both locales — decided, not defaulted.** `ar-MA` selects
+the `latn` numbering system, so ICU already emits "7 300" and never the Eastern Arabic-Indic
+block. That is right for a page mixing model names ("RTX 4060"), capacities and prices: a second
+numeral system would misalign every price column and disagree with the API's own values. The unit
+stays `DH` rather than `د.م.` because the Arabic wizard copy already quotes `DH` in three places
+(`budgetSuffix`, the clip guidance, the OG description) — switching only `formatMoney()` would
+print two spellings of one unit on one page, which is the defect the decision avoids. Changing it
+is a copy-wide act, not a formatting one, and `lib/i18n/format.ts` says so. Bidi note for whoever
+does change it: in an RTL paragraph `8594\u00A0DH` already renders number-then-unit in READING
+order (the unit sits to the LEFT of the digits), so the Latin unit is not "backwards" — measured
+with `Range` rects rather than assumed.
+
+**The missing-key gate was the actual hole.** Both catalogues already held 222 keys, but nothing
+compared them: `next-intl` resolves a missing key at RENDER time, so a key added to `fr` would
+build green and fail only on `/ar`. `scripts/check-i18n.mjs` gained rule 5 — `messages/fr.json` is
+the reference and every other catalogue must carry the same KEYS and the same ICU PLACEHOLDER set
+per key (a `{amount}`/`{montant}` drift renders literal braces). Proven to fire, not assumed:
+injecting one `fr`-only key, then one extra placeholder in `ar`, each produced exit 1 naming the
+key; the clean tree passes.
+
+**`e2e/rtl.spec.ts` is the RTL proof, and it asserts GEOMETRY.** 21 specs: the wizard's `<ol>` and
+the share group keep their DOM order while their `x` centres strictly descend on `/ar` and ascend
+on `/fr`; the budget bar's fill is anchored to the inline start (right edge on `/ar`, left on
+`/fr`) at the same fraction; prices carry no Eastern Arabic-Indic digit and do print `DH`; a Latin
+name inside the Arabic page computes `direction: ltr`; the Arabic guide body is Arabic prose (not
+the French body) in an RTL article with Arabic-only internal links; and all seven Arabic routes
+satisfy `scrollWidth - clientWidth <= 0` at 360 px. Six full-page PNGs are attached to the run
+(`ar-home`, `ar-wizard-budget`, `ar-result`, `ar-guide`, `ar-component`, `fr-result`) instead of
+stored as `toHaveScreenshot()` baselines: a baseline nobody refreshes fails a build on a
+font-rendering difference and teaches the team to skip it, while the assertions are what redden.
+Reviewing those PNGs is how the `h1` alignment bug above was found — the numbers were green and
+the heading was visibly wrong.
+
+**Measured on the final tree:** `typecheck` 0, `lint` 0 errors (the pre-existing
+`postcss.config.mjs` warning), `check:tokens` 62 files, `check:i18n` 60 files + 2 catalogues,
+`check:api-types`, `next build` exit 0 (four `●` guide routes), and **236/236** Playwright specs
+with `E2E_BROWSER_API=1` (215 before this sprint; 235 passed + the pre-existing browser-API skip
+without the flag).
+
+**Two honest limits.** First, the API's own `disclaimer` string is served in FRENCH and the web
+renders it verbatim on `/ar/config/...`, `/ar/composants/...` and the Arabic preset pages —
+visible in the screenshots as "Prix indicatifs, non actualisés." under an otherwise Arabic page.
+That text belongs to the v1.5 contract and the web layer must not re-author it, so the fix is a
+localized disclaimer in the API, not a string here. Second, the OG cards stay French-only:
+Satori has no IBM Plex Sans Arabic face, so a shared `/ar` link previews French text — unchanged
+from S15/S18, and still open.
+
+Not done here, deliberately: no visual-regression baselines (above), no per-locale OG cards, and
+`kit`/`format`/`tokens` stay French and `noindex` — they are style sheets, not crawl surface.
 
 #### S21 — WCAG AA + Web Interface Guidelines audit (2 h)
 **Goal:** A real accessibility pass: axe clean + manual keyboard/screen-reader sweep of the

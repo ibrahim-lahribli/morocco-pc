@@ -267,8 +267,11 @@ recorded: the upload needed `include-hidden-files: true` because `.lighthouseci`
 directory and `upload-artifact` skips hidden files by default — without it the step reports
 success and stores nothing. S19 then promoted the three assertions to `error` with
 `aggregationMethod: "median"` (2026-10-21), and added the verified-price JSON-LD gate in
-`apps/web/lib/result/structured-data.ts`. S17 then added the component and guide routes, and S18 the
-crawl surface: `e2e/seo.spec.ts` (7 specs) brings the suite to **215/215** on the 2026-10-21 tree,
+`apps/web/lib/result/structured-data.ts`. S17 then added the component and guide routes, S18 the
+crawl surface (`e2e/seo.spec.ts`, 7 specs) and S20 the Arabic pass (`e2e/rtl.spec.ts`, 21 specs,
+Arabic guide bodies, `ar` hreflang + sitemap entries, and a locale key/placeholder parity rule in
+`check:i18n`): the suite is **236/236** on the 2026-10-22 tree with `E2E_BROWSER_API=1` (235 passed
++ the pre-existing skip without it),
 `next build` reports the four per-preset OG images as `●` and `/sitemap.xml` + `/robots.txt` as
 `ƒ` (dynamic on purpose — see the sprint board), and the job's command list is unchanged because
 the new spec runs inside `npm test`.

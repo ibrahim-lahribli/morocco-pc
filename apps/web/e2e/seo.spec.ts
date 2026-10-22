@@ -7,16 +7,19 @@
  *      because "lists pages" is easy and "does not list the wrong ones" is the
  *      DoD: the 20 000 API-backed preset (every build verified), the verified
  *      catalogue product, the home page and the wizard are in; the two fixture
- *      presets, the indicative preset, the offer-less product, every `/config/`
- *      URL and every `/ar/` URL are out (V9: Arabic URLs and alternates are
- *      S20's). The generic direction is asserted too — every listed URL must
- *      answer 200 AND must not say `noindex` — because that is the way the page
- *      and the document actually drift apart: one is edited, the other is not.
+ *      presets, the indicative preset, the offer-less product and every
+ *      `/config/` URL are out. Both locales are listed since S20 — each page
+ *      contributes its `fr` and its `ar` address, and nothing else — so the
+ *      Arabic pair is asserted here as well as the French one. The generic
+ *      direction is asserted too — every listed URL must answer 200 AND must
+ *      not say `noindex` — because that is the way the page and the document
+ *      actually drift apart: one is edited, the other is not.
  *   2. **Canonical is absolute and self-referencing on every shipped page**, in
  *      both locales — an Arabic page names itself, not its French sibling.
- *   3. **No hreflang points at a 404.** The annotated `fr`/`x-default` URLs are
- *      fetched and must answer 200; the guide page (French-only) has no `ar`
- *      alternate, because `/ar/guides/...` is a 404 by S17's design.
+ *   3. **No hreflang points at a 404.** The annotated `fr`, `ar` and `x-default`
+ *      URLs are fetched and must answer 200 — which is the precondition V9 held
+ *      back for two sprints, and the reason the set could grow to `ar` only once
+ *      every route (the guides included) had an Arabic body.
  *   4. **The preset card is a real 1200 × 630 PNG** inside the sharing
  *      debuggers' size guidance — asserted on the BYTES (PNG signature + IHDR),
  *      not only on the meta tags that claim it.
@@ -56,7 +59,6 @@ function canonical(html: string): string | null {
 }
 
 const P9000 = "/fr/config-pc-gamer-9000-dh";
-const P15000 = "/fr/config-pc-gamer-15000-dh";
 const P20000 = "/fr/config-pc-gamer-20000-dh";
 
 // ---------------------------------------------------------------------------
@@ -84,24 +86,28 @@ test("the crawl origin is configuration; a malformed value fails instead of gues
 // 1 + 4 (robots): sitemap and robots
 // ---------------------------------------------------------------------------
 
-test("the sitemap lists only indexable pages, and never a result or an ar URL", async ({
-  request,
-}) => {
+test("the sitemap lists only indexable pages, in both locales", async ({ request }) => {
   const response = await request.get("/sitemap.xml");
   expect(response.status()).toBe(200);
   expect(response.headers()["content-type"]).toContain("xml");
 
   const body = await response.text();
-  // Well-formed, namespace-qualified urlset: what the debuggers parse.
+  // Well-formed, namespace-qualified urlset: what the debuggers parse. The xhtml
+  // namespace appears because every entry carries its `rel="alternate"` pair.
   expect(body.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true);
-  expect(body).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
+  expect(body).toContain('xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"');
+  expect(body).toContain('xmlns:xhtml="http://www.w3.org/1999/xhtml"');
 
   const locs = sitemapUrls(body);
-  expect(locs.length).toBeGreaterThan(3);
+  expect(locs.length).toBeGreaterThan(6);
 
-  // French URLs only (V9): S20 is what makes the Arabic side a surface.
+  // Both locales, and only these two: a page is listed in the union of its
+  // translations, and an address in any other shape is a bug.
   for (const loc of locs) {
-    expect(loc.startsWith(`${ORIGIN}/fr`), `${loc} must be a French URL`).toBe(true);
+    expect(
+      loc.startsWith(`${ORIGIN}/fr`) || loc.startsWith(`${ORIGIN}/ar`),
+      `${loc} must be a fr or ar URL`,
+    ).toBe(true);
   }
 
   // INVITATIONS: the API-served preset whose every build is verified, and the
@@ -115,13 +121,30 @@ test("the sitemap lists only indexable pages, and never a result or an ar URL", 
   expect(locs).toContain(`${ORIGIN}/fr/guides`);
   expect(locs).toContain(`${ORIGIN}/fr/guides/budget-pc-gamer`);
 
+  // The Arabic siblings, which S20 makes legal: same pages, `ar` addresses.
+  expect(locs).toContain(`${ORIGIN}/ar`);
+  expect(locs).toContain(`${ORIGIN}/ar/configurer`);
+  expect(locs).toContain(`${ORIGIN}/ar/guides`);
+  expect(locs).toContain(`${ORIGIN}/ar/guides/budget-pc-gamer`);
+  expect(locs).toContain(`${ORIGIN}/ar/composants/rtx-4060-8gb`);
+
+  // Each listed page carries its hreflang pair in the document itself, so a
+  // crawler does not need the HTML to discover the translation.
+  const first = body.slice(body.indexOf(`<loc>${ORIGIN}/fr</loc>`));
+  expect(first).toContain('<xhtml:link rel="alternate" hreflang="fr"');
+  expect(first).toContain('<xhtml:link rel="alternate" hreflang="ar"');
+  expect(first).toContain('<xhtml:link rel="alternate" hreflang="x-default"');
+
   // ...and NOT the pages that answer `noindex`: two fixture presets, the preset
-  // whose pass carries an indicative card, and the offer-less product. Listing
+  // whose pass carries an indicative card, and the offer-less product — in
+  // NEITHER locale, since the predicate is the page's, not the URL's. Listing
   // one of these would be the site telling a crawler two different things.
-  expect(locs).not.toContain(`${ORIGIN}${P9000}`);
-  expect(locs).not.toContain(`${ORIGIN}${P15000}`);
-  expect(locs).not.toContain(`${ORIGIN}/fr/composants/kit-ddr5-16-go`);
-  expect(locs).not.toContain(`${ORIGIN}/fr/composants/rtx-4060-ti-gaming-oc-16-go`);
+  for (const locale of ["fr", "ar"]) {
+    expect(locs).not.toContain(`${ORIGIN}/${locale}/config-pc-gamer-9000-dh`);
+    expect(locs).not.toContain(`${ORIGIN}/${locale}/config-pc-gamer-15000-dh`);
+    expect(locs).not.toContain(`${ORIGIN}/${locale}/composants/kit-ddr5-16-go`);
+    expect(locs).not.toContain(`${ORIGIN}/${locale}/composants/rtx-4060-ti-gaming-oc-16-go`);
+  }
 
   // A result is a per-visitor page with `noindex`: permanently excluded.
   expect(body).not.toContain("/config/");
@@ -171,6 +194,7 @@ const PAGES = [
   "/fr/guides",
   "/ar/guides",
   "/fr/guides/budget-pc-gamer",
+  "/ar/guides/budget-pc-gamer",
   "/fr/composants/rtx-4060-8gb",
   "/ar/composants/rtx-4060-8gb",
   P9000,
@@ -188,19 +212,24 @@ test("canonical is absolute and self-referencing on every shipped page", async (
   }
 });
 
-test("hreflang names fr + x-default, and every annotated URL answers 200", async ({ request }) => {
-  for (const path of ["/fr", "/ar", P9000, "/fr/guides/choisir-un-gpu"]) {
+test("hreflang names fr + ar + x-default, and every annotated URL answers 200", async ({
+  request,
+}) => {
+  for (const path of ["/fr", "/ar", P9000, "/fr/guides/choisir-un-gpu", "/ar/guides/choisir-un-gpu"]) {
     const html = await (await request.get(path)).text();
     const links = alternates(html);
     const languages = Object.fromEntries(links.map((link) => [link.hreflang, link.href]));
+    const bare = path.replace(/^\/(fr|ar)/, "");
 
-    // Both entries name the FRENCH page — the canonical of the document being
-    // served stays separate (proven above), which is what V9 allows before S20.
-    expect(languages.fr, `${path} fr alternate`).toBe(`${ORIGIN}/fr${path.replace(/^\/(fr|ar)/, "")}`);
+    // Each locale names ITS OWN page — that is what S20 buys, and what V9 held
+    // back until every advertised URL existed in both languages.
+    expect(languages.fr, `${path} fr alternate`).toBe(`${ORIGIN}/fr${bare}`);
+    expect(languages.ar, `${path} ar alternate`).toBe(`${ORIGIN}/ar${bare}`);
     expect(languages["x-default"], `${path} x-default`).toBe(languages.fr);
-    // No `ar` alternate may exist yet: `/ar/guides/...` is a 404 (S17).
-    expect(Object.keys(languages).sort()).toEqual(["fr", "x-default"]);
+    expect(Object.keys(languages).sort()).toEqual(["ar", "fr", "x-default"]);
 
+    // The claim is only legal because the URL exists. This is the assertion that
+    // would go red if a French-only page shipped an `ar` alternate.
     for (const link of links) {
       const response = await request.get(link.href.slice(ORIGIN.length));
       expect(response.status(), `${path} hreflang ${link.hreflang} -> ${link.href}`).toBe(200);

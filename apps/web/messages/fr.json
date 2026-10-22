@@ -268,10 +268,7 @@
     "title": "Guides",
     "intro": "Des repères pour choisir, pas des fiches techniques recopiées : ce qui change d'un palier de budget à l'autre, et ce qui décide vraiment d'une carte graphique.",
     "updated": "Mis à jour le {date}",
-    "all": "Tous les guides",
-    "frOnlyTitle": "Guides disponibles en français",
-    "frOnlyBody": "Nos guides sont pour l'instant rédigés en français. Ils sont lisibles dès maintenant ; la version arabe arrive avec la passe de localisation.",
-    "frOnlyCta": "Lire les guides en français"
+    "all": "Tous les guides"
   },
   "notFound": {
     "eyebrow": "Erreur 404",

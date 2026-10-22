@@ -45,7 +45,12 @@ export async function ComponentRow({ component, locale }: ComponentRowProps) {
         <span className="block text-micro tracking-wide text-muted uppercase">
           {t(`roles.${roleLabel(component.role)}`)}
         </span>
-        <span className="mt-0.5 block text-compact text-ink break-words">
+        {/* `dir="auto"`: a product name is DATA, and most of them are Latin
+            ("RTX 4060 8GB"). Forcing the row's direction onto that string puts
+            its punctuation on the wrong side on the Arabic page, so the name
+            picks its own direction from its first strong character while the
+            role above it stays the page's. */}
+        <span dir="auto" className="mt-0.5 block text-compact text-ink break-words">
           {component.name}
           {variant ? <span className="text-muted"> · {component.variant}</span> : null}
         </span>

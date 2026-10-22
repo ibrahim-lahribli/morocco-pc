@@ -65,15 +65,15 @@ referenced by no sprint and `OD3` is unused; they are not invented here.
 | ID | Finding | Status |
 |---|---|---|
 | V1 | The API's POST latency is unproven, so the wizard cannot promise 3 s | open; needs a deployed origin |
-| V2 | A zero-build pass is a legitimate outcome and must be explained, not shown as an error | **PARTIAL (S11)** — the zero-build state and its pre-filled way back render; S14 owns the floor advice |
+| V2 | A zero-build pass is a legitimate outcome and must be explained, not shown as an error | **DONE (S11 + S14)** — the zero-build state, its pre-filled way back and the floor advice all render; a zero-build body is a RESULT, so `wizard.tsx` navigates to it exactly like any other pass |
 | V3 | `resolution` / `priority` may be inert (OG-38), and the UI must not imply otherwise | open on the API side |
 | V4 | Explanation text is a string today, so copy cannot be composed from codes | **PARTIAL (S13)** — both branches ship: the string verbatim when `reasons[]` is absent, catalogue lines when it is served. The persisted trace is still prose (CD-2) |
 | V5 | Catalogue names carry a `Seed ` prefix; the UI must use `display_name` and never render "Seed", `SEED_UNVERIFIED` or `TestCompat` | `display_name` available since v1.2 |
 | V6 | A price is two facts — `offer_class` and `price_status` — and showing one without the other misleads | **DONE (S12)** — each card derives démo/indicatif/vérifié from BOTH columns, so an all-seed pass no longer hides inside "indicatif" |
-| V9 | `hreflang` for `ar` cannot be emitted before the `ar` routes exist | **PARTIAL (S18)** — every page emits `fr` + `x-default` and the spec fetches each annotated URL for a 200; the `ar` alternates and `ar` sitemap URLs are S20's, whose absence is deliberate (`/ar/guides/...` is a 404 today) |
+| V9 | `hreflang` for `ar` cannot be emitted before the `ar` routes exist | **DONE (S20)** — every page emits `fr`, `ar` and `x-default`, each naming its OWN locale's URL; `pageAlternates()` and `app/sitemap.ts` share one `localeAlternates()` helper (the sitemap carries the pair as `xhtml:link`), and `e2e/seo.spec.ts` FETCHES every annotated URL and requires a 200, so a French-only page cannot ship an `ar` alternate |
 | V10 | 429 must be a first-class state with `Retry-After`, not a generic error | **DONE (S10)** — the countdown, the disable, and the re-enable. S10 also found the header was unreadable cross-origin: the API now lists `Retry-After` and `X-Request-Id` in its CORS `exposedHeaders`, without which `fetch` returns both as null |
 | V11 | Money and dates must go through `Intl` (`fr-MA`), never hand-formatted | **DONE (S5)** — `lib/i18n/format.ts`; `npm run check:i18n` fails on inline Intl, a runtime-locale method, a hand-written amount or a literal date |
-| V12 | The budget input needs both a 500 MAD slider and a free numeric field, clamped honestly | not started |
+| V12 | The budget input needs both a 500 MAD slider and a free numeric field, clamped honestly | **DONE (S8)** — `budget-step.tsx` ships both controls (the slider snaps to 500 MAD steps and says so, the numeric field keeps the exact amount), clamps on blur with an inline sentence, and pins the behaviour in `e2e/wizard-budget.spec.ts` + `wizard-model.spec.ts` |
 | V13 | `builds[]` is 1..N, not always 3; the results page must not render empty slots | **DONE (S11)** — the array is mapped in rank order, never padded |
 | V14 | `apps/web` is a separate package: own manifest, own lockfile, own workflow, root CI untouched | done in S1 |
 
@@ -253,10 +253,26 @@ offers with provenance, derived appearances, ISR-cached) from the CD-5 endpoints
 pipeline ships the fr-only guides under `/{locale}/guides`. **S18 is DONE (2026-10-21)**: the crawl surface ships —
 `/sitemap.xml` (dynamic, listing only the pages whose own `robots` tag says `index`),
 `/robots.txt` pointing at it, an absolute self-referencing canonical on every shipped route,
-`fr` + `x-default` `hreflang` (V9: no `ar` before S20), and a 1200 x 630 card per preset. The open
+`fr` + `x-default` `hreflang` (V9: no `ar` before S20 — S20 landed 2026-10-22 and the set is now
+`fr` + `ar` + `x-default`), and a 1200 x 630 card per preset. The open
 decision closed the way it had to: the origin comes from `NEXT_PUBLIC_SITE_URL` (localhost fallback
 when unset, a hard failure when malformed), never from `headers()`, so prerendered pages keep their
 ISR.
+
+**S20 is DONE (2026-10-22)**: the Arabic side is a translated surface, not a translated shell. Both
+guides have Arabic `.mdx` bodies (`content/guides/*.ar.mdx`), the registry is keyed by locale so a
+slug cannot exist in one language only, `/{locale}/guides/{slug}` prerenders the cross product, and
+the guide index is one list in the route's language. `hreflang` now emits `fr`, `ar` and
+`x-default` from one helper that the sitemap shares (`xhtml:link` per entry), so **V9 is closed**;
+`e2e/seo.spec.ts` still fetches every annotated URL and requires a 200, which is the gate that
+keeps an alternate legal. `check:i18n` gained locale key/placeholder parity (`next-intl` resolves
+a missing key at render time, so this was the one hole the build could not see), and
+`e2e/rtl.spec.ts` proves the mirror GEOMETRICALLY — stepper and share group mirror with DOM order
+intact, the budget bar anchors to the inline start, seven Arabic routes hold 360 px, digits stay
+Western and the unit stays `DH` in both locales (recorded decision: one unit spelling per page).
+Two limits are recorded in the sprint board: the API's `disclaimer` string is still served in
+French and rendered verbatim on Arabic pages (API-owned copy), and the OG cards stay French-only
+because Satori has no Arabic face.
 
 ### W4 — hardening
 

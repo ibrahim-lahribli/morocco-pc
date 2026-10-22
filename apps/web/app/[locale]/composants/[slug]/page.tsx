@@ -145,8 +145,19 @@ export default async function ComponentPage({
     <section>
       <p className="text-micro tracking-wide text-muted uppercase">{categoryLabel}</p>
       {/* `break-words` + a wrapping h1 is the 360 px rule: a 60-character vendor
-          SKU must wrap inside the heading, not scroll the page sideways. */}
-      <h1 className="mt-1 text-heading break-words text-ink">{product.display_name}</h1>
+          SKU must wrap inside the heading, not scroll the page sideways.
+
+          S20's addition is the `dir` split, and it is deliberately on a SPAN:
+          the name is DATA, so it resolves its own direction from its first
+          strong character (a Latin name must keep its order next to the page's
+          RTL punctuation), while the h1 keeps the PAGE's direction so the
+          heading still aligns with the rest of the column. Putting `dir="auto"`
+          on the h1 itself pushed this one heading to the wrong edge of the
+          Arabic page — visible in the RTL screenshots, and the reason the
+          attribute moved onto the span. */}
+      <h1 className="mt-1 text-heading break-words text-ink">
+        <span dir="auto">{product.display_name}</span>
+      </h1>
 
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <Badge tone={provenance}>{tResult(BADGE_KEY[provenance])}</Badge>
@@ -168,7 +179,10 @@ export default async function ComponentPage({
             {specs.map((row) => (
               <div key={row.key} className="flex items-baseline justify-between gap-3 px-4 py-2">
                 <dt className="min-w-0 text-compact text-muted">{row.label}</dt>
-                <dd className="num-tabular min-w-0 text-end text-compact break-words text-ink">
+                <dd
+                  dir="auto"
+                  className="num-tabular min-w-0 text-end text-compact break-words text-ink"
+                >
                   {row.value}
                 </dd>
               </div>
