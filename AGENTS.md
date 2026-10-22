@@ -270,11 +270,15 @@ success and stores nothing. S19 then promoted the three assertions to `error` wi
 `apps/web/lib/result/structured-data.ts`. S17 then added the component and guide routes, S18 the
 crawl surface (`e2e/seo.spec.ts`, 7 specs) and S20 the Arabic pass (`e2e/rtl.spec.ts`, 21 specs,
 Arabic guide bodies, `ar` hreflang + sitemap entries, and a locale key/placeholder parity rule in
-`check:i18n`): the suite is **236/236** on the 2026-10-22 tree with `E2E_BROWSER_API=1` (235 passed
-+ the pre-existing skip without it),
+`check:i18n`), S21 the axe audit (`e2e/a11y.spec.ts`, 47 checks) and S22 the legal pages, analytics
+and states (`e2e/legal.spec.ts`, `e2e/analytics.spec.ts`, `e2e/states.spec.ts`): the suite is
+**305/305** in CI on the 2026-10-22 tree with `E2E_BROWSER_API=1` (304 passed + the pre-existing
+skip without it),
 `next build` reports the four per-preset OG images as `●` and `/sitemap.xml` + `/robots.txt` as
 `ƒ` (dynamic on purpose — see the sprint board), and the job's command list is unchanged because
-the new spec runs inside `npm test`.
+the new spec runs inside `npm test`. S22 landed in `5d76c30` (legal pages, analytics, states) plus
+`e599c1c` (final-step event), `f8e0a85` (throwing provider) and `0b40c56` (malformed event); web
+runs 39779063058, 39781059639, 39784490562 and 39785866828 are green.
 
 **The scheduled job HAS now run, twice, on 2026-10-18** (`workflow_dispatch` on `agent/platforms`;
 runs 39119596060 and 39120485573). Both doubts that could only be settled by a real run are now
