@@ -8,17 +8,22 @@
  * answers `noindex` is a contradiction: Search Console reports it as "Excluded
  * by 'noindex' tag", and the site has told two systems two different things. So
  * no page is listed by virtue of existing; each one is listed because the SAME
- * predicate that writes its `robots` tag said yes:
+ * predicate that writes its `robots` tag said yes — and for the two page types
+ * that have one, that means literally ONE call (`presetPageIndexable()`,
+ * `componentPageIndexable()`), not a second spelling of the rule:
  *
- *   - **presets** — `presetIndexable()`, the S16 conjunction (API-sourced AND
- *     every build verified). A committed fixture is a demonstration and stays out;
- *     an API page with one indicative card stays out with it.
- *   - **components** — `indexableComponentSlugs()` (F17's `componentIndexable()`,
- *     confirmed through the product read). A catalogue product with a placeholder
- *     offer is not listed even when the list endpoint's single `offer_class`
- *     looks verified.
+ *   - **presets** — `presetPageIndexable()`, S16's conjunction (API-sourced AND
+ *     every build verified) applied to the loader outcome. A committed fixture is
+ *     a demonstration and stays out; an API page with one indicative card stays
+ *     out with it.
+ *   - **components** — `indexableComponentSlugs()`, which asks the same
+ *     `componentPageIndexable()` the product page asks, confirmed through the
+ *     product read. A catalogue product with a placeholder offer is not listed
+ *     even when the list endpoint's single `offer_class` looks verified.
  *   - **guides** — every guide is indexable prose, French-only by S17's own rule.
- *   - **home** — the one page that is always indexable.
+ *   - **home and the wizard** — the two pages that set no `robots` at all, so the
+ *     crawler's default applies and both are listed. The wizard's four steps are
+ *     query strings on ONE url, which is why it contributes one entry.
  *
  * `/config/[id]` is absent and must stay absent: it is a per-visitor result,
  * `noindex` by design, and no sitemap may suggest otherwise. That is an invariant
@@ -44,9 +49,9 @@
  * `presetsForBuild`) rather than throwing, and a shorter list is the honest
  * failure for a document whose whole contract is "only what is indexable".
  *
- * Order is deterministic — home, the guide index, the guides in manifest order,
- * presets cheapest first, components in keyset order — so regenerating an
- * unchanged site emits an unchanged document.
+ * Order is deterministic — home, the wizard, the guide index, the guides in
+ * manifest order, presets cheapest first, components in keyset order — so
+ * regenerating an unchanged site emits an unchanged document.
  */
 import type { MetadataRoute } from "next";
 
@@ -54,8 +59,7 @@ import { indexableComponentSlugs } from "@/lib/catalog/load";
 import { GUIDE_MANIFEST } from "@/lib/guides/manifest";
 import { localePath } from "@/lib/i18n/paths";
 import { loadPresetCached, presetsForBuild } from "@/lib/presets/load";
-import { presetIndexable } from "@/lib/presets/model";
-import { orderBuilds } from "@/lib/result/model";
+import { presetPageIndexable } from "@/lib/presets/model";
 import { absoluteUrl } from "@/lib/seo/site";
 
 export const dynamic = "force-dynamic";
@@ -63,6 +67,15 @@ export const dynamic = "force-dynamic";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [
     { url: absoluteUrl(localePath("fr", "/")), changeFrequency: "weekly", priority: 1 },
+    // The wizard is indexable (it overrides no `robots`) and is the page a search
+    // for "configurer un pc" should land on, so leaving it out would be the
+    // listing disagreeing with the tag in the harmless direction — still a
+    // disagreement, and the cheap one to fix.
+    {
+      url: absoluteUrl(localePath("fr", "/configurer")),
+      changeFrequency: "monthly",
+      priority: 0.9,
+    },
     { url: absoluteUrl(localePath("fr", "/guides")), changeFrequency: "monthly", priority: 0.8 },
   ];
 
@@ -75,12 +88,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   // Cheapest first, as `presetsForBuild()` returns them. A preset the ribbon does
-  // not name is not listed; one whose page would say `noindex` is not either.
+  // not name is not listed; one whose page would say `noindex` is not either —
+  // and that is decided by the SAME call the page's `robots` tag makes.
   for (const preset of await presetsForBuild()) {
     const outcome = await loadPresetCached(preset.slug);
-    if (outcome.kind !== "ok") continue;
-    const builds = orderBuilds(outcome.page.recommendation.builds);
-    if (!presetIndexable(outcome.page.source, builds)) continue;
+    if (outcome.kind !== "ok" || !presetPageIndexable(outcome)) continue;
     entries.push({
       url: absoluteUrl(localePath("fr", `/${preset.slug}`)),
       lastModified: outcome.page.recommendation.generated_at ?? undefined,

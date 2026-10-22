@@ -5,10 +5,13 @@
  *
  *   1. **The sitemap validates and lists ONLY indexable pages.** Two directions,
  *      because "lists pages" is easy and "does not list the wrong ones" is the
- *      DoD: the 20 000 API-backed preset (every build verified) and the verified
- *      catalogue product are in; the two fixture presets, the indicative preset,
- *      the offer-less product, every `/config/` URL and every `/ar/` URL are out
- *      (V9: Arabic URLs and alternates are S20's).
+ *      DoD: the 20 000 API-backed preset (every build verified), the verified
+ *      catalogue product, the home page and the wizard are in; the two fixture
+ *      presets, the indicative preset, the offer-less product, every `/config/`
+ *      URL and every `/ar/` URL are out (V9: Arabic URLs and alternates are
+ *      S20's). The generic direction is asserted too — every listed URL must
+ *      answer 200 AND must not say `noindex` — because that is the way the page
+ *      and the document actually drift apart: one is edited, the other is not.
  *   2. **Canonical is absolute and self-referencing on every shipped page**, in
  *      both locales — an Arabic page names itself, not its French sibling.
  *   3. **No hreflang points at a 404.** The annotated `fr`/`x-default` URLs are
@@ -106,6 +109,9 @@ test("the sitemap lists only indexable pages, and never a result or an ar URL", 
   expect(locs).toContain(`${ORIGIN}${P20000}`);
   expect(locs).toContain(`${ORIGIN}/fr/composants/rtx-4060-8gb`);
   expect(locs).toContain(`${ORIGIN}/fr`);
+  // The wizard overrides no `robots` either, and its four steps are query
+  // strings on this one URL — so a page a searcher wants is listed exactly once.
+  expect(locs).toContain(`${ORIGIN}/fr/configurer`);
   expect(locs).toContain(`${ORIGIN}/fr/guides`);
   expect(locs).toContain(`${ORIGIN}/fr/guides/budget-pc-gamer`);
 
@@ -121,13 +127,22 @@ test("the sitemap lists only indexable pages, and never a result or an ar URL", 
   expect(body).not.toContain("/config/");
 });
 
-test("every URL the sitemap advertises answers 200", async ({ request }) => {
+test("every URL the sitemap advertises answers 200 and is itself indexable", async ({
+  request,
+}) => {
   const locs = sitemapUrls(await (await request.get("/sitemap.xml")).text());
   expect(locs.length).toBeGreaterThan(0);
   for (const loc of locs) {
     const path = loc.slice(ORIGIN.length);
     const response = await request.get(path);
     expect(response.status(), loc).toBe(200);
+    // The direction that bites: a listed page whose OWN tag says `noindex` is the
+    // site contradicting itself in public. Both sides now call one predicate, and
+    // this is the assertion that notices when someone stops.
+    const robots = /<meta name="robots" content="([^"]*)"/.exec(await response.text())?.[1];
+    expect(robots ?? "", `${loc} is listed but its own tag says noindex`).not.toContain(
+      "noindex",
+    );
   }
 });
 

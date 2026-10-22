@@ -43,8 +43,13 @@
 // a browser. Relative paths keep that import resolvable by every runner, not just
 // Next's aliasing.
 import type { Build } from "../result/model";
-import { priceProvenance } from "../result/model";
+import { orderBuilds, priceProvenance } from "../result/model";
 import { BUDGET_MAX } from "../wizard/model";
+// Type-only on purpose: `load.ts` imports this module's RULES, so a value import
+// back would be a cycle. `import type` is erased, and the loop never exists at
+// runtime — which is also why `e2e/preset-model.spec.ts` can load this file
+// directly.
+import type { PresetOutcome } from "./load";
 
 /** One SEO family: a slug prefix, the contract's `use_case`, and its currency. */
 export interface PresetFamily {
@@ -160,4 +165,28 @@ export function presetIndexable(
   if (source !== "api") return false;
   if (builds.length === 0) return false;
   return builds.every((build) => priceProvenance(build) === "verified");
+}
+
+/**
+ * Whether a preset PAGE may be indexed — the ONE predicate the page's `robots`
+ * tag, its JSON-LD gate and `/sitemap.xml` all call.
+ *
+ * `presetIndexable()` above is the rule; this is the only place the rule is
+ * applied to a loader OUTCOME. Before it existed, three call sites each spelled
+ * the same composition by hand — `orderBuilds()` over
+ * `page.recommendation.builds`, then the conjunction — and that is precisely how
+ * a sitemap starts listing a page whose own tag answers `noindex`: the two
+ * documents have to be edited together, and nothing makes them.
+ *
+ * A `missing` outcome is not indexable — there is no page to index.
+ *
+ * A plain boolean, not a type guard: a caller that needs `outcome.page` still
+ * narrows on `kind` first (as `/sitemap.xml` does), because "may be indexed"
+ * says nothing about which page it is.
+ */
+export function presetPageIndexable(outcome: PresetOutcome): boolean {
+  return (
+    outcome.kind === "ok" &&
+    presetIndexable(outcome.page.source, orderBuilds(outcome.page.recommendation.builds))
+  );
 }

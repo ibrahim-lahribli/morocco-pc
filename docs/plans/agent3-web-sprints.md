@@ -1101,8 +1101,9 @@ reads. It cannot 500 either — both loaders degrade to FEWER entries
 a shorter sitemap is the honest failure for a document whose contract is "only indexable pages".
 
 **"Only indexable" reuses the predicates the pages already use.** Presets are gated by
-`presetIndexable()` (API-sourced AND every build verified) and components by
-`componentIndexable()`. The catalogue walk is two-phase on purpose: `GET /v1/catalog/products`
+`presetPageIndexable()` (S16's rule: API-sourced AND every build verified) and components by
+`componentPageIndexable()`; both apply that rule to the loader outcome, so the sitemap makes the
+same CALL the page's `robots` tag makes rather than a second spelling of it. The catalogue walk is two-phase on purpose: `GET /v1/catalog/products`
 carries ONE `offer_class` per product, so it only nominates candidates, and a per-candidate
 product read decides — a product with one verified and one placeholder offer is indexable-looking
 in the list and not indexable in fact. `/config/` is excluded permanently and asserted absent.
@@ -1143,12 +1144,25 @@ the local default.
 **215/215** Playwright specs under `E2E_BROWSER_API=1` — 214 + 1 pre-existing skip without it,
 which is why a bare local `npm test` reports 214 passed — and `test:lighthouse` exit 0. The
 sitemap was re-measured in both directions on a production build: with the fixture API it lists
-six URLs (home, the guide index, both guides, the 20 000 preset, the verified GPU) and all six
-answer 200; with NO API and with a CONFIGURED BUT DEAD API (`http://localhost:3999`) it answers
-**200 with four** and logs the degradation; a malformed `NEXT_PUBLIC_SITE_URL=https://exemple.ma/fr`
-fails `next build` (exit 1) naming the variable, and a valid one (`https://exemple.ma`) moves
+seven URLs (home, the wizard, the guide index, both guides, the 20 000 preset, the verified GPU)
+and all seven answer 200; with NO API and with a CONFIGURED BUT DEAD API
+(`http://localhost:3999`) it answers **200 with four** and logs the degradation; a malformed
+`NEXT_PUBLIC_SITE_URL=https://exemple.ma/fr` fails `next build` (exit 1) naming the variable, and a
+valid one (`https://exemple.ma`) moves
 `/sitemap.xml` and `/robots.txt` to that origin. The card was decoded again: PNG signature,
 1200 x 630, 40 190 B, and it renders unclipped at 1400 px.
+
+**One predicate per page type, and the wizard listed.** The sitemap and the pages now share one
+call each — `presetPageIndexable()` and `componentPageIndexable()`, which apply the existing
+`presetIndexable()`/`componentIndexable()` rules to the loader OUTCOME — because three sites (the
+page's `robots` tag, its JSON-LD gate and `/sitemap.xml`) each spelled `orderBuilds(...)` plus the
+conjunction by hand. That is how a sitemap starts listing a page whose own tag says `noindex`:
+the two documents only stay in step while someone remembers both. `/configurer` joined the
+listing too — it sets no `robots`, it carries a canonical, and its four steps are query strings
+on ONE url — and `e2e/seo.spec.ts` now proves the invariant generically in the other direction:
+every advertised URL must answer 200 AND must not say `noindex`. Measured after the change: build
+exit 0, 215/215 specs, and all seven listed pages serve `index` (two explicitly, five by the
+crawler's default).
 
 **The caveat: `NEXT_PUBLIC_SITE_URL` is a BUILD-TIME value for every prerendered page.** Measured
 the same day: a server started with `NEXT_PUBLIC_SITE_URL=https://exemple.ma` but from a build

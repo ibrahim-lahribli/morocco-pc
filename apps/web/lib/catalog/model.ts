@@ -32,6 +32,9 @@
  */
 import type { CatalogProductResponse } from "../api/client";
 import type { PriceProvenance } from "../result/model";
+// Type-only on purpose: `load.ts` imports this module's RULES, so a value import
+// back would be a cycle. `import type` is erased and never exists at runtime.
+import type { CatalogOutcome } from "./load";
 
 /** The badge's three words, shared with the results page (S12). */
 export type CatalogProvenance = PriceProvenance;
@@ -101,6 +104,25 @@ export function componentIndexable(
   if (product.offers.length === 0) return false;
   if (product.price_status !== "verified") return false;
   return product.offers.every((offer) => offer.offer_class === "VERIFIED");
+}
+
+/**
+ * Whether a component PAGE may be indexed — the ONE predicate the page's
+ * `robots` tag and `/sitemap.xml`'s catalogue walk both call.
+ *
+ * `componentIndexable()` above is the rule; this applies it to a loader OUTCOME,
+ * so the page and the sitemap ask one question rather than two spellings of it.
+ * The sitemap's catalogue walk used to repeat the `kind === "ok"` half itself,
+ * which is the shape that rots: the page's tag and the listed set were only
+ * kept in step by whoever remembered both.
+ *
+ * `missing` is not indexable — a 404 has nothing to index.
+ *
+ * A plain boolean, not a type guard: a caller that needs `outcome.product` still
+ * narrows on `kind` first, because "may be indexed" does not say which product.
+ */
+export function componentPageIndexable(outcome: CatalogOutcome): boolean {
+  return outcome.kind === "ok" && componentIndexable(outcome.product);
 }
 
 /**

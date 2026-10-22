@@ -9,7 +9,7 @@ import { routing } from "@/i18n/routing";
 import {
   catalogCategory,
   catalogProvenance,
-  componentIndexable,
+  componentPageIndexable,
   fromPrice,
   offerProvenance,
 } from "@/lib/catalog/model";
@@ -96,13 +96,13 @@ export async function generateMetadata({
     title: t("meta.title", { name: product.display_name, category: categoryLabel }),
     description: t("meta.description", { name: product.display_name }),
     // S18: the canonical is the product page itself, in the language being
-    // served — and `presetIndexable`/`componentIndexable` decide whether it may
-    // enter the sitemap, not whether it may name itself.
+    // served — and `componentPageIndexable()` decides whether it may enter the
+    // sitemap, not whether it may name itself.
     alternates: pageAlternates(safe, `/composants/${product.slug}`),
     robots: {
-      // The SAME predicate the page's data proves; a demo or indicative price
-      // keeps the page out of the index while its links stay followable.
-      index: componentIndexable(product),
+      // The SAME call `/sitemap.xml`'s catalogue walk makes; a demo or indicative
+      // price keeps the page out of the index while its links stay followable.
+      index: componentPageIndexable(outcome),
       follow: true,
     },
   };

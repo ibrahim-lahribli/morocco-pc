@@ -40,7 +40,7 @@ import {
   type CatalogListResponse,
   type CatalogProductResponse,
 } from "../api/client";
-import { componentIndexable } from "./model";
+import { componentPageIndexable } from "./model";
 import { loadPresetCached, presetsForBuild } from "../presets/load";
 import { orderBuilds } from "../result/model";
 
@@ -160,8 +160,9 @@ export async function indexableComponentSlugs(): Promise<string[]> {
   const slugs: string[] = [];
   for (const slug of candidates) {
     try {
-      const outcome = await loadCatalogProductCached(slug);
-      if (outcome.kind === "ok" && componentIndexable(outcome.product)) slugs.push(slug);
+      // The SAME predicate the product page hands to its `robots` tag, so the
+      // listed set and the tag are one decision rather than two.
+      if (componentPageIndexable(await loadCatalogProductCached(slug))) slugs.push(slug);
     } catch (cause) {
       console.warn(
         "sitemap: could not verify a catalogue product; leaving it out",

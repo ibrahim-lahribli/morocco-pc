@@ -9,7 +9,7 @@ import { routing } from "@/i18n/routing";
 import { formatDate, formatMoney, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
 import { loadPresetCached, presetsForBuild } from "@/lib/presets/load";
-import { parsePresetSlug, presetIndexable } from "@/lib/presets/model";
+import { parsePresetSlug, presetPageIndexable } from "@/lib/presets/model";
 import { pageAlternates } from "@/lib/seo/site";
 import { orderBuilds } from "@/lib/result/model";
 import { asVerifiedPricedBuild, jsonLdScript, productJsonLd } from "@/lib/result/structured-data";
@@ -40,9 +40,9 @@ import { toHref, type Answers } from "@/lib/wizard/model";
  *   - **It reuses the results page.** Each build is S11's `BuildCard` — the same
  *     card, badge, budget bar and component list. There is no second card
  *     implementation, and no second answer to "what does a build look like".
- *   - **noindex until the prices are real.** `presetIndexable()` allows an index
- *     only for an API-served page whose every build is `verified`; a fixture page
- *     is a demonstration and stays out of the index (W3).
+ *   - **noindex until the prices are real.** `presetPageIndexable()` allows an
+ *     index only for an API-served page whose every build is `verified`; a fixture
+ *     page is a demonstration and stays out of the index (W3).
  *
  * `revalidate` must be a LITERAL for Next to statically analyze it; it is the same
  * number as `PRESET_REVALIDATE_SECONDS` in `lib/presets/model.ts` (the fetch
@@ -89,7 +89,9 @@ export async function generateMetadata({
     // S20's, once every advertised URL exists in both locales).
     alternates: pageAlternates(safe, `/${presetSlug}`),
     robots: {
-      index: presetIndexable(page.source, orderBuilds(page.recommendation.builds)),
+      // The SAME call `/sitemap.xml` makes for this slug (S18), so the listed
+      // set and this tag cannot disagree without one of them being edited.
+      index: presetPageIndexable(outcome),
       // While noindexed, the links out of this page are still worth following:
       // the family becomes indexable as a whole once the prices are real.
       follow: true,
@@ -119,11 +121,12 @@ export default async function PresetPage({
   /**
    * S19's gate, on the page type that can actually rank.
    *
-   * The predicate is `presetIndexable()` — the SAME one `generateMetadata`
-   * hands to `robots` — so a page can never be readable by a crawler while its
-   * price is unmarked, or marked up while it is noindexed. It is the conjunction
-   * of "served by the API" and "every build verified"; a fixture page is a
-   * demonstration and stays both out of the index and out of structured data.
+   * The predicate is `presetPageIndexable()` — the SAME one `generateMetadata`
+   * hands to `robots` and the one `/sitemap.xml` lists by — so a page can never
+   * be readable by a crawler while its price is unmarked, or marked up while it
+   * is noindexed. It is the conjunction of "served by the API" and "every build
+   * verified"; a fixture page is a demonstration and stays both out of the index
+   * and out of structured data.
    *
    * Two guards sit on top of the predicate, both taken from the results page
    * (S19) for the same reasons: a verified build with no recorded total must not
@@ -132,7 +135,7 @@ export default async function PresetPage({
    * than something to teach a crawler. The build itself still renders either way;
    * the gate is about the CLAIM.
    */
-  const indexable = presetIndexable(page.source, builds);
+  const indexable = presetPageIndexable(outcome);
   const primary = builds[0];
   const currency = page.recommendation.currency ?? page.family.currency;
   const structuredData =
