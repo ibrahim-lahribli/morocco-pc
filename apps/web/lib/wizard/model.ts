@@ -50,10 +50,32 @@ export const BUDGET_MIN = 500;
 export const BUDGET_MAX = 1_000_000;
 
 /**
- * The slider's granularity (S8), in MAD. It lives here for the same reason the
- * bounds do: the slider, the snap note and the tests must agree by construction.
+ * The budget's granularity (S8), in MAD. It lives here for the same reason the
+ * bounds do: the rail, the snap note, the arrow keys and the tests must agree by
+ * construction.
  */
 export const BUDGET_STEP = 500;
+
+/**
+ * How many positions the budget rail has, 0..`BUDGET_SLIDER_POSITIONS` (S27).
+ *
+ * The rail is a POSITION domain, not an amount domain: a native
+ * `<input type="range">` lays its thumb out linearly in its own value, so the
+ * only way to give the low end of the budget more than 0.7 % of a 360 px track
+ * is to make its value a position and map that position to an amount. A
+ * thousand positions put the thumb within 0.1 % of any point on the rail, which
+ * is finer than the 24 px thumb can express at 360 px.
+ */
+export const BUDGET_SLIDER_POSITIONS = 1000;
+
+/**
+ * What PageUp / PageDown move, in MAD (S27).
+ *
+ * Ten arrows, stated rather than inherited: the rail no longer has a constant
+ * "ten positions" worth of movement, and a page that silently meant a tenth of
+ * a curve is a rule nobody can describe to a keyboard user.
+ */
+export const BUDGET_PAGE_STEP = BUDGET_STEP * 10;
 
 /** Which bound moved an amount, or null when it was already inside the range. */
 export type BudgetClamp = "min" | "max" | null;
@@ -82,6 +104,93 @@ export function clampBudget(amount: number): { amount: number; clamped: BudgetCl
   if (amount < BUDGET_MIN) return { amount: BUDGET_MIN, clamped: "min" };
   if (amount > BUDGET_MAX) return { amount: BUDGET_MAX, clamped: "max" };
   return { amount, clamped: null };
+}
+
+/**
+ * The amount a rail POSITION means (S27).
+ *
+ * Exponential, because budgets are: a 3 000 and a 5 000 budget are as far
+ * apart as a 30 000 and a 50 000 one, so equal rail distance should mean equal
+ * PROPORTION, not equal MAD. `BUDGET_MIN * (max/min)^(p / positions)` does that
+ * and lands exactly on both ends (`p = 0` is 500, `p = 1000` is 1 000 000), then
+ * snaps onto S8's grid — the rail still speaks in 500 MAD amounts, it just moves
+ * through them unevenly.
+ *
+ * The consequence, stated rather than discovered: the curve is FINER than the
+ * 500 grid at the bottom (many positions share one amount) and COARSER at the
+ * top (one position step is more than 500 MAD above roughly 66 000), so a
+ * few grid amounts have no position of their own. That is only a limit on the
+ * RAIL — `TextField` still accepts any integer, and S8's rule that the typed
+ * amount is the answer is what keeps the mismatch honest.
+ */
+export function budgetAtPosition(position: number): number {
+  const bounded = Math.min(BUDGET_SLIDER_POSITIONS, Math.max(0, Math.round(position)));
+  const ratio = BUDGET_MAX / BUDGET_MIN;
+  return snapToStep(BUDGET_MIN * ratio ** (bounded / BUDGET_SLIDER_POSITIONS));
+}
+
+/**
+ * The rail position nearest an amount — `budgetAtPosition`'s inverse (S27).
+ *
+ * Rounded to the nearest position rather than floored, so a drag landing a hair
+ * either side of a rung still shows that rung. Callers pass a SNAPPED amount
+ * (`snapToStep`), because the rail has no position for 7 300.
+ *
+ * Exactness is preserved where it matters: every amount below the curve's
+ * crossover (around 66 000) round-trips through this pair unchanged, and the two
+ * endpoints always do. Above it the rail's own resolution is coarser than the
+ * grid, so a grid amount may land on a neighbour — the field keeps the exact
+ * figure and the snap note says where the thumb went.
+ */
+export function positionForBudget(amount: number): number {
+  if (amount <= BUDGET_MIN) return 0;
+  if (amount >= BUDGET_MAX) return BUDGET_SLIDER_POSITIONS;
+  const ratio = BUDGET_MAX / BUDGET_MIN;
+  const position = Math.round(
+    (BUDGET_SLIDER_POSITIONS * Math.log(amount / BUDGET_MIN)) / Math.log(ratio),
+  );
+  return Math.min(BUDGET_SLIDER_POSITIONS, Math.max(0, position));
+}
+
+/**
+ * The amount a key press asks for on the budget rail, or null for a key the rail
+ * leaves alone (S27).
+ *
+ * The rail's POSITION steps are uneven, so the keyboard cannot inherit the
+ * browser's "+1 position" and still promise anything a person can predict. The
+ * rule is therefore stated in amounts:
+ *
+ *   - Arrow keys move exactly `BUDGET_STEP` (500 MAD), as they did in S8;
+ *   - PageUp / PageDown move `BUDGET_PAGE_STEP` (ten arrows);
+ *   - Home and End jump to the bounds (500 and 1 000 000 — the latter is on the
+ *     grid, so "End" lands on the true maximum).
+ *
+ * `rtl` mirrors only the HORIZONTAL arrows: in an RTL page the rail runs the
+ * other way, so ArrowRight must move the thumb the way it points — rightward,
+ * which is down the scale. ArrowUp / ArrowDown are vertical and never mirrored.
+ */
+export function budgetForSliderKey(key: string, current: number, rtl: boolean): number | null {
+  const horizontal = rtl ? -1 : 1;
+  switch (key) {
+    case "ArrowUp":
+      return clampBudget(current + BUDGET_STEP).amount;
+    case "ArrowDown":
+      return clampBudget(current - BUDGET_STEP).amount;
+    case "ArrowRight":
+      return clampBudget(current + horizontal * BUDGET_STEP).amount;
+    case "ArrowLeft":
+      return clampBudget(current - horizontal * BUDGET_STEP).amount;
+    case "PageUp":
+      return clampBudget(current + BUDGET_PAGE_STEP).amount;
+    case "PageDown":
+      return clampBudget(current - BUDGET_PAGE_STEP).amount;
+    case "Home":
+      return BUDGET_MIN;
+    case "End":
+      return BUDGET_MAX;
+    default:
+      return null;
+  }
 }
 
 /** The currency the wizard sends. The market is Morocco and the contract

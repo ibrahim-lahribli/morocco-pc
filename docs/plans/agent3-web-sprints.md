@@ -414,8 +414,10 @@ on the app's own promise, with `--repeat-each=3` used to prove it stable.
 Known limitation, recorded rather than papered over: the slider is LINEAR over 500 -> 1 000 000,
 exactly as this DoD asks (Home = 500, End = 1 000 000, arrows = 500), so on a 360 px track the first
 7 000 MAD occupy roughly 0.7 % of the rail and every realistic budget sits under the first
-thumb-width. A curve-mapped position (exponential thumb, still 500 MAD steps in value) is the fix,
-and it needs its own sprint because it redefines what an arrow key means — **S27**, below.
+thumb-width. **CLOSED 2026-10-22 by S27** (below): the rail now speaks POSITIONS and maps them
+through an exponential curve, so 7 000 MAD sits at 34.7 % of the track while the amounts it can
+produce are still 500 MAD ones. Everything S8 promised survives there — the field keeps the typed
+amount, the arrows still move 500 DH, Home and End still reach the bounds.
 
 
 #### S9 — Resolution + priority steps with the inputs_applied gate (2 h)
@@ -1472,6 +1474,42 @@ it, and the rail is correct, only unhelpful in its first centimetre.
 4. `/ar/configurer`: the thumb reaches the inline end for the maximum and the arrows still move it
    in the reading direction.
 
+**Status: DONE 2026-10-22 — as built.** The rail's VALUE is now a POSITION
+(`0..BUDGET_SLIDER_POSITIONS`, 1 000 of them) and `budgetAtPosition()` maps a position to a 500 MAD
+amount on `500 × 2000^(p/1000)`, which lands exactly on both ends. Measured positions: 500 -> 0 %,
+1 000 -> 9.1 %, 3 000 -> 23.6 %, 7 000 -> 34.7 %, 20 000 -> 48.5 %, 100 000 -> 69.7 %, 1 000 000 ->
+100 %; the same 7 000 was 0.65 % of a linear rail. `positionForBudget()` is the inverse and rounds
+to the nearest position, so a drag a hair either side of a rung still shows that rung.
+
+Three things are worth recording, because each one is a place the obvious version lies:
+
+1. **The keyboard is defined in AMOUNTS, not positions.** One position is ~2 DH at the bottom of
+   the curve and ~8 000 DH at the top, so the browser's own "one step" would have made the arrow
+   keys meaningless. `budgetForSliderKey()` states the rule instead: arrows move 500 DH wherever the
+   thumb is, PageUp/PageDown move 5 000 DH, Home and End are the bounds. The handler takes the
+   DIRECTION from the rendered element (`getComputedStyle(...).direction`), so in Arabic ArrowRight
+   walks DOWN the scale, the way the rail runs, and ArrowUp remains vertical and unmirrored.
+2. **The curve is coarser than the 500 grid above ~66 000 MAD.** Below the crossover every grid
+   amount round-trips exactly; above it a grid amount can land on a neighbour (±500 MAD), because
+   1 000 positions cannot resolve 2 000 grid points everywhere. The rail is allowed to be coarse
+   there — the FIELD still keeps any integer, which is S8's rule — and the snap note names the RUNG
+   the thumb is on rather than the amount it "should" be, so the sentence stays true.
+3. **`aria-valuenow|min|max` are positions; `aria-valuetext` is the amount.** Every label a person
+   or a screen reader reads goes through `formatMoney` (header, `aria-valuetext`, the two end
+   labels), which is what the tests assert. The native numeric attributes stay in the rail's own
+   domain: that is the documented cost of curving a native control instead of replacing it with a
+   div, and the reason the alternative was rejected (S3's rule).
+
+Measured: 29/29 in `wizard-budget.spec.ts` + `wizard-model.spec.ts` (5 new S27 checks: the rail
+fraction at 360 px, the amount-domain keys, the RTL mirror, and the model's position/value pair and
+key map), `typecheck` / `lint` / `build` exit 0, and the full suite 242/242. The e2e specs prove each claim
+rather than restating the math: the rail fraction is read off the element's own `value|min|max` and
+converted to 125 px of thumb travel, and the Arabic mirror is proven by CLICKING 8 px from the left
+edge of the track — 1 000 000 DH there, where the same pixel in French is under 2 000. Proven RED by
+putting the rail back on the amount domain (S8's linear version): the fraction spec failed
+(`Expected < 2000, Received 1000000` on the RTL click), so the specs pin the curve, not the
+component's own arithmetic.
+
 ### Dependency map (summary)
 
 - **Contract-dependent sprints:** S4 (drift gate), S9 (CD-1), S13 (CD-2), S16 (CD-4), S17
@@ -1479,5 +1517,6 @@ it, and the rail is correct, only unhelpful in its first centimetre.
   on the API being final.
 - **Hard order:** S1 → {S2, S4, S5} → S3 → S6 → S7 → {S8, S9} → S10 → S11 → {S12, S13, S14,
   S15} → {S16, S17} → {S18, S19} → S20 → S21 → S22 → S26. W5 (S23–S25) is post-beta only.
-- **Total:** 27 sprints — the 26 on the path to M3 plus S27's post-M3 slider refinement — each
-  1–2 h of agent work. Nominal sums: W0–W4 + exit ≈ 40 h, W5 ≈ 6 h, S27 ≈ 1.5 h.
+- **Total:** 27 sprints — the 26 on the path to M3 plus S27's post-M3 slider refinement (DONE
+  2026-10-22) — each 1–2 h of agent work. Nominal sums: W0–W4 + exit ≈ 40 h, W5 ≈ 6 h,
+  S27 ≈ 1.5 h.

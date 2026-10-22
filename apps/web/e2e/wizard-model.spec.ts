@@ -13,9 +13,12 @@ import { APPLIED_INPUTS, readAppliedInputs } from "../lib/wizard/applied";
 import {
   BUDGET_MAX,
   BUDGET_MIN,
+  BUDGET_SLIDER_POSITIONS,
   BUDGET_STEP,
   PRIORITY_CHOICES,
   STEPS,
+  budgetAtPosition,
+  budgetForSliderKey,
   clampBudget,
   firstInvalidStep,
   firstInvalidStepBefore,
@@ -23,6 +26,7 @@ import {
   isPriorityChoice,
   normalizeAnswers,
   parseAmount,
+  positionForBudget,
   readState,
   resolveStep,
   snapToStep,
@@ -83,6 +87,79 @@ test("the slider's grid rounds up, clamps, and lands exactly on the maximum", ()
   // End must reach the TRUE maximum, which only holds because the max is on the
   // grid: 500 + 1 999 × 500.
   expect((BUDGET_MAX - BUDGET_MIN) % BUDGET_STEP).toBe(0);
+});
+
+test("the rail's positions land on the budget grid, exactly where the grid is finer (S27)", () => {
+  // Both ends are exact by construction — the reason End can still promise the
+  // TRUE maximum rather than the nearest point under it.
+  expect(budgetAtPosition(0)).toBe(BUDGET_MIN);
+  expect(budgetAtPosition(BUDGET_SLIDER_POSITIONS)).toBe(BUDGET_MAX);
+
+  // The point of the curve. A linear rail put 7 000 MAD at 0.65 % of the track;
+  // here it is the 347th of 1 000 positions.
+  expect(positionForBudget(7000)).toBe(347);
+  expect(budgetAtPosition(347)).toBe(7000);
+  expect(positionForBudget(20000) / BUDGET_SLIDER_POSITIONS).toBeCloseTo(0.485, 3);
+  // A typed 7 300 still snaps to 7 500 first (S8), and that has a position.
+  expect(positionForBudget(snapToStep(7300))).toBe(356);
+
+  // Below the crossover the pair round-trips every grid amount unchanged.
+  for (const amount of [BUDGET_MIN, 1000, 3000, 7500, 20000, 50000, 100000]) {
+    expect(budgetAtPosition(positionForBudget(amount))).toBe(amount);
+  }
+
+  // Above it the rail is COARSER than the 500 grid: a neighbouring rung, never a
+  // number off the grid. The rail is allowed to be coarse there — the field is
+  // what keeps an exact amount (S8), and the note names the rung it is on.
+  for (const amount of [200_000, 350_000, 500_000]) {
+    const rung = budgetAtPosition(positionForBudget(amount));
+    expect(rung).not.toBe(amount);
+    expect(rung % BUDGET_STEP).toBe(0);
+    expect(Math.abs(rung - amount)).toBeLessThanOrEqual(BUDGET_STEP);
+  }
+
+  // Monotone over the whole rail: further never means cheaper, and a position
+  // outside the rail is clamped rather than extrapolated.
+  let previous = BUDGET_MIN;
+  for (let position = 0; position <= BUDGET_SLIDER_POSITIONS; position += 1) {
+    const amount = budgetAtPosition(position);
+    expect(amount).toBeGreaterThanOrEqual(previous);
+    previous = amount;
+  }
+  expect(budgetAtPosition(-10)).toBe(BUDGET_MIN);
+  expect(budgetAtPosition(BUDGET_SLIDER_POSITIONS + 10)).toBe(BUDGET_MAX);
+  expect(positionForBudget(1)).toBe(0);
+  expect(positionForBudget(5_000_000)).toBe(BUDGET_SLIDER_POSITIONS);
+});
+
+test("the rail's keys move in amounts, and RTL mirrors only the sideways ones (S27)", () => {
+  // The rail's POSITIONS are uneven (2 DH at the bottom, ~8 000 at the top), so
+  // the keys are stated in amounts instead of inheriting "one position".
+  expect(budgetForSliderKey("ArrowRight", 7000, false)).toBe(7500);
+  expect(budgetForSliderKey("ArrowLeft", 7000, false)).toBe(6500);
+  expect(budgetForSliderKey("ArrowUp", 7000, false)).toBe(7500);
+  expect(budgetForSliderKey("ArrowDown", 7000, false)).toBe(6500);
+  expect(budgetForSliderKey("PageUp", 7000, false)).toBe(12000);
+  expect(budgetForSliderKey("PageDown", 12500, false)).toBe(7500);
+  expect(budgetForSliderKey("Home", 500_000, false)).toBe(BUDGET_MIN);
+  expect(budgetForSliderKey("End", 7000, false)).toBe(BUDGET_MAX);
+
+  // RTL mirrors the HORIZONTAL arrows only: ArrowRight points against the scale,
+  // and the vertical pair means the same thing in both directions.
+  expect(budgetForSliderKey("ArrowRight", 7000, true)).toBe(6500);
+  expect(budgetForSliderKey("ArrowLeft", 7000, true)).toBe(7500);
+  expect(budgetForSliderKey("ArrowUp", 7000, true)).toBe(7500);
+  expect(budgetForSliderKey("ArrowDown", 7000, true)).toBe(6500);
+  expect(budgetForSliderKey("PageUp", 7000, true)).toBe(12000);
+
+  // Stepping into a bound stops on it rather than walking out of the range.
+  expect(budgetForSliderKey("ArrowLeft", BUDGET_MIN, false)).toBe(BUDGET_MIN);
+  expect(budgetForSliderKey("ArrowRight", BUDGET_MAX, false)).toBe(BUDGET_MAX);
+
+  // A key the rail does not own belongs to the page.
+  expect(budgetForSliderKey("Tab", 7000, false)).toBeNull();
+  expect(budgetForSliderKey("Enter", 7000, false)).toBeNull();
+  expect(budgetForSliderKey("a", 7000, false)).toBeNull();
 });
 
 test("clampBudget names the bound that moved the amount", () => {

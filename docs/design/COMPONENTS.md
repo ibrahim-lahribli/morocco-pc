@@ -110,6 +110,19 @@ amount — the sentence itself is the message catalogue's. It runs on BLUR and n
 so a half-typed number is not rewritten under the caret. The pair sits in one `<fieldset>` whose
 `<legend>` is the question, because a label on the field alone would name half the answer.
 
+**S27 replaced the rail's linear scale with a curved one.** A native range lays its thumb out
+linearly in its own value, so `Slider` is now given POSITIONS (`0..BUDGET_SLIDER_POSITIONS`, 1 000
+of them) and the budget step passes `format = position → amount`. `budgetAtPosition` /
+`positionForBudget` in `lib/wizard/model.ts` are that exponential pair (500 DH at position 0,
+1 000 000 at position 1 000), so 7 000 DH sits at 34.7 % of a 360 px track where the linear rail put
+it at 0.65 %. Two rules follow, and they belong to the step rather than to the rail: the keys move in
+AMOUNTS (`budgetForSliderKey` — 500 DH per arrow, 5 000 DH per page key, the bounds on Home/End, and
+the horizontal arrows mirrored in RTL so ArrowRight walks the way the rail runs), and the snap note
+names the RUNG the thumb is on rather than the nearest grid amount, because above ~66 000 DH the
+curve is coarser than the 500 grid. `Slider` itself did not change: it still renders `format(current)`
+as the header value, the `aria-valuetext` and the two end labels, which is why every number a person
+reads is an amount while the native `aria-valuenow` stays a position.
+
 ## The flow is derived, not fixed (S9)
 
 `/fr/configurer` has two to four steps, and the number is a property of the answers. `stepsFor()`

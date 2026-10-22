@@ -1,14 +1,25 @@
 "use client";
 
 /**
- * The budget step (S8) — one answer, two controls.
+ * The budget step (S8, S27) — one answer, two controls, one curved rail.
  *
- * The field is exact and the slider is coarse. They are not two answers, so they
+ * The field is exact and the rail is coarse. They are not two answers, so they
  * cannot be two states: the field keeps the draft the user is typing into, the
- * slider renders the SAME draft snapped onto its 500 MAD grid, and a slider move
+ * rail renders the SAME draft snapped onto its 500 MAD grid, and a rail move
  * writes back into both. The URL answer is the typed amount, never the snapped
- * one — typing 7 300 keeps 7 300 — so the note under the slider exists to say so
+ * one — typing 7 300 keeps 7 300 — so the note under the rail exists to say so
  * rather than to let the thumb quietly lie.
+ *
+ * S27 changed what the rail's VALUE is. A native `<input type="range">` lays its
+ * thumb out linearly in its own value, so a rail over 500..1 000 000 put a 7 000 budget
+ * at 0.7 % of a 360 px track — every realistic budget inside the first
+ * thumb-width. The rail therefore speaks POSITIONS (0..`BUDGET_SLIDER_POSITIONS`)
+ * and `budgetAtPosition` maps a position to a 500 MAD amount on an exponential
+ * curve, which gives the low end the room it needs: a 7 000 budget is now about a third
+ * of the track. `format` is passed position → money, so the header, the
+ * `aria-valuetext` and the min/max labels all announce AMOUNTS; only the native
+ * `aria-valuenow|min|max` stay in positions, which is the documented trade-off of
+ * curving a native control rather than replacing it with a div.
  *
  * Where each rule comes from:
  *
@@ -19,12 +30,18 @@
  *   - ENTER still submits, because the step is a `<form>`; an out-of-range
  *     amount is settled first and the submit is refused on that press, so the
  *     guidance appears instead of a jump to the next step.
- *   - The slider reaches the TRUE maximum: `BUDGET_MAX` is on the grid
+ *   - KEYS move in AMOUNTS, not positions (S27): an arrow is 500 DH, PageUp /
+ *     PageDown move ten arrows, Home and End are the bounds. The rail's own
+ *     positions are uneven, so the browser's "+1 position" would mean about 2 at the
+ *     bottom and 8 000 at the top; `budgetForSliderKey` states the rule
+ *     instead, and mirrors only the horizontal arrows in an RTL page so
+ *     ArrowRight moves the thumb the way it points.
+ *   - The rail reaches the TRUE maximum: `BUDGET_MAX` is on the grid
  *     (500 + 1999 × 500), so End lands on 1 000 000 and not 999 500.
  *
- * `aria-valuetext` on the slider comes from `formatMoney`, so a screen reader
- * hears the amount with its currency rather than a bare number, in either
- * language (V11/V12).
+ * `aria-valuetext` on the rail comes from `formatMoney`, so a screen reader hears
+ * the amount with its currency rather than a bare number, in either language
+ * (V11/V12).
  */
 import { useState } from "react";
 
@@ -34,9 +51,13 @@ import { fill, type WizardCopy } from "@/lib/wizard/copy";
 import {
   BUDGET_MAX,
   BUDGET_MIN,
+  BUDGET_SLIDER_POSITIONS,
   BUDGET_STEP,
+  budgetAtPosition,
+  budgetForSliderKey,
   clampBudget,
   parseAmount,
+  positionForBudget,
   snapToStep,
   type BudgetClamp,
 } from "@/lib/wizard/model";
@@ -63,14 +84,19 @@ export function BudgetStep({ saved, copy, locale, onCommit, serverError }: Budge
 
   const parsed = parseAmount(draft);
   const inRange = parsed !== null && parsed >= BUDGET_MIN && parsed <= BUDGET_MAX;
-  const thumb = snapToStep(parsed ?? saved ?? BUDGET_MIN);
+  // The rail has no position for 7 300, so the thumb is the SNAPPED amount's
+  // position — and `thumbAmount` is the amount the thumb is actually on, which is
+  // what the note below has to name (S27: above the curve's crossover that is a
+  // neighbour of the snapped figure, never a number the thumb is not on).
+  const thumb = positionForBudget(snapToStep(parsed ?? saved ?? BUDGET_MIN));
+  const thumbAmount = budgetAtPosition(thumb);
   const bounds = { min: formatMoney(BUDGET_MIN, locale), max: formatMoney(BUDGET_MAX, locale) };
 
   const snapNote =
-    parsed !== null && inRange && parsed !== thumb
+    parsed !== null && inRange && parsed !== thumbAmount
       ? fill(copy.budgetSnapNote, {
           step: formatNumber(BUDGET_STEP, locale),
-          snapped: formatMoney(thumb, locale),
+          snapped: formatMoney(thumbAmount, locale),
           exact: formatMoney(parsed, locale),
         })
       : null;
@@ -85,6 +111,14 @@ export function BudgetStep({ saved, copy, locale, onCommit, serverError }: Budge
   function commitIfValid(raw: string) {
     const value = parseAmount(raw);
     onCommit(value !== null && value >= BUDGET_MIN && value <= BUDGET_MAX ? value : undefined);
+  }
+
+  /** A rail move and a key press are the same event: an amount, already chosen. */
+  function choose(amount: number) {
+    setDraft(formatNumber(amount, locale));
+    setTouched(false);
+    setClamped(null);
+    onCommit(amount);
   }
 
   /**
@@ -153,18 +187,25 @@ export function BudgetStep({ saved, copy, locale, onCommit, serverError }: Budge
         <Slider
           id="wizard-budget-slider"
           label={copy.budgetSliderLabel}
-          min={BUDGET_MIN}
-          max={BUDGET_MAX}
-          step={BUDGET_STEP}
+          // POSITIONS, not amounts (S27): the thumb's geometry is linear in what
+          // the browser is given, and the curve lives in the mapping.
+          min={0}
+          max={BUDGET_SLIDER_POSITIONS}
+          step={1}
           value={thumb}
           aria-describedby={snapNote === null ? undefined : "wizard-budget-snap"}
-          format={(value) => formatMoney(value, locale)}
-          onChange={(event) => {
-            const next = Number(event.target.value);
-            setDraft(formatNumber(next, locale));
-            setTouched(false);
-            setClamped(null);
-            onCommit(next);
+          format={(position) => formatMoney(budgetAtPosition(position), locale)}
+          onChange={(event) => choose(budgetAtPosition(Number(event.target.value)))}
+          onKeyDown={(event) => {
+            // The direction comes from the rendered element, not from the locale
+            // list: if a direction is ever changed in CSS, the keys follow it.
+            const rtl = getComputedStyle(event.currentTarget).direction === "rtl";
+            const next = budgetForSliderKey(event.key, thumbAmount, rtl);
+            if (next === null) return;
+            // Only the keys the rail owns are taken; Tab, Enter and everything
+            // else still belong to the page.
+            event.preventDefault();
+            choose(next);
           }}
         />
       </div>
