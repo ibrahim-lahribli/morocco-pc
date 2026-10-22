@@ -1567,7 +1567,10 @@ lands, and alone it proves nothing about the platform path the sprint exists to 
 
 **Status: HALF DONE 2026-10-23 — saved builds SHIPPED; price history still BLOCKED.** A build can be
 saved from every card, on the results page AND the preset page, and the shelf is
-`/{locale}/enregistrements`. An entry is a POINTER, not a copy — the result id, the engine rank, the
+`/{locale}/enregistrements` — reachable from a footer nav on EVERY page (the 404 included), not only
+from the link a saved card shows. The footer, not the header, is a measured choice: at 360 px the
+header already fills its row, and a third item there scrolled the page to 376 px. An entry is a
+POINTER, not a copy — the result id, the engine rank, the
 total the page showed and the local `savedAt` — so the list can never print a price the card it
 links to does not; opening one is a link back to `/config/[id]`, which answers for itself when the
 API no longer serves that id. `localStorage` under `morocco-pc:saved-builds:v1` is the whole store:
@@ -1585,8 +1588,9 @@ region AND gives focus somewhere to be: the row that owned it is gone, so focus 
 itself (the list, or the empty card), never to the next row's « Retirer » — a held Enter would
 otherwise delete the shelf one item per keypress.
 
-Measured: **344/344** in the full suite with `E2E_BROWSER_API=1`, 23 of them new
-(`e2e/saved.spec.ts` 11, `e2e/saved-model.spec.ts` 12 — the model half needs no browser);
+Measured: **346/346** in the full suite with `E2E_BROWSER_API=1`, 25 of them new
+(`e2e/saved.spec.ts` 11, `e2e/saved-model.spec.ts` 12 — the model half needs no browser — plus 2 in
+`e2e/shell.spec.ts` for the footer entry, in both locales);
 `typecheck`, `build` (the shelf prerenders `●` per locale) and `lint` (0 errors, the pre-existing
 `postcss.config.mjs` warning) exit 0; `check:tokens` 76 files, `check:i18n` 74 files + 2 catalogues,
 and `e2e/a11y.spec.ts` is **51** checks with the shelf audited in BOTH locales. One existing spec had
