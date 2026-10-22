@@ -119,6 +119,11 @@ test("360 px stacks the rows; 1280 px lays them out as columns", async ({ page }
   expect(first.width).toBeGreaterThan(200);
   // The fallback is not the table collapsed — the per-value label is painted.
   await expect(cells.nth(0).getByText(A_PRODUCT.display_name)).toBeVisible();
+  // Two LINES, not one run: the label sits above its value, or a long product
+  // name would wrap around the value and read as a single sentence.
+  const label = (await cells.nth(0).getByText(A_PRODUCT.display_name).boundingBox())!;
+  const value = (await cells.nth(0).locator('[dir="auto"]').boundingBox())!;
+  expect(label.y + label.height).toBeLessThanOrEqual(value.y + 1);
   // And stacking does not scroll the page sideways.
   expect(
     await page.evaluate(
@@ -190,6 +195,25 @@ test("Arabic mirrors the columns without reversing the reading order", async ({ 
   // The marker is Arabic too, and the price is a DH amount on both sides.
   await expect(page.getByText("مختلف").first()).toBeVisible();
   await expect(page.getByText(formatMoney(3200, "ar")).first()).toBeVisible();
+});
+
+test("Arabic stacks the selection panel from the inline start", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto(AR_COMPARE);
+
+  // The name owns its line in the stack, and that line starts where the page
+  // starts. `dir="auto"` on the BLOCK would align an LTR name to the left edge
+  // of an RTL row — a defect this assertion exists to keep fixed.
+  const row = page.locator("main ul li").first();
+  const name = row.locator("span.min-w-0");
+  const nameBox = (await name.boundingBox())!;
+  const rowBox = (await row.boundingBox())!;
+  expect(await name.evaluate((el) => getComputedStyle(el).direction)).toBe("rtl");
+  expect(Math.abs(rowBox.x + rowBox.width - (nameBox.x + nameBox.width))).toBeLessThanOrEqual(20);
+  // Only the text resolves its own direction.
+  expect(await name.locator('[dir="auto"]').evaluate((el) => getComputedStyle(el).direction)).toBe(
+    "ltr",
+  );
 });
 
 test("the compare page stays out of the index and canonicals the route", async ({ request }) => {

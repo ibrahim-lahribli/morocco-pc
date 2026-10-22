@@ -174,6 +174,27 @@ export default async function ComponentPage({
       </div>
 
       <section className="mt-6">
+        <h2 className="text-subtitle text-ink">{t("specs.title")}</h2>
+        {specs.length === 0 ? (
+          <p className="mt-2 text-compact text-muted">{t("specs.none")}</p>
+        ) : (
+          <dl className="mt-3 divide-y divide-border rounded-card border border-border">
+            {specs.map((row) => (
+              <div key={row.key} className="flex items-baseline justify-between gap-3 px-4 py-2">
+                <dt className="min-w-0 text-compact text-muted">{row.label}</dt>
+                <dd
+                  dir="auto"
+                  className="num-tabular min-w-0 text-end text-compact break-words text-ink"
+                >
+                  {row.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </section>
+
+      <section className="mt-6">
         <h2 className="text-subtitle text-ink">{t("compare.title")}</h2>
         <p className="mt-2 text-compact text-muted">{t("compare.hint")}</p>
         {comparisons.length === 0 ? null : (
@@ -198,27 +219,6 @@ export default async function ComponentPage({
             {t("compare.open")}
           </Link>
         </p>
-      </section>
-
-      <section className="mt-6">
-        <h2 className="text-subtitle text-ink">{t("specs.title")}</h2>
-        {specs.length === 0 ? (
-          <p className="mt-2 text-compact text-muted">{t("specs.none")}</p>
-        ) : (
-          <dl className="mt-3 divide-y divide-border rounded-card border border-border">
-            {specs.map((row) => (
-              <div key={row.key} className="flex items-baseline justify-between gap-3 px-4 py-2">
-                <dt className="min-w-0 text-compact text-muted">{row.label}</dt>
-                <dd
-                  dir="auto"
-                  className="num-tabular min-w-0 text-end text-compact break-words text-ink"
-                >
-                  {row.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        )}
       </section>
 
       <section className="mt-6">

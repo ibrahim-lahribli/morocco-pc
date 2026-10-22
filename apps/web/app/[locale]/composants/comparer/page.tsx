@@ -175,9 +175,16 @@ export default async function ComparePage({
               table can be drawn. */}
           <ul className="mt-6 divide-y divide-border rounded-card border border-border">
             {columns.map((column) => (
-              <li key={column.slug} className="flex flex-wrap items-center gap-2 px-4 py-2">
-                <span dir="auto" className="min-w-0 flex-1 text-compact break-words text-ink">
-                  {column.name}
+              <li key={column.slug} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
+                {/* The name is DATA, but a `dir="auto"` on the BLOCK would take the
+                    whole line with it: an LTR product name became a block aligned
+                    away from the inline start. The block keeps the page's direction
+                    (so `basis-full` stacks from the inline start) and the span
+                    inside resolves the text's own order. */}
+                <span className="min-w-0 basis-full text-compact text-ink sm:basis-auto sm:flex-1">
+                  <span dir="auto" className="break-words">
+                    {column.name}
+                  </span>
                 </span>
                 <span className="num-tabular text-compact text-ink">{column.priceText}</span>
                 <Badge tone={column.provenance}>{column.provenanceLabel}</Badge>

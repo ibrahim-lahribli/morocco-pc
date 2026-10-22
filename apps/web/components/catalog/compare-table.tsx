@@ -96,7 +96,7 @@ export function CompareTable({ columns, rows, labels }: CompareTableProps) {
               {row.differs ? (
                 <>
                   {" "}
-                  <span className="ms-2 text-micro font-medium text-warning">{labels.differs}</span>
+                  <span className="ms-2 text-caption font-medium text-warning">{labels.differs}</span>
                 </>
               ) : null}
             </th>
@@ -106,14 +106,20 @@ export function CompareTable({ columns, rows, labels }: CompareTableProps) {
                 role="cell"
                 className="border-b border-border px-3 py-2 text-start text-ink max-sm:block max-sm:border-b-0 max-sm:py-1"
               >
-                <span className="hidden text-micro text-muted max-sm:inline">
+                {/* Two lines in the stack, one line at wide widths: the label is
+                    a BLOCK there, or a long product name would wrap around the
+                    value and read as one run ("... Ventus 3X / 165 W Blanc"). */}
+                <span className="hidden text-micro text-muted max-sm:block">
                   {names.get(cell.slug) ?? ""}
-                </span>{" "}
-                {/* `dir="auto"` per value: a spec is DATA, and a Latin model name
-                    inside an Arabic page keeps its own order while the cell keeps
-                    the table's alignment. */}
-                <span dir="auto" className="break-words">
-                  {cell.value ?? labels.unknown}
+                </span>
+                {/* The block keeps the CELL's direction, so the value still starts
+                    at the inline edge in Arabic; only the inline span resolves its
+                    own direction, because a spec is DATA — a Latin model name keeps
+                    its order inside an RTL cell. */}
+                <span className="max-sm:block">
+                  <span dir="auto" className="break-words">
+                    {cell.value ?? labels.unknown}
+                  </span>
                 </span>
               </td>
             ))}
