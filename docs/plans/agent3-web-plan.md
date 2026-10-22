@@ -13,8 +13,10 @@ done, including the dedicated `web.yml` job and its Lighthouse budgets, which we
 GitHub on 2026-10-21; W1 is COMPLETE (S7–S10, the wizard shell, the budget step, the
 profile-gated step flow and the POST hand-off); W2 is COMPLETE (S11–S15); W3 is COMPLETE
 (S16, S17, S18 and S19's gating are DONE); W4 is COMPLETE — S20 (the Arabic/RTL pass), S21 (the
-WCAG AA audit) and S22 (legal pages, analytics, states) are DONE 2026-10-22 — and W5 and
-the M3 gate are not started.**
+WCAG AA audit) and S22 (legal pages, analytics, states) are DONE 2026-10-22 — and S27, the
+post-M3 slider curve, is DONE 2026-10-22, so 23 of the 27 sprints are done. What remains is W5
+(S23–S25, outside the M3 gate on purpose) and S26, the M3 verification run, which is BLOCKED on
+deployment: no web host is chosen and no API origin is deployed.**
 The design tokens now exist as CODE (`apps/web/app/globals.css`, Tailwind v4 `@theme`, OKLCH) with
 a grep gate and a measured contrast matrix; their provenance and the four deliberate deviations are in
 [docs/design/TOKEN_MAP.md](../design/TOKEN_MAP.md). The eight base components are built on those
@@ -188,8 +190,9 @@ S4's pieces: `lib/api/schema.d.ts` (generated, committed), `lib/api/client.ts` (
 drift gate). The snapshot is NOT copied into `apps/web`: the generator reads the API's own gated
 `apps/api/test/unit/openapi-v1.5.json`, so the tree keeps ONE contract instead of two.
 
-What does not exist yet: Lighthouse CI budgets, the token system (today's tokens are create-next-app
-defaults), the component kit, `next-intl` and the Arabic subset (only Latin Geist is loaded).
+**Correction, 2026-10-22.** This paragraph used to list the Lighthouse budgets, the token system,
+the component kit, `next-intl` and the Arabic subset as missing — all five were built by S2–S6,
+and the **Today** paragraph above is the record. Nothing in W0 is outstanding.
 
 ### W1 — wizard
 
@@ -298,7 +301,15 @@ measurement, the copy review and the state inventory are in
 
 Component detail v2 and compare, swap inside a build (needs CD-8), price history, saved builds.
 
-**Today:** not started, and deliberately out of scope for M3 (S23–S25).
+**Today (2026-10-22): none of the three is started, and all three stay outside the M3 gate on
+purpose — but they are not equally blocked.** **S23** (component detail v2 + compare) is ready:
+S17 and CD-5 both shipped, and its compare state is URL-held on the client. **S24** (swap inside a
+build) waits on **CD-8**, the swap endpoint, which is not built and which no platform sprint owns;
+only its disabled-with-an-explanation control is buildable, and the DoD forbids simulating a swap.
+**S25** is two halves with different answers: saved builds are `localStorage`-only and can ship
+now, while price history has no data source — `price_history` exists since migration 009 but no API
+route reads it, so the chart would plot fixtures. The sprint board carries a status line per
+sprint.
 
 ## 5. M3 exit gate
 
@@ -306,8 +317,14 @@ Component detail v2 and compare, swap inside a build (needs CD-8), price history
 - The **wizard completes at 360 px**.
 - The **full FR flow runs against the staging API** (wizard → results → share).
 
-**Today:** unmeasurable. All three need a deployed API; two of them need a chosen web host. S26 is
-the verification sprint that produces the evidence.
+**Today (2026-10-22): BLOCKED, and S26 stays blocked until the deployment happens.** All three
+criteria need a deployed API origin and the two staging runs also need a chosen web host; neither
+exists, so the gate is unmeasurable rather than merely unmeasured. Part of criterion 1 is already
+enforced without a deployment — S6/S19's three budgets (`error`, `median`) run in `web.yml` on the
+fixture result page and on a real preset page — but the criterion's own *score* of 90 or better is
+not asserted anywhere: `lighthouserc.cjs` selects `onlyCategories: performance` and asserts three
+metrics, never the category score. Criterion 2's wizard is covered by Playwright at 360×800;
+criterion 3 has no origin to run against.
 
 ## 6. Measured state of the scaffold (2026-10-20)
 
