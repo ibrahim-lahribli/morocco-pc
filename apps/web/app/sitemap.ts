@@ -21,6 +21,9 @@
  *     product read. A catalogue product with a placeholder offer is not listed
  *     even when the list endpoint's single `offer_class` looks verified.
  *   - **guides** — every guide is indexable prose, in both locales since S20.
+ *   - **the legal pages** (S22) — indexable on purpose: a legal notice, a
+ *     privacy page and a contact page are documents a reader may search for,
+ *     and none of them carries anyone's data.
  *   - **home and the wizard** — the two pages that set no `robots` at all, so the
  *     crawler's default applies and both are listed. The wizard's four steps are
  *     query strings on ONE url, which is why it contributes one entry.
@@ -111,6 +114,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // in Arabic, not a second one.
     ...perLocale("/configurer", { changeFrequency: "monthly", priority: 0.9 }),
     ...perLocale("/guides", { changeFrequency: "monthly", priority: 0.8 }),
+    // S22's three legal pages. `yearly` is what their prose actually does:
+    // these are not surveys of a fast-moving catalogue, and a `weekly` claim
+    // would invite a crawler to re-read text that has not changed.
+    ...perLocale("/mentions-legales", { changeFrequency: "yearly", priority: 0.3 }),
+    ...perLocale("/confidentialite", { changeFrequency: "yearly", priority: 0.3 }),
+    ...perLocale("/contact", { changeFrequency: "yearly", priority: 0.3 }),
   ];
 
   for (const guide of GUIDE_MANIFEST) {

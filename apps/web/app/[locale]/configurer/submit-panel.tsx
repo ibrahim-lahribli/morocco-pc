@@ -65,7 +65,13 @@ export function SubmitPanel({ submitting, failure, remaining, copy, locale }: Su
 
   return (
     <div className="mt-6">
-      <Alert tone={message.tone}>
+      {/*
+        S22: a warning here is ALWAYS the result of an action (this box only
+        exists after a submit), so it is announced — `error` already interrupts on
+        its own, and `warning` has to be told. A 429 is a warning rather than an
+        error on purpose: waiting fixes it, and the sentence carries the seconds.
+      */}
+      <Alert tone={message.tone} role={message.tone === "warning" ? "status" : undefined}>
         <p>{message.text}</p>
         {message.detail === undefined ? null : (
           <p className="mt-1 text-muted">{message.detail}</p>

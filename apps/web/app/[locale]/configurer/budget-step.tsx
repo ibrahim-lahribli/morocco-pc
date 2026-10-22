@@ -45,7 +45,7 @@
  */
 import { useState } from "react";
 
-import { Slider, TextField } from "@/components/ui";
+import { Alert, Slider, TextField } from "@/components/ui";
 import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { fill, type WizardCopy } from "@/lib/wizard/copy";
 import {
@@ -178,9 +178,14 @@ export function BudgetStep({ saved, copy, locale, onCommit, serverError }: Budge
       </div>
 
       {clampNotice === null ? null : (
-        <p role="status" className="mt-1.5 text-caption text-warning">
+        // S22 unified this: a clamp is the result of an ACTION (the reader left
+        // the field outside the range), so it is announced, and it is drawn by
+        // the same `Alert` primitive every other state in the app uses — the last
+        // notice that had grown its own markup. `role="status"` is explicit
+        // because a warning is not a live region by default (alert.tsx).
+        <Alert tone="warning" role="status" className="mt-2">
           {clampNotice}
-        </p>
+        </Alert>
       )}
 
       <div className="mt-5">

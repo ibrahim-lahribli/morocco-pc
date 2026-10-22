@@ -52,6 +52,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { Alert, Button, ChoiceGroup, Skeleton } from "@/components/ui";
 import type { ChoiceGroupOption } from "@/components/ui";
+import { trackEvent } from "@/lib/analytics";
 import { createRecommendation, getMetaOptions, type MetaOptionsResponse } from "@/lib/api/client";
 import type { AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
@@ -236,6 +237,11 @@ export function Wizard({ copy, locale }: { copy: WizardCopy; locale: AppLocale }
 
     try {
       const { body } = await createRecommendation(request);
+      // S22's third event, and the reason it is a COUNT: the size of the result
+      // is the only fact about this pass that analytics may know. The budget,
+      // the answers and the id stay on this side of the boundary (the events
+      // map in `lib/analytics.ts` has no field for them).
+      trackEvent({ name: "config_generated", props: { builds: body.builds.length } });
       // 201 (a new pass) and 200 (a reused one) are the same outcome here; the
       // result page owns the difference, and a zero-build body is a RESULT, not
       // an error (V2), so it navigates exactly like any other.
@@ -346,6 +352,10 @@ export function Wizard({ copy, locale }: { copy: WizardCopy; locale: AppLocale }
           if (isLast) {
             if (canSubmit) void submit();
           } else if (canAdvance) {
+            // S22: a step is "completed" when the flow moves FORWARD past it —
+            // Back is not a completion, and neither is a repaired URL, so the
+            // event is fired here rather than in `goTo()`.
+            trackEvent({ name: "wizard_step", props: { step: shownStep } });
             goTo(next);
           }
         }}

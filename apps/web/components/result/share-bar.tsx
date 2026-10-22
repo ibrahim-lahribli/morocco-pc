@@ -26,6 +26,7 @@
 import { useState, useSyncExternalStore } from "react";
 
 import { Button, buttonClasses } from "@/components/ui";
+import { trackEvent } from "@/lib/analytics";
 
 export interface ShareBarLabels {
   /** The group's accessible name. */
@@ -93,12 +94,16 @@ export function ShareBar({ shareUrl, whatsappHref, shareText, labels }: ShareBar
   async function onCopy() {
     if (await copyLink()) {
       setCopied(true);
+      // S22: WHICH channel was used, never which URL was shared. The link names
+      // one person's configuration, so it stays out of the payload entirely.
+      trackEvent({ name: "share_used", props: { channel: "copy" } });
     }
   }
 
   async function onShare() {
     try {
       await navigator.share({ text: shareText, url: shareUrl });
+      trackEvent({ name: "share_used", props: { channel: "native" } });
     } catch (error) {
       // The user cancelled the sheet: announce nothing, copy nothing.
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -123,6 +128,9 @@ export function ShareBar({ shareUrl, whatsappHref, shareText, labels }: ShareBar
           rel="noopener noreferrer"
           aria-label={labels.whatsapp}
           className={anchorClasses}
+          // The anchor still works before JS and keeps its link semantics; the
+          // handler only records that this channel was chosen.
+          onClick={() => trackEvent({ name: "share_used", props: { channel: "whatsapp" } })}
         >
           {labels.whatsapp}
         </a>

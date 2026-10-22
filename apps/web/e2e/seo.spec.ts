@@ -120,6 +120,10 @@ test("the sitemap lists only indexable pages, in both locales", async ({ request
   expect(locs).toContain(`${ORIGIN}/fr/configurer`);
   expect(locs).toContain(`${ORIGIN}/fr/guides`);
   expect(locs).toContain(`${ORIGIN}/fr/guides/budget-pc-gamer`);
+  // Listed because they override no `robots` — and reached by a reader who is
+  // looking for exactly these three documents.
+  expect(locs).toContain(`${ORIGIN}/fr/confidentialite`);
+  expect(locs).toContain(`${ORIGIN}/ar/mentions-legales`);
 
   // The Arabic siblings, which S20 makes legal: same pages, `ar` addresses.
   expect(locs).toContain(`${ORIGIN}/ar`);
@@ -195,6 +199,13 @@ const PAGES = [
   "/ar/guides",
   "/fr/guides/budget-pc-gamer",
   "/ar/guides/budget-pc-gamer",
+  // S22's legal pages: indexed, self-canonical, and bilingual like the rest.
+  "/fr/mentions-legales",
+  "/ar/mentions-legales",
+  "/fr/confidentialite",
+  "/ar/confidentialite",
+  "/fr/contact",
+  "/ar/contact",
   "/fr/composants/rtx-4060-8gb",
   "/ar/composants/rtx-4060-8gb",
   P9000,

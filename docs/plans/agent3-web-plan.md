@@ -12,8 +12,8 @@ and lockfile (OD4) that does not touch the engine or root CI (V14).
 done, including the dedicated `web.yml` job and its Lighthouse budgets, which were proven on
 GitHub on 2026-10-21; W1 is COMPLETE (S7–S10, the wizard shell, the budget step, the
 profile-gated step flow and the POST hand-off); W2 is COMPLETE (S11–S15); W3 is COMPLETE
-(S16, S17, S18 and S19's gating are DONE); W4 is IN PROGRESS — S20 (the Arabic/RTL pass) and
-S21 (the WCAG AA audit) are DONE 2026-10-22, and S22 remains — and W5 and
+(S16, S17, S18 and S19's gating are DONE); W4 is COMPLETE — S20 (the Arabic/RTL pass), S21 (the
+WCAG AA audit) and S22 (legal pages, analytics, states) are DONE 2026-10-22 — and W5 and
 the M3 gate are not started.**
 The design tokens now exist as CODE (`apps/web/app/globals.css`, Tailwind v4 `@theme`, OKLCH) with
 a grep gate and a measured contrast matrix; their provenance and the four deliberate deviations are in
@@ -280,14 +280,19 @@ because Satori has no Arabic face.
 Arabic/RTL pass, WCAG AA, legal pages wired (H4). (The empty/error/rate-limited states this
 phase used to list shipped in S14, which is W2.)
 
-**Today:** **S20 is DONE (2026-10-22)** — both locales render every shipped route, the guides
-have Arabic bodies, the `hreflang` set is `fr` + `ar` + `x-default` and the sitemap lists the
-`ar` pair, and `check:i18n` fails on a locale key/placeholder mismatch. **S21 is DONE
-(2026-10-22)**: `e2e/a11y.spec.ts` runs axe (WCAG 2.0/2.1/2.2 A+AA) over 20 routes × 2 locales
+**Today: W4 is COMPLETE (2026-10-22).** **S20 is DONE** — both locales render every shipped
+route, the guides have Arabic bodies, the `hreflang` set is `fr` + `ar` + `x-default` and the
+sitemap lists the `ar` pair, and `check:i18n` fails on a locale key/placeholder mismatch.
+**S21 is DONE**: `e2e/a11y.spec.ts` runs axe (WCAG 2.0/2.1/2.2 A+AA) over 20 routes × 2 locales
 plus zoom and interface-guideline checks — 0 violations — and the manual half, its limits and
 the proofs that the gate fires are recorded in
-[docs/design/ACCESSIBILITY_AUDIT.md](../design/ACCESSIBILITY_AUDIT.md). **S22 (legal pages,
-analytics) is not started.**
+[docs/design/ACCESSIBILITY_AUDIT.md](../design/ACCESSIBILITY_AUDIT.md). **S22 is DONE** — the three
+legal pages are indexed and footer-linked in both locales, analytics is one module behind a
+per-request config route (unset = off, and off means no third-party request), and every
+error/empty/waiting state renders through the alert primitive. Its LCP finding is the part worth
+reading: starting the loader at `load` cost 7 % LCP, so it now waits for the page's fonts — the
+measurement, the copy review and the state inventory are in
+[docs/design/STATES.md](../design/STATES.md).
 
 ### W5 — post-beta (excluded from M3)
 

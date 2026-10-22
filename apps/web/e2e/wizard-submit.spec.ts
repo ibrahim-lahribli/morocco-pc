@@ -211,7 +211,9 @@ test("a 413 explains itself, and the retry is the same button", async ({ page })
   await submitButton(page).click();
 
   await expect(
-    page.getByText("La demande est trop volumineuse pour être acceptée. Réessayez dans un instant."),
+    page.getByText(
+      "La demande est trop volumineuse pour être acceptée. Vérifiez vos réponses, puis réessayez.",
+    ),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Réessayer" }).click();

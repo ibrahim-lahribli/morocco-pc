@@ -9,7 +9,13 @@
       "ar": "العربية"
     },
     "footer": "morocco-pc — configurateur de PC pour le marché marocain. Prix en dirhams (DH).",
-    "formats": "Formats (démo)"
+    "formats": "Formats (démo)",
+    "legalNav": "Informations légales",
+    "legal": {
+      "mentions": "Mentions légales",
+      "privacy": "Confidentialité",
+      "contact": "Contact"
+    }
   },
   "home": {
     "title": "Configurez votre PC, pièce par pièce",
@@ -47,7 +53,7 @@
     "submitProgressLabel": "Recherche des configurations",
     "submitProgressValueText": "Demande envoyée, réponse en attente",
     "submitElapsed": "Depuis {seconds} s",
-    "errorTooLarge": "La demande est trop volumineuse pour être acceptée. Réessayez dans un instant.",
+    "errorTooLarge": "La demande est trop volumineuse pour être acceptée. Vérifiez vos réponses, puis réessayez.",
     "errorRateLimited": "Trop de demandes en peu de temps. Réessayez dans {seconds} s.",
     "errorRateLimitedNoWait": "Trop de demandes en peu de temps. Réessayez dans un instant.",
     "errorUnavailable": "Le service est momentanément indisponible. Réessayez dans un instant.",
@@ -273,7 +279,55 @@
   "notFound": {
     "eyebrow": "Erreur 404",
     "title": "Page introuvable",
-    "body": "Cette adresse ne correspond à aucune page. Le lien est peut-être incomplet, ou la configuration n'existe plus.",
+    "body": "Cette adresse ne correspond à aucune page. Vérifiez le lien, ou lancez une nouvelle configuration.",
     "cta": "Configurer mon PC"
+  },
+  "legal": {
+    "updated": "Dernière mise à jour : {date}",
+    "mentions": {
+      "eyebrow": "Informations légales",
+      "title": "Mentions légales",
+      "intro": "Qui publie ce site, ce qu'il promet et ce qu'il ne promet pas.",
+      "publisherHeading": "Éditeur",
+      "publisherBody": "morocco-pc est un projet en cours de développement, publié à titre de démonstration. Aucune vente n'y est réalisée et aucun paiement n'y est demandé. Les informations d'identification de l'éditeur (raison sociale, adresse, numéro ICE) seront ajoutées ici avant toute exploitation commerciale.",
+      "hostingHeading": "Hébergement",
+      "hostingBody": "L'hébergeur n'est pas encore attribué : son nom et son adresse seront indiqués ici à la mise en ligne. Aucune donnée personnelle n'est collectée aujourd'hui, ce que décrit la page Confidentialité.",
+      "pricesHeading": "Prix et configurations",
+      "pricesBody": "Les montants affichés sont des estimations en dirhams, calculées à partir du catalogue interne et de ses offres. Ce ne sont pas des offres de vente : le prix pratiqué en magasin peut différer, et une configuration proposée n'est pas un engagement de disponibilité.",
+      "ipHeading": "Contenus et marques",
+      "ipBody": "Les textes, les composants d'interface et le code de ce site sont produits pour ce projet. Les noms de marques et de produits cités appartiennent à leurs propriétaires et servent uniquement à désigner le matériel.",
+      "contactHint": "Une question sur ces mentions ? La page Contact explique où l'adresser."
+    },
+    "privacy": {
+      "eyebrow": "Informations légales",
+      "title": "Confidentialité",
+      "intro": "Ce que ce site enregistre, et ce qu'il n'enregistre pas.",
+      "cookiesHeading": "Cookies",
+      "cookiesBody": "Ce site ne dépose aucun cookie : ni mesure d'audience, ni publicité, ni préférence de langue. Le choix de langue est dans l'adresse, pas dans un cookie.",
+      "accountsHeading": "Comptes et formulaires",
+      "accountsBody": "Il n'y a ni compte, ni connexion, ni formulaire de contact : rien n'est à saisir ici en dehors du budget et de l'usage, qui servent à calculer une configuration.",
+      "analyticsHeading": "Mesure d'audience",
+      "analyticsBody": "Si le déploiement l'active, la mesure d'audience est sans cookie et sans identifiant : un outil auto-hébergé ou Plausible compte des pages vues et trois événements — étape du configurateur terminée, configuration générée, partage utilisé. Le budget, la résolution, la priorité et l'adresse partagée ne sont jamais transmis.",
+      "analyticsQueryBody": "La chaîne de requête de l'adresse est retirée de la page vue avant l'envoi : un budget présent dans l'adresse ne quitte pas le navigateur.",
+      "resultsHeading": "Configurations partagées",
+      "resultsBody": "Une configuration calculée est identifiée par un identifiant aléatoire dans l'adresse. Toute personne qui possède le lien peut la consulter, et les moteurs de recherche ne l'indexent pas.",
+      "logsHeading": "Journaux du serveur",
+      "logsBody": "Le serveur peut journaliser une requête HTTP (horodatage, route, identifiant de requête) pour diagnostiquer une panne. Ces journaux ne servent pas à établir un profil.",
+      "rightsHeading": "Vos droits",
+      "rightsBody": "Aucune donnée personnelle n'étant collectée aujourd'hui, il n'y a rien à consulter, corriger ou supprimer. Une demande reste possible par la page Contact, et la section Éditeur des mentions légales nomme le responsable de traitement dès qu'il est connu."
+    },
+    "contact": {
+      "eyebrow": "Informations légales",
+      "title": "Contact",
+      "intro": "À qui s'adressent une question, une erreur de prix ou un problème d'affichage.",
+      "channelHeading": "Adresse de contact",
+      "channelBody": "Aucune adresse n'est ouverte pour cette version de démonstration. Elle sera publiée ici, à la mise en production, et c'est la même adresse qui figurera dans les mentions légales.",
+      "priceHeading": "Signaler une erreur de prix",
+      "priceBody": "Le signalement le plus utile cite l'adresse de la configuration, le magasin et le prix constaté : sans ces trois éléments, l'écart ne peut pas être vérifié.",
+      "displayHeading": "Signaler un problème d'affichage",
+      "displayBody": "La page, le navigateur et l'appareil suffisent. Une capture d'écran aide, mais n'est jamais nécessaire.",
+      "dataHeading": "Demande relative aux données",
+      "dataBody": "La page Confidentialité décrit ce qui est enregistré, et aujourd'hui la réponse est : rien qui vous identifie."
+    }
   }
 }

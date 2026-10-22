@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { preload } from "react-dom";
 
+import { Analytics } from "@/components/analytics";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { routing } from "@/i18n/routing";
 import { localePath } from "@/lib/i18n/paths";
@@ -90,6 +91,18 @@ const geistMono = Geist_Mono({
  */
 const ARABIC_PRELOAD = ["400", "500", "600"] as const;
 
+/**
+ * The footer's link set (S22), in reading order: the three legal pages, then the
+ * formats sheet. Declared as data so the list and its labels cannot drift apart,
+ * and so a test can walk the same list the page renders.
+ */
+const FOOTER_LINKS = [
+  { key: "legal.mentions", path: "/mentions-legales" },
+  { key: "legal.privacy", path: "/confidentialite" },
+  { key: "legal.contact", path: "/contact" },
+  { key: "formats", path: "/format" },
+] as const;
+
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
 }
@@ -171,17 +184,35 @@ export default async function LocaleLayout({
         <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
           {children}
         </main>
+        {/**
+         * S22: the footer is the ONE place every page — the 404 included, since
+         * that renders inside this layout — carries the legal links. A `nav`
+         * with its own name, because a footer is a landmark and the links in it
+         * are a set rather than a paragraph: a screen reader can jump to
+         * "Informations légales" instead of tabbing through the page. The
+         * formats sheet stays here as a fifth link — it is a demonstration
+         * page, and the footer is where demonstration pages belong.
+         */}
         <footer className="border-t border-border">
           <div className="mx-auto w-full max-w-5xl px-4 py-6 text-compact text-muted">
             <p>{t("footer")}</p>
-            <Link
-              href={localePath(locale, "/format")}
-              className="mt-1 inline-block text-compact text-primary underline-offset-4 hover:underline"
-            >
-              {t("formats")}
-            </Link>
+            <nav aria-label={t("legalNav")} className="mt-2">
+              <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                {FOOTER_LINKS.map((link) => (
+                  <li key={link.key}>
+                    <Link
+                      href={localePath(locale, link.path)}
+                      className="text-primary underline-offset-4 hover:underline"
+                    >
+                      {t(link.key)}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
           </div>
         </footer>
+        <Analytics />
       </body>
     </html>
   );

@@ -1428,6 +1428,41 @@ audit record says so instead of implying otherwise. That is the next step, not a
 3. Footer legal links resolve in both locales;404 page links them too.
 4. Every error state copy reviewed against the voice rules (active voice, fix stated).
 
+**Status: DONE 2026-10-22 — as built.** Three legal pages (mentions légales, confidentialité,
+contact) exist in both locales, are listed in the sitemap, and are linked from the footer of every
+page — the 404 included, because that page renders inside the layout. Analytics is one module
+(`lib/analytics.ts`) behind `GET /api/analytics/config`, so the provider is a DEPLOYMENT setting
+rather than a build constant; its events map is three events whose props are closed value sets, and
+the injected tag always carries `data-exclude-search` / `data-exclude-hash`. The inventory of states,
+the copy review and the analytics contract live in
+[docs/design/STATES.md](../../docs/design/STATES.md).
+
+Three things are worth recording, because each one is a place the obvious version is wrong:
+
+1. **The build-time `NEXT_PUBLIC_*` version of analytics cannot be tested, and cannot be switched
+   off without a rebuild.** Every page is prerendered, so a public env var is frozen into the HTML.
+   The config therefore comes from a force-dynamic route that reads the server's environment, and
+   the suite proves the loader by intercepting THAT route (`e2e/analytics.spec.ts`): unconfigured is
+   `{provider: null}` and not one third-party request is made; configured, the tag, its attributes,
+   the events and their payloads are all asserted.
+2. **"After the load event" is not late enough — measured, not assumed.** Starting the loader at
+   `load` moved LCP from 2 408 ms to 2 585 ms on the result page and 2 412 -> 2 587 ms on the preset
+   page (+7 %, over the 2 500 ms budget CI enforces). The request was competing with the page's web
+   font; the fix waits for `document.fonts.ready` and then an idle callback, after which the same
+   harness reads 2 329/2 330 ms against 2 337/2 324 ms with analytics off. Both rounds are tabulated
+   in STATES.md.
+3. **A state must be drawn by the primitive, not merely look like one.** `e2e/states.spec.ts`
+   asserts `data-tone` and the live-region role for the clamp, the zero-build result, the 429 and the
+   options failure; the clamp moved out of its bespoke `<p>`, and the 429 panel gained the
+   `role="status"` it was missing (it is the result of an action, and a warning is not a live region
+   by default).
+
+**Honest gaps.** No real Plausible/Umami account was exercised — the vendor half of the
+"no query string" claim rests on their documented `data-exclude-search` behaviour plus the attribute
+this app sets, and the LCP rounds used a local stub script rather than the vendor's bytes. The legal
+pages name the fields that must be filled before commercial launch (publisher identity, host,
+contact channel) instead of inventing them; `docs/design/STATES.md` §5 records where they are.
+
 ### Phase W5 — Post-beta (excluded from M3)
 
 #### S23 — Component detail v2 + compare (2 h, post-beta)
