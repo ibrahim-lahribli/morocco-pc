@@ -159,19 +159,69 @@ window.__analyticsPageviews = [{
 window.__analyticsAt = performance.now();
 `;
 
+/**
+ * A provider whose global throws. The test below proves the action that sent the
+ * event still happens; `__analyticsThrew` is set BEFORE the throw so the spec can
+ * tell "the event reached the provider" from "the event was still queued".
+ */
+const THROWING_SRC = "http://analytics.test/throwing.js";
+const THROWING_STUB = `
+window.__analyticsThrew = false;
+window.plausible = function () {
+  window.__analyticsThrew = true;
+  throw new Error("provider exploded");
+};
+setTimeout(function () { window.__analyticsArmed = true; }, 100);
+`;
+
 /** Turn analytics on for this page, pointing at the stub. */
-async function enableAnalytics(page: Page): Promise<void> {
+async function enableAnalytics(
+  page: Page,
+  scriptSrc: string = STUB_SRC,
+  scriptBody: string = STUB,
+): Promise<void> {
   await page.route(CONFIG_ROUTE, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       // Same shape the route handler serves, with the script swapped for a stub.
-      body: JSON.stringify({ provider: "plausible", domain: DOMAIN, scriptSrc: STUB_SRC }),
+      body: JSON.stringify({ provider: "plausible", domain: DOMAIN, scriptSrc }),
     }),
   );
-  await page.route(STUB_SRC, (route) =>
-    route.fulfill({ status: 200, contentType: "application/javascript", body: STUB }),
+  await page.route(scriptSrc, (route) =>
+    route.fulfill({ status: 200, contentType: "application/javascript", body: scriptBody }),
   );
+}
+
+/** The options list and a successful pass, for the tests that submit the wizard. */
+async function serveWizardApi(page: Page): Promise<void> {
+  await page.route("**/v1/meta/options*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify(META_OPTIONS),
+    }),
+  );
+  await page.route("**/v1/recommendations", async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({
+        status: 204,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "POST, OPTIONS",
+          "access-control-allow-headers": "content-type, accept",
+        },
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify(RECOMMENDATION_OK),
+    });
+  });
 }
 
 /** Record the window's `load` on the same clock the stub uses. */
@@ -279,35 +329,9 @@ test("completing a step sends the step, and never the answer", async ({ page }) 
 test("a generated configuration sends a COUNT, never the id or the budget", async ({ page }) => {
   await enableAnalytics(page);
 
-  // The wizard's last step needs the options list and the POST; both are routed
-  // here so the spec owns the answers (the same pattern as wizard-submit.spec).
-  await page.route("**/v1/meta/options*", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      headers: { "access-control-allow-origin": "*" },
-      body: JSON.stringify(META_OPTIONS),
-    }),
-  );
-  await page.route("**/v1/recommendations", async (route) => {
-    if (route.request().method() === "OPTIONS") {
-      await route.fulfill({
-        status: 204,
-        headers: {
-          "access-control-allow-origin": "*",
-          "access-control-allow-methods": "POST, OPTIONS",
-          "access-control-allow-headers": "content-type, accept",
-        },
-      });
-      return;
-    }
-    await route.fulfill({
-      status: 201,
-      contentType: "application/json",
-      headers: { "access-control-allow-origin": "*" },
-      body: JSON.stringify(RECOMMENDATION_OK),
-    });
-  });
+  // The wizard's last step needs the options list and the POST; the helper owns
+  // both, the same pattern as wizard-submit.spec.
+  await serveWizardApi(page);
 
   await page.goto(
     "/fr/configurer?etape=priority&use_case=GAMING&budget_amount=7300&resolution=1440p&priority=3",
@@ -332,6 +356,35 @@ test("a generated configuration sends a COUNT, never the id or the budget", asyn
   const payload = JSON.stringify(calls);
   expect(payload).not.toContain(RECOMMENDATION_OK.id);
   expect(payload).not.toContain("7300");
+});
+
+test("a provider that throws cannot stop the submit that sent the event", async ({ page }) => {
+  await enableAnalytics(page, THROWING_SRC, THROWING_STUB);
+  await serveWizardApi(page);
+
+  await page.goto(
+    "/fr/configurer?etape=priority&use_case=GAMING&budget_amount=7300&resolution=1440p&priority=3",
+  );
+
+  // The stub arms only after the module's `load` handler has had time to run, so
+  // this waits for a LOADED provider rather than one that is still being fetched:
+  // an event queued here would never reach the throwing global.
+  await page.waitForFunction(
+    () => (window as unknown as { __analyticsArmed?: boolean }).__analyticsArmed === true,
+  );
+  await page.getByRole("button", { name: "Voir mes configurations" }).click();
+
+  // The event really reached the provider and it threw: the flag is set before
+  // the throw. Without the guard in `send()`, this click would have thrown before
+  // `submit()`, and the URL assertion below would fail.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { __analyticsThrew?: boolean }).__analyticsThrew === true,
+      ),
+    )
+    .toBe(true);
+  await expect(page).toHaveURL(new RegExp(`/fr/config/${RECOMMENDATION_OK.id}$`));
 });
 
 test("sharing sends the channel, never the link", async ({ page }) => {

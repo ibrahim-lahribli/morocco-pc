@@ -268,12 +268,21 @@ function afterQuiet(run: () => void): void {
 
 function send(event: AnalyticsEvent): void {
   const { name, props } = event;
-  if (loaded === "plausible") {
-    window.plausible?.(name, { props });
-    return;
-  }
-  if (loaded === "umami") {
-    window.umami?.track(name, props);
+  // This runs inside click, submit and navigation handlers, and the provider is
+  // third-party code: a global that throws would otherwise cancel the action
+  // that produced the event. An event is disposable; the action is not. Nothing
+  // is logged — noise on every event would be its own defect — and nothing is
+  // retried, because a provider that throws will throw again.
+  try {
+    if (loaded === "plausible") {
+      window.plausible?.(name, { props });
+      return;
+    }
+    if (loaded === "umami") {
+      window.umami?.track(name, props);
+    }
+  } catch {
+    // The event is lost deliberately; the caller's navigation or request is not.
   }
 }
 

@@ -74,6 +74,10 @@ follows the step event rather than replacing it.
 Never sent, because no member of `AnalyticsEvent` has a field for it: the budget, the resolution, the
 priority, the result id, the shared URL, anything typed.
 
+**Sending is best-effort.** `send()` catches a provider global that throws: the event is lost, but
+the click, submit or navigation that produced it is not. `e2e/analytics.spec.ts` drives a stub whose
+`plausible()` throws and proves the wizard still reaches the result page.
+
 **Two mechanisms carry "no query string reaches the provider":**
 
 1. the injected tag always sets `data-exclude-search` and `data-exclude-hash`, which is the
