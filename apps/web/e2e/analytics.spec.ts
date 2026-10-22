@@ -324,6 +324,9 @@ test("a generated configuration sends a COUNT, never the id or the budget", asyn
     name: "config_generated",
     props: { builds: RECOMMENDATION_OK.builds.length },
   });
+  // The final step is completed by the submit, so `priority` is reachable too;
+  // `config_generated` records the pass, not the step.
+  expect(calls).toContainEqual({ name: "wizard_step", props: { step: "priority" } });
   // Client-side navigation keeps the JS context, so this is the SAME page's log:
   // neither the pass id nor the budget is in it.
   const payload = JSON.stringify(calls);

@@ -350,7 +350,14 @@ export function Wizard({ copy, locale }: { copy: WizardCopy; locale: AppLocale }
         onSubmit={(event) => {
           event.preventDefault();
           if (isLast) {
-            if (canSubmit) void submit();
+            if (canSubmit) {
+              // The last step is completed by SUBMITTING, not by advancing, so it
+              // is the one step a forward navigation never records. Emit it here
+              // too, or the map's final value is unreachable; the pass itself is
+              // the separate `config_generated` event fired by `submit()`.
+              trackEvent({ name: "wizard_step", props: { step: shownStep } });
+              void submit();
+            }
           } else if (canAdvance) {
             // S22: a step is "completed" when the flow moves FORWARD past it —
             // Back is not a completion, and neither is a repaired URL, so the

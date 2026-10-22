@@ -66,6 +66,11 @@ a bounded count; an event that is not in the map is dropped, and so is a value o
 | `config_generated` | `builds`: 0..1000 | how many builds came back; a count is not a user answer |
 | `share_used` | `channel`: `whatsapp` / `copy` / `native` | which way out was used, never the shared URL |
 
+`wizard_step` fires when the flow moves forward past a step, and on the last step's submit: that
+step is completed by the REQUEST, not by a navigation, so the map's final value (`priority` in the
+full profile) is reachable. `config_generated` is the separate fact that a pass was produced, and it
+follows the step event rather than replacing it.
+
 Never sent, because no member of `AnalyticsEvent` has a field for it: the budget, the resolution, the
 priority, the result id, the shared URL, anything typed.
 
