@@ -415,7 +415,7 @@ Known limitation, recorded rather than papered over: the slider is LINEAR over 5
 exactly as this DoD asks (Home = 500, End = 1 000 000, arrows = 500), so on a 360 px track the first
 7 000 MAD occupy roughly 0.7 % of the rail and every realistic budget sits under the first
 thumb-width. A curve-mapped position (exponential thumb, still 500 MAD steps in value) is the fix,
-and it needs its own sprint because it redefines what an arrow key means.
+and it needs its own sprint because it redefines what an arrow key means — **S27**, below.
 
 
 #### S9 — Resolution + priority steps with the inputs_applied gate (2 h)
@@ -1189,8 +1189,18 @@ forty, is chosen against that limit. Measured against a contract-shaped fake API
 unverified` in the log; a fake that answers 429 after 8 reads leaves 13 URLs (`produit-000..007`),
 `sitemap: the catalogue API rate-limited the walk; 28 product(s) went unverified`, HTTP 200. The
 worst case is the budget plus one in-flight read (which keeps its own 5 s timeout),
-independent of catalogue size. Not pinned by a spec: the fixture mock serves three
-products, so this bound is verified by that harness rather than by CI.
+independent of catalogue size. **Pinned by CI since 2026-10-22.** The fixture mock gained a
+slow-catalogue mode (`MOCK_CATALOG_SLOW=1`: a synthetic catalogue of `MOCK_CATALOG_SLOW_SIZE`
+products, every one VERIFIED, each detail read delayed by `MOCK_CATALOG_SLOW_DELAY_MS`), because
+three fixture products can never reach a 15 s budget. `e2e/sitemap-budget.spec.ts` starts a SECOND
+instance of that mock, points the server API root at it and calls `indexableComponentSlugs()`
+itself, then asserts what only a real deadline can show: products are left unverified, the call
+returns within the budget plus ONE in-flight read's timeout, what it did verify is a clean prefix in
+keyset order, the reads overlapped (the same reads sequentially would take far longer), and the log
+names the budget and the count left unverified. Measured: 40 products at 2 s each -> 32 verified in
+16.2 s, 8 named as unverified, `RESULT` 237/237 in the suite. Proven RED by deleting the deadline
+check (`Date.now() >= deadline`): all 40 verified and the prefix assertion failed, so the spec pins
+the bound rather than the harness's own arithmetic.
 
 #### S19 — JSON-LD gating + performance budgets (2 h)
 **Goal:** Product + Offer JSON-LD (MAD) only when `price_status` is verified — never demo
@@ -1431,6 +1441,37 @@ text equivalent; 360px compare falls back to stacked cards.
 2. Playwright 360 px wizard E2E against staging = green.
 3. Staging run log shows zero unhandled console errors and zero 5xx.
 
+### Post-M3 refinement (not on the critical path)
+
+#### S27 — Budget slider: curve-mapped thumb (1.5 h)
+**Goal:** Put the realistic part of the range under the thumb: the slider's POSITION on the rail
+is mapped through a curve while its VALUE stays on S8's 500 MAD grid, so 500 -> 7 000 MAD stops
+occupying about 0.7 % of a 360 px track. S8 recorded this as a known limitation rather than a
+defect: the linear rail is exactly what S8's definition of done asked for, and every realistic
+budget sits under the first thumb-width.
+**Depends on:** S8. Deliberately outside the M3 gate — nothing else in the product is waiting on
+it, and the rail is correct, only unhelpful in its first centimetre.
+**Definition of done:**
+- Position <-> value is ONE pair of pure functions, inverses of each other and pinned by a unit
+  check, preserving both the 500 MAD step and the true 1 000 000 maximum (which is ON the grid:
+  500 + 1 999 x 500 — S8's own arithmetic check).
+- Keyboard semantics are STATED, not inherited: the arrow keys' value delta is written down (the
+  same 500 DH as today, or a documented different rule), Home stays 500 and End stays 1 000 000,
+  and `aria-valuetext` still announces DH.
+- S8's synchronisation rule survives untouched: the field keeps what was typed, the URL holds the
+  typed amount, and the note under the rail still says where the thumb sits and which number is
+  kept.
+- The Arabic page mirrors GEOMETRICALLY on a 360 px viewport, as S20's RTL specs require.
+**Test scenarios:**
+1. At 360 px, a 7 000 MAD budget puts the thumb past 20 % of the rail (measured on the element's
+   own box; today it is about 0.7 %).
+2. Position/value round-trips exactly for 500, 7 000, 20 000 and 1 000 000, and for a typed
+   off-grid amount through S8's snap rule.
+3. ArrowRight/ArrowLeft move by the documented amount from three starting points; Home and End are
+   unchanged; `aria-valuetext` is in DH in both locales.
+4. `/ar/configurer`: the thumb reaches the inline end for the maximum and the arrows still move it
+   in the reading direction.
+
 ### Dependency map (summary)
 
 - **Contract-dependent sprints:** S4 (drift gate), S9 (CD-1), S13 (CD-2), S16 (CD-4), S17
@@ -1438,5 +1479,5 @@ text equivalent; 360px compare falls back to stacked cards.
   on the API being final.
 - **Hard order:** S1 → {S2, S4, S5} → S3 → S6 → S7 → {S8, S9} → S10 → S11 → {S12, S13, S14,
   S15} → {S16, S17} → {S18, S19} → S20 → S21 → S22 → S26. W5 (S23–S25) is post-beta only.
-- **Total:** 26 sprints, each 1–2 h of agent work. Nominal sums: W0–W4 + exit ≈ 40 h,
-  W5 ≈ 6 h.
+- **Total:** 27 sprints — the 26 on the path to M3 plus S27's post-M3 slider refinement — each
+  1–2 h of agent work. Nominal sums: W0–W4 + exit ≈ 40 h, W5 ≈ 6 h, S27 ≈ 1.5 h.

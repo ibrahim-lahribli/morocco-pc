@@ -31,6 +31,18 @@
  * The same state can be sent as an `x-mock-state` header instead, and `delay`
  * works on any route. CORS is open (`*`): the mock is never deployed, and the
  * real CORS policy is proven on the API side (P2 Sprint 4).
+ *
+ * ## Slow catalogue mode (S18's sitemap budget)
+ *
+ * `MOCK_CATALOG_SLOW=1` swaps BOTH catalogue routes for a synthetic catalogue of
+ * `MOCK_CATALOG_SLOW_SIZE` products (default 40), every one of them VERIFIED, and
+ * makes each detail read wait `MOCK_CATALOG_SLOW_DELAY_MS` (default 1000). It is a
+ * separate INSTANCE of this mock, not a per-request state: `/sitemap.xml`'s walk
+ * reads the detail route without a query string, so a state a caller could only
+ * set on one request cannot describe the walk. Three fixture products can never
+ * reach a 15 s budget, and that is the whole reason this mode exists — it is what
+ * `e2e/sitemap-budget.spec.ts` starts to hold `indexableComponentSlugs()` to its
+ * bound instead of measuring it once by hand.
  */
 
 import http from "node:http";
@@ -53,6 +65,31 @@ import {
 
 const PORT = Number(process.env.MOCK_API_PORT || 3211);
 const SLOW_DEFAULT_MS = 8000;
+
+/** The slow catalogue: see the header. Off unless this instance was started for it. */
+const CATALOG_SLOW = process.env.MOCK_CATALOG_SLOW === "1";
+const CATALOG_SLOW_SIZE = Number(process.env.MOCK_CATALOG_SLOW_SIZE || 40);
+const CATALOG_SLOW_DELAY_MS = Number(process.env.MOCK_CATALOG_SLOW_DELAY_MS || 1000);
+
+/**
+ * The synthetic catalogue, keyed by slug. Every product is VERIFIED and carries
+ * one verified offer, so `componentIndexable()` says yes to all of them and the
+ * only thing that can shorten a walk is the bound under test — a mixture of
+ * classes would leave the spec unable to say why an entry is missing.
+ *
+ * Slugs are zero-padded (`produit-000`), so the keyset order the API promises is
+ * also the numeric order, and a truncated walk reads as a prefix rather than a
+ * scatter.
+ */
+const CATALOG_SLOW_PRODUCTS = CATALOG_SLOW
+  ? Object.fromEntries(
+      Array.from({ length: CATALOG_SLOW_SIZE }, (_, index) => {
+        const slug = `produit-${String(index).padStart(3, "0")}`;
+        const template = CATALOG_PRODUCTS_BY_SLUG["rtx-4060-8gb"];
+        return [slug, { ...template, slug, display_name: `Produit ${slug}` }];
+      }),
+    )
+  : {};
 
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
@@ -213,6 +250,22 @@ async function handle(req, res) {
 
   if (req.method === "GET" && path === "/v1/catalog/products") {
     if (state === "503") return sendError(res, "unavailable");
+    if (CATALOG_SLOW) {
+      // One page: the walk's pagination is the listing's own behaviour, and the
+      // bound under test is the CONFIRMATION phase, not the cursor loop.
+      send(res, 200, {
+        products: Object.values(CATALOG_SLOW_PRODUCTS).map((product) => ({
+          slug: product.slug,
+          display_name: product.display_name,
+          category: product.category,
+          from_price: product.offers[0].price,
+          offer_class: product.offers[0].offer_class,
+          has_offer: true,
+        })),
+        next_cursor: null,
+      });
+      return;
+    }
     send(res, 200, CATALOG_LIST_OK);
     return;
   }
@@ -223,6 +276,15 @@ async function handle(req, res) {
     // echo the requested slug back inside ONE fixture body, which made the
     // 404 path untestable and let a page render a product nothing serves.
     const slug = decodeURIComponent(productMatch[1]);
+    const slowProduct = CATALOG_SLOW_PRODUCTS[slug];
+    if (slowProduct !== undefined) {
+      // The delay is what makes the budget observable: a walk that respected no
+      // bound would finish all of these, and this spec would then fail on the
+      // prefix rather than pass on a coincidence.
+      await new Promise((resolve) => setTimeout(resolve, CATALOG_SLOW_DELAY_MS));
+      send(res, 200, slowProduct);
+      return;
+    }
     const product = CATALOG_PRODUCTS_BY_SLUG[slug];
     if (state === "404" || product === undefined) return sendError(res, "notFound");
     send(res, 200, product);

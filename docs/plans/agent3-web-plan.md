@@ -2,17 +2,18 @@
 
 **What this file is.** The PLAN for the frontend: product shape, stack, the contract dependencies
 it consumes, the design direction, the W0–W5 phases and the M3 exit gate. The sprint-level
-breakdown (S1–S26, each with its definition of done and test scenarios) lives in
+breakdown (S1–S27, each with its definition of done and test scenarios) lives in
 [agent3-web-sprints.md](agent3-web-sprints.md); those sprints are sprints OF this file, not a
 separate plan. Everything here is scoped to `apps/web/`, a standalone package with its own manifest
 and lockfile (OD4) that does not touch the engine or root CI (V14).
 
-**Status (2026-10-21).** PLAN REGISTERED, with the design registered as the S2/S3 source
+**Status (2026-10-22).** PLAN REGISTERED, with the design registered as the S2/S3 source
 (§3 — Stitch, not Figma: the Figma copy is an unread export target). **W0 is COMPLETE — S1–S6 are
 done, including the dedicated `web.yml` job and its Lighthouse budgets, which were proven on
 GitHub on 2026-10-21; W1 is COMPLETE (S7–S10, the wizard shell, the budget step, the
 profile-gated step flow and the POST hand-off); W2 is COMPLETE (S11–S15); W3 is COMPLETE
-(S16, S17, S18 and S19's gating are DONE); W4 (the Arabic/RTL pass, S20) is next, and W5 and
+(S16, S17, S18 and S19's gating are DONE); W4 is IN PROGRESS — S20 (the Arabic/RTL pass) is
+DONE 2026-10-22, and S21/S22 remain — and W5 and
 the M3 gate are not started.**
 The design tokens now exist as CODE (`apps/web/app/globals.css`, Tailwind v4 `@theme`, OKLCH) with
 a grep gate and a measured contrast matrix; their provenance and the four deliberate deviations are in
@@ -276,9 +277,13 @@ because Satori has no Arabic face.
 
 ### W4 — hardening
 
-Arabic/RTL pass, WCAG AA, empty/error/rate-limited states, legal pages wired (H4).
+Arabic/RTL pass, WCAG AA, legal pages wired (H4). (The empty/error/rate-limited states this
+phase used to list shipped in S14, which is W2.)
 
-**Today:** not started (S20–S22).
+**Today:** **S20 is DONE (2026-10-22)** — both locales render every shipped route, the guides
+have Arabic bodies, the `hreflang` set is `fr` + `ar` + `x-default` and the sitemap lists the
+`ar` pair, and `check:i18n` fails on a locale key/placeholder mismatch. **S21 (WCAG AA + Web
+Interface Guidelines audit) and S22 (legal pages, analytics) are not started.**
 
 ### W5 — post-beta (excluded from M3)
 
