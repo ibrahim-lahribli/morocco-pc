@@ -8,6 +8,7 @@ import { preload } from "react-dom";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { routing } from "@/i18n/routing";
 import { localePath } from "@/lib/i18n/paths";
+import { siteOrigin } from "@/lib/seo/site";
 import Link from "next/link";
 
 import "../globals.css";
@@ -102,6 +103,13 @@ export async function generateMetadata({
   const safe = hasLocale(routing.locales, locale) ? locale : routing.defaultLocale;
   const t = await getTranslations({ locale: safe, namespace: "home" });
   return {
+    // S18: the ONE origin every absolute URL resolves from — file-based OG
+    // images, and any relative metadata a future page adds. Deliberately
+    // configuration (`lib/seo/site.ts`), never the request: a canonical built
+    // from a Host header tells a crawler that a preview deployment is the
+    // document and production is its duplicate. Each page still states its own
+    // absolute canonical, so this is a base, not the answer.
+    metadataBase: new URL(siteOrigin()),
     title: `morocco-pc — ${t("title")}`,
     description: t("intro"),
   };

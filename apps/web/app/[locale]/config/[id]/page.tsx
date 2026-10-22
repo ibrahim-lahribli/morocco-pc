@@ -102,6 +102,11 @@ export async function generateMetadata({
   const ogDescription =
     outcome.kind === "ok" ? t("share.ogDescription") : t("errorBody");
   const robots = { index: false, follow: false };
+  // S18: this page is noindex by design, and its canonical is the URL the
+  // request named — the SAME origin the share bar and og:url use, because a
+  // result is a per-request address, not a document with a configured home. No
+  // `languages` set: a page that must not be indexed has no language cluster to
+  // declare, and emitting one would advertise a URL the crawler may not keep.
 
   // `description` is set here so the layout's HOME intro cannot leak onto
   // a searched result page, and metadataBase is the ONE origin every
@@ -111,6 +116,7 @@ export async function generateMetadata({
     title: `morocco-pc — ${t("title")}`,
     description: ogDescription,
     robots,
+    alternates: { canonical: url },
     openGraph: {
       siteName: "morocco-pc",
       type: "website",

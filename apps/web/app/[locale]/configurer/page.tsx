@@ -6,6 +6,7 @@ import { Suspense } from "react";
 
 import { Skeleton } from "@/components/ui";
 import { routing } from "@/i18n/routing";
+import { pageAlternates } from "@/lib/seo/site";
 import type { AppLocale } from "@/lib/i18n/format";
 import type { WizardCopy } from "@/lib/wizard/copy";
 import { Wizard } from "./wizard";
@@ -40,6 +41,9 @@ export async function generateMetadata({
   return {
     title: `morocco-pc — ${t("title")}`,
     description: t("intro"),
+    // S18: a step is a query string on this one URL, so every step's canonical
+    // is the wizard itself — without this the four steps compete as four pages.
+    alternates: pageAlternates(safe, "/configurer"),
   };
 }
 

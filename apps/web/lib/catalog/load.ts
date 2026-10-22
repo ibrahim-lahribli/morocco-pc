@@ -35,8 +35,12 @@ import { cache } from "react";
 import {
   ApiError,
   getCatalogProductForServer,
+  isApiConfigured,
+  listCatalogProductsForServer,
+  type CatalogListResponse,
   type CatalogProductResponse,
 } from "../api/client";
+import { componentIndexable } from "./model";
 import { loadPresetCached, presetsForBuild } from "../presets/load";
 import { orderBuilds } from "../result/model";
 
@@ -79,6 +83,95 @@ export async function loadCatalogProduct(slug: string): Promise<CatalogOutcome> 
 
 /** The request-scoped memo: `generateMetadata` and the body cost ONE read. */
 export const loadCatalogProductCached = cache(loadCatalogProduct);
+
+/** Keyset page size, and the hard stop, for the sitemap's catalogue walk. */
+const LIST_PAGE_LIMIT = 100;
+const LIST_PAGE_CAP = 20;
+
+/**
+ * The catalogue slugs whose pages may be indexed — S18's sitemap input.
+ *
+ * Three rules, and each one is a way the obvious shortcut lies:
+ *
+ *   1. **No API configured means no catalogue pages.** The component routes are
+ *      ISR with an EMPTY param list: a build with no API renders none of them, so
+ *      listing any would advertise URLs that 404. (A build that named an API gets
+ *      the real list — this is the same "configured or nothing" rule `load.ts`
+ *      states for the ribbon.)
+ *   2. **The list is a CANDIDATE FILTER, not the verdict.** `GET
+ *      /v1/catalog/products` carries one `offer_class` per product, while
+ *      `componentIndexable()` requires every offer of the product to be VERIFIED.
+ *      A product with one verified and one placeholder offer is indexable-looking
+ *      in the list and is NOT indexable in fact, so each candidate is confirmed
+ *      through the product read — the same predicate the page's `robots` tag and
+ *      its JSON-LD gate use, so the sitemap cannot disagree with the page.
+ *   3. **A failure lists FEWER pages, never a broken sitemap.** A dead list read
+ *      returns `[]` (with a line naming the cause); a dead detail read skips that
+ *      one slug. Throwing would either fail a build over an optional API or hand
+ *      a crawler a 500, and a shorter sitemap is the honest degradation. The
+ *      mechanism is therefore "only indexable pages", never "everything".
+ *
+ * Order is the API's keyset order (by slug), so two regenerations of an unchanged
+ * catalogue emit the same document.
+ */
+export async function indexableComponentSlugs(): Promise<string[]> {
+  if (!isApiConfigured()) return [];
+
+  const candidates = new Set<string>();
+  let cursor: string | null = null;
+  let truncated = false;
+
+  for (let page = 0; page < LIST_PAGE_CAP; page += 1) {
+    let body: CatalogListResponse;
+    try {
+      body = await listCatalogProductsForServer(
+        // `limit` is a STRING in the contract (a numeric pattern), not a number.
+        { limit: String(LIST_PAGE_LIMIT), ...(cursor === null ? {} : { cursor }) },
+        {
+          revalidate: CATALOG_REVALIDATE_SECONDS,
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        },
+      );
+    } catch (cause) {
+      console.warn(
+        "sitemap: catalogue list unavailable; no component pages listed",
+        cause instanceof Error ? cause.message : cause,
+      );
+      return [];
+    }
+
+    for (const product of body.products) {
+      if (product.has_offer && product.offer_class === "VERIFIED") {
+        candidates.add(product.slug);
+      }
+    }
+
+    if (body.next_cursor === null || body.next_cursor === "") break;
+    cursor = body.next_cursor;
+    if (page === LIST_PAGE_CAP - 1) truncated = true;
+  }
+
+  if (truncated) {
+    console.warn(
+      `sitemap: catalogue listing stopped after ${LIST_PAGE_CAP} pages; the sitemap is incomplete`,
+    );
+  }
+
+  const slugs: string[] = [];
+  for (const slug of candidates) {
+    try {
+      const outcome = await loadCatalogProductCached(slug);
+      if (outcome.kind === "ok" && componentIndexable(outcome.product)) slugs.push(slug);
+    } catch (cause) {
+      console.warn(
+        "sitemap: could not verify a catalogue product; leaving it out",
+        slug,
+        cause instanceof Error ? cause.message : cause,
+      );
+    }
+  }
+  return slugs;
+}
 
 /**
  * The preset builds that use this product, cheapest preset first.

@@ -1064,6 +1064,101 @@ OG image generation for preset/guide pages.
    assert dimensions and weight in CI).
 4. robots.txt references the sitemap and returns 200.
 
+**Status: DONE 2026-10-21 — as built.** `/sitemap.xml` and `/robots.txt` exist as Next metadata
+routes, every shipped page carries an absolute self-referencing canonical plus `fr` +
+`x-default` `hreflang`, and every preset page has its own 1200 x 630 card.
+
+**The origin comes from CONFIGURATION, and a bad value fails the build.** This was S18's one open
+decision: a prerendered page cannot call `headers()` without becoming dynamic, so the canonical
+origin had to come from somewhere other than the request. It is `NEXT_PUBLIC_SITE_URL`
+(`lib/seo/site.ts`), read at build/request time, with `http://localhost:3210` as the UNSET
+default — so no build depends on ambient state and a local crawl is self-consistent. A MALFORMED
+value throws (`exemple.ma` with no scheme, a non-http protocol, or an origin carrying a path)
+rather than falling back, because a fallback would ship exactly the localhost-canonical defect the
+variable exists to prevent. The layout sets `metadataBase` from the same helper, and every page's
+canonical is ABSOLUTE anyway, so a future base change cannot silently re-root it. A deployment
+MUST set it; the name is documented in `apps/web/.env.example`.
+
+**Every shipped route names itself, including the noindex ones.** Home, `configurer`, preset,
+component, guides index, guide and `/config/[id]` all carry a canonical — the result page's is the
+request's own URL, matching its S15 `og:url`, because a result is a per-request address rather
+than a document with a configured home. The three internal design pages (`kit`, `format`, `tokens`)
+stay canonical-free: they are `noindex` style sheets, not crawl surface, and their metadata is
+static.
+
+**hreflang is `fr` + `x-default`, both naming the FRENCH page (V9).** Not the page's own locale:
+before S20 the Arabic side is not a translated surface, and `/ar/guides/{slug}` is a 404, so an
+`ar` alternate would annotate a route that does not exist. `e2e/seo.spec.ts` fetches every
+annotated URL and requires a 200 — the "no hreflang to a 404" half of the DoD is a live assertion,
+not a review note.
+
+**The sitemap is DYNAMIC, and that is a correctness choice.** A metadata route is static by
+default, which would have frozen a build-time catalogue into the artifact: CI builds with no API,
+so the committed sitemap would describe the fixture site forever. `force-dynamic` renders it per
+request; the reads under it are still `next.revalidate`-cached, so a crawl costs a few cached API
+reads. It cannot 500 either — both loaders degrade to FEWER entries
+(`indexableComponentSlugs` returns `[]` on a dead list, `presetsForBuild` logs and continues), and
+a shorter sitemap is the honest failure for a document whose contract is "only indexable pages".
+
+**"Only indexable" reuses the predicates the pages already use.** Presets are gated by
+`presetIndexable()` (API-sourced AND every build verified) and components by
+`componentIndexable()`. The catalogue walk is two-phase on purpose: `GET /v1/catalog/products`
+carries ONE `offer_class` per product, so it only nominates candidates, and a per-candidate
+product read decides — a product with one verified and one placeholder offer is indexable-looking
+in the list and not indexable in fact. `/config/` is excluded permanently and asserted absent.
+URLs are French only; `ar` URLs and `ar` alternates are S20's, on the same V9 boundary.
+
+**robots.txt disallows nothing, deliberately.** The obvious candidate — `/config/[id]` — answers
+`noindex, follow` in its own HTML, and a `Disallow` would hide that tag from the crawler, which is
+how a URL-only index entry happens. `Sitemap:` is absolute, from the same helper.
+
+**The preset card is a file, not a render per fetch.** `opengraph-image.tsx` is a function of the
+slug alone (no API, no translations, no clock), so it is deterministic. It needed its own
+`generateStaticParams`: without one the image route was `ƒ` in the build table even though the
+page it belongs to was `●` — measured, then fixed, and the build now lists four `●` card routes
+for the two fixture budgets x two locales. The card carries the BUDGET, never a build total, so a
+share preview cannot claim a provenance the page does not have, and its text is French-only like
+S15's result card (Satori has no Arabic face).
+
+Measured on the final tree: **215/215** Playwright specs (7 new in `e2e/seo.spec.ts`),
+`typecheck`, `lint` (0 errors, the pre-existing `postcss.config.mjs` warning), `check:tokens`
+(62 files, with one more hex exemption for the new Satori card), `check:i18n` (60),
+`check:api-types`, `npm run build` exit 0 with `/[locale]/[presetSlug]/opengraph-image` `●` for
+four routes and `/sitemap.xml` + `/robots.txt` `ƒ`, and `test:lighthouse` exit 0 (median LCP
+2328 / 2325 ms, CLS 0, script 145 981 / 150 545 B — unchanged by a metadata-only sprint). The
+sitemap was checked in both directions against the fixture mock (the 20 000 API preset and the
+verified GPU listed; 9 000, 15 000, the offer-less RAM kit and the long-name GPU absent) and with
+NO API configured (four entries, HTTP 200, no error). The card's PNG was decoded: 1200 x 630,
+40 190 B, and no ink in the right or bottom margin, so nothing is clipped.
+
+Not done here, deliberately: the `ar` URLs, `ar` alternates and translated guides are S20's;
+component names inside `BuildCard` are still not links (S17's boundary); and the canonical origin
+is UNSET in CI, so the suite asserts against `http://localhost:3210` — a deployment that forgets
+`NEXT_PUBLIC_SITE_URL` will advertise localhost, which the helper documents and the spec pins as
+the local default.
+
+**Re-verified 2026-10-22, with one caveat the audit above did not state.** Green on this tree:
+`typecheck`, `lint` (0 errors, the same `postcss.config.mjs` warning), `check:tokens` (62 files),
+`check:i18n` (60), `check:api-types`, `next build` (four `●` card routes, `ƒ` sitemap + robots),
+**215/215** Playwright specs under `E2E_BROWSER_API=1` — 214 + 1 pre-existing skip without it,
+which is why a bare local `npm test` reports 214 passed — and `test:lighthouse` exit 0. The
+sitemap was re-measured in both directions on a production build: with the fixture API it lists
+six URLs (home, the guide index, both guides, the 20 000 preset, the verified GPU) and all six
+answer 200; with NO API and with a CONFIGURED BUT DEAD API (`http://localhost:3999`) it answers
+**200 with four** and logs the degradation; a malformed `NEXT_PUBLIC_SITE_URL=https://exemple.ma/fr`
+fails `next build` (exit 1) naming the variable, and a valid one (`https://exemple.ma`) moves
+`/sitemap.xml` and `/robots.txt` to that origin. The card was decoded again: PNG signature,
+1200 x 630, 40 190 B, and it renders unclipped at 1400 px.
+
+**The caveat: `NEXT_PUBLIC_SITE_URL` is a BUILD-TIME value for every prerendered page.** Measured
+the same day: a server started with `NEXT_PUBLIC_SITE_URL=https://exemple.ma` but from a build
+without it serves `/sitemap.xml` and `/robots.txt` at `https://exemple.ma` **while `/fr` still
+answers `http://localhost:3210/fr`**, because a prerendered canonical is baked and the two crawl
+routes are `force-dynamic`. That is the split the origin module exists to prevent, so the contract
+is: set the variable for `next build` and let `next start` inherit it — the helper's header and
+`apps/web/.env.example` now say so, and `e2e/seo.spec.ts` cannot catch it because the suite builds
+and serves from one environment.
+
 #### S19 — JSON-LD gating + performance budgets (2 h)
 **Goal:** Product + Offer JSON-LD (MAD) only when `price_status` is verified — never demo
 prices — and the W3 performance budgets enforced in CI.

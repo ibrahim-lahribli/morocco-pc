@@ -9,6 +9,7 @@ import { routing } from "@/i18n/routing";
 import { findGuide, GUIDES } from "@/lib/guides/registry";
 import { formatDate, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
+import { pageAlternates } from "@/lib/seo/site";
 
 /**
  * `/{locale}/guides/{slug}` — one editorial guide, from MDX (S17).
@@ -47,7 +48,14 @@ export async function generateMetadata({
   if (guide === null || safe !== "fr") {
     return { robots: { index: false, follow: false } };
   }
-  return { title: guide.title, description: guide.description };
+  return {
+    title: guide.title,
+    description: guide.description,
+    // Guides are French-only (S17), so this page's canonical is its own French
+    // URL and `/ar/guides/...` is a 404 — which is exactly why no `ar` alternate
+    // is emitted anywhere (V9): a hreflang must never name a route that 404s.
+    alternates: pageAlternates(safe, `/guides/${guide.slug}`),
+  };
 }
 
 export default async function GuidePage({

@@ -130,6 +130,20 @@ export function serverApiBaseUrl(): string {
   );
 }
 
+/**
+ * Whether an API base was NAMED in the environment.
+ *
+ * Three callers depend on this distinction (S16, S17, S18): a build with no API
+ * configured must render the committed fixtures deterministically and offline,
+ * while a deployment that named an API gets real data. Falling back to
+ * `localhost:3000` is a request-time convenience; treating it as "configured"
+ * would make every build depend on whatever happened to be listening.
+ */
+export function isApiConfigured(): boolean {
+  const raw = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
+  return typeof raw === "string" && raw.trim() !== "";
+}
+
 function parseRetryAfter(response: Response): number | undefined {
   const header = response.headers.get("retry-after");
   if (header === null) {
@@ -389,16 +403,42 @@ export async function getRecommendationForStatic(
   );
 }
 
-export async function listCatalogProducts(
-  query: CatalogListQuery = {},
-  init?: RequestInit
-): Promise<CatalogListResponse> {
+/** `/v1/catalog/products` + its query string, built once for both callers. */
+function catalogListPath(query: CatalogListQuery = {}): string {
   const search = new URLSearchParams();
   if (query.role !== undefined) search.set("role", query.role);
   if (query.limit !== undefined) search.set("limit", query.limit);
   if (query.cursor !== undefined) search.set("cursor", query.cursor);
-  const suffix = search.size === 0 ? "" : `?${search.toString()}`;
-  return (await request<CatalogListResponse>(`/v1/catalog/products${suffix}`, init)).body;
+  return search.size === 0
+    ? "/v1/catalog/products"
+    : `/v1/catalog/products?${search.toString()}`;
+}
+
+export async function listCatalogProducts(
+  query: CatalogListQuery = {},
+  init?: RequestInit
+): Promise<CatalogListResponse> {
+  return (await request<CatalogListResponse>(catalogListPath(query), init)).body;
+}
+
+/**
+ * GET /v1/catalog/products, on the SERVER (S18's sitemap).
+ *
+ * Same two differences as the other `…ForServer` reads, and one more that is
+ * specific to this route: the sitemap needs the WHOLE catalogue, one keyset page
+ * at a time, so `cursor` is part of the query it passes through. Cached for the
+ * revalidation window because a catalogue listing changes when the catalogue
+ * does, not per crawler.
+ */
+export async function listCatalogProductsForServer(
+  query: CatalogListQuery,
+  init: { revalidate: number; signal?: AbortSignal },
+): Promise<CatalogListResponse> {
+  return getJson<CatalogListResponse>(
+    catalogListPath(query),
+    { next: { revalidate: init.revalidate }, signal: init.signal },
+    serverApiBaseUrl(),
+  );
 }
 
 /** `/v1/catalog/products/:slug`. The slug is DATA, so it is encoded here. */

@@ -10,6 +10,7 @@ import { formatDate, formatMoney, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
 import { loadPresetCached, presetsForBuild } from "@/lib/presets/load";
 import { parsePresetSlug, presetIndexable } from "@/lib/presets/model";
+import { pageAlternates } from "@/lib/seo/site";
 import { orderBuilds } from "@/lib/result/model";
 import { asVerifiedPricedBuild, jsonLdScript, productJsonLd } from "@/lib/result/structured-data";
 import { toHref, type Answers } from "@/lib/wizard/model";
@@ -84,6 +85,9 @@ export async function generateMetadata({
   return {
     title: t("title", { budget }),
     description: t("description", { budget }),
+    // S18: self-referencing, with `fr` + `x-default` (V9; the `ar` alternate is
+    // S20's, once every advertised URL exists in both locales).
+    alternates: pageAlternates(safe, `/${presetSlug}`),
     robots: {
       index: presetIndexable(page.source, orderBuilds(page.recommendation.builds)),
       // While noindexed, the links out of this page are still worth following:

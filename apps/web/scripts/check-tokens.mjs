@@ -73,14 +73,16 @@ function walk(dir, out = []) {
 }
 
 /**
- * The ONE file allowed a raw hex outside globals.css: the OG share card
- * (S15), whose renderer (Satori) knows neither CSS nor Tailwind - its hex
- * literals ARE the token values globals.css compiles to, named in the
- * card's own header. Only the hex rule exempts it; the palette and
- * physical-side rules still read the file.
+ * The files allowed a raw hex outside globals.css: the OG share cards
+ * (S15's result card, S18's preset card), whose renderer (Satori) knows neither
+ * CSS nor Tailwind - their hex literals ARE the token values globals.css
+ * compiles to, named in each card's own header. Only the hex rule exempts them;
+ * the palette and physical-side rules still read the files.
  */
 const HEX_EXEMPT = new Set([
   path.join(ROOT, "app", "[locale]", "config", "[id]", "opengraph-image.tsx"),
+  // S18's preset card: the same renderer, the same reason.
+  path.join(ROOT, "app", "[locale]", "[presetSlug]", "opengraph-image.tsx"),
 ]);
 
 const files = TARGETS.flatMap((target) => walk(path.join(ROOT, target)));

@@ -81,7 +81,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `scripts/lib/db-url.js` | `TEST_DATABASE_URL` guard for write-capable tests |
 | `src/recommendation/` | ALL engine application code — the pipeline stages |
 | `apps/api/` | The HTTP API (Decision 36): Fastify routes, TypeBox contracts, the SQL repository, a Dockerfile. TEST DB only unless `API_ALLOW_SHARED=1`; no engine logic, no frontend |
-| `apps/web/` | The web app (Next.js 16 App Router, Tailwind v4 tokens, next-intl fr/ar): wizard, results, preset, component and guide routes, a zero-dependency fixture mock, and its own gates (`typecheck`, `lint`, `check:tokens`, `check:i18n`, `check:api-types`, Playwright at 360 px, Lighthouse budgets). Own `package.json`/lockfile and `.github/workflows/web.yml`; no secrets, no database, no engine logic |
+| `apps/web/` | The web app (Next.js 16 App Router, Tailwind v4 tokens, next-intl fr/ar): wizard, results, preset, component and guide routes, its own crawl surface (`sitemap.xml`, `robots.txt`, canonical + `fr`/`x-default` `hreflang`, per-preset OG cards, all off a configured `NEXT_PUBLIC_SITE_URL`), a zero-dependency fixture mock, and its own gates (`typecheck`, `lint`, `check:tokens`, `check:i18n`, `check:api-types`, Playwright at 360 px, Lighthouse budgets). Own `package.json`/lockfile and `.github/workflows/web.yml`; no secrets, no database, no engine logic |
 
 `src/recommendation/` has one directory per pipeline stage: `compatibility`, `candidates`,
 `offers`, `filtering`, `retention`, `assembly`, `scoring`, `query`, `ranking`, `persistence`,
@@ -267,7 +267,11 @@ recorded: the upload needed `include-hidden-files: true` because `.lighthouseci`
 directory and `upload-artifact` skips hidden files by default — without it the step reports
 success and stores nothing. S19 then promoted the three assertions to `error` with
 `aggregationMethod: "median"` (2026-10-21), and added the verified-price JSON-LD gate in
-`apps/web/lib/result/structured-data.ts`.
+`apps/web/lib/result/structured-data.ts`. S17 then added the component and guide routes, and S18 the
+crawl surface: `e2e/seo.spec.ts` (7 specs) brings the suite to **215/215** on the 2026-10-21 tree,
+`next build` reports the four per-preset OG images as `●` and `/sitemap.xml` + `/robots.txt` as
+`ƒ` (dynamic on purpose — see the sprint board), and the job's command list is unchanged because
+the new spec runs inside `npm test`.
 
 **The scheduled job HAS now run, twice, on 2026-10-18** (`workflow_dispatch` on `agent/platforms`;
 runs 39119596060 and 39120485573). Both doubts that could only be settled by a real run are now

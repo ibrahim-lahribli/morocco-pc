@@ -8,6 +8,7 @@ import { routing } from "@/i18n/routing";
 import { GUIDE_MANIFEST } from "@/lib/guides/manifest";
 import { formatDate, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
+import { pageAlternates } from "@/lib/seo/site";
 
 /**
  * `/{locale}/guides` — the editorial index (S17).
@@ -36,9 +37,19 @@ export async function generateMetadata({
   const t = await getTranslations({ locale: safe, namespace: "guides" });
 
   if (safe !== "fr") {
-    return { title: t("frOnlyTitle"), robots: { index: false, follow: true } };
+    // The Arabic note is thin and untranslated, so it stays out of the index —
+    // but it is still a page, and a page names itself (S18).
+    return {
+      title: t("frOnlyTitle"),
+      robots: { index: false, follow: true },
+      alternates: pageAlternates(safe, "/guides"),
+    };
   }
-  return { title: t("title"), description: t("intro") };
+  return {
+    title: t("title"),
+    description: t("intro"),
+    alternates: pageAlternates(safe, "/guides"),
+  };
 }
 
 export default async function GuidesIndexPage({

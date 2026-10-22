@@ -38,6 +38,7 @@ import { cache } from "react";
 import {
   getPresetsForServer,
   getRecommendationForStatic,
+  isApiConfigured,
   type RecommendationResponse,
 } from "@/lib/api/client";
 
@@ -75,12 +76,6 @@ interface RibbonEntry {
 }
 
 type RibbonRead = { kind: "ok"; entries: RibbonEntry[] } | { kind: "error"; cause: unknown };
-
-/** True only when an API base was NAMED in the environment (see boundary 1). */
-function apiConfigured(): boolean {
-  const raw = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
-  return typeof raw === "string" && raw.trim() !== "";
-}
 
 /**
  * The ribbon for one family, as budgets + pass ids, cheapest first (the order the
@@ -145,7 +140,7 @@ export async function presetsForBuild(): Promise<BuildPreset[]> {
     for (const fixture of PRESET_FIXTURES) {
       if (fixture.useCase === family.useCase) add(family, fixture.budget);
     }
-    if (!apiConfigured()) continue;
+    if (!isApiConfigured()) continue;
     const ribbon = await readRibbon(family, BUILD_TIMEOUT_MS);
     if (ribbon.kind !== "ok") {
       console.warn(
@@ -193,7 +188,7 @@ export async function loadPreset(slug: string): Promise<PresetOutcome> {
         page: { family, budget, slug, source: "api", recommendation },
       };
     }
-  } else if (apiConfigured()) {
+  } else if (isApiConfigured()) {
     // Reachable-but-broken is worth a line; an unconfigured API at build time is
     // the documented normal path and stays quiet.
     console.warn(

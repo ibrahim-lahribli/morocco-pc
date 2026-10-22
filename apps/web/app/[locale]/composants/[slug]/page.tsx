@@ -17,6 +17,7 @@ import { componentAppearancesCached, loadCatalogProductCached } from "@/lib/cata
 import { presentSpecs, SPEC_LABEL_KEYS, type SpecCopy } from "@/lib/catalog/specs";
 import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
+import { pageAlternates } from "@/lib/seo/site";
 
 /**
  * `/{locale}/composants/{slug}` — the catalogue product page (S17).
@@ -94,6 +95,10 @@ export async function generateMetadata({
   return {
     title: t("meta.title", { name: product.display_name, category: categoryLabel }),
     description: t("meta.description", { name: product.display_name }),
+    // S18: the canonical is the product page itself, in the language being
+    // served — and `presetIndexable`/`componentIndexable` decide whether it may
+    // enter the sitemap, not whether it may name itself.
+    alternates: pageAlternates(safe, `/composants/${product.slug}`),
     robots: {
       // The SAME predicate the page's data proves; a demo or indicative price
       // keeps the page out of the index while its links stay followable.

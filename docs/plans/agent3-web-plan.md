@@ -11,8 +11,9 @@ and lockfile (OD4) that does not touch the engine or root CI (V14).
 (§3 — Stitch, not Figma: the Figma copy is an unread export target). **W0 is COMPLETE — S1–S6 are
 done, including the dedicated `web.yml` job and its Lighthouse budgets, which were proven on
 GitHub on 2026-10-21; W1 is COMPLETE (S7–S10, the wizard shell, the budget step, the
-profile-gated step flow and the POST hand-off); W2 is COMPLETE (S11–S15); W3 has S16 and S19's
-gating DONE, with S17 next and S18 not started; W4–W5 and the M3 gate are not started.**
+profile-gated step flow and the POST hand-off); W2 is COMPLETE (S11–S15); W3 is COMPLETE
+(S16, S17, S18 and S19's gating are DONE); W4 (the Arabic/RTL pass, S20) is next, and W5 and
+the M3 gate are not started.**
 The design tokens now exist as CODE (`apps/web/app/globals.css`, Tailwind v4 `@theme`, OKLCH) with
 a grep gate and a measured contrast matrix; their provenance and the four deliberate deviations are in
 [docs/design/TOKEN_MAP.md](../design/TOKEN_MAP.md). The eight base components are built on those
@@ -69,7 +70,7 @@ referenced by no sprint and `OD3` is unused; they are not invented here.
 | V4 | Explanation text is a string today, so copy cannot be composed from codes | **PARTIAL (S13)** — both branches ship: the string verbatim when `reasons[]` is absent, catalogue lines when it is served. The persisted trace is still prose (CD-2) |
 | V5 | Catalogue names carry a `Seed ` prefix; the UI must use `display_name` and never render "Seed", `SEED_UNVERIFIED` or `TestCompat` | `display_name` available since v1.2 |
 | V6 | A price is two facts — `offer_class` and `price_status` — and showing one without the other misleads | **DONE (S12)** — each card derives démo/indicatif/vérifié from BOTH columns, so an all-seed pass no longer hides inside "indicatif" |
-| V9 | `hreflang` for `ar` cannot be emitted before the `ar` routes exist | deferred to S20 by design |
+| V9 | `hreflang` for `ar` cannot be emitted before the `ar` routes exist | **PARTIAL (S18)** — every page emits `fr` + `x-default` and the spec fetches each annotated URL for a 200; the `ar` alternates and `ar` sitemap URLs are S20's, whose absence is deliberate (`/ar/guides/...` is a 404 today) |
 | V10 | 429 must be a first-class state with `Retry-After`, not a generic error | **DONE (S10)** — the countdown, the disable, and the re-enable. S10 also found the header was unreadable cross-origin: the API now lists `Retry-After` and `X-Request-Id` in its CORS `exposedHeaders`, without which `fetch` returns both as null |
 | V11 | Money and dates must go through `Intl` (`fr-MA`), never hand-formatted | **DONE (S5)** — `lib/i18n/format.ts`; `npm run check:i18n` fails on inline Intl, a runtime-locale method, a hand-written amount or a literal date |
 | V12 | The budget input needs both a 500 MAD slider and a free numeric field, clamped honestly | not started |
@@ -249,10 +250,13 @@ from the ribbon, reuses S11's build card, stays `noindex` until an API-served pa
 verified, and now carries S19's enforced 170 KB script budget. S19's gating landed 2026-10-21 too.
 **S17 is DONE (2026-10-21)**: `/{locale}/composants/{slug}` renders a catalogue product (spec row,
 offers with provenance, derived appearances, ISR-cached) from the CD-5 endpoints, and the MDX
-pipeline ships the fr-only guides under `/{locale}/guides`. **S18 (sitemap, robots, canonical,
-hreflang, OG images) is not started** — it needs one open decision first: prerendered pages cannot
-call `headers()` without losing ISR, so the absolute canonical/sitemap origin has to come from a
-configured site URL (with a localhost fallback for tests) rather than from the request.
+pipeline ships the fr-only guides under `/{locale}/guides`. **S18 is DONE (2026-10-21)**: the crawl surface ships —
+`/sitemap.xml` (dynamic, listing only the pages whose own `robots` tag says `index`),
+`/robots.txt` pointing at it, an absolute self-referencing canonical on every shipped route,
+`fr` + `x-default` `hreflang` (V9: no `ar` before S20), and a 1200 x 630 card per preset. The open
+decision closed the way it had to: the origin comes from `NEXT_PUBLIC_SITE_URL` (localhost fallback
+when unset, a hard failure when malformed), never from `headers()`, so prerendered pages keep their
+ISR.
 
 ### W4 — hardening
 
