@@ -7,17 +7,17 @@ breakdown (S1–S27, each with its definition of done and test scenarios) lives 
 separate plan. Everything here is scoped to `apps/web/`, a standalone package with its own manifest
 and lockfile (OD4) that does not touch the engine or root CI (V14).
 
-**Status (2026-10-22).** PLAN REGISTERED, with the design registered as the S2/S3 source
+**Status (2026-10-23).** PLAN REGISTERED, with the design registered as the S2/S3 source
 (§3 — Stitch, not Figma: the Figma copy is an unread export target). **W0 is COMPLETE — S1–S6 are
 done, including the dedicated `web.yml` job and its Lighthouse budgets, which were proven on
 GitHub on 2026-10-21; W1 is COMPLETE (S7–S10, the wizard shell, the budget step, the
 profile-gated step flow and the POST hand-off); W2 is COMPLETE (S11–S15); W3 is COMPLETE
 (S16, S17, S18 and S19's gating are DONE); W4 is COMPLETE — S20 (the Arabic/RTL pass), S21 (the
 WCAG AA audit) and S22 (legal pages, analytics, states) are DONE 2026-10-22 — and S27, the
-post-M3 slider curve, and S23, the compare view, are DONE 2026-10-22, so 24 of the 27 sprints are
-done. What remains is the rest of W5 (S24 and S25, outside the M3 gate on purpose) and S26, the
-M3 verification run, which is BLOCKED on deployment: no web host is chosen and no API origin is
-deployed.**
+post-M3 slider curve, S23, the compare view, and S25's saved-builds half are DONE (2026-10-22 and
+2026-10-23), so 24 of the 27 sprints are done and S25 is half done. What remains is S24 (swap
+inside a build), S25's price-history half and S26, the M3 verification run, which is BLOCKED on
+deployment: no web host is chosen and no API origin is deployed.**
 
 ## 1. Product shape and stack
 
@@ -294,15 +294,15 @@ measurement, the copy review and the state inventory are in
 
 Component detail v2 and compare, swap inside a build (needs CD-8), price history, saved builds.
 
-**Today (2026-10-22): S23 is DONE** — the compare view ships at
-`/{locale}/composants/comparer?slugs=a,b`, with the component page as its entry point; the board’s
-S23 status carries what landed and what it measured. **The other two are not started, and they stay
-outside the M3 gate on purpose.** **S24** (swap inside a build) waits on **CD-8**, the swap
-endpoint, which is not built and which no platform sprint owns; only its
-disabled-with-an-explanation control is buildable, and the DoD forbids simulating a swap. **S25** is
-two halves with different answers: saved builds are `localStorage`-only and can ship now, while
-price history has no data source — `price_history` exists since migration 009 but no API route
-reads it, so the chart would plot fixtures.
+**Today (2026-10-23): S23 is DONE and S25's saved-builds half is DONE** — the compare view ships at
+`/{locale}/composants/comparer?slugs=a,b`, with the component page as its entry point, and the shelf
+ships at `/{locale}/enregistrements`; the board’s S23 and S25 statuses carry what landed and what it
+measured. **S24 and S25's remaining half stay outside the M3 gate on purpose.** **S24** (swap inside
+a build) waits on **CD-8**, the swap endpoint, which is not built and which no platform sprint owns;
+only its disabled-with-an-explanation control is buildable, and the DoD forbids simulating a swap.
+**S25** had two halves with different answers: saved builds were `localStorage`-only and have now
+shipped, while price history still has no data source — `price_history` exists since migration 009
+but no API route reads it, so the chart would plot fixtures.
 
 ## 5. M3 exit gate
 

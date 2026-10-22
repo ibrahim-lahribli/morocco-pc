@@ -7,11 +7,12 @@ keyboard-reachable with visible focus, no raw API enum text rendered, fr copy in
 Contract dependencies (CD-*) and findings (V*) are defined in the plan §2 — the API and engine
 are in progress, so every contract-dependent sprint has a fixtures-first path.
 
-**Board state, 2026-10-22 (S23 landed).** 27 sprints: **24 DONE** (S1–S23 and S27, whose status
-lines below carry the evidence), **2 NOT STARTED** (S24 and S25 — W5/post-beta, deliberately
-outside the M3 gate) and **1 BLOCKED** (S26, which needs a deployed API and a chosen web host).
-What is left is not one block: S24 waits on CD-8, S25 is two halves whose saved-builds half is
-ready while its price history has no data source, and only S26 needs a deployment.
+**Board state, 2026-10-23 (S25's saved-builds half landed).** 27 sprints: **24 DONE** (S1–S23 and
+S27, whose status lines below carry the evidence), **1 HALF DONE** (S25 — saved builds shipped, price
+history still has no data source), **1 NOT STARTED** (S24, W5/post-beta, deliberately outside the M3
+gate) and **1 BLOCKED** (S26, which needs a deployed API and a chosen web host). What is left is not
+one block: S24 waits on CD-8, S25's remaining half waits on an API route for `price_history`, and
+only S26 needs a deployment.
 
 ## Sprints
 
@@ -1522,7 +1523,7 @@ listing**, filtered by `category` in the web layer: the route’s `role` filter 
 vocabulary (`CPU_COOLER`, `RAM`) while a product carries `product_category` (`COOLER`, `MEMORY`),
 and restating that mapping here would be a second vocabulary that can drift.
 
-Measured: **10** compare specs and **318/318** in the full suite with `E2E_BROWSER_API=1`;
+Measured: **11** compare specs and **319/319** in the full suite with `E2E_BROWSER_API=1`;
 `typecheck` and `build` exit 0 (the route reports `ƒ` dynamic, `[slug]` keeps `●`), `lint` 0 errors
 (the pre-existing `postcss.config.mjs` warning), `check:tokens` 72 files, `check:i18n` 70 files + 2
 catalogues, and `e2e/a11y.spec.ts` is now **49** checks — the compare route is audited in BOTH
@@ -1564,10 +1565,37 @@ lands, and alone it proves nothing about the platform path the sprint exists to 
 2. Save a build → survives reload; clearing storage shows the empty state with a CTA.
 3. localStorage quota/unavailable (private mode) → graceful inline notice, no crash.
 
-**Status: NOT STARTED 2026-10-22 — two halves, one blocker; split it.** Saved builds are pure
-`localStorage` work (save, survive reload, an empty state with a CTA, and the quota/private-mode
-notice) and can ship now. Price history cannot: `price_history` has existed since migration 009,
-but no API route reads it — `apps/api/src/` mentions it nowhere — so a chart built today plots
+**Status: HALF DONE 2026-10-23 — saved builds SHIPPED; price history still BLOCKED.** A build can be
+saved from every card, on the results page AND the preset page, and the shelf is
+`/{locale}/enregistrements`. An entry is a POINTER, not a copy — the result id, the engine rank, the
+total the page showed and the local `savedAt` — so the list can never print a price the card it
+links to does not; opening one is a link back to `/config/[id]`, which answers for itself when the
+API no longer serves that id. `localStorage` under `morocco-pc:saved-builds:v1` is the whole store:
+no account, no server, no migration, and the page's own copy says the saves are device-local.
+
+The honesty requirements live in the failure paths, not the happy one. Validation is per RECORD, so a
+corrupt store costs one entry rather than the shelf — the timestamp is validated by PARSING it
+(`Number.isFinite(Date.parse(...))`), because `formatDate` throws `RangeError: Invalid time value` on
+an invalid `Date` and one bad `savedAt` would otherwise blank the page. A store that cannot be READ
+shows a warning and the way forward instead of the empty state: « rien n’a été enregistré » is a
+claim the page cannot make when it cannot see the list. `QuotaExceededError` asks the reader to
+remove one, any other refusal says nothing was saved, and a failed write leaves the previous value in
+place — so no message ever reports a save that did not happen. A removal is announced in a live
+region AND gives focus somewhere to be: the row that owned it is gone, so focus moves to the shelf
+itself (the list, or the empty card), never to the next row's « Retirer » — a held Enter would
+otherwise delete the shelf one item per keypress.
+
+Measured: **344/344** in the full suite with `E2E_BROWSER_API=1`, 23 of them new
+(`e2e/saved.spec.ts` 11, `e2e/saved-model.spec.ts` 12 — the model half needs no browser);
+`typecheck`, `build` (the shelf prerenders `●` per locale) and `lint` (0 errors, the pre-existing
+`postcss.config.mjs` warning) exit 0; `check:tokens` 76 files, `check:i18n` 74 files + 2 catalogues,
+and `e2e/a11y.spec.ts` is **51** checks with the shelf audited in BOTH locales. One existing spec had
+to be scoped, not relaxed: `share.spec.ts` asserted on a page-wide `[aria-live="polite"]`, and a
+result page now legitimately carries one polite region per build card, so those two assertions
+resolve the share bar's own region instead.
+
+The chart half stays BLOCKED for the recorded reason: `price_history` has existed since migration
+009, but no API route reads it — `apps/api/src/` mentions it nowhere — so a chart built today plots
 fixtures. The plan's fixtures-first rule allows that; presenting it as the feature does not.
 
 ### M3 exit gate
@@ -1673,7 +1701,7 @@ component's own arithmetic.
   2026-10-22) — each 1–2 h of agent work. Nominal sums: W0–W4 + exit ≈ 40 h, W5 ≈ 6 h,
   S27 ≈ 1.5 h.
 
-**State, 2026-10-22 (S23 landed):** every node on this map through S22 is DONE, and so are S27 and
-S23, which sit outside it. The hard order’s only remaining node is S26, and a deployment gates it.
-Of the two open W5 sprints, S25’s saved-builds half can start immediately and its chart half waits
-on an API route; S24 waits on CD-8, which nobody has scheduled.
+**State, 2026-10-23 (S25's saved-builds half landed):** every node on this map through S22 is DONE,
+and so are S27, S23 and S25's saved half, which sit outside it. The hard order’s only remaining node
+is S26, and a deployment gates it. What is left: S25's price-history half waits on an API route for
+`price_history`, and S24 waits on CD-8, which nobody has scheduled.

@@ -184,6 +184,9 @@ export default async function PresetPage({
           <li key={`${build.rank}:${index}`}>
             <BuildCard
               build={build}
+              // The SAME pass `viewPass` links to: a save keeps a pointer to the
+              // result document, whichever page the build was saved from.
+              resultId={page.recommendation.id}
               budget={page.budget}
               generatedAt={computedAt}
               position={index + 1}

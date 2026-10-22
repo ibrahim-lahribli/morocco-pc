@@ -355,5 +355,26 @@
       "dataHeading": "Demande relative aux données",
       "dataBody": "La page Confidentialité décrit ce qui est enregistré, et aujourd'hui la réponse est : rien qui vous identifie."
     }
+  },
+  "saved": {
+    "title": "Mes enregistrements",
+    "metaTitle": "Mes enregistrements — morocco-pc",
+    "metaDescription": "Les configurations enregistrées dans ce navigateur, sur cet appareil.",
+    "intro": "Les configurations que vous avez enregistrées sur cet appareil. Elles restent dans ce navigateur : aucun compte, aucun serveur, rien qui parte d’ici.",
+    "save": "Enregistrer",
+    "saved": "Enregistré sur cet appareil.",
+    "removed": "Enregistrement retiré.",
+    "full": "Cet appareil n’a plus de place pour un enregistrement de plus. Retirez-en un, puis réessayez.",
+    "saveUnavailable": "L’enregistrement n’est pas disponible ici (navigation privée ou stockage désactivé). Rien n’a été enregistré.",
+    "readUnavailable": "Le stockage de cet appareil est inaccessible : la liste ne peut pas être lue, et rien ne peut y être enregistré.",
+    "emptyTitle": "Aucun enregistrement",
+    "emptyBody": "Vous n’avez encore enregistré aucune configuration sur cet appareil. Un enregistrement reste dans ce navigateur, sans compte.",
+    "emptyCta": "Créer une configuration",
+    "open": "Ouvrir le résultat",
+    "remove": "Retirer",
+    "savedOnLabel": "Enregistré le",
+    "noTotal": "Total non enregistré",
+    "removeUnavailable": "Le retrait n’a pas abouti : cet appareil refuse d’écrire dans son stockage. Rien n’a changé.",
+    "openShelf": "Voir mes enregistrements"
   }
 }

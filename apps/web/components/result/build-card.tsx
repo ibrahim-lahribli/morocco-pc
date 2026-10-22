@@ -49,8 +49,10 @@
  */
 import { getTranslations } from "next-intl/server";
 
+import { SaveBuildButton } from "@/components/saved/save-build-button";
 import { Alert, Badge, ProgressBar, cn } from "@/components/ui";
 import { formatDate, formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
+import { localePath } from "@/lib/i18n/paths";
 import {
   barFigures,
   budgetTone,
@@ -67,6 +69,8 @@ import { ComponentRow } from "./component-row";
 
 export interface BuildCardProps {
   build: Build;
+  /** The recommendation this build belongs to — the address a save keeps. */
+  resultId: string;
   /** The query's budget, or null when the pass did not record one. */
   budget: number | null;
   /** When this pass ran, or null — the only date the contract carries (CD-6). */
@@ -87,6 +91,7 @@ const BADGE_KEY: Record<PriceProvenance, string> = {
 
 export async function BuildCard({
   build,
+  resultId,
   budget,
   generatedAt,
   position,
@@ -94,6 +99,9 @@ export async function BuildCard({
   locale,
 }: BuildCardProps) {
   const t = await getTranslations({ locale, namespace: "result" });
+  // S25's saved-builds copy is its own namespace: the shelf is not a results
+  // word, and the same strings are read by the page that lists it.
+  const tSaved = await getTranslations({ locale, namespace: "saved" });
   const headingId = `build-${position}-heading`;
 
   const total = build.total_price;
@@ -136,6 +144,30 @@ export async function BuildCard({
 
       <div className="mt-2">
         <Badge tone={provenance}>{badgeText}</Badge>
+      </div>
+
+      {/* Saving is this browser's business, so the control is the card's ONE
+          client island. It keeps a POINTER (this result, this rank), never a
+          copy of the build: the card below it is the only place the build is
+          rendered from the API. */}
+      <div className="mt-3">
+        <SaveBuildButton
+          entry={{
+            id: resultId,
+            rank: build.rank,
+            strategyKey: strategyLabel(build.strategy_key),
+            totalPrice: total,
+          }}
+          shelfHref={localePath(locale, "/enregistrements")}
+          labels={{
+            save: tSaved("save"),
+            saved: tSaved("saved"),
+            removed: tSaved("removed"),
+            full: tSaved("full"),
+            unavailable: tSaved("saveUnavailable"),
+            openShelf: tSaved("openShelf"),
+          }}
+        />
       </div>
 
       {bar === null ? null : (
