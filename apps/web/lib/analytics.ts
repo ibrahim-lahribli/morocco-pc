@@ -162,6 +162,18 @@ export function resolveAnalyticsConfig(env: AnalyticsEnv): AnalyticsConfig | nul
  * event would be a fact nobody asserted.
  */
 export function sanitizeEvent(event: AnalyticsEvent): AnalyticsEvent | null {
+  // A type is a compile-time promise, and this is the runtime boundary: a call
+  // written loosely enough to omit `props` must be DROPPED, not throw. The
+  // caller is a click handler or a submit, where a throw is the page's problem.
+  if (
+    event === null ||
+    typeof event !== "object" ||
+    event.props === null ||
+    typeof event.props !== "object"
+  ) {
+    return null;
+  }
+
   const schema = ANALYTICS_EVENTS[event.name] as Record<string, PropRule> | undefined;
   if (schema === undefined) return null;
 

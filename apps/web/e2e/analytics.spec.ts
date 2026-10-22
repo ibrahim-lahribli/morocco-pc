@@ -114,6 +114,12 @@ test("an event can only carry a value the map declares", () => {
   expect(loose({ name: "wizard_step", props: { step: "budget", budget_amount: 9000 } })).toBeNull();
   // A missing prop, an unknown event, and a count that is not a count.
   expect(loose({ name: "wizard_step", props: {} })).toBeNull();
+  // A MISSING `props` used to throw here rather than drop the event; this runs
+  // inside click and submit handlers, where a throw cancels the action.
+  expect(loose({ name: "wizard_step" })).toBeNull();
+  expect(loose({ name: "wizard_step", props: null })).toBeNull();
+  expect(loose(null)).toBeNull();
+  expect(loose(undefined)).toBeNull();
   expect(loose({ name: "pageview", props: { path: "/fr" } })).toBeNull();
   expect(loose({ name: "config_generated", props: { builds: -1 } })).toBeNull();
   expect(loose({ name: "config_generated", props: { builds: 2.5 } })).toBeNull();
