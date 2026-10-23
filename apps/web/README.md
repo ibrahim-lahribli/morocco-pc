@@ -44,6 +44,13 @@ stale `npm run start` after a rebuild if the specs look out of date.
 anything already answers on 3210, because measuring a `next dev` server would
 budget a build that never ships.
 
+`npm test` drives the wizard against the FIXTURE mock. The same submit against the REAL engine is one
+opt-in spec, `e2e/wizard-engine.spec.ts`: start the API on 3000 against the TEST branch
+(`ALLOWED_ORIGINS=http://localhost:3210 npm run start:api` at the repo root), then run it ALONE with
+`E2E_ENGINE_API=1 E2E_APP_API_BASE_URL=http://localhost:3000 npx playwright test
+e2e/wizard-engine.spec.ts`. It asserts the committed pass and deletes its own rows; never set those
+two variables for the whole suite — every fixture-driven spec would then talk to a live database.
+
 ## Routes today
 
 `/fr`, `/ar` (shell and the wizard's entry point), `/fr/configurer` and

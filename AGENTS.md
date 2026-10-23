@@ -274,8 +274,9 @@ Arabic guide bodies, `ar` hreflang + sitemap entries, and a locale key/placehold
 states (`e2e/legal.spec.ts`, `e2e/analytics.spec.ts`, `e2e/states.spec.ts`), S23 the compare view
 (`e2e/compare.spec.ts`, 11 specs) and S25's saved builds at `/{locale}/enregistrements`
 (`e2e/saved.spec.ts` 11, `e2e/saved-model.spec.ts` 12, plus 2 footer-entry specs in
-`e2e/shell.spec.ts`): the suite is **346/346**, measured 2026-10-23 on `6af052f` with
-`E2E_BROWSER_API=1` (345 passed + the pre-existing skip without it). The last CI evidence for this
+`e2e/shell.spec.ts`): the suite is **361 specs**, measured 2026-10-23 with `E2E_BROWSER_API=1` —
+**360 passed and 1 skipped**, the skip being `e2e/wizard-engine.spec.ts` (the opt-in real-engine
+harness below); without that env var it is 359 passed and 2 skipped. The last CI evidence for this
 job is the S22 runs listed below — S23 and S25 are local commits, not pushed, so their figures are
 a local measurement, not a CI run.
 `next build` reports the four per-preset OG images as `●`, the shelf as `●` per locale, and
@@ -284,6 +285,15 @@ command list is unchanged because the new specs run inside `npm test`. S22 lande
 (legal pages, analytics, states) plus
 `e599c1c` (final-step event), `f8e0a85` (throwing provider) and `0b40c56` (malformed event); web
 runs 39779063058, 39781059639, 39784490562 and 39785866828 are green.
+
+**One spec is deliberately NOT in that job** — `e2e/wizard-engine.spec.ts` (2026-10-23): it drives
+the wizard's submit through the REAL API into PostgreSQL on the TEST branch and reads the committed
+pass back, the seam the fixture mock cannot cover. It needs `E2E_ENGINE_API=1`,
+`E2E_APP_API_BASE_URL=http://localhost:3000` and a running
+`ALLOWED_ORIGINS=http://localhost:3210 npm run start:api`, so it skips in CI by construction and
+must be run alone; its header carries the command, it deletes its own pass in FK order and asserts
+residue 0, and it resolves the repo root's `pg`/`.env` behind `getWriteTestDbUrl()` — the guard
+that makes the shared database unreachable from it.
 
 **The scheduled job HAS now run, twice, on 2026-10-18** (`workflow_dispatch` on `agent/platforms`;
 runs 39119596060 and 39120485573). Both doubts that could only be settled by a real run are now

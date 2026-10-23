@@ -41,7 +41,13 @@ export default defineConfig({
     {
       command: "npm run start",
       url: "http://localhost:3210/fr",
-      env: { API_BASE_URL: "http://localhost:3211" },
+      // `E2E_APP_API_BASE_URL` exists for ONE harness: `e2e/wizard-engine.spec.ts`
+      // submits to the real, engine-backed API on port 3000, so the Next server
+      // has to read THAT pass back rather than the fixture mock. It defaults to
+      // the mock, so every other spec and the CI job are unchanged, and the
+      // engine spec is documented to run alone (a suite-wide override would
+      // point the fixture-driven specs at a live database).
+      env: { API_BASE_URL: process.env.E2E_APP_API_BASE_URL ?? "http://localhost:3211" },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

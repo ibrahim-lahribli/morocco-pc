@@ -598,6 +598,15 @@ deliberately does NOT set `NEXT_PUBLIC_API_BASE_URL`: `lib/presets/load.ts` read
 API base, so a build-time value would make `next build` consult the API and end S16's offline,
 fixture-only prerender.
 
+**The same submit was driven against the real engine, once (2026-10-23).** `e2e/wizard-engine.spec.ts`
+is that leg WITHOUT the mock: the real API on 3000 (TEST branch), the Next server pointed at it by
+`E2E_APP_API_BASE_URL` (a config seam that still defaults to the mock), and assertions that reach past
+the response into PostgreSQL — the committed query, the rank-1 candidate and its 8 components whose
+`selected_price` sums to the total the page printed, and a second identical submit answering 200
+`reused: true` with the ORIGINAL id (Decision 47). Opt-in (`E2E_ENGINE_API=1` plus that override),
+run alone, never in CI, and it deletes its own pass in FK order: a leftover `recommendation_query`
+row blocks the golden harness for the whole checkout.
+
 ### Phase W2 — Results
 
 #### S11 — Results page: SSR + strategy cards + component list + budget bar (2 h)
@@ -1651,6 +1660,12 @@ the category score. It is asserted now — `categories:performance` ≥ 0.90 at 
 floor raised to 0.99 the run failed `expected >=0.99, found 0.98` and exited 1, and the restored 0.90
 passed at 0.98 on both measured pages. Criterion 2's wizard at 360×800 is Playwright-covered;
 criterion 3 still has no origin.
+
+**Criterion 2's top half is proven locally, the rest still needs staging (2026-10-23).**
+`e2e/wizard-engine.spec.ts` drives the wizard's submit through the real API into PostgreSQL on the
+TEST branch and reads the committed pass back, so the flow staging would exercise is no longer only a
+mock — but twenty consecutive runs, a deployed origin and the zero-5xx / zero-console log are all
+staging facts, and no local run claims them.
 
 ### Post-M3 refinement (not on the critical path)
 
