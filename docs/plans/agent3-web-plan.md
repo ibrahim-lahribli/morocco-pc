@@ -14,9 +14,9 @@ GitHub on 2026-10-21; W1 is COMPLETE (S7–S10, the wizard shell, the budget ste
 profile-gated step flow and the POST hand-off); W2 is COMPLETE (S11–S15); W3 is COMPLETE
 (S16, S17, S18 and S19's gating are DONE); W4 is COMPLETE — S20 (the Arabic/RTL pass), S21 (the
 WCAG AA audit) and S22 (legal pages, analytics, states) are DONE 2026-10-22 — and S27, the
-post-M3 slider curve, S23, the compare view, and S25's saved-builds half are DONE (2026-10-22 and
-2026-10-23), so 24 of the 27 sprints are done and S25 is half done. What remains is S24 (swap
-inside a build), S25's price-history half and S26, the M3 verification run, which is BLOCKED on
+post-M3 slider curve, S23, the compare view, and S25, saved builds plus the price history, are
+DONE (2026-10-22 and 2026-10-23), so 25 of the 27 sprints are done. What remains is S24 (swap
+inside a build) and S26, the M3 verification run, which is BLOCKED on
 deployment: no web host is chosen and no API origin is deployed.**
 
 ## 1. Product shape and stack
@@ -294,15 +294,20 @@ measurement, the copy review and the state inventory are in
 
 Component detail v2 and compare, swap inside a build (needs CD-8), price history, saved builds.
 
-**Today (2026-10-23): S23 is DONE and S25's saved-builds half is DONE** — the compare view ships at
+**Today (2026-10-23): S23 and S25 are DONE** — the compare view ships at
 `/{locale}/composants/comparer?slugs=a,b`, with the component page as its entry point, and the shelf
 ships at `/{locale}/enregistrements`; the board’s S23 and S25 statuses carry what landed and what it
-measured. **S24 and S25's remaining half stay outside the M3 gate on purpose.** **S24** (swap inside
+measured. **S24 stays outside the M3 gate on purpose.** **S24** (swap inside
 a build) waits on **CD-8**, the swap endpoint, which is not built and which no platform sprint owns;
 only its disabled-with-an-explanation control is buildable, and the DoD forbids simulating a swap.
-**S25** had two halves with different answers: saved builds were `localStorage`-only and have now
-shipped, while price history still has no data source — `price_history` exists since migration 009
-but no API route reads it, so the chart would plot fixtures.
+**S25** had two halves with different answers, and both have now shipped: saved builds were
+`localStorage`-only and now live at `/{locale}/enregistrements`, and price history — a table since
+migration 009 that no route read — now renders against
+`GET /v1/catalog/products/:slug/price-history` (contract v1.6, Decision 51), which serves one point
+per observation MOMENT. `apps/web/components/price-history.tsx` owns the three data states (no
+reading, one reading, and a 2+ series with the chart, the min / max / latest rows and the up / down /
+unchanged sentence), mirrors geometrically on `/ar`, and is pinned by 13 Playwright specs in the
+merged suite’s 359 passed / 1 skipped.
 
 ## 5. M3 exit gate
 
