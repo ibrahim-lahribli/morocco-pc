@@ -27,6 +27,13 @@
  *            unreportable, and a hash cannot say WHICH column differs.
  *   counts   row counts for a fixed, named table list. A table missing from the
  *            list is a programming error, not a "match" (see compareSnapshots).
+ *   models   every `scoring_model` row as `name@version|active|inactive`. A ROW
+ *            COUNT cannot see this: two branches can each hold exactly one
+ *            active model and still serve different scores, which is precisely
+ *            the drift a catalog comparison must not call parity (the TEST
+ *            branch carries `launch-v2@1.0.0` while another database may still
+ *            serve `seed-minimal-v1@1.0.0` at the same row count). null when the
+ *            table itself is absent, like the ledger.
  */
 
 /** Tables whose row counts must agree. The first seven are the plan's catalog
@@ -109,10 +116,15 @@ function compareList(check, a, b) {
  * @returns {{ok: boolean, rows: Array<{check: string, status: string, detail: string}>}}
  */
 function compareSnapshots(a, b) {
+  // A snapshot written before the model check existed carries no `models` key.
+  // Treat `undefined` as "absent on this side" so such a fixture stays a MATCH
+  // against another one instead of throwing on `.length`.
+  const modelsOf = (snapshot) => (Array.isArray(snapshot.models) ? snapshot.models : null);
   const rows = [];
   rows.push(compareList('ledger-files', a.ledger, b.ledger));
   rows.push(compareList('tables', a.tables, b.tables));
   rows.push(compareList('schema-shape', a.shape, b.shape));
+  rows.push(compareList('scoring-model-pins', modelsOf(a), modelsOf(b)));
 
   for (const table of PARITY_TABLES) {
     const left = a.counts && Object.prototype.hasOwnProperty.call(a.counts, table) ? a.counts[table] : null;

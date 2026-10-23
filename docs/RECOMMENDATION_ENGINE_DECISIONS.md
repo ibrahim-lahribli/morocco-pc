@@ -2334,7 +2334,19 @@ change, no commit.
    `.recommendation_profile_id` are accepted and IGNORED in v1 (no engine
    consumer). Recorded so the gap versus the product pitch is explicit, not
    silent. Priority variation is expected to come later via a different
-   `scoring_model_id`.
+   `scoring_model_id`. **AMENDED 2026-10-23:** the "no engine consumer" half is
+   no longer true, and has not been since 2026-10-09/10. `loadQueryInput`
+   SELECTs `resolution` and `priority` and returns both as SIBLINGS of the
+   Engine 2A input (never inside it); E2 (Decision 39) made `resolution` a
+   retention input through `retention/targets.js`'s GPU spend multiplier, E4
+   (Decision 41) made `priority` the archetype ORDER in
+   `ranking/select-archetypes.js` `strategyOrder`, and E5 (Decision 42) gave
+   `resolution` a second consumer, the optional per-resolution VRAM floor.
+   What still holds is the consequence this item was actually about: on the
+   current catalog neither field moves the observed result, because no active
+   model declares `resolution_profiles` and the catalog exposes only one or two
+   distinct (CPU, GPU) pairs, so the three strategies cannot diverge.
+   `.recommendation_profile_id` is still read by nothing.
 
 ### Gate G4 record
 
@@ -4213,7 +4225,7 @@ Date: 2026-10-07. Scope: the first process around the engine. This closes nothin
 - Every one of the 101 `store_offer` rows is a seed offer (`ingestion_record_id IS NULL`). With the option OFF, Stage 1 throws `EMPTY_CANDIDATE_POOL` once the 30-day window (Decision 7) lapses — the OG-30 cliff, re-armed every 30 days.
 - Layer 4 carries `recommendation_profile`, `recommendation_query`, `build_candidate`, `build_component` and `recommendation_result` (migration 011). `build_component` carries `offer_class` and `store_offer_id` since migration 018 (Decision 35). **No seed inserts a `recommendation_profile`, and both databases hold zero profile rows.**
 - Two facts the API has no column for: `budget_floor` is computed in memory (Decision 27, `retention/budget-floor.js`) and `recommendation_result` has no engine-version column (OG-18, ACCEPTABLE / OPEN).
-- `recommendation_query.resolution`, `recommendation_query.priority` and `recommendation_profile.default_resolution` exist in the schema and are read by NO non-test code — `query/load-query-input.js` does not even SELECT the first two (Decision 17.6).
+- `recommendation_query.resolution` and `.priority` ARE read: `loadQueryInput` SELECTs both and returns them as Engine 2A siblings, retention consumes `resolution` (Decision 39's GPU spend multiplier, Decision 42's VRAM floor) and ranking consumes `priority` (`selectArchetypes`' strategy order, Decision 41). Only `recommendation_profile.default_resolution` is still read by nothing. **CORRECTED 2026-10-23:** this line originally read "…are read by NO non-test code — `query/load-query-input.js` does not even SELECT the first two (Decision 17.6)", which had been false since 2026-10-09. What survives is the measured consequence: neither field changes the result on the current catalog.
 - `scoring_model` has one active row (`seed-minimal-v1/1.0.0`) whose `configuration.gpu_required_use_cases` is `["GAMING","WORKSTATION"]`.
 - `AGENTS.md` section 1 said, until this decision, that the project is "NOT a running service: there is no HTTP server, no API layer".
 
@@ -4237,7 +4249,7 @@ A fifth, subtler problem: with the Decision 35 option defaulting to OFF, a beta 
 5. **The beta option is pinned ON and is not a request field.** `engine.js` passes `{ allow_unverified_seed_offers: true }` always. A client must not be able to turn the freshness rule back on and get different results for the same body.
 6. **`price_status` is derived, never stored.** `"verified"` only when EVERY persisted component of that build is `VERIFIED`; anything else, including an unrecognised class, is `"indicative"`. Fail-safe by direction: an unknown provenance is never advertised as confirmed. The French `disclaimer` restates it.
 7. **One option vocabulary, derived where it can be.** `apps/api/src/meta.js` owns the lists AND the validator, so they cannot drift. `use_case` comes ONLY from the active scoring model's `configuration.gpu_required_use_cases` — no `DISTINCT` over submitted values and no second hardcoded list. `currency` is a fixed allow-list (`MAD`): Stage 1 matches currency by exact equality, so advertising an unpriceable currency would be a lie. An unreadable model is a **503**, never an empty array. Labels are French (the product is the Moroccan market).
-8. **`resolution` and `priority` are accepted, persisted, and NOT used in scoring.** They are stored on the profile and the query row, and the API documents them as inert because the engine does not read them (Decision 17.6). A frontend must not imply otherwise.
+8. **`resolution` and `priority` are accepted, persisted, and read — but neither changes a SCORE.** They are stored on the profile and the query row; `priority` sets the ORDER of the returned archetypes (`ranking/select-archetypes.js` `strategyOrder`, E4 / Decision 41) and `resolution` scales the GPU retention target (E2 / Decision 39) and gates the optional per-resolution VRAM floor (E5 / Decision 42), while Engine 4's arithmetic never sees either field. **CORRECTED 2026-10-23:** the original wording — "NOT used in scoring … because the engine does not read them (Decision 17.6)" — is false about the reads, and was never true after 2026-10-10. A frontend must not PROMISE a resolution- or priority-dependent result: on the current catalog both leave the observed top build unchanged (golden A4/A5 stay EXPECTED-RED with equal totals).
 9. **The active scoring model is resolved by the API and pinned onto the query row** (eligible = `is_active`, ordered newest-first with an `id` tie-break so row order can never decide it). The engine still resolves the model by the pinned FK (Decision 11) — the API chooses the id, the engine does not discover one.
 10. **Error contract:** 201 only when at least one build was produced; 200 for a valid zero-build pass and for `EMPTY_CANDIDATE_POOL` (which additionally carries `reason`); 422 validation and vocabulary (with per-field `details`); 413 oversized body; 404 unknown or malformed id; 429 rate limit; 503 no active model; 500 generic plus `request_id` with the detail log-only. Unknown body fields are REJECTED, not dropped (`additionalProperties: false` with ajv `removeAdditional: false`), and a numeric-string budget is rejected (`coerceTypes: false`) because the engine's loader takes a number.
 11. **Operational limits:** 30/min/IP on POST (it runs a whole pass) and 120/min on GET; a 10 KB body limit; CORS from `ALLOWED_ORIGINS` where empty means CORS is DISABLED entirely rather than reflecting any origin; structured pino logs with a request id that never contain a request body or a database URL; the OpenAPI 3.0 document at `/v1/docs/json`.
@@ -5213,7 +5225,7 @@ Paging with `OFFSET` over `product.name` can repeat or skip a row, because the n
 7. **The detail's `price_status` is derived exactly as the recommendation response derives it**, with one extra outcome: `verified` only when the product HAS offers and every one is `VERIFIED`; `indicative` when any is not (an unrecognized class included - fail-safe by direction); `null` when there is no offer, because an empty offer list contradicts nothing and `verified` over it would be the one reading the field must never produce. The French `DISCLAIMER` is part of the detail contract, not a decoration a presenter may drop.
 8. **A GPU's `specs` belongs to the VARIANT that was priced.** GPU board specs are variant-keyed, and one live GPU product has two variants, so the detail serves the spec of the variant the cheapest offer names (falling back to the lowest-id variant when there is no offer). Identity and audit columns (`product_id`, `product_variant_id`, `created_at`, `updated_at`, `id`) are stripped. `specs` is an OPEN object in the contract: its keys are the spec table's columns, and enumerating them would make every spec migration a breaking API change.
 9. **There is NO `use_case` parameter, and that is a recorded deviation from the sprint sketch.** The active model exposes no per-use-case PRODUCT filter - `role_weights` are global and only `gpu_policy` varies - so the parameter could only be inert. This API refuses unknown query parameters; accepting one it would ignore would tell a client its results were narrowed when they were not. `docs/API.md` and the sprint's status block state the deviation with its reason.
-10. **The crate is read-only and contract-pinned.** Both routes are 120/min, issue SELECTs over Layer 1 and Layer 3 only, and read/write no Layer 4 table. Contract **v1.5** is pinned byte-for-byte by `apps/api/test/unit/openapi-v1.5.json` (v1.4 was deleted in the same change), every route declares `429`/`500`, and the completeness gate fails an undocumented one.
+10. **The crate is read-only and contract-pinned.** Both routes are 120/min, issue SELECTs over Layer 1 and Layer 3 only, and read/write no Layer 4 table. Contract **v1.5** was pinned byte-for-byte by `apps/api/test/unit/openapi-v1.5.json` (v1.4 was deleted in the same change) — **SUPERSEDED 2026-10-23:** Decision 51 added the price history, so the pin is now `openapi-v1.6.json` and v1.5 was deleted in that change; every route still declares `429`/`500` and the completeness gate still fails an undocumented one.
 
 ### Rejected alternatives
 

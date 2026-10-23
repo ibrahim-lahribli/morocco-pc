@@ -64,6 +64,11 @@ jobs:
       - run: node scripts/check-offer-freshness.js --fail-days=14
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Is there a RETAILER behind each price? INCONCLUSIVE (no non-seed offer
+      # exists) exits 0 on purpose; only an unprovenanced non-seed offer fails.
+      - run: node scripts/check-offer-provenance.js
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - run: node scripts/verify-migrations-replay.js --test-db
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

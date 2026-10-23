@@ -28,6 +28,7 @@ const {
   SMOKE_ENGINE_VERSION,
   adoptPassForCleanup,
   buildSchemaPreflightSql,
+  guardLabel,
   healthIsOk,
   missingSchemaPrerequisites,
   parseArgs,
@@ -107,6 +108,44 @@ test('the target is the shared DATABASE_URL, named by digest and never by host',
   assert.equal(target.target.pooled, false);
   assert.match(target.digest, /^db:[0-9a-f]{12}$/);
   assert.ok(!JSON.stringify(target.target).includes('owner-s3cret'), 'no credential in the descriptor');
+  assert.equal(target.isShared, true);
+  assert.equal(guardLabel(target), 'DATABASE_URL (SHARED)');
+
+  // The EU production database is reachable by naming ITS variable: the smoke
+  // test is not shared-only, and the guard line must not claim it is.
+  const named = resolveTarget({
+    DATABASE_URL: FAKE_SHARED,
+    TARGET_DATABASE_URL: 'postgresql://u:p@ep-eu-production-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require',
+  }, 'TARGET_DATABASE_URL');
+  assert.equal(named.target.endpointId, 'ep-eu-production');
+  assert.equal(named.isShared, false);
+  assert.equal(guardLabel(named), 'TARGET_DATABASE_URL (named target)');
+  assert.throws(() => resolveTarget({ DATABASE_URL: FAKE_SHARED }, 'TARGET_DATABASE_URL'),
+    /TARGET_DATABASE_URL is not set/);
+});
+
+test('--target-env takes a variable NAME, and the refusal names it', () => {
+  assert.equal(parseArgs(['node', 'x', '--confirm-shared']).targetEnv, 'DATABASE_URL');
+  assert.equal(parseArgs(['node', 'x', '--confirm-shared', '--target-env=TARGET_DATABASE_URL']).targetEnv,
+    'TARGET_DATABASE_URL');
+  for (const bad of ['', 'postgres://u:p@ep-x.neon.tech/neondb', 'lower', '9X']) {
+    assert.throws(() => parseArgs(['node', 'x', '--target-env=' + bad]),
+      (error) => error.usage === true, JSON.stringify(bad) + ' must be a usage error');
+  }
+
+  const child = spawnSync(process.execPath, ['scripts/smoke-api-role.js', '--target-env=TARGET_DATABASE_URL'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    env: isolatedEnv({
+      DATABASE_URL: FAKE_SHARED,
+      TARGET_DATABASE_URL: 'postgresql://u:p@ep-eu-production-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require',
+    }),
+  });
+  assert.equal(child.status, 1, 'no --confirm-shared, so it refuses');
+  const output = child.stdout + child.stderr;
+  assert.match(output, /guard: TARGET_DATABASE_URL \(named target\)/);
+  assert.match(output, /REFUSED: this smoke test writes Layer 4 rows to TARGET_DATABASE_URL \(named target\)/);
+  assert.doesNotMatch(output, /ECONNREFUSED|ENOTFOUND|getaddrinfo/i, 'nothing dialled the target');
 });
 
 test('CLI: --help exits 2, a run without --confirm-shared refuses with exit 1', () => {
@@ -126,7 +165,8 @@ test('CLI: --help exits 2, a run without --confirm-shared refuses with exit 1', 
   });
   assert.equal(unconfirmed.status, 1);
   const output = unconfirmed.stdout + unconfirmed.stderr;
-  assert.match(output, /REFUSED: this smoke test writes Layer 4 rows to the SHARED database/);
+  assert.match(output, /REFUSED: this smoke test writes Layer 4 rows to DATABASE_URL \(SHARED\)/,
+    'the refusal names WHICH variable, so a named target is never misreported as shared');
   assert.doesNotMatch(output, /ECONNREFUSED|ENOTFOUND|getaddrinfo|connection terminated/i, 'nothing dialled the target');
   assert.doesNotMatch(output, /at main|Node\.js v/);
 });

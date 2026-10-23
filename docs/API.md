@@ -5,9 +5,11 @@ specified by **Decision 36**, and owns **no engine logic**: every route calls th
 engine through its public barrels and reads or writes Layer 4 rows through one
 repository module.
 
-Status at 2026-10-15: **implemented and running against the TEST branch.** The
+Status at 2026-10-23: **implemented and running against the TEST branch.** The
 DB-free suite runs on every push/PR; the DB-backed suite is wired into the
-recurring CI job and has been verified locally, but **not yet by a CI run**. Both
+recurring CI job and was **proven there on 2026-10-18** — `test:api:db` answered
+9 passed / 0 failed on the runner (dispatch runs 39119596060 and 39120485573), so
+the local-only caveat this line used to carry is gone. Both
 databases now carry the schema it reads (019 + 020; shared applied 2026-10-15), while
 the write-safety default still points the API at the isolated branch - see *Database
 target*.
@@ -62,9 +64,9 @@ column is an UNEXPECTED error, so `503` is NOT the answer (`503` on this API mea
 free, because `createRecommendationQuery` commits the profile and query rows BEFORE the
 engine runs, so it leaves an unmarked `recommendation_query` row behind and the golden
 harness refuses to run while ANY unmarked row exists (delete them in FK order); and the
-`morocco_pc_api` role now EXISTS on the shared database, applied 2026-10-19 from the same
-restore point with a 20/20 self-check, so the column-scoped GRANTs in *Production mode* are
-live there. Step 5 is no longer improvised: `node
+`morocco_pc_api` role now EXISTS on the shared database (applied 2026-10-19) AND on the EU
+production database (applied 2026-10-23, audit target `db:2d66f26d7ddc`), each from its own
+restore point with a 20/20 self-check, so the column-scoped GRANTs in *Production mode* are live on both. Step 5 is no longer improvised: `node
 scripts/apply-api-role.js` applies the block under a restore-point guard that refuses without
 one, and `node scripts/smoke-api-role.js --confirm-shared` proves the API itself runs as the
 role; the owner procedure is `docs/RECIPES/provision-the-api-role.md`.
@@ -144,19 +146,23 @@ the unprivileged `node` user. There is deliberately **no `apps/api/package.json`
 the engine's own `require('pg')` / `require('dotenv')` resolve upward, so a
 single root `node_modules` is what makes both the engine and the API work.
 
-## Production mode (designed 2026-10-07; role applied to shared 2026-10-19)
+## Production mode (designed 2026-10-07; role applied to shared 2026-10-19, to EU 2026-10-23)
 
-The beta runs against the TEST branch. Pointing the API at the shared Neon
-project (`API_ALLOW_SHARED=1` + `DATABASE_URL`) is a production decision, and
-the facts below govern it.
+The beta runs against the TEST branch. The EU project (`morocco-pc-eu`) is the production
+DATABASE as of 2026-10-23; the shared Neon project is the dev database. Pointing the API at
+either is a production decision (`API_ALLOW_SHARED=1` + `DATABASE_URL`), and the facts below
+govern it.
 
 **APPLIED 2026-10-19.** The role, its 20-grant block and its self-check ran on the shared
 database from restore point `br-ancient-cake-axh57vpj` (HEAD `3f0c166`, audit target
 `db:54ff6ea3f6e6`): 8 statements, self-check 20/20. `node scripts/smoke-api-role.js
 --confirm-shared` then ran the API itself as `morocco_pc_api` - health `db:"ok"`, POST
 `201` with 1 build in 52 statements, no `42501`, and all six Layer 4 tables back at 0.
-What has NOT happened is a DEPLOY: there is still no hosted origin, and the EU project is a
-separate database this apply never touched.
+The EU production database got the same treatment on 2026-10-23 (restore point
+`br-late-rice-b906upai`, audit target `db:2d66f26d7ddc`, 20/20 self-check, then the same smoke
+test green as the role), but no DEPLOY has happened anywhere: there is still no hosted origin.
+The EU app's `DATABASE_URL` secret, when it is created, must carry the ROLE's connection string
+rather than the owner's - that rotation is an owner step (OG-54), not something the apply did.
 
 ### The database role
 
@@ -467,8 +473,8 @@ default-off, separate-bucket and spoofed-prefix behaviours are pinned by
 | `budget_amount` | yes | A JSON **number** > 0 (max 1,000,000). A numeric *string* is rejected — the engine's loader is strict, so the API says so at the edge. |
 | `currency` | yes | Exactly 3 characters, and one of the advertised values. |
 | `use_case` | yes | One of the advertised values (see *Option vocabulary*). |
-| `resolution` | no | Advertised value. **Stored, not yet used in scoring.** |
-| `priority` | no | Integer 1–5. **Stored, not yet used in scoring.** |
+| `resolution` | no | Advertised value. Recorded on the query; scales the GPU retention target and gates the optional per-resolution VRAM floor. Never changes a score, and does not move the top build on today's catalog. |
+| `priority` | no | Integer 1–5. Recorded on the query; sets the ORDER of the returned archetypes (and each build's `strategy_key`). Never changes a score. |
 
 Unknown fields are **rejected**, not ignored (`additionalProperties: false` with
 ajv `removeAdditional: false`), so a typo is a 422 rather than a silent default.
@@ -838,7 +844,7 @@ labels** (the product is the Moroccan market).
 |---|---|
 | `use_cases` | The active scoring model's use-case vocabulary: the `use_case_profiles` keys when the model declares them (`launch-v2`), otherwise the legacy `configuration.gpu_required_use_cases` (`seed-minimal-v1`). Not a `DISTINCT` over submitted values, and not a second hardcoded list. Order follows the JSONB key order of `use_case_profiles`, not the declaration order in the seed file. |
 | `currencies` | A fixed allow-list (`MAD`), not a `DISTINCT` over `store_offer`. Stage 1 matches currency by exact equality, so advertising an unpriceable currency would be a lie. |
-| `resolutions`, `priorities` | Fixed lists. **Stored on the profile/query, not read by the engine.** |
+| `resolutions`, `priorities` | Fixed lists. **Stored on the profile/query and read downstream — `resolution` by retention, `priority` by ranking; neither changes a score.** |
 
 The option list and the POST validator read ONE array, derived in one place:
 `apps/api/src/engine.js` calls the scoring barrel's `listUseCases` (the API's
@@ -855,10 +861,18 @@ than empty — `/v1/meta/options` answers **503**, and so does a POST, because a
 model with no vocabulary cannot validate one. Never an empty array, which
 would look like a valid form with no valid choice.
 
-**`resolution` and `priority` do not change results.** The engine does not read
-`recommendation_query.resolution`, `recommendation_query.priority`, or
-`recommendation_profile.default_resolution` (Decision 17.6 — `loadQueryInput`
-does not even SELECT them). A frontend must not imply otherwise.
+**`resolution` and `priority` are read, but neither changes a score, and on
+today's catalog neither moves the top build.** `loadQueryInput` returns both as
+siblings of the engine's candidate-selection input (never inside it);
+`priority` (1–5) sets the ORDER of the returned archetypes, so it can change
+which build is rank 1 and each build's `strategy_key`, and `resolution` scales
+the GPU spend target that target-aware retention applies and gates the optional
+per-resolution VRAM floor. Neither reaches Engine 4's arithmetic, and the
+measured effect here is nil: the catalog exposes only one or two distinct (CPU,
+GPU) pairs - never the three an archetype set needs - so all three strategies
+claim the same builds, and no active model declares `resolution_profiles`.
+`recommendation_profile.default_resolution` is read by nothing. A frontend may
+show these as preferences; it must not promise that changing one changes the build.
 
 ## Errors
 

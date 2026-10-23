@@ -1853,3 +1853,59 @@ branch - so its side of the claim rests on the stored baselines.
 `node scripts/generate-presets.js --cleanup` (54 presets / 54 passes / 54 results / 430 components /
 54 profiles); every Layer 4 table reads 0 after both runs. Generating presets and running the golden
 harness remain mutually exclusive on one branch until generated passes carry a marker.
+
+## 2026-10-23 — environment consistency, the EU role, and offer provenance
+
+**(1) The parity gate now compares the ACTIVE scoring model, not just its row count.**
+`scripts/lib/target-parity.js` gained a `models` list (`name@version|active`) and a
+`scoring-model-pins` check, and the CLI reads `scoring_model` through a `to_regclass` guard
+(so a pre-008 target still compares as "absent on both"). Why: two databases can agree on the
+row COUNT and still serve different scores. Measured with
+`node scripts/check-target-parity.js --a=env:TEST_DATABASE_URL --b=env:TARGET_DATABASE_URL`
+(driver `.env.eu`): **TEST ↔ EU RESULT: MATCH** — ledger 22/22, 43 tables, shape digest
+`2006504971c70a90` on both, `launch-v2@1.0.0|active` on both, and identical catalog + Layer 4
+counts. The same gate against shared reports DIFF `scoring-model-pins: count 1 vs 2`, because
+shared still serves `seed-minimal-v1@1.0.0` (seed 013 unapplied there). That is now a recorded
+fact (OG-54), not a surprise for the next harness.
+
+**(2) Decision recorded by measurement, not by preference: production runs `launch-v2@1.0.0`.**
+The EU database already served it (seed 013 deactivates v1 there; seed 017 removes the 1.1-1.3
+experiment rows on replay), and the parity gate above proves it row for row. Nothing was
+activated by hand and no seed was applied in this session — the "activation" is the already-
+replayed EU seed set, verified rather than assumed.
+
+**(3) `morocco_pc_api` was provisioned on EU; TEST keeps the rehearsal.** Both owner scripts
+gained `--target-env=<NAME>` (a variable NAME, never a URL; the default stays `DATABASE_URL`,
+so the shared-only guard behavior is unchanged, and the guard line prints which variable it
+used). Restore point `br-late-rice-b906upai` (branch of EU `main`, no compute) was created
+FIRST, then `node scripts/apply-api-role.js --target-env=TARGET_DATABASE_URL
+--restore-point=br-late-rice-b906upai --password-file=~/.morocco-pc/api-role-eu.password`
+reported `AUDIT TARGET: db:2d66f26d7ddc`, 8 statements and self-check **20/20**;
+`node scripts/smoke-api-role.js --confirm-shared --target-env=TARGET_DATABASE_URL` then ran the
+API itself as the role: health `db:"ok"`, POST 201 with **1 build**, 52 statements, no `42501`,
+six Layer 4 counts back to 0. The dry run's digest matched
+`DATABASE_URL="$TARGET_DIRECT_URL" node scripts/run-migrations.js --dry-run` before applying.
+The branch rehearsal was re-run the same day: 8 grants, 20/20 answers, a row-wide UPDATE denied
+`42501`, 53 statements as the role, residue 0, role removed. Each database has its OWN role
+password; do not reuse the shared one.
+
+**(4) Offer provenance is now measured, and it is worse than "unverified": it is absent.**
+`node scripts/check-offer-provenance.js` (with `--target=env:NAME`) reports INCONCLUSIVE on
+shared, TEST and EU: 101 offers, **0** with an ingestion record, listing identifier, product
+URL or seller name, and 101 `price_history` rows that belong to seed offers and carry no
+retailer evidence. The freshness gate was changed to say `RESULT: INCONCLUSIVE` (exit 0)
+instead of `PASS` when no VERIFIED offer exists, so a green line can no longer be read as a
+verified catalog. The repeatable path is documented in `docs/IMPORT_OFFERS.md` ("Refresh the
+catalog") and was exercised end to end on the TEST branch with a temporary CSV: dry-run
+`[NEW] ... SKU_EXACT`, commit `inserted 1`, then the row carried `listing_identifier`,
+`product_url`, `seller_name`, `ingestion_record_id` and `fetched_at` = the row's `observed_at`
+(not the run time), `spec_provenance` = `UNVERIFIED`, and the gate returned **PASS** with
+1 verified offer; the fixture was then deleted (price_history → spec_provenance → store_offer →
+ingestion_record) and residue asserted 0. Note for the next reader: a NEW offer's first
+observation lives on `store_offer.fetched_at`; `price_history` only appends on a price or
+availability CHANGE, so an empty history is "no change yet", not "never observed". The gate is now a nightly `recurring-gates` step in `.github/workflows/ci.yml` (it exits 0 on INCONCLUSIVE, so a seed catalog does not page anyone, but an unprovenanced non-seed offer does).
+
+**(5) Verification run this session:** `node --test scripts/lib/target-parity.test.js
+offer-provenance*.test.js apply-api-role-cli.test.js smoke-api-role-cli.test.js` green;
+`npm run test:scripts`; `npm run test:api`; `npm run test:unit`; `verify:docs --offline`;
+`gen-decision-index --check`. Measured 2026-10-23 on Node 24: `test:scripts` 383 pass / 0 fail, `test:api` 120 pass / 0 fail, `test:unit` 1171 pass / 0 fail, `verify:docs --offline` OK, `gen-decision-index --check` clean. The live halves were exercised read-only the same day: `check-offer-provenance.js` INCONCLUSIVE (exit 0) and `check-offer-freshness.js --fail-days=14` INCONCLUSIVE (exit 0) on shared.

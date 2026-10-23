@@ -20,7 +20,7 @@ measurement runs.
 | Database region | Neon `aws-eu-central-1` (Frankfurt) | Fly's `fra` and Render's `frankfurt` are the same metro. Neon's only other EU region is `aws-eu-west-2` (London). |
 | Replay source | the **TEST branch**, not the shared database | Both carry the API's contract (ledger 22 on each since 2026-10-19), so either replays an API that can serve. The branch stays the source because the shared dev database accumulates local test rows. |
 | Host | **Fly.io `fra`** (recommended); Render `frankfurt` as the alternative | See the comparison below. Both build `apps/api/Dockerfile` with the repository root as context. |
-| Contract version at deploy | v1.5 | The served OpenAPI document names it; `/v1/docs/json` is the check. |
+| Contract version at deploy | v1.6 | The served OpenAPI document names it; `/v1/docs/json` is the check. Eight paths as of 2026-10-23 — the price history is the eighth. |
 
 Hosting facts verified 2026-10-17 on vendor pages (re-check at checkout; Fly prices vary by
 region and Render's page bundles pricing into a comparison article):
@@ -271,6 +271,15 @@ fly secrets set \
 fly deploy --app morocco-pc-api
 ```
 
+
+The production role now exists on this database (applied 2026-10-23, audit target
+`db:2d66f26d7ddc`, restore point `br-late-rice-b906upai`, self-check 20/20, and the
+smoke test green as `morocco_pc_api`). The deploy SHOULD therefore set
+`DATABASE_URL` to the ROLE's connection string rather than the owner's. That is a
+deliberate step, not a default: the password lives outside the repo
+(`$HOME/.morocco-pc/api-role-eu.password`), and rotating the app onto a
+least-privilege role deserves its own deploy and its own smoke run. Until it is
+taken, the deployed API runs with the owner's credentials (OG-54).
 Deliberately **not** set yet:
 
 - `TEST_DATABASE_URL` — absent, so the guard cannot silently select the wrong pool.

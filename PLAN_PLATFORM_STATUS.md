@@ -6,14 +6,14 @@
 plans. The plans own the HOW; the register owns the open-item ledger; this page owns the
 where-are-we.
 
-**Date:** 2026-10-19 · **Branch:** `master` (PR #3 merged `agent/platforms` as `b2fe64a`) · **Rules:** [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md).
+**Date:** 2026-10-19, **revised 2026-10-23** for contract v1.6 · **Branch:** `master` (PR #3 merged `agent/platforms` as `b2fe64a`) · **Rules:** [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md).
 Passing-test counts are deliberately not restated here — see the dated entries in
 `DEVELOPMENT_NOTES.md`.
 
 ## Verdict
 
 **16 sprints done, 3 partial, 2 not started. PR #3 landed `agent/platforms` on `master` as `b2fe64a` on 2026-10-18, with identical content on both sides, so what remains is owner actions rather than agent work.**
-**The recurring gates now run from the default branch, and the verdict is measured: `unit-and-docs` is green on `master`, and the one red step — `verify-migrations-replay` — was closed at its cause on 2026-10-19.** That red was never code: the replay diffed a 22-file tree against a shared database at ledger 20 and reported the 021/022 objects as fresh-only. The owner-approved apply (restore point `br-ancient-cake-axh57vpj`, ledger 20 -> 22) makes the same command report **0 drift**, and dispatch run [39207745723](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39207745723) on `master` (`3f0c166`) is the first **wholly green** `recurring-gates` — every step PASS, `unit-and-docs` included. **P1 Sprint 3**'s statement-count half is still measurable on the TEST branch (only its latency table waits for the co-located target). The BETA engine and API surface are live on the TEST branch (contract v1.5, schema at ledger 22 on the branch and, since 2026-10-19, on shared too, where the `morocco_pc_api` role is now provisioned); nothing is deployed and nothing is in production. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency sprints and the deployed-host legs; **P1 Sprint 4** (DONE 2026-10-16) unblocked P1 Sprints 5–6 (both DONE 2026-10-16), and P2 Sprint 3 landed 2026-10-17 (Step 7 decided 2026-10-18: public but unlisted); **P3 Sprint 1** is now DONE because the nightly fires from `master` and its per-step result is recorded.
+**The recurring gates now run from the default branch, and the verdict is measured: `unit-and-docs` is green on `master`, and the one red step — `verify-migrations-replay` — was closed at its cause on 2026-10-19.** That red was never code: the replay diffed a 22-file tree against a shared database at ledger 20 and reported the 021/022 objects as fresh-only. The owner-approved apply (restore point `br-ancient-cake-axh57vpj`, ledger 20 -> 22) makes the same command report **0 drift**, and dispatch run [39207745723](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39207745723) on `master` (`3f0c166`) is the first **wholly green** `recurring-gates` — every step PASS, `unit-and-docs` included. **P1 Sprint 3**'s statement-count half is still measurable on the TEST branch (only its latency table waits for the co-located target). The BETA engine and API surface are live on the TEST branch (schema at ledger 22 on the branch and, since 2026-10-19, on shared too, where the `morocco_pc_api` role is now provisioned); nothing is deployed and nothing is in production. That contract is now **v1.6** (2026-10-23, Decision 51): the product **price history** — `GET /v1/catalog/products/:slug/price-history`, one point per observation MOMENT, oldest first — is the EIGHTH path, it needed no migration (`price_history` dates from migration 009), and `apps/web`'s S25 price-history section consumes it; the pin is `apps/api/test/unit/openapi-v1.6.json`. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency sprints and the deployed-host legs; **P1 Sprint 4** (DONE 2026-10-16) unblocked P1 Sprints 5–6 (both DONE 2026-10-16), and P2 Sprint 3 landed 2026-10-17 (Step 7 decided 2026-10-18: public but unlisted); **P3 Sprint 1** is now DONE because the nightly fires from `master` and its per-step result is recorded.
 
 **Web frontend (outside the 21 sprints, recorded here because it shares the deployment gate).**
 `apps/web` has 25 of its 27 sprints done and its host is now DECIDED - **Cloudflare Workers** through
@@ -44,11 +44,11 @@ reason.
 | P1 | 6 — presets job + `GET /v1/presets` | **DONE** | Migration 022 + generator + endpoint (contract v1.4, Decision 48); the commit shipped broken and was repaired 2026-10-16 (36620ec) |
 | P2 | 1 — use-case vocabulary from the model (OG-38) | **DONE** | `listUseCases` swap; branch serves GAMING/OFFICE/WORKSTATION |
 | P2 | 2 — truthful per-IP limits (`trustProxy`) | **PARTIAL** | Steps 1–3 **DONE 2026-10-17** (`TRUST_PROXY` = trusted proxy address/CIDR list, default off, unsafe shapes refused; 14 new tests, `test:api` 89/0; **Decision 49** recorded); Step 5 committed (`aab917f`); **Step 4 needs P1's deployed host**, with the procedure in `docs/RECIPES/deploy-eu-colocation.md` §8.4 |
-| P2 | 3 — catalog endpoints (read-only) | **DONE** | Steps 1–6 **DONE 2026-10-17** (two read endpoints, keyset pagination on `slug`, provenance-labelled prices, contract v1.5; `test:api` 98/0, `test:api:db` 9/0 with a 100-row page walk); Step 7 **DECIDED 2026-10-18**: public but unlisted, noindex until prices are VERIFIED, indicative prices behind the disclaimer |
+| P2 | 3 — catalog endpoints (read-only) | **DONE** | Steps 1–6 **DONE 2026-10-17** (two read endpoints, keyset pagination on `slug`, provenance-labelled prices, contract v1.5, superseded by v1.6 on 2026-10-23; `test:api` 98/0, `test:api:db` 9/0 with a 100-row page walk); Step 7 **DECIDED 2026-10-18**: public but unlisted, noindex until prices are VERIFIED, indicative prices behind the disclaimer |
 | P2 | 4 — CORS allow-list + 429 contract, proven | **DONE** | 4 CORS tests + the 429 body/`Retry-After` pin, both documented (2026-10-17); `test:api` 75/0 |
 | P2 | 5 — contract-completeness gate | **DONE** | `openapi-coverage.test.js` (7 tests); the gate exposed missing 429/500 on all five routes, now declared; snapshot regenerated (2026-10-17) |
 | P3 | 1 — prove the recurring CI job | **DONE** | Steps 1–3 **DONE 2026-10-18**: two `workflow_dispatch` runs on `agent/platforms` ([39119596060](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39119596060), [39120485573](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39120485573)) — `test:api:db` **9 passed / 0 failed on the runner**; the replay was RED only on the branch-only 021/022 objects. **Step 4 DONE 2026-10-19**: PR #3 merged the branch into `master` as `b2fe64a`; the push run is green, and dispatch run [39123812237](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39123812237) on `master` fails ONLY at `verify-migrations-replay` (freshness PASS, `test:api:db` PASS, `unit-and-docs` PASS). The remaining red was the shared database sitting at ledger 20 — **CLOSED 2026-10-19** by the shared apply (see the P3 S2 row), not a sprint step. **PROVEN GREEN 2026-10-19**: dispatch run [39207745723](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39207745723) completed success with every `recurring-gates` step PASS. Steps 5–6 recorded in `DEVELOPMENT_NOTES.md` 2026-10-19 |
-| P3 | 2 — rehearse the production DB role | **DONE** | Steps 1–4 **DONE 2026-10-17** (`scripts/rehearse-api-role.js`: 20/20 privilege answers, zero `42501` as the role, row-wide UPDATE denied, residue 0, role removed); **Step 5 DONE 2026-10-19** (applied to shared from `br-ancient-cake-axh57vpj`, self-check 20/20, the smoke test ran the API as the role on shared) |
+| P3 | 2 — rehearse the production DB role | **DONE** | Steps 1–4 **DONE 2026-10-17** (rehearsal: 20/20 privilege answers, zero `42501` as the role, row-wide UPDATE denied, residue 0, role removed); **Step 5 DONE 2026-10-19 on shared and 2026-10-23 on EU** — shared from restore point `br-ancient-cake-axh57vpj` (audit target `db:54ff6ea3f6e6`), EU from `br-late-rice-b906upai` (audit target `db:2d66f26d7ddc`), 8 statements and self-check 20/20 on each, both smoke runs green (`health db:"ok"`, POST 201 with 1 build, residue 0). Both owner scripts take `--target-env=<NAME>`; TEST keeps the create-and-drop rehearsal by design. Residual: the EU host's secret still carries the owner's credentials (OG-54) |
 | P3 | 3 — staging + production + schema-gated deploy | NOT STARTED | 6 steps; **owner-gated** (cloud accounts); needs P1 S1 |
 | P3 | 4 — observability that pages someone | **PARTIAL** | Steps 1–2 **DONE 2026-10-19**: DSN-gated `@sentry/node` capture behind an injected `captureError` (`apps/api/src/monitoring.js`, lazy require), 13 new tests (`test:api` 111/0 on Node 22 and 24), request data stripped in `beforeSend`; **Steps 3–6 remain** (a delivered event needs the deployed host + a DSN, then the body-asserting monitor, the retention decision and the commit) |
 | P3 | 5 — freshness gate sees real offers | **DONE** | Pure helper + tests (2026-10-17); every non-seed offer evaluated by age, SEED stays informational |
@@ -76,6 +76,7 @@ OG-52 is the register's record of "the work P0 did NOT absorb". Each item below 
 | P3 migration-deploy step | P3 S3 | — (agent, once the environments exist) |
 | P4 H2 retailer with readable terms | — (no P4 plan file) | A real retailer; blocks all P4 real-data work |
 | P4 non-seed provenance gate | P3 S5 | — **DONE 2026-10-17** (the gate covers non-seed provenance; the P4 real-data work stays open) |
+| P4 offer provenance (the evidence half) | P3 S5 | **GATE LANDED 2026-10-23** — `scripts/check-offer-provenance.js` (`--target=env:NAME`) classifies every offer by retailer evidence (ingestion record, listing id, URL on the store's own host, seller, observation time) and prints INCONCLUSIVE — never PASS — when no non-seed offer exists. Measured INCONCLUSIVE on shared, TEST and EU: 101 seed offers, 0 verified. The freshness gate now says INCONCLUSIVE for the same population. Real offers still need a retailer (OG-19 / OG-37 / OG-54) |
 | P4 Decision 7 amendment / seed retirement / read-path `ACTIVE` audit | — (no P4 plan file) | — (agent, but gated behind real data) |
 
 ## What is blocked vs. what can start now
@@ -102,7 +103,7 @@ but the choice stays the owner's, so no host is written into this page as decide
 - **P3 S2** — **DONE 2026-10-19** (Steps 1–4 rehearsed on the TEST branch 2026-10-17; Step 5, the shared apply, ran 2026-10-19).
 - **P3 S5** — **DONE 2026-10-17** (the gate covers non-seed provenance; no migration, no write).
 - **P2 S4 and P2 S5** — **DONE 2026-10-17** (the CORS/429 proof and the OpenAPI-completeness gate; both DB-free).
-- **P2 S3** — **DONE 2026-10-18** (the two read-only catalog endpoints, contract v1.5, plus Step 7's public-but-unlisted decision).
+- **P2 S3** — **DONE 2026-10-18** (the two read-only catalog endpoints, contract v1.5 at the time, plus Step 7's public-but-unlisted decision); the contract they belong to is v1.6 since 2026-10-23.
 - **P2 S2 Steps 1–3** — **DONE 2026-10-17** (configurable `trustProxy`, default off, with 14 DB-free tests); only Step 4 needs the deployed host.
 
 ## The frontend track (its own branch, not this one)
@@ -126,15 +127,16 @@ and none of them is agent work left undone:
   stub collaborators: an allow-listed origin gets `ACAO` echoed EXACTLY on both the preflight (204)
   and the served POST (201), a non-listed origin is still served but gets no `ACAO` header, and an
   invalid body answers 422 `VALIDATION_ERROR` with a per-field `details` array. The served OpenAPI
-  document is 3.0.3 / `info.version 1.5.0` with exactly seven paths. So the browser contract is ready;
+  document is 3.0.3 / `info.version 1.6.0` with exactly eight paths (the price history is the eighth). So the browser contract is ready;
   what is missing is an origin to list, not a capability. `apps/web` at `245638d` made NO API call
   (no `fetch`/client library anywhere under `apps/web/`); **S4 (2026-10-20, on the `frontend`
-  branch) closed that half** — a typed client generated from this API's committed 1.5.0 snapshot, a
+  branch) closed that half** — a typed client generated from this API's committed 1.6.0 snapshot, a
   fixture mock, and 19 specs (6 driving the client, 13 driving the mock)
   against it. What S4 cannot prove is anything that needs a real server, so the two hosts must still agree on `ALLOWED_ORIGINS` before the first real
   request, and "can it talk to the API" stays UNVERIFIED until one is attempted.
-- **The POST contract review** invited before merge: dedupe (200 + `reused: true`) and presets
-  (contract v1.4) change what the wizard may rely on.
+- **The POST contract review** invited before merge: dedupe (200 + `reused: true`), presets
+  (contract v1.4) and the catalogue + price history (v1.5 / v1.6) change what the wizard and the
+  product pages may rely on.
 - **A write target that is not the TEST branch** — the Neon `frontend-dev` branch
   (`br-proud-frog-ax80h3nv`) plus the gitignored `.env.frontend-dev`, because every distinct POST
   leaves an unmarked `recommendation_query` row and `eval:scenarios` refuses to run while one

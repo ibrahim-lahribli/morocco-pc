@@ -11,10 +11,14 @@
  * against.
  *
  * Why this module exists as the owner (Decision 36 item 3): the frontend must
- * never imply that a value changes a result. `resolution` and `priority` are
- * accepted, persisted on the profile/query row, and deliberately NOT read by
- * the engine (Decision 17.6 - `loadQueryInput` does not even SELECT them), so
- * they are documented as "stored, not yet used in scoring". The option list and
+ * never promise that a value changes a result. `resolution` and `priority` are
+ * accepted and persisted on the profile/query row, and both ARE read - by
+ * retention (Decision 39's GPU spend multiplier, Decision 42's VRAM floor) and
+ * by ranking (Decision 41's archetype order) respectively - but neither changes
+ * a score and neither moves the top build on the current catalog, so the honest
+ * label is "recorded, no promised effect" rather than "unread". Until
+ * 2026-10-23 this header claimed `loadQueryInput` did not even SELECT them
+ * (Decision 17.6); that had been false since 2026-10-09. The option list and
  * the validator live here together so they cannot drift apart: a value that POST
  * accepts is always present in /v1/meta/options, and `meta-consistency.test.js`
  * pins exactly that.
@@ -56,14 +60,14 @@ const CURRENCIES = Object.freeze([
   Object.freeze({ value: 'MAD', label: 'Dirham marocain (MAD)' }),
 ]);
 
-/** Display resolutions. STORED on the profile, NOT yet used in scoring. */
+/** Display resolutions. STORED on the profile; scales the GPU retention target and gates the optional per-resolution VRAM floor. Never changes a score. */
 const RESOLUTIONS = Object.freeze([
   Object.freeze({ value: '1080p', label: 'Full HD (1080p)' }),
   Object.freeze({ value: '1440p', label: 'QHD (1440p)' }),
   Object.freeze({ value: '2160p', label: '4K UHD (2160p)' }),
 ]);
 
-/** Weighting priorities, 1 (price first) to 5 (performance first). NOT used in scoring. */
+/** Weighting priorities, 1 (price first) to 5 (performance first). Sets the returned archetypes' ORDER; never changes a score. */
 const PRIORITIES = Object.freeze([
   Object.freeze({ value: 1, label: 'Prix avant tout' }),
   Object.freeze({ value: 2, label: 'Plutôt le prix' }),

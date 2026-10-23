@@ -10,7 +10,7 @@ Two scripts do the work, and each refuses the ways it could do harm:
 
 | Script | What it is | Writes |
 |---|---|---|
-| `node scripts/apply-api-role.js` | the Apply — creates the role and the 20-grant block | DDL on the SHARED database |
+| `node scripts/apply-api-role.js` | the Apply — creates the role and the 20-grant block | DDL on the target database (default `DATABASE_URL` = shared; `--target-env=NAME` names another) |
 | `node scripts/smoke-api-role.js` | the Smoke test — runs the API as the role and removes what it wrote | one Layer 4 pass, deleted again |
 
 The role's contract — the 20 privilege answers, the GRANT block, the self-check SQL, the teardown
@@ -24,12 +24,27 @@ answer.
 statements, self-check 20/20, then `smoke-api-role.js --confirm-shared` green (health
 `db:"ok"`, POST 201 with 1 build, 52 statements, residue 0). The steps below are the procedure as
 it was run; the recorded outcome is `DEVELOPMENT_NOTES.md` 2026-10-19 (3). The recipe is kept for
-the NEXT environment — the EU project is a different database, so its role apply is still ahead.
+the NEXT environment — the EU project is a different database, so its role apply was its own run (recorded below).
+
+**APPLIED 2026-10-23 on the EU production database** (`morocco-pc-eu`,
+`lingering-heart-20497074`, main branch `br-sweet-voice-b9fv6xx1`, endpoint
+`ep-damp-mouse-b9naeqoe`) — a DIFFERENT database, so this was its own apply, not a
+copy. Restore point `br-late-rice-b906upai` was created first (branch of main, no
+compute), audit target `db:2d66f26d7ddc`, HEAD `a12f3eb`: 8 statements, self-check
+20/20, then `smoke-api-role.js --confirm-shared --target-env=TARGET_DATABASE_URL`
+green (health `db:"ok"`, POST 201 with 1 build, 52 statements, no `42501`, all six
+Layer 4 counts back to 0). The target variable is `TARGET_DATABASE_URL` from
+`.env.eu`; its password was generated into its own file
+(`$HOME/.morocco-pc/api-role-eu.password`) because each database has its own role
+password. **TEST deliberately keeps the create-and-drop rehearsal** — no standing
+role is provisioned there. The deployed app still connects with the owner's
+credentials until its `DATABASE_URL` secret is pointed at the role; that is an
+owner step, registered as OG-54.
 
 ## Prerequisites
 
 1. `git status` first — shared checkout. Note the HEAD sha; the apply records it.
-2. `.env` holds the **shared** `DATABASE_URL` (the apply has no branch mode by design: the branch
+2. The target variable is set: `.env` holds the **shared** `DATABASE_URL` by default, or `--target-env=<NAME>` names another (the branch
    rehearsal is a different script).
 3. The database owner's credential, i.e. what `DATABASE_URL` already carries.
 4. A Neon **restore point** (step 1 below) — a recorded `br-…` id, not a promise.
@@ -41,7 +56,7 @@ the NEXT environment — the EU project is a different database, so its role app
    ```
 
    `API_ROLE_PASSWORD` in the environment works too, but a file keeps the secret out of `ps` and
-   out of every log. Never pass it as an argument — neither script accepts one.
+   out of every log. Never pass it as an argument. Use one FILE per TARGET — each database has its own role password, so `api-role.password` (shared) and `api-role-eu.password` (EU) stay separate.
 
 ## Verified on the way in (measured 2026-10-17)
 

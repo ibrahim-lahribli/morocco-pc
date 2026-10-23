@@ -28,6 +28,10 @@
  *   - row counts of the engine's catalog tables: a seed file that silently wrote
  *     nothing leaves a smaller catalog, and every later latency number would be
  *     measuring less work.
+ *   - the identity of every `scoring_model` row and whether it is ACTIVE: two
+ *     branches can agree on the row COUNT while serving different scores, so
+ *     parity of counts is not parity of behaviour. The active model is the fact
+ *     a release check is actually asked to confirm.
  *   - row counts of the Layer 4 tables: the new target must start EMPTY there.
  *     A non-zero count is not automatically fatal, but it is a difference an
  *     operator must explain before calling the target "the same".
@@ -132,6 +136,26 @@ async function readShape(client) {
 }
 
 /**
+ * Every scoring model as `name@version|active|inactive`, name/version order, or
+ * null when the table predates `008`.
+ *
+ * The row COUNT alone is not enough (see the header): a database with one
+ * active model and a database with one active model can still score the same
+ * build differently. Reading the identity and the active flag is what turns
+ * "same row count" into "same behaviour".
+ */
+async function readModels(client) {
+  const reg = await client.query("SELECT to_regclass('public.scoring_model') AS reg");
+  if (reg.rows[0].reg === null) return null;
+  const result = await client.query(
+    'SELECT name, version, is_active FROM scoring_model ORDER BY name ASC, version ASC'
+  );
+  return result.rows.map(
+    (row) => row.name + '@' + row.version + '|' + (row.is_active ? 'active' : 'inactive')
+  );
+}
+
+/**
  * Row counts for the fixed table list.
  *
  * `null` means the table DOES NOT EXIST on that target (PostgreSQL `42P01`),
@@ -168,6 +192,7 @@ async function readSnapshot(url, label) {
       tables: await readTables(client),
       shape: await readShape(client),
       counts: await readCounts(client),
+      models: await readModels(client),
     };
     return snapshot;
   } finally {
@@ -184,6 +209,12 @@ function printReport(a, b, comparison) {
     return snapshot.ledger.length + ' files, tail ' + snapshot.ledger[snapshot.ledger.length - 1];
   };
   console.log('   ledger ' + tail(a) + '  vs  ' + tail(b));
+  const activeModels = (snapshot) => {
+    if (!Array.isArray(snapshot.models)) return 'table absent';
+    const active = snapshot.models.filter((row) => row.endsWith('|active'));
+    return active.length === 0 ? 'none active' : active.join(', ');
+  };
+  console.log('   models ' + activeModels(a) + '  vs  ' + activeModels(b));
   console.log('   shape  ' + shortDigest(a.shape) + '  vs  ' + shortDigest(b.shape));
   console.log('');
   console.log('check'.padEnd(width) + 'status  detail');

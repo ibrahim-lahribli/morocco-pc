@@ -31,14 +31,15 @@ function snapshot(overrides) {
     tables: ['product', 'store_offer'],
     shape: ['col|product|id:uuid:NO', 'enum|product_category|CPU'],
     counts,
+    models: ['launch-v2@1.0.0|active'],
   }, overrides || {});
 }
 
 test('identical snapshots match on every check', () => {
   const result = compareSnapshots(snapshot(), snapshot());
   assert.equal(result.ok, true);
-  // Three list checks (ledger, tables, shape) plus one count check per table.
-  assert.equal(result.rows.length, 3 + PARITY_TABLES.length);
+  // Four list checks (ledger, tables, shape, models) plus one count per table.
+  assert.equal(result.rows.length, 4 + PARITY_TABLES.length);
   assert.deepEqual(result.rows.filter((row) => row.status !== 'MATCH'), []);
 });
 
@@ -64,6 +65,45 @@ test('a missing ledger is a DIFF, not an error and not a pass', () => {
   // is a fact about both, not a difference between them.
   const both = compareSnapshots(snapshot({ ledger: null }), snapshot({ ledger: null }));
   assert.equal(both.rows.find((entry) => entry.check === 'ledger-files').status, 'MATCH');
+});
+
+test('an ACTIVE scoring model that differs is a DIFF even when the row count matches', () => {
+  // The case the count check cannot see: both sides hold exactly one active
+  // model, so `rows:scoring_model` MATCHes, yet the scores they serve differ.
+  const b = snapshot({ models: ['seed-minimal-v1@1.0.0|active'] });
+  const result = compareSnapshots(snapshot(), b);
+  assert.equal(result.ok, false);
+  assert.equal(result.rows.find((entry) => entry.check === 'rows:scoring_model').status, 'MATCH');
+  const row = result.rows.find((entry) => entry.check === 'scoring-model-pins');
+  assert.equal(row.status, 'DIFF');
+  assert.match(row.detail, /launch-v2@1\.0\.0\|active/);
+  assert.match(row.detail, /seed-minimal-v1@1\.0\.0\|active/);
+
+  // The active FLAG is part of the row: the same pins with a different active
+  // model is still a difference, not a reordering.
+  const flipped = compareSnapshots(
+    snapshot({ models: ['launch-v2@1.0.0|active'] }),
+    snapshot({ models: ['launch-v2@1.0.0|inactive'] })
+  );
+  assert.equal(flipped.ok, false);
+  assert.equal(flipped.rows.find((entry) => entry.check === 'scoring-model-pins').status, 'DIFF');
+});
+
+test('a snapshot without model rows is compared as absent, not as an error', () => {
+  // Both absent is a MATCH (a pre-008 database on both sides); a fixture or a
+  // caller that predates the check must not crash on `.length`.
+  const old = (extra) => {
+    const base = snapshot(extra);
+    delete base.models;
+    return base;
+  };
+  const both = compareSnapshots(old(), old());
+  assert.equal(both.rows.find((entry) => entry.check === 'scoring-model-pins').status, 'MATCH');
+  assert.match(both.rows.find((entry) => entry.check === 'scoring-model-pins').detail, /absent on both/);
+
+  const one = compareSnapshots(old(), snapshot());
+  assert.equal(one.ok, false);
+  assert.equal(one.rows.find((entry) => entry.check === 'scoring-model-pins').status, 'DIFF');
 });
 
 test('the table list is compared by name and order', () => {
