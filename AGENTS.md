@@ -265,7 +265,7 @@ same artifact. A deliberate type error on a throwaway ref (run 39619535613) turn
 the typecheck step red and skipped every later step, so the gate does fire. One trap that run
 recorded: the upload needed `include-hidden-files: true` because `.lighthouseci` is a DOT
 directory and `upload-artifact` skips hidden files by default — without it the step reports
-success and stores nothing. S19 then promoted the three assertions to `error` with
+success and stores nothing. S19 then promoted its three metric assertions to `error` with
 `aggregationMethod: "median"` (2026-10-21), and added the verified-price JSON-LD gate in
 `apps/web/lib/result/structured-data.ts`. S17 then added the component and guide routes, S18 the
 crawl surface (`e2e/seo.spec.ts`, 7 specs) and S20 the Arabic pass (`e2e/rtl.spec.ts`, 21 specs,

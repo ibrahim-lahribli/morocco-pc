@@ -12,8 +12,7 @@
  * `scripts/lighthouse-ci.mjs` starts the built app and the mock before this
  * config is read — `lhci autorun` on its own would measure whatever happens to
  * be listening, which is how a budget quietly becomes a lie.
- *
- * ENFORCED, per S19: all three assertions are `error`, so a regression fails the
+ * * ENFORCED, per S19: all four assertions are `error`, so a regression fails the
  * web job instead of only decorating its artifact. They were `warn` from S6
  * until the budgets had run on a few real runners (2026-10-21).
  *
@@ -22,11 +21,18 @@
  * one 3.09 s sample passed a 2.5 s budget because two samples were 2.36 s. A
  * budget that reports its best run is not a budget. The median of the three is
  * what the next sample most resembles.
- *
- * 170 KB is 174 080 bytes — S6's hypothesis, measured as TRANSFER size (so
+ * * 170 KB is 174 080 bytes — S6's hypothesis, measured as TRANSFER size (so
  * compression counts). `resource-summary:script:size` is the closest audit LHCI
  * can assert on: it counts the JavaScript the page actually fetched, which is
  * what "initial JS" means for a server-rendered route.
+ *
+ * `categories:performance` >= 0.90 is S26's DoD line — "Lighthouse mobile >= 90 on
+ * preset pages, asserted in CI" — and it is NOT redundant with the three metrics
+ * above. A page can hold every one of them and still fall below 90 on the audits
+ * nobody budgeted (total blocking time, speed index, first contentful paint), so
+ * the three answer "did the things we measured regress" while the score answers
+ * "is the page fast", which is what the exit gate actually promises. `minScore`
+ * takes the 0..1 category score, not a 0..100 number: 0.9 is 90.
  */
 const { IDS } = require("./mock/fixtures.mjs");
 
@@ -60,13 +66,16 @@ module.exports = {
       },
     },
     assert: {
-      // One aggregation for all three, so no assertion can drift back to the
+      // One aggregation for all four, so no assertion can drift back to the
       // optimistic default on its own.
       aggregationMethod: "median",
       assertions: {
         "largest-contentful-paint": ["error", { maxNumericValue: 2500 }],
         "cumulative-layout-shift": ["error", { maxNumericValue: 0.1 }],
         "resource-summary:script:size": ["error", { maxNumericValue: 174080 }],
+        // S26's exit gate: the category SCORE, taken as the median of the three
+        // runs like every other assertion here.
+        "categories:performance": ["error", { minScore: 0.9 }],
       },
     },
     upload: {

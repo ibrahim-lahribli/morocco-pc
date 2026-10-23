@@ -328,7 +328,7 @@ GitHub the same day:** run 39618370244 (push) and 39618455093 (dispatch) were gr
 proven too: a deliberate type error on a throwaway ref (run 39619535613) failed the typecheck step
 and skipped the rest. **On `master` now:** pushing 3e1a4e7 ran both workflows and the web run
 (39620417164) was green step for step, report artifact attached; the engine's `ci` job was green
-on the same commit. S19 has since promoted the three assertions to `error` with a median
+S19 has since promoted its three metric assertions to `error` with a median
 aggregation (see S19 below).
 
 ### Phase W1 — Wizard
@@ -1640,15 +1640,17 @@ exists. The page says the true thing for today's data rather than drawing a tren
 2. Playwright 360 px wizard E2E against staging = green.
 3. Staging run log shows zero unhandled console errors and zero 5xx.
 
-**Status: BLOCKED 2026-10-22 — the one sprint a deployment gate stops.** All three exit criteria
-need a deployed API origin and the two staging runs also need a chosen web host; neither exists.
-What is already enforced without one: S6/S19's three budgets (`error`, `median`) run in `web.yml`
-on the fixture result page and on a real preset page, and the 360 px wizard is covered by
-Playwright. What is genuinely unproven: the FR flow against a staging API, twenty consecutive runs
-without flake, and a staging run with zero unhandled console errors and zero 5xx. Note that the
-DoD's first line — a performance SCORE of 90 or better asserted in CI — is not asserted today:
-`lighthouserc.cjs` selects `onlyCategories: performance` and asserts three metrics, never the
-category score. That assertion belongs to this sprint.
+**Status: BLOCKED 2026-10-22, criterion 1 LANDED 2026-10-23 — a deployment still stops the
+sprint.** The staging runs need a deployed API origin and a chosen web host; neither exists, and what
+is genuinely unproven is the FR flow against a staging API, twenty consecutive runs without flake,
+and a staging run with zero unhandled console errors and zero 5xx. The DoD's first line used to be
+the other gap: "a performance SCORE of 90 or better asserted in CI" was not asserted anywhere,
+because `lighthouserc.cjs` selected `onlyCategories: performance` and asserted three metrics, never
+the category score. It is asserted now — `categories:performance` ≥ 0.90 at `error` under the same
+`median` aggregation as its three siblings — and the assertion is PROVEN, not merely added: with the
+floor raised to 0.99 the run failed `expected >=0.99, found 0.98` and exited 1, and the restored 0.90
+passed at 0.98 on both measured pages. Criterion 2's wizard at 360×800 is Playwright-covered;
+criterion 3 still has no origin.
 
 ### Post-M3 refinement (not on the critical path)
 

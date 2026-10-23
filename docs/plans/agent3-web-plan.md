@@ -315,14 +315,14 @@ merged suite’s 359 passed / 1 skipped.
 - The **wizard completes at 360 px**.
 - The **full FR flow runs against the staging API** (wizard → results → share).
 
-**Today (2026-10-22): BLOCKED, and S26 stays blocked until the deployment happens.** All three
-criteria need a deployed API origin and the two staging runs also need a chosen web host; neither
-exists, so the gate is unmeasurable rather than merely unmeasured. Part of criterion 1 is already
-enforced without a deployment — S6/S19's three budgets (`error`, `median`) run in `web.yml` on the
-fixture result page and on a real preset page — but the criterion's own *score* of 90 or better is
-not asserted anywhere: `lighthouserc.cjs` selects `onlyCategories: performance` and asserts three
-metrics, never the category score. Criterion 2's wizard is covered by Playwright at 360×800;
-criterion 3 has no origin to run against.
+**Today (2026-10-23): S26 stays BLOCKED on the deployment, with criterion 1 now enforced.** The
+staging runs need a deployed API origin and a chosen web host; neither exists, so the FR flow and the
+zero-error staging log remain unmeasurable rather than merely unmeasured. Criterion 1 no longer
+belongs to that list: since 2026-10-23 `lighthouserc.cjs` enforces FOUR assertions (`error`,
+`median`) in `web.yml` — LCP ≤ 2 500 ms, CLS ≤ 0.1, script transfer ≤ 174 080 B, and
+`categories:performance` ≥ 0.90 — on the fixture result page AND on a real preset page, so the
+criterion's own score is measured at the median of three runs (0.98 on both pages, measured
+locally). The wizard at 360×800 is Playwright-covered; criterion 3 has no origin to run against.
 
 ## 6. Measured state of the scaffold (2026-10-20)
 
