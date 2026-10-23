@@ -231,6 +231,50 @@ test.describe("the mock serves every contract state", () => {
     expect((await request.get("/v1/catalog/products/x?state=404")).status()).toBe(404);
   });
 
+  test("the price history is the frozen v1.6 envelope, not a lookalike", async ({ request }) => {
+    const body = await (
+      await request.get("/v1/catalog/products/rtx-4060-8gb/price-history")
+    ).json();
+    // The exact key list, because a mock that invents a field name is how S25
+    // passed against `observations` while the API served `points`.
+    expect(Object.keys(body).sort()).toEqual([
+      "change_amount",
+      "change_pct",
+      "currency",
+      "disclaimer",
+      "latest_price",
+      "max_price",
+      "min_price",
+      "observation_count",
+      "points",
+      "slug",
+    ]);
+    expect(body.observation_count).toBe(body.points.length);
+    const prices = body.points.map((point: { price: number }) => point.price);
+    expect(body.latest_price).toBe(prices[prices.length - 1]);
+    expect(body.min_price).toBe(Math.min(...prices));
+    expect(body.max_price).toBe(Math.max(...prices));
+    expect(body.change_amount).toBe(Number((prices[prices.length - 1] - prices[0]).toFixed(2)));
+
+    // One reading is a fact, not a trend: the summary says so with nulls.
+    const single = await (
+      await request.get("/v1/catalog/products/rtx-4060-ti-gaming-oc-16-go/price-history")
+    ).json();
+    expect(single.points).toHaveLength(1);
+    expect(single.change_amount).toBeNull();
+    expect(single.change_pct).toBeNull();
+
+    // An empty series is a 200; an unknown slug is the 404 the detail route
+    // also gives, so the two cannot be confused.
+    const empty = await (
+      await request.get("/v1/catalog/products/kit-ddr5-16-go/price-history")
+    ).json();
+    expect(empty.points).toEqual([]);
+    expect(empty.observation_count).toBe(0);
+    expect(empty.latest_price).toBeNull();
+    expect((await request.get("/v1/catalog/products/pas-un-produit/price-history")).status()).toBe(404);
+  });
+
   test("slow mode delays without changing the body", async ({ request }) => {
     const started = Date.now();
     const response = await request.post("/v1/recommendations?state=slow&delay=300", {

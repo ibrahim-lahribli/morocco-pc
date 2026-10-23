@@ -5240,6 +5240,25 @@ It supersedes no decision. It extends the API surface Decision 36 defines with t
 
 Status: RESOLVED 2026-10-23; IMPLEMENTED 2026-10-23 — `GET /v1/catalog/products/:slug/price-history` serves a product's recorded observations oldest-first, with each point's Decision 35 provenance class and a summary whose change fields stay null until there are two observation moments; contract **v1.6**.
 
+**UPDATE 2026-10-23 — S25's UI half SHIPPED, so three sentences below describe that pass only.**
+`apps/web/components/price-history.tsx` now reads this route's `points` server-side and renders the three
+data states — no reading, one reading, and a 2+ series with the chart, the min / max / latest rows and the
+up / down / unchanged sentence — mirrored GEOMETRICALLY on `/ar` (direction is a prop, the axis grows toward
+the inline end, and a spec reads the plotted points back off the rendered SVG), with the product page placing
+it between the offers and the build appearances. Evidence: `apps/web/e2e/price-history.spec.ts` **13** specs
+in both locales, the merged web suite **359 passed / 1 skipped** (up from 346), `check:api-types` at contract
+**1.6.0 / 8 paths** with `schema.d.ts` byte-identical to the generator, and a live run against the shared
+catalogue rendering « Un seul relevé : 3 200 DH, le 18 septembre 2026. » in French and the Arabic equivalent,
+with no chart and no 360 px overflow.
+
+The CONTRACT is unchanged by the UI half: no field, type, status, cap or ordering moved, so items 1-10 stand
+exactly as written. Read the *Date* sentence "It does NOT build the chart", the *Verdict* bullet **NOT done
+here**, and the "chart pending" phrasing in *Supersedes / superseded by* as the record of the API pass; this
+paragraph supersedes all three. The data limit stated below still governs the UI, and it is DATA, not code:
+every product's history is a single observation MOMENT today (99 of the 100 products carry exactly one row,
+and the two-row product's rows share one instant), so the 2+ branches stay fixture-exercised until a second
+ingestion sweep exists.
+
 Date: 2026-10-23. S25 of `docs/plans/agent3-web-sprints.md` shipped its saved-builds half and left the price-history half blocked: `price_history` has existed since migration 009, but NO route read it, so a chart could only have plotted fixtures. This entry records the read contract the sprint needed. It is NOT an engine change — not one module under `src/recommendation/` is touched, no score, rank or persisted row changes — and it needs NO migration or seed: the table, its index and its 101 rows are already there. It does NOT build the chart; the UI half of S25 remains open, and the shape below is what it codes against.
 
 ### Current situation

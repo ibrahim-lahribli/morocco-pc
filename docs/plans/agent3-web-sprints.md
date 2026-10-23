@@ -7,13 +7,11 @@ keyboard-reachable with visible focus, no raw API enum text rendered, fr copy in
 Contract dependencies (CD-*) and findings (V*) are defined in the plan §2 — the API and engine
 are in progress, so every contract-dependent sprint has a fixtures-first path.
 
-**Board state, 2026-10-23 (S25's saved-builds half landed; its price-history API unblocked).** 27
-sprints: **24 DONE** (S1–S23 and S27, whose status lines below carry the evidence), **1 HALF DONE**
-(S25 — saved builds shipped, and the price-history API now exists (contract v1.6, Decision 51), so only
-the chart is left), **1 NOT STARTED** (S24, W5/post-beta, deliberately outside the M3
-gate) and **1 BLOCKED** (S26, which needs a deployed API and a chosen web host). What is left is not
-one block: S24 waits on CD-8, S25's remaining half is the chart against the route that now exists,
-and only S26 needs a deployment.
+**Board state, 2026-10-23 (S25 landed whole: saved builds and the price history).** 27
+sprints: **25 DONE** (S1–S23, S25 and S27, whose status lines below carry the evidence), **1 NOT
+STARTED** (S24, W5/post-beta, deliberately outside the M3 gate) and **1 BLOCKED** (S26, which needs a
+deployed API and a chosen web host). What is left is not one block: S24 waits on CD-8, and only S26
+needs a deployment.
 
 ## Sprints
 
@@ -1566,11 +1564,11 @@ lands, and alone it proves nothing about the platform path the sprint exists to 
 2. Save a build → survives reload; clearing storage shows the empty state with a CTA.
 3. localStorage quota/unavailable (private mode) → graceful inline notice, no crash.
 
-**Status: HALF DONE 2026-10-23 — saved builds SHIPPED; price history UNBLOCKED, chart still to build.**
+**Status: DONE 2026-10-23 — saved builds SHIPPED, and the price history SHIPPED on the route it unblocked.**
 `GET /v1/catalog/products/:slug/price-history` landed the same day (contract v1.6, Decision 51) and
 serves one point per observation MOMENT at that moment's cheapest price, oldest first, with the change
-fields null until two moments exist — so the chart codes against a real shape and the three thin-data
-states are the norm today, not an edge case. The UI below is what remains. A build can be
+fields null until two moments exist — so the chart was built against a real shape and the three thin-data
+states are the norm today, not an edge case. The chart reads that route. A build can be
 saved from every card, on the results page AND the preset page, and the shelf is
 `/{locale}/enregistrements` — reachable from a footer nav on EVERY page (the 404 included), not only
 from the link a saved card shows. The footer, not the header, is a measured choice: at 360 px the
@@ -1593,7 +1591,8 @@ region AND gives focus somewhere to be: the row that owned it is gone, so focus 
 itself (the list, or the empty card), never to the next row's « Retirer » — a held Enter would
 otherwise delete the shelf one item per keypress.
 
-Measured: **346/346** in the full suite with `E2E_BROWSER_API=1`, 25 of them new
+Measured on the saved-builds branch, BEFORE master's S23 was merged in: **346/346** in the full
+suite with `E2E_BROWSER_API=1`, 25 of them new
 (`e2e/saved.spec.ts` 11, `e2e/saved-model.spec.ts` 12 — the model half needs no browser — plus 2 in
 `e2e/shell.spec.ts` for the footer entry, in both locales);
 `typecheck`, `build` (the shelf prerenders `●` per locale) and `lint` (0 errors, the pre-existing
@@ -1603,9 +1602,28 @@ to be scoped, not relaxed: `share.spec.ts` asserted on a page-wide `[aria-live="
 result page now legitimately carries one polite region per build card, so those two assertions
 resolve the share bar's own region instead.
 
-The chart half stays BLOCKED for the recorded reason: `price_history` has existed since migration
-009, but no API route reads it — `apps/api/src/` mentions it nowhere — so a chart built today plots
-fixtures. The plan's fixtures-first rule allows that; presenting it as the feature does not.
+The chart half shipped the same day and no longer plots fixtures. `apps/web/components/price-history.tsx`
+reads the route's `points` on the server — already collapsed to one point per observation MOMENT and
+ascending — and owns the whole surface: no reading, one reading, and a 2+ series with the SVG chart, the
+min / max / latest rows and the up / down / unchanged sentence. Thin data is a SENTENCE, never a zero: one
+observation renders « Un seul relevé : 3 200 DH, le 18 septembre 2026. » and draws no line, because a
+chart of one point is a picture of nothing. The Arabic page mirrors GEOMETRICALLY, not by reversing the
+array: direction is a prop, the time axis grows toward the inline end, and the spec reads the plotted
+points back off the rendered SVG's own x positions — a left-to-right axis inside an RTL page fails. The
+chart is a labelled image (`role="img"` carrying the count sentence) and every value it plots also exists
+in text, which is the DoD's "text summary equivalent".
+
+Measured on the merged tree (master's S23 plus this S25 half): the suite is **359 passed / 1 skipped**
+(up from 346, and the skip is the pre-existing `E2E_BROWSER_API` one), of which `e2e/price-history.spec.ts`
+is **13** specs across both locales, `e2e/compare.spec.ts` 11 and `e2e/a11y.spec.ts` still **51** checks;
+`typecheck`, `lint` (0 errors), `check:tokens` (77 files), `check:i18n` (75 files + 2 catalogues) and
+`build` exit 0. `check:api-types` pins contract **1.6.0** and its eight paths. Against the real API the
+page renders the single-reading sentence in French and Arabic, with no chart and no 360 px overflow.
+
+The honest limit is DATA, not code: every product's history is a single observation MOMENT today — 99 of
+the 100 products carry exactly one row, and the hundredth's two rows (two offers) share one instant — so
+the 2+ branches, falling / rising / unchanged, are exercised by fixtures until a second ingestion sweep
+exists. The page says the true thing for today's data rather than drawing a trend it never saw.
 
 ### M3 exit gate
 
@@ -1710,7 +1728,6 @@ component's own arithmetic.
   2026-10-22) — each 1–2 h of agent work. Nominal sums: W0–W4 + exit ≈ 40 h, W5 ≈ 6 h,
   S27 ≈ 1.5 h.
 
-**State, 2026-10-23 (S25's saved-builds half landed):** every node on this map through S22 is DONE,
-and so are S27, S23 and S25's saved half, which sit outside it. The hard order’s only remaining node
-is S26, and a deployment gates it. What is left: S25's chart half (its API route landed, Decision 51),
-and S24, which waits on CD-8 — nobody has scheduled it.
+**State, 2026-10-23 (S25 landed whole):** every node on this map through S22 is DONE,
+and so are S27, S23 and both halves of S25, which sit outside it. The hard order’s only remaining node
+is S26, and a deployment gates it. What is left: S24, which waits on CD-8 — nobody has scheduled it.

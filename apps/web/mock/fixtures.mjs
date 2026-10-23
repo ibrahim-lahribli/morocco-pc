@@ -662,6 +662,11 @@ export const PRESETS_EMPTY = {
  * that shares some facts with the first and differs on the rest, which is what
  * gives a comparison something to compare.
  *
+ * S25 appended two more, `rx-7600-8gb` and `ssd-nvme-1-to`, because the price
+ * section has change branches that only exist when a series rises or holds
+ * still. Both carry an indicative offer, so neither enters the index or the
+ * sitemap and the crawlable catalogue is unchanged.
+ *
  * `specs` is an OPEN object in the contract — its keys are the spec table's
  * columns minus the ids and timestamps the API strips — so one entry here also
  * carries a NULL (`height_mm`) and one a foreign key (`memory_type_id`), which
@@ -734,6 +739,38 @@ export const CATALOG_PRODUCTS_BY_SLUG = {
     price_status: "indicative",
     disclaimer: DISCLAIMER,
   },
+  /**
+   * S25: the RISING series. It is appended here, not preferred: the three
+   * products above are pinned by the catalogue specs (the verified GPU, the
+   * offer-less kit, the 60-character name), and this one exists so the
+   * "en hausse" sentence is rendered by a real page instead of by nobody.
+   * Its offer is SEED_UNVERIFIED, so it stays out of the index and out of the
+   * sitemap — it is a price-series fixture, not a product we advertise.
+   */
+  "rx-7600-8gb": {
+    slug: "rx-7600-8gb",
+    display_name: "Radeon RX 7600 8GB",
+    category: "GPU",
+    specs: { board_tgp_watts: 165, width_slots: 2, length_mm: 240, height_mm: 40 },
+    offers: [{ price: 3390, currency: "MAD", offer_class: "SEED_UNVERIFIED" }],
+    price_status: "indicative",
+    disclaimer: DISCLAIMER,
+  },
+  /**
+   * S25: the FLAT series — the same price twice, which is the one case where
+   * the chart has no vertical range to scale (every point sits on the middle
+   * line) and the summary must say the price has not moved rather than invent
+   * a direction.
+   */
+  "ssd-nvme-1-to": {
+    slug: "ssd-nvme-1-to",
+    display_name: "SSD NVMe 1 To",
+    category: "STORAGE",
+    specs: { capacity_gb: 1000, interface: "PCIe 4.0 x4", protocol: "NVMe" },
+    offers: [{ price: 780, currency: "MAD", offer_class: "SEED_UNVERIFIED" }],
+    price_status: "indicative",
+    disclaimer: DISCLAIMER,
+  },
 };
 
 /** The list page, derived from the map so the two cannot disagree (S17). */
@@ -750,6 +787,65 @@ export const CATALOG_LIST_OK = {
     has_offer: product.offers.length > 0,
   })),
   next_cursor: null,
+};
+
+/**
+ * The price history, by slug (S25), keyed by the same slugs as the catalogue
+ * above so a component page always has a series to answer with.
+ *
+ * FIVE products, FIVE DATA STATES, and the states are the fixture's job:
+ * `kit-ddr5-16-go` has never been observed at a price, `rtx-4060-ti-…` has
+ * exactly one reading, `rtx-4060-8gb` has four and its latest is BELOW its
+ * first (the falling branch), `rx-7600-8gb` rises (the rising branch, and one
+ * of its prices arrives as a numeric string), and `ssd-nvme-1-to` never moves
+ * (the unchanged branch, and the chart's no-vertical-range case). A spec that
+ * wants a state picks a slug; nothing has to be stubbed at request time, which
+ * matters because the page reads this on the SERVER — a browser route
+ * interception cannot reach it.
+ *
+ * `observed_at` values are fixed calendar days and the series is NOT
+ * monotonic on purpose: `rtx-4060-8gb` has a past low, so the minimum is a
+ * different reading from the latest one and a summary that confused the two
+ * would still render something plausible. `price` is in MAD — the only
+ * currency the site quotes — and is usually a NUMBER, the shape a real
+ * endpoint would send for a price; `rx-7600-8gb` carries one numeric STRING
+ * deliberately, because pg returns a NUMERIC column that way.
+ */
+export const PRICE_HISTORY_BY_SLUG = {
+  "rtx-4060-8gb": {
+    points: [
+      { observed_at: "2026-05-22", price: 3990 },
+      { observed_at: "2026-07-04", price: 3050 },
+      { observed_at: "2026-08-19", price: 3450 },
+      { observed_at: "2026-10-06", price: 3200 },
+    ],
+  },
+  "kit-ddr5-16-go": { points: [] },
+  "rtx-4060-ti-gaming-oc-16-go": {
+    points: [{ observed_at: "2026-09-24", price: 4750 }],
+  },
+  /**
+   * S25: the RISING series, and one reading whose price is a numeric STRING.
+   *
+   * The string is not a typo: `pg` returns a NUMERIC column as a string, so an
+   * endpoint forwarding that column sends exactly this. A loader that refused
+   * it would drop the reading and draw two points instead of three, which is
+   * what the spec counts.
+   */
+  "rx-7600-8gb": {
+    points: [
+      { observed_at: "2026-06-02", price: 2990 },
+      { observed_at: "2026-08-11", price: "3190.00" },
+      { observed_at: "2026-10-04", price: 3390 },
+    ],
+  },
+  /** The FLAT series: two readings, one price. */
+  "ssd-nvme-1-to": {
+    points: [
+      { observed_at: "2026-07-09", price: 780 },
+      { observed_at: "2026-09-15", price: 780 },
+    ],
+  },
 };
 
 /** The fixture slug every catalogue spec starts from: verified, so indexable. */

@@ -29,6 +29,10 @@
  *    N preset reads per component page, all cached for the revalidation window and
  *    request-memoized here, so it is a build-time/ISR cost, never a per-visitor
  *    one.
+ *
+ * 3. **The price readings** (S25) are a read of their own path —
+ *    `GET /v1/catalog/products/:slug/price-history`, contract v1.6 — see
+ *    `loadPriceHistory`.
  */
 import { cache } from "react";
 
@@ -37,6 +41,7 @@ import {
   getCatalogProductForServer,
   isApiConfigured,
   listCatalogProductsForServer,
+  serverApiBaseUrl,
   type CatalogListResponse,
   type CatalogProductResponse,
 } from "../api/client";
@@ -307,6 +312,133 @@ export async function componentAppearances(productSlug: string): Promise<Appeara
 
 /** Same memo, so the body and its metadata never pay for two walks. */
 export const componentAppearancesCached = cache(componentAppearances);
+
+/**
+ * One price reading for a catalogue product (S25).
+ *
+ * The two fields are the whole shape on purpose: a reading says WHEN a price was
+ * seen and WHAT it was. Every label and sentence around it belongs to the page,
+ * so a new language never needs a new fixture.
+ */
+export interface PriceObservation {
+  /**
+   * The moment the price was seen: an ISO-8601 STRING as served, a full
+   * timestamp from the API (`2026-09-18T22:33:23.358Z`) or a bare `YYYY-MM-DD`
+   * from a fixture. `formatDate` renders either in the page's language, so the
+   * contract's precision is kept rather than truncated here.
+   */
+  observed_at: string;
+  /** The observed price in MAD — positive and finite, enforced on read. */
+  price: number;
+}
+
+/** `/v1/catalog/products/:slug/price-history`. The slug is DATA, so it is encoded. */
+function priceHistoryPath(slug: string): string {
+  return `/v1/catalog/products/${encodeURIComponent(slug)}/price-history`;
+}
+
+/**
+ * A reading, or null when the entry cannot be rendered honestly.
+ *
+ * `price` accepts a NUMBER or a numeric STRING because `pg` returns NUMERIC
+ * columns as strings, and an endpoint forwarding that column would send exactly
+ * such a string — the repo's other loaders coerce the same way. A reading with an
+ * unparseable day, or a price that is not a finite positive number, is DROPPED: a
+ * zero or a NaN would draw a point at a made-up height, and a missing day would
+ * print an invalid date in both languages.
+ */
+function asPriceObservation(value: unknown): PriceObservation | null {
+  if (typeof value !== "object" || value === null) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.observed_at !== "string") return null;
+  if (!Number.isFinite(Date.parse(record.observed_at))) return null;
+  const rawPrice = record.price;
+  if (typeof rawPrice !== "number" && typeof rawPrice !== "string") return null;
+  const price = Number(rawPrice);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  return { observed_at: record.observed_at, price };
+}
+
+/**
+ * The price readings for one product, OLDEST FIRST (S25).
+ *
+ * Three limits worth stating, because each one is a place the obvious version
+ * lies:
+ *
+ *   1. **The series is the contract's `points`.**
+ *      `GET /v1/catalog/products/:slug/price-history` (contract v1.6) serves
+ *      them ascending, already collapsed to ONE POINT PER OBSERVATION MOMENT at
+ *      that moment's cheapest price; the summary fields beside them are the
+ *      API's own reading of the same rows, and this page derives its own from
+ *      the points. A 404 names a product the catalogue does not serve — the
+ *      product read has already answered for that slug — so it is an empty
+ *      series here, not an error.
+ *   2. **Every other failure PROPAGATES.** A price series is data, not
+ *      decoration: silently rendering a dead endpoint as "never observed" would
+ *      print a false claim about the product's price. Throwing keeps the page's
+ *      ISR rule intact — Next serves the last good copy instead of a rewritten
+ *      history.
+ *   3. **The result is SORTED here, once.** Ties break on price, so two readings
+ *      on one day keep a stable order; the chart's axis and the summary's "since
+ *      the first reading" both assume an order, and neither should inherit
+ *      whatever order the server happened to send.
+ *
+ * Cached for the catalogue window and request-memoized, like its siblings.
+ */
+export async function loadPriceHistory(slug: string): Promise<PriceObservation[]> {
+  let response: Response;
+  try {
+    response = await fetch(serverApiBaseUrl() + priceHistoryPath(slug), {
+      headers: { accept: "application/json" },
+      next: { revalidate: CATALOG_REVALIDATE_SECONDS },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (cause) {
+    throw new ApiError({
+      status: 0,
+      code: "NETWORK_ERROR",
+      message: "The price history could not be reached.",
+      cause,
+    });
+  }
+
+  if (response.status === 404) return [];
+  if (!response.ok) {
+    throw new ApiError({
+      status: response.status,
+      code: `HTTP_${response.status}`,
+      message: `The price history request failed with status ${response.status}`,
+    });
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch (cause) {
+    // A 2xx that is not JSON is a proxy page, not a series.
+    throw new ApiError({
+      status: response.status,
+      code: "UNKNOWN",
+      message: "Expected a JSON price history",
+      cause,
+    });
+  }
+
+  const record =
+    typeof body === "object" && body !== null ? (body as Record<string, unknown>) : null;
+  const raw = record !== null && Array.isArray(record.points) ? record.points : [];
+  const observations = raw.flatMap((entry) => {
+    const parsed = asPriceObservation(entry);
+    return parsed === null ? [] : [parsed];
+  });
+  observations.sort(
+    (a, b) => Date.parse(a.observed_at) - Date.parse(b.observed_at) || a.price - b.price,
+  );
+  return observations;
+}
+
+/** The request-scoped memo: a render reads the series exactly once. */
+export const loadPriceHistoryCached = cache(loadPriceHistory);
 
 /** Keyset page size for the compare picker’s one listing read. */
 const CANDIDATE_PAGE_LIMIT = 100;

@@ -174,7 +174,11 @@ test("the wrong selections are answered in words", async ({ page }) => {
 
   // A fourth slug is not a fourth column.
   await page.goto(`/fr/composants/comparer?slugs=${A},${B},${C},${RAM}`);
-  await expect(page.getByText(/Trois composants au maximum/)).toBeVisible();
+  // The OVERFLOW sentence, not the shared prefix: with a fourth same-category
+  // fixture in the catalogue the picker also renders its "three at most, remove
+  // one" hint, which repeats the first four words. Both are correct on screen;
+  // matching the prefix would match two elements and fail strict mode.
+  await expect(page.getByText(/les suivants du lien ont été ignorés/)).toBeVisible();
   await expect(page.getByRole("table").locator('th[scope="col"]')).toHaveCount(4);
 });
 

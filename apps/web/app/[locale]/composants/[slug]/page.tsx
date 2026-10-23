@@ -4,6 +4,7 @@ import { hasLocale } from "next-intl";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 
+import { PriceHistory } from "@/components/price-history";
 import { Badge, LinkButton } from "@/components/ui";
 import { routing } from "@/i18n/routing";
 import {
@@ -14,7 +15,11 @@ import {
   offerProvenance,
   PROVENANCE_MESSAGE_KEY,
 } from "@/lib/catalog/model";
-import { componentAppearancesCached, loadCatalogProductCached } from "@/lib/catalog/load";
+import {
+  componentAppearancesCached,
+  loadCatalogProductCached,
+  loadPriceHistoryCached,
+} from "@/lib/catalog/load";
 import { catalogCandidates } from "@/lib/catalog/load";
 import { comparePath } from "@/lib/catalog/compare";
 import { presentSpecs, SPEC_LABEL_KEYS, type SpecCopy } from "@/lib/catalog/specs";
@@ -37,6 +42,12 @@ import { pageAlternates } from "@/lib/seo/site";
  *   - **`noindex` until the prices are real.** `componentIndexable()` requires
  *     every offer to be VERIFIED, not merely a `price_status` column that says so
  *     — the same "indexability follows the data" rule S16 applies to presets.
+ *   - **The price series is a THIRD read** (S25), and its own path:
+ *     `loadPriceHistory()` reads `GET /v1/catalog/products/:slug/price-history`
+ *     (contract v1.6), which serves one point per observation MOMENT, oldest
+ *     first. The page derives its own summary from those points; an absent
+ *     series is "aucun relevé" rather than an error, and `<PriceHistory>` owns
+ *     the three states.
  *   - **A stale or unreachable API keeps the last good page.** The read
  *     propagates anything that is not a 404, so Next serves the previous ISR copy
  *     instead of replacing a product with an error; only "this slug names
@@ -136,6 +147,9 @@ export default async function ComponentPage({
   const provenance = catalogProvenance(product);
   const price = fromPrice(product);
   const appearances = await componentAppearancesCached(product.slug);
+  // S25: the series is read once and passed whole; the component decides which
+  // of its three states that makes.
+  const priceHistory = await loadPriceHistoryCached(product.slug);
 
   // S23: the same-category products this page can be compared with. The section
   // renders even when there are none, because its "Ouvrir la comparaison" link is
@@ -245,6 +259,15 @@ export default async function ComponentPage({
           </ul>
         )}
       </section>
+
+      {/* The direction is a PROP because the chart is drawn on the server: an
+          SVG coordinate system does not inherit `dir`, so the time axis has to
+          be projected from the inline start explicitly. */}
+      <PriceHistory
+        observations={priceHistory}
+        locale={appLocale}
+        direction={locale === "ar" ? "rtl" : "ltr"}
+      />
 
       <section className="mt-6">
         <h2 className="text-subtitle text-ink">{t("appearances.title")}</h2>
