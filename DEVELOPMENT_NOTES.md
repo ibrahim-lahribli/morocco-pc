@@ -1343,6 +1343,24 @@ for a private-network one — and none is recorded here because no host is chose
 holds no provider evidence. Pin it from the deploy's own `request.ip` evidence; do not copy a
 range from memory. The contract is recorded as **Decision 49**.
 
+## 2026-10-23 — V1's DB-side input is now measured (round-trip band, not a POST headline)
+
+V1 promises "a recommendation POST completes in under 3 s", and it remains unmeasured for exactly
+the reason the plan says: no deployed origin exists. What changed this pass is the input to that
+promise: a read-only probe of the per-round-trip latency to Neon on the GitHub Actions runner that
+the nightly gate runs on. `node scripts/measure-db-roundtrip.js` was added at commit [`644804d`](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39936779287) and dispatched on `master` by workflow_dispatch run [39936779287](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39936779287); the step ran and exited 0. The probe reports the band one pass pays (`statements x RTT`, 49 statements by default — the count `measure-api-pass-phases.js` reported for one GAMING pass at `launch-v2@1.0.0` on 2026-10-23), beside what a colocated origin would pay at 2 ms/statement.
+
+**What was measured, verbatim from the runner:**
+
+- `DATABASE_URL`: min 55.3, median 55.6, p95 55.9, max 62.3, band 2 724 ms.
+- `TEST_DATABASE_URL`: min 56.6, median 56.8, p95 57.1, max 57.6, band 2 783 ms.
+
+Both databases land in a tight 55–57 ms band on the runner; the same probe on this machine lands at 120–207 ms (median), so the runner is 2–4× closer to Neon than the dev box is. The comparison to 2 ms/statement is what a colocated origin would pay — roughly 98 ms for the same 49 statements — and is the figure the co-location target is measured against, not the runner's current number.
+
+**What it does and does not claim.** It claims a floor: at 56 ms per round trip, **2.7 s of a 3 s budget is spent on I/O alone** before the engine does any work, leaving ~200–280 ms for the engine, the API hop, serialisation and the client round trip. It does NOT claim a deployed POST meets 3 s: engine time and the client RTT sit on top of the floor, and the 49-statement default is one GAMING pass at one pin — a different scenario or scoring model moves it, and `measure-api-pass-phases.js` prints its own count whenever that question comes up. It does NOT claim the runner is the deployed number: until P1 Sprint 1's Steps 7–9 land, the database lives in aws-us-east-2 (Ohio) and the real target is the co-located EU host, whose own round trip is the figure that decides the target.
+
+So the probe is informational by design — the runner band now gives the nightly a repeatable figure and a week-over-week basis to notice drift, and it converts "we don't know" into "co-location is a requirement, not a nicety". It is not a pass on V1. The equal-form parser is mandatory (`--fail-days=N` lesson carried over), and `--target` takes an env var NAME, never a URL; neither the connection string nor the host appears in its output.
+
 ## 2026-10-18 — the commit writes three INSERTs instead of one per row (P1 Sprint 2)
 
 Measured with `node scripts/measure-api-pass-phases.js --budget=20000 --use-case=GAMING --model=launch-v2@1.0.0`

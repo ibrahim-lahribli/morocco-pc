@@ -24,7 +24,7 @@ config's own note records R2 as unavailable on this account without a payment me
 `wrangler` as devDependencies, all committed. The decision closes the host question and NOTHING else:
 no Workers environment is deployed, no web workflow step deploys, and the web app has never called a
 deployed API, so web S26's staging legs wait on the same owner-gated deploy as P1 Sprint 1's Steps
-7-9, and V1 (POST latency), `trustProxy` Step 4 and Sentry Steps 3-6 remain unmeasured for the same
+7-9, and V1 (POST latency) **remains open**, though its DB-side input is now measured: from GitHub Actions the round trip to Neon is ~56 ms and a 49-statement pass pays ~2.7 s before the engine does any work (commit [644804d](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39936779287), dispatch run [39936779287](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39936779287)); `trustProxy` Step 4 and Sentry Steps 3-6 remain unmeasured for the same
 reason.
 
 ## Sprint completion matrix

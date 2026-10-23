@@ -64,7 +64,7 @@ referenced by no sprint and `OD3` is unused; they are not invented here.
 
 | ID | Finding | Status |
 |---|---|---|
-| V1 | The API's POST latency is unproven, so the wizard cannot promise 3 s | open; needs a deployed origin |
+| V1 | The API's POST latency is unproven; the wizard cannot promise 3 s until one is measured | open; needs a deployed origin, with a DB-side input now measured |
 | V2 | A zero-build pass is a legitimate outcome and must be explained, not shown as an error | **DONE (S11 + S14)** — the zero-build state, its pre-filled way back and the floor advice all render; a zero-build body is a RESULT, so `wizard.tsx` navigates to it exactly like any other pass |
 | V3 | `resolution` / `priority` may be inert (OG-38), and the UI must not imply otherwise | open on the API side |
 | V4 | Explanation text is a string today, so copy cannot be composed from codes | **PARTIAL (S13)** — both branches ship: the string verbatim when `reasons[]` is absent, catalogue lines when it is served. The persisted trace is still prose (CD-2) |
@@ -221,7 +221,7 @@ progress.
 
 **POST latency target: under 3 s.** That is a target, not a measurement: no deployed origin exists,
 so the wizard's real number is unknown and the sprint board deliberately keeps it out of the gate
-until staging exists.
+until staging exists. The DB-side input is now measured: from the runner hosting `ci.yml`, a `SELECT 1` round trip is **~56 ms** (55.3–57.6 ms, median 55.6/56.8 ms for the two databases), which is ~2.7 s of a 49-statement pass before the engine does any work — the same figure the nightly gate records. That does not speak to a deployed POST, but it places the target under a tight constraint: if the API is not co-located with the database, the round-trip floor alone consumes most of the 3 s budget; with a colocated origin the floor drops to ~0.1 s and the target has room. So V1 stays open until a deployed origin exists, and the number that decides it is the runner's, not the dev box's.
 
 **Today:** **S11–S13 done** (2026-10-20/21) — `/fr/config/[id]` is the results page: an SSR
 read of `GET /v1/recommendations/:id`, rank-ordered strategy cards whose first is primary, a
@@ -453,3 +453,5 @@ it.
   environment variable (`NEXT_PUBLIC_API_BASE_URL`) and 19 specs (6 driving the client, 13 driving the mock) — but all of them
   point at the local fixture mock. No real origin exists to call, so CORS-to-server, real latency and
   real 429 behaviour are unproven rather than merely untested.
+- **V1's real number is still unknown, but its DB-side input is now measured.** `node scripts/measure-db-roundtrip.js`
+  runs in `recurring-gates` for both databases on every nightly and every dispatch; commit [`644804d`](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39936779287) dispatched the workflow and the step reported from a real runner: a `SELECT 1` round trip is **~56 ms** from GitHub Actions, and **~120–207 ms** from this machine — so the runner is 2–4× closer to Neon, and a 49-statement pass pays **~2.7 s** on the runner before the engine does any work. That is a floor, not a POST headline: it sets the target against evidence without pretending to measure one.
