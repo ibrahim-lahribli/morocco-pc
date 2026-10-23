@@ -10,7 +10,8 @@ are in progress, so every contract-dependent sprint has a fixtures-first path.
 **Board state, 2026-10-23 (S25 landed whole: saved builds and the price history).** 27
 sprints: **25 DONE** (S1–S23, S25 and S27, whose status lines below carry the evidence), **1 NOT
 STARTED** (S24, W5/post-beta, deliberately outside the M3 gate) and **1 BLOCKED** (S26, which needs a
-deployed API and a chosen web host). What is left is not one block: S24 waits on CD-8, and only S26
+deployed API and a deployed web environment - the host is decided, Cloudflare Workers, 2026-10-23).
+What is left is not one block: S24 waits on CD-8, and only S26
 needs a deployment.
 
 ## Sprints
@@ -1650,7 +1651,8 @@ exists. The page says the true thing for today's data rather than drawing a tren
 3. Staging run log shows zero unhandled console errors and zero 5xx.
 
 **Status: BLOCKED 2026-10-22, criterion 1 LANDED 2026-10-23 — a deployment still stops the
-sprint.** The staging runs need a deployed API origin and a chosen web host; neither exists, and what
+sprint.** The web host is decided (Cloudflare Workers via the OpenNext adapter, 2026-10-23 - the plan §1 and
+§7), but nothing has been deployed from it and no API origin exists; what
 is genuinely unproven is the FR flow against a staging API, twenty consecutive runs without flake,
 and a staging run with zero unhandled console errors and zero 5xx. The DoD's first line used to be
 the other gap: "a performance SCORE of 90 or better asserted in CI" was not asserted anywhere,

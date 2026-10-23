@@ -15,6 +15,18 @@ Passing-test counts are deliberately not restated here — see the dated entries
 **16 sprints done, 3 partial, 2 not started. PR #3 landed `agent/platforms` on `master` as `b2fe64a` on 2026-10-18, with identical content on both sides, so what remains is owner actions rather than agent work.**
 **The recurring gates now run from the default branch, and the verdict is measured: `unit-and-docs` is green on `master`, and the one red step — `verify-migrations-replay` — was closed at its cause on 2026-10-19.** That red was never code: the replay diffed a 22-file tree against a shared database at ledger 20 and reported the 021/022 objects as fresh-only. The owner-approved apply (restore point `br-ancient-cake-axh57vpj`, ledger 20 -> 22) makes the same command report **0 drift**, and dispatch run [39207745723](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39207745723) on `master` (`3f0c166`) is the first **wholly green** `recurring-gates` — every step PASS, `unit-and-docs` included. **P1 Sprint 3**'s statement-count half is still measurable on the TEST branch (only its latency table waits for the co-located target). The BETA engine and API surface are live on the TEST branch (contract v1.5, schema at ledger 22 on the branch and, since 2026-10-19, on shared too, where the `morocco_pc_api` role is now provisioned); nothing is deployed and nothing is in production. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency sprints and the deployed-host legs; **P1 Sprint 4** (DONE 2026-10-16) unblocked P1 Sprints 5–6 (both DONE 2026-10-16), and P2 Sprint 3 landed 2026-10-17 (Step 7 decided 2026-10-18: public but unlisted); **P3 Sprint 1** is now DONE because the nightly fires from `master` and its per-step result is recorded.
 
+**Web frontend (outside the 21 sprints, recorded here because it shares the deployment gate).**
+`apps/web` has 25 of its 27 sprints done and its host is now DECIDED - **Cloudflare Workers** through
+the OpenNext adapter, recorded 2026-10-23 in `docs/plans/agent3-web-plan.md` §1/§5/§7 and as
+**OG-53**: `apps/web/wrangler.jsonc` (worker `morocco-pc-web`, `main: .open-next/worker.js`, assets
+binding `ASSETS`, `NEXT_INC_CACHE_KV`), `apps/web/open-next.config.ts` (KV incremental cache - the
+config's own note records R2 as unavailable on this account without a payment method), and `@opennextjs/cloudflare` +
+`wrangler` as devDependencies, all committed. The decision closes the host question and NOTHING else:
+no Workers environment is deployed, no web workflow step deploys, and the web app has never called a
+deployed API, so web S26's staging legs wait on the same owner-gated deploy as P1 Sprint 1's Steps
+7-9, and V1 (POST latency), `trustProxy` Step 4 and Sentry Steps 3-6 remain unmeasured for the same
+reason.
+
 ## Sprint completion matrix
 
 | Plan | Sprint | Status | Done / remaining |
@@ -133,8 +145,9 @@ committed scaffold ships `postcss.config.mjs` registering `@tailwindcss/postcss`
 emits real Tailwind utilities (`text-2xl`, `mx-auto`, `sr-only`) with no CSS warning, while lint,
 typecheck and the 3 Playwright specs pass. The old claim ("no PostCSS or Turbopack integration
 wired, so `@theme` is never processed") described an uncommitted working tree, not the branch. The
-frontend's real open items are the unfunded W0 sprints and the unchosen web host - see the plan
-file's §6 and §7 on that branch.
+frontend's real open items are the DEPLOYMENT of its now-decided host (Cloudflare Workers, chosen
+2026-10-23 - see the plan §1/§5/§7) and S24's absent swap endpoint (CD-8); the "unfunded W0 sprints"
+phrasing above is superseded, because W0 is COMPLETE (S1-S6).
 
 ## Register sync
 

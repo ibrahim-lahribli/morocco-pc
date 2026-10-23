@@ -17,7 +17,11 @@ WCAG AA audit) and S22 (legal pages, analytics, states) are DONE 2026-10-22 — 
 post-M3 slider curve, S23, the compare view, and S25, saved builds plus the price history, are
 DONE (2026-10-22 and 2026-10-23), so 25 of the 27 sprints are done. What remains is S24 (swap
 inside a build) and S26, the M3 verification run, which is BLOCKED on
-deployment: no web host is chosen and no API origin is deployed.**
+deployment. **The web host is now DECIDED (2026-10-23): Cloudflare Workers**, built through the
+`@opennextjs/cloudflare` adapter - `apps/web/wrangler.jsonc` and `apps/web/open-next.config.ts` are
+committed, the adapter and `wrangler` are devDependencies, and the incremental cache is KV. No
+deployment has been made from that config and no API origin exists, so S26's staging legs are still
+unmeasurable.
 
 ## 1. Product shape and stack
 
@@ -31,7 +35,7 @@ Web, **mobile-first and SEO-first**: the wizard must be completable at 360 px, a
 | API client | **typed client generated from `/v1/docs/json`**, with the OpenAPI snapshot committed and a drift gate in CI |
 | i18n | `next-intl`, **fr default**, `ar` with RTL |
 | Analytics | privacy-friendly, no PII (Plausible or Umami — OD5 leaves the provider open) |
-| Hosting | close to users (the API's latency work assumes EU co-location; the web host is still unchosen) |
+| Hosting | **Cloudflare Workers** (decided 2026-10-23) through the OpenNext adapter - committed `wrangler.jsonc` + `open-next.config.ts`, KV incremental cache. Close to users, which the API's latency work assumes (EU co-location). Configured and built locally, NOT deployed |
 | Location | entirely in `apps/web/` |
 
 ## 2. Contract dependencies and findings
@@ -316,8 +320,9 @@ merged suite’s 359 passed / 1 skipped.
 - The **full FR flow runs against the staging API** (wizard → results → share).
 
 **Today (2026-10-23): S26 stays BLOCKED on the deployment, with criterion 1 now enforced.** The
-staging runs need a deployed API origin and a chosen web host; neither exists, so the FR flow and the
-zero-error staging log remain unmeasurable rather than merely unmeasured. Criterion 1 no longer
+web host is now decided (Cloudflare Workers, 2026-10-23 - above and §7), but no environment has been
+deployed from it and no API origin exists, so the FR flow and the zero-error staging log remain
+unmeasurable rather than merely unmeasured. Criterion 1 no longer
 belongs to that list: since 2026-10-23 `lighthouserc.cjs` enforces FOUR assertions (`error`,
 `median`) in `web.yml` — LCP ≤ 2 500 ms, CLS ≤ 0.1, script transfer ≤ 174 080 B, and
 `categories:performance` ≥ 0.90 — on the fixture result page AND on a real preset page, so the
@@ -433,8 +438,10 @@ it.
 
 ## 7. What is missing from the plan, stated plainly
 
-- **No web host is chosen.** Hosting "close to users" is a requirement without a decision, and it
-  gates the M3 staging run.
+- **The web host is chosen; nothing is deployed.** The decision is Cloudflare Workers through the
+  OpenNext adapter (2026-10-23) and the config is committed, but a committed `wrangler.jsonc` is not
+  an environment: there is no preview URL, no staging deployment and no CI step that deploys, so the
+  M3 staging run is gated by the deploy rather than by the host choice.
 - **`/v1/docs/json` is the only contract source, and it is pinned one level up.** S4 generates the
   client types from the API's committed `apps/api/test/unit/openapi-v1.6.json` rather than copying it
   into `apps/web`, so the tree holds one contract; the cost is that the web package's drift gate
