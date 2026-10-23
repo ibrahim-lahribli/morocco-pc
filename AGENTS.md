@@ -73,7 +73,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `docs/DATA_STATE.md` | GENERATED live row-count/coverage snapshot — instance-specific, never cite as a permanent claim |
 | `docs/GLOSSARY.md` | Load-bearing vocabulary (status vocabulary, decision ids, the `D2` vs `Decision 2` collision) |
 | `docs/TEST_MAP.md` | Which test pins which contract — check before changing pinned behavior |
-| `docs/RECIPES/` | Task checklists: add a migration/seed/scoring-model/pair-evaluator/stage/status-claim |
+| `docs/RECIPES/` | Task checklists: add a migration/seed/scoring-model/pair-evaluator/stage/status-claim, provision the API role, refresh/import offers, deploy the EU colocation, and the first-launch owner sequence |
 | `database/migrations/` | Authoritative schema (`001`–`022`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
 | `database/seeds/` | DML-only, idempotent seed data |
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |

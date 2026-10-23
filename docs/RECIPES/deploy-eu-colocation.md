@@ -628,9 +628,10 @@ the rotation is the moment it surfaced; a `500` with no `42501` is a different b
 **Step 6 — record it, then close the gap item.** Record in `DEVELOPMENT_NOTES.md`, dated: the app,
 the audit-target digest of the database (`db:2d66f26d7ddc` for EU), that the secret was rotated,
 step 4's full `RESULT` line with its session counts, and step 5's POST id and
-`served_by.engine_version`. Close **OG-54 item (1)** on those lines alone. Items (2) and (3) of that
-row are different owner actions — a seed apply on shared, and a real retailer source — and nothing
-here closes them.
+`served_by.engine_version`. Close **OG-54 item (1)** on those lines alone. The launch-wide order —
+deploy, rotate, item (1), item (2) on shared, item (3) — is `docs/RECIPES/first-eu-launch.md`.
+Items (2) and (3) of that row are different owner actions — a seed apply on shared, and a real
+retailer source — and nothing here closes them.
 
 **Rollback.** Setting the owner's URL back IS the rollback, and step 4 is how you see it land:
 
