@@ -39,7 +39,11 @@ Layer 4 counts back to 0). The target variable is `TARGET_DATABASE_URL` from
 password. **TEST deliberately keeps the create-and-drop rehearsal** — no standing
 role is provisioned there. The deployed app still connects with the owner's
 credentials until its `DATABASE_URL` secret is pointed at the role; that is an
-owner step, registered as OG-54.
+owner step with its own procedure and its own evidence —
+`docs/RECIPES/deploy-eu-colocation.md` section 8.5, checked by
+`scripts/check-deployed-role.js` — registered as OG-54. **A green smoke test is NOT
+that proof:** it connects as the role from the operator's machine, which says nothing
+about which credential the deployed app presents.
 
 ## Prerequisites
 

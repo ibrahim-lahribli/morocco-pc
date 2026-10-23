@@ -1909,3 +1909,61 @@ availability CHANGE, so an empty history is "no change yet", not "never observed
 offer-provenance*.test.js apply-api-role-cli.test.js smoke-api-role-cli.test.js` green;
 `npm run test:scripts`; `npm run test:api`; `npm run test:unit`; `verify:docs --offline`;
 `gen-decision-index --check`. Measured 2026-10-23 on Node 24: `test:scripts` 383 pass / 0 fail, `test:api` 120 pass / 0 fail, `test:unit` 1171 pass / 0 fail, `verify:docs --offline` OK, `gen-decision-index --check` clean. The live halves were exercised read-only the same day: `check-offer-provenance.js` INCONCLUSIVE (exit 0) and `check-offer-freshness.js --fail-days=14` INCONCLUSIVE (exit 0) on shared.
+
+## 2026-10-23 (later) — the rotation's check, and why the smoke test is not its proof
+
+The EU role's apply landed on 2026-10-23 and the app is NOT on it. The distinction this entry records:
+`smoke-api-role.js` runs the API **from the operator's machine** as `morocco_pc_api`, so green there
+proves the GRANT SET is sufficient. It never observes the deployed app's credential, and
+`fly secrets list` shows a digest rather than a value. The readable evidence is database-side:
+`apps/api/src/db.js` tags every pooled connection `application_name = 'morocco-pc-api'`.
+
+Two things had to be measured before a gate could stand on that:
+
+- `pg_stat_activity` exposes `usename` and `application_name` for EVERY session to any user of the
+  database — only `query`, `state` and the wait events need `pg_read_all_stats` — so the owner's
+  credential is enough to read the app's.
+- Neon's POOLER preserves a client's `application_name`, but only once a query has run. Measured on
+  shared 2026-10-23: a pooled client that only called `connect()` produced NO visible session; after
+  `SELECT 1` the same client appeared as `morocco-pc-appname-probe2`, `usename neondb_owner`,
+  `client_addr 127.0.0.1/32` (the pooler's local face), while a direct client showed a
+  `10.51.x.x/32` container address. That is why the gate is three-valued: an idle pool is
+  INVISIBLE, so "no session" can never be read as "correct credential". The running API's 15 s
+  health check (`SELECT 1`) is what keeps a connection visible between requests.
+
+`scripts/check-deployed-role.js` (pure half `scripts/lib/deployed-role.js`) prints PASS when every
+tagged session is `morocco_pc_api`, FAIL naming any other user, INCONCLUSIVE when none was observed.
+23 DB-free tests; `test:scripts` is 406/0 on Node 24. Live 2026-10-23: INCONCLUSIVE on shared and
+on EU (0 tagged sessions on each) — nothing is deployed, which is the honest reading of OG-54 item
+(1) and the reason it stays OPEN until §8.5 step 4 prints PASS and step 5 gets a POST 201.
+
+**The check had to be fixed twice by measurement, which is the point of this entry.** First:
+a pooled READ of `pg_stat_activity` is not a read at all. The pooler multiplexes clients onto one
+server connection and applies `application_name` per client, so the checker's own pooled
+connection reused the very server connection the app-tagged probe was on and RELABELLED it
+`morocco-pc-deployed-role-check`; the check then reported INCONCLUSIVE, having destroyed the
+evidence it went looking for. The read now goes through `toDirectUrl` (the same helper the apply
+and the migration runner use), so it gets its own backend.
+
+Second: a pooled server connection OUTLIVES its client and keeps the last client's tag. Measured:
+after a pooled client carrying `application_name='morocco-pc-api'` disconnected, its server
+connection stayed in `pg_stat_activity`, still tagged and idle, so the gate kept reporting FAIL
+naming `neondb_owner` for a session with no client behind it. That is why the report prints each
+app session's `backend_start` and why section 8.5 says to run it while the app is serving traffic.
+The leftover was terminated and the tagged-session count asserted 0 before the session ended.
+
+The FAIL path was then exercised end to end, read-only: a pooled probe client carrying the app's
+tag, and the check printed `RESULT: FAIL - 1 of 1 morocco-pc-api session(s) are authenticated as
+another role: neondb_owner (1 connection)`, exit 1; with no tagged session it prints INCONCLUSIVE,
+exit 0. The PASS path is pinned by unit tests only - proving it live needs a session authenticated
+AS the role, and no deployed app exists to open one.
+
+Operational trap, same class as the empty-env `TEST_DATABASE_URL` one:
+`DOTENV_CONFIG_PATH=.env.eu node scripts/<x>.js` does NOT load `.env.eu`. That variable is read only
+by the `dotenv/config` PRELOAD entry (`node -r dotenv/config`); `require('dotenv').config()` inside a
+script ignores it and reads `.env`. The failure is silent and looks exactly like a key that is not
+in the file: `TARGET_DATABASE_URL is not set` while it is on the file's first line.
+
+Naming note: the WRITE scripts take `--target-env=NAME` (it selects the database a write lands on)
+and the read-only gates take `--target=env:NAME`. Two spellings, one meaning — do not "unify" them
+without changing every call site in the recipes.
