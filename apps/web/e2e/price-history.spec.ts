@@ -63,10 +63,10 @@ type Locale = "fr" | "ar";
 const CATALOGUES = { fr, ar } as const;
 const LOCALES: readonly Locale[] = ["fr", "ar"];
 
-const MANY = PRICE_HISTORY_BY_SLUG["rtx-4060-8gb"].observations;
-const ONE = PRICE_HISTORY_BY_SLUG["rtx-4060-ti-gaming-oc-16-go"].observations[0];
-const RISING_READINGS = PRICE_HISTORY_BY_SLUG["rx-7600-8gb"].observations;
-const FLAT_READINGS = PRICE_HISTORY_BY_SLUG["ssd-nvme-1-to"].observations;
+const MANY = PRICE_HISTORY_BY_SLUG["rtx-4060-8gb"].points;
+const ONE = PRICE_HISTORY_BY_SLUG["rtx-4060-ti-gaming-oc-16-go"].points[0];
+const RISING_READINGS = PRICE_HISTORY_BY_SLUG["rx-7600-8gb"].points;
+const FLAT_READINGS = PRICE_HISTORY_BY_SLUG["ssd-nvme-1-to"].points;
 
 /** The catalogued sentence, with its ICU arguments filled in. */
 function fill(template: string, values: Record<string, string>): string {

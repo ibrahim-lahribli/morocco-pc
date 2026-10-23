@@ -55,6 +55,7 @@ import http from "node:http";
 import {
   CATALOG_LIST_OK,
   CATALOG_PRODUCTS_BY_SLUG,
+  DISCLAIMER,
   ERRORS,
   HEALTH_OK,
   IDS,
@@ -171,6 +172,35 @@ function validateCreate(body) {
   return [];
 }
 
+/**
+ * The frozen `GET /v1/catalog/products/:slug/price-history` body (contract v1.6).
+ *
+ * Built from the fixture's readings exactly as the API builds it from its rows:
+ * the summary is DERIVED, so a fixture cannot disagree with its own points, and
+ * the field names are the contract's (`points`, not a mock-only `observations`).
+ * `change_amount` / `change_pct` need two readings — one observation is a fact,
+ * not a trend — so the mock answers `null` for the same reason the API does.
+ */
+function priceHistoryBody(slug, points) {
+  const prices = points.map((point) => Number(point.price));
+  const first = prices.length > 0 ? prices[0] : null;
+  const last = prices.length > 0 ? prices[prices.length - 1] : null;
+  const hasTrend = prices.length >= 2;
+  return {
+    slug,
+    currency: "MAD",
+    points,
+    observation_count: points.length,
+    latest_price: last,
+    min_price: prices.length > 0 ? Math.min(...prices) : null,
+    max_price: prices.length > 0 ? Math.max(...prices) : null,
+    change_amount: hasTrend ? Number((last - first).toFixed(2)) : null,
+    change_pct:
+      hasTrend && first > 0 ? Number((((last - first) / first) * 100).toFixed(2)) : null,
+    disclaimer: DISCLAIMER,
+  };
+}
+
 async function handle(req, res) {
   if (req.method === "OPTIONS") {
     res.writeHead(204, CORS_HEADERS);
@@ -281,6 +311,11 @@ async function handle(req, res) {
   // state, because the page reads this on the server: the slug is the only
   // thing a spec can choose from outside the Next process.
   //
+  // The BODY is contract v1.6's frozen envelope, built by `priceHistoryBody`
+  // from the fixture's readings — the mock once served a mock-only
+  // `observations` key, and the S25 specs passed against a shape the API never
+  // served.
+  //
   // The path is matched by its two literal halves rather than by a pattern:
   // the middle is DATA (a slug), read as a slice and then checked for a
   // separator, so a deeper path is not mistaken for a product.
@@ -295,11 +330,11 @@ async function handle(req, res) {
     if (rawSlug.length > 0 && !rawSlug.includes("/")) {
       if (state === "503") return sendError(res, "unavailable");
       const slug = decodeURIComponent(rawSlug);
-      const history = PRICE_HISTORY_BY_SLUG[slug];
+      const fixture = PRICE_HISTORY_BY_SLUG[slug];
       // A known product with no readings is a 200 carrying an empty series;
       // only a slug the mock does not serve is a miss.
-      if (history === undefined) return sendError(res, "notFound");
-      send(res, 200, history);
+      if (fixture === undefined) return sendError(res, "notFound");
+      send(res, 200, priceHistoryBody(slug, fixture.points));
       return;
     }
   }

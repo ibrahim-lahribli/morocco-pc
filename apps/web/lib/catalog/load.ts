@@ -30,8 +30,9 @@
  *    request-memoized here, so it is a build-time/ISR cost, never a per-visitor
  *    one.
  *
- * 3. **The price readings** (S25) are a read of their own path, and the one
- *    route here that contract v1.5 does not have — see `loadPriceHistory`.
+ * 3. **The price readings** (S25) are a read of their own path —
+ *    `GET /v1/catalog/products/:slug/price-history`, contract v1.6 — see
+ *    `loadPriceHistory`.
  */
 import { cache } from "react";
 
@@ -320,7 +321,12 @@ export const componentAppearancesCached = cache(componentAppearances);
  * so a new language never needs a new fixture.
  */
 export interface PriceObservation {
-  /** The day the price was seen, ISO-8601 (`YYYY-MM-DD`), as served. */
+  /**
+   * The moment the price was seen: an ISO-8601 STRING as served, a full
+   * timestamp from the API (`2026-09-18T22:33:23.358Z`) or a bare `YYYY-MM-DD`
+   * from a fixture. `formatDate` renders either in the page's language, so the
+   * contract's precision is kept rather than truncated here.
+   */
   observed_at: string;
   /** The observed price in MAD — positive and finite, enforced on read. */
   price: number;
@@ -359,11 +365,14 @@ function asPriceObservation(value: unknown): PriceObservation | null {
  * Three limits worth stating, because each one is a place the obvious version
  * lies:
  *
- *   1. **This route is not in contract v1.5.** It is served today by the fixture
- *      mock alone. A 404 therefore means "no reading recorded" — an absent
- *      endpoint and an empty series are the same answer to the page, and neither
- *      is an error. The day the API grows the endpoint, the page gains real
- *      history without a change here.
+ *   1. **The series is the contract's `points`.**
+ *      `GET /v1/catalog/products/:slug/price-history` (contract v1.6) serves
+ *      them ascending, already collapsed to ONE POINT PER OBSERVATION MOMENT at
+ *      that moment's cheapest price; the summary fields beside them are the
+ *      API's own reading of the same rows, and this page derives its own from
+ *      the points. A 404 names a product the catalogue does not serve — the
+ *      product read has already answered for that slug — so it is an empty
+ *      series here, not an error.
  *   2. **Every other failure PROPAGATES.** A price series is data, not
  *      decoration: silently rendering a dead endpoint as "never observed" would
  *      print a false claim about the product's price. Throwing keeps the page's
@@ -417,7 +426,7 @@ export async function loadPriceHistory(slug: string): Promise<PriceObservation[]
 
   const record =
     typeof body === "object" && body !== null ? (body as Record<string, unknown>) : null;
-  const raw = record !== null && Array.isArray(record.observations) ? record.observations : [];
+  const raw = record !== null && Array.isArray(record.points) ? record.points : [];
   const observations = raw.flatMap((entry) => {
     const parsed = asPriceObservation(entry);
     return parsed === null ? [] : [parsed];

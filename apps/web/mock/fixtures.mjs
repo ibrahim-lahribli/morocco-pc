@@ -789,16 +789,16 @@ export const CATALOG_LIST_OK = {
  */
 export const PRICE_HISTORY_BY_SLUG = {
   "rtx-4060-8gb": {
-    observations: [
+    points: [
       { observed_at: "2026-05-22", price: 3990 },
       { observed_at: "2026-07-04", price: 3050 },
       { observed_at: "2026-08-19", price: 3450 },
       { observed_at: "2026-10-06", price: 3200 },
     ],
   },
-  "kit-ddr5-16-go": { observations: [] },
+  "kit-ddr5-16-go": { points: [] },
   "rtx-4060-ti-gaming-oc-16-go": {
-    observations: [{ observed_at: "2026-09-24", price: 4750 }],
+    points: [{ observed_at: "2026-09-24", price: 4750 }],
   },
   /**
    * S25: the RISING series, and one reading whose price is a numeric STRING.
@@ -809,7 +809,7 @@ export const PRICE_HISTORY_BY_SLUG = {
    * what the spec counts.
    */
   "rx-7600-8gb": {
-    observations: [
+    points: [
       { observed_at: "2026-06-02", price: 2990 },
       { observed_at: "2026-08-11", price: "3190.00" },
       { observed_at: "2026-10-04", price: 3390 },
@@ -817,7 +817,7 @@ export const PRICE_HISTORY_BY_SLUG = {
   },
   /** The FLAT series: two readings, one price. */
   "ssd-nvme-1-to": {
-    observations: [
+    points: [
       { observed_at: "2026-07-09", price: 780 },
       { observed_at: "2026-09-15", price: 780 },
     ],
