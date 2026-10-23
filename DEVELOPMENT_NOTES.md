@@ -1803,3 +1803,35 @@ for byte (verified by diffing the two, CRLF-normalised).
 
 **Still open (unchanged by this pass):** no deployed origin, no hosting account, no Sentry DSN, no
 retailer. P1 S1 Steps 7-9, P1 S3's latency table, P2 S2 Step 4 and P3 S3/S4 remain owner-gated.
+
+## 2026-10-23 - `eval:scenarios` needs an explicit model pin, and the 55/23 split IS that pin
+
+`npm run eval:scenarios` fails before it runs anything on the TEST branch today:
+`scoring-model pin seed-minimal-v1@1.0.0 exists but is NOT ACTIVE ... Active: launch-v2@1.0.0`.
+The branch active model is `launch-v2@1.0.0`, so a run there must carry `--model=launch-v2@1.0.0`
+(or set `SCORING_MODEL_PIN`). This is unrelated to generated presets: it fires on a database with
+every Layer 4 table at 0. The startup preflight itself is healthy -
+`startup orphan cleanup: {"profiles":0,"queries":0,"dependents":0,"unmarked":0}`.
+
+**The count.** A full run at `launch-v2@1.0.0` on 2026-10-23 (clean DB, residue 0 afterwards) reads
+`total 81 / PASS 55 / FAIL 23 / UNKNOWN 3`, exit 0, while AGENTS.md records 56 / 22 / 3.
+
+**The one row that moves is `A1 | S19`** - `>= 3 distinct (CPU,GPU) pairs in the selected set`.
+Evidence comes from the committed baselines, not a re-measurement:
+
+- `test/golden/baseline-2026-10.md` (v1, `seed-minimal-v1`): `A1 | S19` = PASS;
+- `test/golden/baseline-launch-v2-2026-10.md`: `A1 | S19` = FAIL / EXPECTED-RED;
+- those two files differ in exactly ONE disposition across their 57 rows, and it is `A1 | S19`;
+- the 2026-10-23 run matches `baseline-launch-v2-2026-10.md` on all 47 rows they share:
+  **0 disposition differences**, with `A1 | S19` FAIL / EXPECTED-RED in both.
+
+So 56/22/3 is the `seed-minimal-v1` figure and 55/23/3 is its `launch-v2` counterpart: A1 is a
+diversity threshold, and S19 yields 2 distinct (CPU,GPU) pairs under launch-v2 instead of 3. The
+disposition is `EXPECTED-RED`, not `FAIL`, so no approved assertion failed. This is not a regression
+from any 2026-10-23 change. Caveat: the v1 leg could NOT be re-measured - that pin is inactive on the
+branch - so its side of the claim rests on the stored baselines.
+
+**Left behind on purpose.** The 54 preset passes generated earlier the same day were removed with
+`node scripts/generate-presets.js --cleanup` (54 presets / 54 passes / 54 results / 430 components /
+54 profiles); every Layer 4 table reads 0 after both runs. Generating presets and running the golden
+harness remain mutually exclusive on one branch until generated passes carry a marker.

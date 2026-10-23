@@ -43,3 +43,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# OpenNext build output (added 2026-10-23 to keep the deploy artifacts out of git)
+.open-next
+# local tool state and dev-server scratch (added 2026-10-23; git status was listing them)
+/.wrangler/
+/tmp/

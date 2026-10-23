@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "morocco-pc-web",
+  "compatibility_date": "2024-12-30",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "kv_namespaces": [
+    {
+      // open-next.config.ts enables `kvIncrementalCache`, which reads this exact
+      // binding name. Without it the adapter throws an IgnorableError that is
+      // swallowed as a cache miss, so ISR re-renders on every request and
+      // `x-nextjs-cache` never leaves MISS. KV, not R2: R2 needs a payment
+      // method on file just to be enabled.
+      "binding": "NEXT_INC_CACHE_KV",
+      "id": "d47960335cfc4793b9df62db7950259c"
+    }
+  ],
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "morocco-pc-web"
+    }
+  ]
+}
