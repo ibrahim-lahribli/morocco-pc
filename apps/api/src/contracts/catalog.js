@@ -2,11 +2,14 @@
 
 /**
  * apps/api/src/contracts/catalog.js - the read-only catalog contracts
- * (Platform P2 Sprint 3, contract v1.5).
+ * (Platform P2 Sprint 3, contract v1.5; the price history arrived in v1.6).
  *
  * `GET /v1/catalog/products` and `GET /v1/catalog/products/:slug` expose the
  * product catalogue migration 020 made addressable (`slug`, `display_name`) and
- * the Layer 3 offers that price it. Three properties are load-bearing.
+ * the Layer 3 offers that price it; `GET /v1/catalog/products/:slug/price-history`
+ * serves the observations behind that price. Three properties are load-bearing,
+ * and the history route obeys all three: one point per observation moment.
+ * That last rule is a fourth property, stated on `PriceHistoryResponseSchema`.
  *
  *   1. NULL MEANS UNKNOWN, AND AN UNPRICED PRODUCT IS NOT HIDDEN. A product
  *      with no eligible offer keeps its page slot, reports `has_offer: false`
@@ -98,6 +101,51 @@ const CatalogProductDetailSchema = Type.Object({
   disclaimer: Type.String(),
 }, { additionalProperties: false, $id: 'CatalogProductDetail' });
 
+/**
+ * One observation of a product's price (contract v1.6).
+ *
+ * A point is ONE OBSERVATION MOMENT at the product's CHEAPEST price then, not
+ * one `price_history` row: a product can hold several offers (two stores, two
+ * variants) recorded in the same sweep, and two consecutive points would draw a
+ * rise that never happened. The grouping is documented at
+ * `presentPriceHistory`.
+ *
+ * `observed_at` is an ISO-8601 STRING and never a Date: JSON has no date type,
+ * and the web layer formats it through its own locale helpers. `price` is a
+ * NUMBER (pg hands NUMERIC back as a string; the presenter converts), and
+ * `offer_class` is the same Decision 35 vocabulary every catalog price carries.
+ */
+const PriceHistoryPointSchema = Type.Object({
+  observed_at: Type.String(),
+  price: Type.Number(),
+  offer_class: Type.String(),
+}, { additionalProperties: false, $id: 'PriceHistoryPoint' });
+
+/**
+ * `GET /v1/catalog/products/:slug/price-history` - the observations behind one
+ * product's price, OLDEST first.
+ *
+ * The summary fields are nullable because thin data is the normal case here, and
+ * a 0 would be a number the catalog never observed (`NULL IS NOT 0`):
+ * `latest_price` / `min_price` / `max_price` need at least ONE point, while
+ * `change_amount` / `change_pct` need TWO DISTINCT moments - a single
+ * observation is a fact, not a trend. `observation_count` is the number of
+ * moments and is never nullable; "none" is countable. No history is a 200 with
+ * `points: []`; an UNKNOWN product is a 404, so the two cannot be confused.
+ */
+const PriceHistoryResponseSchema = Type.Object({
+  slug: Type.String(),
+  currency: Type.String(),
+  points: Type.Array(PriceHistoryPointSchema),
+  observation_count: Type.Integer(),
+  latest_price: Type.Union([Type.Number(), Type.Null()]),
+  min_price: Type.Union([Type.Number(), Type.Null()]),
+  max_price: Type.Union([Type.Number(), Type.Null()]),
+  change_amount: Type.Union([Type.Number(), Type.Null()]),
+  change_pct: Type.Union([Type.Number(), Type.Null()]),
+  disclaimer: Type.String(),
+}, { additionalProperties: false, $id: 'PriceHistoryResponse' });
+
 module.exports = {
   CatalogProductSchema,
   CatalogListResponseSchema,
@@ -105,4 +153,6 @@ module.exports = {
   CatalogProductParamsSchema,
   CatalogOfferSchema,
   CatalogProductDetailSchema,
+  PriceHistoryPointSchema,
+  PriceHistoryResponseSchema,
 };

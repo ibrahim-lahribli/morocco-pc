@@ -7,12 +7,13 @@ keyboard-reachable with visible focus, no raw API enum text rendered, fr copy in
 Contract dependencies (CD-*) and findings (V*) are defined in the plan §2 — the API and engine
 are in progress, so every contract-dependent sprint has a fixtures-first path.
 
-**Board state, 2026-10-23 (S25's saved-builds half landed).** 27 sprints: **24 DONE** (S1–S23 and
-S27, whose status lines below carry the evidence), **1 HALF DONE** (S25 — saved builds shipped, price
-history still has no data source), **1 NOT STARTED** (S24, W5/post-beta, deliberately outside the M3
+**Board state, 2026-10-23 (S25's saved-builds half landed; its price-history API unblocked).** 27
+sprints: **24 DONE** (S1–S23 and S27, whose status lines below carry the evidence), **1 HALF DONE**
+(S25 — saved builds shipped, and the price-history API now exists (contract v1.6, Decision 51), so only
+the chart is left), **1 NOT STARTED** (S24, W5/post-beta, deliberately outside the M3
 gate) and **1 BLOCKED** (S26, which needs a deployed API and a chosen web host). What is left is not
-one block: S24 waits on CD-8, S25's remaining half waits on an API route for `price_history`, and
-only S26 needs a deployment.
+one block: S24 waits on CD-8, S25's remaining half is the chart against the route that now exists,
+and only S26 needs a deployment.
 
 ## Sprints
 
@@ -191,7 +192,7 @@ mock server covering every contract state the web consumes — including the pro
    `inputs_applied`/`reasons`/`display_name` usage must route through the fallback layer).
 
 **Status: DONE 2026-10-20 — as built.** `npm run gen:api-types` generates `lib/api/schema.d.ts` from
-`apps/api/test/unit/openapi-v1.5.json`; `lib/api/client.ts` is the single fetch path (typed
+`apps/api/test/unit/openapi-v1.6.json`; `lib/api/client.ts` is the single fetch path (typed
 `ApiError`, `details[]`, `retryAfterSeconds`); `lib/api/compile-gate.ts` makes a contract
 regression a `tsc` failure; `mock/server.mjs` + `mock/fixtures.mjs` serve every state listed above
 plus the dedupe path, the zero-build-with-no-floor case and an open CORS policy; `check:api-types`
@@ -308,7 +309,7 @@ deleted here: the same gates, budgets included, one job per web push instead of 
 `push`/`pull_request` touching
 `apps/web/**` it runs, in `apps/web`, `npm ci`, `typecheck`, `lint`, `check:tokens`,
 `check:i18n`, `check:api-types` (the S4 drift gate, which is why the triggers also include
-`apps/api/test/unit/openapi-v1.5.json`), `build`, Playwright (`--with-deps chromium`), `npm test`
+`apps/api/test/unit/openapi-v1.6.json`), `build`, Playwright (`--with-deps chromium`), `npm test`
 at 360×800 through the existing `mobile-360` project, then `npm run test:lighthouse` — uploading
 `test-results/` on failure and `.lighthouseci/` always. Verified locally from a fresh `npm ci`
 under Node 22.23.3 with `CI=true`: **168/168** specs.
@@ -1565,7 +1566,11 @@ lands, and alone it proves nothing about the platform path the sprint exists to 
 2. Save a build → survives reload; clearing storage shows the empty state with a CTA.
 3. localStorage quota/unavailable (private mode) → graceful inline notice, no crash.
 
-**Status: HALF DONE 2026-10-23 — saved builds SHIPPED; price history still BLOCKED.** A build can be
+**Status: HALF DONE 2026-10-23 — saved builds SHIPPED; price history UNBLOCKED, chart still to build.**
+`GET /v1/catalog/products/:slug/price-history` landed the same day (contract v1.6, Decision 51) and
+serves one point per observation MOMENT at that moment's cheapest price, oldest first, with the change
+fields null until two moments exist — so the chart codes against a real shape and the three thin-data
+states are the norm today, not an edge case. The UI below is what remains. A build can be
 saved from every card, on the results page AND the preset page, and the shelf is
 `/{locale}/enregistrements` — reachable from a footer nav on EVERY page (the 404 included), not only
 from the link a saved card shows. The footer, not the header, is a measured choice: at 360 px the
@@ -1707,5 +1712,5 @@ component's own arithmetic.
 
 **State, 2026-10-23 (S25's saved-builds half landed):** every node on this map through S22 is DONE,
 and so are S27, S23 and S25's saved half, which sit outside it. The hard order’s only remaining node
-is S26, and a deployment gates it. What is left: S25's price-history half waits on an API route for
-`price_history`, and S24 waits on CD-8, which nobody has scheduled.
+is S26, and a deployment gates it. What is left: S25's chart half (its API route landed, Decision 51),
+and S24, which waits on CD-8 — nobody has scheduled it.

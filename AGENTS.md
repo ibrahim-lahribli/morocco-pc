@@ -28,7 +28,7 @@ the engine's public barrels (`src/recommendation/*/index.js`), the `scripts/` CL
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–50). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–51). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
    To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
@@ -249,7 +249,7 @@ remote already stores (`ref` = the branch to run on) — keep that token out of 
 untouched). On `push`/`pull_request` touching `apps/web/**` (and `workflow_dispatch`; never
 `schedule`), a `web` job runs in `apps/web`: `npm ci`, then `typecheck`, `lint`, `check:tokens`,
 `check:i18n`, `check:api-types` (the S4 contract-drift gate, so the triggers also include
-`apps/api/test/unit/openapi-v1.5.json`), `build`, `playwright install --with-deps chromium`,
+`apps/api/test/unit/openapi-v1.6.json`), `build`, `playwright install --with-deps chromium`,
 `npm test` and `test:lighthouse` (the ENFORCED budgets on a fixture result page — `error` level,
 median of three, since S19) on Node 22
 — uploading `apps/web/test-results` when a run fails and `apps/web/.lighthouseci` always. It

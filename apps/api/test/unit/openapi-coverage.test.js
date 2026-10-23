@@ -196,6 +196,7 @@ test('every served API route is documented, with its success and error responses
   assert.deepEqual(documentedRoutes, [
     'GET /v1/catalog/products',
     'GET /v1/catalog/products/:slug',
+    'GET /v1/catalog/products/:slug/price-history',
     'GET /v1/health',
     'GET /v1/meta/options',
     'GET /v1/presets',

@@ -181,7 +181,7 @@ S4's pieces: `lib/api/schema.d.ts` (generated, committed), `lib/api/client.ts` (
 `lib/api/compile-gate.ts` (contract probes that only `tsc` can see), `mock/server.mjs` +
 `mock/fixtures.mjs` (zero-dependency, every contract state) and `scripts/check-api-types.mjs` (the
 drift gate). The snapshot is NOT copied into `apps/web`: the generator reads the API's own gated
-`apps/api/test/unit/openapi-v1.5.json`, so the tree keeps ONE contract instead of two.
+`apps/api/test/unit/openapi-v1.6.json`, so the tree keeps ONE contract instead of two.
 
 **Correction, 2026-10-22.** This paragraph used to list the Lighthouse budgets, the token system,
 the component kit, `next-intl` and the Arabic subset as missing — all five were built by S2–S6,
@@ -329,7 +329,7 @@ Run in `apps/web` on the rebased branch, Node 24 locally (CI pins 22):
 | `npm run build` | exit 0 — `next build` (Turbopack), 8 prerendered routes across `/fr` and `/ar` (the build reports 11 static pages), **no CSS parse warning**; `/fr/configurer` and `/ar/configurer` stay ● SSG despite `useSearchParams`, because the hook sits behind a Suspense boundary, and `/fr/config/[id]` is reported ƒ Dynamic because an id is whatever the API minted, and `/[locale]/[...rest]` is ƒ Dynamic beside it so an unknown path inside a locale renders the locale's own 404 |
 | `npm run lint` | exit 0 — 0 errors, 1 warning (`postcss.config.mjs` anonymous default export) |
 | `npm run typecheck` | exit 0, and also exit 0 with `next-env.d.ts` removed (the clean-CI order is safe) |
-| `npm run check:api-types` | exit 0 — contract 1.5.0, 7 paths, `schema.d.ts` byte-identical to the generator |
+| `npm run check:api-types` | exit 0 — contract 1.6.0, 8 paths, `schema.d.ts` byte-identical to the generator |
 | `npm run check:tokens` | exit 0 — 0 hex literals, 0 palette utilities, 0 physical side classes across `app/` + `components/` + `lib/` (39 files); proven RED on each of the three rule types before being trusted |
 | `npm run check:i18n` | exit 0 — no inline `Intl`, no runtime-locale method, no hand-written amount/date in 37 files; proven RED on all four rule types before being trusted |
 | `npm test` (Playwright, 360×800) | 152/152 pass — the 3 shell specs, S4's 19 (every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, one for a non-JSON 200), S2's 8 (palette count, 15 text contrast pairs, 3 UI pairs, then the rendered page: 360 px, noindex, alias chain, 48 px control + 2 px ring, `ms-auto` mirroring, the mono face's late swap), S3's 10 (per-component geometry, roles, keyboard, reduced motion), S5's 15 (lang/dir, switcher, formatting, fonts, the per-locale Arabic preload, the mono preload that is not there, CLS) and S7's 21 (12 wizard: labels from `meta/options`, keyboard-only step 1, deep link, repair, Back with values, Enter advancing the form, the last step's honest disabled action, 503 + retry, 360 px/legend/targets, Arabic, the home link; 9 model: URL parsing, ranges, backwards-only repair, round-trip, request body) and S8's 9 (7 budget: the snap note, the min and max clamps with their notices, the slider's 500 steps and both ends, Enter settling before it advances, 360 px with a 44 px rail and a real legend, the Arabic clamp; 2 model: the 500 grid with its top-of-range arithmetic, and `clampBudget` naming the bound) and S9's 12 (6 steps: the gaming/office flow lengths, a URL
@@ -405,7 +405,7 @@ darker replacements recorded if either ever needs room. RTL is asserted, not ass
 **S4's evidence (2026-10-20).** The drift gate was proven RED four ways and restored to PASS after
 each: a hand-edited `schema.d.ts` (stale types, named at the first differing line), a MUTATED
 SNAPSHOT (the sprint DoD's literal scenario — red at line 438, with the fix named), a raised
-`EXPECTED_VERSION` (the snapshot is 1.5.0), and a removed `EXPECTED_PATHS` entry (a path set that
+`EXPECTED_VERSION` (the snapshot is 1.6.0), and a removed `EXPECTED_PATHS` entry (a path set that
 changed). The comparison normalizes line endings, because this box runs `core.autocrlf=true` and a
 CRLF checkout of the same content is not drift: proven PASS on a CRLF copy and FAIL on a CRLF copy
 with one changed line, and `.gitattributes` pins `schema.d.ts` to LF so the artifact stays stable.
@@ -431,7 +431,7 @@ it.
 - **No web host is chosen.** Hosting "close to users" is a requirement without a decision, and it
   gates the M3 staging run.
 - **`/v1/docs/json` is the only contract source, and it is pinned one level up.** S4 generates the
-  client types from the API's committed `apps/api/test/unit/openapi-v1.5.json` rather than copying it
+  client types from the API's committed `apps/api/test/unit/openapi-v1.6.json` rather than copying it
   into `apps/web`, so the tree holds one contract; the cost is that the web package's drift gate
   reads a sibling package's file and cannot run from `apps/web` alone.
 - **The pinned contract can still be BEHIND the deployed one.** The gate compares the snapshot to the

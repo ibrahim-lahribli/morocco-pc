@@ -265,3 +265,89 @@ test('a GPU product with two variants serves the spec of the variant its cheapes
     await pool.end();
   }
 });
+
+test('a real price history is one point per observation moment, cheapest price first', async (t) => {
+  const pool = createPool();
+  const app = createApp(pool);
+  try {
+    // The richest history on the branch (one product has two rows today, both
+    // from the SAME sweep - two variants, two stores). Ordering is explicit: an
+    // unordered LIMIT 1 is how a gate starts reporting intermittent drift.
+    const anchor = (await pool.query(
+      'SELECT p.slug, count(*)::int AS observations, count(DISTINCT h.observed_at)::int AS moments'
+      + ' FROM product p'
+      + ' JOIN store_offer o ON o.product_id = p.id'
+      + ' JOIN price_history h ON h.store_offer_id = o.id'
+      + ' GROUP BY p.slug'
+      + ' ORDER BY observations DESC, p.slug ASC LIMIT 1'
+    )).rows[0];
+    if (!anchor) {
+      // Data-dependent, like the two-variant GPU case above: a visible SKIP, not
+      // a passing assertion the run never earned.
+      t.skip('no product carries a price_history row on this branch');
+      return;
+    }
+
+    const { status, body } = await getJson(
+      app,
+      '/v1/catalog/products/' + encodeURIComponent(anchor.slug) + '/price-history'
+    );
+    assert.equal(status, 200);
+
+    // The expectation is built from the DATABASE, not from the served statement:
+    // the cheapest price at each instant, oldest first.
+    const expected = (await pool.query(
+      'SELECT h.observed_at, min(h.price) AS price'
+      + ' FROM price_history h'
+      + ' JOIN store_offer o ON o.id = h.store_offer_id'
+      + ' JOIN product p ON p.id = o.product_id'
+      + ' WHERE p.slug = $1'
+      + ' GROUP BY h.observed_at'
+      + ' ORDER BY h.observed_at ASC',
+      [anchor.slug]
+    )).rows;
+
+    assert.equal(body.observation_count, expected.length, 'one point per observation MOMENT');
+    assert.equal(body.points.length, expected.length);
+    assert.equal(body.points.length, anchor.moments, 'two offers in one sweep are one point, not two');
+    assert.deepEqual(
+      body.points.map((point) => point.price),
+      expected.map((row) => Number(row.price)),
+      'the moment is worth its cheapest observed price, and NUMERIC is served as a number'
+    );
+    assert.deepEqual(
+      body.points.map((point) => point.observed_at),
+      expected.map((row) => row.observed_at.toISOString()),
+      'the series is ascending by observation time'
+    );
+
+    assert.equal(body.currency, 'MAD');
+    assert.equal(body.slug, anchor.slug);
+    for (const point of body.points) {
+      assert.equal(point.offer_class, 'SEED_UNVERIFIED', 'every historical price carries its provenance class');
+    }
+
+    // Thin data is a fact, not a trend: a change needs two MOMENTS.
+    const first = expected[0].price;
+    const last = expected[expected.length - 1].price;
+    if (expected.length >= 2) {
+      assert.equal(body.change_amount, Number((Number(last) - Number(first)).toFixed(2)));
+      assert.equal(body.change_pct, Number((((Number(last) - Number(first)) / Number(first)) * 100).toFixed(2)));
+    } else {
+      assert.equal(body.change_amount, null, 'one observation has no change, and 0 would claim it held');
+      assert.equal(body.change_pct, null);
+      assert.equal(body.latest_price, Number(first));
+      assert.equal(body.min_price, Number(first));
+      assert.equal(body.max_price, Number(first));
+    }
+
+    // Scenario guard: an unknown slug is the SAME 404 envelope as the detail
+    // route, not an empty history that a chart would render as "no data yet".
+    const missing = await getJson(app, '/v1/catalog/products/no-such-product-slug/price-history');
+    assert.equal(missing.status, 404);
+    assert.deepEqual(missing.body, { error: 'NOT_FOUND', message: 'No product with that slug' });
+  } finally {
+    await app.close();
+    await pool.end();
+  }
+});

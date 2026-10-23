@@ -12,7 +12,7 @@ databases now carry the schema it reads (019 + 020; shared applied 2026-10-15), 
 the write-safety default still points the API at the isolated branch - see *Database
 target*.
 
-**Contract v1.5 (2026-10-17):** v1.1 (2026-10-14) surfaced the persisted pass
+**Contract v1.6 (2026-10-23):** v1.1 (2026-10-14) surfaced the persisted pass
 facts - `budget_floor`, `engine_version` and each build's `strategy_key` became
 columns in migration `019_recommendation_pass_facts.sql` (Decision 46), so POST
 and GET no longer differ on any persisted field. v1.2 adds product identity:
@@ -33,7 +33,11 @@ currency, from migration `022_recommendation_preset.sql` (Decision 48). See
 addressable catalogue migration 020 made possible - keyset pagination on the
 unique `slug`, every price beside its Decision 35 provenance class, and a
 product page carrying its spec row, its eligible offers and the French
-disclaimer. See *GET /v1/catalog/products*.
+disclaimer. See *GET /v1/catalog/products*. **v1.6 adds the price history** (S25's unblock,
+Decision 51): `GET /v1/catalog/products/:slug/price-history` serves the observations behind
+one product's price, oldest first, one point per observation MOMENT at that moment's
+cheapest price, and a summary whose change fields stay `null` until there are two moments.
+See *GET /v1/catalog/products/:slug/price-history*.
 
 **`catalog_version` and the preset ribbon are served on BOTH databases since 2026-10-19.**
 Migrations 021 and 022 were applied to the shared database that day from restore point
@@ -384,6 +388,7 @@ All routes are under `/v1` and speak JSON.
 | GET | `/v1/presets` | 120/min | Generated landing-page presets for one use case and currency (current catalog version) |
 | GET | `/v1/catalog/products` | 120/min | Paginated ACTIVE catalogue, keyset-ordered by `slug` (contract v1.5) |
 | GET | `/v1/catalog/products/:slug` | 120/min | One product: spec row, eligible offers, provenance, disclaimer |
+| GET | `/v1/catalog/products/:slug/price-history` | 120/min | The recorded observations behind one product's price, oldest first (contract v1.6) |
 | GET | `/v1/docs/json` | 120/min | OpenAPI 3.0 document |
 
 Rate limits are per client IP and per route — a GET is cheap, a POST runs an
@@ -660,6 +665,49 @@ One product page: identity, specs, every eligible offer, and the derived price s
 - **404** for any slug without an ACTIVE catalogue product, malformed slugs included (there is no
   row to leak a PostgreSQL `22P02` from). **422** only for a schema violation, such as an
   over-long slug.
+
+### GET /v1/catalog/products/:slug/price-history
+
+The observations behind one product's price (contract v1.6, Decision 51). One point per
+observation MOMENT, oldest first.
+
+```json
+{
+  "slug": "rtx-4060-8gb",
+  "currency": "MAD",
+  "points": [
+    { "observed_at": "2026-09-18T22:33:23.358Z", "price": 3200, "offer_class": "SEED_UNVERIFIED" }
+  ],
+  "observation_count": 1,
+  "latest_price": 3200,
+  "min_price": 3200,
+  "max_price": 3200,
+  "change_amount": null,
+  "change_pct": null,
+  "disclaimer": "Prix indicatifs, non actualisés."
+}
+```
+
+- **One point per MOMENT, at that moment's cheapest observed price.** A product can hold
+  several offers (two stores, two variants) and both can be recorded in the same sweep;
+  serving them as consecutive points would draw a rise that never happened. `observation_count`
+  is the number of moments served, and the array is ascending by `observed_at`, so a client
+  plots it in order.
+- **Every point carries its provenance class**, derived from the offer's `ingestion_record_id`
+  exactly as the list and detail do. The whole catalogue is seed pricing today, so every point
+  is `SEED_UNVERIFIED` - correct, and not special-cased.
+- **Thin data is reported, not smoothed.** `latest_price`, `min_price` and `max_price` need one
+  moment; `change_amount` and `change_pct` need two and are `null` otherwise - a change over a
+  single observation is UNKNOWN, never `0`. Today the branch's entire history is one sweep
+  (2026-09-18 to 2026-09-27), so the honest rendering is a sentence and a date, not a line.
+- **No history is a 200** with `points: []`, `observation_count: 0` and every summary field
+  `null`. **An unknown slug is a 404** with the standard envelope - never an empty history.
+- **No window or paging parameter**, and the route caps at 366 moments (newest kept). The
+  30-day offer-eligibility window is deliberately NOT applied to historical rows: it answers
+  "may this offer be recommended now", and pruning history by it would rewrite the past.
+- **Nothing else changed.** v1.6 adds this one path - no field on the existing paths gained,
+  lost or changed type - and the served document is pinned byte-for-byte by
+  `apps/api/test/unit/openapi-v1.6.json`.
 
 ## Response shape
 

@@ -276,9 +276,14 @@ function buildApp(options) {
         // GET /v1/catalog/products (keyset pagination on slug) and
         // GET /v1/catalog/products/:slug. Every price carries its Decision 35
         // provenance class, and the detail carries the derived price_status
-        // and the disclaimer. Pinned byte-for-byte by
-        // apps/api/test/unit/openapi-v1.5.json.
-        version: '1.5.0',
+        // and the disclaimer.
+        // 1.6.0 (2026-10-23): the price history behind one product -
+        // GET /v1/catalog/products/:slug/price-history, the observations in
+        // ascending order with their provenance, and a summary whose change
+        // fields are null until there are two points (Decision 51). No existing
+        // field or path changed. Pinned byte-for-byte by
+        // apps/api/test/unit/openapi-v1.6.json.
+        version: '1.6.0',
       },
     },
   });
