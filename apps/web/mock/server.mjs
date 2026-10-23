@@ -24,6 +24,11 @@
  *                                 through the id alone)
  *   GET /v1/presets               ?state=ok | empty | 503
  *   GET /v1/catalog/products      ?state=ok | 503
+ *   GET /v1/catalog/products/:slug/price-history
+ *                                 ?state=ok | 503 (an unknown slug is a 404; a
+ *                                 known slug with no readings answers 200 with
+ *                                 an EMPTY series, because "we have observed
+ *                                 nothing" is an answer, not a miss)
  *   GET /v1/catalog/products/:slug ?state=ok | 404 (an unknown slug is a 404)
  *   GET /v1/meta/options          ?state=ok | 503
  *   GET /v1/health                always 200
@@ -56,6 +61,7 @@ import {
   META_OPTIONS,
   PRESETS_EMPTY,
   PRESETS_OK,
+  PRICE_HISTORY_BY_SLUG,
   RECOMMENDATIONS_BY_ID,
   RECOMMENDATION_OK,
   RECOMMENDATION_REUSED,
@@ -268,6 +274,34 @@ async function handle(req, res) {
     }
     send(res, 200, CATALOG_LIST_OK);
     return;
+  }
+
+  // S25: one product's price history, on its OWN path so the product read
+  // below keeps its one-segment shape. The series is selected by SLUG, not by
+  // state, because the page reads this on the server: the slug is the only
+  // thing a spec can choose from outside the Next process.
+  //
+  // The path is matched by its two literal halves rather than by a pattern:
+  // the middle is DATA (a slug), read as a slice and then checked for a
+  // separator, so a deeper path is not mistaken for a product.
+  const PRICE_HISTORY_PREFIX = "/v1/catalog/products/";
+  const PRICE_HISTORY_SUFFIX = "/price-history";
+  if (
+    req.method === "GET" &&
+    path.startsWith(PRICE_HISTORY_PREFIX) &&
+    path.endsWith(PRICE_HISTORY_SUFFIX)
+  ) {
+    const rawSlug = path.slice(PRICE_HISTORY_PREFIX.length, -PRICE_HISTORY_SUFFIX.length);
+    if (rawSlug.length > 0 && !rawSlug.includes("/")) {
+      if (state === "503") return sendError(res, "unavailable");
+      const slug = decodeURIComponent(rawSlug);
+      const history = PRICE_HISTORY_BY_SLUG[slug];
+      // A known product with no readings is a 200 carrying an empty series;
+      // only a slug the mock does not serve is a miss.
+      if (history === undefined) return sendError(res, "notFound");
+      send(res, 200, history);
+      return;
+    }
   }
 
   const productMatch = path.match(/^\/v1\/catalog\/products\/([^/]+)$/);

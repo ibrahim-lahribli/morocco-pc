@@ -202,7 +202,10 @@ test.describe("the mock serves every contract state", () => {
   test("catalog reads serve a page and a 404 for an unknown slug", async ({ request }) => {
     const list = await (await request.get("/v1/catalog/products")).json();
     expect(list.next_cursor).toBeNull();
-    expect(list.products).toHaveLength(3);
+    // Five, not three: S25 appended two indicative products that exist to carry
+    // a rising and a flat price series, and the list mirrors the catalogue map
+    // by design — so the pin moves with the map rather than being relaxed.
+    expect(list.products).toHaveLength(5);
     expect(list.products[1].has_offer).toBe(false);
     expect(list.products[1].offer_class).toBeNull();
     // S17: a product with no offer is still listed (has_offer false), and the

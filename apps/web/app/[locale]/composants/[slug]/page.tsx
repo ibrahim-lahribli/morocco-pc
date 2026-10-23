@@ -4,8 +4,10 @@ import { hasLocale } from "next-intl";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 
+import { PriceHistory } from "@/components/price-history";
 import { Badge, LinkButton } from "@/components/ui";
 import { routing } from "@/i18n/routing";
+import { compareHref } from "@/lib/catalog/compare";
 import {
   catalogCategory,
   catalogProvenance,
@@ -13,8 +15,12 @@ import {
   fromPrice,
   offerProvenance,
 } from "@/lib/catalog/model";
-import { componentAppearancesCached, loadCatalogProductCached } from "@/lib/catalog/load";
-import { presentSpecs, SPEC_LABEL_KEYS, type SpecCopy } from "@/lib/catalog/specs";
+import {
+  componentAppearancesCached,
+  loadCatalogProductCached,
+  loadPriceHistoryCached,
+} from "@/lib/catalog/load";
+import { presentSpecs, specCopy, type SpecCopy } from "@/lib/catalog/specs";
 import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
 import { pageAlternates } from "@/lib/seo/site";
@@ -34,6 +40,12 @@ import { pageAlternates } from "@/lib/seo/site";
  *   - **`noindex` until the prices are real.** `componentIndexable()` requires
  *     every offer to be VERIFIED, not merely a `price_status` column that says so
  *     — the same "indexability follows the data" rule S16 applies to presets.
+ *   - **The price series is a THIRD read, and the one surface the contract
+ *     does not have yet** (S25): `loadPriceHistory()` reads
+ *     `/v1/catalog/products/:slug/price-history`, which only the fixture mock
+ *     serves today. An absent series is "aucun relevé" rather than an error,
+ *     and `<PriceHistory>` owns the three states and the text summary — this
+ *     page only places it.
  *   - **A stale or unreachable API keeps the last good page.** The read
  *     propagates anything that is not a 404, so Next serves the previous ISR copy
  *     instead of replacing a product with an error; only "this slug names
@@ -129,17 +141,15 @@ export default async function ComponentPage({
   const category = catalogCategory(product.category);
   const categoryLabel = category === null ? t("categoryFallback") : t(`categories.${category}`);
 
-  const copy: SpecCopy = {
-    labels: Object.fromEntries(SPEC_LABEL_KEYS.map((key) => [key, t(`specs.${key}`)])),
-    units: { slots: t("specs.units.slots"), gb: t("specs.units.gb") },
-    yes: t("specs.yes"),
-    no: t("specs.no"),
-  };
+  const copy: SpecCopy = specCopy(t);
   const specs = presentSpecs(product, appLocale, copy);
 
   const provenance = catalogProvenance(product);
   const price = fromPrice(product);
   const appearances = await componentAppearancesCached(product.slug);
+  // S25: the series is read once and passed whole; the component decides which
+  // of its three states that makes.
+  const priceHistory = await loadPriceHistoryCached(product.slug);
 
   return (
     <section>
@@ -216,6 +226,15 @@ export default async function ComponentPage({
         )}
       </section>
 
+      {/* The direction is a PROP because the chart is drawn on the server: an
+          SVG coordinate system does not inherit `dir`, so the time axis has to
+          be projected from the inline start explicitly. */}
+      <PriceHistory
+        observations={priceHistory}
+        locale={appLocale}
+        direction={locale === "ar" ? "rtl" : "ltr"}
+      />
+
       <section className="mt-6">
         <h2 className="text-subtitle text-ink">{t("appearances.title")}</h2>
         {appearances.length === 0 ? (
@@ -241,9 +260,16 @@ export default async function ComponentPage({
 
       <p className="mt-6 text-micro text-muted">{product.disclaimer}</p>
 
-      <div className="mt-6">
+      {/* S23: the entry point into the compare view, pre-selecting this
+          product so the reader lands on the picker with one column already in
+          place — a comparison needs two, and the URL is where they add the
+          second. */}
+      <div className="mt-6 flex flex-wrap items-center gap-3">
         <LinkButton href={localePath(locale, "/configurer")} variant="secondary">
           {t("cta")}
+        </LinkButton>
+        <LinkButton href={compareHref(locale, [product.slug])} variant="secondary">
+          {t("compare.entry")}
         </LinkButton>
       </div>
     </section>

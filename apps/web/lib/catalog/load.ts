@@ -29,6 +29,9 @@
  *    N preset reads per component page, all cached for the revalidation window and
  *    request-memoized here, so it is a build-time/ISR cost, never a per-visitor
  *    one.
+ *
+ * 3. **The price readings** (S25) are a read of their own path, and the one
+ *    route here that contract v1.5 does not have — see `loadPriceHistory`.
  */
 import { cache } from "react";
 
@@ -37,6 +40,7 @@ import {
   getCatalogProductForServer,
   isApiConfigured,
   listCatalogProductsForServer,
+  serverApiBaseUrl,
   type CatalogListResponse,
   type CatalogProductResponse,
 } from "../api/client";
@@ -307,3 +311,209 @@ export async function componentAppearances(productSlug: string): Promise<Appeara
 
 /** Same memo, so the body and its metadata never pay for two walks. */
 export const componentAppearancesCached = cache(componentAppearances);
+
+/**
+ * One price reading for a catalogue product (S25).
+ *
+ * The two fields are the whole shape on purpose: a reading says WHEN a price was
+ * seen and WHAT it was. Every label and sentence around it belongs to the page,
+ * so a new language never needs a new fixture.
+ */
+export interface PriceObservation {
+  /** The day the price was seen, ISO-8601 (`YYYY-MM-DD`), as served. */
+  observed_at: string;
+  /** The observed price in MAD — positive and finite, enforced on read. */
+  price: number;
+}
+
+/** `/v1/catalog/products/:slug/price-history`. The slug is DATA, so it is encoded. */
+function priceHistoryPath(slug: string): string {
+  return `/v1/catalog/products/${encodeURIComponent(slug)}/price-history`;
+}
+
+/**
+ * A reading, or null when the entry cannot be rendered honestly.
+ *
+ * `price` accepts a NUMBER or a numeric STRING because `pg` returns NUMERIC
+ * columns as strings, and an endpoint forwarding that column would send exactly
+ * such a string — the repo's other loaders coerce the same way. A reading with an
+ * unparseable day, or a price that is not a finite positive number, is DROPPED: a
+ * zero or a NaN would draw a point at a made-up height, and a missing day would
+ * print an invalid date in both languages.
+ */
+function asPriceObservation(value: unknown): PriceObservation | null {
+  if (typeof value !== "object" || value === null) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.observed_at !== "string") return null;
+  if (!Number.isFinite(Date.parse(record.observed_at))) return null;
+  const rawPrice = record.price;
+  if (typeof rawPrice !== "number" && typeof rawPrice !== "string") return null;
+  const price = Number(rawPrice);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  return { observed_at: record.observed_at, price };
+}
+
+/**
+ * The price readings for one product, OLDEST FIRST (S25).
+ *
+ * Three limits worth stating, because each one is a place the obvious version
+ * lies:
+ *
+ *   1. **This route is not in contract v1.5.** It is served today by the fixture
+ *      mock alone. A 404 therefore means "no reading recorded" — an absent
+ *      endpoint and an empty series are the same answer to the page, and neither
+ *      is an error. The day the API grows the endpoint, the page gains real
+ *      history without a change here.
+ *   2. **Every other failure PROPAGATES.** A price series is data, not
+ *      decoration: silently rendering a dead endpoint as "never observed" would
+ *      print a false claim about the product's price. Throwing keeps the page's
+ *      ISR rule intact — Next serves the last good copy instead of a rewritten
+ *      history.
+ *   3. **The result is SORTED here, once.** Ties break on price, so two readings
+ *      on one day keep a stable order; the chart's axis and the summary's "since
+ *      the first reading" both assume an order, and neither should inherit
+ *      whatever order the server happened to send.
+ *
+ * Cached for the catalogue window and request-memoized, like its siblings.
+ */
+export async function loadPriceHistory(slug: string): Promise<PriceObservation[]> {
+  let response: Response;
+  try {
+    response = await fetch(serverApiBaseUrl() + priceHistoryPath(slug), {
+      headers: { accept: "application/json" },
+      next: { revalidate: CATALOG_REVALIDATE_SECONDS },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (cause) {
+    throw new ApiError({
+      status: 0,
+      code: "NETWORK_ERROR",
+      message: "The price history could not be reached.",
+      cause,
+    });
+  }
+
+  if (response.status === 404) return [];
+  if (!response.ok) {
+    throw new ApiError({
+      status: response.status,
+      code: `HTTP_${response.status}`,
+      message: `The price history request failed with status ${response.status}`,
+    });
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch (cause) {
+    // A 2xx that is not JSON is a proxy page, not a series.
+    throw new ApiError({
+      status: response.status,
+      code: "UNKNOWN",
+      message: "Expected a JSON price history",
+      cause,
+    });
+  }
+
+  const record =
+    typeof body === "object" && body !== null ? (body as Record<string, unknown>) : null;
+  const raw = record !== null && Array.isArray(record.observations) ? record.observations : [];
+  const observations = raw.flatMap((entry) => {
+    const parsed = asPriceObservation(entry);
+    return parsed === null ? [] : [parsed];
+  });
+  observations.sort(
+    (a, b) => Date.parse(a.observed_at) - Date.parse(b.observed_at) || a.price - b.price,
+  );
+  return observations;
+}
+
+/** The request-scoped memo: a render reads the series exactly once. */
+export const loadPriceHistoryCached = cache(loadPriceHistory);
+/** What the compare page asks for: the products it could read, and the slugs it could not. */
+export interface CompareSelection {
+  products: CatalogProductResponse[];
+  /** The slugs the URL named that this catalogue does not serve. */
+  missing: string[];
+}
+
+/**
+ * The selected products, in selection order (S23).
+ *
+ * A slug the catalogue no longer serves is DROPPED and reported, rather than
+ * throwing the whole page away: a compare URL is a working document someone
+ * shared, and one dead token must not cost the reader the comparison that still
+ * exists. The page renders `missing` as a sentence and offers the picker to repair
+ * the link. Every OTHER failure still propagates, so a dead API keeps the last good
+ * copy — the same rule this file applies to the product page.
+ */
+export async function loadCompareProducts(slugs: readonly string[]): Promise<CompareSelection> {
+  const outcomes = await Promise.all(slugs.map((slug) => loadCatalogProductCached(slug)));
+  const products: CatalogProductResponse[] = [];
+  const missing: string[] = [];
+
+  outcomes.forEach((outcome, index) => {
+    if (outcome.kind === "ok") products.push(outcome.product);
+    else missing.push(slugs[index]);
+  });
+
+  return { products, missing };
+}
+
+/** Same memo: one render costs one read per slug, not two. */
+export const loadCompareProductsCached = cache(loadCompareProducts);
+
+/** How many keyset pages the picker will read before it stops. */
+const PICKER_PAGE_CAP = 5;
+
+/** One row of the compare picker — the list endpoint's own shape. */
+export type CatalogueListItem = CatalogListResponse["products"][number];
+
+/**
+ * The catalogue, as the picker lists it (S23).
+ *
+ * Bounded on purpose: `GET /v1/catalog/products` is keyset-paginated, and a picker
+ * that walked an unbounded catalogue would hold the page open for as long as the
+ * catalogue is long. Five pages of a hundred is the documented ceiling; a longer
+ * catalogue gives a shorter picker plus one warning, which is the same degradation
+ * the sitemap walk makes.
+ *
+ * A failure returns what it has so far and logs, because the picker is an ADDITION
+ * to a page whose real content is the comparison already in the URL: a sick list
+ * endpoint must not 500 a comparison that is fine.
+ */
+export async function catalogueProductsForPicker(): Promise<CatalogueListItem[]> {
+  const products: CatalogueListItem[] = [];
+  let cursor: string | null = null;
+
+  for (let page = 0; page < PICKER_PAGE_CAP; page += 1) {
+    let body: CatalogListResponse;
+    try {
+      body = await listCatalogProductsForServer(
+        { limit: String(LIST_PAGE_LIMIT), ...(cursor === null ? {} : { cursor }) },
+        {
+          revalidate: CATALOG_REVALIDATE_SECONDS,
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        },
+      );
+    } catch (cause) {
+      console.warn(
+        "compare: the catalogue list is unavailable; the picker is short",
+        cause instanceof Error ? cause.message : cause,
+      );
+      return products;
+    }
+
+    products.push(...body.products);
+    if (body.next_cursor === null || body.next_cursor === "") return products;
+    cursor = body.next_cursor;
+  }
+
+  console.warn(
+    `compare: the picker stopped after ${PICKER_PAGE_CAP} catalogue pages; some products are not offered`,
+  );
+  return products;
+}
+
+/** One read per render, like every other loader here. */
+export const catalogueProductsForPickerCached = cache(catalogueProductsForPicker);
