@@ -84,3 +84,26 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+      # V1's "a POST completes in under 3 s" has no deployed origin to measure on,
+      # and a local run cannot stand in: on 2026-10-23 the dev box measured a median
+      # 120-205 ms per `SELECT 1`, which puts a 49-statement pass at 6-10 s of round
+      # trip ALONE - a property of that machine's distance from Neon, not of the
+      # product. This step reports the same band from a runner so the target is
+      # judged against a repeatable number instead of a guess: statements x RTT is a
+      # floor every origin pays, and an origin colocated with its database would pay
+      # ~1-2 ms per statement instead of ~200.
+      #
+      # READ ONLY - the script issues `SELECT 1` and nothing else, takes no lock and
+      # writes nothing, so it is safe against the shared database too. INFORMATIONAL:
+      # the figures are printed, never asserted, because no threshold is defensible
+      # until an origin exists; the step fails only if a target cannot be reached.
+      # if: always() for the same reason as the suite above - an unrelated red gate
+      # must not hide the number.
+      - name: DB round-trip band (V1 latency input)
+        if: always() && steps.deps.outcome == 'success'
+        run: |
+          node scripts/measure-db-roundtrip.js --target=env:DATABASE_URL
+          node scripts/measure-db-roundtrip.js --target=env:TEST_DATABASE_URL
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
