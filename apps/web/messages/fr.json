@@ -11,6 +11,7 @@
     "footer": "morocco-pc — configurateur de PC pour le marché marocain. Prix en dirhams (DH).",
     "formats": "Formats (démo)",
     "legalNav": "Informations légales",
+    "savedNav": "Vos configurations",
     "legal": {
       "mentions": "Mentions légales",
       "privacy": "Confidentialité",
@@ -299,6 +300,32 @@
       "none": "Aucune configuration publiée n'utilise encore ce composant.",
       "item": "Configuration à {budget} — N° {rank}"
     },
+    "compare": {
+      "title": "Comparer des composants",
+      "metaTitle": "Comparer des composants — morocco-pc",
+      "metaDescription": "Deux ou trois composants côte à côte : les caractéristiques, les prix et les différences, ligne par ligne.",
+      "intro": "Deux ou trois composants, ligne par ligne. Chaque différence porte le mot « Diffère » ; une caractéristique que l’un ne publie pas est dite « Non renseigné ».",
+      "caption": "Comparaison de {count} composants",
+      "specColumn": "Caractéristique",
+      "differs": "Diffère",
+      "unknown": "Non renseigné",
+      "remove": "Retirer",
+      "summary": "Écarts : {different} sur {total}. Identiques : {same}.",
+      "empty": "Choisissez un composant dans le catalogue pour commencer une comparaison.",
+      "oneHint": "Ajoutez un deuxième composant de la même catégorie pour voir les différences.",
+      "mixed": "Ces composants ne sont pas de la même catégorie : une comparaison côte à côte n’aurait pas de sens. Retirez-en un pour continuer.",
+      "duplicates": "Un composant figurait deux fois dans le lien : il n’est affiché qu’une fois.",
+      "overflow": "Trois composants au maximum : les suivants du lien ont été ignorés.",
+      "missing": "Un composant du lien n’existe pas dans le catalogue : il a été ignoré.",
+      "unavailable": "Le catalogue ne répond pas pour un composant : les autres sont affichés.",
+      "addTitle": "Ajouter un composant",
+      "addItem": "Ajouter {name}",
+      "full": "Trois composants au maximum. Retirez-en un pour en ajouter un autre.",
+      "catalogueTitle": "Composants du catalogue",
+      "hint": "Comparez ses caractéristiques avec celles d’un autre composant de la même catégorie.",
+      "with": "Avec {name}",
+      "open": "Ouvrir la comparaison"
+    },
     "fromPrice": "À partir de {amount}",
     "noPrice": "Aucun prix disponible",
     "cta": "Configurer mon PC"
@@ -362,5 +389,26 @@
       "dataHeading": "Demande relative aux données",
       "dataBody": "La page Confidentialité décrit ce qui est enregistré, et aujourd'hui la réponse est : rien qui vous identifie."
     }
+  },
+  "saved": {
+    "title": "Mes enregistrements",
+    "metaTitle": "Mes enregistrements — morocco-pc",
+    "metaDescription": "Les configurations enregistrées dans ce navigateur, sur cet appareil.",
+    "intro": "Les configurations que vous avez enregistrées sur cet appareil. Elles restent dans ce navigateur : aucun compte, aucun serveur, rien qui parte d’ici.",
+    "save": "Enregistrer",
+    "saved": "Enregistré sur cet appareil.",
+    "removed": "Enregistrement retiré.",
+    "full": "Cet appareil n’a plus de place pour un enregistrement de plus. Retirez-en un, puis réessayez.",
+    "saveUnavailable": "L’enregistrement n’est pas disponible ici (navigation privée ou stockage désactivé). Rien n’a été enregistré.",
+    "readUnavailable": "Le stockage de cet appareil est inaccessible : la liste ne peut pas être lue, et rien ne peut y être enregistré.",
+    "emptyTitle": "Aucun enregistrement",
+    "emptyBody": "Vous n’avez encore enregistré aucune configuration sur cet appareil. Un enregistrement reste dans ce navigateur, sans compte.",
+    "emptyCta": "Créer une configuration",
+    "open": "Ouvrir le résultat",
+    "remove": "Retirer",
+    "savedOnLabel": "Enregistré le",
+    "noTotal": "Total non enregistré",
+    "removeUnavailable": "Le retrait n’a pas abouti : cet appareil refuse d’écrire dans son stockage. Rien n’a changé.",
+    "openShelf": "Voir mes enregistrements"
   }
 }

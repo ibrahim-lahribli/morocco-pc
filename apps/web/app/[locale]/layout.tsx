@@ -139,6 +139,9 @@ export default async function LocaleLayout({
   if (!hasLocale(routing.locales, locale)) notFound();
 
   const t = await getTranslations({ locale, namespace: "shell" });
+  // The shelf's OWN words, not a second copy of them: the footer link and the
+  // page's h1 must not be able to disagree about what the page is called.
+  const tSaved = await getTranslations({ locale, namespace: "saved" });
   const dir = locale === "ar" ? "rtl" : "ltr";
   const fonts = [inter.variable, geistMono.variable].join(" ");
   // React 19's resource API: emits ONE <link rel="preload"> in <head>.
@@ -192,10 +195,30 @@ export default async function LocaleLayout({
          * "Informations légales" instead of tabbing through the page. The
          * formats sheet stays here as a fifth link — it is a demonstration
          * page, and the footer is where demonstration pages belong.
+         *
+         * S25: the shelf gets its OWN nav above that one, because it is not a
+         * legal document and putting it in the "Informations légales" set would
+         * make that landmark misdescribe itself. The footer rather than the
+         * header is a measured choice: at 360 px the header already fills its
+         * row (brand 95 px + switcher 151 px of 360), and a third item scrolls
+         * the page to 376 px — the horizontal overflow S1 forbids. The footer
+         * wraps, and it is the one place every page carries, the 404 included.
          */}
         <footer className="border-t border-border">
           <div className="mx-auto w-full max-w-5xl px-4 py-6 text-compact text-muted">
             <p>{t("footer")}</p>
+            <nav aria-label={t("savedNav")} className="mt-2">
+              <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <li>
+                  <Link
+                    href={localePath(locale, "/enregistrements")}
+                    className="text-primary underline-offset-4 hover:underline"
+                  >
+                    {tSaved("title")}
+                  </Link>
+                </li>
+              </ul>
+            </nav>
             <nav aria-label={t("legalNav")} className="mt-2">
               <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 {FOOTER_LINKS.map((link) => (

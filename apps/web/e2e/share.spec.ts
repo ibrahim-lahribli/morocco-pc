@@ -19,7 +19,7 @@
  * forwarded hop — trimmed, validated, and never able to throw.
  */
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 import { formatMoney } from "../lib/i18n/format";
 import { absoluteResultUrl, originFromHeaders, waMeHref } from "../lib/result/share";
@@ -33,6 +33,18 @@ const ZERO = `/fr/config/${IDS.zeroBuild}`;
 
 const ORIGIN = "http://localhost:3210";
 const canonical = (id: string) => absoluteResultUrl(ORIGIN, "fr", id);
+
+/**
+ * The share bar's OWN live region: the group is the buttons, and the region is
+ * the group's sibling inside the bar — so scope through the group's parent.
+ * A page-wide `[aria-live]` selector is not enough any more: a result page also
+ * carries one polite region per build card (S25's save toggle).
+ */
+const shareLive = (page: Page) =>
+  page
+    .getByRole("group", { name: "Partager cette configuration" })
+    .locator("xpath=..")
+    .locator('[aria-live="polite"]');
 
 // ---------------------------------------------------------------------------
 // The URL math, without a browser
@@ -125,7 +137,9 @@ test("without the Web Share API the copy button writes the canonical URL and ann
   await expect(page.getByRole("button", { name: "Partager", exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Copier le lien" }).click();
-  await expect(page.locator('[aria-live="polite"]')).toHaveText("Lien copié.");
+  // Scoped to the share group: a result page also carries one polite region per
+  // build card (S25's save toggle), so a page-wide selector matches many.
+  await expect(shareLive(page)).toHaveText("Lien copié.");
 
   const clip = await page.evaluate(() => navigator.clipboard.readText());
   expect(clip).toBe(canonical(IDS.threeBuilds));
@@ -164,7 +178,7 @@ test("with the Web Share API present the third button shares via it, not via a c
   expect(share[0].url).toBe(canonical(IDS.threeBuilds));
   expect(share[0].text).toContain(money(total));
   // Success through the sheet announces nothing: no false "copied".
-  await expect(page.locator('[aria-live="polite"]')).toHaveText("");
+  await expect(shareLive(page)).toHaveText("");
 });
 
 // ---------------------------------------------------------------------------

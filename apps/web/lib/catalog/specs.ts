@@ -225,19 +225,3 @@ export function presentSpecs(
 
   return rows;
 }
-/**
- * The label map and the two word units, built from a `catalog` translator.
- *
- * One builder rather than one per page: the component page and the compare view
- * both render `presentSpecs()` rows, and two inline copies of this object would
- * be two answers to "which keys have a label" — the drift is invisible until a new
- * spec key renders as its snake_case name on one page and in words on the other.
- */
-export function specCopy(translate: (key: string) => string): SpecCopy {
-  return {
-    labels: Object.fromEntries(SPEC_LABEL_KEYS.map((key) => [key, translate(`specs.${key}`)])),
-    units: { slots: translate("specs.units.slots"), gb: translate("specs.units.gb") },
-    yes: translate("specs.yes"),
-    no: translate("specs.no"),
-  };
-}

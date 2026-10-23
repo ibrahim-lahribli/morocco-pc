@@ -5236,3 +5236,59 @@ Paging with `OFFSET` over `product.name` can repeat or skip a row, because the n
 ### Supersedes / superseded by
 
 It supersedes no decision. It extends the API surface Decision 36 defines with two read-only paths, consuming Decision 35's provenance classes, Decision 37's "vocabulary belongs to the model" principle (hence no `use_case`), and migration 020's `slug`. It corrects `PLAN_PLATFORM_P2.md` Sprint 3's interface line in place (step 1-6 ticked, the `use_case` removal and the read-only DB suite recorded in its status block) and `docs/OPEN_GAPS.md` OG-52's P2 catalog clause. No dated banner anywhere is retro-edited.
+## Decision 51 — a price history is one point per observation MOMENT, and its summary reports thin data instead of inventing a trend (S25 unblock)
+
+Status: RESOLVED 2026-10-23; IMPLEMENTED 2026-10-23 — `GET /v1/catalog/products/:slug/price-history` serves a product's recorded observations oldest-first, with each point's Decision 35 provenance class and a summary whose change fields stay null until there are two observation moments; contract **v1.6**.
+
+Date: 2026-10-23. S25 of `docs/plans/agent3-web-sprints.md` shipped its saved-builds half and left the price-history half blocked: `price_history` has existed since migration 009, but NO route read it, so a chart could only have plotted fixtures. This entry records the read contract the sprint needed. It is NOT an engine change — not one module under `src/recommendation/` is touched, no score, rank or persisted row changes — and it needs NO migration or seed: the table, its index and its 101 rows are already there. It does NOT build the chart; the UI half of S25 remains open, and the shape below is what it codes against.
+
+### Current situation
+
+- `price_history` (migration 009) is `id`, `store_offer_id` (NOT NULL, FK to `store_offer`), `price` (NUMERIC, `CHECK (price > 0)`), `currency`, `availability`, `observed_at` (TIMESTAMPTZ NOT NULL) and `created_at`. It has NO `product_id`; the product is reached through `store_offer.product_id`. `idx_price_history_store_offer_observed (store_offer_id, observed_at DESC)` is the only read index.
+- Measured read-only on the shared database 2026-10-23: **101 rows over 101 distinct offers**, one currency (MAD), observed between **2026-09-18T22:33:23.358Z and 2026-09-27T00:25:51.593Z** — a nine-day window, i.e. ONE ingestion sweep, not a series.
+- **100 products carry at least one row; 99 of them exactly one.** The single product with two rows (`rtx-4060-8gb`) has them at the SAME instant (3200 and 4800, from two stores and two variants) — a spread across variants, not a price move. Every other product's "history" is a single point.
+- All 101 rows join an offer whose `ingestion_record_id` is NULL, so every historical price is `SEED_UNVERIFIED` under Decision 35 — derived, never assumed.
+- Nothing in `apps/api/` read the table. The catalog routes (Decision 50) serve CURRENT prices only; `store_offer.last_checked_at` is one timestamp per offer and cannot reconstruct a series.
+
+### Problem
+
+A chart needs a read path, and the obvious one is wrong in two ways at once. Serving one point per `price_history` ROW makes the only multi-row product on this catalog draw a +50 % jump between two variants observed in the same second — a trend the catalog never observed. Computing the change over a single point as `0` asserts the price held, when the catalog simply has one observation. Both are the same defect this repository keeps closing: a number presented as knowledge the database never had.
+
+There is also a scope temptation: `price_history` stores `availability`, so a route could recreate an "eligible offers" history. That would apply TODAY's 30-day freshness rule (and the Decision 35 seed waiver) retroactively and silently DELETE observations that were real when recorded — rewriting the past to describe the present.
+
+### Decision
+
+1. **The history is per PRODUCT, reached through `store_offer`, and that needs no migration.** `SELECT_PRICE_HISTORY_SQL` joins `price_history -> store_offer` on `store_offer_id` and filters `store_offer.product_id = $1`. A `price_history.product_id` column was rejected: it is derivable in one join, and a denormalized copy would need a backfill plus drift protection for no read win.
+2. **ONE POINT PER OBSERVATION MOMENT, carrying that moment's CHEAPEST price.** Rows are grouped by `observed_at`, keeping the lowest `price` (and ITS `offer_class`); equal prices keep the repository's total order, so the pick is deterministic. This is an aggregation of OBSERVED rows: no point is invented, no gap is filled, no day is synthesized. The served `observation_count` is therefore the number of moments, not the number of rows.
+3. **The series is ASCENDING by `observed_at`.** The statement orders `observed_at DESC, id DESC` with a `LIMIT`, so the cap truncates the OLDEST observations and keeps the most recent history; the presenter then sorts ascending (ISO-8601 strings compare lexicographically, and the sort is stable). "First -> last" is therefore before -> after, and a client can plot the array in order without sorting.
+4. **EVERY POINT CARRIES ITS Decision 35 PROVENANCE.** `offer_class` is derived from the offer's `ingestion_record_id` by the same `offerClassFor` the list and detail use — never copied into `price_history`, never inferred from the row's age.
+5. **THE SUMMARY IS NULLABLE WHERE THE DATA IS THIN.** `latest_price`, `min_price` and `max_price` need at least ONE moment; `change_amount` and `change_pct` need TWO DISTINCT moments and are `null` otherwise. `change_pct` is additionally `null` when the first price is not positive (the table's CHECK makes that unreachable today, and the contract does not rely on it). Both change fields are rounded through `toFixed(2)` so a delta of 0.1 is not served as 0.09999999999999998. `observation_count` is an integer and is never null: "none" is countable.
+6. **NO HISTORY IS A 200 WITH AN EMPTY LIST; AN UNKNOWN PRODUCT IS A 404.** `points: []` plus an all-null summary says "this product exists and nothing has been observed yet", which the chart renders as a sentence. An unknown slug answers the SAME `{ error: "NOT_FOUND", message: "No product with that slug" }` envelope as the detail route, because an empty 200 would be indistinguishable from a product nobody has priced.
+7. **Currency is exact and comes from `meta.CURRENCIES[0]` (MAD), never a SQL literal**, exactly as Decision 50 item 4 requires: the engine matches currency by exact equality, so a second advertised currency must arrive with a parameter, not a hardcoded string.
+8. **Offer eligibility is deliberately NOT applied to historical rows.** The 30-day window and the Decision 35 seed waiver answer "may this offer be RECOMMENDED now", which is the detail route's question. Pruning history by them would delete observations that were real when recorded. The only filter is the table's own `CHECK (price > 0)`; a row whose NUMERIC will not parse is DROPPED rather than served as 0.
+9. **One page, capped at 366 moments, with no window or paging parameter.** The route takes the slug and nothing else. A public chart needs the recent series, not an archive; an unbounded history would be a denial-of-service shape on a 120/min route, and a `since` parameter is a new contract to design when a real ingestion cadence exists — not a knob to guess now.
+10. **Contract v1.6, pinned.** `apps/api/test/unit/openapi-v1.6.json` replaces `openapi-v1.5.json` (deleted in the same change). The route is 120/min like the rest of the catalog, declares its `429`/`500`, and is listed in the web client's `EXPECTED_PATHS` — so the completeness gate and `check:api-types` both fail if it disappears.
+
+### Rejected alternatives
+
+- **One point per `price_history` row.** Rejected on measured data: the only product with two rows has them at the same instant from two variants, so the series would open with a +50 % rise that never happened. A chart is read as a time series whether or not the data supports one.
+- **A per-OFFER history (`/:slug/offers/:id/history`).** Rejected: the page is a product page, and a per-offer shape forces a client to join and then decide how to merge offers — the exact decision this contract makes once, in the open.
+- **`change_amount: 0` for a single observation.** Rejected: it asserts the price held when the catalog observed it once. `null` is this repo's word for "not known", and the web chart has a first-class sentence for it.
+- **Interpolating or forward-filling missing days.** Rejected: it invents observations. The summary and the chart both say "two points" when there are two.
+- **Applying today's eligibility window to history.** Rejected: it rewrites the past to agree with the present, and would empty the series for a catalog that has not been re-ingested inside 30 days.
+- **A `price_history.product_id` migration.** Rejected: derivable through `store_offer.product_id` in one join; a copy would need a backfill and a drift guard for no read-path benefit.
+- **Paging or a `since`/`until` window now.** Rejected: no client needs it, and both would be contract surface guessed before an ingestion cadence exists. The 366-moment cap is the documented limit.
+- **Deriving the series from `store_offer.last_checked_at` / `price`.** Rejected: one row per offer is a snapshot, not a series, and it would ignore the table that exists precisely to hold observations.
+
+### Verdict for this pass
+
+- **Unit - PASS.** `npm run test:api` **120 pass / 0 fail** (7 route tests in `apps/api/test/unit/price-history.test.js`: ascending points with numbers and summary, the one-observation null change, the empty 200, the 404, the cap, the dropped unparsable row, and the same-moment collapse), with the snapshot and coverage gates updated for v1.6. On Node 22.23.3 (the version CI pins) the same suite is also **120 pass / 0 fail, 0 cancelled**.
+- **Live read against the TEST branch - PASS.** `npm run test:api:db` **10 pass / 0 fail** (the new read-only test rebuilds the expected series from the database - cheapest price per instant, ascending - and asserts the served points match it, every class is `SEED_UNVERIFIED`, and the unknown-slug 404). The suite is SELECT-only and writes nothing, so it has no residue to assert.
+- **Web contract gate - PASS.** `npm run check:api-types` reports contract **1.6.0, 8 paths**, `schema.d.ts` byte-identical to the generator output after `npm run gen:api-types`.
+- **Docs gates - PASS**: `npm run verify:docs` and `npm run gen:decisions` clean; this entry is the 49th heading and the 55th `Status:` line.
+- **No database writes.** No migration, no seed, no Layer 4 read or write.
+- **NOT done here:** the chart itself. S25's UI half is handed to a separate worker against this frozen shape; this decision unblocks it and does not claim it.
+
+### Supersedes / superseded by
+
+It supersedes no decision. It extends the catalog surface Decision 50 defines with one read-only path, reuses Decision 50's currency rule and its open-eligibility split, and consumes Decision 35's provenance classes. It corrects S25's status block in `docs/plans/agent3-web-sprints.md` in place (the price-history half moves from BLOCKED to "API unblocked, chart pending") and the board's state paragraph. No dated banner anywhere is retro-edited.

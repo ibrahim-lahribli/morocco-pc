@@ -1,147 +1,181 @@
 /**
  * lib/catalog/compare.ts — the compare view's decisions, as pure functions (S23).
  *
- * Three things live here, and each one is a way the obvious version lies:
+ * The comparison is a VIEW of the catalogue, not a second copy of it: every
+ * value it prints comes from `presentSpecs()`, the same module the component
+ * page uses, so a spec cannot be formatted one way on its own page and another
+ * way beside a sibling. Four rules, and each one is a way a comparison lies:
  *
- * ## 1. The URL is the whole state, and it is PARSED leniently
- *
- * `/composants/comparer?composants=a,b,c` is shareable, so every reading of it has
- * to survive what a chat client or a mail app does to a URL: an empty entry, a
- * repeated slug, more than three, the same slug twice. `parseCompareSlugs()` drops
- * blanks, keeps the FIRST occurrence (so re-sharing a link never reorders the
- * columns), and stops at three. It never throws and never invents a slug: a product
- * that no longer exists is the loader's business, not the parser's.
- *
- * ## 2. A row is a UNION of what the products publish, not an intersection
- *
- * Comparing two GPUs is the easy case; comparing a GPU with a drive is legal here
- * and nearly empty. The intersection would hide exactly the facts a reader came for
- * — "this one does not publish a TGP" is information — so every key that ANY
- * selected product publishes becomes a row, and a product that does not publish it
- * gets `null`, which the view renders as a WORD rather than a blank cell. That is
- * the repo's NULL rule (NULL is UNKNOWN, never zero) applied to a comparison.
- *
- * ## 3. `differs` is computed on the RENDERED text, and includes "unknown"
- *
- * `40 mm` against `Non renseigné` is a difference a reader must be told about, so
- * the comparison is between the strings the page shows, not between raw values —
- * two products whose `2` and `2.0` both render as `2` agree in front of the reader,
- * which is the only place the question matters. A row `differs` when its cells are
- * not all identical, and the view states that in words on every row, because a
- * colour alone is not a text equivalent.
- *
- * Row ORDER is the union in product order: the first product's curated category
- * order (from `presentSpecs`, which owns labels, units and the id skip), then any
- * key only the later products publish, in their own order. Reusing `presentSpecs`
- * is deliberate — a second formatter here would be a second answer to "what is this
- * spec called, and in what unit".
+ * 1. **The URL is the selection.** `?slugs=a,b` is the whole state, so a shared
+ *    link reproduces the view and the Back button works. There is no cookie, no
+ *    localStorage and no client store — nothing that could make the page a
+ *    different comparison for two people holding the same URL.
+ * 2. **Two or three, never more.** `MAX_COMPARE` bounds the columns for a
+ *    reason: at 360 px a comparison is a stack of labelled values, and beyond
+ *    three it stops being readable even when it still fits.
+ * 3. **A missing value is a WORD, not a zero and not a dash.** `presentSpecs()`
+ *    omits a NULL row for a single product, which is right for a spec sheet. In
+ *    a comparison the absence is itself information — "one of these publishes
+ *    this fact, the other does not" — so the cell says so, and the row counts as
+ *    a difference. It is never drawn as `0` or `—`.
+ * 4. **Only the same category can be compared.** The spec tables are per
+ *    category, so a GPU beside a RAM kit would render every row as "unknown"
+ *    and call that a comparison. `commonCategory()` answers, and the page says
+ *    why instead of drawing noise.
  */
 import type { CatalogProductResponse } from "../api/client";
 import type { AppLocale } from "../i18n/format";
+import { localePath } from "../i18n/paths";
 import { presentSpecs, type SpecCopy } from "./specs";
 
-/** The query parameter that carries the selection. */
-export const COMPARE_PARAM = "composants";
-/** Three side by side is what a 360 px card stack and a table can both hold. */
-export const COMPARE_MAX = 3;
-/** Fewer than two is not a comparison; the page says so instead of drawing one. */
-export const COMPARE_MIN = 2;
+/** Columns a comparison may hold. Three fits a 360 px stack and a wide table. */
+export const MAX_COMPARE = 3;
 
-/** What the compare view needs from a product — nothing more. */
-export type CompareProduct = Pick<CatalogProductResponse, "category" | "specs">;
+/** The route, without a locale prefix and without a query string. */
+export const COMPARE_PATH = "/composants/comparer";
+
+/** What the query string said, and what the view had to drop to honour it. */
+export interface CompareSelection {
+  slugs: string[];
+  /** The same slug appeared more than once; it is shown once. */
+  duplicates: boolean;
+  /** More than `MAX_COMPARE` slugs were asked for; the tail is not shown. */
+  overflow: boolean;
+}
 
 /**
- * The slugs a URL names, in the order it names them, deduped, capped at three.
+ * `?slugs=a,b` as a selection, in URL order.
  *
- * A repeated query parameter (`?composants=a&composants=b`) arrives as an array,
- * which is why the input is both shapes.
+ * Both shapes Next hands a page are accepted (`string` for one occurrence,
+ * `string[]` for `?slugs=a&slugs=b`), and each value may still hold a
+ * comma-separated list, so a hand-edited URL behaves like a shared one. Empty
+ * segments are not "a product named nothing": they are ignored silently.
  */
-export function parseCompareSlugs(raw: string | string[] | undefined): string[] {
-  if (raw === undefined) return [];
-  const values = Array.isArray(raw) ? raw : [raw];
+export function parseCompareSlugs(raw: string | string[] | undefined): CompareSelection {
+  const values = raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];
   const slugs: string[] = [];
+  let duplicates = false;
+  let overflow = false;
 
   for (const value of values) {
     for (const part of value.split(",")) {
       const slug = part.trim();
-      if (slug === "" || slugs.includes(slug)) continue;
+      if (slug === "") continue;
+      if (slugs.includes(slug)) {
+        duplicates = true;
+        continue;
+      }
+      if (slugs.length >= MAX_COMPARE) {
+        overflow = true;
+        continue;
+      }
       slugs.push(slug);
-      if (slugs.length === COMPARE_MAX) return slugs;
     }
   }
 
-  return slugs;
+  return { slugs, duplicates, overflow };
 }
 
-/**
- * The compare URL for a selection.
- *
- * `encodeURIComponent` per slug, then a literal comma: a slug is `[a-z0-9-]` in
- * practice, but this way a slug that ever contained a comma or a space cannot break
- * the one separator the parser depends on.
- */
-export function compareHref(locale: string, slugs: readonly string[]): string {
-  const base = `/${locale}/composants/comparer`;
+/** The URL for a selection. Slugs are data, so each one is encoded. */
+export function comparePath(locale: string, slugs: readonly string[]): string {
+  const base = localePath(locale, COMPARE_PATH);
   if (slugs.length === 0) return base;
-  const selection = slugs.map((slug) => encodeURIComponent(slug)).join(",");
-  return `${base}?${COMPARE_PARAM}=${selection}`;
+  return `${base}?slugs=${slugs.map((slug) => encodeURIComponent(slug)).join(",")}`;
 }
+
+/** The same selection without one slug — the "Retirer" link's target. */
+export function withoutSlug(slugs: readonly string[], slug: string): string[] {
+  return slugs.filter((value) => value !== slug);
+}
+
+/** The product as this module needs it: identity, category and its open specs. */
+export type CompareProduct = Pick<
+  CatalogProductResponse,
+  "slug" | "display_name" | "category" | "specs"
+>;
 
 /**
- * The selection with one slug added or removed — the ONE function behind every
- * "Ajouter" and "Retirer" link, so the two cannot disagree about the cap or the
- * order. At the cap, an add is a no-op rather than a silent replacement.
+ * The category every product shares, or null when they do not share one.
+ *
+ * One product trivially shares its own category; zero products have none. The
+ * page only draws a table when this returns a category, which is rule 4.
  */
-export function toggleCompareSlug(slugs: readonly string[], slug: string): string[] {
-  if (slugs.includes(slug)) return slugs.filter((entry) => entry !== slug);
-  if (slugs.length >= COMPARE_MAX) return [...slugs];
-  return [...slugs, slug];
+export function commonCategory(products: readonly { category: string }[]): string | null {
+  if (products.length === 0) return null;
+  const first = products[0].category;
+  return products.every((product) => product.category === first) ? first : null;
 }
 
-/** One feature row: its label, one cell per product, and whether they agree. */
+/** One product's value in one row, or null when it publishes nothing here. */
+export interface CompareCell {
+  slug: string;
+  value: string | null;
+}
+
 export interface CompareRow {
-  /** The spec key — a stable React key, never printed. */
   key: string;
   label: string;
-  /** One entry per compared product, in selection order; null = not published. */
-  cells: (string | null)[];
-  /** True when the cells are not all identical, including "value vs unknown". */
+  cells: CompareCell[];
+  /** True when the cells are not all the same — including a missing value. */
   differs: boolean;
 }
 
+export interface ComparisonSummary {
+  total: number;
+  same: number;
+  different: number;
+}
+
+export interface Comparison {
+  rows: CompareRow[];
+  summary: ComparisonSummary;
+}
+
+/** The spec copy, plus the word for a value this product does not publish. */
+export type CompareCopy = SpecCopy & { unknown: string };
+
 /**
- * Merge the selected products' spec rows into one comparison.
+ * The rows of a comparison, in display order.
  *
- * Assumes at least one product; the page only calls it with two or more (the
- * single-selection state has no table at all).
+ * Order is the CURATED spec order, not the products' arrival order: each
+ * product's `presentSpecs()` rows already follow the category's curated list,
+ * and the union preserves the first product's sequence, appending a key the
+ * first product does not carry where the later one places it. A reader
+ * therefore sees the same order as on a component page, with the extra facts
+ * slotted in rather than dumped at the end.
+ *
+ * Labels come from the first product that carries the key. They are copy, not
+ * data, so two products could not disagree about one — but taking the first is
+ * still the rule that keeps the value single-sourced.
  */
-export function buildCompareRows(
+export function buildComparison(
   products: readonly CompareProduct[],
   locale: AppLocale,
-  copy: SpecCopy,
-): CompareRow[] {
-  const perProduct = products.map(
-    (product) => new Map(presentSpecs(product, locale, copy).map((row) => [row.key, row])),
-  );
+  copy: CompareCopy,
+): Comparison {
+  const rowsPerProduct = products.map((product) => presentSpecs(product, locale, copy));
 
-  const keys: string[] = [];
-  for (const rows of perProduct) {
-    for (const key of rows.keys()) {
-      if (!keys.includes(key)) keys.push(key);
+  const order: string[] = [];
+  const labels = new Map<string, string>();
+  for (const rows of rowsPerProduct) {
+    for (const row of rows) {
+      if (labels.has(row.key)) continue;
+      labels.set(row.key, row.label);
+      order.push(row.key);
     }
   }
 
-  return keys.map((key) => {
-    const cells = perProduct.map((rows) => rows.get(key)?.value ?? null);
-    const first = cells[0];
-    // The label is the first product that publishes the key; they share one copy
-    // map, so any of them answers the same word.
-    const label = perProduct.find((rows) => rows.has(key))?.get(key)?.label ?? key;
-    return {
-      key,
-      label,
-      cells,
-      differs: cells.some((cell) => cell !== first),
-    };
+  const rows: CompareRow[] = order.map((key) => {
+    const cells: CompareCell[] = rowsPerProduct.map((rows, index) => {
+      const row = rows.find((candidate) => candidate.key === key);
+      return { slug: products[index].slug, value: row === undefined ? null : row.value };
+    });
+    // `Set` over the rendered VALUES: formatting is shared with the spec sheet,
+    // so "245 mm" and "245 mm" are equal and nothing compares raw JSON.
+    const distinct = new Set(cells.map((cell) => cell.value));
+    return { key, label: labels.get(key) ?? key, cells, differs: distinct.size > 1 };
   });
+
+  const same = rows.filter((row) => !row.differs).length;
+  return { rows, summary: { total: rows.length, same, different: rows.length - same } };
 }

@@ -202,6 +202,7 @@ test.describe("Arabic routes at 360 px", () => {
     "/ar/guides",
     "/ar/guides/choisir-un-gpu",
     "/ar/composants/rtx-4060-8gb",
+    "/ar/composants/comparer?slugs=rtx-4060-8gb,rtx-4070-12gb",
   ];
 
   for (const route of ARABIC_ROUTES) {

@@ -239,6 +239,135 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/catalog/products/{slug}/price-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The observations behind one product price, oldest first (contract v1.6) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            slug: string;
+                            currency: string;
+                            points: {
+                                observed_at: string;
+                                price: number;
+                                offer_class: string;
+                            }[];
+                            observation_count: number;
+                            latest_price: number | null;
+                            min_price: number | null;
+                            max_price: number | null;
+                            change_amount: number | null;
+                            change_pct: number | null;
+                            disclaimer: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/health": {
         parameters: {
             query?: never;

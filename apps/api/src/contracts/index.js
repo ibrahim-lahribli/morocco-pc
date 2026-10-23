@@ -31,4 +31,6 @@ module.exports = {
   CatalogProductParamsSchema: catalog.CatalogProductParamsSchema,
   CatalogOfferSchema: catalog.CatalogOfferSchema,
   CatalogProductDetailSchema: catalog.CatalogProductDetailSchema,
+  PriceHistoryPointSchema: catalog.PriceHistoryPointSchema,
+  PriceHistoryResponseSchema: catalog.PriceHistoryResponseSchema,
 };

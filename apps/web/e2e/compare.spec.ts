@@ -1,261 +1,268 @@
 /**
  * apps/web/e2e/compare.spec.ts — S23's proof for the compare view.
  *
- * Four claims, and each one is a way the page can look right while being wrong:
+ * One spec per DoD scenario, plus the claims the route's header makes:
  *
- *   1. **The URL is the state, in the order it names.** A shared link renders the
- *      same columns, and a reload renders them again. Column order is asserted, not
- *      just membership, because "compare A with B" and "compare B with A" are the
- *      same fact and different pages.
- *   2. **Every row states its verdict IN WORDS.** The DoD asks for a text
- *      equivalent of the diff highlighting, so "Identique" and "Différent" are
- *      asserted on the rows that carry them — including the row where one product
- *      publishes nothing, which is a difference and must read as one rather than as
- *      an empty cell.
- *   3. **At 360 px the table is replaced by cards, not shrunk.** The table must be
- *      hidden, one card per product must be visible with its own heading, and the
- *      document must not scroll sideways.
- *   4. **Selection is keyboard navigation.** Add and remove are anchors whose href
- *      is the next URL, so focusing one and pressing Enter is the whole interaction;
- *      the assertions drive them that way and never click through a widget.
- *
- * Expectations come from the same two catalogues the app reads and from the same
- * fixture map the mock serves, so a copy change moves the test with the page
- * instead of leaving a hand-typed French sentence behind.
+ *   1. **The URL is the selection.** Two slugs render two columns, and a reload
+ *      of the same URL renders the same comparison — no cookie, no store.
+ *   2. **It is a real table**, with a caption, `scope="col"` headers and a
+ *      `scope="row"` header per fact. A grid of divs would fail these.
+ *   3. **A difference is TEXT.** The marker says "Diffère" and the summary counts
+ *      the rows; neither relies on colour.
+ *   4. **360 px stacks, wide screens do not.** Asserted as GEOMETRY: the value
+ *      cells share one inline start in the stack and sit side by side at 1280.
+ *   5. **Every control is a link**, so removing a column is a keyboard
+ *      activation rather than a click handler.
+ *   6. **The wrong selections are answered in words**: a repeated slug, a fourth
+ *      slug, an unknown slug, and two categories that cannot be compared.
+ *   7. **The page stays out of the index** and names the ROUTE in its canonical,
+ *      never the selection.
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 
+import { formatMoney } from "../lib/i18n/format";
 import { CATALOG_PRODUCTS_BY_SLUG } from "../mock/fixtures.mjs";
 
-import ar from "../messages/ar.json";
-import fr from "../messages/fr.json";
+const ORIGIN = "http://localhost:3210";
 
-type Locale = "fr" | "ar";
+const A = "rtx-4060-8gb";
+const B = "rtx-4070-12gb";
+/** The 60-character SKU, a GPU too — used only for the three-column cap. */
+const C = "rtx-4060-ti-gaming-oc-16-go";
+/** A RAM kit: no offer, and a DIFFERENT category from the two GPUs. */
+const RAM = "kit-ddr5-16-go";
 
-const CATALOGUES = { fr, ar } as const;
-const LOCALES: readonly Locale[] = ["fr", "ar"];
+const A_PRODUCT = CATALOG_PRODUCTS_BY_SLUG[A];
+const B_PRODUCT = CATALOG_PRODUCTS_BY_SLUG[B];
+
+const COMPARE = `/fr/composants/comparer?slugs=${A},${B}`;
+const AR_COMPARE = `/ar/composants/comparer?slugs=${A},${B}`;
 
 /**
- * Two GPUs whose spec rows agree exactly once: both are 165 W, and they differ on
- * length, thickness, height (one publishes 40 mm, the other publishes nothing) and
- * on the two rows only the Ti card carries. That single agreeing row is what makes
- * the "Identique" assertion meaningful.
+ * The counts the table must report, derived from the fixtures rather than
+ * hardcoded: a fixture that grows a spec should move this spec, not break it.
+ * Two values are equal only when their PRINTED text would be, which is why the
+ * comparison is over strings.
  */
-const A = "rx-7600-8gb";
-const B = "rtx-4060-ti-gaming-oc-16-go";
-/** A third, for the cap. */
-const C = "rtx-4060-8gb";
-/** Never selected, so they are the rows that show the cap sentence. */
-const D = "kit-ddr5-16-go";
-const E = "ssd-nvme-1-to";
+const SPEC_KEYS = [...new Set([...Object.keys(A_PRODUCT.specs), ...Object.keys(B_PRODUCT.specs)])];
+const DIFFERENT = SPEC_KEYS.filter(
+  (key) =>
+    String((A_PRODUCT.specs as Record<string, unknown>)[key]) !==
+    String((B_PRODUCT.specs as Record<string, unknown>)[key]),
+).length;
+const SAME = SPEC_KEYS.length - DIFFERENT;
 
-/** Indexed by a SLUG STRING, so the open map is widened rather than narrowed. */
-const PRODUCTS = CATALOG_PRODUCTS_BY_SLUG as Record<string, { display_name: string }>;
-const NAME = (slug: string): string => PRODUCTS[slug].display_name;
+test("the URL is the whole selection, and reloading it renders the same view", async ({ page }) => {
+  await page.goto(COMPARE);
 
-const WIDE = { width: 1280, height: 900 } as const;
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Comparer des composants");
+  const table = page.getByRole("table");
+  await expect(table).toBeVisible();
 
-/** `/{locale}/composants/comparer?composants=…` — the page's only input. */
-function comparePath(locale: Locale, slugs: readonly string[]): string {
-  return `/${locale}/composants/comparer?composants=${slugs.join(",")}`;
-}
+  const headers = table.locator('th[scope="col"]');
+  await expect(headers).toHaveText(["Caractéristique", A_PRODUCT.display_name, B_PRODUCT.display_name]);
 
-/** The comparison's table (wide viewports only). */
-function table(page: Page) {
-  return page.locator("table");
-}
+  // A reload is a fresh request with the same URL: nothing was remembered.
+  await page.reload();
+  await expect(table).toBeVisible();
+  await expect(table.locator('th[scope="col"]')).toHaveText([
+    "Caractéristique",
+    A_PRODUCT.display_name,
+    B_PRODUCT.display_name,
+  ]);
+  await expect(page.getByRole("table")).toHaveCount(1);
+});
 
-/** One characteristic's row, found by its label — the label is data, not layout. */
-function row(page: Page, label: string) {
-  return page.locator("tbody tr").filter({ hasText: label });
-}
+test("the comparison is a real table: caption, column headers and a row header per fact", async ({
+  page,
+}) => {
+  await page.goto(COMPARE);
+  const table = page.getByRole("table");
 
-for (const locale of LOCALES) {
-  const copy = CATALOGUES[locale].catalog.compare;
-  const specs = CATALOGUES[locale].catalog.specs;
+  // The caption is read before the rows even though it is visually hidden.
+  await expect(table.locator("caption")).toHaveText("Comparaison de 2 composants");
 
-  test(`[${locale}] a shared URL renders the same selection in the same order`, async ({ page }) => {
-    await page.setViewportSize(WIDE);
-    const url = comparePath(locale, [A, B]);
+  // One column header per product, plus the spec column.
+  await expect(table.locator('th[scope="col"]')).toHaveCount(3);
+  // One row header per FACT, and two value cells beside each.
+  await expect(table.locator('th[scope="row"]')).toHaveCount(SPEC_KEYS.length);
+  await expect(page.getByRole("cell")).toHaveCount(SPEC_KEYS.length * 2);
+});
 
-    await page.goto(url);
-    const headers = table(page).locator("thead th");
-    // Label column first, then one column per product, in URL order.
-    await expect(headers).toHaveCount(3);
-    await expect(headers.nth(0)).toHaveText(copy.specColumn);
-    await expect(headers.nth(1)).toContainText(NAME(A));
-    await expect(headers.nth(2)).toContainText(NAME(B));
+test("a difference carries a word and a count, not just a colour", async ({ page }) => {
+  await page.goto(COMPARE);
+  const table = page.getByRole("table");
 
-    // The picker agrees about what is selected: one "Retirer <name>" per column.
-    await expect(page.getByRole("link", { name: copy.removeNamed.replace("{name}", NAME(A)) })).toBeVisible();
-    await expect(page.getByRole("link", { name: copy.removeNamed.replace("{name}", NAME(B)) })).toBeVisible();
+  // The summary counts what the rows mark.
+  await expect(page.getByText(`Écarts : ${DIFFERENT} sur ${SPEC_KEYS.length}. Identiques : ${SAME}.`)).toBeVisible();
 
-    // A reload is the sharing scenario: the same address, the same page.
-    await page.reload();
-    await expect(table(page).locator("thead th").nth(1)).toContainText(NAME(A));
-    await expect(table(page).locator("thead th").nth(2)).toContainText(NAME(B));
-  });
+  // Every differing row header says so; every identical row stays unmarked.
+  const marked = table.locator('th[scope="row"]').filter({ hasText: "Diffère" });
+  await expect(marked).toHaveCount(DIFFERENT);
 
-  test(`[${locale}] every row states its verdict in words`, async ({ page }) => {
-    await page.setViewportSize(WIDE);
-    await page.goto(comparePath(locale, [A, B]));
+  // `width_slots` is the shared fact: 2 on both products.
+  const shared = table.locator('th[scope="row"]').filter({ hasText: "Épaisseur" });
+  await expect(shared).not.toContainText("Diffère");
+  await expect(shared.locator("..")).toContainText("2 emplacements");
+});
 
-    // Both publish the same TGP, so this row agrees — and says so.
-    const tgp = row(page, specs.board_tgp_watts);
-    await expect(tgp).toHaveCount(1);
-    await expect(tgp).toContainText(copy.same);
-    await expect(tgp).not.toContainText(copy.differs);
-
-    // Different lengths: the verdict is the other word.
-    const length = row(page, specs.length_mm);
-    await expect(length).toContainText(copy.differs);
-    await expect(length).not.toContainText(copy.same);
-
-    // One publishes 40 mm, the other publishes nothing: a difference, stated with
-    // the unknown WORD rather than an empty cell.
-    const height = row(page, specs.height_mm);
-    await expect(height).toContainText("40 mm");
-    await expect(height).toContainText(copy.unknown);
-    await expect(height).toContainText(copy.differs);
-
-    // A row only one product carries is still a row, not an omission.
-    const psu = row(page, specs.recommended_psu_watts);
-    await expect(psu).toHaveCount(1);
-    await expect(psu).toContainText(copy.unknown);
-  });
-
-  test(`[${locale}] at 360 px the comparison is stacked cards`, async ({ page }) => {
-    await page.setViewportSize({ width: 360, height: 800 });
-    await page.goto(comparePath(locale, [A, B]));
-
-    // The table exists in the markup but is out of the tree; the cards are what a
-    // reader gets. Exactly one of the two is ever visible.
-    await expect(table(page)).toBeHidden();
-
-    const cards = page.locator("article");
-    await expect(cards).toHaveCount(2);
-    await expect(cards.nth(0).getByRole("heading", { level: 3 })).toContainText(NAME(A));
-    await expect(cards.nth(1).getByRole("heading", { level: 3 })).toContainText(NAME(B));
-
-    // The words travel with the cards: each card states its own rows' verdicts.
-    for (const card of [cards.nth(0), cards.nth(1)]) {
-      await expect(card).toContainText(specs.board_tgp_watts);
-      await expect(card).toContainText(copy.same);
-      await expect(card).toContainText(copy.differs);
-    }
-
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(overflow, "the page must not scroll sideways").toBeLessThanOrEqual(0);
-  });
-
-  test(`[${locale}] adding a second product is a keyboard navigation`, async ({ page }) => {
-    await page.goto(comparePath(locale, [A]));
-    // One product is not a comparison: the page says what it needs and offers the
-    // picker, and it draws no table and no cards.
-    await expect(page.getByText(copy.needTwo)).toBeVisible();
-    await expect(page.locator("article")).toHaveCount(0);
-
-    // The whole interaction: focus the link and press Enter. No widget, no click.
-    const add = page.getByRole("link", { name: copy.addNamed.replace("{name}", NAME(B)) });
-    await add.focus();
-    await page.keyboard.press("Enter");
-    await page.waitForURL((url) => url.searchParams.get("composants") === `${A},${B}`);
-
-    await expect(page.locator("article")).toHaveCount(2);
-    await expect(page.getByText(copy.needTwo)).toHaveCount(0);
-  });
-
-  test(`[${locale}] removing the second product returns to the "two needed" state`, async ({ page }) => {
-    await page.goto(comparePath(locale, [A, B]));
-
-    const remove = page.getByRole("link", { name: copy.removeNamed.replace("{name}", NAME(B)) });
-    await remove.focus();
-    await page.keyboard.press("Enter");
-    await page.waitForURL((url) => url.searchParams.get("composants") === A);
-
-    await expect(page.getByText(copy.needTwo)).toBeVisible();
-    await expect(page.locator("article")).toHaveCount(0);
-  });
-
-  test(`[${locale}] at three products the rest are a sentence, not a link`, async ({ page }) => {
-    await page.goto(comparePath(locale, [A, B, C]));
-
-    await expect(page.locator("article")).toHaveCount(3);
-    // The two products that are NOT selected carry the cap sentence instead of a
-    // control that would silently do nothing.
-    await expect(page.getByText(copy.max)).toHaveCount(2);
-    await expect(
-      page.getByRole("link", { name: copy.addNamed.replace("{name}", NAME(D)) }),
-    ).toHaveCount(0);
-    await expect(
-      page.getByRole("link", { name: copy.removeNamed.replace("{name}", NAME(D)) }),
-    ).toHaveCount(0);
-  });
-
-  test(`[${locale}] a dead slug is dropped from the comparison and named`, async ({ page }) => {
-    await page.goto(comparePath(locale, ["pas-un-produit", A, B]));
-
-    // The comparison that still exists is rendered, in the surviving URL order…
-    await expect(page.locator("article")).toHaveCount(2);
-    await expect(page.locator("article").first()).toContainText(NAME(A));
-    // …and the page says one token was dropped rather than pretending it was never
-    // in the link.
-    await expect(page.getByText(copy.missing)).toBeVisible();
-    // The picker forwards only what resolved, so "Ajouter" cannot rebuild the dead
-    // token either.
-    await expect(
-      page.getByRole("link", { name: copy.addNamed.replace("{name}", NAME(E)) }),
-    ).toBeVisible();
-  });
-}
-
-test("the comparison mirrors on /ar and states its verdicts in Arabic", async ({ page }) => {
-  await page.setViewportSize(WIDE);
-  await page.goto(comparePath("ar", [A, B]));
-  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
-
-  const centres = await table(page)
-    .locator("thead th")
-    .evaluateAll((cells) =>
-      cells.map((cell) => {
-        const box = cell.getBoundingClientRect();
-        return box.x + box.width / 2;
-      }),
-    );
-  expect(centres).toHaveLength(3);
-  // RTL: the label column is at the reading start (the RIGHT), and the product
-  // columns keep their URL order leftwards — a mirrored table, not a reversed one.
-  expect(centres[0]).toBeGreaterThan(centres[1]);
-  expect(centres[1]).toBeGreaterThan(centres[2]);
-
-  const arabic = ar.catalog.compare;
-  await expect(row(page, ar.catalog.specs.board_tgp_watts)).toContainText(arabic.same);
-  await expect(row(page, ar.catalog.specs.length_mm)).toContainText(arabic.differs);
-
-  // And the same page at 360 px stacks into cards, still in Arabic.
+test("360 px stacks the rows; 1280 px lays them out as columns", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
-  await expect(table(page)).toBeHidden();
-  const cards = page.locator("article");
-  await expect(cards).toHaveCount(2);
-  await expect(cards.first()).toContainText(arabic.same);
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  await page.goto(COMPARE);
+
+  const cells = page.getByRole("cell");
+  const first = (await cells.nth(0).boundingBox())!;
+  const second = (await cells.nth(1).boundingBox())!;
+
+  // Stacked: both values of one row start at the same inline start and fill it.
+  expect(Math.abs(second.x - first.x)).toBeLessThanOrEqual(1);
+  expect(first.width).toBeGreaterThan(200);
+  // The fallback is not the table collapsed — the per-value label is painted.
+  await expect(cells.nth(0).getByText(A_PRODUCT.display_name)).toBeVisible();
+  // Two LINES, not one run: the label sits above its value, or a long product
+  // name would wrap around the value and read as a single sentence.
+  const label = (await cells.nth(0).getByText(A_PRODUCT.display_name).boundingBox())!;
+  const value = (await cells.nth(0).locator('[dir="auto"]').boundingBox())!;
+  expect(label.y + label.height).toBeLessThanOrEqual(value.y + 1);
+  // And stacking does not scroll the page sideways.
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    ),
+  ).toBeLessThanOrEqual(0);
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.reload();
+
+  const wideFirst = (await cells.nth(0).boundingBox())!;
+  const wideSecond = (await cells.nth(1).boundingBox())!;
+  expect(wideSecond.x).toBeGreaterThan(wideFirst.x + 20);
+  // At wide widths the column header names the value, so the per-cell label is
+  // gone from the accessibility tree too — not merely invisible.
+  await expect(cells.nth(0).getByText(A_PRODUCT.display_name)).toBeHidden();
+});
+
+test("removing a column is a link, operable with Enter", async ({ page }) => {
+  await page.goto(COMPARE);
+
+  const remove = page.getByRole("link", { name: `Retirer ${B_PRODUCT.display_name}` });
+  await expect(remove).toHaveAttribute("href", `/fr/composants/comparer?slugs=${A}`);
+
+  await remove.focus();
+  await page.keyboard.press("Enter");
+
+  await expect(page).toHaveURL(new RegExp(`/fr/composants/comparer\\?slugs=${A}$`));
+  await expect(page.getByText("Ajoutez un deuxième composant")).toBeVisible();
+  await expect(page.getByRole("table")).toHaveCount(0);
+});
+
+test("the wrong selections are answered in words", async ({ page }) => {
+  // Two categories cannot be compared: the page says why and draws no table.
+  await page.goto(`/fr/composants/comparer?slugs=${A},${RAM}`);
+  await expect(page.getByText(/pas de la même catégorie/)).toBeVisible();
+  await expect(page.getByRole("table")).toHaveCount(0);
+
+  // A repeated slug is shown once, and said so.
+  await page.goto(`/fr/composants/comparer?slugs=${A},${A}`);
+  await expect(page.getByText(/figurait deux fois/)).toBeVisible();
+  await expect(page.getByRole("table")).toHaveCount(0);
+
+  // An unknown slug is dropped; the product that DOES exist still renders.
+  await page.goto(`/fr/composants/comparer?slugs=${A},pas-un-produit`);
+  await expect(page.getByText(/n’existe pas dans le catalogue/)).toBeVisible();
+  await expect(page.getByText("Ajoutez un deuxième composant")).toBeVisible();
+
+  // A fourth slug is not a fourth column.
+  await page.goto(`/fr/composants/comparer?slugs=${A},${B},${C},${RAM}`);
+  // The OVERFLOW sentence, not the shared prefix: with a fourth same-category
+  // fixture in the catalogue the picker also renders its "three at most, remove
+  // one" hint, which repeats the first four words. Both are correct on screen;
+  // matching the prefix would match two elements and fail strict mode.
+  await expect(page.getByText(/les suivants du lien ont été ignorés/)).toBeVisible();
+  await expect(page.getByRole("table").locator('th[scope="col"]')).toHaveCount(4);
+});
+
+test("Arabic mirrors the columns without reversing the reading order", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(AR_COMPARE);
+
+  const headers = page.getByRole("table").locator('th[scope="col"]');
+  // DOM order is unchanged: the spec column, then A, then B.
+  const texts = await headers.allTextContents();
+  expect(texts[1]).toBe(A_PRODUCT.display_name);
+  expect(texts[2]).toBe(B_PRODUCT.display_name);
+
+  // RTL lays the first column at the inline START, which is the right edge.
+  const a = (await headers.nth(1).boundingBox())!;
+  const b = (await headers.nth(2).boundingBox())!;
+  expect(a.x).toBeGreaterThan(b.x);
+  // The marker is Arabic too, and the price is a DH amount on both sides.
+  await expect(page.getByText("مختلف").first()).toBeVisible();
+  await expect(page.getByText(formatMoney(3200, "ar")).first()).toBeVisible();
+});
+
+test("Arabic stacks the selection panel from the inline start", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto(AR_COMPARE);
+
+  // The name owns its line in the stack, and that line starts where the page
+  // starts. `dir="auto"` on the BLOCK would align an LTR name to the left edge
+  // of an RTL row — a defect this assertion exists to keep fixed.
+  const row = page.locator("main ul li").first();
+  const name = row.locator("span.min-w-0");
+  const nameBox = (await name.boundingBox())!;
+  const rowBox = (await row.boundingBox())!;
+  expect(await name.evaluate((el) => getComputedStyle(el).direction)).toBe("rtl");
+  expect(Math.abs(rowBox.x + rowBox.width - (nameBox.x + nameBox.width))).toBeLessThanOrEqual(20);
+  // Only the text resolves its own direction.
+  expect(await name.locator('[dir="auto"]').evaluate((el) => getComputedStyle(el).direction)).toBe(
+    "ltr",
   );
-  expect(overflow, "the Arabic page must not scroll sideways").toBeLessThanOrEqual(0);
 });
 
-test("a component page links into the comparison with itself selected", async ({ request }) => {
-  const html = await (await request.get(`/fr/composants/${A}`)).text();
-  expect(html).toContain(`/fr/composants/comparer?composants=${A}`);
-});
+test("the compare page stays out of the index and canonicals the route", async ({ request }) => {
+  const response = await request.get(COMPARE);
+  expect(response.status()).toBe(200);
+  const html = await response.text();
 
-test("the compare view stays out of the index and out of the sitemap", async ({ request }) => {
-  const html = await (await request.get(comparePath("fr", [A, B]))).text();
   expect(html).toMatch(/<meta name="robots" content="[^"]*noindex/);
+  const canonical = /<link\b[^>]*\brel="canonical"[^>]*>/.exec(html)?.[0] ?? "";
+  const href = /href="([^"]+)"/.exec(canonical)?.[1];
+  // The ROUTE, not the selection: two selections are not two pages.
+  expect(href).toBe(`${ORIGIN}/fr/composants/comparer`);
+});
 
-  // The URL space is unbounded, so it must not be advertised anywhere.
-  const sitemap = await (await request.get("/sitemap.xml")).text();
-  expect(sitemap).not.toContain("/composants/comparer");
+test("a component page offers comparisons with its own category, and they resolve", async ({
+  page,
+  request,
+}) => {
+  await page.goto(`/fr/composants/${A}`);
+
+  const section = page
+    .getByRole("heading", { name: "Comparer des composants", level: 2 })
+    .locator("..");
+  const link = section.getByRole("link", { name: `Avec ${B_PRODUCT.display_name}` });
+  await expect(link).toHaveAttribute(
+    "href",
+    `/fr/composants/comparer?slugs=${A},${B}`,
+  );
+  expect((await request.get(`/fr/composants/comparer?slugs=${A},${B}`)).status()).toBe(200);
+
+  // A one-product comparison is a starting point, not an error.
+  const open = section.getByRole("link", { name: "Ouvrir la comparaison" });
+  await expect(open).toHaveAttribute("href", `/fr/composants/comparer?slugs=${A}`);
+});
+
+test("the page never prints an engine word, a raw spec key or a fake zero", async ({ page }) => {
+  await page.goto(COMPARE);
+  const text = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+
+  for (const vocabulary of ["SEED_UNVERIFIED", "VERIFIED", "GPU", "MEMORY"]) {
+    expect(text).not.toContain(vocabulary);
+  }
+  expect(text).not.toMatch(/[a-z]+_[a-z]/);
+  // `recommended_psu_watts` exists on B only: its absence on A is a WORD, never
+  // "0 W" and never a dash.
+  await expect(page.getByText("Non renseigné").first()).toBeVisible();
+  expect(text).not.toMatch(/0 W/);
 });

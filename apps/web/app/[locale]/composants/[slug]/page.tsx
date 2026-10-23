@@ -7,20 +7,22 @@ import { notFound } from "next/navigation";
 import { PriceHistory } from "@/components/price-history";
 import { Badge, LinkButton } from "@/components/ui";
 import { routing } from "@/i18n/routing";
-import { compareHref } from "@/lib/catalog/compare";
 import {
   catalogCategory,
   catalogProvenance,
   componentPageIndexable,
   fromPrice,
   offerProvenance,
+  PROVENANCE_MESSAGE_KEY,
 } from "@/lib/catalog/model";
 import {
   componentAppearancesCached,
   loadCatalogProductCached,
   loadPriceHistoryCached,
 } from "@/lib/catalog/load";
-import { presentSpecs, specCopy, type SpecCopy } from "@/lib/catalog/specs";
+import { catalogCandidates } from "@/lib/catalog/load";
+import { comparePath } from "@/lib/catalog/compare";
+import { presentSpecs, SPEC_LABEL_KEYS, type SpecCopy } from "@/lib/catalog/specs";
 import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
 import { pageAlternates } from "@/lib/seo/site";
@@ -40,12 +42,12 @@ import { pageAlternates } from "@/lib/seo/site";
  *   - **`noindex` until the prices are real.** `componentIndexable()` requires
  *     every offer to be VERIFIED, not merely a `price_status` column that says so
  *     — the same "indexability follows the data" rule S16 applies to presets.
- *   - **The price series is a THIRD read, and the one surface the contract
- *     does not have yet** (S25): `loadPriceHistory()` reads
- *     `/v1/catalog/products/:slug/price-history`, which only the fixture mock
- *     serves today. An absent series is "aucun relevé" rather than an error,
- *     and `<PriceHistory>` owns the three states and the text summary — this
- *     page only places it.
+ *   - **The price series is a THIRD read** (S25), and its own path:
+ *     `loadPriceHistory()` reads `GET /v1/catalog/products/:slug/price-history`
+ *     (contract v1.6), which serves one point per observation MOMENT, oldest
+ *     first. The page derives its own summary from those points; an absent
+ *     series is "aucun relevé" rather than an error, and `<PriceHistory>` owns
+ *     the three states.
  *   - **A stale or unreachable API keeps the last good page.** The read
  *     propagates anything that is not a 404, so Next serves the previous ISR copy
  *     instead of replacing a product with an error; only "this slug names
@@ -76,13 +78,6 @@ export const revalidate = 3600;
 export function generateStaticParams() {
   return [];
 }
-
-/** The three badge words come from the results page's namespace (S12/S17). */
-const BADGE_KEY = {
-  demo: "provenance.demo",
-  indicative: "provenance.indicative",
-  verified: "provenance.verified",
-} as const;
 
 export async function generateMetadata({
   params,
@@ -141,7 +136,12 @@ export default async function ComponentPage({
   const category = catalogCategory(product.category);
   const categoryLabel = category === null ? t("categoryFallback") : t(`categories.${category}`);
 
-  const copy: SpecCopy = specCopy(t);
+  const copy: SpecCopy = {
+    labels: Object.fromEntries(SPEC_LABEL_KEYS.map((key) => [key, t(`specs.${key}`)])),
+    units: { slots: t("specs.units.slots"), gb: t("specs.units.gb") },
+    yes: t("specs.yes"),
+    no: t("specs.no"),
+  };
   const specs = presentSpecs(product, appLocale, copy);
 
   const provenance = catalogProvenance(product);
@@ -150,6 +150,13 @@ export default async function ComponentPage({
   // S25: the series is read once and passed whole; the component decides which
   // of its three states that makes.
   const priceHistory = await loadPriceHistoryCached(product.slug);
+
+  // S23: the same-category products this page can be compared with. The section
+  // renders even when there are none, because its "Ouvrir la comparaison" link is
+  // how a comparison is started at all.
+  const comparisons = (await catalogCandidates(product.category, [product.slug]))
+    .slice(0, 3)
+    .map((candidate) => ({ slug: candidate.slug, name: candidate.display_name }));
 
   return (
     <section>
@@ -170,7 +177,7 @@ export default async function ComponentPage({
       </h1>
 
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <Badge tone={provenance}>{tResult(BADGE_KEY[provenance])}</Badge>
+        <Badge tone={provenance}>{tResult(PROVENANCE_MESSAGE_KEY[provenance])}</Badge>
         {price === null ? (
           <span className="text-compact text-muted">{t("noPrice")}</span>
         ) : (
@@ -202,6 +209,33 @@ export default async function ComponentPage({
       </section>
 
       <section className="mt-6">
+        <h2 className="text-subtitle text-ink">{t("compare.title")}</h2>
+        <p className="mt-2 text-compact text-muted">{t("compare.hint")}</p>
+        {comparisons.length === 0 ? null : (
+          <ul className="mt-3 space-y-2">
+            {comparisons.map((entry) => (
+              <li key={entry.slug}>
+                <Link
+                  href={comparePath(locale, [product.slug, entry.slug])}
+                  className="text-compact text-primary underline-offset-4 hover:underline"
+                >
+                  {t("compare.with", { name: entry.name })}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-3">
+          <Link
+            href={comparePath(locale, [product.slug])}
+            className="text-compact text-primary underline-offset-4 hover:underline"
+          >
+            {t("compare.open")}
+          </Link>
+        </p>
+      </section>
+
+      <section className="mt-6">
         <h2 className="text-subtitle text-ink">{t("offers.title")}</h2>
         {product.offers.length === 0 ? (
           <p className="mt-2 text-compact text-muted">{t("offers.none")}</p>
@@ -218,7 +252,7 @@ export default async function ComponentPage({
                 {/* The class is an enum; the badge is its word. `SEED_UNVERIFIED`
                     is never a thing a reader should see. */}
                 <Badge tone={offerProvenance(offer.offer_class)}>
-                  {tResult(BADGE_KEY[offerProvenance(offer.offer_class)])}
+                  {tResult(PROVENANCE_MESSAGE_KEY[offerProvenance(offer.offer_class)])}
                 </Badge>
               </li>
             ))}
@@ -260,16 +294,9 @@ export default async function ComponentPage({
 
       <p className="mt-6 text-micro text-muted">{product.disclaimer}</p>
 
-      {/* S23: the entry point into the compare view, pre-selecting this
-          product so the reader lands on the picker with one column already in
-          place — a comparison needs two, and the URL is where they add the
-          second. */}
-      <div className="mt-6 flex flex-wrap items-center gap-3">
+      <div className="mt-6">
         <LinkButton href={localePath(locale, "/configurer")} variant="secondary">
           {t("cta")}
-        </LinkButton>
-        <LinkButton href={compareHref(locale, [product.slug])} variant="secondary">
-          {t("compare.entry")}
         </LinkButton>
       </div>
     </section>

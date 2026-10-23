@@ -7,6 +7,14 @@ keyboard-reachable with visible focus, no raw API enum text rendered, fr copy in
 Contract dependencies (CD-*) and findings (V*) are defined in the plan §2 — the API and engine
 are in progress, so every contract-dependent sprint has a fixtures-first path.
 
+**Board state, 2026-10-23 (S25's saved-builds half landed; its price-history API unblocked).** 27
+sprints: **24 DONE** (S1–S23 and S27, whose status lines below carry the evidence), **1 HALF DONE**
+(S25 — saved builds shipped, and the price-history API now exists (contract v1.6, Decision 51), so only
+the chart is left), **1 NOT STARTED** (S24, W5/post-beta, deliberately outside the M3
+gate) and **1 BLOCKED** (S26, which needs a deployed API and a chosen web host). What is left is not
+one block: S24 waits on CD-8, S25's remaining half is the chart against the route that now exists,
+and only S26 needs a deployment.
+
 ## Sprints
 
 ### Phase W0 — Foundation
@@ -25,6 +33,14 @@ locale, strict TS, Tailwind v4, and its own package manifest (OD4).
 2. `/fr` at 360 px viewport: no horizontal scroll (Playwright assert `scrollWidth ≤ clientWidth`).
 3. Root `npm run test:unit` still passes (repo untouched).
 4. Lighthouse smoke on `/fr` runs in CI (budgets added in S6).
+
+**Status: DONE 2026-10-20 — checked against the tree on 2026-10-22, not re-run.** The package
+declares `dev`, `build`, `start`, `lint`, `typecheck` and `test` (the `check:*`, `gen:api-types` and
+`mock:api` scripts arrived with S2/S4/S5), carries its own committed lockfile, and leaves `ci.yml`
+untouched — `.github/workflows/web.yml` is the S1 own-CI boundary. One DoD line is true of CI rather
+than of every shell: Node 22 is what CI pins and what S6 re-verified from a fresh `npm ci` under
+22.23.3 on 2026-10-21, while the local runs recorded in the plan's measured-state section used
+Node 24.
 
 #### S2 — Design direction + design tokens (1.5 h)
 **Goal:** Turn the Stitch design (registered in the plan §3) into Tailwind v4 CSS-first
@@ -176,7 +192,7 @@ mock server covering every contract state the web consumes — including the pro
    `inputs_applied`/`reasons`/`display_name` usage must route through the fallback layer).
 
 **Status: DONE 2026-10-20 — as built.** `npm run gen:api-types` generates `lib/api/schema.d.ts` from
-`apps/api/test/unit/openapi-v1.5.json`; `lib/api/client.ts` is the single fetch path (typed
+`apps/api/test/unit/openapi-v1.6.json`; `lib/api/client.ts` is the single fetch path (typed
 `ApiError`, `details[]`, `retryAfterSeconds`); `lib/api/compile-gate.ts` makes a contract
 regression a `tsc` failure; `mock/server.mjs` + `mock/fixtures.mjs` serve every state listed above
 plus the dedupe path, the zero-build-with-no-floor case and an open CORS policy; `check:api-types`
@@ -282,6 +298,10 @@ Lighthouse CI budgets — without disturbing the engine's existing jobs.
 2. LHCI runs on a fixture route and uploads results as CI artifacts.
 3. The engine's `test:unit` job is unchanged and green on the same commit.
 
+**Status: DONE 2026-10-21 — the job and the budgets are live in `web.yml`, with the three
+assertions at `warn`; S19 promoted them to `error` the same day.** The narrative below is the
+landing record.
+
 **The dedicated job and the warning-first budgets landed 2026-10-21; S19 promoted them to
 failures the same day.** `.github/workflows/web.yml` is the S6 job: its own workflow (the engine's
 `ci.yml` jobs untouched), no secrets, no database. It replaces the scaffold-era `web-ci.yml`,
@@ -289,7 +309,7 @@ deleted here: the same gates, budgets included, one job per web push instead of 
 `push`/`pull_request` touching
 `apps/web/**` it runs, in `apps/web`, `npm ci`, `typecheck`, `lint`, `check:tokens`,
 `check:i18n`, `check:api-types` (the S4 drift gate, which is why the triggers also include
-`apps/api/test/unit/openapi-v1.5.json`), `build`, Playwright (`--with-deps chromium`), `npm test`
+`apps/api/test/unit/openapi-v1.6.json`), `build`, Playwright (`--with-deps chromium`), `npm test`
 at 360×800 through the existing `mobile-360` project, then `npm run test:lighthouse` — uploading
 `test-results/` on failure and `.lighthouseci/` always. Verified locally from a fresh `npm ci`
 under Node 22.23.3 with `CI=true`: **168/168** specs.
@@ -1220,6 +1240,10 @@ prices — and the W3 performance budgets enforced in CI.
 3. JS budget: initial bundle measured ≤ 170 KB gzip on a preset page (CI check).
 4. Structured-data validation passes on the verified fixture (schema.org types correct).
 
+**Status: DONE 2026-10-21 — both halves are in the tree and the budgets are enforced.** DoD
+scenario 3 named a PRESET page, which S16 added to the measured URL set the same day; the record
+below is what landed.
+
 **Landing 2026-10-21: the budgets are `error`, and the result page carries the gate.**
 `lib/result/structured-data.ts` makes "a demo price marked up" UNREPRESENTABLE rather than
 guarded: `asVerifiedPricedBuild()` is the only constructor of the branded
@@ -1473,6 +1497,44 @@ RTL-safe; spec diffs highlighted with text (not colour alone).
 **Test scenarios:** compare URL shared → renders identical selection; diff highlighting has a
 text equivalent; 360px compare falls back to stacked cards.
 
+**Status: DONE 2026-10-22 — as built.** `/{locale}/composants/comparer?slugs=a,b` compares two or
+three products, and the URL is the whole state: no cookie, no store and no client JavaScript, so
+every control is a link and the Back button undoes an addition. The comparison is ONE semantic
+table — a caption, `scope="col"` headers and a `scope="row"` header per fact — and below 640 px
+the rows STACK as CSS on that same DOM. The per-value labels that appear in the stack are
+`hidden`, not `sr-only`, at wide widths, so a wide screen reader does not hear each product’s name
+once per cell on top of the column header. A difference carries the WORD « Diffère » (Arabic
+«مختلف») and a count line, never colour alone, and a fact only one product publishes reads
+« Non renseigné » rather than `0` or a dash — `presentSpecs()` still owns the formatting, so the
+two views cannot disagree about a value.
+
+The component page gained the ENTRY POINT, which is what made "v2 depth" a real deliverable: a
+« Comparer des composants » section lists same-category siblings as `?slugs=this,that` links, and
+« Ouvrir la comparaison » starts a one-product view that the picker (and the whole catalogue, when
+the selection is empty) can grow. Two rules stop the view from lying: only the SAME category can
+be compared — a GPU beside a RAM kit would render every row as "unknown" and call it a comparison
+— and every wrong selection is answered in words rather than by disappearing: a repeated slug, a
+fourth slug, a slug the catalogue does not serve, and a catalogue read that FAILED (reported per
+product, so one sibling’s hiccup cannot take the view down).
+
+Two smaller decisions worth keeping. **The summary sentence avoids plural agreement** — « Écarts :
+4 sur 5. Identiques : 1. » — because "1 identiques" is wrong, and ICU plurals with Arabic’s six
+categories is more machinery than the sentence needs. **The candidates come from one page of the
+listing**, filtered by `category` in the web layer: the route’s `role` filter speaks the ENGINE’s
+vocabulary (`CPU_COOLER`, `RAM`) while a product carries `product_category` (`COOLER`, `MEMORY`),
+and restating that mapping here would be a second vocabulary that can drift.
+
+Measured: **11** compare specs and **319/319** in the full suite with `E2E_BROWSER_API=1`;
+`typecheck` and `build` exit 0 (the route reports `ƒ` dynamic, `[slug]` keeps `●`), `lint` 0 errors
+(the pre-existing `postcss.config.mjs` warning), `check:tokens` 72 files, `check:i18n` 70 files + 2
+catalogues, and `e2e/a11y.spec.ts` is now **49** checks — the compare route is audited in BOTH
+locales at 360 px, i.e. in the stacked layout, which is why the table’s roles are explicit: a
+display change is exactly where table semantics go missing. The fixture gained a SECOND GPU
+(`rtx-4070-12gb`) that shares `width_slots` with the first and differs on the rest, plus one fact
+the first does not publish, so the diff, the identity and the unknown cell are all real data.
+The RTL spec asserts the mirror GEOMETRICALLY: column one sits at the inline start, which is the
+right edge on `/ar`, while the DOM order stays A then B.
+
 #### S24 — Swap within a build (2 h, post-beta, CD-8)
 **Goal:** Component swap inside a build card, driven by the Platform swap endpoint (CD-8).
 **Depends on:** CD-8 (swap endpoint), S11
@@ -1486,6 +1548,12 @@ text equivalent; 360px compare falls back to stacked cards.
 2. Swap producing a compatibility warning → warning shown inline, in words.
 3. CD-8 absent → control disabled with explanation; no request fired.
 
+**Status: NOT STARTED 2026-10-22 — BLOCKED on CD-8, with one buildable slice.** The swap endpoint
+does not exist and no platform sprint owns it, so the DoD's own fallback is the only honest
+deliverable today: a control rendered disabled with an explanation, firing no request and
+simulating nothing. That slice does not earn a sprint — it must be revisited the moment the endpoint
+lands, and alone it proves nothing about the platform path the sprint exists to exercise.
+
 #### S25 — Price history + saved builds (2 h, post-beta)
 **Goal:** Price history for components/builds, and saved builds (local-first, no account).
 **Depends on:** S11, S23 (component pages)
@@ -1497,6 +1565,47 @@ text equivalent; 360px compare falls back to stacked cards.
 1. Chart renders with `aria` text summary; screen-reader smoke reads the trend sentence.
 2. Save a build → survives reload; clearing storage shows the empty state with a CTA.
 3. localStorage quota/unavailable (private mode) → graceful inline notice, no crash.
+
+**Status: HALF DONE 2026-10-23 — saved builds SHIPPED; price history UNBLOCKED, chart still to build.**
+`GET /v1/catalog/products/:slug/price-history` landed the same day (contract v1.6, Decision 51) and
+serves one point per observation MOMENT at that moment's cheapest price, oldest first, with the change
+fields null until two moments exist — so the chart codes against a real shape and the three thin-data
+states are the norm today, not an edge case. The UI below is what remains. A build can be
+saved from every card, on the results page AND the preset page, and the shelf is
+`/{locale}/enregistrements` — reachable from a footer nav on EVERY page (the 404 included), not only
+from the link a saved card shows. The footer, not the header, is a measured choice: at 360 px the
+header already fills its row, and a third item there scrolled the page to 376 px. An entry is a
+POINTER, not a copy — the result id, the engine rank, the
+total the page showed and the local `savedAt` — so the list can never print a price the card it
+links to does not; opening one is a link back to `/config/[id]`, which answers for itself when the
+API no longer serves that id. `localStorage` under `morocco-pc:saved-builds:v1` is the whole store:
+no account, no server, no migration, and the page's own copy says the saves are device-local.
+
+The honesty requirements live in the failure paths, not the happy one. Validation is per RECORD, so a
+corrupt store costs one entry rather than the shelf — the timestamp is validated by PARSING it
+(`Number.isFinite(Date.parse(...))`), because `formatDate` throws `RangeError: Invalid time value` on
+an invalid `Date` and one bad `savedAt` would otherwise blank the page. A store that cannot be READ
+shows a warning and the way forward instead of the empty state: « rien n’a été enregistré » is a
+claim the page cannot make when it cannot see the list. `QuotaExceededError` asks the reader to
+remove one, any other refusal says nothing was saved, and a failed write leaves the previous value in
+place — so no message ever reports a save that did not happen. A removal is announced in a live
+region AND gives focus somewhere to be: the row that owned it is gone, so focus moves to the shelf
+itself (the list, or the empty card), never to the next row's « Retirer » — a held Enter would
+otherwise delete the shelf one item per keypress.
+
+Measured: **346/346** in the full suite with `E2E_BROWSER_API=1`, 25 of them new
+(`e2e/saved.spec.ts` 11, `e2e/saved-model.spec.ts` 12 — the model half needs no browser — plus 2 in
+`e2e/shell.spec.ts` for the footer entry, in both locales);
+`typecheck`, `build` (the shelf prerenders `●` per locale) and `lint` (0 errors, the pre-existing
+`postcss.config.mjs` warning) exit 0; `check:tokens` 76 files, `check:i18n` 74 files + 2 catalogues,
+and `e2e/a11y.spec.ts` is **51** checks with the shelf audited in BOTH locales. One existing spec had
+to be scoped, not relaxed: `share.spec.ts` asserted on a page-wide `[aria-live="polite"]`, and a
+result page now legitimately carries one polite region per build card, so those two assertions
+resolve the share bar's own region instead.
+
+The chart half stays BLOCKED for the recorded reason: `price_history` has existed since migration
+009, but no API route reads it — `apps/api/src/` mentions it nowhere — so a chart built today plots
+fixtures. The plan's fixtures-first rule allows that; presenting it as the feature does not.
 
 ### M3 exit gate
 
@@ -1512,6 +1621,16 @@ text equivalent; 360px compare falls back to stacked cards.
 1. `LHCI` preset-page score ≥ 90 asserted in CI.
 2. Playwright 360 px wizard E2E against staging = green.
 3. Staging run log shows zero unhandled console errors and zero 5xx.
+
+**Status: BLOCKED 2026-10-22 — the one sprint a deployment gate stops.** All three exit criteria
+need a deployed API origin and the two staging runs also need a chosen web host; neither exists.
+What is already enforced without one: S6/S19's three budgets (`error`, `median`) run in `web.yml`
+on the fixture result page and on a real preset page, and the 360 px wizard is covered by
+Playwright. What is genuinely unproven: the FR flow against a staging API, twenty consecutive runs
+without flake, and a staging run with zero unhandled console errors and zero 5xx. Note that the
+DoD's first line — a performance SCORE of 90 or better asserted in CI — is not asserted today:
+`lighthouserc.cjs` selects `onlyCategories: performance` and asserts three metrics, never the
+category score. That assertion belongs to this sprint.
 
 ### Post-M3 refinement (not on the critical path)
 
@@ -1590,3 +1709,8 @@ component's own arithmetic.
 - **Total:** 27 sprints — the 26 on the path to M3 plus S27's post-M3 slider refinement (DONE
   2026-10-22) — each 1–2 h of agent work. Nominal sums: W0–W4 + exit ≈ 40 h, W5 ≈ 6 h,
   S27 ≈ 1.5 h.
+
+**State, 2026-10-23 (S25's saved-builds half landed):** every node on this map through S22 is DONE,
+and so are S27, S23 and S25's saved half, which sit outside it. The hard order’s only remaining node
+is S26, and a deployment gates it. What is left: S25's chart half (its API route landed, Decision 51),
+and S24, which waits on CD-8 — nobody has scheduled it.

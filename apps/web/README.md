@@ -4,7 +4,7 @@ A standalone Next.js (App Router, TypeScript strict) package with its own
 manifest and lockfile (OD4). It is **mobile-first and SEO-first**, French by
 default with an Arabic RTL locale, and it reaches the API only through
 `lib/api/client.ts` — whose types are generated from the API's own committed
-OpenAPI snapshot (`apps/api/test/unit/openapi-v1.5.json`), so the tree holds one
+OpenAPI snapshot (`apps/api/test/unit/openapi-v1.6.json`), so the tree holds one
 contract rather than two.
 
 **Where the truth lives**

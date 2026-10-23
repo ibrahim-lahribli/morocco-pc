@@ -12,7 +12,7 @@
 
 **Date:** 2026-10-15 · **Branch:** `agent/platforms` · **Decision id:** only Sprint 5 needs a decision entry (the catalog read contract); take the next free number from the log's tail at write time.
 
-**Contract version note.** The live contract is **v1.5** (`apps/api/test/unit/openapi-v1.5.json`; the v1.1-v1.4 snapshots were superseded and deleted rather than kept — P1 Sprints 5-6 and P2 Sprint 3 landed in that order). Never commit two snapshots and never leave a superseded one in the tree.
+**Contract version note.** The live contract is **v1.6** (`apps/api/test/unit/openapi-v1.6.json`; the v1.1-v1.5 snapshots were superseded and deleted rather than kept — P1 Sprints 5-6, P2 Sprint 3 and the price history landed in that order). Never commit two snapshots and never leave a superseded one in the tree.
 
 **Program rules:** the Global Constraints, the run-safely protocol and the self-review protocol this plan works inside live once, for P0–P3, in [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md). This plan adds only what is specific to it, and its self-review verdict is recorded there.
 

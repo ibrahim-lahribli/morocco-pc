@@ -1,7 +1,7 @@
 # Accessibility audit — S21 (2026-10-22)
 
 The record of what was checked, how, and what remains unchecked. The gate is
-`apps/web/e2e/a11y.spec.ts` (47 checks, run by `npm test`, so CI runs it); this
+`apps/web/e2e/a11y.spec.ts` (47 checks at S21, 51 since S23 and S25, run by `npm test`, so CI runs it); this
 file is the part a green run cannot carry: the manual list, the proofs that the
 gate actually fires, and the limits.
 

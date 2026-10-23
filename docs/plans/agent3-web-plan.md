@@ -7,22 +7,17 @@ breakdown (S1–S27, each with its definition of done and test scenarios) lives 
 separate plan. Everything here is scoped to `apps/web/`, a standalone package with its own manifest
 and lockfile (OD4) that does not touch the engine or root CI (V14).
 
-**Status (2026-10-22).** PLAN REGISTERED, with the design registered as the S2/S3 source
+**Status (2026-10-23).** PLAN REGISTERED, with the design registered as the S2/S3 source
 (§3 — Stitch, not Figma: the Figma copy is an unread export target). **W0 is COMPLETE — S1–S6 are
 done, including the dedicated `web.yml` job and its Lighthouse budgets, which were proven on
 GitHub on 2026-10-21; W1 is COMPLETE (S7–S10, the wizard shell, the budget step, the
 profile-gated step flow and the POST hand-off); W2 is COMPLETE (S11–S15); W3 is COMPLETE
 (S16, S17, S18 and S19's gating are DONE); W4 is COMPLETE — S20 (the Arabic/RTL pass), S21 (the
-WCAG AA audit) and S22 (legal pages, analytics, states) are DONE 2026-10-22 — and W5 and
-the M3 gate are not started.**
-The design tokens now exist as CODE (`apps/web/app/globals.css`, Tailwind v4 `@theme`, OKLCH) with
-a grep gate and a measured contrast matrix; their provenance and the four deliberate deviations are in
-[docs/design/TOKEN_MAP.md](../design/TOKEN_MAP.md). The eight base components are built on those
-tokens and proven at [/fr/kit](../../apps/web/app/[locale]/kit/page.tsx) — reference in
-[docs/design/COMPONENTS.md](../design/COMPONENTS.md).
-`apps/web` now HAS a typed client and a fixture mock server, so the contract is exercised
-end-to-end against fixtures; it has still never called a REAL API, because nothing is deployed
-(P1 Sprint 1 Steps 7–9).
+WCAG AA audit) and S22 (legal pages, analytics, states) are DONE 2026-10-22 — and S27, the
+post-M3 slider curve, S23, the compare view, and S25's saved-builds half are DONE (2026-10-22 and
+2026-10-23), so 24 of the 27 sprints are done and S25 is half done. What remains is S24 (swap
+inside a build), S25's price-history half and S26, the M3 verification run, which is BLOCKED on
+deployment: no web host is chosen and no API origin is deployed.**
 
 ## 1. Product shape and stack
 
@@ -186,10 +181,11 @@ S4's pieces: `lib/api/schema.d.ts` (generated, committed), `lib/api/client.ts` (
 `lib/api/compile-gate.ts` (contract probes that only `tsc` can see), `mock/server.mjs` +
 `mock/fixtures.mjs` (zero-dependency, every contract state) and `scripts/check-api-types.mjs` (the
 drift gate). The snapshot is NOT copied into `apps/web`: the generator reads the API's own gated
-`apps/api/test/unit/openapi-v1.5.json`, so the tree keeps ONE contract instead of two.
+`apps/api/test/unit/openapi-v1.6.json`, so the tree keeps ONE contract instead of two.
 
-What does not exist yet: Lighthouse CI budgets, the token system (today's tokens are create-next-app
-defaults), the component kit, `next-intl` and the Arabic subset (only Latin Geist is loaded).
+**Correction, 2026-10-22.** This paragraph used to list the Lighthouse budgets, the token system,
+the component kit, `next-intl` and the Arabic subset as missing — all five were built by S2–S6,
+and the **Today** paragraph above is the record. Nothing in W0 is outstanding.
 
 ### W1 — wizard
 
@@ -298,7 +294,15 @@ measurement, the copy review and the state inventory are in
 
 Component detail v2 and compare, swap inside a build (needs CD-8), price history, saved builds.
 
-**Today:** not started, and deliberately out of scope for M3 (S23–S25).
+**Today (2026-10-23): S23 is DONE and S25's saved-builds half is DONE** — the compare view ships at
+`/{locale}/composants/comparer?slugs=a,b`, with the component page as its entry point, and the shelf
+ships at `/{locale}/enregistrements`; the board’s S23 and S25 statuses carry what landed and what it
+measured. **S24 and S25's remaining half stay outside the M3 gate on purpose.** **S24** (swap inside
+a build) waits on **CD-8**, the swap endpoint, which is not built and which no platform sprint owns;
+only its disabled-with-an-explanation control is buildable, and the DoD forbids simulating a swap.
+**S25** had two halves with different answers: saved builds were `localStorage`-only and have now
+shipped, while price history still has no data source — `price_history` exists since migration 009
+but no API route reads it, so the chart would plot fixtures.
 
 ## 5. M3 exit gate
 
@@ -306,8 +310,14 @@ Component detail v2 and compare, swap inside a build (needs CD-8), price history
 - The **wizard completes at 360 px**.
 - The **full FR flow runs against the staging API** (wizard → results → share).
 
-**Today:** unmeasurable. All three need a deployed API; two of them need a chosen web host. S26 is
-the verification sprint that produces the evidence.
+**Today (2026-10-22): BLOCKED, and S26 stays blocked until the deployment happens.** All three
+criteria need a deployed API origin and the two staging runs also need a chosen web host; neither
+exists, so the gate is unmeasurable rather than merely unmeasured. Part of criterion 1 is already
+enforced without a deployment — S6/S19's three budgets (`error`, `median`) run in `web.yml` on the
+fixture result page and on a real preset page — but the criterion's own *score* of 90 or better is
+not asserted anywhere: `lighthouserc.cjs` selects `onlyCategories: performance` and asserts three
+metrics, never the category score. Criterion 2's wizard is covered by Playwright at 360×800;
+criterion 3 has no origin to run against.
 
 ## 6. Measured state of the scaffold (2026-10-20)
 
@@ -319,7 +329,7 @@ Run in `apps/web` on the rebased branch, Node 24 locally (CI pins 22):
 | `npm run build` | exit 0 — `next build` (Turbopack), 8 prerendered routes across `/fr` and `/ar` (the build reports 11 static pages), **no CSS parse warning**; `/fr/configurer` and `/ar/configurer` stay ● SSG despite `useSearchParams`, because the hook sits behind a Suspense boundary, and `/fr/config/[id]` is reported ƒ Dynamic because an id is whatever the API minted, and `/[locale]/[...rest]` is ƒ Dynamic beside it so an unknown path inside a locale renders the locale's own 404 |
 | `npm run lint` | exit 0 — 0 errors, 1 warning (`postcss.config.mjs` anonymous default export) |
 | `npm run typecheck` | exit 0, and also exit 0 with `next-env.d.ts` removed (the clean-CI order is safe) |
-| `npm run check:api-types` | exit 0 — contract 1.5.0, 7 paths, `schema.d.ts` byte-identical to the generator |
+| `npm run check:api-types` | exit 0 — contract 1.6.0, 8 paths, `schema.d.ts` byte-identical to the generator |
 | `npm run check:tokens` | exit 0 — 0 hex literals, 0 palette utilities, 0 physical side classes across `app/` + `components/` + `lib/` (39 files); proven RED on each of the three rule types before being trusted |
 | `npm run check:i18n` | exit 0 — no inline `Intl`, no runtime-locale method, no hand-written amount/date in 37 files; proven RED on all four rule types before being trusted |
 | `npm test` (Playwright, 360×800) | 152/152 pass — the 3 shell specs, S4's 19 (every mock state reachable, the typed client mapping those states, one spec pinning the fixtures' own arithmetic, one for a non-JSON 200), S2's 8 (palette count, 15 text contrast pairs, 3 UI pairs, then the rendered page: 360 px, noindex, alias chain, 48 px control + 2 px ring, `ms-auto` mirroring, the mono face's late swap), S3's 10 (per-component geometry, roles, keyboard, reduced motion), S5's 15 (lang/dir, switcher, formatting, fonts, the per-locale Arabic preload, the mono preload that is not there, CLS) and S7's 21 (12 wizard: labels from `meta/options`, keyboard-only step 1, deep link, repair, Back with values, Enter advancing the form, the last step's honest disabled action, 503 + retry, 360 px/legend/targets, Arabic, the home link; 9 model: URL parsing, ranges, backwards-only repair, round-trip, request body) and S8's 9 (7 budget: the snap note, the min and max clamps with their notices, the slider's 500 steps and both ends, Enter settling before it advances, 360 px with a 44 px rail and a real legend, the Arabic clamp; 2 model: the 500 grid with its top-of-range arithmetic, and `clampBudget` naming the bound) and S9's 12 (6 steps: the gaming/office flow lengths, a URL
@@ -395,7 +405,7 @@ darker replacements recorded if either ever needs room. RTL is asserted, not ass
 **S4's evidence (2026-10-20).** The drift gate was proven RED four ways and restored to PASS after
 each: a hand-edited `schema.d.ts` (stale types, named at the first differing line), a MUTATED
 SNAPSHOT (the sprint DoD's literal scenario — red at line 438, with the fix named), a raised
-`EXPECTED_VERSION` (the snapshot is 1.5.0), and a removed `EXPECTED_PATHS` entry (a path set that
+`EXPECTED_VERSION` (the snapshot is 1.6.0), and a removed `EXPECTED_PATHS` entry (a path set that
 changed). The comparison normalizes line endings, because this box runs `core.autocrlf=true` and a
 CRLF checkout of the same content is not drift: proven PASS on a CRLF copy and FAIL on a CRLF copy
 with one changed line, and `.gitattributes` pins `schema.d.ts` to LF so the artifact stays stable.
@@ -421,7 +431,7 @@ it.
 - **No web host is chosen.** Hosting "close to users" is a requirement without a decision, and it
   gates the M3 staging run.
 - **`/v1/docs/json` is the only contract source, and it is pinned one level up.** S4 generates the
-  client types from the API's committed `apps/api/test/unit/openapi-v1.5.json` rather than copying it
+  client types from the API's committed `apps/api/test/unit/openapi-v1.6.json` rather than copying it
   into `apps/web`, so the tree holds one contract; the cost is that the web package's drift gate
   reads a sibling package's file and cannot run from `apps/web` alone.
 - **The pinned contract can still be BEHIND the deployed one.** The gate compares the snapshot to the

@@ -330,6 +330,7 @@ export default async function ConfigPage({
             <li key={`${build.rank}:${index}`}>
               <BuildCard
                 build={build}
+                resultId={id}
                 budget={budget}
                 generatedAt={recommendation.generated_at}
                 position={index + 1}

@@ -72,12 +72,8 @@ const ROUTES: readonly Route[] = [
   { name: "guides / budget", path: "/guides/budget-pc-gamer" },
   { name: "guides / gpu", path: "/guides/choisir-un-gpu" },
   { name: "component", path: "/composants/rtx-4060-8gb" },
-  // S23: the comparison is audited at the suite's 360 px viewport, i.e. the CARD
-  // layout — the table is the wide representation and is `display:none` here.
-  {
-    name: "component / compare",
-    path: "/composants/comparer?composants=rx-7600-8gb,rtx-4060-ti-gaming-oc-16-go",
-  },
+  { name: "compare", path: "/composants/comparer?slugs=rtx-4060-8gb,rtx-4070-12gb" },
+  { name: "saved builds", path: "/enregistrements" },
   { name: "kit", path: "/kit", frenchOnly: true },
   { name: "tokens", path: "/tokens", frenchOnly: true },
   { name: "format", path: "/format" },

@@ -39,6 +39,19 @@ import type { CatalogOutcome } from "./load";
 /** The badge's three words, shared with the results page (S12). */
 export type CatalogProvenance = PriceProvenance;
 
+/**
+ * The badge’s three MESSAGE KEYS (S12/S17/S23).
+ *
+ * One map for every surface that prints a provenance word: the results page, the
+ * component page and the compare view resolve the same key for the same state, so
+ * a price cannot be "démo" in one room and "indicatif" in another.
+ */
+export const PROVENANCE_MESSAGE_KEY = {
+  demo: "provenance.demo",
+  indicative: "provenance.indicative",
+  verified: "provenance.verified",
+} as const satisfies Record<CatalogProvenance, string>;
+
 /** The contract's eight categories, in the order the enum declares them. */
 export const CATALOG_CATEGORIES = [
   "CPU",

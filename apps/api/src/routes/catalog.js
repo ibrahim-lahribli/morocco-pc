@@ -2,10 +2,20 @@
 
 /**
  * apps/api/src/routes/catalog.js - the read-only catalog surface (Platform P2
- * Sprint 3, contract v1.5).
+ * Sprint 3, contract v1.6 - three catalog reads plus the price history).
  *
  *   GET /v1/catalog/products?role=&limit=&cursor=
  *   GET /v1/catalog/products/:slug
+ *   GET /v1/catalog/products/:slug/price-history   (contract v1.6)
+ *
+ * HISTORY IS A RECORD, NOT A TREND CLAIM. The history route serves what was
+ * observed, oldest first, and reports thin data instead of smoothing it: ONE
+ * POINT PER OBSERVATION MOMENT (a product with two offers in one sweep is one
+ * point at the cheaper price), one moment is a price with a date and NO
+ * change, and zero is an empty list.
+ * Its statement deliberately does not apply the eligibility rule the list and
+ * detail use - see repository.js - because pruning a history row by today's
+ * stock status would rewrite the past.
  *
  * Boundary: HTTP concerns only. Both statements live in ../repository.js, the
  * role vocabulary behind ../engine.js, and the currency vocabulary in ../meta.js;
@@ -52,16 +62,27 @@ const {
   CatalogProductsQuerySchema,
   CatalogProductParamsSchema,
   CatalogProductDetailSchema,
+  PriceHistoryResponseSchema,
   ErrorResponseSchema,
   DISCLAIMER,
 } = require('../contracts');
-const { toNumberOrNull } = require('./presets');
+const { toIsoOrNull, toNumberOrNull } = require('./presets');
 
 const CATALOG_RATE_LIMIT = Object.freeze({ max: 120, timeWindow: '1 minute' });
 
 /** Page size when the caller says nothing; the bound a caller may ask for. */
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+
+/**
+ * The most observation MOMENTS one response carries, selected NEWEST first
+ * before the presenter sorts and collapses them. A year of daily ingestion fits
+ * in it, and a cap is what stops a
+ * long-lived product from turning this read into an unbounded document. There is
+ * no time-window PARAMETER on purpose: a clock-relative filter would make one
+ * URL answer differently on different days for a reason the client cannot see.
+ */
+const PRICE_HISTORY_LIMIT = 366;
 
 /**
  * The currency the catalog is priced in.
@@ -173,6 +194,77 @@ function presentCatalogProduct(snapshot) {
   };
 }
 
+/**
+ * Present one product's observations as a chart-ready series.
+ *
+ * ONE POINT PER OBSERVATION MOMENT, carrying that moment's CHEAPEST price. A
+ * product can hold several offers (rtx-4060-8gb holds two, from two stores and
+ * two variants), and both can be observed in the same sweep: serving them as two
+ * consecutive points would draw a +50 % rise that never happened. Collapsing to
+ * the cheapest price at each instant is the product-level reading the page
+ * wants, and it is an aggregation of OBSERVED rows, not an interpolation - no
+ * point is invented and no gap is filled.
+ *
+ * ASCENDING by `observed_at`: the statement returns newest-first so its LIMIT
+ * cuts the OLDEST rows, and sorting here is what makes the series plottable and
+ * makes "first -> last" mean before -> after.
+ *
+ * Thin data is REPORTED, never smoothed: `change_amount` / `change_pct` need
+ * TWO observation MOMENTS, and with one the price, min and max are still served
+ * - a single point is a fact, not a trend, and null is how this contract says
+ * "no trend". A row whose NUMERIC price will not parse is dropped rather than
+ * rendered as 0, which is the one number the catalog must never invent.
+ *
+ * @param {object} snapshot { product, points } from readPriceHistory
+ * @param {string} currency the query's currency, echoed so a client can format
+ * @returns {object} the response body
+ */
+function presentPriceHistory(snapshot, currency) {
+  const rows = Array.isArray(snapshot.points) ? snapshot.points : [];
+  const observed = rows
+    .map((row) => ({
+      observed_at: toIsoOrNull(row.observed_at),
+      price: toNumberOrNull(row.price),
+      offer_class: offerClassFor(row),
+    }))
+    .filter((point) => point.observed_at !== null && point.price !== null)
+    // ISO-8601 strings sort lexicographically; the sort is stable, so equal
+    // timestamps keep the repository's total order (observed_at DESC, id DESC,
+    // reversed) and the cheapest-of-equals pick below stays deterministic.
+    .sort((a, b) => (a.observed_at < b.observed_at ? -1 : a.observed_at > b.observed_at ? 1 : 0));
+
+  const points = [];
+  for (const point of observed) {
+    const previous = points[points.length - 1];
+    if (previous && previous.observed_at === point.observed_at) {
+      // Same moment, two offers: the product's price then was its cheapest.
+      if (point.price < previous.price) points[points.length - 1] = point;
+    } else {
+      points.push(point);
+    }
+  }
+
+  const prices = points.map((point) => point.price);
+  const first = points.length > 0 ? points[0].price : null;
+  const last = points.length > 0 ? points[points.length - 1].price : null;
+  const hasTrend = points.length >= 2;
+
+  return {
+    slug: snapshot.product.slug,
+    currency,
+    points,
+    observation_count: points.length,
+    latest_price: last,
+    min_price: prices.length > 0 ? Math.min(...prices) : null,
+    max_price: prices.length > 0 ? Math.max(...prices) : null,
+    // Two decimals through the decimal STRING: subtracting money in binary
+    // floating point is how a delta of 0.1 becomes 0.09999999999999998.
+    change_amount: hasTrend ? Number((last - first).toFixed(2)) : null,
+    change_pct: hasTrend && first > 0 ? Number((((last - first) / first) * 100).toFixed(2)) : null,
+    disclaimer: DISCLAIMER,
+  };
+}
+
 /** 422 body for a value the schema cannot range or enumerate. */
 function fieldError(field, message) {
   return {
@@ -278,12 +370,39 @@ function registerCatalogRoutes(app) {
     }
     return reply.code(200).send(presentCatalogProduct(snapshot));
   });
+
+  app.get('/v1/catalog/products/:slug/price-history', {
+    config: { rateLimit: CATALOG_RATE_LIMIT },
+    schema: {
+      tags: ['catalog'],
+      summary: 'The observations behind one product price, oldest first (contract v1.6)',
+      params: CatalogProductParamsSchema,
+      response: {
+        200: PriceHistoryResponseSchema,
+        404: ErrorResponseSchema,
+        422: ErrorResponseSchema,
+        429: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const snapshot = await app.repo.readPriceHistory(app.pool, {
+      slug: request.params.slug,
+      currency: CATALOG_CURRENCY,
+      limit: PRICE_HISTORY_LIMIT,
+    });
+    if (!snapshot || !snapshot.found) {
+      return reply.code(404).send({ error: 'NOT_FOUND', message: 'No product with that slug' });
+    }
+    return reply.code(200).send(presentPriceHistory(snapshot, CATALOG_CURRENCY));
+  });
 }
 
 module.exports = {
   registerCatalogRoutes,
   presentCatalogPage,
   presentCatalogProduct,
+  presentPriceHistory,
   offerClassFor,
   priceStatusFor,
   parseLimit,
@@ -291,4 +410,5 @@ module.exports = {
   CATALOG_CURRENCY,
   DEFAULT_LIMIT,
   MAX_LIMIT,
+  PRICE_HISTORY_LIMIT,
 };

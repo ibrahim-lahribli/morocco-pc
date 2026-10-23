@@ -20,6 +20,38 @@ test("/fr renders the app shell at 360 px with no horizontal scroll", async ({
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
+test("the shelf is one click from every page, even with nothing saved", async ({ page }) => {
+  // A reader who cleared storage has no saved card to click, and the card's own
+  // "Voir mes enregistrements" link only exists once something is saved — so the
+  // way in cannot be that link.
+  await page.goto("/fr");
+  const nav = page.getByRole("navigation", { name: "Vos configurations" });
+  await expect(nav).toBeVisible();
+  const link = nav.getByRole("link", { name: "Mes enregistrements", exact: true });
+  await expect(link).toHaveAttribute("href", "/fr/enregistrements");
+
+  await link.click();
+  await expect(page).toHaveURL(/\/fr\/enregistrements$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Mes enregistrements");
+  // Nothing saved here: the empty state, which is a true statement, not an error.
+  await expect(page.getByRole("heading", { name: "Aucun enregistrement" })).toBeVisible();
+
+  // The footer rather than the header is why this still fits at 360 px.
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("the Arabic footer points at the Arabic shelf", async ({ page }) => {
+  await page.goto("/ar");
+  await expect(
+    page
+      .getByRole("navigation", { name: "تكويناتك" })
+      .getByRole("link", { name: "التكوينات المحفوظة" }),
+  ).toHaveAttribute("href", "/ar/enregistrements");
+});
+
 test("/ redirects to /fr (fr is the default locale)", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/fr$/);

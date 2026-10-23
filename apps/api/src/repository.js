@@ -503,6 +503,35 @@ const SELECT_CATALOG_OFFERS_SQL = [
 ].join('\n');
 
 /**
+ * Every observation of one catalog product's price, NEWEST first, capped.
+ *
+ * HISTORY IS A RECORD, NOT A CURRENT ELIGIBILITY CLAIM. The list and the detail
+ * prune offers through `CATALOG_OFFER_ELIGIBILITY_SQL` (in stock, checked within
+ * 30 days). Applying that here would let history DELETE ITSELF as an offer ages
+ * out, so a price that rose while the offer went out of stock would render as a
+ * flat line. The product must still be ACTIVE and categorized - the identity
+ * statement owns that - and every point still carries its offer's provenance
+ * class, so a seed observation is never mistaken for a verified one.
+ *
+ * The cap takes the NEWEST rows; the presenter collapses them to one point per
+ * observation moment and serves them ascending, so the cut-off drops ancient
+ * points and never recent ones.
+ *
+ * $1 uuid    product id
+ * $2 text    currency
+ * $3 integer cap, newest first
+ */
+const SELECT_PRICE_HISTORY_SQL = [
+  'SELECT h.observed_at, h.price, o.ingestion_record_id',
+  'FROM price_history h',
+  'JOIN store_offer o ON o.id = h.store_offer_id',
+  'WHERE o.product_id = $1',
+  '  AND h.currency = $2',
+  'ORDER BY h.observed_at DESC, h.id DESC',
+  'LIMIT $3',
+].join('\n');
+
+/**
  * The spec columns that are IDENTITY, not specification. They are stripped from
  * the served object: a catalog consumer needs `socket`, `tdp_watts` and the
  * like, not row keys or audit timestamps.
@@ -605,6 +634,27 @@ async function readCatalogProduct(db, key) {
     offers,
     specs: specRows.length === 0 ? null : specRows[0].specs,
   };
+}
+
+/**
+ * One catalog product's price observations, newest first.
+ *
+ * @param {object} db pool or client exposing query(sql, params)
+ * @param {object} key { slug, currency, limit }
+ * @returns {Promise<{found: false} | {found: true, product: object,
+ *   points: Array<object>}>} `points` is the NEWEST `limit` rows, newest first
+ */
+async function readPriceHistory(db, key) {
+  const identity = await db.query(SELECT_CATALOG_PRODUCT_SQL, [key.slug]);
+  const identityRows = identity && Array.isArray(identity.rows) ? identity.rows : [];
+  if (identityRows.length === 0) {
+    return { found: false };
+  }
+  const product = identityRows[0];
+
+  const result = await db.query(SELECT_PRICE_HISTORY_SQL, [product.id, key.currency, key.limit]);
+  const points = result && Array.isArray(result.rows) ? result.rows : [];
+  return { found: true, product, points };
 }
 
 /**
@@ -828,8 +878,10 @@ module.exports = {
   SELECT_CATALOG_PRODUCTS_SQL,
   SELECT_CATALOG_PRODUCT_SQL,
   SELECT_CATALOG_OFFERS_SQL,
+  SELECT_PRICE_HISTORY_SQL,
   selectCatalogProducts,
   readCatalogProduct,
+  readPriceHistory,
   selectActiveScoringModel,
   createRecommendationQuery,
   findReusableQuery,

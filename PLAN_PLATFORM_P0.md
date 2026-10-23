@@ -420,7 +420,7 @@ real branch row read. Migration 020 IS in the tree and applied on the TEST branc
 
 ### OpenAPI snapshot test
 
-- A committed snapshot (`openapi-v1.2.json` in this sprint; `apps/api/test/unit/openapi-v1.5.json` at the latest revision) is compared byte-for-byte to the document served at `/v1/docs/json`; the test fails if the served document differs. Regenerate the snapshot only when the contract is deliberately changed, and replace the old file rather than adding a second one.
+- A committed snapshot (`openapi-v1.2.json` in this sprint; `apps/api/test/unit/openapi-v1.6.json` at the latest revision) is compared byte-for-byte to the document served at `/v1/docs/json`; the test fails if the served document differs. Regenerate the snapshot only when the contract is deliberately changed, and replace the old file rather than adding a second one.
 - This is the simple version of the P2 "contract version" item; the rest of P2 stays planned.
 
 ### Verification at the door

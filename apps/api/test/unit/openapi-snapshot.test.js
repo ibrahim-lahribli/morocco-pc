@@ -4,22 +4,23 @@
  * apps/api/test/unit/openapi-snapshot.test.js - the served OpenAPI document,
  * pinned (Sprint 4 of PLAN_PLATFORM_P0.md: v1.1 pass facts, v1.2 product
  * identity; Platform P1 Sprint 5: v1.3 request dedupe; Platform P1 Sprint 6:
- * v1.4 the presets ribbon; Platform P2 Sprint 3: v1.5 the read-only catalog).
+ * v1.4 the presets ribbon; Platform P2 Sprint 3: v1.5 the read-only catalog;
+ * v1.6 the price history).
  *
  * A committed snapshot is the only thing that makes a published contract a
  * CLAIM rather than a description: without it, the document can lose a field,
  * change a type or gain a path and every test still passes, because the tests
- * assert against the same code that generates the document. `openapi-v1.5.json`
+ * assert against the same code that generates the document. `openapi-v1.6.json`
  * is the served bytes, not a hand-written file - regenerate it, never edit it.
  * There is exactly ONE snapshot on purpose: each superseded file (v1.1 through
- * v1.4) was DELETED when the next landed, because two plausible contracts in the
+ * v1.5) was DELETED when the next landed, because two plausible contracts in the
  * tree is worse than none - a reader cannot tell which one the service serves.
  *
  * How to regenerate (deliberate contract change only):
  *
  *   node -e "const fs=require('fs');const stub=require('./apps/api/test/helpers/stub');\
  *   stub.createTestApp().inject({method:'GET',url:'/v1/docs/json'})\
- *   .then(r=>fs.writeFileSync('apps/api/test/unit/openapi-v1.5.json',r.body+'\n'))"
+ *   .then(r=>fs.writeFileSync('apps/api/test/unit/openapi-v1.6.json',r.body+'\n'))"
  *
  * The comparison ignores ONE trailing newline so that a committed text file may
  * keep the POSIX convention; every other byte must match exactly, including key
@@ -41,6 +42,11 @@
  * v1.5 adds the read-only catalog (Platform P2 Sprint 3):
  * `/v1/catalog/products` and `/v1/catalog/products/{slug}`. No existing field
  * or path changed, and the earlier minors stay asserted below.
+ *
+ * v1.6 adds exactly one path: `/v1/catalog/products/{slug}/price-history`
+ * (S25's unblock). No existing field or path changed. Its summary fields are
+ * declared nullable for the reason the route gives: most products have ONE
+ * observation, and a change over one point is UNKNOWN, not zero.
  */
 
 const test = require('node:test');
@@ -50,7 +56,7 @@ const path = require('node:path');
 
 const stub = require('../helpers/stub');
 
-const SNAPSHOT_PATH = path.join(__dirname, 'openapi-v1.5.json');
+const SNAPSHOT_PATH = path.join(__dirname, 'openapi-v1.6.json');
 
 async function servedDocument() {
   const response = await stub.createTestApp().inject({ method: 'GET', url: '/v1/docs/json' });
@@ -66,23 +72,23 @@ function responsesFor(document) {
   ];
 }
 
-test('the served OpenAPI document is byte-identical to the committed v1.5 snapshot', async () => {
+test('the served OpenAPI document is byte-identical to the committed v1.6 snapshot', async () => {
   const { raw } = await servedDocument();
   const committed = fs.readFileSync(SNAPSHOT_PATH, 'utf8');
 
   assert.equal(
     raw,
     committed.replace(/\n$/, ''),
-    'the served document differs from openapi-v1.5.json. If the change is deliberate, regenerate the '
+    'the served document differs from openapi-v1.6.json. If the change is deliberate, regenerate the '
       + 'snapshot with the command in this file\'s header and commit it together with the schema change; '
       + 'if it is not, the contract has drifted and this is the gate that noticed.'
   );
 });
 
-test('the v1.5 document advertises the persisted pass facts on BOTH verbs', async () => {
+test('the v1.6 document advertises the persisted pass facts on BOTH verbs', async () => {
   const { document } = await servedDocument();
 
-  assert.equal(document.info.version, '1.5.0', 'the version names the current surface (the catalog reads)');
+  assert.equal(document.info.version, '1.6.0', 'the version names the current surface (the catalog reads + history)');
 
   // Both verbs serve the same response schema, and that sameness is the
   // contract: a client may read either and see the same fields.
@@ -128,7 +134,7 @@ test('the v1.5 document advertises the persisted pass facts on BOTH verbs', asyn
   );
 });
 
-test('the v1.5 document declares the dedupe fields on BOTH verbs', async () => {
+test('the v1.6 document declares the dedupe fields on BOTH verbs', async () => {
   const { document } = await servedDocument();
 
   for (const [label, response] of responsesFor(document)) {
@@ -166,7 +172,7 @@ test('the v1.5 document declares the dedupe fields on BOTH verbs', async () => {
   assert.deepEqual(servedBy.required, ['engine_version'], 'served_by still carries exactly its one field');
 });
 
-test('the v1.5 document declares components[].slug on BOTH verbs, nullable like its column', async () => {
+test('the v1.6 document declares components[].slug on BOTH verbs, nullable like its column', async () => {
   const { document } = await servedDocument();
 
   // `slug` is served from the persisted column (migration 020), so it belongs in
@@ -195,7 +201,7 @@ test('the v1.5 document declares components[].slug on BOTH verbs, nullable like 
   );
 });
 
-test('the v1.5 document declares both catalog reads, with provenance beside every price', async () => {
+test('the v1.6 document declares both catalog reads, with provenance beside every price', async () => {
   const { document } = await servedDocument();
 
   const list = document.paths['/v1/catalog/products'];
@@ -247,4 +253,58 @@ test('the v1.5 document declares both catalog reads, with provenance beside ever
   assert.match(status, /indicative/);
   assert.match(status, /verified/);
   assert.match(status, /null/);
+});
+
+test('the v1.6 document declares the price history, and says when a trend is unknown', async () => {
+  const { document } = await servedDocument();
+
+  const history = document.paths['/v1/catalog/products/{slug}/price-history'];
+  assert.ok(history && history.get, 'the price history is documented');
+  assert.deepEqual(
+    history.get.parameters.map((parameter) => parameter.name),
+    ['slug'],
+    'the history takes the slug and nothing else: no window or paging, because the route caps it'
+  );
+
+  const body = history.get.responses['200'].content['application/json'].schema;
+  assert.deepEqual(
+    body.required,
+    [
+      'slug',
+      'currency',
+      'points',
+      'observation_count',
+      'latest_price',
+      'min_price',
+      'max_price',
+      'change_amount',
+      'change_pct',
+      'disclaimer',
+    ],
+    'the summary is part of the contract: a client must not have to re-derive it'
+  );
+
+  // Each point carries the provenance of ITS price, exactly as the list and
+  // detail do - a historical price without its class would be the same defect
+  // one layer down.
+  const point = body.properties.points.items;
+  assert.deepEqual(point.required, ['observed_at', 'price', 'offer_class']);
+  assert.deepEqual(point.properties.price, { type: 'number' });
+
+  // The change fields are nullable because thin data is the NORMAL case: a
+  // single observation is a fact and not a trend, and 0 would assert the price
+  // held when the catalog only ever observed it once.
+  for (const field of ['latest_price', 'min_price', 'max_price', 'change_amount', 'change_pct']) {
+    assert.deepEqual(
+      body.properties[field],
+      { type: 'number', nullable: true },
+      field + ' is declared a nullable number'
+    );
+  }
+  // Countable is not nullable: "no observation" is 0, not unknown.
+  assert.deepEqual(body.properties.observation_count, { type: 'integer' });
+  assert.ok(
+    body.required.includes('observation_count'),
+    'observation_count is required: the empty state is a fact the client formats'
+  );
 });
