@@ -131,12 +131,20 @@ function scenarioExpectsBuilds(scenario, currentEpicIndex) {
 /**
  * If a row is UNKNOWN and one of its scenarios expects builds whose epic has
  * LANDED (`expect_builds_after` reached), return that scenario id - the row
- * escalates to a hard FAIL. ANY UNKNOWN escalates once the epic has landed; the
- * check is deliberately NOT limited to `build_count === 0`, because a row can be
- * UNKNOWN for reasons other than an empty build set (e.g. no selected build
- * carries a GPU) and a landed epic means the harness should be able to judge it.
+ * escalates to a hard FAIL. ANY MEASURED UNKNOWN escalates once the epic has
+ * landed; the check is deliberately NOT limited to `build_count === 0`, because
+ * a row can be UNKNOWN for reasons other than an empty build set (e.g. no
+ * selected build carries a GPU) and a landed epic means the harness should be
+ * able to judge it.
+ *
+ * A row marked `unmeasured` (see UNMEASURED) never escalates: it is UNKNOWN
+ * because an artifact it needs was not produced in this invocation, which is
+ * what `--filter` does by construction. Escalating it would make every narrowed
+ * run exit 1 once the epic pointer landed, while saying nothing about the
+ * scenarios that DID run.
  */
 function rowEscalation(result, scenarioById, currentEpicIndex) {
+  if (result.unmeasured === true) return null;
   for (const sid of result.scenario_ids) {
     if (scenarioExpectsBuilds(scenarioById.get(sid), currentEpicIndex)) return sid;
   }
@@ -342,8 +350,8 @@ function projectArtifact(id, snapshot, rankedResult, selection, maps) {
 // Result rows
 // ---------------------------------------------------------------------------
 
-function row(assertion, status, scenarioIds, measured, expected, detail) {
-  return {
+function row(assertion, status, scenarioIds, measured, expected, detail, flags) {
+  const result = {
     assertion,
     status,
     scenario_ids: scenarioIds,
@@ -351,7 +359,20 @@ function row(assertion, status, scenarioIds, measured, expected, detail) {
     expected,
     detail: detail === undefined ? '' : detail,
   };
+  if (flags !== undefined && flags.unmeasured === true) result.unmeasured = true;
+  return result;
 }
+
+/**
+ * The flag that marks a row this run could not MEASURE because an artifact it
+ * needs was never produced - as opposed to a row that was measured and came
+ * back inconclusive. Two causes, both structural: the scenario itself was
+ * filtered out of the invocation, or a scenario the assertion COMPARES against
+ * (A6's reference, A4/A5's pair) was. Such a row stays UNKNOWN and is never
+ * escalated to a hard FAIL, so `--filter=S06,S17,S18` reports the rows it can
+ * measure and does not turn its own missing inputs into RED.
+ */
+const UNMEASURED = Object.freeze({ unmeasured: true });
 
 /** Combine sub-check statuses: any FAIL -> FAIL, else any UNKNOWN -> UNKNOWN. */
 function combine(subStatuses) {
@@ -375,7 +396,7 @@ function a1(assertion, min, get) {
     const a = get(sid);
     const expected = '>= ' + min + ' distinct (CPU,GPU) pairs in the selected set';
     if (a === null) {
-      rows.push(row('A1', STATUSES.UNKNOWN, [sid], null, expected, 'artifact missing'));
+      rows.push(row('A1', STATUSES.UNKNOWN, [sid], null, expected, 'artifact missing', UNMEASURED));
       continue;
     }
     if (a.selected.length === 0) {
@@ -400,7 +421,7 @@ function a2(assertion, spendMin, get) {
   for (const series of assertion.series) {
     const expected = 'best-build total_price non-decreasing across budgets; spend ratio >= ' + spendMin;
     if (missing(get, series)) {
-      rows.push(row('A2', STATUSES.UNKNOWN, series, null, expected, 'artifact missing'));
+      rows.push(row('A2', STATUSES.UNKNOWN, series, null, expected, 'artifact missing', UNMEASURED));
       continue;
     }
     const arts = series.map((id) => get(id));
@@ -443,7 +464,7 @@ function a2b(assertion, growthMin, get) {
     const expected = 'rank-1 GPU price at ' + pair.high + ' >= ' + growthMin + ' x at ' + pair.low
       + ' (same use_case/resolution/priority)';
     if (low === null || high === null) {
-      rows.push(row('A2b', STATUSES.UNKNOWN, ids, null, expected, 'artifact missing'));
+      rows.push(row('A2b', STATUSES.UNKNOWN, ids, null, expected, 'artifact missing', UNMEASURED));
       continue;
     }
     if (low.best === null || high.best === null || low.best.gpu_price === null || high.best.gpu_price === null) {
@@ -479,7 +500,7 @@ function a3(assertion, thresholds, byId, get) {
       + '; GAMING GPU share in [' + shareBand.min + ', ' + shareBand.max + ']'
       + '; WORKSTATION CPU+RAM share > GAMING';
     if (gaming === null || workstation === null) {
-      rows.push(row('A3', STATUSES.UNKNOWN, ids, null, expected, 'artifact missing'));
+      rows.push(row('A3', STATUSES.UNKNOWN, ids, null, expected, 'artifact missing', UNMEASURED));
       continue;
     }
     const gamingSignatures = new Set(gaming.ranked_signatures);
@@ -535,7 +556,7 @@ function a4(assertion, thresholds, byId, get) {
   for (const series of assertion.series) {
     const expected = 'top-build GPU price non-decreasing across increasing resolution';
     if (missing(get, series)) {
-      rows.push(row('A4', STATUSES.UNKNOWN, series, null, expected, 'artifact missing'));
+      rows.push(row('A4', STATUSES.UNKNOWN, series, null, expected, 'artifact missing', UNMEASURED));
       continue;
     }
     const arts = series.map((id) => get(id));
@@ -562,7 +583,7 @@ function a4(assertion, thresholds, byId, get) {
     const [low, high] = assertion.strict_pair;
     const expected = 'top-build GPU price strictly greater at the higher resolution, same budget';
     if (missing(get, [low, high])) {
-      rows.push(row('A4', STATUSES.UNKNOWN, [low, high], null, expected, 'artifact missing'));
+      rows.push(row('A4', STATUSES.UNKNOWN, [low, high], null, expected, 'artifact missing', UNMEASURED));
     } else {
       const a = get(low);
       const b = get(high);
@@ -587,7 +608,7 @@ function a4(assertion, thresholds, byId, get) {
     const floor = floorByResolution[resolution];
     const expected = 'every selected GPU has vram_capacity_gb >= ' + floor + ' at ' + resolution;
     if (a === null) {
-      rows.push(row('A4', STATUSES.UNKNOWN, [sid], null, expected, 'artifact missing'));
+      rows.push(row('A4', STATUSES.UNKNOWN, [sid], null, expected, 'artifact missing', UNMEASURED));
       continue;
     }
     const withGpu = a.selected.filter((entry) => entry.has_gpu);
@@ -610,6 +631,23 @@ function a4(assertion, thresholds, byId, get) {
   return rows;
 }
 
+/**
+ * The rank-1 build of an artifact: the FIRST archetype in output order.
+ *
+ * E4 (Decision 41) made `priority` an OUTPUT ordering: selectArchetypes returns
+ * BALANCED first at priority 3, VALUE first at 1-2 and PERFORMANCE first at 4-5.
+ * `best` is ranked[0] (highest build_score), which priority never touches, so an
+ * assertion that claims to test priority must read `selected[0]`. Before
+ * 2026-10-24 A5 read `best` and therefore measured the same build for priority 1
+ * and 5 in every pair - it could not pass whatever the engine did (deviation
+ * recorded in test/golden/CHANGELOG.md).
+ */
+function topSelected(artifact) {
+  if (artifact === null || artifact === undefined) return null;
+  const selected = Array.isArray(artifact.selected) ? artifact.selected : [];
+  return selected.length === 0 ? null : selected[0];
+}
+
 /** A5 - priority divergence: price-first ranks a strictly cheaper build than performance-first. */
 function a5(assertion, byId, get) {
   const rows = [];
@@ -619,22 +657,24 @@ function a5(assertion, byId, get) {
     const ids = [pair.price_first, pair.performance_first];
     const expected = 'rank-1 total_price at price-first < at performance-first, and signatures differ';
     if (low === null || high === null) {
-      rows.push(row('A5', STATUSES.UNKNOWN, ids, null, expected, 'artifact missing'));
+      rows.push(row('A5', STATUSES.UNKNOWN, ids, null, expected, 'artifact missing', UNMEASURED));
       continue;
     }
-    if (low.best === null || high.best === null) {
-      rows.push(row('A5', STATUSES.UNKNOWN, ids, null, expected, 'no ranked build'));
+    const lowTop = topSelected(low);
+    const highTop = topSelected(high);
+    if (lowTop === null || highTop === null) {
+      rows.push(row('A5', STATUSES.UNKNOWN, ids, null, expected, 'no archetype selected'));
       continue;
     }
-    const cheaper = low.best.total_price < high.best.total_price;
-    const differ = low.best.signature !== high.best.signature;
+    const cheaper = lowTop.total_price < highTop.total_price;
+    const differ = lowTop.signature !== highTop.signature;
     rows.push(row(
       'A5',
       cheaper && differ ? STATUSES.PASS : STATUSES.FAIL,
       ids,
       {
-        price_first_total: low.best.total_price,
-        performance_first_total: high.best.total_price,
+        price_first_total: lowTop.total_price,
+        performance_first_total: highTop.total_price,
         signatures_differ: differ,
       },
       expected,
@@ -644,26 +684,39 @@ function a5(assertion, byId, get) {
   return rows;
 }
 
-/** A6 - OFFICE: no discrete GPU, iGPU CPU, top-build price <= ratio x reference. */
+/**
+ * A6 - OFFICE: no discrete GPU, iGPU CPU, top-build price <= ratio x reference.
+ *
+ * Every clause reads the SAME build: the rank-1 archetype (`selected[0]`), the
+ * recommendation the OFFICE query actually leads with. Before 2026-10-24 the
+ * "no discrete GPU" clause scanned `selected` while the CPU and price clauses
+ * read `best` (ranked[0]) - two different builds wearing one row's decision, so
+ * a GPU-less recommendation could still FAIL on a rank-1 entry that was never
+ * assessed for the iGPU clause (deviation recorded in test/golden/CHANGELOG.md).
+ * "no discrete GPU" is the one clause that must stay suite-wide: a single
+ * GPU-bearing entry in the recommended set is a failure even if the top one is
+ * GPU-less.
+ */
 function a6(assertion, maxRatio, get) {
-  const reference = get(assertion.reference);
-  const referencePrice = reference !== null && reference.best !== null ? reference.best.total_price : null;
+  const referenceTop = topSelected(get(assertion.reference));
+  const referencePrice = referenceTop === null ? null : referenceTop.total_price;
   const rows = [];
   for (const sid of assertion.scenarios) {
     const a = get(sid);
-    const expected = 'no discrete GPU; CPU integrated_gpu_present = true; top price <= '
-      + maxRatio + ' x ' + assertion.reference + ' top price';
+    const expected = 'no discrete GPU; rank-1 CPU integrated_gpu_present = true; rank-1 price <= '
+      + maxRatio + ' x ' + assertion.reference + ' rank-1 price';
     if (a === null || referencePrice === null) {
-      rows.push(row('A6', STATUSES.UNKNOWN, [sid], null, expected, 'artifact or reference missing'));
+      rows.push(row('A6', STATUSES.UNKNOWN, [sid], null, expected, 'artifact or reference missing', UNMEASURED));
       continue;
     }
-    if (a.selected.length === 0 || a.best === null) {
+    const top = topSelected(a);
+    if (top === null) {
       rows.push(row('A6', STATUSES.UNKNOWN, [sid], null, expected, 'no builds at this budget'));
       continue;
     }
     const noGpu = a.selected.every((entry) => !entry.has_gpu);
-    const igpu = a.best.cpu_integrated_gpu_present;
-    const ratio = a.best.total_price / referencePrice;
+    const igpu = top.cpu_integrated_gpu_present;
+    const ratio = top.total_price / referencePrice;
     const sub = [];
     sub.push(noGpu ? STATUSES.PASS : STATUSES.FAIL);
     sub.push(igpu === true ? STATUSES.PASS : (igpu === null ? STATUSES.UNKNOWN : STATUSES.FAIL));
@@ -695,7 +748,7 @@ function a7(assertion, get) {
     const a = get(sid);
     if (a === null) {
       rows.push(row('A7', STATUSES.UNKNOWN, [sid], null,
-        'zero builds; budget_floor present; within_budget === (budget >= cheapest_total)', 'artifact missing'));
+        'zero builds; budget_floor present; within_budget === (budget >= cheapest_total)', 'artifact missing', UNMEASURED));
       continue;
     }
     const hasFloor = a.budget_floor !== null && a.budget_floor !== undefined && typeof a.budget_floor === 'object';
@@ -737,7 +790,7 @@ function a8(assertion, tolerance, get, getSecond) {
     const second = getSecond(sid);
     const expected = 'identical signature lists and build_scores within ' + tolerance;
     if (first === null || second === null) {
-      rows.push(row('A8', STATUSES.UNKNOWN, [sid], null, expected, 'artifact missing'));
+      rows.push(row('A8', STATUSES.UNKNOWN, [sid], null, expected, 'artifact missing', UNMEASURED));
       continue;
     }
     const listsEqual = first.ranked_signatures.length === second.ranked_signatures.length
@@ -774,7 +827,7 @@ function a9(assertion, get, pi1) {
     const a = get(sid);
     const expected = 'no selected build has compatibility_status = REJECT';
     if (a === null) {
-      rows.push(row('A9', STATUSES.UNKNOWN, [sid], null, expected, 'artifact missing'));
+      rows.push(row('A9', STATUSES.UNKNOWN, [sid], null, expected, 'artifact missing', UNMEASURED));
       continue;
     }
     rows.push(row(
@@ -833,7 +886,7 @@ function a10(assertion, get) {
     const expected = 'archetype strategies exactly ' + JSON.stringify(scenario.expected_strategies)
       + ' in output order, distinct pairs, and no UNKNOWN degradation codes';
     if (a === null) {
-      rows.push(row('A10', STATUSES.UNKNOWN, [sid], null, expected, 'artifact missing'));
+      rows.push(row('A10', STATUSES.UNKNOWN, [sid], null, expected, 'artifact missing', UNMEASURED));
       continue;
     }
     const measured = a.archetype_strategies;
@@ -842,8 +895,13 @@ function a10(assertion, get) {
     const pairKeys = a.selected.map((entry) => entry.pair_key).filter((k) => k !== null);
     const distinctOk = new Set(pairKeys).size === pairKeys.length;
     // Reason codes present but EMPTY_RANKED means the scenario has nothing,
-    // else every degradation code must be one of NO_* (the honest shortfall).
-    const codesOk = a.archetype_reason_codes.every((code) => code === 'EMPTY_RANKED' || /^NO_[A-Z]+$/.test(code));
+    // else every degradation code must be one of the three NO_<STRATEGY>_CANDIDATE
+    // codes (the honest shortfall). Spelling the vocabulary out rather than
+    // matching /^NO_[A-Z]+$/ matters: E4's codes carry an underscore
+    // (NO_VALUE_CANDIDATE), which the old pattern rejected, so every real
+    // degradation FAILed A10 until 2026-10-24.
+    const codesOk = a.archetype_reason_codes.every((code) => code === 'EMPTY_RANKED'
+      || /^NO_(PERFORMANCE|BALANCED|VALUE)_CANDIDATE$/.test(code));
     rows.push(row(
       'A10',
       orderOk && distinctOk && codesOk ? STATUSES.PASS : STATUSES.FAIL,

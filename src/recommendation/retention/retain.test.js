@@ -1078,3 +1078,92 @@ test('E2: roleTargets must be null or an object', () => {
     );
   }
 });
+
+// ---------------------------------------------------------------------------
+// E6 (Decision 54) - policy-driven role exclusions
+// ---------------------------------------------------------------------------
+
+test('E6: an excluded CPU is dropped even when it is both the top scorer and the cheapest', () => {
+  const rows = [
+    ['CPU', 'cpu-excluded', 90, 100],
+    ['CPU', 'cpu-b', 80, 5000],
+    ['CPU', 'cpu-c', 70, 9000],
+  ];
+  const sources = {
+    filterResult: { results: rows.map(([role, id]) => verdict(role, id)) },
+    candidateScores: scores(...rows.map(([role, id, score]) => scoreEntry(role, id, score))),
+    prices: priced(rows.map(([role, id, , price]) => [role, id, price])),
+    topKPerRole: 2,
+  };
+  const unfiltered = retainTopKPerRole(sources);
+  const filtered = retainTopKPerRole({ ...sources, roleExclusions: { CPU: ['cpu-excluded'] } });
+  assert.deepEqual(ids(unfiltered.results), ['cpu-excluded', 'cpu-b']);
+  assert.deepEqual(ids(filtered.results), ['cpu-b', 'cpu-c']);
+});
+
+test('E6: a Set and an array express the same exclusion, and absence is byte-identical', () => {
+  const rows = [['CPU', 'cpu-a', 90, 100], ['CPU', 'cpu-b', 80, 200], ['CPU', 'cpu-c', 70, 300]];
+  const sources = {
+    filterResult: { results: rows.map(([role, id]) => verdict(role, id)) },
+    candidateScores: scores(...rows.map(([role, id, score]) => scoreEntry(role, id, score))),
+    prices: priced(rows.map(([role, id, , price]) => [role, id, price])),
+    topKPerRole: 2,
+  };
+  const legacyAbsent = retainTopKPerRole(sources);
+  const legacyNull = retainTopKPerRole({ ...sources, roleExclusions: null });
+  const withArray = retainTopKPerRole({ ...sources, roleExclusions: { CPU: ['cpu-a'] } });
+  const withSet = retainTopKPerRole({ ...sources, roleExclusions: { CPU: new Set(['cpu-a']) } });
+  assert.deepEqual(legacyNull, legacyAbsent);
+  assert.deepEqual(withSet, withArray);
+  assert.deepEqual(ids(withArray.results), ['cpu-b', 'cpu-c']);
+});
+
+test('E6: excluding every candidate of a role leaves the other roles intact', () => {
+  const rows = [
+    ['CPU', 'cpu-a', 90, 100],
+    ['GPU', 'gpu-a', 80, 200],
+  ];
+  const out = retainTopKPerRole({
+    filterResult: { results: rows.map(([role, id]) => verdict(role, id)) },
+    candidateScores: scores(...rows.map(([role, id, score]) => scoreEntry(role, id, score))),
+    prices: priced(rows.map(([role, id, , price]) => [role, id, price])),
+    topKPerRole: 2,
+    roleExclusions: { CPU: ['cpu-a'] },
+  });
+  assert.deepEqual(ids(out.results), ['gpu-a']);
+});
+
+test('E6: a role with no exclusion entry keeps every candidate the cap allows', () => {
+  const rows = [['CPU', 'cpu-a', 90, 100], ['GPU', 'gpu-a', 80, 200], ['GPU', 'gpu-b', 70, 300]];
+  const out = retainTopKPerRole({
+    filterResult: { results: rows.map(([role, id]) => verdict(role, id)) },
+    candidateScores: scores(...rows.map(([role, id, score]) => scoreEntry(role, id, score))),
+    prices: priced(rows.map(([role, id, , price]) => [role, id, price])),
+    topKPerRole: 2,
+    roleExclusions: { CPU: ['nothing-here'] },
+  });
+  assert.deepEqual(ids(out.results).sort(), ['cpu-a', 'gpu-a', 'gpu-b']);
+});
+
+test('E6: a malformed roleExclusions map is refused with the fielded path', () => {
+  const base = cpuCase([['cpu-a', 60, 1000], ['cpu-b', 50, 2000]]);
+  const cases = [
+    [5, ERROR_CODES.INVALID_INPUT, 'roleExclusions'],
+    [[], ERROR_CODES.INVALID_INPUT, 'roleExclusions'],
+    [{ CPU: 'cpu-a' }, ERROR_CODES.INVALID_FIELD_VALUE, 'roleExclusions.CPU'],
+    [{ CPU: [null] }, ERROR_CODES.INVALID_FIELD_VALUE, 'roleExclusions.CPU'],
+    [{ CPU: [1] }, ERROR_CODES.INVALID_FIELD_VALUE, 'roleExclusions.CPU'],
+    // A role outside the canonical vocabulary would exclude NOTHING while its
+    // caller believed the pool had been narrowed, so it is refused by name.
+    [{ MEMORY: ['cpu-a'] }, ERROR_CODES.INVALID_FIELD_VALUE, 'roleExclusions.MEMORY'],
+    [{ cpu: ['cpu-a'] }, ERROR_CODES.INVALID_FIELD_VALUE, 'roleExclusions.cpu'],
+  ];
+  for (const [value, code, field] of cases) {
+    assertError(
+      rejectionOf(() => retainTopKPerRole({ ...base, topKPerRole: 1, roleExclusions: value })),
+      code,
+      field,
+      'roleExclusions=' + JSON.stringify(value)
+    );
+  }
+});

@@ -29,7 +29,15 @@
  *
  *   retainTopKPerRole({ filterResult, candidateScores, topKPerRole, prices })
  *     - the Decision 12 retention stage (see ./retain). `prices` is the Engine 2
- *     Stage 1 carrier and is required since Decision 27.
+ *     Stage 1 carrier and is required since Decision 27. E2 adds the optional
+ *     `roleTargets`; E6 (Decision 54) adds the optional `roleExclusions`, which
+ *     drops policy-ineligible candidates before ordering and the K cap.
+ *
+ *   excludedCpuProductIds({ gpuPolicy, filteringContext })   (E6)
+ *     - the CPU eligibility set implied by a DECLARED `IGPU_ALLOWED` policy:
+ *     null for any other policy, else the product ids of CPU candidates with no
+ *     verified integrated GPU (see ./igpu-pool). The orchestrator passes the
+ *     result to retainTopKPerRole as `roleExclusions.CPU`.
  *
  *   computeBudgetFloor({ retained, prices, budgetAmount, currency })
  *     - the Decision 27 zero-build diagnostic (see ./budget-floor): the
@@ -88,6 +96,7 @@
 'use strict';
 
 const { retainTopKPerRole } = require('./retain');
+const { excludedCpuProductIds } = require('./igpu-pool');
 const { BUDGET_FLOOR_ROLES, computeBudgetFloor } = require('./budget-floor');
 const {
   RESOLUTION_MULTIPLIERS,
@@ -99,6 +108,7 @@ const {
 
 module.exports = {
   retainTopKPerRole,
+  excludedCpuProductIds,
   BUDGET_FLOOR_ROLES,
   computeBudgetFloor,
   computeRoleTargets,

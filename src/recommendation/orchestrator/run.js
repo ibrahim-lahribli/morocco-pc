@@ -45,7 +45,8 @@
  *   candidateScores { scores }
  *     |  retainTopKPerRole({ filterResult, candidateScores, topKPerRole,
  *     |                        prices: offerResult.prices,
- *     |                        roleTargets })   Decision 27 + E2
+ *     |                        roleTargets, roleExclusions })
+ *     |                     Decision 27 + E2 + E6 (Decision 54)
  *     v
  *   retentionResult { results }                  Decision 12/14 retention
  *     |  computeBudgetFloor({ retained, prices, budgetAmount, currency })
@@ -331,12 +332,23 @@ async function runRecommendation(args) {
   // E2: the active model's per-use-case spend targets become per-role price
   // targets. A model that declares no `use_case_profiles`, or no profile for
   // this query's use case, yields null and retention keeps the pre-E2 rule.
+  // E6 (Decision 54): the declared per-use-case `gpu_policy` is resolved ONCE,
+  // here, because two stages consume it - retention (which CPUs MAY reach the
+  // walk) and Engine 3 (the per-CPU GPU decision). A declared IGPU_ALLOWED
+  // excludes CPUs with no verified integrated GPU; every other policy returns
+  // null, so the pool is unchanged.
+  const gpuPolicy = resolveGpuPolicy(configuration, queryInput);
+  const excludedCpuIds = retention.excludedCpuProductIds({
+    gpuPolicy,
+    filteringContext,
+  });
   const retentionResult = retention.retainTopKPerRole({
     filterResult,
     candidateScores,
     topKPerRole: configuration.candidate_caps.top_k_per_role,
     prices: offerResult.prices,
     roleTargets: resolveRoleTargets(configuration, queryInput),
+    roleExclusions: excludedCpuIds === null ? null : { CPU: excludedCpuIds },
   });
 
   // 11b. Decision 27: the zero-build diagnostic. Pure, and computed
@@ -363,11 +375,10 @@ async function runRecommendation(args) {
     // E5 (Decision 42): the resolved VRAM floor (integer) or null; Engine 3
     // receives the floor as policy input and owns the GPU-depth enforcement.
     vramFloorGb: resolveVramFloorGb(configuration, queryInput),
-    // E6 (Decision 43): the per-use-case GPU policy (REQUIRED |
-    // IGPU_ALLOWED) or null; Engine 3 receives it as policy input and owns
-    // the Step 3 decision. The declared profile wins over the legacy
-    // gpu_required_use_cases list for the query's use case.
-    gpuPolicy: resolveGpuPolicy(configuration, queryInput),
+    // E6 (Decision 43): the SAME resolved policy retention consumed above;
+    // Engine 3 owns the per-CPU Step 3 decision. Re-resolving here would be a
+    // second reader of the same configuration for no reason.
+    gpuPolicy,
   });
 
   // 13. Engine 4 STEP 3 (index-aligned with the builds in discovery order; the
