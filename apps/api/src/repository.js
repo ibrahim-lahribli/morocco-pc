@@ -91,11 +91,31 @@ const INSERT_QUERY_SQL = [
  * `persistPassFacts` (migration 019). pg parses a jsonb column into a JS value
  * already, so this row field is an OBJECT here, not a string - the presenter's
  * `parseFloor` handles the string case only for safety.
+ *
+ * Decision 52 added three fields that the presenter needs to answer what each
+ * input CHANGED, and one of them is a second table:
+ *
+ *   - `q.resolution` and `q.priority` are the request's own values, stored since
+ *     the Layer 4 schema existed but never selected here until now. They were
+ *     not omitted by accident: nothing in the response depended on them, and a
+ *     column nobody reads is not a field the API should expose. `input_effects`
+ *     depends on them.
+ *   - `sm.configuration` is the configuration of the model this pass PINNED
+ *     (`q.scoring_model_id`, written once at INSERT - see INSERT_QUERY_SQL). The
+ *     join is LEFT and the configuration is nullable on purpose: a deleted model
+ *     row is UNKNOWN, and inventing the CURRENTLY active model's configuration
+ *     for an older pass would be exactly the kind of retro-fitted claim this
+ *     contract exists to prevent.
+ *
+ * No ORDER or LIMIT is added: the id is the primary key.
  */
 const SELECT_QUERY_SQL = [
-  'SELECT id, budget_amount, currency, use_case, created_at, budget_floor, catalog_version',
-  'FROM recommendation_query',
-  'WHERE id = $1',
+  'SELECT q.id, q.budget_amount, q.currency, q.use_case, q.resolution, q.priority,',
+  '       q.created_at, q.budget_floor, q.catalog_version, q.scoring_model_id,',
+  '       sm.configuration',
+  'FROM recommendation_query q',
+  'LEFT JOIN scoring_model sm ON sm.id = q.scoring_model_id',
+  'WHERE q.id = $1',
 ].join(' ');
 
 /**

@@ -100,6 +100,8 @@ function readRepo(rel) {
 // adds one heading/status => 48 headings, 54 Status lines.
 // Decision 51 (S25 unblock / price history, 2026-10-23) adds one
 // heading/status => 49 headings, 55 Status lines.
+// Decision 52 (input effects, 2026-10-24) adds one heading/status => 50
+// headings, 56 Status lines.
 const decisions = (function checkDecisions() {
   const raw = readRepo('docs/RECOMMENDATION_ENGINE_DECISIONS.md');
   // Line-ending tolerant: the log is stored CRLF, but a Linux checkout
@@ -116,9 +118,9 @@ const decisions = (function checkDecisions() {
     if (inEngine3 && /^### Decision \d+/.test(line)) nested += 1;
     if (/^Status:/.test(line)) status += 1;
   }
-  const ok = global === 49 && nested === 5 && status === 55;
+  const ok = global === 50 && nested === 5 && status === 56;
   if (!ok) {
-    fail('decisions-parse', 'global=' + global + ' (want 49), nested=' + nested + ' (want 5), Status:=' + status + ' (want 55)');
+    fail('decisions-parse', 'global=' + global + ' (want 50), nested=' + nested + ' (want 5), Status:=' + status + ' (want 56)');
     return null;
   }
   pass('decisions-parse', global + ' headings + ' + nested + ' nested = ' + (global + 2) + ' global, ' + status + ' Status: lines');

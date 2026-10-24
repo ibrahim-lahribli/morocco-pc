@@ -230,6 +230,94 @@ test('GET /v1/meta/options matches its contract and labels in French', async () 
   assert.deepEqual(body.currencies.map((option) => option.value), ['MAD']);
   assert.deepEqual(body.priorities.map((option) => option.value), [1, 2, 3, 4, 5]);
   assert.equal(body.currencies[0].label, 'Dirham marocain (MAD)');
+  // Decision 52: the LEGACY model's configuration declares no per-resolution
+  // reader, so `resolution` is not advertised as applied - which is what stops
+  // the wizard asking a question nothing downstream reads (CD-1).
+  assert.deepEqual(body.inputs_applied, ['use_case', 'priority']);
+});
+
+test('GET /v1/meta/options advertises resolution once the model declares a reader', async () => {
+  const app = stub.createTestApp({
+    repository: stub.createRepositoryStub({
+      async selectActiveScoringModel() {
+        return stub.PROFILE_MODEL;
+      },
+    }),
+  });
+  const body = (await app.inject({ method: 'GET', url: '/v1/meta/options' })).json();
+
+  assert.deepEqual(contractErrors(contracts.MetaOptionsSchema, body), []);
+  assert.deepEqual(body.inputs_applied, ['use_case', 'resolution', 'priority']);
+});
+
+test('input_effects states what each input changed, and a GET revisit reports the same thing', async () => {
+  const app = stub.createTestApp();
+  const created = await createRecommendation(app);
+  const body = created.json();
+
+  assert.deepEqual(contractErrors(contracts.RecommendationResponseSchema, body), []);
+  // The fixture's model is the LEGACY shape and the fixture query pins
+  // resolution 1440p / priority 5 with two builds: the legacy list still decides
+  // the GPU requirement, nothing reads the resolution, and the archetype order
+  // is the priority's (5 puts PERFORMANCE first, unlike the default 3). Three
+  // DIFFERENT reasons, one per input - which is what makes this a statement
+  // about the pass rather than a constant.
+  assert.deepEqual(body.input_effects, [
+    { input: 'use_case', effect: 'APPLIED', reason: 'GPU_POLICY_ONLY' },
+    { input: 'resolution', effect: 'NO_EFFECT', reason: 'NO_RESOLUTION_POLICY' },
+    { input: 'priority', effect: 'APPLIED', reason: 'STRATEGY_ORDER' },
+  ]);
+
+  const fetched = await app.inject({ method: 'GET', url: '/v1/recommendations/' + body.id });
+  assert.equal(fetched.statusCode, 200);
+  assert.deepEqual(
+    fetched.json().input_effects,
+    body.input_effects,
+    'POST and GET derive the effects from the same persisted rows'
+  );
+});
+
+test('input_effects is UNKNOWN when the pass did not record a model configuration', async () => {
+  // Models the LEFT JOIN in SELECT_QUERY_SQL missing its row (a deleted model):
+  // `configuration` is absent, `scoring_model_id` is still recorded. The answer
+  // must be UNKNOWN - never an invented effect, and never the CURRENT model's
+  // configuration borrowed on the pass's behalf.
+  const row = Object.assign({}, stub.QUERY_ROW, { configuration: undefined });
+  const app = stub.createTestApp({
+    repository: stub.createRepositoryStub({
+      async readRecommendationResult() {
+        return { found: true, query: row, rows: stub.SAMPLE_ROWS };
+      },
+    }),
+  });
+  const body = (await app.inject({ method: 'GET', url: '/v1/recommendations/' + row.id })).json();
+
+  assert.deepEqual(contractErrors(contracts.RecommendationResponseSchema, body), []);
+  assert.deepEqual(body.input_effects[0], {
+    input: 'use_case', effect: 'UNKNOWN', reason: 'NOT_RECORDED',
+  });
+  assert.deepEqual(body.input_effects[1], {
+    input: 'resolution', effect: 'UNKNOWN', reason: 'NOT_RECORDED',
+  });
+  // Priority needs no configuration: the builds' strategy keys are enough.
+  assert.deepEqual(body.input_effects[2], {
+    input: 'priority', effect: 'APPLIED', reason: 'STRATEGY_ORDER',
+  });
+
+  // The neutral value is still NO_EFFECT with the SAME missing configuration:
+  // 3 is the order an omitted priority produces, so it cannot be credited with
+  // a change - the one case where the two facts (provided, and effective) part.
+  const neutral = Object.assign({}, row, { priority: 3 });
+  const neutralBody = (await stub.createTestApp({
+    repository: stub.createRepositoryStub({
+      async readRecommendationResult() {
+        return { found: true, query: neutral, rows: stub.SAMPLE_ROWS };
+      },
+    }),
+  }).inject({ method: 'GET', url: '/v1/recommendations/' + neutral.id })).json();
+  assert.deepEqual(neutralBody.input_effects[2], {
+    input: 'priority', effect: 'NO_EFFECT', reason: 'DEFAULT_ORDER',
+  });
 });
 
 test('GET /v1/health matches its contract', async () => {
@@ -251,7 +339,7 @@ test('the OpenAPI document is served as JSON at /v1/docs/json', async () => {
   const document = response.json();
   assert.equal(document.openapi, '3.0.3');
   assert.equal(document.info.title, 'morocco-pc API');
-  assert.equal(document.info.version, '1.6.0', 'the contract version names the current surface (the catalog reads + history)');
+  assert.equal(document.info.version, '1.7.0', 'the contract version names the current surface (adds input effects)');
   assert.ok(document.paths['/v1/recommendations'], 'the recommendation path is documented');
   assert.ok(document.paths['/v1/recommendations/{id}'], 'the read path is documented');
 });

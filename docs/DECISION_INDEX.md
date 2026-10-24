@@ -3,7 +3,7 @@
 **GENERATED FILE — do not edit by hand.** Regenerate with `node scripts/gen-decision-index.js`
 (or `npm run gen:decisions`) after any change to `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 `node scripts/gen-decision-index.js --check` exits non-zero when this file is stale.
-Generated 2026-10-23 from RECOMMENDATION_ENGINE_DECISIONS.md (5326 lines).
+Generated 2026-10-23 from RECOMMENDATION_ENGINE_DECISIONS.md (5376 lines).
 
 Generated for audit finding **D5** (decision-log navigability): one row per decision with number,
 title, status, date and line anchor. Every status comes from the normalized `Status:` line at the
@@ -17,9 +17,9 @@ section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` a
 
 ## Open decisions
 
-None. All 51 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-23.
+None. All 52 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-23.
 
-## Global decisions (49 `## Decision` headings + 2 nested 4/5 aliases = 51)
+## Global decisions (50 `## Decision` headings + 2 nested 4/5 aliases = 52)
 
 | # | Title | Status | Date | DECISIONS.md line |
 |---|---|---|---|---|
@@ -72,6 +72,7 @@ None. All 51 global decisions (including the two nested 4/5 aliases) and all 5 E
 | 49 | `TRUST_PROXY` names the trusted PROXY ADDRESS, never a hop count, and both unsafe shapes fail at startup (Platform P2 Sprint 2) | RESOLVED 2026-10-17; IMPLEMENTED 2026-10-17 — the rate limiter keys on the client IP only when `TRUST_PROXY` names the proxy that forwarded the request; the default ignores `X-Forwarded-For`, and a hop count or `true` is refused before the process listens. | 2026-10-17 | 5142 |
 | 50 | the catalog is a keyset page over `slug`, and every catalog price carries its Decision 35 provenance (Platform P2 Sprint 3) | RESOLVED 2026-10-17; IMPLEMENTED 2026-10-17 — the catalog is served read-only: `GET /v1/catalog/products` pages ACTIVE products with a keyset on the unique `slug`, and `GET /v1/catalog/products/:slug` serves the spec row, every eligible offer and a derived `price_status`; every price travels with its provenance class, and an unpriced product is listed rather than hidden. | 2026-10-17 | 5197 |
 | 51 | a price history is one point per observation MOMENT, and its summary reports thin data instead of inventing a trend (S25 unblock) | RESOLVED 2026-10-23; IMPLEMENTED 2026-10-23 — `GET /v1/catalog/products/:slug/price-history` serves a product's recorded observations oldest-first, with each point's Decision 35 provenance class and a summary whose change fields stay null until there are two observation moments; contract **v1.6**. | 2026-10-23 | 5251 |
+| 52 | each accepted input has ONE reader, and every reply states what it changed (input effects, contract v1.7) | RESOLVED 2026-10-24; IMPLEMENTED 2026-10-24 — `use_case`, `resolution` and `priority` are documented by the ONE reader each has, `GET /v1/meta/options` serves `inputs_applied` (the deployment fact), and both recommendation verbs serve `input_effects` (the per-pass fact) in the closed vocabulary `APPLIED \| NO_EFFECT \| UNKNOWN`; contract **v1.7**, no migration. | 2026-10-24 | 5326 |
 
 ## Engine 3 contract decisions (Engine-3-local numbering; local 4–5 ARE global Decisions 4–5)
 
@@ -85,9 +86,9 @@ None. All 51 global decisions (including the two nested 4/5 aliases) and all 5 E
 
 ## Reconciliation
 
-- Global decisions: 51 = 49 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
+- Global decisions: 52 = 50 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
 - Engine-3-local contracts: 5 (`### Decision 1–5` under "Engine 3 contract decisions"; local 1–3 are NOT global 1–3, local 4/5 ARE global 4/5 — AGENTS.md §2).
-- Parsed headings: 49 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
+- Parsed headings: 50 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
 - Status source: each entry’s normalized `Status:` line (first content line). The generator exits
   non-zero if a decision is added without one, so this table cannot go stale silently.
 - Open decisions: none.

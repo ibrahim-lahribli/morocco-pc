@@ -70,10 +70,24 @@ const QUERY_ROW = Object.freeze({
   budget_amount: '20000',
   currency: 'MAD',
   use_case: 'GAMING',
+  // Stored since the Layer 4 schema existed; selected by SELECT_QUERY_SQL only
+  // since Decision 52, which needs them to state each input's effect.
+  resolution: '1440p',
+  // 5, not 3: 3 IS the default archetype order, so it is provably NO_EFFECT for
+  // `priority` (Decision 52) and a fixture at 3 could not cover the APPLIED path.
+  priority: 5,
   created_at: new Date('2026-10-07T09:00:00.000Z'),
   budget_floor: SAMPLE_BUDGET_FLOOR,
   // The catalog version the pass recorded (migration 021 / Decision 47).
   catalog_version: TEST_CATALOG_VERSION,
+  // The model the pass PINNED, and its configuration as the LEFT JOIN in
+  // SELECT_QUERY_SQL returns it (a jsonb column pg has already parsed). The
+  // ACTIVE_MODEL is the LEGACY shape on purpose: it is what the real shared
+  // database serves, and its absence of `use_case_profiles` is the fact
+  // `input_effects` must report as NO_EFFECT for resolution rather than invent
+  // an effect for.
+  scoring_model_id: ACTIVE_MODEL.id,
+  configuration: ACTIVE_MODEL.configuration,
 });
 
 /**
@@ -232,6 +246,10 @@ function createEngineStub(runFullRun) {
     calls,
     catalogCalls: [],
     useCaseVocabulary: realEngine.useCaseVocabulary,
+    // The REAL multiplier table, forwarded for the same reason: `input_effects`
+    // claims whether resolution moved the GPU target, and a stub with its own
+    // copy could agree with a test while the API disagreed with retention.
+    resolutionMultiplier: realEngine.resolutionMultiplier,
     // The catalog's role filter is the ENGINE's vocabulary (component_role ->
     // product_category), so the stub forwards the real derivation: a copy here
     // could agree with a test while the served API disagreed with itself.

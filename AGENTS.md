@@ -28,7 +28,7 @@ the engine's public barrels (`src/recommendation/*/index.js`), the `scripts/` CL
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–51). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–52). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
    To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
@@ -252,7 +252,7 @@ remote already stores (`ref` = the branch to run on) — keep that token out of 
 untouched). On `push`/`pull_request` touching `apps/web/**` (and `workflow_dispatch`; never
 `schedule`), a `web` job runs in `apps/web`: `npm ci`, then `typecheck`, `lint`, `check:tokens`,
 `check:i18n`, `check:api-types` (the S4 contract-drift gate, so the triggers also include
-`apps/api/test/unit/openapi-v1.6.json`), `build`, `playwright install --with-deps chromium`,
+`apps/api/test/unit/openapi-v1.7.json`), `build`, `playwright install --with-deps chromium`,
 `npm test` and `test:lighthouse` (the ENFORCED budgets on a fixture result page — `error` level,
 median of three, since S19) on Node 22
 — uploading `apps/web/test-results` when a run fails and `apps/web/.lighthouseci` always. It
@@ -277,7 +277,7 @@ Arabic guide bodies, `ar` hreflang + sitemap entries, and a locale key/placehold
 states (`e2e/legal.spec.ts`, `e2e/analytics.spec.ts`, `e2e/states.spec.ts`), S23 the compare view
 (`e2e/compare.spec.ts`, 11 specs) and S25's saved builds at `/{locale}/enregistrements`
 (`e2e/saved.spec.ts` 11, `e2e/saved-model.spec.ts` 12, plus 2 footer-entry specs in
-`e2e/shell.spec.ts`): the suite is **361 specs**, measured 2026-10-23 with `E2E_BROWSER_API=1` —
+`e2e/shell.spec.ts`) plus S26's input effects (`e2e/inputs-applied.spec.ts`, 5 specs, Decision 52): the suite is **366 specs**, measured 2026-10-24 without `E2E_BROWSER_API` as **364 passed / 2 skipped** (the earlier 361 was measured 2026-10-23 with `E2E_BROWSER_API=1` —
 **360 passed and 1 skipped**, the skip being `e2e/wizard-engine.spec.ts` (the opt-in real-engine
 harness below); without that env var it is 359 passed and 2 skipped. The last CI evidence for this
 job is the S22 runs listed below — S23 and S25 are local commits, not pushed, so their figures are

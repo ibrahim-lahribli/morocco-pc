@@ -14,7 +14,7 @@ databases now carry the schema it reads (019 + 020; shared applied 2026-10-15), 
 the write-safety default still points the API at the isolated branch - see *Database
 target*.
 
-**Contract v1.6 (2026-10-23):** v1.1 (2026-10-14) surfaced the persisted pass
+**Contract v1.7 (2026-10-24):** v1.1 (2026-10-14) surfaced the persisted pass
 facts - `budget_floor`, `engine_version` and each build's `strategy_key` became
 columns in migration `019_recommendation_pass_facts.sql` (Decision 46), so POST
 and GET no longer differ on any persisted field. v1.2 adds product identity:
@@ -39,7 +39,10 @@ disclaimer. See *GET /v1/catalog/products*. **v1.6 adds the price history** (S25
 Decision 51): `GET /v1/catalog/products/:slug/price-history` serves the observations behind
 one product's price, oldest first, one point per observation MOMENT at that moment's
 cheapest price, and a summary whose change fields stay `null` until there are two moments.
-See *GET /v1/catalog/products/:slug/price-history*.
+See *GET /v1/catalog/products/:slug/price-history*. **v1.7 adds input effects** (Decision 52):
+`GET /v1/meta/options` names which inputs the active model READS (`inputs_applied`), and every
+recommendation reply states what each input changed in THAT pass (`input_effects`). Additive only:
+no path and no existing field changed. See *What each input changes*.
 
 **`catalog_version` and the preset ribbon are served on BOTH databases since 2026-10-19.**
 Migrations 021 and 022 were applied to the shared database that day from restore point
@@ -473,8 +476,8 @@ default-off, separate-bucket and spoofed-prefix behaviours are pinned by
 | `budget_amount` | yes | A JSON **number** > 0 (max 1,000,000). A numeric *string* is rejected — the engine's loader is strict, so the API says so at the edge. |
 | `currency` | yes | Exactly 3 characters, and one of the advertised values. |
 | `use_case` | yes | One of the advertised values (see *Option vocabulary*). |
-| `resolution` | no | Advertised value. Recorded on the query; scales the GPU retention target and gates the optional per-resolution VRAM floor. Never changes a score, and does not move the top build on today's catalog. |
-| `priority` | no | Integer 1–5. Recorded on the query; sets the ORDER of the returned archetypes (and each build's `strategy_key`). Never changes a score. |
+| `resolution` | no | Advertised value. Recorded on the query; multiplies the **GPU** retention target only (1080p ×1.0, 1440p ×1.25, 2160p ×1.5) and gates the optional per-resolution VRAM floor. Never changes a score; `input_effects` reports what it did in this pass. |
+| `priority` | no | Integer 1–5. Recorded on the query; decides which strategy is tried FIRST, so it sets the order of the returned archetypes and — because each pick claims a (CPU, GPU) pair — which archetype claims a contested one. Never changes a score, and 3 (the default order) changes nothing relative to omitting it. |
 
 Unknown fields are **rejected**, not ignored (`additionalProperties: false` with
 ajv `removeAdditional: false`), so a typo is a 422 rather than a silent default.
@@ -713,7 +716,7 @@ observation MOMENT, oldest first.
   "may this offer be recommended now", and pruning history by it would rewrite the past.
 - **Nothing else changed.** v1.6 adds this one path - no field on the existing paths gained,
   lost or changed type - and the served document is pinned byte-for-byte by
-  `apps/api/test/unit/openapi-v1.6.json`.
+  `apps/api/test/unit/openapi-v1.7.json`.
 
 ## Response shape
 
@@ -738,6 +741,11 @@ observation MOMENT, oldest first.
   "catalog_version": "f6df98b7588334800b687280242eb95f",
   "reused": false,
   "reason": null,
+  "input_effects": [
+    { "input": "use_case", "effect": "APPLIED", "reason": "USE_CASE_PROFILE" },
+    { "input": "resolution", "effect": "APPLIED", "reason": "GPU_TARGET_SCALED" },
+    { "input": "priority", "effect": "APPLIED", "reason": "STRATEGY_ORDER" }
+  ],
   "disclaimer": "Prix indicatifs, non actualisés.",
   "served_by": { "engine_version": "a1b2c3d" },
   "builds": [
@@ -809,6 +817,16 @@ Each build also carries its own `engine_version` and `strategy_key`: which E4
 archetype (Decision 41) nominated that rank. Both are read per result row, so two
 ranks in one reply can legitimately carry different strategies.
 
+**`input_effects` is the third request-shaped field, and it is the only one that
+claims something about the INPUTS.** It is derived from the same rows on both
+verbs (see *What each input changes*), so it is not a request fact in the sense
+`reused` is - a revisit reproduces it - but it is also never read back from a
+column, because nothing stores it. Three consequences are deliberate: an older
+pass whose model row is gone reads UNKNOWN rather than the current model's
+answer; a `NO_EFFECT` names its proof instead of leaving the user to guess; and
+an `APPLIED` says what the input shaped, never that a different build would have
+been better.
+
 ### `price_status`
 
 **Derived, never stored.** `"verified"` only when **every** component's persisted
@@ -845,6 +863,7 @@ labels** (the product is the Moroccan market).
 | `use_cases` | The active scoring model's use-case vocabulary: the `use_case_profiles` keys when the model declares them (`launch-v2`), otherwise the legacy `configuration.gpu_required_use_cases` (`seed-minimal-v1`). Not a `DISTINCT` over submitted values, and not a second hardcoded list. Order follows the JSONB key order of `use_case_profiles`, not the declaration order in the seed file. |
 | `currencies` | A fixed allow-list (`MAD`), not a `DISTINCT` over `store_offer`. Stage 1 matches currency by exact equality, so advertising an unpriceable currency would be a lie. |
 | `resolutions`, `priorities` | Fixed lists. **Stored on the profile/query and read downstream — `resolution` by retention, `priority` by ranking; neither changes a score.** |
+| `inputs_applied` | NOT an option list: the subset of `use_case` / `resolution` / `priority` the ACTIVE model gives a reader at all. `resolution` is omitted when the model declares neither a GPU spend target nor a `resolution_profiles` floor, so a form can stop asking it. Advisory only — an omitted input is still accepted. |
 
 The option list and the POST validator read ONE array, derived in one place:
 `apps/api/src/engine.js` calls the scoring barrel's `listUseCases` (the API's
@@ -872,7 +891,82 @@ measured effect here is nil: the catalog exposes only one or two distinct (CPU,
 GPU) pairs - never the three an archetype set needs - so all three strategies
 claim the same builds, and no active model declares `resolution_profiles`.
 `recommendation_profile.default_resolution` is read by nothing. A frontend may
-show these as preferences; it must not promise that changing one changes the build.
+show these as preferences; the per-pass truth is served as `input_effects` (see *What each input changes*), and it still must not promise that changing one changes the build.
+
+## What each input changes (contract v1.7)
+
+The three accepted inputs are not decorations, and they are not "applied" in the
+same sense. Each has exactly one reader in the pipeline, and what it changes is
+narrower than a score:
+
+| Input | What it changes | What it never changes |
+|---|---|---|
+| `use_case` | Selects the scoring model's `use_case_profiles[use_case]`: its `gpu_policy` decides whether a discrete GPU is required (Decision 43), and its `spend_targets` become the per-role price targets retention aims at (Decision 39). With no profile, the legacy `gpu_required_use_cases` list still decides the GPU requirement. | It does not touch Engine 4's arithmetic. Two use cases whose profiles are identical produce identical scores. |
+| `resolution` | Multiplies the **GPU** spend target only (1080p ×1.0, 1440p ×1.25, 2160p ×1.5 — `retention/targets.js`), and selects a declared `resolution_profiles[resolution].vram_floor_gb` floor when the model declares one (Decision 42). | It does not change a score, and it scales no other role's target. |
+| `priority` | Orders the archetype strategies (1–2 VALUE first, 3 BALANCED first, 4–5 PERFORMANCE first), so it decides which strategy is tried first and — because each pick claims a (CPU, GPU) pair — which archetype claims a contested pair. That fixes each build's `strategy_key` and its rank (Decision 41). | It does not change a score, and it is not a weight: no scoring term reads it. **3 is also the order an omitted priority produces**, so it is reported `NO_EFFECT` / `DEFAULT_ORDER` rather than credited with a change it did not make. |
+
+### `inputs_applied` (on `GET /v1/meta/options`)
+
+A **deployment** fact: the subset of `use_case` / `resolution` / `priority` the
+ACTIVE model's configuration gives a reader at all. `use_case` and `priority`
+always appear; `resolution` appears only when the model declares a GPU spend
+target (a POSITIVE share) or a `resolution_profiles` entry. A model declaring neither (the legacy
+`seed-minimal-v1`) therefore serves `["use_case", "priority"]`, and the web wizard
+stops asking the resolution question rather than recording an answer nothing
+reads. The list is **advisory**: an input it omits is still ACCEPTED by POST and
+still recorded on the query row.
+
+### `input_effects` (on both recommendation verbs)
+
+A **per-pass** fact, derived on the read path from the rows the pass persisted:
+the query's own `use_case` / `resolution` / `priority`, the configuration of the
+scoring model the query recorded (`recommendation_query.scoring_model_id`, joined
+LEFT so a deleted model row reads as UNKNOWN rather than borrowing the current
+one), and the builds' `strategy_key`s. POST and GET therefore report the same
+three records, and a revisit cannot claim an effect the original pass did not
+have.
+
+Each record is `{ input, effect, reason }`, in the order `use_case`,
+`resolution`, `priority` — always all three, so an omitted optional input is
+reported rather than left for a client to infer:
+
+| `effect` | Means |
+|---|---|
+| `APPLIED` | The input was read **and shaped this pass**: it selected a declared profile, scaled the GPU target away from neutral, selected a declared VRAM floor, or selected a NON-DEFAULT archetype order (which strategy is tried first). It does **not** claim the top build would have differed — there is no persisted counterfactual, so the API does not assert one. |
+| `NO_EFFECT` | Provably could not change this pass, and `reason` names the proof. |
+| `UNKNOWN` | The facts needed to say either way were not recorded (a missing model row, an unrecognised stored value). NULL means UNKNOWN, and UNKNOWN is never reported as either of the others. |
+
+`reason` is a closed list for the writers in this repository; a client must map it
+and fall back to the effect's generic sentence, never print it raw (the same rule
+as `reasons[]` below):
+
+| `reason` | Effect | Fact |
+|---|---|---|
+| `USE_CASE_PROFILE` | APPLIED | A declared `use_case_profiles` entry was selected. |
+| `GPU_POLICY_ONLY` | APPLIED | No profile; the legacy `gpu_required_use_cases` list was consulted. |
+| `VRAM_FLOOR` | APPLIED | A declared per-resolution VRAM floor was selected. |
+| `GPU_TARGET_SCALED` | APPLIED | The GPU spend target was multiplied by a non-neutral factor. |
+| `NEUTRAL_MULTIPLIER` | NO_EFFECT | The resolution's multiplier is exactly 1.0. |
+| `NO_GPU_TARGET` | NO_EFFECT | The selected profile declares no GPU spend target (or a zero share, which the multiplier cannot move). |
+| `NO_RESOLUTION_POLICY` | NO_EFFECT | The model declares no per-resolution read. |
+| `STRATEGY_ORDER` | APPLIED | The priority selected an archetype order other than the default one, so it chose which strategy is tried first. |
+| `DEFAULT_ORDER` | NO_EFFECT | The priority (3) IS the order an omitted one produces. |
+| `NO_BUILDS` | NO_EFFECT | Nothing was assembled for it to order. |
+| `NOT_PROVIDED` | NO_EFFECT | The request omitted the optional input. |
+| `NOT_RECORDED` | UNKNOWN | The pass did not record what the answer needs. |
+| `UNRECOGNISED_VALUE` | UNKNOWN | A stored value outside the accepted vocabulary. |
+
+Two facts about `priority` are worth stating because a client maps the reason:
+`NO_BUILDS` means the pass returned NO build at all, while a pass whose builds came
+back with no recorded `strategy_key` (a pre-019 result row) reports
+`UNKNOWN` / `NOT_RECORDED` - the builds exist, the order they came back in is what
+was not recorded. And a zero GPU share in a profile is `NO_GPU_TARGET`, not
+`GPU_TARGET_SCALED`: `0 x multiplier` is 0, so the resolution cannot have moved it.
+
+Pinned by `apps/api/test/unit/inputs.test.js` (the derivation and every reason),
+`apps/api/test/unit/contract.test.js` (POST/GET agreement and the UNKNOWN case),
+and `apps/web/e2e/inputs-applied.spec.ts` (the parser and the rendered block in
+both locales).
 
 ## Errors
 
@@ -967,7 +1061,7 @@ profile id is captured before the query is deleted).
   `TOP_N_PERSISTED` builds, so the list is bounded by construction.
 - **No 202/polling path.** A POST is synchronous; measure before adding
   asynchronous job handling.
-- **`resolution`/`priority` are accepted but inert** (see *Option vocabulary*).
+- **`resolution`/`priority` are read but change no score, and on today's catalog they rarely change the answer** (see *What each input changes*). `input_effects` reports the per-pass truth, so a client never has to guess; the measured emptiness is a property of the catalog (one or two distinct (CPU, GPU) pairs), not of an unread field.
 - **The identity surface needs migration 020 wherever the API points.** `components[].name` is `COALESCE(product.display_name, product.name)` and `components[].slug` is `product.slug`; against a database below 020 those columns do not exist, the component read fails `42703`, and the request answers the generic `500 INTERNAL_ERROR`. Both databases are at 020 since 2026-10-15 (the shared catalog's 104 products all carry distinct CHECKed slugs and no `Seed `-prefixed `display_name`), so on either target the prefix is gone from served names and every component carries a slug.
 - **`strategy_key` / `engine_version` are recorded but not yet consumed.** They are persisted and served; no client reads them back yet, and their golden-harness coverage (A10) is still owed (**OG-46** — OG-45 tracks the persistence itself, which is done wherever migration 019 is applied).
 - **A zero-build pass is deploy-blind in the reuse key.** `engine_version` is recorded on `recommendation_result` rows (Decision 46), and a pass that assembled nothing has none, so the key can only require that *no* result row contradicts the answering deploy. A committed zero-build pass therefore survives a redeploy in the key. Its `budget_floor` is catalog-derived and the catalog IS in the key, so the exposure is narrow; the fix, when it matters, is to record the engine version on the query row too.

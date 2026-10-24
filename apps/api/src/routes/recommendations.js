@@ -41,6 +41,15 @@
  * the persisted rows could answer it, which is exactly why it is not derivable
  * from them.
  *
+ * INPUT EFFECTS (Decision 52). `input_effects` IS derived from the persisted
+ * rows by `../inputs.js` - the query's stored `use_case` / `resolution` /
+ * `priority`, the configuration of the model the row PINNED, and the builds'
+ * `strategy_key`s - so a GET revisit reports the same thing the original POST
+ * did. The only injected fact is the engine's resolution multiplier, forwarded
+ * from `app.engine` so the served arithmetic and retention's arithmetic have one
+ * owner. A pass whose model row is gone reports UNKNOWN; it never borrows the
+ * currently active model's configuration.
+ *
  * Status codes:
  *   201  THIS request created a pass that produced at least one build
  *   200  a reused pass (`reused: true`), or a valid pass that produced ZERO
@@ -53,6 +62,7 @@
  *   503  no active scoring model
  */
 
+const inputs = require('../inputs');
 const meta = require('../meta');
 const {
   DISCLAIMER,
@@ -234,11 +244,12 @@ function priceStatusFor(components) {
  * the only source of, and which is therefore null for any pass that did not
  * just run) and `reused` (a request fact, `false` on every GET).
  *
- * @param {object} source { snapshot, reason, deployVersion, reused }
+ * @param {object} source { snapshot, reason, deployVersion, reused,
+ *        resolutionMultiplier }
  * @returns {object} the response body
  */
 function presentRecommendationResult(source) {
-  const { snapshot, reason, deployVersion, reused } = source;
+  const { snapshot, reason, deployVersion, reused, resolutionMultiplier } = source;
   const query = snapshot.query || {};
   const grouped = groupBuilds(snapshot.rows || []);
   // The top-level engine_version is the one recorded on the persisted result
@@ -293,6 +304,17 @@ function presentRecommendationResult(source) {
     // that no persisted row could answer: true only when THIS POST found an
     // equivalent committed pass and served it instead of running one.
     reused: reused === true,
+    // Decision 52: what each accepted input changed in THIS pass, derived from
+    // the rows above. Always all three entries - an omitted optional input is
+    // NO_EFFECT/NOT_PROVIDED, never a missing field a client has to interpret.
+    input_effects: inputs.inputEffects({
+      configuration: query.configuration,
+      useCase: query.use_case,
+      resolution: query.resolution,
+      priority: query.priority,
+      strategyKeys: grouped.map((build) => build.strategy_key),
+      resolutionMultiplier,
+    }),
     reason: reason === undefined ? null : reason,
     disclaimer: DISCLAIMER,
     served_by: { engine_version: deployVersion },
@@ -441,6 +463,7 @@ function registerRecommendationRoutes(app) {
         reason,
         deployVersion: app.engineVersion,
         reused,
+        resolutionMultiplier: app.engine.resolutionMultiplier,
       });
       // 201 means THIS request created a pass that produced builds. A reuse
       // created nothing to be created - it is a read - and a zero-build pass is
@@ -486,6 +509,9 @@ function registerRecommendationRoutes(app) {
       // equivalent pass, which is a fact about that request and not about the
       // resource being fetched.
       reused: false,
+      // Same injected engine fact as POST, so a revisit derives the identical
+      // `input_effects` from the same rows.
+      resolutionMultiplier: app.engine.resolutionMultiplier,
     }));
   });
 }

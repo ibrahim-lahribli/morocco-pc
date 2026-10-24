@@ -54,6 +54,23 @@ test('every value /v1/meta/options advertises is accepted by POST', async () => 
   }
 });
 
+test('the inputs list is ADVISORY: an input it omits is still accepted by POST', async () => {
+  // Decision 52 separates two questions the old docs ran together. `inputs_applied`
+  // says whether the ACTIVE model reads an input (so a form can stop asking it);
+  // it says nothing about whether the API ACCEPTS it. A caller that still sends
+  // a resolution against a legacy model must get an answer, not a 422 - the
+  // value is stored and reported as NO_EFFECT by `input_effects`.
+  const app = stub.createTestApp();
+  const options = (await app.inject({ method: 'GET', url: '/v1/meta/options' })).json();
+
+  assert.deepEqual(options.inputs_applied, ['use_case', 'priority']);
+  assert.ok(!options.inputs_applied.includes('resolution'));
+
+  const response = await postWith(app, { resolution: '2160p', priority: 5 });
+  assert.notEqual(response.statusCode, 422, 'a stored-but-unread input is not a validation error');
+  assert.notEqual(response.statusCode, 503);
+});
+
 test('a value that is NOT advertised is rejected in every dimension', async () => {
   const app = stub.createTestApp();
 

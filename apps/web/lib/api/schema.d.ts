@@ -487,6 +487,7 @@ export interface paths {
                                 value: string | number;
                                 label: string;
                             }[];
+                            inputs_applied: string[];
                         };
                     };
                 };
@@ -737,6 +738,11 @@ export interface paths {
                             reused: boolean;
                             reason: string | null;
                             disclaimer: string;
+                            input_effects: {
+                                input: "use_case" | "resolution" | "priority";
+                                effect: "APPLIED" | "NO_EFFECT" | "UNKNOWN";
+                                reason: string;
+                            }[];
                             served_by: {
                                 engine_version: string;
                             };
@@ -790,6 +796,11 @@ export interface paths {
                             reused: boolean;
                             reason: string | null;
                             disclaimer: string;
+                            input_effects: {
+                                input: "use_case" | "resolution" | "priority";
+                                effect: "APPLIED" | "NO_EFFECT" | "UNKNOWN";
+                                reason: string;
+                            }[];
                             served_by: {
                                 engine_version: string;
                             };
@@ -946,6 +957,11 @@ export interface paths {
                             reused: boolean;
                             reason: string | null;
                             disclaimer: string;
+                            input_effects: {
+                                input: "use_case" | "resolution" | "priority";
+                                effect: "APPLIED" | "NO_EFFECT" | "UNKNOWN";
+                                reason: string;
+                            }[];
                             served_by: {
                                 engine_version: string;
                             };
