@@ -50,6 +50,19 @@
  * pair once). The FAIL gate itself is unchanged; the verdict-level field
  * is kept and validated but no longer consumed.
  *
+ * Swap preview (Decision 55, CD-8): evaluateBuildReplacement is the ONE
+ * public way to ask "what would this build be if ONE role held a different
+ * component?" - a pure, read-only evaluation that reads the SAME
+ * PAIRWISE_CHECKS table, the SAME evaluatePairCheck argument construction and
+ * the same Engine 2D evaluators as the walk above, and evaluates EVERY check
+ * whose pair touches the replaced role in EITHER position (the CPU keys no
+ * check at all: its whole verdict lives in the MOTHERBOARD, RAM and
+ * CPU_COOLER entries that name it as partner). It substitutes the candidate
+ * into a COPY of the picked map - the build is never mutated, nothing is
+ * persisted - and answers `{ status, pairs, unknown_pairwise_count }`, where
+ * each pair keeps its aggregated status and reason code. A missing partner
+ * contributes no pair, exactly as in the walk, so an omitted GPU adds none.
+ *
  * Component compatibility notes (Decision 22 item 8b): every emitted
  * component carries compatibility_notes - the picked verdict's Engine 2D
  * CONDITIONAL notes (item 8a) narrowed by identity to the partner
@@ -334,7 +347,10 @@ function readTraversalInputs(engine3Input) {
  * expansion by the caller.
  */
 function validateVerdict(entry, index) {
-  const where = `results.${index}`;
+  // Decision 55: a replacement candidate is validated by THIS gate too, so
+  // `index` also accepts a label (`candidate`, `picked.RAM`) to name the
+  // caller's own input instead of a results-array position.
+  const where = typeof index === 'string' ? index : `results.${index}`;
   if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
     fail(ERROR_CODES.INVALID_CANDIDATE, where, `Result entry "${where}" must be an object`);
   }
@@ -562,11 +578,59 @@ const PAIRWISE_CHECKS = Object.freeze({
 });
 
 /**
+ * Decision 55: the ONE construction of a check's canonical left/right
+ * arguments. `check.leftIsNew` says whether the check's KEYED role (the
+ * later-picked one that owns the entry) is the canonical LEFT argument;
+ * everywhere except case_radiator the canonical left role is the partner.
+ * The assembly gate, the build-local UNKNOWN count and the swap preview all
+ * go through here, so a hypothetical replacement can never be judged by
+ * different arguments than the walk that produced the build.
+ */
+function evaluatePairCheck(filteringContext, check, keyedVerdict, partnerVerdict) {
+  const left = check.leftIsNew ? keyedVerdict : partnerVerdict;
+  const right = check.leftIsNew ? partnerVerdict : keyedVerdict;
+  return aggregateCompatibilityResults(check.evaluator(filteringContext, left, right));
+}
+
+/**
+ * Decision 55: the ONE traversal of PAIRWISE_CHECKS over a picked map.
+ * Visits every check whose keyed role AND partner role are both picked, in
+ * EXPANSION_ORDER then table order - no sorting, so the visit order is
+ * deterministic. `visit` may return exactly false to stop the walk.
+ */
+function forEachPickedCheck(picked, visit) {
+  for (const role of EXPANSION_ORDER) {
+    const keyedVerdict = picked[role];
+    if (keyedVerdict === undefined) {
+      continue;
+    }
+    const checks = PAIRWISE_CHECKS[role];
+    if (checks === undefined) {
+      continue;
+    }
+    for (const check of checks) {
+      const partnerVerdict = picked[check.partnerRole];
+      if (partnerVerdict === undefined) {
+        continue;
+      }
+      if (visit(role, check, keyedVerdict, partnerVerdict) === false) {
+        return;
+      }
+    }
+  }
+}
+
+/**
  * One pass of the role's pairwise checks against the already-picked
  * partners. Returns true on the first aggregated pair FAIL. PASS and UNKNOWN
  * pairs stay eligible (Decision 16); an absent partner - the GPU-omit path,
  * or a role bucket that was empty - contributes no pair at all, mirroring
  * Engine 2D's zero-partners-is-never-a-FAIL semantics.
+ *
+ * Deliberately ROLE-SCOPED, unlike forEachPickedCheck: the DFS calls this once
+ * per tentative pick, so scanning the whole picked map here would multiply
+ * the cost of assembly for an answer the caller already knows it wants. The
+ * table and the left/right construction are still the shared ones.
  */
 function firstPairFailure(filteringContext, role, verdict, picked) {
   const checks = PAIRWISE_CHECKS[role];
@@ -578,10 +642,10 @@ function firstPairFailure(filteringContext, role, verdict, picked) {
     if (partner === undefined) {
       continue;
     }
-    const left = check.leftIsNew ? verdict : partner;
-    const right = check.leftIsNew ? partner : verdict;
-    const pair = aggregateCompatibilityResults(check.evaluator(filteringContext, left, right));
-    if (pair.status === FINAL_STATUSES.FAIL) {
+    if (
+      evaluatePairCheck(filteringContext, check, verdict, partner).status ===
+      FINAL_STATUSES.FAIL
+    ) {
       return true;
     }
   }
@@ -590,40 +654,175 @@ function firstPairFailure(filteringContext, role, verdict, picked) {
 
 /**
  * Decision 23 (O2): count the UNKNOWN pairs among THIS build's picked
- * components. Same table and same canonical left/right construction as
- * firstPairFailure, but with no early return: every entry whose partner is
- * also picked is evaluated and aggregated, and each pair whose status is
- * UNKNOWN increments the count. Later-picked roles key every pair exactly
- * once (roles with no PAIRWISE_CHECKS entry are covered via their partner's
- * entry); an absent partner (GPU-omit path, empty bucket) contributes no
+ * components. Same table, same canonical left/right construction
+ * (evaluatePairCheck) and same traversal (forEachPickedCheck) as
+ * evaluateBuildReplacement, but with no early return: every entry whose
+ * partner is also picked is evaluated and aggregated, and each pair whose
+ * status is UNKNOWN increments the count. Later-picked roles key every pair
+ * exactly once (roles with no PAIRWISE_CHECKS entry are covered via their
+ * partner's entry); an absent partner (GPU-omit path, empty bucket) contributes no
  * pair. Only UNKNOWN is counted (never "not PASS"); the verdict-level
  * unknown_pairwise_count field is never read here.
  */
 function countBuildLocalUnknownPairs(filteringContext, picked) {
   let count = 0;
-  for (const role of EXPANSION_ORDER) {
-    const verdict = picked[role];
-    if (verdict === undefined) {
-      continue;
+  // `_keyedRole` is unused on purpose: the count does not care who keys the pair.
+  forEachPickedCheck(picked, (_keyedRole, check, keyedVerdict, partnerVerdict) => {
+    if (
+      evaluatePairCheck(filteringContext, check, keyedVerdict, partnerVerdict).status ===
+      FINAL_STATUSES.UNKNOWN
+    ) {
+      count += 1;
     }
-    const checks = PAIRWISE_CHECKS[role];
-    if (checks === undefined) {
-      continue;
-    }
-    for (const check of checks) {
-      const partner = picked[check.partnerRole];
-      if (partner === undefined) {
-        continue;
-      }
-      const left = check.leftIsNew ? verdict : partner;
-      const right = check.leftIsNew ? partner : verdict;
-      const pair = aggregateCompatibilityResults(check.evaluator(filteringContext, left, right));
-      if (pair.status === FINAL_STATUSES.UNKNOWN) {
-        count += 1;
-      }
+  });
+  return count;
+}
+
+/**
+ * Decision 55: the picked map a preview substitutes into - one Engine 2D
+ * verdict per role, keyed by an EXPANSION_ORDER role and nothing else. The
+ * entries are validated by validateVerdict, the same gate assembly applies to
+ * its own input, so a malformed build cannot produce a confident preview. A
+ * role that is absent is fine: it is either the role being replaced (nothing
+ * to compare against) or an omitted GPU.
+ */
+function validatePicked(picked) {
+  if (picked === null || typeof picked !== 'object' || Array.isArray(picked)) {
+    fail(ERROR_CODES.INVALID_INPUT, 'picked', '"picked" must be an object keyed by role');
+  }
+  for (const key of Object.keys(picked)) {
+    if (!EXPANSION_ORDER.includes(key)) {
+      fail(
+        ERROR_CODES.INVALID_FIELD_VALUE,
+        `picked.${key}`,
+        `"picked" has an unknown role key "${key}"; use one of ${EXPANSION_ORDER.join(', ')}`
+      );
     }
   }
-  return count;
+  for (const role of EXPANSION_ORDER) {
+    const entry = picked[role];
+    if (entry === undefined) {
+      continue;
+    }
+    const validated = validateVerdict(entry, `picked.${role}`);
+    if (validated.component_role !== role) {
+      fail(
+        ERROR_CODES.INVALID_FIELD_VALUE,
+        `picked.${role}.component_role`,
+        `"picked.${role}" must carry component_role "${role}"`
+      );
+    }
+    // A picked map is a BUILD, and a build never holds a rejected candidate
+    // (groupEligible drops them before expansion). Refusing one here keeps
+    // "malformed input" from silently becoming "a pair verdict" - the same
+    // reason the candidate may not be REJECT either.
+    if (validated.status === REJECT_STATUS) {
+      fail(
+        ERROR_CODES.INVALID_FIELD_VALUE,
+        `picked.${role}.status`,
+        `"picked.${role}.status" must be an eligible verdict (PASS or UNKNOWN); a build holds no rejected candidate`
+      );
+    }
+  }
+}
+
+/**
+ * Decision 55 (CD-8 engine half): evaluate ONE hypothetical replacement
+ * against an already-picked build and return the verdict, WITHOUT touching
+ * the build. Nothing is mutated, persisted or re-ranked, and no price is read
+ * here - the price and budget facts of a preview belong to the caller, which
+ * resolves them through the filtering / offer-selection path a pass uses
+ * (Decision 55 item 4).
+ *
+ * The candidate is substituted into a COPY of `picked` at `role` - replacing
+ * an existing pick and supplying an omitted one (the GPU-omit path) are the
+ * same operation - and then EVERY check whose pair includes `role` in either
+ * position is evaluated, in EXPANSION_ORDER then table order. The CPU is the
+ * proof case: it keys no entry of its own, so its verdict comes entirely from
+ * the MOTHERBOARD, RAM and CPU_COOLER entries that name it as partner.
+ *
+ * Answers a frozen `{ status, pairs, unknown_pairwise_count }`:
+ *   - `pairs[i]` is `{ check, role, partner_role, status, reason, evidence }`,
+ *     where `check` is the relationship key, `role` is the entry's keyed role
+ *     and `partner_role` its partner - the table's own orientation, so the
+ *     same pair is described identically whether the replaced role is the
+ *     keyed one or the partner;
+ *   - `status` is aggregateCompatibilityResults over `pairs` (FAIL beats
+ *     UNKNOWN beats PASS), the SAME precedence the walk applies;
+ *   - `unknown_pairwise_count` counts the UNKNOWN pairs, never "not PASS".
+ * A role with no relationship to any picked partner (SSD_BOOT has none, and
+ * a freshly supplied GPU in a GPU-less build keys none of its own) answers
+ * `pairs: []` with `status: 'PASS'` - aggregateCompatibilityResults over an
+ * empty set - which is the walk's own zero-partners answer; a caller that
+ * needs to tell "no relationship" from "verified" reads `pairs.length`.
+ *
+ * A REJECT candidate is refused rather than previewed: rejection is the
+ * filtering stage's own verdict (an ineligible candidate has no price and no
+ * compatible build), and a preview that answered PASS/UNKNOWN for it would
+ * hide exactly what the caller must report.
+ */
+function evaluateBuildReplacement(input) {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    fail(ERROR_CODES.INVALID_INPUT, 'input', '"input" must be an object');
+  }
+  const { picked, filteringContext, role, candidate } = input;
+  if (!EXPANSION_ORDER.includes(role)) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'role',
+      `"role" must be one of ${EXPANSION_ORDER.join(', ')}`
+    );
+  }
+  if (
+    filteringContext === null ||
+    typeof filteringContext !== 'object' ||
+    Array.isArray(filteringContext)
+  ) {
+    fail(ERROR_CODES.INVALID_INPUT, 'filteringContext', '"filteringContext" must be an object');
+  }
+  validatePicked(picked);
+  const validatedCandidate = validateVerdict(candidate, 'candidate');
+  if (validatedCandidate.component_role !== role) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'candidate.component_role',
+      `"candidate.component_role" must be "${role}"`
+    );
+  }
+  if (validatedCandidate.status === REJECT_STATUS) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'candidate.status',
+      '"candidate.status" must be an eligible verdict (PASS or UNKNOWN); a rejected candidate has no replacement verdict to preview'
+    );
+  }
+
+  const substituted = Object.assign({}, picked, { [role]: validatedCandidate });
+  const pairs = [];
+  forEachPickedCheck(substituted, (keyedRole, check, keyedVerdict, partnerVerdict) => {
+    if (keyedRole !== role && check.partnerRole !== role) {
+      return;
+    }
+    const pair = evaluatePairCheck(filteringContext, check, keyedVerdict, partnerVerdict);
+    pairs.push(
+      Object.freeze({
+        check: check.key,
+        role: keyedRole,
+        partner_role: check.partnerRole,
+        status: pair.status,
+        reason: pair.reason,
+        evidence: Object.freeze(pair.evidence),
+      })
+    );
+  });
+  const frozenPairs = Object.freeze(pairs);
+  return Object.freeze({
+    status: aggregateCompatibilityResults(frozenPairs).status,
+    pairs: frozenPairs,
+    unknown_pairwise_count: frozenPairs.filter(
+      (pair) => pair.status === FINAL_STATUSES.UNKNOWN
+    ).length,
+  });
 }
 
 /**
@@ -844,5 +1043,5 @@ function assembleBuilds(engine3Input) {
   return deepFreeze({ builds: Object.freeze(builds) });
 }
 
-module.exports = { assembleBuilds, EXPANSION_ORDER };
+module.exports = { assembleBuilds, EXPANSION_ORDER, evaluateBuildReplacement };
 

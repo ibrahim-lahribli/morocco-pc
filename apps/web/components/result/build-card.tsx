@@ -50,7 +50,7 @@
 import { getTranslations } from "next-intl/server";
 
 import { SaveBuildButton } from "@/components/saved/save-build-button";
-import { Alert, Badge, ProgressBar, cn } from "@/components/ui";
+import { Alert, Badge, Button, ProgressBar, cn } from "@/components/ui";
 import { formatDate, formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
 import {
@@ -103,6 +103,8 @@ export async function BuildCard({
   // word, and the same strings are read by the page that lists it.
   const tSaved = await getTranslations({ locale, namespace: "saved" });
   const headingId = `build-${position}-heading`;
+  // Per-card, so two cards never share a described-by target.
+  const swapNoteId = `build-${position}-swap-note`;
 
   const total = build.total_price;
   const bar = barFigures(total, budget);
@@ -207,6 +209,32 @@ export async function BuildCard({
           />
         ))}
       </ul>
+
+      {/* S24's buildable half (shipped 2026-10-25). CD-8 — a swap endpoint —
+          does not exist, so the control is PRESENT and DISABLED rather than
+          hidden: an honest future state, and no swap is simulated here. There
+          is no handler and no fetch, so there is no code path that could fire a
+          request. The explanation is VISIBLE TEXT, not a hover-only tooltip —
+          a disabled button cannot take focus, so a tooltip on it would be
+          unreachable by keyboard and by touch at 360 px — and
+          `aria-describedby` still ties the sentence to the control for anyone
+          who reaches it with a virtual cursor. `data-swap` states the state for
+          the spec and for the change that lands when the endpoint exists. */}
+      <div className="mt-3">
+        <Button
+          variant="secondary"
+          size="compact"
+          className="w-full"
+          disabled
+          aria-describedby={swapNoteId}
+          data-swap="unavailable"
+        >
+          {t("swap.label")}
+        </Button>
+        <p id={swapNoteId} className="mt-1.5 text-caption text-muted">
+          {t("swap.explanation")}
+        </p>
+      </div>
 
       <BuildExplanation build={build} locale={locale} />
     </article>

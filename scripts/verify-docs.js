@@ -106,6 +106,10 @@ function readRepo(rel) {
 // => 51 headings, 57 Status lines.
 // Decision 54 (E6 retention eligibility, 2026-10-24) adds one
 // heading/status => 52 headings, 58 Status lines.
+// Decision 55 (CD-8 swap preview, 2026-10-25) adds one heading/status
+// => 53 headings, 59 Status lines. (A contract entry first, then the UPDATE
+// that records its engine half landing - the count moves on the entry, not
+// on the code.)
 const decisions = (function checkDecisions() {
   const raw = readRepo('docs/RECOMMENDATION_ENGINE_DECISIONS.md');
   // Line-ending tolerant: the log is stored CRLF, but a Linux checkout
@@ -122,9 +126,9 @@ const decisions = (function checkDecisions() {
     if (inEngine3 && /^### Decision \d+/.test(line)) nested += 1;
     if (/^Status:/.test(line)) status += 1;
   }
-  const ok = global === 52 && nested === 5 && status === 58;
+  const ok = global === 53 && nested === 5 && status === 59;
   if (!ok) {
-    fail('decisions-parse', 'global=' + global + ' (want 52), nested=' + nested + ' (want 5), Status:=' + status + ' (want 58)');
+    fail('decisions-parse', 'global=' + global + ' (want 53), nested=' + nested + ' (want 5), Status:=' + status + ' (want 59)');
     return null;
   }
   pass('decisions-parse', global + ' headings + ' + nested + ' nested = ' + (global + 2) + ' global, ' + status + ' Status: lines');

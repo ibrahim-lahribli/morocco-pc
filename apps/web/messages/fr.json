@@ -106,6 +106,10 @@
     },
     "overBudget": "Cette configuration dépasse votre budget de {amount}.",
     "componentsLabel": "Composants",
+    "swap": {
+      "label": "Remplacer un composant",
+      "explanation": "Bientôt disponible : remplacer une pièce demandera de recalculer sa compatibilité avec le reste de la configuration et son prix."
+    },
     "roles": {
       "CPU": "Processeur",
       "GPU": "Carte graphique",

@@ -148,7 +148,7 @@ emits real Tailwind utilities (`text-2xl`, `mx-auto`, `sr-only`) with no CSS war
 typecheck and the 3 Playwright specs pass. The old claim ("no PostCSS or Turbopack integration
 wired, so `@theme` is never processed") described an uncommitted working tree, not the branch. The
 frontend's real open items are the DEPLOYMENT of its now-decided host (Cloudflare Workers, chosen
-2026-10-23 - see the plan §1/§5/§7) and S24's absent swap endpoint (CD-8); the "unfunded W0 sprints"
+2026-10-23 - see the plan §1/§5/§7) and S24's absent swap endpoint (CD-8: contract decided by Decision 55, engine export built 2026-10-25, route not built; disabled control shipped 2026-10-25); the "unfunded W0 sprints"
 phrasing above is superseded, because W0 is COMPLETE (S1-S6).
 
 ## Register sync

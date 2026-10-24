@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { assembleBuilds, EXPANSION_ORDER } = require('./assemble');
+const { assembleBuilds, EXPANSION_ORDER, evaluateBuildReplacement } = require('./assemble');
 const { priceKey, validatePrices } = require('./prices');
 const { selectDiverseTop } = require('../ranking/select-diverse');
 const { validateEngine3Input } = require('./input');
@@ -1609,11 +1609,18 @@ test('Decision 16: a malformed filtering_context fails fast before expansion', (
   }
 });
 
-test('public surface is exactly assembleBuilds with one parameter', () => {
+test('public surface is assembleBuilds plus the Decision 55 preview', () => {
   const api = require('./assemble');
-  assert.deepEqual(Object.keys(api).sort(), ['EXPANSION_ORDER', 'assembleBuilds']);
+  assert.deepEqual(Object.keys(api).sort(), [
+    'EXPANSION_ORDER',
+    'assembleBuilds',
+    'evaluateBuildReplacement',
+  ]);
   assert.equal(typeof assembleBuilds, 'function');
   assert.equal(assembleBuilds.length, 1);
+  assert.equal(typeof evaluateBuildReplacement, 'function');
+  // One argument object, like assembleBuilds: no positional overload.
+  assert.equal(evaluateBuildReplacement.length, 1);
   assert.deepEqual([...EXPANSION_ORDER], [
     'CPU',
     'MOTHERBOARD',
@@ -1676,7 +1683,9 @@ test('assemble.js uses only the five allowed engine requires', () => {
   const exportsFound = [...ASSEMBLE_SOURCE.matchAll(/module\.exports\s*=\s*\{([^}]*)\}/g)].map((m) =>
     m[1].replace(/\s/g, '')
   );
-  assert.deepEqual(exportsFound, ['assembleBuilds,EXPANSION_ORDER']);
+  // Decision 55 adds the swap preview; the one-table/one-evaluator pin above
+  // is what keeps it from growing a second vocabulary.
+  assert.deepEqual(exportsFound, ['assembleBuilds,EXPANSION_ORDER,evaluateBuildReplacement']);
 });
 
 // ---------------------------------------------------------------------------
@@ -2268,4 +2277,412 @@ test('E8: OG-09 is SOFT in the walk - an under-spec cooler adds one UNKNOWN and 
     soft.builds[0].unknown_pairwise_count,
     control.builds[0].unknown_pairwise_count + 1
   );
+});
+// ---------------------------------------------------------------------------
+// Decision 55 (CD-8): the read-only replacement preview
+//
+// These tests are about AGREEMENT. The preview must never judge a swap by a
+// different table, a different left/right construction or a different
+// evaluator than the walk that produced the build, so wherever it can each
+// test cross-checks the preview against `assembleBuilds` on the same fixture
+// instead of against a hand-written expectation - a hand-written expectation
+// is a second opinion, not a proof.
+// ---------------------------------------------------------------------------
+
+/** The O2 fixture plus an am5 CPU-2 that the mb-1 board explicitly supports. */
+function swapContext() {
+  const base = o2MixedContext();
+  return Object.freeze({
+    candidates: base.candidates,
+    specs: Object.freeze({
+      ...base.specs,
+      'p:cpu-2': Object.freeze({ socket_id: 'am5', tdp_watts: 65 }),
+    }),
+    platform_by_socket: base.platform_by_socket,
+    compat: Object.freeze({
+      ...base.compat,
+      cpu_motherboard_exact: Object.freeze({
+        'mb-1': Object.freeze([
+          ...base.compat.cpu_motherboard_exact['mb-1'],
+          Object.freeze({
+            cpu_product_id: 'cpu-2',
+            support_status: 'PASS',
+            source_table: 'cpu_motherboard_support',
+            source_id: 'cm-swap',
+          }),
+        ]),
+      }),
+    }),
+  });
+}
+
+/** role -> verdict map, the shape the walk holds internally. */
+function pickedMap(results) {
+  const picked = {};
+  for (const v of results) {
+    picked[v.component_role] = v;
+  }
+  return picked;
+}
+
+test('Decision 55: every pair is reachable from BOTH of its roles, and the union is the build count', () => {
+  const context = o2MixedContext();
+  const results = o2MixedResults();
+  const picked = pickedMap(results);
+  const out = assembleBuilds(
+    engineInput({ results, integrated: { 'cpu-1': true }, filteringContext: context })
+  );
+  assert.equal(out.builds.length, 1);
+  const build = out.builds[0];
+
+  const occurrences = new Map();
+  const unknownByKey = new Map();
+  let failPairs = 0;
+  for (const role of EXPANSION_ORDER) {
+    if (picked[role] === undefined) {
+      continue;
+    }
+    const preview = evaluateBuildReplacement({
+      picked,
+      filteringContext: context,
+      role,
+      candidate: picked[role],
+    });
+    for (const pair of preview.pairs) {
+      // Only pairs that name the replaced role are returned - in either
+      // position (Decision 55 item 1).
+      assert.equal(pair.role === role || pair.partner_role === role, true);
+      const key = `${pair.check}|${pair.role}|${pair.partner_role}`;
+      occurrences.set(key, (occurrences.get(key) || 0) + 1);
+      unknownByKey.set(key, pair.status === 'UNKNOWN');
+      if (pair.status === 'FAIL') {
+        failPairs += 1;
+      }
+    }
+  }
+
+  // The build exists, so none of its pairs may come back FAIL from a preview
+  // of its own picks: the strongest single agreement statement here.
+  assert.equal(failPairs, 0);
+  // 7 picked roles, 9 co-occurring pair slots in PAIRWISE_CHECKS - the six of
+  // the Decision 23 O2 fixture plus the three E8 (Decision 45) pairs, whose
+  // own roles are all picked here.
+  assert.deepEqual([...occurrences.keys()], [
+    'cpu_motherboard|MOTHERBOARD|CPU',
+    'platform_memory|RAM|CPU',
+    'cooler_socket|CPU_COOLER|CPU',
+    'cooler_tdp|CPU_COOLER|CPU',
+    'motherboard_memory|RAM|MOTHERBOARD',
+    'mb_memory_slots|RAM|MOTHERBOARD',
+    'mb_memory_capacity|RAM|MOTHERBOARD',
+    'case_form_factor|CASE|MOTHERBOARD',
+    'case_radiator|CPU_COOLER|CASE',
+  ]);
+  // Each pair is returned by exactly the two previews of the roles it names.
+  // That is what "in EITHER position" buys: a replacement is judged from the
+  // same pair whichever side of it is being replaced.
+  for (const [key, count] of occurrences) {
+    assert.equal(count, 2, key);
+  }
+  let unknownPairs = 0;
+  for (const isUnknown of unknownByKey.values()) {
+    if (isUnknown) {
+      unknownPairs += 1;
+    }
+  }
+  // ...and the union of the previews is exactly the set assembly counted, with
+  // the same UNKNOWN count (countBuildLocalUnknownPairs, Decision 23 O2).
+  assert.equal(unknownPairs, build.unknown_pairwise_count);
+});
+
+test('Decision 55: replacing the CPU runs no CPU-keyed check - the partners decide', () => {
+  const context = swapContext();
+  const picked = pickedMap(o2MixedResults());
+  const preview = evaluateBuildReplacement({
+    picked,
+    filteringContext: context,
+    role: 'CPU',
+    candidate: verdict('CPU', 'cpu-2'),
+  });
+
+  // The CPU keys none of PAIRWISE_CHECKS: its whole verdict lives in the
+  // MOTHERBOARD, RAM and CPU_COOLER entries that name it as partner.
+  assert.deepEqual(
+    preview.pairs.map((p) => p.check),
+    ['cpu_motherboard', 'platform_memory', 'cooler_socket', 'cooler_tdp']
+  );
+  assert.deepEqual(
+    preview.pairs.map((p) => p.role),
+    ['MOTHERBOARD', 'RAM', 'CPU_COOLER', 'CPU_COOLER']
+  );
+  for (const pair of preview.pairs) {
+    assert.equal(pair.partner_role, 'CPU');
+  }
+  assert.equal(preview.pairs.some((p) => p.role === 'CPU'), false);
+
+  // cpu-2 is am5 and has its own exact PASS row, so the board pair passes;
+  // no platform mapping exists (UNKNOWN) and no cooler_socket row exists
+  // (UNKNOWN); the 250 W cooler covers 65 W (PASS). The two verdicts are
+  // reported side by side, never collapsed.
+  assert.deepEqual(
+    preview.pairs.map((p) => p.status),
+    ['PASS', 'UNKNOWN', 'UNKNOWN', 'PASS']
+  );
+  assert.equal(preview.status, 'UNKNOWN');
+  assert.equal(preview.unknown_pairwise_count, 2);
+});
+
+test('Decision 55: a FAIL preview agrees with the walk that rejects the same swap', () => {
+  const base = o2MixedContext();
+  const context = Object.freeze({
+    candidates: base.candidates,
+    specs: Object.freeze({
+      ...base.specs,
+      'p:mb-2': Object.freeze({
+        socket_id: 'am4',
+        memory_type_id: 'ddr5',
+        form_factor: 'ATX',
+        dimm_slots: 4,
+        max_memory_capacity_gb: 128,
+      }),
+    }),
+    platform_by_socket: base.platform_by_socket,
+    compat: base.compat,
+  });
+  const preview = evaluateBuildReplacement({
+    picked: pickedMap(o2MixedResults()),
+    filteringContext: context,
+    role: 'MOTHERBOARD',
+    candidate: verdict('MOTHERBOARD', 'mb-2'),
+  });
+
+  const board = preview.pairs.find((p) => p.check === 'cpu_motherboard');
+  assert.equal(board.status, 'FAIL');
+  assert.equal(typeof board.reason, 'string');
+  assert.equal(preview.status, 'FAIL');
+
+  // The walk refuses the same swap: an am4 board under the am5 cpu-1 abandons
+  // the MOTHERBOARD branch, so this fixture assembles no build at all.
+  const swapped = o2MixedResults().map((v) =>
+    v.component_role === 'MOTHERBOARD' ? verdict('MOTHERBOARD', 'mb-2') : v
+  );
+  const out = assembleBuilds(
+    engineInput({ results: swapped, integrated: { 'cpu-1': true }, filteringContext: context })
+  );
+  assert.equal(out.builds.length, 0);
+});
+
+test('Decision 55: a supplied GPU is previewed through the PSU and CASE entries', () => {
+  const context = o2MixedContext();
+  const picked = pickedMap(o2MixedResults());
+  assert.equal(picked.GPU, undefined);
+  const before = snapshot(picked);
+
+  const preview = evaluateBuildReplacement({
+    picked,
+    filteringContext: context,
+    role: 'GPU',
+    candidate: verdict('GPU', 'gpu-1'),
+  });
+
+  // Supplying an omitted role is the same operation as replacing a picked
+  // one; the GPU keys nothing itself, so its verdict comes from PSU and CASE.
+  assert.deepEqual(
+    preview.pairs.map((p) => p.check),
+    ['gpu_psu', 'gpu_case']
+  );
+  assert.deepEqual(
+    preview.pairs.map((p) => p.role),
+    ['PSU', 'CASE']
+  );
+  // No v:gpu-1-var spec exists, so both pairs are UNKNOWN - never PASS.
+  assert.equal(preview.status, 'UNKNOWN');
+  assert.equal(preview.unknown_pairwise_count, 2);
+
+  // REPLACING a picked GPU is the same operation seen from the other side, and
+  // the most common swap of all: the same pairs, judged the same way.
+  const replaced = evaluateBuildReplacement({
+    picked: { ...picked, GPU: verdict('GPU', 'gpu-1') },
+    filteringContext: context,
+    role: 'GPU',
+    candidate: verdict('GPU', 'gpu-2'),
+  });
+  assert.deepEqual(
+    replaced.pairs.map((p) => [p.check, p.partner_role, p.status]),
+    preview.pairs.map((p) => [p.check, p.partner_role, p.status])
+  );
+
+  // Read-only: the build's own map is untouched by the preview.
+  assert.deepEqual(snapshot(picked), before);
+});
+
+test('Decision 55: the result is frozen, and a role with no relationship answers pairs: []', () => {
+  const context = o2MixedContext();
+  const picked = pickedMap(o2MixedResults());
+
+  const ssd = evaluateBuildReplacement({
+    picked,
+    filteringContext: context,
+    role: 'SSD_BOOT',
+    candidate: verdict('SSD_BOOT', 'ssd-2'),
+  });
+  // No role pairs with storage in this schema: nothing to fail, which is the
+  // walk's own zero-partners answer. A caller tells "nothing checked" from
+  // "checked and compatible" by pairs.length, never by the status.
+  assert.deepEqual(ssd.pairs, []);
+  assert.equal(ssd.status, 'PASS');
+  assert.equal(ssd.unknown_pairwise_count, 0);
+
+  const ram = evaluateBuildReplacement({
+    picked,
+    filteringContext: context,
+    role: 'RAM',
+    candidate: picked.RAM,
+  });
+  assert.equal(Object.isFrozen(ssd), true);
+  assert.equal(Object.isFrozen(ssd.pairs), true);
+  assert.equal(Object.isFrozen(ram), true);
+  assert.equal(Object.isFrozen(ram.pairs), true);
+  for (const pair of ram.pairs) {
+    assert.equal(Object.isFrozen(pair), true);
+    assert.equal(Object.isFrozen(pair.evidence), true);
+    assert.deepEqual(Object.keys(pair), [
+      'check',
+      'role',
+      'partner_role',
+      'status',
+      'reason',
+      'evidence',
+    ]);
+  }
+});
+
+test('Decision 55: a malformed preview input fails fast with the shared codes', () => {
+  const context = o2MixedContext();
+  const picked = pickedMap(o2MixedResults());
+  const { relationships, ...ramWithoutRelationships } = picked.RAM;
+  void relationships;
+  const { product_id, ...ramWithoutProductId } = picked.RAM;
+  void product_id;
+
+  const cases = [
+    ['input', null, ERROR_CODES.INVALID_INPUT, 'input'],
+    [
+      'missing role',
+      { picked, filteringContext: context, candidate: picked.RAM },
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'role',
+    ],
+    // MEMORY is not a role (RAM is); SSD_SECONDARY is in the vocabulary but
+    // never expands, so it is not previewable either.
+    [
+      'MEMORY is not a role',
+      { picked, filteringContext: context, role: 'MEMORY', candidate: picked.RAM },
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'role',
+    ],
+    [
+      'non-expanding role',
+      { picked, filteringContext: context, role: 'SSD_SECONDARY', candidate: picked.SSD_BOOT },
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'role',
+    ],
+    [
+      'picked not an object',
+      { picked: null, filteringContext: context, role: 'RAM', candidate: picked.RAM },
+      ERROR_CODES.INVALID_INPUT,
+      'picked',
+    ],
+    [
+      'unknown picked key',
+      {
+        picked: { ...picked, MEMORY: picked.RAM },
+        filteringContext: context,
+        role: 'RAM',
+        candidate: picked.RAM,
+      },
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'picked.MEMORY',
+    ],
+    [
+      'picked verdict missing a field',
+      {
+        picked: { ...picked, RAM: ramWithoutRelationships },
+        filteringContext: context,
+        role: 'RAM',
+        candidate: picked.RAM,
+      },
+      ERROR_CODES.MISSING_REQUIRED_FIELD,
+      'picked.RAM.relationships',
+    ],
+    [
+      'picked verdict under the wrong key',
+      {
+        picked: { ...picked, RAM: verdict('CPU', 'cpu-1') },
+        filteringContext: context,
+        role: 'RAM',
+        candidate: picked.RAM,
+      },
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'picked.RAM.component_role',
+    ],
+    [
+      'picked verdict that was rejected',
+      {
+        picked: { ...picked, RAM: verdict('RAM', 'ram-1', { status: 'REJECT' }) },
+        filteringContext: context,
+        role: 'RAM',
+        candidate: picked.RAM,
+      },
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'picked.RAM.status',
+    ],
+    [
+      'candidate for another role',
+      {
+        picked,
+        filteringContext: context,
+        role: 'RAM',
+        candidate: verdict('GPU', 'gpu-1'),
+      },
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'candidate.component_role',
+    ],
+    [
+      'rejected candidate',
+      {
+        picked,
+        filteringContext: context,
+        role: 'RAM',
+        candidate: verdict('RAM', 'ram-1', { status: 'REJECT' }),
+      },
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'candidate.status',
+    ],
+    [
+      'candidate missing a field',
+      {
+        picked,
+        filteringContext: context,
+        role: 'RAM',
+        candidate: ramWithoutProductId,
+      },
+      ERROR_CODES.MISSING_REQUIRED_FIELD,
+      'candidate.product_id',
+    ],
+    [
+      'malformed context',
+      { picked, filteringContext: null, role: 'RAM', candidate: picked.RAM },
+      ERROR_CODES.INVALID_INPUT,
+      'filteringContext',
+    ],
+  ];
+
+  for (const [label, args, code, field] of cases) {
+    assert.throws(
+      () => evaluateBuildReplacement(args),
+      (e) => e instanceof CandidateSelectionError && e.code === code && e.field === field,
+      label
+    );
+  }
 });

@@ -1967,3 +1967,22 @@ in the file: `TARGET_DATABASE_URL is not set` while it is on the file's first li
 Naming note: the WRITE scripts take `--target-env=NAME` (it selects the database a write lands on)
 and the read-only gates take `--target=env:NAME`. Two spellings, one meaning — do not "unify" them
 without changing every call site in the recipes.
+
+## 2026-10-25 — the fixture suite and a real API on port 3000 are mutually exclusive
+
+`playwright.config.ts` starts its own fixture mock on 3211 for the SERVER (`API_BASE_URL`) and a
+second one on 3000, the port `apiBaseUrl()` falls back to, and it REUSES whatever already listens on
+3210 (`reuseExistingServer: !CI`). A `next start` left on 3210 by an earlier session had been started
+without `API_BASE_URL`, so its server-side reads fell back to `localhost:3000` — where a REAL API
+(`apps/api/src/server.js`) was running. Result: 15 fixture specs 404'd on preset, catalog, compare
+and price-history routes whose real-catalog slugs differ from the fixtures, while the rest passed.
+The failures name the API, not the page: `/fr/composants/<fixture-slug>` answers 404 and the
+spec's own content assertions read the real catalog's values.
+
+The two arrangements cannot coexist: `e2e/wizard-engine.spec.ts` documents a real API on 3000, and
+the fixture suite needs that port free (or serving the mock). Measured 2026-10-25 on `master`: with
+the leftover 3210 server stopped and the app started from the suite's own config (so
+`API_BASE_URL` = the 3211 mock), the suite is **368 passed / 2 skipped, exit 0**, including 4 new
+`e2e/swap.spec.ts` specs for S24's disabled swap control. Rule: before believing a web-suite red,
+check what is listening on 3210 and which env it was started with.
+

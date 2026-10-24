@@ -16,7 +16,8 @@ profile-gated step flow and the POST hand-off); W2 is COMPLETE (S11–S15); W3 i
 WCAG AA audit) and S22 (legal pages, analytics, states) are DONE 2026-10-22 — and S27, the
 post-M3 slider curve, S23, the compare view, and S25, saved builds plus the price history, are
 DONE (2026-10-22 and 2026-10-23), so 25 of the 27 sprints are done. What remains is S24 (swap
-inside a build) and S26, the M3 verification run, which is BLOCKED on
+inside a build - its disabled control shipped 2026-10-25, the endpoint is still unbuilt) and S26, the
+M3 verification run, which is BLOCKED on
 deployment. **The web host is now DECIDED (2026-10-23): Cloudflare Workers**, built through the
 `@opennextjs/cloudflare` adapter - `apps/web/wrangler.jsonc` and `apps/web/open-next.config.ts` are
 committed, the adapter and `wrangler` are devDependencies, and the incremental cache is KV. No
@@ -55,7 +56,7 @@ the API catches up.
 | CD-5 | `GET /v1/catalog/products` and `/…/{slug}` | **SHIPPED** (contract v1.5, Decision 50) |
 | CD-6 | An honest per-price obsolescence label | **PARTIAL, resolved as far as the contract allows (S12).** `generated_at` dates the PASS, not a shop survey, so the verified badge says "Vérifié · calculé le …" instead of "prix constatés le …". A true per-price observation date is still absent, and the badge must not pretend to have one |
 | CD-7 | `budget_floor` present on the GET revisit | **SHIPPED** (migration 019 + Decision 46; both verbs carry it) |
-| CD-8 | A swap endpoint | **NOT BUILT**, and no platform sprint owns it. S24 ships the disabled control with an explanation rather than a simulated swap |
+| CD-8 | A swap endpoint | **CONTRACT DECIDED (Decision 55), ENGINE HALF BUILT (2026-10-25), ROUTE NOT BUILT** — a read-only `GET /v1/recommendations/:id/builds/:rank/swap-preview` over one new engine export (`evaluateBuildReplacement`, landed with 6 agreement tests), with a mutating swap left to its own decision. S24's disabled-with-explanation control SHIPPED 2026-10-25 (`e2e/swap.spec.ts`, 4 specs, no request fired) |
 
 ### 2.2 Findings (V-*)
 
@@ -303,7 +304,7 @@ Component detail v2 and compare, swap inside a build (needs CD-8), price history
 ships at `/{locale}/enregistrements`; the board’s S23 and S25 statuses carry what landed and what it
 measured. **S24 stays outside the M3 gate on purpose.** **S24** (swap inside
 a build) waits on **CD-8**, the swap endpoint, which is not built and which no platform sprint owns;
-only its disabled-with-an-explanation control is buildable, and the DoD forbids simulating a swap.
+only its disabled-with-an-explanation control was buildable — it SHIPPED 2026-10-25 (`e2e/swap.spec.ts`, 4 specs, no request) — and the DoD forbids simulating a swap, so the endpoint is what remains. Its contract is now **Decision 55** (2026-10-25): read-only, engine-owned, nothing persisted.
 **S25** had two halves with different answers, and both have now shipped: saved builds were
 `localStorage`-only and now live at `/{locale}/enregistrements`, and price history — a table since
 migration 009 that no route read — now renders against

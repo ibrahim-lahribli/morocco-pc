@@ -28,6 +28,11 @@
  *     loaded Engine 2 sources through Step 1 -> Step 2 -> Step 4 with the GPU
  *     inputs sourced (never stubbed) and returns frozen `{ builds }`, see
  *     ./pipeline.
+ *   evaluateBuildReplacement() - Decision 55 (CD-8): ONE hypothetical swap
+ *     against an already-picked build, over the SAME private pairwise table
+ *     the walk uses, returning frozen `{ status, pairs,
+ *     unknown_pairwise_count }`. Read-only: nothing is mutated, priced,
+ *     persisted or re-ranked (see ./assemble).
  *
  * Still NOT owned here: price selection (upstream, Engine 2 Stage 1), the
  * DB-backed loaders (Engine 2B / Stage 1 / 2D context / Decision 11 scoring
@@ -38,7 +43,7 @@
 const { validateEngine3Input } = require('./input');
 const { priceKey, validatePrices, lookupPrice } = require('./prices');
 const { resolveGpuRequirement } = require('./gpu-policy');
-const { assembleBuilds, EXPANSION_ORDER } = require('./assemble');
+const { assembleBuilds, EXPANSION_ORDER, evaluateBuildReplacement } = require('./assemble');
 const { buildGpuInputs } = require('./gpu-input');
 const { assembleBuildsForRecommendation } = require('./pipeline');
 
@@ -52,4 +57,5 @@ module.exports = {
   EXPANSION_ORDER,
   buildGpuInputs,
   assembleBuildsForRecommendation,
+  evaluateBuildReplacement,
 };

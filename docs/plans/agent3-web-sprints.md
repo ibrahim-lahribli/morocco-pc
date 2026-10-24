@@ -14,6 +14,15 @@ deployed API and a deployed web environment - the host is decided, Cloudflare Wo
 What is left is not one block: S24 waits on CD-8, and only S26
 needs a deployment.
 
+**Update 2026-10-25:** S24 is no longer NOT STARTED. Its honest half SHIPPED — the disabled
+control with a visible explanation, in both locales, pinned by 4 specs in `e2e/swap.spec.ts` — while
+the endpoint (CD-8) stays unbuilt, so the sprint remains open for the swap itself. CD-8 is no longer
+an open question: **Decision 55** (2026-10-25) fixes it as a READ-ONLY preview (`GET
+/v1/recommendations/:id/builds/:rank/swap-preview`) over one new pure engine export, with nothing
+persisted and a mutating swap left to its own decision.
+
+**Update 2026-10-25 (later):** CD-8's ENGINE half landed — `assembly` `evaluateBuildReplacement`, six agreement tests in `assembly/assemble.test.js` including the CPU-as-partner case — so what remains is the route (b), this UI (c) and the `; IMPLEMENTED` flip (d). Nothing is served yet and the control stays disabled.
+
 ## Sprints
 
 ### Phase W0 — Foundation
@@ -1561,6 +1570,22 @@ does not exist and no platform sprint owns it, so the DoD's own fallback is the 
 deliverable today: a control rendered disabled with an explanation, firing no request and
 simulating nothing. That slice does not earn a sprint — it must be revisited the moment the endpoint
 lands, and alone it proves nothing about the platform path the sprint exists to exercise.
+
+**Status update 2026-10-25 — the fallback half is SHIPPED; CD-8 is still absent.** Every build card
+now carries one disabled control (`data-swap="unavailable"`), labelled « Remplacer un composant » /
+« استبدال مكوّن », with a VISIBLE explanation tied to it by `aria-describedby`. A hover-only tooltip
+was rejected on purpose: a disabled control cannot take focus, so a tooltip on it would be
+unreachable by keyboard and by touch at 360 px. There is no handler and no fetch, so no code path
+could fire a request, and `e2e/swap.spec.ts` (4 specs) pins the label, the disabled state, the
+explanation's wiring, that EVERY card carries one, that activating it fires no request and navigates
+nowhere, and the Arabic copy; the fixture-built preset pages render the same control in both
+locales. Measured: `typecheck`, `lint` (0 errors, the pre-existing `postcss.config.mjs` warning),
+`check:i18n` (77 files, 2 catalogues), `check:tokens` (79 files) and `build` exit 0; the suite is
+**368 passed / 2 skipped** (366 before this change, plus the 4 new specs). The endpoint remains
+unbuilt, though its contract is now **Decision 55** (read-only preview; a mutation needs its own
+decision), so S24 stays open — the control must be revisited, not merely re-styled, the moment CD-8
+lands. The engine half then landed the same day (`evaluateBuildReplacement`, six agreement
+tests); the route and this UI are still unbuilt, so the control stays disabled.
 
 #### S25 — Price history + saved builds (2 h, post-beta)
 **Goal:** Price history for components/builds, and saved builds (local-first, no account).

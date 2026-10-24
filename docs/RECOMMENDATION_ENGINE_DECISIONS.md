@@ -5465,3 +5465,71 @@ E6's acceptance is about the RECOMMENDATION, not about one CPU's walk: "OFFICE: 
 ### Supersedes / superseded by
 
 Partly supersedes Decision 43's REJECTED alternative #3 ("Read the policy in retention and reserve a slot for an iGPU CPU: it would give one constraint two owners"). That rejection was right about ownership and wrong about reachability: retention now answers a NARROWER question (which CPUs may reach Engine 3) from the SAME single resolved policy, while Engine 3 keeps the per-CPU GPU decision — one reader, two consumers, no second derivation. Decision 43's Status line ("The rule is UNREACHABLE on today's catalog") is historical and was updated in place; rules 1-6 stand unchanged.
+
+## Decision 55 — a swap PREVIEW is a read-only evaluation: the engine owns the verdict and the persisted pass stays a record
+
+Status: RESOLVED 2026-10-25 — CD-8 is ONE read-only evaluation route backed by ONE new pure Engine 3 export over the SAME pairwise-check table assembly uses; nothing is persisted, no build row is rewritten, and a mutating "commit swap" is explicitly left to its own future decision. ENGINE HALF IMPLEMENTED 2026-10-25 (`assembly` `evaluateBuildReplacement` + agreement tests); the route, the UI and the `; IMPLEMENTED` flip are still open, so S24's control stays disabled.
+
+Date: 2026-10-25. Defines CD-8 (`docs/plans/agent3-web-plan.md` §2.1), the contract S24 was waiting on, BEFORE any code exists, so the engine, the API and the web UI cannot invent three versions of "swappable". It closes no gap row: it is the missing contract, not a defect fix. NOT a migration, no seed, no engine behaviour change until the export lands, and NOT the mutation that would persist a swapped build (item 9).
+
+### Current situation
+
+- A pass is a RECORD with a stable address: `recommendation_result` is unique on `(recommendation_query_id, rank)` (`uq_recommendation_result_query_rank`), the build's total is `build_candidate.total_price`, and each part is one `build_component` row per role (`uq_build_component_role_singular`) carrying `product_id`, `product_variant_id`, `selected_price`, `offer_class` and `store_offer_id` (Decision 35's provenance snapshot). Decision 46 adds `engine_version` / `strategy_key` per rank; Decision 47 adds `catalog_version` per query.
+- The API serves those builds on POST and GET through ONE read path (`apps/api/src/repository.js` `readRecommendationResult`), addressing a build by `rank`: the contract has no build id (Decision 36, contract v1.7).
+- Compatibility: `src/recommendation/compatibility/index.js` exports the per-relationship resolvers, but the RELATIONSHIP GRAPH — which role is checked against which, its canonical left/right, and which role's entry owns the check — is private to `src/recommendation/assembly/assemble.js` (`PAIRWISE_CHECKS`, line 479). The table is keyed by the LATER-picked role, so a role can be a key (MOTHERBOARD, RAM, PSU, CASE, CPU_COOLER) or only ever a partner: CPU keys no check at all, and its `cpu_motherboard`, `platform_memory`, `cooler_socket` and `cooler_tdp` verdicts live in other roles' entries.
+- Assembly rejects only FAIL; UNKNOWN stays eligible and is COUNTED, not judged (`firstPairFailure`, `countBuildLocalUnknownPairs`, `aggregateCompatibilityResults`; Decision 16). A candidate's own eligibility (offer window, seed waiver, availability) is produced upstream by filtering and offer selection (Decisions 7, 35), never by assembly.
+- No route evaluates a hypothetical build. `build_component` is mutable at the schema level (Layer 4 reconciliation item 28) but no API path writes it after the pass, and the production role holds no row-wide UPDATE on the Layer 4 write tables by design (Decision 46).
+
+### Problem
+
+S24 asks a UI to offer a replacement and to surface the API's compatibility warnings and price delta. Three implementations are available today and two of them are wrong:
+
+1. **Re-derive compatibility in the web layer.** The pairing graph and the E8 support-table reads live in the engine; restating them in `apps/web` creates a second vocabulary that WILL drift, and the import boundary (`apps/api/test/unit/import-boundary.test.js`) exists to forbid exactly that.
+2. **Mutate `build_component` in place.** A persisted pass would stop being the record it claims to be: `rank`, `strategy_key`, `engine_version`, the dedupe key (Decision 47/48), the presets that point at it and the golden harness's fingerprints all describe the ORIGINAL assembly. A later reader could not tell an engine-produced build from an edited one, and the role has no row-wide UPDATE precisely so this cannot happen quietly.
+3. **"Just re-run the pass with a role pinned."** Assembly walks `EXPANSION_ORDER` and has no pin mechanism; adding one changes every caller's semantics, and a re-run produces a NEW pass with new scores and a new rank, not a preview of this one.
+
+Nothing decided what the endpoint answers, which layer owns the verdict, or whether the pass may change. Without that, S24's control stays disabled forever or someone invents (1).
+
+### Decision
+
+1. **One pure engine export owns the verdict.** `assembly` gains `evaluateBuildReplacement({ picked, filteringContext, role, candidate })` returning a frozen `{ status, pairs, unknown_pairwise_count }`, where `status` is PASS | UNKNOWN | FAIL by `aggregateCompatibilityResults` over `pairs` and each pair is `{ check, role, partner_role, status, reason, evidence }`. It MUST read the SAME `PAIRWISE_CHECKS` table as `assembleBuilds` — extracted to one module-level owner in `assemble.js`, never copied — and MUST evaluate EVERY check whose pair includes the replaced role in EITHER position. The CPU is the proof case: replacing it re-runs no CPU-keyed check, because CPU keys none; its whole verdict comes from the MOTHERBOARD, RAM and CPU_COOLER entries that name it as partner.
+2. **The endpoint is a GET and is READ-ONLY.** `GET /v1/recommendations/:id/builds/:rank/swap-preview?role=<ROLE>&product_id=<uuid>[&product_variant_id=<uuid>]`. GET because the operation is a pure function of (persisted build, live catalog) with no body and no side effect, and it keeps the catalog routes' CORS/429 semantics with no preflight. `role` is validated against the assembly barrel's `EXPANSION_ORDER`, never a list restated in `apps/api`.
+3. **Three facts in the response, and nothing else.** `compatibility` (item 1), `price` (`previous`, `next`, `delta`, `offer_class`, `price_status`) and `budget` (`budget_amount`, `total`, `delta`, `within_budget`). `previous` is the served component's `price_used`; when it is null, `previous` and `delta` are null, NEVER 0 (the standing NULL != 0 rule). No re-ranked list, no new `strategy_key`, no "updated build".
+4. **Eligibility and price are the engine's.** The candidate is resolved through the same filtering and offer-selection path a pass uses (the 30-day window, the Decision 35 seed waiver, `lookupPrice`); an ineligible candidate is a `FAIL` carrying the filtering reason and a null price, never a silently priced component. `offer_class` and `price_status` travel with the price so a client can say what kind of number it is showing (V6).
+5. **UNKNOWN is reported, never collapsed.** A FAIL verdict is a 200 RESULT, not an error; each pair keeps its reason code; `unknown_pairwise_count` is reported; and a client MUST NOT render UNKNOWN as compatible (the standing UNKNOWN != PASS rule, applied to a response field).
+6. **Nothing is persisted.** No INSERT/UPDATE/DELETE, no `recommendation_query` row (the golden harness refuses unmarked rows), and no dedupe or preset interaction. No migration and no new grant: `morocco_pc_api`'s SELECTs plus its three column-scoped UPDATEs are exactly enough.
+7. **Reproducibility is on the wire.** The response carries `catalog_version` (Decision 47) and the answering `engine_version`, and it is served `Cache-Control: no-store`: the verdict is a function of the live catalog AND the persisted build, so a cached copy could outlive either.
+8. **Contract v1.8.0** adds exactly one path and no field on any existing response; `apps/api/test/unit/openapi-v1.8.json` replaces v1.7 (one snapshot in the tree, per the standing rule), the coverage gate declares 200/404/422/429/500, and `apps/web`'s `check:api-types` follows.
+9. **A mutating swap is OUT of scope, deliberately.** Persisting a swapped build needs its own decision covering pass immutability, the dedupe key, presets and rank / `strategy_key` invalidation. The preview MUST NOT be used to fake it, and S24's DoD forbids simulating a swap.
+
+### Rejected alternatives
+
+- **Mutating `build_component` / `recommendation_result` in place.** Loses "a pass is a record" (rank, `strategy_key`, `engine_version`, the dedupe key, preset pointers, golden fingerprints), and the role's grants forbid it by design. Re-opening that needs the separate decision in item 9, not a convenient endpoint.
+- **Client-side compatibility.** Two vocabularies for one rule set, including E8 support-table reads the web cannot see; the import boundary forbids it.
+- **A POST that runs the engine again with a pinned role.** No pin exists, and a re-run is a new pass (new scores, new rank, a new query row) — not a preview, and it would pollute dedupe and the harness.
+- **A "list alternatives" endpoint with no verdict.** The UI would then judge compatibility itself: the same duplication, with a friendlier name.
+
+### Verdict for this pass
+
+**Design-only — BLOCKED on nothing, and NOT implemented at the time; superseded by the UPDATE at the end of this entry (2026-10-25).** No code, no migration, no seed; the decision is the contract the rest of CD-8 is built against. What remains, in order: (a) the engine export plus agreement tests proving it reproduces assembly's verdict on existing builds, including the CPU-as-partner case; (b) the route, contract v1.8.0 and the coverage / `check:api-types` gates; (c) S24's UI reading `compatibility` / `price` / `budget` and rendering UNKNOWN as its own state; (d) flipping this Status to `; IMPLEMENTED <date>` in the same change as (a)-(c). Until (d), the shipped control stays disabled (`e2e/swap.spec.ts`, 2026-10-25) and no swap is simulated.
+
+One implementation detail is deliberately left open: whether `:rank` is resolved through `recommendation_result` alone or also requires `build_candidate_id IS NOT NULL`. Both name the same build today; the implementer must pick one and pin it with a test rather than leaving the choice to the SQL.
+
+### UPDATE 2026-10-25 — the engine half landed (a); the route did not
+
+`assembly` now exports `evaluateBuildReplacement({ picked, filteringContext, role, candidate })` (`src/recommendation/assembly/assemble.js`, re-exported by identity from `assembly/index.js`), answering a frozen `{ status, pairs, unknown_pairwise_count }` with `pairs[i] = { check, role, partner_role, status, reason, evidence }`. It reads the SAME `PAIRWISE_CHECKS` table through TWO new shared internals — `evaluatePairCheck` (the ONE construction of a check's canonical left/right arguments, now used by `firstPairFailure` and `countBuildLocalUnknownPairs` too) and `forEachPickedCheck` (the ONE full-build traversal) — so a preview cannot drift from the walk that produced the build. `firstPairFailure` deliberately stays ROLE-SCOPED: the DFS calls it once per tentative pick, and scanning the whole map there would multiply assembly's cost.
+
+Agreement is pinned, not asserted, by six tests in `assembly/assemble.test.js`:
+
+- every co-occurring pair is returned by exactly the TWO previews of the roles it names; the union is the 9 slots of the O2+E8 fixture, no pair of an existing build comes back FAIL, and the union's UNKNOWN count equals that build's `unknown_pairwise_count`;
+- replacing the CPU returns `cpu_motherboard`, `platform_memory`, `cooler_socket` and `cooler_tdp` and NO CPU-keyed pair (PASS and UNKNOWN reported side by side, `status: UNKNOWN`, count 2) — the CPU-as-partner proof of item 1;
+- an am4 board under the am5 CPU FAILs the preview (`cpu_motherboard`, with a reason code) AND makes `assembleBuilds` emit zero builds on the same fixture;
+- a supplied GPU on the omit path is previewed through `gpu_psu` and `gpu_case`, with the picked map untouched afterwards;
+- the result, its pairs and their evidence arrays are frozen; `SSD_BOOT` (no relationship at all) answers `pairs: []` with `status: 'PASS'`, the walk's own zero-partners answer — which is why a caller reads `pairs.length` to tell "nothing checked" from "checked and compatible";
+- every malformed input fails fast with the shared codes (`role`, `picked.<ROLE>.*`, `candidate.*`, `filteringContext`), including `MEMORY` used as a role name and the non-expanding `SSD_SECONDARY`.
+
+A REJECT candidate is REFUSED (`INVALID_FIELD_VALUE`) rather than previewed: rejection is the filtering stage's verdict, and answering PASS/UNKNOWN for it would hide the one fact the route must report.
+
+Measured: `npm run test:unit` 1191 pass / 0 fail / 0 cancelled on Node 24.21.0 AND on the Node 22 CI leg (`npx -y node@22 --test "src/**/*.test.js"`), up from 1185; `assembly/assemble.test.js` alone 90/90. No migration, no seed, no API change, no web change.
+
+Still open, in the order of items (b)-(d): the route + contract v1.8.0 + the coverage / `check:api-types` gates; S24's UI reading `compatibility` / `price` / `budget`; then the `; IMPLEMENTED <date>` flip.
