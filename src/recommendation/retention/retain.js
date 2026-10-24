@@ -35,6 +35,17 @@
  *   existing candidate-pool input already expects ({ results } of Engine 2D
  *   verdicts; Decision 14 Rule 6: Engine 3 changes nothing)
  *
+ * E6 (2026-10-10; Decision 53) - policy-driven CPU eligibility:
+ *   `retainTopKPerRole` takes an OPTIONAL `roleExclusions` map (role -> array
+ *   or Set of product-id strings) and DROPS those candidates from the role's
+ *   bucket BEFORE ordering, the Decision 27 reservation and the K cap. It is
+ *   how a declared `IGPU_ALLOWED` policy reaches the pool: a CPU without a
+ *   verified integrated GPU cannot supply the graphics the profile requires,
+ *   so retention must not hand it to Engine 3 (Decision 43 owns the per-CPU
+ *   GPU decision; this owns WHICH CPUs can reach it - see ./igpu-pool).
+ *   Absent/null is byte-identical to today for every other model and role, so
+ *   a model that declares no profile keeps its pinned output exactly.
+ *
  * E2 (2026-10-09) - target-aware price-band retention:
  *   `retainTopKPerRole` takes an OPTIONAL `roleTargets` argument (the
  *   computeRoleTargets map from ./targets). When a role HAS a target its bucket
@@ -318,6 +329,10 @@ function deepFreeze(value) {
  *        - roleTargets: the OPTIONAL computeRoleTargets map (E2). null/absent
  *          keeps the pre-E2 top-K rule; a role with an entry gets band retention
  *          whose slots are bounded by the unchanged K and the hard ceiling
+ *        - roleExclusions: the OPTIONAL E6 map (role -> array|Set of
+ *          product-id strings). An excluded candidate is dropped before Rule
+ *          2 ordering, the Decision 27 reservation and the K cap. null/absent
+ *          changes nothing.
  * @returns {object} frozen { results: [retained verdict, ...] } - the exact
  *        Engine 3 candidate-pool input shape: verdicts are the producer's
  *        records handed over by reference, buckets in canonical
@@ -343,7 +358,14 @@ function retainTopKPerRole(sources) {
       'Candidate retention requires an object carrying filterResult, candidateScores and topKPerRole'
     );
   }
-  const { filterResult, candidateScores, topKPerRole, prices, roleTargets = null } = sources;
+  const {
+    filterResult,
+    candidateScores,
+    topKPerRole,
+    prices,
+    roleTargets = null,
+    roleExclusions = null,
+  } = sources;
 
   // --- light gates (fail fast, before any work; existing vocabulary) -------
   if (!isPlainObject(filterResult) || !Array.isArray(filterResult.results)) {
@@ -404,6 +426,44 @@ function retainTopKPerRole(sources) {
     );
   }
 
+  // E6 (Decision 53): normalize the OPTIONAL role exclusion map once. A
+  // caller that wired it wrong is told here rather than by a silently ignored
+  // role. Values may be arrays (the ./igpu-pool contract) or Sets; membership
+  // is by String(product_id), the same identity the verdicts carry.
+  const excludedByRole = new Map();
+  if (roleExclusions !== null) {
+    if (!isPlainObject(roleExclusions)) {
+      fail(
+        ERROR_CODES.INVALID_INPUT,
+        'roleExclusions',
+        '"roleExclusions" must be null or an object keyed by component role'
+      );
+    }
+    for (const role of Object.keys(roleExclusions)) {
+      const value = roleExclusions[role];
+      const isSet = value instanceof Set;
+      if (value === null || value === undefined || (!isSet && !Array.isArray(value))) {
+        fail(
+          ERROR_CODES.INVALID_FIELD_VALUE,
+          `roleExclusions.${role}`,
+          `"roleExclusions.${role}" must be an array or Set of product-id strings`
+        );
+      }
+      const ids = new Set();
+      for (const productId of value) {
+        if (typeof productId !== 'string' || productId.trim().length === 0) {
+          fail(
+            ERROR_CODES.INVALID_FIELD_VALUE,
+            `roleExclusions.${role}`,
+            `"roleExclusions.${role}" entries must be non-blank product-id strings`
+          );
+        }
+        ids.add(productId);
+      }
+      excludedByRole.set(role, ids);
+    }
+  }
+
   const scoreByIdentity = buildScoreIndex(candidateScores);
 
   // --- Rule 2: bucket the eligible verdicts per role; REJECT never ranks ---
@@ -418,6 +478,12 @@ function retainTopKPerRole(sources) {
     }
     if (!RETENTION_ELIGIBLE_STATUSES.includes(verdict.status)) {
       continue; // REJECT (from the real producer, only REJECT) never ranks.
+    }
+    // E6 (Decision 53): a policy-excluded candidate never enters the bucket, so
+    // it cannot win the cheapest reservation, a price band or the K top-up.
+    const excluded = excludedByRole.get(verdict.component_role);
+    if (excluded !== undefined && excluded.has(String(verdict.product_id))) {
+      continue;
     }
     const score = scoreByIdentity.get(
       identityKey(verdict.product_id, verdict.product_variant_id, verdict.component_role)

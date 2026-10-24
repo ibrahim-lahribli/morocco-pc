@@ -296,37 +296,102 @@ test('A4: a selected GPU below the resolution floor FAILs; a NULL vram is UNKNOW
 test('A5: equal priority prices FAIL; cheaper-and-different PASS', () => {
   const assertion = { type: 'priority_divergence', pairs: [{ price_first: 'S10', performance_first: 'S11' }] };
   const scenarios = [{ id: 'S10' }, { id: 'S11' }];
+  // A5 reads the RANK-1 ARCHETYPE (selected[0]): E4 makes priority an output
+  // ordering, so `best` (ranked[0]) is the same build under every priority.
+  const top = (signature, total) => ({ signature, total_price: total, has_gpu: true, compatibility_status: 'PASS', pair_key: signature });
 
   const equal = run(assertion, {}, scenarios, new Map([
-    ['S10', art({ best: { signature: 'same', total_price: 1000, gpu_price: 1, cpu_integrated_gpu_present: false, has_gpu: true } })],
-    ['S11', art({ best: { signature: 'same', total_price: 1000, gpu_price: 1, cpu_integrated_gpu_present: false, has_gpu: true } })],
+    ['S10', art({ selected: [top('same', 1000)] })],
+    ['S11', art({ selected: [top('same', 1000)] })],
   ]));
   assert.equal(equal[0].status, STATUSES.FAIL);
 
   const divergent = run(assertion, {}, scenarios, new Map([
-    ['S10', art({ best: { signature: 'cheap', total_price: 900, gpu_price: 1, cpu_integrated_gpu_present: false, has_gpu: true } })],
-    ['S11', art({ best: { signature: 'pricey', total_price: 1500, gpu_price: 1, cpu_integrated_gpu_present: false, has_gpu: true } })],
+    ['S10', art({ selected: [top('cheap', 900)] })],
+    ['S11', art({ selected: [top('pricey', 1500)] })],
   ]));
   assert.equal(divergent[0].status, STATUSES.PASS);
+  assert.equal(divergent[0].measured.price_first_total, 900);
+
+  // The regression this pins: identical `best` and priority-specific
+  // `selected` must still PASS, because priority only moves the ORDER of the
+  // archetypes, never which builds are eligible.
+  const sameBest = { signature: 'ranked-0', total_price: 1200, gpu_price: 1, cpu_integrated_gpu_present: false, has_gpu: true };
+  const priorityOrdered = run(assertion, {}, scenarios, new Map([
+    ['S10', art({ best: sameBest, selected: [top('cheap', 900), top('pricey', 1500)] })],
+    ['S11', art({ best: sameBest, selected: [top('pricey', 1500), top('cheap', 900)] })],
+  ]));
+  assert.equal(priorityOrdered[0].status, STATUSES.PASS);
+
+  const noArchetype = run(assertion, {}, scenarios, new Map([
+    ['S10', art({ selected: [] })],
+    ['S11', art({ selected: [top('pricey', 1500)] })],
+  ]));
+  assert.equal(noArchetype[0].status, STATUSES.UNKNOWN);
+  assert.equal(noArchetype[0].detail, 'no archetype selected');
 });
 
 test('A6: a discrete GPU in the OFFICE build FAILs; a bare iGPU build PASSes', () => {
   const thresholds = { A6_office_price_ratio_max: { value: 0.4 } };
   const assertion = { type: 'office_igpu', scenarios: ['S19'], reference: 'S03' };
   const scenarios = [{ id: 'S19' }, { id: 'S03' }];
-  const reference = art({ scenario_id: 'S03', best: { signature: 'r', total_price: 10000, gpu_price: 1, cpu_integrated_gpu_present: false, has_gpu: true } });
+  const reference = art({ scenario_id: 'S03', selected: [{ signature: 'r', total_price: 10000, has_gpu: true, compatibility_status: 'PASS', cpu_integrated_gpu_present: false, pair_key: 'rp' }] });
+  const office = (entry, extra) => art(Object.assign({
+    selected: [Object.assign({ signature: 'a', gpu_vram_gb: null, compatibility_status: 'PASS', pair_key: 'p' }, entry)],
+  }, extra || {}));
 
   const withGpu = run(assertion, thresholds, scenarios, new Map([
     ['S03', reference],
-    ['S19', art({ selected: [{ signature: 'a', has_gpu: true, gpu_vram_gb: 8, compatibility_status: 'PASS', total_price: 3000, pair_key: 'p' }], best: { signature: 'a', total_price: 3000, gpu_price: 900, cpu_integrated_gpu_present: true, has_gpu: true } })],
+    ['S19', office({ has_gpu: true, gpu_vram_gb: 8, total_price: 3000, cpu_integrated_gpu_present: true })],
   ]));
   assert.equal(withGpu[0].status, STATUSES.FAIL);
 
   const bare = run(assertion, thresholds, scenarios, new Map([
     ['S03', reference],
-    ['S19', art({ selected: [{ signature: 'a', has_gpu: false, gpu_vram_gb: null, compatibility_status: 'PASS', total_price: 3000, pair_key: 'p' }], best: { signature: 'a', total_price: 3000, gpu_price: null, cpu_integrated_gpu_present: true, has_gpu: false } })],
+    ['S19', office({ has_gpu: false, total_price: 3000, cpu_integrated_gpu_present: true })],
   ]));
   assert.equal(bare[0].status, STATUSES.PASS);
+  assert.equal(bare[0].measured.price_ratio_vs_reference, 0.3);
+
+  // One GPU-bearing entry anywhere in the recommended set FAILs even when the
+  // rank-1 entry is GPU-less - the clause is suite-wide on purpose.
+  const mixed = run(assertion, thresholds, scenarios, new Map([
+    ['S03', reference],
+    ['S19', art({ selected: [
+      { signature: 'a', has_gpu: false, total_price: 3000, cpu_integrated_gpu_present: true, compatibility_status: 'PASS', pair_key: 'p' },
+      { signature: 'b', has_gpu: true, total_price: 3500, cpu_integrated_gpu_present: false, compatibility_status: 'PASS', pair_key: 'q' },
+    ] })],
+  ]));
+  assert.equal(mixed[0].status, STATUSES.FAIL);
+  assert.equal(mixed[0].measured.selected_builds_with_gpu, 1);
+
+  // Every clause reads selected[0], never ranked[0]: a GPU-less recommendation
+  // whose rank-1 ranked entry differs must not be judged on that other build.
+  const rankOneIgnored = run(assertion, thresholds, scenarios, new Map([
+    ['S03', reference],
+    ['S19', office({ has_gpu: false, total_price: 3000, cpu_integrated_gpu_present: true }, {
+      best: { signature: 'z', total_price: 9000, gpu_price: 5000, cpu_integrated_gpu_present: false, has_gpu: true },
+    })],
+  ]));
+  assert.equal(rankOneIgnored[0].status, STATUSES.PASS);
+
+  const overRatio = run(assertion, thresholds, scenarios, new Map([
+    ['S03', reference],
+    ['S19', office({ has_gpu: false, total_price: 5000, cpu_integrated_gpu_present: true })],
+  ]));
+  assert.equal(overRatio[0].status, STATUSES.FAIL);
+
+  const unknownIgpu = run(assertion, thresholds, scenarios, new Map([
+    ['S03', reference],
+    ['S19', office({ has_gpu: false, total_price: 3000, cpu_integrated_gpu_present: null })],
+  ]));
+  assert.equal(unknownIgpu[0].status, STATUSES.UNKNOWN);
+
+  const noBuilds = run(assertion, thresholds, scenarios, new Map([
+    ['S03', reference],
+    ['S19', art({ selected: [], build_count: 0 })],
+  ]));
+  assert.equal(noBuilds[0].status, STATUSES.UNKNOWN);
 });
 
 test('A7 (corrected): within_budget must equal (budget >= cheapest_total), read at run time', () => {
@@ -354,6 +419,82 @@ test('A7 (corrected): within_budget must equal (budget >= cheapest_total), read 
   ]));
   assert.equal(mismatch[0].status, STATUSES.FAIL);
   assert.equal(mismatch[1].status, STATUSES.FAIL);
+});
+
+// ---------------------------------------------------------------------------
+// A10 - E4 archetype strategies
+// ---------------------------------------------------------------------------
+
+test('A10: the exact strategy triple in output order PASSes; reorder or an extra strategy FAILs', () => {
+  const assertion = {
+    type: 'archetype_strategies',
+    scenarios: [{ id: 'S10', expected_strategies: ['VALUE', 'PERFORMANCE', 'BALANCED'] }],
+  };
+  const scenarios = [{ id: 'S10' }];
+  const triple = [
+    { signature: 'v', total_price: 900, has_gpu: true, compatibility_status: 'PASS', pair_key: 'p1' },
+    { signature: 'p', total_price: 1500, has_gpu: true, compatibility_status: 'PASS', pair_key: 'p2' },
+    { signature: 'b', total_price: 1200, has_gpu: true, compatibility_status: 'PASS', pair_key: 'p3' },
+  ];
+
+  const exact = run(assertion, {}, scenarios, new Map([
+    ['S10', art({ selected: triple, archetype_strategies: ['VALUE', 'PERFORMANCE', 'BALANCED'], archetype_reason_codes: [] })],
+  ]));
+  assert.equal(exact[0].status, STATUSES.PASS);
+  assert.deepEqual(exact[0].measured.strategies, ['VALUE', 'PERFORMANCE', 'BALANCED']);
+
+  const reordered = run(assertion, {}, scenarios, new Map([
+    ['S10', art({ selected: triple, archetype_strategies: ['BALANCED', 'PERFORMANCE', 'VALUE'], archetype_reason_codes: [] })],
+  ]));
+  assert.equal(reordered[0].status, STATUSES.FAIL);
+
+  const missing = run(assertion, {}, scenarios, new Map([
+    ['S10', art({ selected: triple.slice(0, 2), archetype_strategies: ['VALUE', 'PERFORMANCE'], archetype_reason_codes: ['NO_BALANCED_CANDIDATE'] })],
+  ]));
+  assert.equal(missing[0].status, STATUSES.FAIL);
+});
+
+test('A10: duplicate pairs FAIL; a reason code outside NO_*/EMPTY_RANKED FAILs; missing artifact is UNKNOWN', () => {
+  const assertion = { type: 'archetype_strategies', scenarios: [{ id: 'S03', expected_strategies: ['BALANCED', 'PERFORMANCE'] }] };
+  const scenarios = [{ id: 'S03' }];
+  const entry = (signature, pairKey) => ({ signature, total_price: 1000, has_gpu: true, compatibility_status: 'PASS', pair_key: pairKey });
+
+  const duplicatePair = run(assertion, {}, scenarios, new Map([
+    ['S03', art({ selected: [entry('a', 'p'), entry('b', 'p')], archetype_strategies: ['BALANCED', 'PERFORMANCE'], archetype_reason_codes: [] })],
+  ]));
+  assert.equal(duplicatePair[0].status, STATUSES.FAIL);
+  assert.equal(duplicatePair[0].measured.distinct_pairs, 1);
+
+  const oddCode = run(assertion, {}, scenarios, new Map([
+    ['S03', art({ selected: [entry('a', 'p'), entry('b', 'q')], archetype_strategies: ['BALANCED', 'PERFORMANCE'], archetype_reason_codes: ['SOMETHING_ELSE'] })],
+  ]));
+  assert.equal(oddCode[0].status, STATUSES.FAIL);
+
+  const emptyRanked = run(
+    { type: 'archetype_strategies', scenarios: [{ id: 'S17', expected_strategies: [] }] },
+    {},
+    [{ id: 'S17' }],
+    new Map([['S17', art({ selected: [], build_count: 0, archetype_strategies: [], archetype_reason_codes: ['EMPTY_RANKED'] })]])
+  );
+  assert.equal(emptyRanked[0].status, STATUSES.PASS);
+
+  // The real E4 codes carry an underscore (NO_<STRATEGY>_CANDIDATE); an
+  // /^NO_[A-Z]+$/ pattern rejected them, which made every honest degradation a
+  // FAIL. A genuine shortfall must PASS when the strategies match.
+  const honestShortfall = run(
+    { type: 'archetype_strategies', scenarios: [{ id: 'S18', expected_strategies: ['BALANCED'] }] },
+    {},
+    [{ id: 'S18' }],
+    new Map([['S18', art({
+      selected: [entry('a', 'p')],
+      archetype_strategies: ['BALANCED'],
+      archetype_reason_codes: ['NO_PERFORMANCE_CANDIDATE', 'NO_VALUE_CANDIDATE'],
+    })]])
+  );
+  assert.equal(honestShortfall[0].status, STATUSES.PASS);
+
+  const absent = run(assertion, {}, scenarios, new Map());
+  assert.equal(absent[0].status, STATUSES.UNKNOWN);
 });
 
 // ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ const targets = require('./targets');
 test('retention barrel exposes exactly its public API', () => {
   assert.deepEqual(Object.keys(retention), [
     'retainTopKPerRole',
+    'excludedCpuProductIds',
     'BUDGET_FLOOR_ROLES',
     'computeBudgetFloor',
     'computeRoleTargets',
@@ -32,6 +33,8 @@ test('retention barrel exposes exactly its public API', () => {
   ]);
   assert.equal(typeof retention.retainTopKPerRole, 'function');
   assert.equal(retention.retainTopKPerRole.length, 1);
+  assert.equal(typeof retention.excludedCpuProductIds, 'function');
+  assert.equal(retention.excludedCpuProductIds.length, 1);
   assert.equal(typeof retention.computeBudgetFloor, 'function');
   assert.equal(retention.computeBudgetFloor.length, 1);
   assert.ok(Array.isArray(retention.BUDGET_FLOOR_ROLES));
@@ -40,6 +43,7 @@ test('retention barrel exposes exactly its public API', () => {
 
 test('retention barrel re-exports by identity - no wrapper, no copy', () => {
   assert.strictEqual(retention.retainTopKPerRole, retain.retainTopKPerRole);
+  assert.strictEqual(retention.excludedCpuProductIds, require('./igpu-pool').excludedCpuProductIds);
   assert.strictEqual(retention.computeBudgetFloor, budgetFloor.computeBudgetFloor);
   assert.strictEqual(retention.BUDGET_FLOOR_ROLES, budgetFloor.BUDGET_FLOOR_ROLES);
   assert.strictEqual(retention.computeRoleTargets, targets.computeRoleTargets);

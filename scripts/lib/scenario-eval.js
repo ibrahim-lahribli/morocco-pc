@@ -610,6 +610,23 @@ function a4(assertion, thresholds, byId, get) {
   return rows;
 }
 
+/**
+ * The rank-1 build of an artifact: the FIRST archetype in output order.
+ *
+ * E4 (Decision 41) made `priority` an OUTPUT ordering: selectArchetypes returns
+ * BALANCED first at priority 3, VALUE first at 1-2 and PERFORMANCE first at 4-5.
+ * `best` is ranked[0] (highest build_score), which priority never touches, so an
+ * assertion that claims to test priority must read `selected[0]`. Before
+ * 2026-10-24 A5 read `best` and therefore measured the same build for priority 1
+ * and 5 in every pair - it could not pass whatever the engine did (deviation
+ * recorded in test/golden/CHANGELOG.md).
+ */
+function topSelected(artifact) {
+  if (artifact === null || artifact === undefined) return null;
+  const selected = Array.isArray(artifact.selected) ? artifact.selected : [];
+  return selected.length === 0 ? null : selected[0];
+}
+
 /** A5 - priority divergence: price-first ranks a strictly cheaper build than performance-first. */
 function a5(assertion, byId, get) {
   const rows = [];
@@ -622,19 +639,21 @@ function a5(assertion, byId, get) {
       rows.push(row('A5', STATUSES.UNKNOWN, ids, null, expected, 'artifact missing'));
       continue;
     }
-    if (low.best === null || high.best === null) {
-      rows.push(row('A5', STATUSES.UNKNOWN, ids, null, expected, 'no ranked build'));
+    const lowTop = topSelected(low);
+    const highTop = topSelected(high);
+    if (lowTop === null || highTop === null) {
+      rows.push(row('A5', STATUSES.UNKNOWN, ids, null, expected, 'no archetype selected'));
       continue;
     }
-    const cheaper = low.best.total_price < high.best.total_price;
-    const differ = low.best.signature !== high.best.signature;
+    const cheaper = lowTop.total_price < highTop.total_price;
+    const differ = lowTop.signature !== highTop.signature;
     rows.push(row(
       'A5',
       cheaper && differ ? STATUSES.PASS : STATUSES.FAIL,
       ids,
       {
-        price_first_total: low.best.total_price,
-        performance_first_total: high.best.total_price,
+        price_first_total: lowTop.total_price,
+        performance_first_total: highTop.total_price,
         signatures_differ: differ,
       },
       expected,
@@ -644,26 +663,39 @@ function a5(assertion, byId, get) {
   return rows;
 }
 
-/** A6 - OFFICE: no discrete GPU, iGPU CPU, top-build price <= ratio x reference. */
+/**
+ * A6 - OFFICE: no discrete GPU, iGPU CPU, top-build price <= ratio x reference.
+ *
+ * Every clause reads the SAME build: the rank-1 archetype (`selected[0]`), the
+ * recommendation the OFFICE query actually leads with. Before 2026-10-24 the
+ * "no discrete GPU" clause scanned `selected` while the CPU and price clauses
+ * read `best` (ranked[0]) - two different builds wearing one row's decision, so
+ * a GPU-less recommendation could still FAIL on a rank-1 entry that was never
+ * assessed for the iGPU clause (deviation recorded in test/golden/CHANGELOG.md).
+ * "no discrete GPU" is the one clause that must stay suite-wide: a single
+ * GPU-bearing entry in the recommended set is a failure even if the top one is
+ * GPU-less.
+ */
 function a6(assertion, maxRatio, get) {
-  const reference = get(assertion.reference);
-  const referencePrice = reference !== null && reference.best !== null ? reference.best.total_price : null;
+  const referenceTop = topSelected(get(assertion.reference));
+  const referencePrice = referenceTop === null ? null : referenceTop.total_price;
   const rows = [];
   for (const sid of assertion.scenarios) {
     const a = get(sid);
-    const expected = 'no discrete GPU; CPU integrated_gpu_present = true; top price <= '
-      + maxRatio + ' x ' + assertion.reference + ' top price';
+    const expected = 'no discrete GPU; rank-1 CPU integrated_gpu_present = true; rank-1 price <= '
+      + maxRatio + ' x ' + assertion.reference + ' rank-1 price';
     if (a === null || referencePrice === null) {
       rows.push(row('A6', STATUSES.UNKNOWN, [sid], null, expected, 'artifact or reference missing'));
       continue;
     }
-    if (a.selected.length === 0 || a.best === null) {
+    const top = topSelected(a);
+    if (top === null) {
       rows.push(row('A6', STATUSES.UNKNOWN, [sid], null, expected, 'no builds at this budget'));
       continue;
     }
     const noGpu = a.selected.every((entry) => !entry.has_gpu);
-    const igpu = a.best.cpu_integrated_gpu_present;
-    const ratio = a.best.total_price / referencePrice;
+    const igpu = top.cpu_integrated_gpu_present;
+    const ratio = top.total_price / referencePrice;
     const sub = [];
     sub.push(noGpu ? STATUSES.PASS : STATUSES.FAIL);
     sub.push(igpu === true ? STATUSES.PASS : (igpu === null ? STATUSES.UNKNOWN : STATUSES.FAIL));
@@ -842,8 +874,13 @@ function a10(assertion, get) {
     const pairKeys = a.selected.map((entry) => entry.pair_key).filter((k) => k !== null);
     const distinctOk = new Set(pairKeys).size === pairKeys.length;
     // Reason codes present but EMPTY_RANKED means the scenario has nothing,
-    // else every degradation code must be one of NO_* (the honest shortfall).
-    const codesOk = a.archetype_reason_codes.every((code) => code === 'EMPTY_RANKED' || /^NO_[A-Z]+$/.test(code));
+    // else every degradation code must be one of the three NO_<STRATEGY>_CANDIDATE
+    // codes (the honest shortfall). Spelling the vocabulary out rather than
+    // matching /^NO_[A-Z]+$/ matters: E4's codes carry an underscore
+    // (NO_VALUE_CANDIDATE), which the old pattern rejected, so every real
+    // degradation FAILed A10 until 2026-10-24.
+    const codesOk = a.archetype_reason_codes.every((code) => code === 'EMPTY_RANKED'
+      || /^NO_(PERFORMANCE|BALANCED|VALUE)_CANDIDATE$/.test(code));
     rows.push(row(
       'A10',
       orderOk && distinctOk && codesOk ? STATUSES.PASS : STATUSES.FAIL,

@@ -216,7 +216,7 @@ function baseRoutes(overrides = {}) {
       || [{ product_id: COOLER_ID, product_variant_id: null }],
     'JOIN gpu_board_spec s ON': [{ product_id: GPU_ID, product_variant_id: GPU_VARIANT_ID }],
     'FROM store_offer': overrides.offers || defaultOffers(),
-    'FROM cpu_spec': [
+    'FROM cpu_spec': overrides.cpuSpecs || [
       { product_id: CPU_ID, socket_id: SOCKET_ID, product_family_id: FAMILY_ID, integrated_gpu_present: true },
       { product_id: ORPHAN_CPU_ID, socket_id: SOCKET_ID, product_family_id: FAMILY_ID, integrated_gpu_present: false },
     ],
@@ -837,6 +837,70 @@ test('E2: a use case the model does not declare passes roleTargets null', async 
     // The fixture query use_case is GAMING, which this model does not declare.
     await runRecommendation({ db, queryId: QUERY_ID });
     assert.equal(spies.retention.calls[0].args[0].roleTargets, null);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6c. E6 (Decision 53): the declared GPU policy reaches retention as a CPU
+//     eligibility set, and the SAME resolved policy reaches Engine 3.
+// ---------------------------------------------------------------------------
+
+test('E6: a declared IGPU_ALLOWED policy passes retention the CPUs with no verified iGPU', async () => {
+  const db = createDb({
+    routes: {
+      configuration: {
+        use_case_profiles: {
+          GAMING: { gpu_policy: 'IGPU_ALLOWED', spend_targets: { CPU: 0.17 } },
+        },
+      },
+      cpuSpecs: [
+        { product_id: CPU_ID, socket_id: SOCKET_ID, product_family_id: FAMILY_ID, integrated_gpu_present: false },
+      ],
+    },
+  });
+  await withSpies([
+    { key: 'retention', namespace: retentionModule, name: 'retainTopKPerRole' },
+    { key: 'assembly', namespace: assemblyModule, name: 'assembleBuildsForRecommendation' },
+  ], async (spies) => {
+    await runRecommendation({ db, queryId: QUERY_ID });
+    const exclusions = spies.retention.calls[0].args[0].roleExclusions;
+    assert.deepEqual(Object.keys(exclusions), ['CPU']);
+    assert.deepEqual(exclusions.CPU, [CPU_ID]);
+    assert.ok(Object.isFrozen(exclusions.CPU));
+    // The same resolved policy reaches Engine 3 - one resolution, two readers.
+    assert.equal(spies.assembly.calls[0].args[0].gpuPolicy, 'IGPU_ALLOWED');
+  });
+});
+
+test('E6: a verified iGPU CPU produces an empty exclusion set, and REQUIRED produces null', async () => {
+  const allowed = createDb({
+    routes: {
+      configuration: {
+        use_case_profiles: { GAMING: { gpu_policy: 'IGPU_ALLOWED', spend_targets: { CPU: 0.17 } } },
+      },
+    },
+  });
+  await withSpies([
+    { key: 'retention', namespace: retentionModule, name: 'retainTopKPerRole' },
+  ], async (spies) => {
+    await runRecommendation({ db: allowed, queryId: QUERY_ID });
+    assert.deepEqual(spies.retention.calls[0].args[0].roleExclusions, { CPU: [] });
+  });
+
+  const required = createDb({
+    routes: {
+      configuration: {
+        use_case_profiles: { GAMING: { gpu_policy: 'REQUIRED', spend_targets: { CPU: 0.17 } } },
+      },
+    },
+  });
+  await withSpies([
+    { key: 'retention', namespace: retentionModule, name: 'retainTopKPerRole' },
+    { key: 'assembly', namespace: assemblyModule, name: 'assembleBuildsForRecommendation' },
+  ], async (spies) => {
+    await runRecommendation({ db: required, queryId: QUERY_ID });
+    assert.equal(spies.retention.calls[0].args[0].roleExclusions, null);
+    assert.equal(spies.assembly.calls[0].args[0].gpuPolicy, 'REQUIRED');
   });
 });
 

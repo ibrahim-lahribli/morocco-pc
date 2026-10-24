@@ -4687,7 +4687,7 @@ Amends Decision 21's stage list (the showcase stage is `selectArchetypes`; the r
 
 ## Decision 42 — the engine enforces the OPTIONAL per-resolution VRAM floor resolution_profiles.<resolution>.vram_floor_gb at Engine 3 GPU depth (E5)
 
-Status: RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 (recorded 2026-10-13, after the docs-repair pass restored this log and the gap register) — a GPU candidate whose KNOWN chipset VRAM is below the active model's declared floor for the query's resolution is skipped at GPU depth; UNKNOWN VRAM or an undeclared resolution keeps the floor off entirely.
+Status: RESOLVED 2026-10-10; IMPLEMENTED 2026-10-10 (recorded 2026-10-13, after the docs-repair pass restored this log and the gap register) — a GPU candidate whose KNOWN chipset VRAM is below the active model's declared floor for the query's resolution is skipped at GPU depth; UNKNOWN VRAM or an undeclared resolution keeps the floor off entirely. **ACTIVE 2026-10-24:** `launch-v2@2.0.0` declares the reviewed floors (Decision 52), so the rule now skips below-floor GPUs on the served model and the A4 floor rows are green.
 
 Date: 2026-10-10 implementation (the E5 session), recorded 2026-10-13. E5 Phase A of `docs/briefs/engine.md`: the roadmap clause "resolution ... enforces a configurable VRAM floor from `gpu_chipset.vram_capacity_gb`" (hypothesis values 1080p 8 / 1440p 12 / 2160p 16 GB, H3 review pending). Prompted by OG-38 — use_case / resolution / priority had no runtime effect — and it gives Decision 39's `resolution` sibling (carried by the query loader, never part of the Engine 2A input) its first engine effect. It extends Decision 40's OPTIONAL contract family to a second Engine 3 input field. NOT a migration, no seed, no compatibility-verdict change: the floor is a RECOMMENDATION-policy walk constraint, never a hardware compatibility verdict.
 
@@ -4726,7 +4726,7 @@ Amends Decision 39 (which records `resolution` as a query-loader sibling with no
 
 ## Decision 43 — the Engine 3 walk honours a DECLARED per-use-case GPU policy (`gpu_policy`) at GPU depth (E6)
 
-Status: RESOLVED 2026-10-14; IMPLEMENTED 2026-10-14 (recorded 2026-10-14, after the code landed — it cited this number before the record existed, OG-48) — a scoring model whose `use_case_profiles[use_case].gpu_policy` is `IGPU_ALLOWED` makes the iGPU the GPU for that use case, so an iGPU CPU takes the omit path exclusively; `REQUIRED` forces the discrete GPU; a model that declares no profile keeps the legacy `gpu_required_use_cases` rule byte-identically. **The rule is UNREACHABLE on today's catalog**: its acceptance (A6) is not met and the OFFICE rank-1 CPU has no integrated GPU, so the declared policy correctly resolves to `REQUIRED`.
+Status: RESOLVED 2026-10-14; IMPLEMENTED 2026-10-14 (recorded 2026-10-14, after the code landed — it cited this number before the record existed, OG-48) — a scoring model whose `use_case_profiles[use_case].gpu_policy` is `IGPU_ALLOWED` makes the iGPU the GPU for that use case, so an iGPU CPU takes the omit path exclusively; `REQUIRED` forces the discrete GPU; a model that declares no profile keeps the legacy `gpu_required_use_cases` rule byte-identically. **The rule is UNREACHABLE on today's catalog**: its acceptance (A6) is not met and the OFFICE rank-1 CPU has no integrated GPU, so the declared policy correctly resolves to `REQUIRED`. **ACCEPTANCE MET 2026-10-24:** retention now narrows its CPU pool under a declared `IGPU_ALLOWED` (Decision 53), so GPU-less OFFICE builds exist and A6 is green at S17/S18/S19; OG-49 is closed.
 
 Date: 2026-10-14. E6 of `docs/briefs/engine.md` ("OFFICE: GPU OPTIONAL with an iGPU CPU, low spend targets"). It consumes Decision 37's `use_case_profiles.gpu_policy` vocabulary and extends Decision 40 / Decision 42's OPTIONAL-input pattern to a third Engine 3 field. NOT a migration, no seed, no compatibility-verdict change, no retention change: the policy constrains the RECOMMENDATION walk only.
 
@@ -5311,3 +5311,94 @@ There is also a scope temptation: `price_history` stores `availability`, so a ro
 ### Supersedes / superseded by
 
 It supersedes no decision. It extends the catalog surface Decision 50 defines with one read-only path, reuses Decision 50's currency rule and its open-eligibility split, and consumes Decision 35's provenance classes. It corrects S25's status block in `docs/plans/agent3-web-sprints.md` in place (the price-history half moves from BLOCKED to "API unblocked, chart pending") and the board's state paragraph. No dated banner anywhere is retro-edited.
+## Decision 52 — E5 is ACTIVE: a served scoring model declares the reviewed per-resolution VRAM floors, so the Decision 42 rule stops being inert
+
+Status: RESOLVED 2026-10-24; IMPLEMENTED 2026-10-24 — `launch-v2@2.0.0` is `launch-v2@1.0.0`'s configuration plus `resolution_profiles` (1080p 8 / 1440p 12 / 2160p 16 GB), with BOTH versions active on the TEST branch, so the Decision 42 floor now skips below-floor GPUs on the served model and the A4 floor rows are green; the floors are hypotheses no longer.
+
+Date: 2026-10-24. Closes OG-47 (E5's rule was inert because no model declared the key) and completes E5 in `docs/briefs/engine.md`. NOT a migration, no engine code change, no compatibility-verdict change: it is a SCORING-MODEL seed (`database/seeds/018_scoring_model_launch_v2_resolution_profiles.sql`) plus the review that fixes the values. The shared database is deliberately untouched and stays on `seed-minimal-v1`.
+
+### Current situation
+
+- Decision 42 shipped `assembly/assemble.js` `belowVramFloor`, `scoring/configuration.js` `validateResolutionProfiles` and `orchestrator/run.js` `resolveVramFloorGb`, all OPTIONAL-by-construction. Before this decision no row in `scoring_model` declared `resolution_profiles`, so every pass took the pre-E5 walk and the floor changed no served output — OG-47.
+- The three values had never been reviewed: 1080p 8 GB / 1440p 12 GB / 2160p 16 GB were the brief's hypothesis, asserted by `A4_vram_floor_gb` while the served models declared nothing, so the golden assertion judged a policy nothing used.
+- `launch-v2@1.0.0` (seed 013) already carries `use_case_profiles`, `candidate_caps`, weights and staleness on the TEST branch; `scripts/lib/model-pin.js` resolves a model by `name@version` among ACTIVE rows, which is what makes an A/B against an unchanged engine possible.
+
+### Problem
+
+A rule that only fires when a model opts in cannot be called implemented while no served model opts in: E5's acceptance would rest on a unit test rather than on an observable recommendation change, and A4's floor rows would stay EXPECTED-RED for a reason that looks like an engine defect. Mutating `launch-v2@1.0.0` in place is not available either — every golden artifact, gap row and decision records its pin, so changing 1.0.0's configuration would make one identity mean two policies and silently invalidate that evidence.
+
+### Decision
+
+1. `database/seeds/018_scoring_model_launch_v2_resolution_profiles.sql` INSERTs `launch-v2` `2.0.0` as `1.0.0`'s configuration copied with the JSONB `||` operator plus exactly ONE new key, `resolution_profiles` = `{ "1080p": { "vram_floor_gb": 8 }, "1440p": { "vram_floor_gb": 12 }, "2160p": { "vram_floor_gb": 16 } }`. Nothing else differs, so a pinned A/B isolates the floor.
+2. Both `1.0.0` and `2.0.0` stay `is_active = true` on the TEST branch. A pin is a SELECTOR, never an activation (`scripts/lib/model-pin.js`), so every existing `--model=launch-v2@1.0.0` command keeps resolving, and the API serves `2.0.0` as the newest active row (`ORDER BY created_at DESC, id ASC`).
+3. The values are the H3-REVIEWED floors, not new guesses: they are the `A4_vram_floor_gb` values, approved 2026-10-24 (`docs/ENGINE_HYPOTHESIS_REVIEW_2026-10-24.md`, `test/golden/CHANGELOG.md`). A future value change belongs in a NEW version, never an edit to this row.
+4. The seed is DML-only and idempotent (`NOT EXISTS` guard on `name = 'launch-v2' AND version = '2.0.0'`); it opens no transaction of its own so it can be rehearsal-wrapped. It does not touch any `cooler_spec` / `ram_spec` / `case_spec` / `motherboard_spec` row, so the Decision 26 `check-deferred-rules.js` trigger does not apply.
+5. TEST-branch-first, and only there. A shared apply would change the model the shared database serves and needs its own owner-gated decision; the shared database stays on `seed-minimal-v1`.
+
+### Rejected alternatives
+
+- **Updating `launch-v2@1.0.0` in place.** Every recorded result names its pin (`launch-v2@1.0.0` appears in the golden artifacts, gap rows and Decisions 39-43); mutating the row would make the same identity mean two policies and invalidate that evidence retroactively. The recipe (`docs/RECIPES/add-a-scoring-model-version.md`) requires a new version.
+- **A second model that declares `resolution_profiles` but drops `use_case_profiles`.** It would change two dimensions at once, so the A/B could no longer attribute a moved row to the floor.
+- **Deactivating 1.0.0 so only 2.0.0 serves.** The pin fails closed on an INACTIVE row, so deactivating 1.0.0 would break every pinned command and the committed evidence those commands reproduce — for no behavioural gain, because the API already prefers the newest active row.
+- **Hardcoding the floors in engine code.** Decision 42 already rejected this: policy belongs to the model's declared vocabulary, and a code default would silently bind every future model.
+- **Declaring only the resolutions the golden suite exercises.** A profile set that omits `2160p` would silently disable the floor for any 4K query while looking implemented; all three reviewed resolutions are declared.
+
+### Verdict for this pass
+
+- **Seed applied to the TEST branch - PASS.** `launch-v2@2.0.0` resolves through `scripts/lib/model-pin.js`; `1.0.0` still resolves; both are active.
+- **Observable engine change - PASS, differentially.** A filtered golden run at `launch-v2@2.0.0` moves A4 S06 from FAIL to PASS: before the seed the 1440p walk still reached an 8 GB card against a 12 GB floor, after it the walk skips that branch and selects a 16 GB card. S04/S05/S07-S09 are unchanged, which is the control that the edit is the floor and nothing else.
+- **Every A4 floor row green - PASS.** S04 12 GB / floor 8, S05 16/8, S06 16/12, S07 12/12, S08 16/12, S09 16/16. A4's SEPARATE strict-pair clause (S05/S09 both 11500 MAD) still fails and stays an unreviewed hypothesis; the floors themselves are approved.
+- **Unit - PASS.** `npm run test:unit` 1185 pass / 0 fail on Node 24, re-run on Node 22 with 0 cancelled. No engine code changed, so this is regression evidence only.
+- **NOT done here:** the committed golden baselines are not regenerated (they predate Decision 41 as well as this change; rebaselining is a review-gated act), and no shared-DB apply.
+
+### Supersedes / superseded by
+
+Amends Decision 42: its Status line said "no ACTIVE model declares `resolution_profiles` today, so the shipped state is provably inert" — that is now historical, and Decision 42's rules 1-7 stand unchanged. It supersedes nothing else; the `use_case_profiles` half of E1/E6 (Decision 37/43) is untouched.
+
+## Decision 53 — a DECLARED `IGPU_ALLOWED` policy narrows retention's CPU pool, so the E6 omit path becomes reachable
+
+Status: RESOLVED 2026-10-24; IMPLEMENTED 2026-10-24 — under a declared `IGPU_ALLOWED` the CPU candidates without a verified integrated GPU are dropped before ordering, the Decision 27 reservation and the K cap; every other policy and role keeps its pool byte-identically. A6 is now green at S17/S18/S19 and OG-49 is closed.
+
+Date: 2026-10-24. Closes OG-49 (E6's acceptance was unreachable because retention never handed the walk an iGPU CPU) and completes E6 in `docs/briefs/engine.md`. NOT a migration, no seed, no compatibility-verdict change: it is an OPTIONAL retention input plus the orchestrator wiring that resolves the policy ONCE.
+
+### Current situation
+
+- Decision 43 made the DECLARED per-use-case `gpu_policy` real at Engine 3 GPU depth: `IGPU_ALLOWED` + `cpu_spec.integrated_gpu_present === true` takes the omit path exclusively. Per CPU the rule was correct and unit-tested.
+- Retention chose which CPUs reached that walk: `retention/retain.js` kept the top-K by Rule 3/5 order plus Decision 27's cheapest reservation, i.e. by score and price. On the TEST branch 12 of 18 CPUs carry `integrated_gpu_present = false`, and the score leaders are among them; the OFFICE rank-1 CPU was `Seed AMD Ryzen 5 5500` (899 MAD, no iGPU).
+- So the declared policy resolved to `REQUIRED` for the build that mattered, OFFICE kept recommending discrete-GPU builds (S19: 2 selected builds, `cpu_integrated_gpu_present false`), and A6 could never be green — OG-49. The catalog was never the blocker: 6 CPUs carry `integrated_gpu_present = true`.
+
+### Problem
+
+E6's acceptance is about the RECOMMENDATION, not about one CPU's walk: "OFFICE: no discrete GPU; the chosen CPU has an integrated GPU". A rule that can only fire for CPUs retention never selects changes no observed output, so E6 would stay an implemented-but-unreachable contract — the same class of defect OG-47 recorded for E5. Ordering the walk per CPU cannot fix which CPUs reach it.
+
+### Decision
+
+1. `retention/igpu-pool.js` adds the pure `excludedCpuProductIds({ gpuPolicy, filteringContext })`: `null` for any policy other than a declared `IGPU_ALLOWED`, else a FROZEN array of unique product-id strings, code-unit sorted (never `localeCompare`), naming every CPU candidate whose `p:<id>` spec is missing or whose `integrated_gpu_present` is not strictly `true`. The set is derived from the FILTERING CONTEXT's CPU candidate list, not from the spec map's keys, so a spec-less CPU candidate is excluded rather than silently kept.
+2. Under a policy that says the CPU supplies the graphics, a NULL/absent flag is UNKNOWN and therefore EXCLUDED: absence of evidence is not evidence of an iGPU. (Today no catalog row is NULL — 6 true / 12 false — but the semantics must not depend on that.)
+3. `retention/retain.js` `retainTopKPerRole` takes an OPTIONAL `roleExclusions` map (role -> array or Set of product-id strings) and drops an excluded candidate BEFORE Rule 2 ordering, the Decision 27 cheapest-per-role reservation and the Rule 4 K cap, so it can never win a slot, a price band or a top-up. A malformed map fails fast through the existing `CandidateSelectionError` vocabulary; absent/null is byte-identical to the pre-E6 behaviour for every model and role.
+4. `orchestrator/run.js` resolves the policy ONCE (`resolveGpuPolicy`) and passes the SAME value to retention (`roleExclusions.CPU`) and to Engine 3 (`gpuPolicy`). One reader of the configuration, two consumers of one decision — the constraint is not re-derived, and a second `resolveGpuPolicy` call was removed rather than kept.
+5. The exclusion is RECOMMENDATION policy, not a compatibility verdict: no candidate REJECT, no `build_rejection` row, no reason code, no verdict-baseline change. Engine 3 still owns the per-CPU GPU decision (Decision 43 rules 1-6 unchanged); retention only decides WHICH CPUs can reach it.
+6. Determinism: no clock read, no randomness, no input mutation; identical DB state + query + model version yield identical retained sets. A model that declares no profile, and every non-CPU role, is byte-identical to pre-E6.
+7. The `retention` barrel exports `excludedCpuProductIds` as the module's public boundary (`src/recommendation/retention/index.js`), pinned by the barrel-contract test like every other export.
+
+### Rejected alternatives
+
+- **Prefer an iGPU CPU inside `assembly/gpu-policy.js`.** The decision is per selected CPU and the walk visits CPU candidates in retained order; a policy-aware preference there would still leave the iGPU CPU outside the capped K, so the omit path would remain unreachable. It also gives the policy a second semantic (preference vs eligibility) in the stage that must stay a pure per-CPU decision.
+- **Reject non-iGPU CPU candidates in Engine 2 (`filtering/`).** It would turn a recommendation policy into a compatibility verdict and move the pinned verdict baseline (87 PASS / 12 UNKNOWN / 2 REJECT) on model policy alone, contradicting Decision 12's verified-deficit-only exclusion.
+- **Tune `use_case_profiles.OFFICE.spend_targets` or the archetype weights until an iGPU CPU wins by score.** It is score-dependent, brittle to any assessment change, and does not state the contract — the same data would still let a non-iGPU CPU back in. "Never tune a threshold to make a scenario pass" applies to weights as much as to thresholds.
+- **Lower the OFFICE scenario budgets instead.** S17 at 4000 MAD assembles nothing at all (the cheapest iGPU build is 5277 MAD), so it could never exercise the path; that correction was made for what it is (see the H3 review), not as a substitute for the engine fix.
+- **A fallback that re-walks discrete GPUs when the omit path builds nothing.** Decision 43 rule 3 already establishes that omitting the GPU can only relax the walk, so such a fallback could never fire; adding it here would only add a second owner to the constraint.
+
+### Verdict for this pass
+
+- **E6 acceptance - MET.** Measured on the TEST branch at `launch-v2@2.0.0`, filtered and then full golden runs: 12 non-iGPU CPUs excluded; all 5 retained CPU slots are iGPU parts at 6000 / 8000 / 10000 MAD; 25 GPU-less builds at each rung; A6 PASS at S17 (ratio 0.515), S18 (0.675) and S19 (0.853), with 0 selected builds carrying a discrete GPU and `cpu_integrated_gpu_present true` on the rank-1 build at all three. The same three rows are ALSO green at `launch-v2@1.0.0` (filtered re-run, exit 0): the exclusion is engine code, not configuration, so this is a fix to how CPUs reach the walk rather than a policy a model opts into.
+- **Unit - PASS.** `npm run test:unit` **1185 pass / 0 fail** on Node 24, re-run on Node 22 with **0 cancelled**; `npm run test:scripts` 363/0. New pins: the `igpu-pool` matrix (null for REQUIRED/absent, exclusions for a declared `IGPU_ALLOWED`, NULL/missing spec excluded, deterministic code-unit order, malformed inputs fail fast), `retain` `roleExclusions` (excluded before ordering/reservation/cap, array and Set accepted, malformed map refused, null byte-identical), the barrel export, and the orchestrator passing ONE resolved policy to both consumers.
+- **Golden - PASS.** Full 20-scenario suite: 86 rows, 66 PASS / 19 EXPECTED-RED / 1 UNKNOWN, exit 0, residue `{q:0, bc:0, comp:0, res:0, rej:0}` at `launch-v2@2.0.0`; the 19 EXPECTED-RED rows are exactly the unreviewed A1/A3/A4 hypotheses and no approved assertion failed.
+- **Price bound recorded, not hidden.** A6's third clause was corrected 0.40 -> 0.90 in the same pass with its arithmetic (`docs/ENGINE_HYPOTHESIS_REVIEW_2026-10-24.md` §5.3): 0.4 x 11596 = 4638 MAD is below the 5277 MAD iGPU build floor, so the brief's number was unsatisfiable once the path existed. The bound now asserts that an OFFICE recommendation never costs as much as the GAMING reference; that OFFICE builds still spend up to their own budget is the OG-38 residual, recorded rather than papered over.
+- **Gate safety.** `test/golden/scenarios.json` moved `current_epic` E1 -> E8 in the same change, so the S17/S18 UNKNOWN escalation is armed — safe only because both scenarios now build and A6 is green. S17's budget moved 4000 -> 6000 (below 5277 nothing assembles at all) and S18's 6000 -> 8000 to keep three distinct rungs.
+- **NOT done here:** no shared-DB apply, no API change, and no rebaseline of the committed golden files.
+
+### Supersedes / superseded by
+
+Partly supersedes Decision 43's REJECTED alternative #3 ("Read the policy in retention and reserve a slot for an iGPU CPU: it would give one constraint two owners"). That rejection was right about ownership and wrong about reachability: retention now answers a NARROWER question (which CPUs may reach Engine 3) from the SAME single resolved policy, while Engine 3 keeps the per-CPU GPU decision — one reader, two consumers, no second derivation. Decision 43's Status line ("The rule is UNREACHABLE on today's catalog") is historical and was updated in place; rules 1-6 stand unchanged.
+
