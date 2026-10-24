@@ -89,9 +89,11 @@ test("a zero-build with a priced floor shows the advice, the caveat and no inven
 }) => {
   await page.goto(ZERO);
 
-  await expect(page.getByRole("heading", { level: 2 })).toHaveText(
-    "Aucune configuration pour ce budget",
-  );
+  // Scoped by name: contract v1.7 adds the input-effects block, which is a
+  // second level-2 section on this page.
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Aucune configuration pour ce budget" }),
+  ).toHaveText("Aucune configuration pour ce budget");
   await expect(page.locator("article")).toHaveCount(0);
 
   // The advice is the RECORDED floor, formatted by the helper...

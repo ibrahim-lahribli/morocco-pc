@@ -27,6 +27,11 @@
  *     mock answers `GET /v1/recommendations/:id` from. That is what makes an
  *     SSR result page testable: the page fetches by the id in its URL, so the
  *     id IS the state selector once no browser is involved to set a header.
+ *   - Contract v1.7 (Decision 52) adds `inputs_applied` to `meta/options` and
+ *     `input_effects` to every recommendation body. The mock serves BOTH, so
+ *     the fixtures describe the CURRENT API; the specs that pin the older
+ *     silent-contract path build that body explicitly instead
+ *     (`e2e/wizard-steps.spec.ts`'s `META_SILENT`).
  */
 
 export const CATALOG_VERSION = "9f0c5a1b2d3e4f5061728394a5b6c7d8";
@@ -109,6 +114,9 @@ export const META_OPTIONS = {
     { value: 3, label: "Équilibré" },
     { value: 5, label: "Performance d'abord" },
   ],
+  // This mock models a deployment whose model declares a per-resolution reader
+  // (a GPU spend target), so all three inputs are advertised as read.
+  inputs_applied: ["use_case", "resolution", "priority"],
 };
 
 const COMPONENT_CPU_VERIFIED = {
@@ -306,6 +314,14 @@ function baseResponse(overrides) {
     reused: false,
     reason: null,
     disclaimer: DISCLAIMER,
+    // Decision 52: one record per input, always all three. The mock POST body
+    // carries no resolution, which is why `resolution` is NOT_PROVIDED here -
+    // a state the results page must explain without inventing an effect.
+    input_effects: [
+      { input: "use_case", effect: "APPLIED", reason: "USE_CASE_PROFILE" },
+      { input: "resolution", effect: "NO_EFFECT", reason: "NOT_PROVIDED" },
+      { input: "priority", effect: "APPLIED", reason: "STRATEGY_ORDER" },
+    ],
     served_by: { engine_version: ENGINE_VERSION },
     builds: [],
     ...overrides,

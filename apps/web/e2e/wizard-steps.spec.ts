@@ -50,6 +50,16 @@ const META_FIVE_PRIORITIES = {
 /** A contract that answers CD-1: only priority changes a result. */
 const META_PRIORITY_APPLIED = { ...META_OPTIONS, inputs_applied: ["priority"] };
 
+/**
+ * The SAME option lists with `inputs_applied` absent: a 1.6 server, i.e. the
+ * "contract is silent" path `lib/wizard/applied.ts` must still handle. The
+ * fixture itself carries the field (it models the current API), so the older
+ * shape is built here rather than left in the shared fixtures as the default.
+ */
+const META_SILENT = Object.fromEntries(
+  Object.entries(META_OPTIONS).filter(([key]) => key !== "inputs_applied"),
+);
+
 async function serveMeta(page: Page, body: unknown = META_OPTIONS): Promise<void> {
   await page.route(META_ROUTE, (route) =>
     route.fulfill({
@@ -121,7 +131,7 @@ test("priority offers three of the contract's five answers, never its own labels
 test("with inputs_applied absent, both questions say the answer is stored, not used", async ({
   page,
 }) => {
-  await serveMeta(page);
+  await serveMeta(page, META_SILENT);
 
   await page.goto("/fr/configurer?etape=resolution&use_case=GAMING&budget_amount=7300");
   // Attached to the GROUP, so a screen reader hears the question and the caveat
@@ -159,7 +169,7 @@ test("a contract that marks priority applied drops the caveat and the inert step
 });
 
 test("the Arabic profile says the same thing about an inert answer", async ({ page }) => {
-  await serveMeta(page);
+  await serveMeta(page, META_SILENT);
   await page.goto(
     "/ar/configurer?etape=priority&use_case=GAMING&budget_amount=7300&resolution=1440p",
   );

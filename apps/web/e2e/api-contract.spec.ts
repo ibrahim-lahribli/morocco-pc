@@ -32,9 +32,21 @@ test.describe("the mock serves every contract state", () => {
     expect(body).toEqual({ status: "ok", db: "ok", engine_version: expect.any(String) });
   });
 
-  test("meta/options offers values AND labels for all four lists", async ({ request }) => {
+  test("meta/options offers values AND labels for all four lists, plus inputs_applied", async ({ request }) => {
     const body = await (await request.get("/v1/meta/options")).json();
-    expect(Object.keys(body).sort()).toEqual(["currencies", "priorities", "resolutions", "use_cases"]);
+    // Contract v1.7 (Decision 52): the fifth key is the deployment fact, not an
+    // option list - an exact key set keeps a silent field from creeping in.
+    expect(Object.keys(body).sort()).toEqual([
+      "currencies",
+      "inputs_applied",
+      "priorities",
+      "resolutions",
+      "use_cases",
+    ]);
+    expect(Array.isArray(body.inputs_applied)).toBe(true);
+    for (const input of body.inputs_applied) {
+      expect(["use_case", "resolution", "priority"]).toContain(input);
+    }
     for (const list of [body.use_cases, body.currencies, body.resolutions, body.priorities]) {
       expect(list.length).toBeGreaterThan(0);
       for (const option of list) {
@@ -70,6 +82,18 @@ test.describe("the mock serves every contract state", () => {
       )
     );
     expect(offerClasses).toEqual(new Set(["VERIFIED", "SEED_UNVERIFIED"]));
+
+    // Decision 52: one effect per input, all three present, each in the closed
+    // vocabularies - so a body that stopped carrying the field fails here.
+    expect(body.input_effects.map((effect: { input: string }) => effect.input)).toEqual([
+      "use_case",
+      "resolution",
+      "priority",
+    ]);
+    for (const effect of body.input_effects) {
+      expect(["APPLIED", "NO_EFFECT", "UNKNOWN"]).toContain(effect.effect);
+      expect(typeof effect.reason).toBe("string");
+    }
 
     // A component is never rendered from `display_name` (V5).
     expect(JSON.stringify(body)).not.toContain("display_name");

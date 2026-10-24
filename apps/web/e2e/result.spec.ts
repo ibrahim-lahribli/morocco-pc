@@ -216,9 +216,12 @@ test("the seed vocabulary never reaches a user (V5)", async ({ page }) => {
 test("a zero-build pass is a state, not an empty page (V2)", async ({ page }) => {
   await page.goto(ZERO);
 
-  await expect(page.getByRole("heading", { level: 2 })).toHaveText(
-    "Aucune configuration pour ce budget",
-  );
+  // Scoped by NAME: since contract v1.7 the page also carries the input-effects
+  // block, so "the only level-2 heading" is no longer the page's structure. The
+  // zero-build heading itself is what this spec is about.
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Aucune configuration pour ce budget" }),
+  ).toHaveText("Aucune configuration pour ce budget");
   await expect(page.locator("article")).toHaveCount(0);
 
   // The way back carries the answers this pass was made with, and lands on the

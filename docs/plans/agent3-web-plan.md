@@ -47,10 +47,10 @@ the API catches up.
 
 ### 2.1 Contract dependencies (CD-*)
 
-| ID | What it is | Status 2026-10-20 |
+| ID | What it is | Status 2026-10-24 |
 |---|---|---|
-| CD-1 | `inputs_applied` — which of `use_case` / `resolution` / `priority` actually changed the result | **ABSENT from the contract.** `resolution` and `priority` are inert in v1 (OG-38), so S9 ships the honest label instead of a step that silently does nothing — and the gate is built and tested behind it: the moment a response carries `inputs_applied`, an input it does not name is no longer asked at all |
-| CD-2 | `reasons[]` — structured reason codes per build | **NOT SERVED, client ready (S13).** Decision 44's `deriveReasons()` still has no route, so the API returns prose and the panel renders it verbatim; the reasons path is built and proven against a provisional fixture, so serving the field is a data change rather than a UI change |
+| CD-1 | `inputs_applied` — which of `use_case` / `resolution` / `priority` actually changed the result | **SHIPPED (contract v1.7, Decision 52).** Two fields, because there are two questions: `GET /v1/meta/options` serves `inputs_applied` — the inputs the ACTIVE model reads at all, a plain string list (`lib/wizard/applied.ts` accepts exactly that shape) — and both recommendation verbs serve `input_effects`, the per-pass `{ input, effect, reason }` records the results page renders. The wizard gate now flips FOR FREE: the "recorded, not used" caveat turns off, and an input the list omits is not asked at all. The list is advisory — an omitted input is still accepted and recorded |
+| CD-2 | `reasons[]` — structured reason codes per build | **NOT SERVED, client ready (S13).** Decision 44's `deriveReasons()` still has no route, so the API returns prose and the panel renders it verbatim; the reasons path is built and proven against a provisional fixture, so serving the field is a data change rather than a UI change. **Narrowed 2026-10-24:** the INPUT half of that gap is now answered by `input_effects` (CD-1), so what remains is the per-build scoring story, not "did my choices count" |
 | CD-4 | `GET /v1/presets` — the landing ribbon | **SHIPPED** (contract v1.4, Decision 48) — consumed by S16's preset pages |
 | CD-5 | `GET /v1/catalog/products` and `/…/{slug}` | **SHIPPED** (contract v1.5, Decision 50) |
 | CD-6 | An honest per-price obsolescence label | **PARTIAL, resolved as far as the contract allows (S12).** `generated_at` dates the PASS, not a shop survey, so the verified badge says "Vérifié · calculé le …" instead of "prix constatés le …". A true per-price observation date is still absent, and the badge must not pretend to have one |
@@ -66,7 +66,7 @@ referenced by no sprint and `OD3` is unused; they are not invented here.
 |---|---|---|
 | V1 | The API's POST latency is unproven; the wizard cannot promise 3 s until one is measured | open; needs a deployed origin, with a DB-side input now measured |
 | V2 | A zero-build pass is a legitimate outcome and must be explained, not shown as an error | **DONE (S11 + S14)** — the zero-build state, its pre-filled way back and the floor advice all render; a zero-build body is a RESULT, so `wizard.tsx` navigates to it exactly like any other pass |
-| V3 | `resolution` / `priority` may be inert (OG-38), and the UI must not imply otherwise | open on the API side |
+| V3 | `resolution` / `priority` may be inert (OG-38), and the UI must not imply otherwise | **CLOSED (contract v1.7, Decision 52)** — the API now reports, per input and per pass, whether it was `APPLIED`, provably `NO_EFFECT` (with the reason) or `UNKNOWN`; the results page renders that, and the wizard's caveat survives only for a server that does not serve the field |
 | V4 | Explanation text is a string today, so copy cannot be composed from codes | **PARTIAL (S13)** — both branches ship: the string verbatim when `reasons[]` is absent, catalogue lines when it is served. The persisted trace is still prose (CD-2) |
 | V5 | Catalogue names carry a `Seed ` prefix; the UI must use `display_name` and never render "Seed", `SEED_UNVERIFIED` or `TestCompat` | `display_name` available since v1.2 |
 | V6 | A price is two facts — `offer_class` and `price_status` — and showing one without the other misleads | **DONE (S12)** — each card derives démo/indicatif/vérifié from BOTH columns, so an all-seed pass no longer hides inside "indicatif" |
