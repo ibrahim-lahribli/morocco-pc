@@ -342,9 +342,11 @@ test("a zero-build 200 is a result, not an error", async ({ page }) => {
   // not dress it up as a failure on the way there.
   await expect(page).toHaveURL(new RegExp(`/fr/config/${RECOMMENDATION_ZERO_BUILD.id}$`));
   // The destination says it in a state of its own, not as an error...
-  await expect(page.getByRole("heading", { level: 2 })).toHaveText(
-    "Aucune configuration pour ce budget",
-  );
+  // Scoped by name: contract v1.7 adds the input-effects block, which is a
+  // second level-2 section on this page.
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Aucune configuration pour ce budget" }),
+  ).toHaveText("Aucune configuration pour ce budget");
   // ...and no failure copy came with it. Scoped by text on purpose: Next's
   // route announcer is ALSO a role="alert", so a bare role count would fail
   // on a page that has nothing wrong with it.

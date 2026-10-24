@@ -5,7 +5,7 @@
  * pinned (Sprint 4 of PLAN_PLATFORM_P0.md: v1.1 pass facts, v1.2 product
  * identity; Platform P1 Sprint 5: v1.3 request dedupe; Platform P1 Sprint 6:
  * v1.4 the presets ribbon; Platform P2 Sprint 3: v1.5 the read-only catalog;
- * v1.6 the price history).
+ * v1.6 the price history; v1.7 input effects).
  *
  * A committed snapshot is the only thing that makes a published contract a
  * CLAIM rather than a description: without it, the document can lose a field,
@@ -20,7 +20,13 @@
  *
  *   node -e "const fs=require('fs');const stub=require('./apps/api/test/helpers/stub');\
  *   stub.createTestApp().inject({method:'GET',url:'/v1/docs/json'})\
- *   .then(r=>fs.writeFileSync('apps/api/test/unit/openapi-v1.6.json',r.body+'\n'))"
+ *   .then(r=>fs.writeFileSync('apps/api/test/unit/openapi-v1.7.json',r.body+'\n'))"
+ *
+ * v1.7 (Decision 52) adds TWO fields and no path: `inputs_applied` on
+ * GET /v1/meta/options and `input_effects` on both recommendation verbs. Both
+ * are ADDITIVE - a 1.6 client keeps working - and the new test at the bottom
+ * pins their vocabularies rather than only their presence, because the whole
+ * point of the field is that its values are a closed, checkable claim.
  *
  * The comparison ignores ONE trailing newline so that a committed text file may
  * keep the POSIX convention; every other byte must match exactly, including key
@@ -56,7 +62,7 @@ const path = require('node:path');
 
 const stub = require('../helpers/stub');
 
-const SNAPSHOT_PATH = path.join(__dirname, 'openapi-v1.6.json');
+const SNAPSHOT_PATH = path.join(__dirname, 'openapi-v1.7.json');
 
 async function servedDocument() {
   const response = await stub.createTestApp().inject({ method: 'GET', url: '/v1/docs/json' });
@@ -72,23 +78,23 @@ function responsesFor(document) {
   ];
 }
 
-test('the served OpenAPI document is byte-identical to the committed v1.6 snapshot', async () => {
+test('the served OpenAPI document is byte-identical to the committed v1.7 snapshot', async () => {
   const { raw } = await servedDocument();
   const committed = fs.readFileSync(SNAPSHOT_PATH, 'utf8');
 
   assert.equal(
     raw,
     committed.replace(/\n$/, ''),
-    'the served document differs from openapi-v1.6.json. If the change is deliberate, regenerate the '
+    'the served document differs from openapi-v1.7.json. If the change is deliberate, regenerate the '
       + 'snapshot with the command in this file\'s header and commit it together with the schema change; '
       + 'if it is not, the contract has drifted and this is the gate that noticed.'
   );
 });
 
-test('the v1.6 document advertises the persisted pass facts on BOTH verbs', async () => {
+test('the v1.7 document advertises the persisted pass facts on BOTH verbs', async () => {
   const { document } = await servedDocument();
 
-  assert.equal(document.info.version, '1.6.0', 'the version names the current surface (the catalog reads + history)');
+  assert.equal(document.info.version, '1.7.0', 'the version names the current surface (adds input effects)');
 
   // Both verbs serve the same response schema, and that sameness is the
   // contract: a client may read either and see the same fields.
@@ -134,7 +140,7 @@ test('the v1.6 document advertises the persisted pass facts on BOTH verbs', asyn
   );
 });
 
-test('the v1.6 document declares the dedupe fields on BOTH verbs', async () => {
+test('the v1.7 document declares the dedupe fields on BOTH verbs', async () => {
   const { document } = await servedDocument();
 
   for (const [label, response] of responsesFor(document)) {
@@ -172,7 +178,7 @@ test('the v1.6 document declares the dedupe fields on BOTH verbs', async () => {
   assert.deepEqual(servedBy.required, ['engine_version'], 'served_by still carries exactly its one field');
 });
 
-test('the v1.6 document declares components[].slug on BOTH verbs, nullable like its column', async () => {
+test('the v1.7 document declares components[].slug on BOTH verbs, nullable like its column', async () => {
   const { document } = await servedDocument();
 
   // `slug` is served from the persisted column (migration 020), so it belongs in
@@ -201,7 +207,7 @@ test('the v1.6 document declares components[].slug on BOTH verbs, nullable like 
   );
 });
 
-test('the v1.6 document declares both catalog reads, with provenance beside every price', async () => {
+test('the v1.7 document declares both catalog reads, with provenance beside every price', async () => {
   const { document } = await servedDocument();
 
   const list = document.paths['/v1/catalog/products'];
@@ -255,7 +261,7 @@ test('the v1.6 document declares both catalog reads, with provenance beside ever
   assert.match(status, /null/);
 });
 
-test('the v1.6 document declares the price history, and says when a trend is unknown', async () => {
+test('the v1.7 document declares the price history, and says when a trend is unknown', async () => {
   const { document } = await servedDocument();
 
   const history = document.paths['/v1/catalog/products/{slug}/price-history'];
@@ -307,4 +313,63 @@ test('the v1.6 document declares the price history, and says when a trend is unk
     body.required.includes('observation_count'),
     'observation_count is required: the empty state is a fact the client formats'
   );
+});
+
+/**
+ * The members of a closed vocabulary, however @fastify/swagger rendered the
+ * TypeBox union: a single `enum` array, or one `anyOf` branch per literal (the
+ * shape it used for `price_status` in v1.5). Reading both keeps this a
+ * vocabulary assertion rather than a formatting assertion.
+ */
+function enumMembers(schema) {
+  const branches = Array.isArray(schema.anyOf) ? schema.anyOf : [schema];
+  return branches.flatMap((branch) => (Array.isArray(branch.enum) ? branch.enum : []));
+}
+
+test('the v1.7 document declares input effects, with closed vocabularies', async () => {
+  const { document } = await servedDocument();
+
+  // The DEPLOYMENT half (Decision 52): which inputs the active model reads at
+  // all. Required, and possibly empty - an empty list is a fact ("this model
+  // reads none of them"), while an absent field would be silence, and the web
+  // wizard treats those two differently by design.
+  const meta = document.paths['/v1/meta/options'].get.responses['200']
+    .content['application/json'].schema;
+  assert.deepEqual(
+    meta.properties.inputs_applied,
+    { type: 'array', items: { type: 'string' } },
+    'inputs_applied is a plain string list, which is what the wizard parser accepts'
+  );
+  assert.ok(
+    meta.required.includes('inputs_applied'),
+    'inputs_applied is required: silence and an empty list must not collapse'
+  );
+
+  // The PER-PASS half, on BOTH verbs: one schema, so POST and GET cannot
+  // advertise different fields (Decision 36 item 4).
+  for (const [label, response] of responsesFor(document)) {
+    const schema = response.content['application/json'].schema;
+    const effects = schema.properties.input_effects;
+    assert.ok(effects, label + ' declares input_effects');
+    assert.ok(schema.required.includes('input_effects'), label + ' requires input_effects');
+    assert.equal(effects.type, 'array');
+
+    const item = effects.items;
+    assert.deepEqual(item.required, ['input', 'effect', 'reason']);
+    // The two vocabularies a client MAY switch on are closed and pinned.
+    assert.deepEqual(
+      enumMembers(item.properties.input).sort(),
+      ['priority', 'resolution', 'use_case'],
+      label + ' pins the input vocabulary'
+    );
+    assert.deepEqual(
+      enumMembers(item.properties.effect).sort(),
+      ['APPLIED', 'NO_EFFECT', 'UNKNOWN'],
+      label + ' pins the three-valued effect vocabulary'
+    );
+    // `reason` stays OPEN on purpose: it explains WHY, and a new explanation
+    // must not force a contract bump on a client that already switches on
+    // `effect`.
+    assert.deepEqual(item.properties.reason, { type: 'string' });
+  }
 });

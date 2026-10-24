@@ -11,13 +11,19 @@
  * against.
  *
  * Why this module exists as the owner (Decision 36 item 3): the frontend must
- * never imply that a value changes a result. `resolution` and `priority` are
- * accepted, persisted on the profile/query row, and deliberately NOT read by
- * the engine (Decision 17.6 - `loadQueryInput` does not even SELECT them), so
- * they are documented as "stored, not yet used in scoring". The option list and
- * the validator live here together so they cannot drift apart: a value that POST
- * accepts is always present in /v1/meta/options, and `meta-consistency.test.js`
- * pins exactly that.
+ * never promise that a value changes a result. `resolution` and `priority` are
+ * accepted and persisted on the profile/query row, and both ARE read - by
+ * retention (Decision 39's GPU spend multiplier, Decision 42's VRAM floor) and
+ * by ranking (Decision 41's archetype order) respectively - but neither changes
+ * a score, so the labels say what the value DOES and never that it improves the
+ * build. Until 2026-10-23 this header claimed `loadQueryInput` did not even
+ * SELECT them (Decision 17.6); that had been false since 2026-10-09. See
+ * `inputs.js` for the vocabulary that answers the harder question - whether a
+ * given pass read the value at all - and Decision 52 for the full semantics.
+ *
+ * The option list and the validator live here together so they cannot drift
+ * apart: a value that POST accepts is always present in /v1/meta/options, and
+ * `meta-consistency.test.js` pins exactly that.
  *
  * use_case is DERIVED, never enumerated twice, and this module no longer does
  * the deriving: the values are HANDED IN by the caller, which gets them from
@@ -56,14 +62,14 @@ const CURRENCIES = Object.freeze([
   Object.freeze({ value: 'MAD', label: 'Dirham marocain (MAD)' }),
 ]);
 
-/** Display resolutions. STORED on the profile, NOT yet used in scoring. */
+/** Display resolutions. STORED on the profile; scales the GPU retention target and gates the optional per-resolution VRAM floor. Never changes a score. */
 const RESOLUTIONS = Object.freeze([
   Object.freeze({ value: '1080p', label: 'Full HD (1080p)' }),
   Object.freeze({ value: '1440p', label: 'QHD (1440p)' }),
   Object.freeze({ value: '2160p', label: '4K UHD (2160p)' }),
 ]);
 
-/** Weighting priorities, 1 (price first) to 5 (performance first). NOT used in scoring. */
+/** Weighting priorities, 1 (price first) to 5 (performance first). Decides which strategy gets first pick and the returned archetypes' ORDER (Decision 41); never changes a score. */
 const PRIORITIES = Object.freeze([
   Object.freeze({ value: 1, label: 'Prix avant tout' }),
   Object.freeze({ value: 2, label: 'Plutôt le prix' }),
@@ -105,13 +111,31 @@ function useCaseValues(useCases) {
   return useCaseOptions(useCases).map((option) => option.value);
 }
 
-/** The complete /v1/meta/options payload. */
-function buildOptions(useCases) {
+/**
+ * The complete /v1/meta/options payload.
+ *
+ * `inputs_applied` is the DEPLOYMENT half of Decision 52's contract: which of
+ * `use_case` / `resolution` / `priority` the ACTIVE model gives a reader at all.
+ * It is a plain string list (not the per-pass `input_effects` shape) because
+ * that is what a form needs - an input the list does not name is not asked, and
+ * `apps/web/lib/wizard/applied.ts` already implements that gate, including the
+ * distinction between "the contract is silent" (null) and "the contract named
+ * nothing" (an empty list).
+ *
+ * It is a PARAMETER, not derived here: the reader depends on the scoring
+ * model's configuration, which this module never sees, and `inputs.js` is the
+ * single owner of the derivation.
+ *
+ * @param {string[]} useCases values from the engine's `listUseCases`
+ * @param {string[]} inputsApplied subset of `inputs.INPUTS` in served order
+ */
+function buildOptions(useCases, inputsApplied) {
   return Object.freeze({
     use_cases: useCaseOptions(useCases),
     currencies: CURRENCIES,
     resolutions: RESOLUTIONS,
     priorities: PRIORITIES,
+    inputs_applied: Object.freeze(Array.isArray(inputsApplied) ? inputsApplied.slice() : []),
   });
 }
 

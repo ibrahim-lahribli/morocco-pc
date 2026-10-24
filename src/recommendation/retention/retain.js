@@ -35,7 +35,7 @@
  *   existing candidate-pool input already expects ({ results } of Engine 2D
  *   verdicts; Decision 14 Rule 6: Engine 3 changes nothing)
  *
- * E6 (2026-10-10; Decision 53) - policy-driven CPU eligibility:
+ * E6 (2026-10-10; Decision 54) - policy-driven CPU eligibility:
  *   `retainTopKPerRole` takes an OPTIONAL `roleExclusions` map (role -> array
  *   or Set of product-id strings) and DROPS those candidates from the role's
  *   bucket BEFORE ordering, the Decision 27 reservation and the K cap. It is
@@ -426,10 +426,12 @@ function retainTopKPerRole(sources) {
     );
   }
 
-  // E6 (Decision 53): normalize the OPTIONAL role exclusion map once. A
-  // caller that wired it wrong is told here rather than by a silently ignored
-  // role. Values may be arrays (the ./igpu-pool contract) or Sets; membership
-  // is by String(product_id), the same identity the verdicts carry.
+  // E6 (Decision 54): normalize the OPTIONAL role exclusion map once, and refuse
+  // a role key outside the canonical vocabulary rather than silently ignoring
+  // it - a mistyped `CPU`/`MEMORY` key would otherwise exclude nothing while its
+  // caller believed the pool had been narrowed. Values may be arrays (the
+  // ./igpu-pool contract) or Sets; membership is by String(product_id), the same
+  // identity the verdicts carry.
   const excludedByRole = new Map();
   if (roleExclusions !== null) {
     if (!isPlainObject(roleExclusions)) {
@@ -440,6 +442,13 @@ function retainTopKPerRole(sources) {
       );
     }
     for (const role of Object.keys(roleExclusions)) {
+      if (!COMPONENT_ROLES.includes(role)) {
+        fail(
+          ERROR_CODES.INVALID_FIELD_VALUE,
+          `roleExclusions.${role}`,
+          `"roleExclusions.${role}" is not a component role`
+        );
+      }
       const value = roleExclusions[role];
       const isSet = value instanceof Set;
       if (value === null || value === undefined || (!isSet && !Array.isArray(value))) {
@@ -479,7 +488,7 @@ function retainTopKPerRole(sources) {
     if (!RETENTION_ELIGIBLE_STATUSES.includes(verdict.status)) {
       continue; // REJECT (from the real producer, only REJECT) never ranks.
     }
-    // E6 (Decision 53): a policy-excluded candidate never enters the bucket, so
+    // E6 (Decision 54): a policy-excluded candidate never enters the bucket, so
     // it cannot win the cheapest reservation, a price band or the K top-up.
     const excluded = excludedByRole.get(verdict.component_role);
     if (excluded !== undefined && excluded.has(String(verdict.product_id))) {

@@ -96,21 +96,24 @@ test('the engine is reachable from exactly one module: engine.js', () => {
   assert.deepEqual(importers, ['engine.js']);
 });
 
-test('engine.js requires exactly the four public barrels it needs', () => {
+test('engine.js requires exactly the five public barrels it needs', () => {
   const requests = requiresIn(path.join(API_SRC, 'engine.js'))
     .filter((request) => request.startsWith('.'))
     .map((request) => request.replace(/\\/g, '/'))
     .sort();
 
   // Four since Platform P1 Sprint 5: `query/` supplies Decision 47's
-  // `catalogVersion`, which the POST route needs as a dedupe-key component. It
-  // is a stage barrel like the others, so the boundary rule is unchanged - the
-  // assertion is exact rather than a subset, so a fifth import has to be a
-  // deliberate edit here.
+  // `catalogVersion`, which the POST route needs as a dedupe-key component.
+  // Five since Decision 52: `retention/` supplies the GPU spend multiplier that
+  // `inputs.js` needs to state whether `resolution` changed the pass. All five
+  // are stage barrels, so the boundary rule is unchanged - the assertion is
+  // exact rather than a subset, so a sixth import has to be a deliberate edit
+  // here.
   assert.deepEqual(requests, [
     '../../../src/recommendation/candidates',
     '../../../src/recommendation/orchestrator',
     '../../../src/recommendation/query',
+    '../../../src/recommendation/retention',
     '../../../src/recommendation/scoring',
   ]);
 });

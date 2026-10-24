@@ -131,7 +131,7 @@ chose by score: 12 of the 18 CPUs have `integrated_gpu_present = false`, and the
 ones won the 5 slots. The rank-1 CPU was `Seed AMD Ryzen 5 5500` (no iGPU), so the declared
 policy correctly resolved to `REQUIRED` and OFFICE kept recommending discrete-GPU builds.
 
-Decision 53 adds the other half: under a **declared** `IGPU_ALLOWED`, retention drops CPU
+Decision 54 adds the other half: under a **declared** `IGPU_ALLOWED`, retention drops CPU
 candidates without a verified integrated GPU *before* ordering, the Decision 27 reservation and
 the K cap (`retention/igpu-pool.js` + `roleExclusions` in `retention/retain.js`, wired once in
 `orchestrator/run.js` and shared with Engine 3). NULL is treated as UNKNOWN and therefore

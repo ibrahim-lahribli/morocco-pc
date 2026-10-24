@@ -710,6 +710,38 @@ test('any UNKNOWN escalates once expect_builds_after has landed, even with build
   assert.equal(atE6.summary.hard_fail, 1);
 });
 
+test('a row whose ARTIFACT IS MISSING is unmeasured, so --filter cannot make a narrowed run RED', () => {
+  // The CLI passes `--filter`'s scenarios as the suite, so a reference or pair
+  // partner outside the filter has no artifact. A6 compares S17 against S03, and
+  // with only S17 in the run the row is UNKNOWN - but the cause is a missing
+  // INPUT, not an unjudgeable recommendation. Escalating it would report RED on
+  // the artifacts the operator deliberately did not run.
+  const assertion = { id: 'A6', type: 'office_igpu', scenarios: ['S17'], reference: 'S03' };
+  const thresholds = { A6_office_price_ratio_max: { value: 0.9 } };
+  const scenarios = [{ id: 'S17', expect_builds_after: 'E6' }];
+  const filtered = runSuite(assertion, thresholds, scenarios,
+    new Map([['S17', art({ selected: [{ signature: 'a', total_price: 6000, has_gpu: false, compatibility_status: 'PASS', gpu_vram_gb: null, pair_key: 'c|OMITTED' }] })]]),
+    { suite: { current_epic: 'E8' } });
+
+  assert.equal(filtered.results[0].status, STATUSES.UNKNOWN);
+  assert.equal(filtered.results[0].unmeasured, true);
+  assert.equal(filtered.results[0].escalated, undefined);
+  assert.equal(filtered.results[0].disposition, DISPOSITIONS.UNKNOWN);
+  assert.equal(filtered.summary.exit_ok, true);
+
+  // The strictness it must NOT weaken: with the reference present and the
+  // scenario producing no builds, the same row still escalates once E6 landed.
+  const measured = runSuite(assertion, thresholds, scenarios, new Map([
+    ['S17', art({ build_count: 0, selected: [] })],
+    ['S03', art({ selected: [{ signature: 'g', total_price: 11596, has_gpu: true, compatibility_status: 'PASS', gpu_vram_gb: 16, pair_key: 'c|v' }] })],
+  ]), { suite: { current_epic: 'E8' } });
+
+  assert.equal(measured.results[0].status, STATUSES.UNKNOWN);
+  assert.equal(measured.results[0].unmeasured, undefined);
+  assert.equal(measured.results[0].escalated, true);
+  assert.equal(measured.summary.hard_fail, 1);
+});
+
 test('A2b: rank-1 GPU price must grow by the factor across budgets; flat FAILs, missing GPU is UNKNOWN', () => {
   const assertion = { id: 'A2b', type: 'gpu_price_growth', pairs: [{ low: 'S03', high: 'S05' }] };
   const thresholds = { A2b_gpu_price_growth_min: { value: 1.3 } };

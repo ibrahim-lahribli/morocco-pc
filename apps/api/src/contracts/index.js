@@ -20,6 +20,7 @@ module.exports = {
   BuildComponentSchema: recommendations.BuildComponentSchema,
   BuildSchema: recommendations.BuildSchema,
   BudgetFloorSchema: recommendations.BudgetFloorSchema,
+  InputEffectSchema: recommendations.InputEffectSchema,
   RecommendationResponseSchema: recommendations.RecommendationResponseSchema,
   RecommendationParamsSchema: recommendations.RecommendationParamsSchema,
   PresetSchema: presets.PresetSchema,

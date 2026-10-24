@@ -1080,7 +1080,7 @@ test('E2: roleTargets must be null or an object', () => {
 });
 
 // ---------------------------------------------------------------------------
-// E6 (Decision 53) - policy-driven role exclusions
+// E6 (Decision 54) - policy-driven role exclusions
 // ---------------------------------------------------------------------------
 
 test('E6: an excluded CPU is dropped even when it is both the top scorer and the cheapest', () => {
@@ -1153,6 +1153,10 @@ test('E6: a malformed roleExclusions map is refused with the fielded path', () =
     [{ CPU: 'cpu-a' }, ERROR_CODES.INVALID_FIELD_VALUE, 'roleExclusions.CPU'],
     [{ CPU: [null] }, ERROR_CODES.INVALID_FIELD_VALUE, 'roleExclusions.CPU'],
     [{ CPU: [1] }, ERROR_CODES.INVALID_FIELD_VALUE, 'roleExclusions.CPU'],
+    // A role outside the canonical vocabulary would exclude NOTHING while its
+    // caller believed the pool had been narrowed, so it is refused by name.
+    [{ MEMORY: ['cpu-a'] }, ERROR_CODES.INVALID_FIELD_VALUE, 'roleExclusions.MEMORY'],
+    [{ cpu: ['cpu-a'] }, ERROR_CODES.INVALID_FIELD_VALUE, 'roleExclusions.cpu'],
   ];
   for (const [value, code, field] of cases) {
     assertError(

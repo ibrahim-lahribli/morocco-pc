@@ -9,6 +9,12 @@
 // does with it — its pool guard, its routes, its repository statements and the
 // engine's 74-statement write path, all as `morocco_pc_api`.
 //
+// The target defaults to the shared `DATABASE_URL`; `--target-env=<NAME>` names
+// another environment variable that holds the target URL (the EU production
+// database lives in `TARGET_DATABASE_URL`, loaded from `.env.eu`). The write
+// approval `--confirm-shared` keeps its name for continuity but covers any real
+// (non-disposable) target, and the guard line always names WHICH variable.
+//
 // WHY IT WRITES, AND WHY THAT IS THE POINT
 // A read-only check (`GET /v1/health`, `GET /v1/meta/options`) would pass for a
 // role with no INSERT grant at all, so it would prove nothing about the only
@@ -57,6 +63,7 @@
 // Usage:
 //   node scripts/smoke-api-role.js --dry-run
 //   API_ROLE_PASSWORD=<from the secret store> node scripts/smoke-api-role.js --confirm-shared
+//   API_ROLE_PASSWORD=<secret> node scripts/smoke-api-role.js --confirm-shared --target-env=TARGET_DATABASE_URL
 
 require('dotenv').config();
 
@@ -76,6 +83,8 @@ const engine = require('../apps/api/src/engine');
 const SMOKE_ENGINE_VERSION = 'smoke-api-role';
 /** The one environment variable the password is read from (a FILE is the alternative). */
 const PASSWORD_ENV = 'API_ROLE_PASSWORD';
+/** Default target variable: the shared database, unchanged from before --target-env. */
+const TARGET_ENV_DEFAULT = 'DATABASE_URL';
 const APPLICATION_NAME = 'morocco-pc-smoke-api-role';
 
 function fail(message) {
@@ -88,15 +97,23 @@ function usageError(message) {
 
 function usageText() {
   return 'usage: node scripts/smoke-api-role.js --confirm-shared [--budget=N] [--use-case=U] [--dry-run]\n'
-    + '          [--password-file=<path>]\n'
-    + 'Runs the API against the SHARED database as ' + apiRole.API_ROLE_NAME + ': health, then one real POST,\n'
-    + 'then removes the rows it wrote and asserts the six Layer 4 counts returned. Writes to the shared\n'
-    + 'database, which is why --confirm-shared is required. Read docs/RECIPES/provision-the-api-role.md first.';
+    + '          [--password-file=<path>] [--target-env=<NAME>]\n'
+    + 'Runs the API against the database named by --target-env (default DATABASE_URL, the SHARED database)\n'
+    + 'as ' + apiRole.API_ROLE_NAME + ': health, then one real POST, then removes the rows it wrote and\n'
+    + 'asserts the six Layer 4 counts returned. Writes to a real database, which is why --confirm-shared\n'
+    + 'is required. Read docs/RECIPES/provision-the-api-role.md first.';
 }
 
 function parseArgs(argv) {
   if (argv.includes('--help')) throw usageError(usageText());
-  const args = { confirmShared: false, dryRun: false, budget: 20000, useCase: 'GAMING', passwordFile: null };
+  const args = {
+    confirmShared: false,
+    dryRun: false,
+    budget: 20000,
+    useCase: 'GAMING',
+    passwordFile: null,
+    targetEnv: TARGET_ENV_DEFAULT,
+  };
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--confirm-shared') {
@@ -109,6 +126,13 @@ function parseArgs(argv) {
       args.useCase = arg.slice('--use-case='.length);
     } else if (arg.startsWith('--password-file=')) {
       args.passwordFile = arg.slice('--password-file='.length);
+    } else if (arg.startsWith('--target-env=')) {
+      const name = arg.slice('--target-env='.length).trim();
+      if (!/^[A-Z][A-Z0-9_]*$/.test(name)) {
+        throw usageError('--target-env expects an environment variable NAME matching ^[A-Z][A-Z0-9_]*$'
+          + ' (received: ' + JSON.stringify(arg.slice('--target-env='.length)) + ')');
+      }
+      args.targetEnv = name;
     } else if (arg.startsWith('--')) {
       throw usageError('unknown argument: ' + arg + '\n' + usageText());
     } else {
@@ -155,15 +179,33 @@ function resolvePassword(args, env = process.env) {
   return { password, source };
 }
 
-/** Parse the shared target WITHOUT connecting. */
-function resolveTarget(env = process.env) {
-  const url = env ? env.DATABASE_URL : undefined;
+/**
+ * Parse the target WITHOUT connecting.
+ *
+ * @param {object} [env] process.env by default
+ * @param {string} [targetEnv] the variable NAME holding the URL
+ */
+function resolveTarget(env = process.env, targetEnv = TARGET_ENV_DEFAULT) {
+  const url = env ? env[targetEnv] : undefined;
   if (typeof url !== 'string' || url.trim() === '') {
-    throw new Error('DATABASE_URL is not set: this smoke test targets the SHARED database');
+    throw new Error(targetEnv + ' is not set: pass --target-env=<NAME> naming a variable that holds the target URL'
+      + ' (the default is ' + TARGET_ENV_DEFAULT + ', the shared database)');
   }
   const directUrl = toDirectUrl(url);
   const target = describeTarget(directUrl);
-  return { url, directUrl, target, digest: applyLogTarget(url) };
+  return {
+    url,
+    directUrl,
+    target,
+    digest: applyLogTarget(url),
+    targetEnv,
+    isShared: targetEnv === TARGET_ENV_DEFAULT,
+  };
+}
+
+/** Human label for the guard line: the shared database is named as such. */
+function guardLabel(target) {
+  return target.isShared ? TARGET_ENV_DEFAULT + ' (SHARED)' : target.targetEnv + ' (named target)';
 }
 
 /**
@@ -303,15 +345,15 @@ function adoptPassForCleanup(postBody) {
 
 async function main() {
   const args = parseArgs(process.argv);
-  const target = resolveTarget(process.env);
+  const target = resolveTarget(process.env, args.targetEnv);
   const roleName = apiRole.API_ROLE_NAME;
 
   console.log('AUDIT TARGET: ' + target.digest);
   console.log('target: endpoint ' + target.target.endpointId + ' (' + (target.target.pooled ? 'pooled' : 'direct')
-    + '), database ' + target.target.database + '; guard: DATABASE_URL (SHARED)');
+    + '), database ' + target.target.database + '; guard: ' + guardLabel(target));
 
   if (!args.confirmShared && !args.dryRun) {
-    console.error('REFUSED: this smoke test writes Layer 4 rows to the SHARED database. Pass --confirm-shared'
+    console.error('REFUSED: this smoke test writes Layer 4 rows to ' + guardLabel(target) + '. Pass --confirm-shared'
       + ' to say so deliberately; it never runs by default and nothing in CI sets it.');
     process.exit(1);
   }
@@ -560,8 +602,10 @@ module.exports = {
   API_SCHEMA_PREREQUISITES,
   PASSWORD_ENV,
   SMOKE_ENGINE_VERSION,
+  TARGET_ENV_DEFAULT,
   adoptPassForCleanup,
   buildSchemaPreflightSql,
+  guardLabel,
   healthIsOk,
   missingSchemaPrerequisites,
   parseArgs,

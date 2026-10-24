@@ -6,10 +6,12 @@ import { notFound } from "next/navigation";
 
 import { Alert, LinkButton } from "@/components/ui";
 import { BuildCard } from "@/components/result/build-card";
+import { InputsApplied } from "@/components/result/inputs-applied";
 import { ShareBar } from "@/components/result/share-bar";
 import { routing } from "@/i18n/routing";
 import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
+import { readInputEffects } from "@/lib/result/inputs";
 import { orderBuilds, priceProvenance, zeroBuildAdvice } from "@/lib/result/model";
 import { loadRecommendationCached } from "@/lib/result/load";
 import { asVerifiedPricedBuild, jsonLdScript, productJsonLd } from "@/lib/result/structured-data";
@@ -190,6 +192,13 @@ export default async function ConfigPage({
   const builds = orderBuilds(recommendation.builds);
 
   /**
+   * Decision 52's per-pass facts. `null` for a body that predates the field (a
+   * 1.6 server), in which case the block is omitted entirely rather than
+   * claiming nothing was applied.
+   */
+  const inputEffects = readInputEffects(recommendation);
+
+  /**
    * Which zero-build copy the floor leads to (S14). Decided by the model, so
    * the page can neither print the floor where none was priced nor repeat the
    * 0 that NULL must never become.
@@ -296,6 +305,12 @@ export default async function ConfigPage({
           </p>
         )}
       </header>
+
+      {/* Above the build list on purpose: the effect of USE_CASE and PRIORITY is
+          only legible while reading the cards it produced. Present in the
+          zero-build branch too - "resolution was not used" is exactly the fact
+          a user staring at an empty result needs. */}
+      <InputsApplied effects={inputEffects} locale={appLocale} />
 
       {builds.length === 0 ? (
         <div className="mt-6 rounded-card border border-border bg-subtle p-4">

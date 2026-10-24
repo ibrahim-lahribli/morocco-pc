@@ -1,11 +1,12 @@
 /**
- * `inputs_applied` — the contract field the wizard needs and the API does not
- * serve yet (CD-1), read without pretending it is part of the types.
+ * `inputs_applied` — the deployment half of Decision 52's contract (CD-1): which
+ * of `use_case` / `resolution` / `priority` the ACTIVE scoring model reads at
+ * all. Contract v1.7 serves it on `meta/options` (2026-10-24); the per-pass half
+ * is `input_effects`, read by `lib/result/inputs.ts`.
  *
- * `docs/plans/agent3-web-plan.md` records the dependency: `inputs_applied` would
- * say which of `use_case` / `resolution` / `priority` actually changed the
- * result, and v1 serves none of it because `resolution` and `priority` are
- * stored and not read (OG-38, Decision 17.6). S4's rule is that every field the
+ * It is still read through `unknown` on purpose: a `meta/options` body from a
+ * 1.6 server carries no field, and a result id minted then can outlive the
+ * server that made it. S4's rule is that every field the
  * app reads comes from `schema.d.ts`, so a name that is not in the contract is a
  * COMPILE error — which is the right default and the reason `compile-gate.ts`
  * exists.
@@ -18,14 +19,16 @@
  *
  *   - `null`  — the field is missing, null, or not an array of strings. The
  *               contract is SILENT, so the wizard asks the question and says the
- *               answer is stored rather than used (OD1). This is today's state.
+ *               answer is stored rather than used (OD1). That is what a 1.6
+ *               server still gets.
  *   - a Set   — the contract named the applied inputs. An input NOT in it is
  *               inert, and its step is not shown at all.
  *
- * The moment the API serves the field, the parser below keeps working unchanged
- * (it already accepts the real shape) and the honest label turns itself off,
- * followed by the steps the contract hides. `e2e/wizard-steps.spec.ts` drives
- * both paths through `page.route`, so the feature check is a test, not a hope.
+ * Now that the API serves the field the parser below stays unchanged (it always
+ * accepted the real shape): the honest label turns itself off for a model that
+ * reads the input, and a step the list does not name is not asked.
+ * `e2e/wizard-steps.spec.ts` drives both paths through `page.route`, so the
+ * feature check is a test, not a hope.
  *
  * Unknown members are IGNORED rather than rejected: a contract that adds a
  * fourth dimension later must not turn the whole field into silence.

@@ -20,7 +20,7 @@ measurement runs.
 | Database region | Neon `aws-eu-central-1` (Frankfurt) | Fly's `fra` and Render's `frankfurt` are the same metro. Neon's only other EU region is `aws-eu-west-2` (London). |
 | Replay source | the **TEST branch**, not the shared database | Both carry the API's contract (ledger 22 on each since 2026-10-19), so either replays an API that can serve. The branch stays the source because the shared dev database accumulates local test rows. |
 | Host | **Fly.io `fra`** (recommended); Render `frankfurt` as the alternative | See the comparison below. Both build `apps/api/Dockerfile` with the repository root as context. |
-| Contract version at deploy | v1.5 | The served OpenAPI document names it; `/v1/docs/json` is the check. |
+| Contract version at deploy | v1.6 | The served OpenAPI document names it; `/v1/docs/json` is the check. Eight paths as of 2026-10-23 — the price history is the eighth. |
 
 Hosting facts verified 2026-10-17 on vendor pages (re-check at checkout; Fly prices vary by
 region and Render's page bundles pricing into a comparison article):
@@ -271,6 +271,13 @@ fly secrets set \
 fly deploy --app morocco-pc-api
 ```
 
+
+The production role now exists on this database (applied 2026-10-23, audit target
+`db:2d66f26d7ddc`, restore point `br-late-rice-b906upai`, self-check 20/20, smoke test
+green as `morocco_pc_api`). The deploy therefore SHOULD set `DATABASE_URL` to the ROLE's
+connection string rather than the owner's. That is section 8.5 — its own deploy, its own
+checks and its own rollback, because a green smoke test does not prove the app uses the
+role. Until it is taken, the deployed API runs with the owner's credentials (OG-54).
 Deliberately **not** set yet:
 
 - `TEST_DATABASE_URL` — absent, so the guard cannot silently select the wrong pool.
@@ -509,6 +516,140 @@ addresses, pin their smallest covering CIDR rather than one `/32`, and record th
 remain per process (Decision 49 item 7), so this pin does not make the limits multi-instance
 exact.
 
+### 8.5 Rotate the app onto the database role (P3 Sprint 2 Step 5, second half)
+
+The role exists on this database. The app does not use it yet: its `DATABASE_URL` secret still
+carries the owner's URL, so every request runs with credentials that could drop a table. This is
+its own section because it needs its own deploy, its own evidence and its own rollback.
+
+**Two proofs, and only one of them is the smoke test.** `scripts/smoke-api-role.js` runs the API
+*from the operator's machine* as `morocco_pc_api`. Green there means the role's grants are
+sufficient for a whole pass. It does NOT mean the deployed app presents that credential — the
+smoke test opens its own connection. The app's secret is unreadable too: `fly secrets list` prints
+a digest, never a value. The one place the answer is visible is the database. The API tags every
+pooled connection `application_name = 'morocco-pc-api'` (`apps/api/src/db.js`), so
+`pg_stat_activity` names the user each live app session authenticated as, and
+`scripts/check-deployed-role.js` reads exactly that. Measured 2026-10-23: Neon's pooler preserves
+`application_name` on the server connection it opens, but only once a query has run — a bare
+`connect()` opens nothing, and the app's 15 s health check (`SELECT 1`) is what keeps a connection
+visible between requests.
+
+Two traps came out of measuring that channel, and both are why the check is written the way it is.
+**The read must be DIRECT.** The pooler multiplexes clients onto one server connection and applies
+`application_name` per client, so a check connected through the pooled URL lands on the app's own
+server connection and RELABELS it: the first version of this check did exactly that, then reported
+`INCONCLUSIVE` having destroyed the evidence it went looking for. `check-deployed-role.js` derives
+the direct endpoint with `toDirectUrl`, so its read has its own backend. **A pooled server
+connection outlives its client** and keeps the last client's tag, so an app tag can be a leftover:
+the report prints the app sessions' `backend_start` (oldest and newest) for exactly that reason.
+Run step 4 while the app is serving traffic, and treat an old start time as a leftover rather than
+as the running app.
+
+**Step 0 — the preconditions, each of which fails loudly.**
+
+- The app is deployed and answering (§8.2, §8.3). Rotating a secret on an app that has never
+  started proves nothing, because there is no session to observe.
+- The role exists on the target: `node scripts/apply-api-role.js --target-env=TARGET_DATABASE_URL
+  --restore-point=<id>` (procedure `provision-the-api-role.md`; applied to EU 2026-10-23, 20/20).
+- The role is SUFFICIENT: the smoke test must be green **first** —
+  `node scripts/smoke-api-role.js --confirm-shared --target-env=TARGET_DATABASE_URL`. A red smoke
+  test is a grant problem, and rotating onto it turns a working app into a failing one.
+- The password is in its own file (`$HOME/.morocco-pc/api-role-eu.password`), one per database.
+
+**Step 1 — build the role's URL and never print it.** Host and database stay the same; only the
+user and password change, so nothing in section 1's env-var trap moves. `roleConnectionString`
+(`scripts/lib/api-role.js`) replaces the whole userinfo, so the owner's password cannot survive
+into the result:
+
+```bash
+export TARGET_DATABASE_URL='postgres://…-pooler…/neondb'   # the OWNER url, as in section 2
+export ROLE_DATABASE_URL="$(node -e "
+require('dotenv').config({ path: '.env.eu' });
+const fs = require('fs'), os = require('os'), path = require('path');
+const { roleConnectionString } = require('./scripts/lib/api-role');
+const pw = fs.readFileSync(path.join(os.homedir(), '.morocco-pc', 'api-role-eu.password'), 'utf8').trim();
+process.stdout.write(roleConnectionString(process.env.TARGET_DATABASE_URL, 'morocco_pc_api', pw));
+")"
+
+# Prove the SHAPE without echoing the secret: the user is the role, the host is unchanged.
+node -e "const u = new URL(process.env.ROLE_DATABASE_URL); console.log('user:', u.username, '| host:', u.host, '| db:', u.pathname)"
+```
+
+Expected: `user: morocco_pc_api | host: ep-…-pooler.…neon.tech | db: /neondb`. If `user` is not the
+role, stop — the secret you would set is the owner's again.
+
+**Step 2 — set the secret and deploy.**
+
+```bash
+fly secrets set DATABASE_URL="$ROLE_DATABASE_URL" --app morocco-pc-api
+fly deploy --app morocco-pc-api
+```
+
+`fly secrets set` restarts the machines by itself; the explicit `fly deploy` makes that restart
+deterministic and is the image section 9's numbers are recorded against. The value does pass
+through `fly`'s argv, so run this from the owner's own terminal, not a shared session, and never
+paste the URL into a chat, an issue or a commit.
+
+**Step 3 — the origin must still be healthy on the new credential.** The health probe runs
+`SELECT 1` through the pool, so this is the first proof the role can connect from Fly at all:
+
+```bash
+node scripts/check-origin-readiness.js --app=morocco-pc-api --origin="https://morocco-pc-api.fly.dev"
+```
+
+Expected `PREFLIGHT OK`. A `db: "down"` here means the new credential is wrong (a bad password, a
+typo'd user, or a URL that lost its `-pooler` suffix) — fix step 1, not the role.
+
+**Step 4 — the check that decides it: which user is the app's session?**
+
+```bash
+node scripts/check-deployed-role.js --target=env:TARGET_DATABASE_URL
+```
+
+Three outcomes, three meanings:
+
+- **`RESULT: PASS - every morocco-pc-api session is authenticated as morocco_pc_api`** — the
+  rotation landed. The report prints session counts per user, so the evidence is quotable;
+- **`RESULT: FAIL - … authenticated as another role: neondb_owner`** — the app is still on the
+  owner. Either step 2 did not restart the machines, a second machine kept the old secret, or the
+  secret landed on the wrong app. `fly status` and `fly secrets list` (digest only) are the next
+  reads;
+- **`RESULT: INCONCLUSIVE - no session tagged morocco-pc-api was observed`** — NOT a pass. Nothing
+  was observed, so nothing was proved: the app may be stopped, freshly restarted, or holding no
+  server connection. Send a request (`curl -sS "$APP/v1/health"`), wait ~20 s for the 15 s health
+  check to open a connection, and re-run. Record an outcome only when it is PASS or FAIL.
+
+**Step 5 — prove the write path on the deployed origin.** Rotation is a credential change, and the
+write path is what it can break: the role may INSERT into the six Layer 4 tables and UPDATE exactly
+three columns (Decision 46 item 7). One POST and its read-back (§8.3) must still answer `201` with
+builds, then a `200` whose builds match. A `42501` in `fly logs` means the grant set is wrong and
+the rotation is the moment it surfaced; a `500` with no `42501` is a different bug.
+
+**Step 6 — record it, then close the gap item.** Record in `DEVELOPMENT_NOTES.md`, dated: the app,
+the audit-target digest of the database (`db:2d66f26d7ddc` for EU), that the secret was rotated,
+step 4's full `RESULT` line with its session counts, and step 5's POST id and
+`served_by.engine_version`. Close **OG-54 item (1)** on those lines alone. The launch-wide order —
+deploy, rotate, item (1), item (2) on shared, item (3) — is `docs/RECIPES/first-eu-launch.md`.
+Items (2) and (3) of that row are different owner actions — a seed apply on shared, and a real
+retailer source — and nothing here closes them.
+
+**Rollback.** Setting the owner's URL back IS the rollback, and step 4 is how you see it land:
+
+```bash
+fly secrets set DATABASE_URL="$TARGET_DATABASE_URL" --app morocco-pc-api   # the owner url again
+fly deploy --app morocco-pc-api
+node scripts/check-deployed-role.js --target=env:TARGET_DATABASE_URL        # expect FAIL naming neondb_owner
+```
+
+A `FAIL … neondb_owner` is the CORRECT result there: the app is back on the credentials it had
+before. If what leaked is the role's PASSWORD, that is not this rollback — issue
+`ALTER ROLE morocco_pc_api PASSWORD '<new>'` as the owner, write the new value to the password
+file, and repeat steps 1–5.
+
+**What rotation does not prove.** It does not re-measure the grant set (the 20/20 self-check at
+apply time and the rehearsal are that measurement), and it does not narrow the role's `SELECT` on
+the catalog. It proves exactly one thing: the running app now authenticates as `morocco_pc_api`.
+
 ---
 
 ## 9. Step 8 — re-measure, twice, and record both
@@ -624,6 +765,7 @@ model pin, statements per phase, ms per phase, ms per round trip, and the four H
 | What | How | When |
 |---|---|---|
 | The deployed API | `fly apps destroy morocco-pc-api` (destroys the app and its machines; secrets go with it) | bad deploy, or after the sprint's numbers are recorded |
+| The app's database credentials | `fly secrets set DATABASE_URL="$TARGET_DATABASE_URL"` then `fly deploy`; the rotated-role check then reports `FAIL` naming `neondb_owner`, which is the rollback landing (§8.5) | a role credential that is wrong, leaked, or missing a grant |
 | The Neon project | Console → Project → Delete; the `pre-p1-replay` branch is inside it and goes with it | only after the parity table and the measurement are recorded |
 | A half-applied migration set | none needed: the ledger resumes at the pending tail | re-run the runner with the same `--restore-point` |
 

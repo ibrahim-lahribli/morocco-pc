@@ -81,9 +81,18 @@ REQUIRED for GPU, and the rest of the pipeline never sees the use case at all.
 They do not change results today. `resolution` and `priority` are accepted by the POST and stored on the
 profile and the query row, and that is all they do. No non-test engine module reads either one.
 
-The proof is textual plus a measurement. Textual: the query loader's own header comment states the five contract
-columns are `id, budget_amount, currency, use_case, scoring_model_id`, and that `resolution, priority, and the
-profile-FK column are NOT selected and NOT used (Decision 17.6)`. The engine's grep for `resolution` /
+> **CORRECTED 2026-10-23:** the last sentence was true when this was measured (2026-10-07) and is not
+> any more. `loadQueryInput` now SELECTs both and returns them as Engine 2A siblings; `priority` is read
+> by `ranking/select-archetypes.js` `strategyOrder` (Decision 41, 2026-10-10) and `resolution` by
+> `retention/targets.js`'s GPU spend multiplier (Decision 39) and the optional E5 VRAM floor (Decision
+> 42). This section's measured conclusion — that they do not change the observed builds on this
+> catalog — still holds, and is now explained by the catalog exposing only one or two distinct
+> (CPU, GPU) pairs rather than by the fields having no reader.
+
+The proof is textual plus a measurement, and it quotes each file as it read on 2026-10-07. Textual: the query
+loader's own header comment then stated the five contract columns are `id, budget_amount, currency, use_case,
+scoring_model_id`, and that `resolution, priority, and the profile-FK column are NOT selected and NOT used
+(Decision 17.6)`. The engine's grep for `resolution` /
 `priorit` (non-test, src/) returns hits only in: load-query-input.js (the header comment naming them as
 ignored), filtering/igpu-map.js (the comment "no dedicated CPU-spec query — Decision 11 resolution", which is
 a different word), compatibility/cpu-motherboard.js ("CPU <-> motherboard support resolution", a different word),
@@ -335,8 +344,10 @@ Today, on currunt-test with the active model seed-minimal-v1 / 1.0.0:
 - Within the two supported use cases, GAMING and WORKSTATION produce identical assembled builds at every budget
   today, because the GPU is REQUIRED in both (the model's gpu_required_use_cases list contains both) and the
   rest of the engine never reads use_case.
-- `resolution` and `priority` are accepted and stored but do not affect the result today; they are documented
-  as inert by Decision 17.6 and Decision 36 item 8, and the measurement above confirms it.
+- `resolution` and `priority` are accepted and stored but do not affect the result today; they were documented
+  as inert by Decision 17.6 and Decision 36 item 8, and the measurement above confirms the result half
+  (CORRECTED 2026-10-23: both ARE read now — see §2.2 — so the "inert because unread" explanation is gone,
+  while the measured result on this catalog is unchanged).
 - The budget that matters most is the one below the cheapest-assembleable build. The cheapest build that actually
   assembles (cheapest discrete GPU 3200 plus cheapest CPU 899 plus the other roles) is around 7 677 MAD
   (reported in the prior session as the cheapest assembled build; the floor cheapest_total is 4 477 MAD which
@@ -413,10 +424,13 @@ if it must resolve OG-07.
 ## 6. Mismatches with decisions and the gap register
 
 - Decision 17.6 says resolution/priority are accepted and IGNORED in v1, and the API route + api/src/meta.js
-  say the same ("stored, not yet used in scoring"). This finding matches that: measured that they do not change
-  assembled builds. No mismatch there; the decision is accurate.
+  said the same ("stored, not yet used in scoring"). This finding matches that: measured that they do not change
+  assembled builds. No mismatch there; the decision is accurate. **CORRECTED 2026-10-23:** there IS now
+  a mismatch, and it has been repaired at the source — Decision 17 item 6, Decision 36 item 8 and
+  `api/src/meta.js` no longer say the fields are unread (they are read; they just change no score and,
+  on this catalog, no output). This section's measurement stands.
 - Decision 36 item 8 says resolution and priority are "NOT used in scoring" and that the API documents them as
-  inert "because the engine does not read them (Decision 17.6)". This finding matches that too.
+  inert "because the engine does not read them (Decision 17.6)". This finding matches that too. **CORRECTED 2026-10-23:** item 8 now records the readers and keeps only the score/observation half (see the correction above).
 - The active model's configuration has only one use-case-aware field (gpu_required_use_cases) and its two values
   are identical for GAMING and WORKSTATION. This is consistent with the architecture/Decision 10/Decision 11
   framing of gpu_required_use_cases as the use-case lever. No mismatch.

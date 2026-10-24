@@ -65,7 +65,7 @@ INSERT INTO scoring_model (name, version, description, configuration, is_active)
 SELECT
     'launch-v2',
     '2.0.0',
-    'Decision 52 (E5): launch-v2@1.0.0 plus the H3-reviewed per-resolution VRAM floors (1080p 8 / 1440p 12 / 2160p 16 GB). 1.0.0 stays active so pinned A/B evidence keeps resolving; the API serves this version as the newest active row.',
+    'Decision 53 (E5): launch-v2@1.0.0 plus the H3-reviewed per-resolution VRAM floors (1080p 8 / 1440p 12 / 2160p 16 GB). 1.0.0 stays active so pinned A/B evidence keeps resolving; the API serves this version as the newest active row.',
     base.configuration || jsonb_build_object(
         'resolution_profiles',
         jsonb_build_object(

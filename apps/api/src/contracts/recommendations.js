@@ -18,7 +18,16 @@
  *   2. `price_status` is DERIVED, never stored: 'verified' only when EVERY
  *      component's persisted `offer_class` is VERIFIED, 'indicative' otherwise.
  *      The disclaimer text is what makes an indicative price honest.
- *   3. `reused` is a REQUEST fact, alongside `served_by.engine_version`:
+ *   3. `input_effects` is the per-pass half of Decision 52's contract: for each
+ *      accepted input, whether THIS pass read it in a way that shaped the
+ *      answer. `input` and `effect` are closed literal vocabularies (a client
+ *      may switch on them); `reason` is a plain string because it explains WHY
+ *      and may grow without breaking a client. The values are derived on the
+ *      READ path from persisted rows (`apps/api/src/inputs.js`), so POST and GET
+ *      cannot disagree - and a field that is absent from an older server's body
+ *      is `undefined` here, which the web client treats as silence, not as
+ *      "nothing applied".
+ *   4. `reused` is a REQUEST fact, alongside `served_by.engine_version`:
  *      `true` only when a POST answered from an equivalent committed pass
  *      (Platform P1 Sprint 5, Decision 47), `false` on every GET and on every
  *      POST that ran its own pass. It is NOT nullable and NOT derivable from
@@ -71,6 +80,25 @@ const BuildSchema = Type.Object({
 }, { additionalProperties: false });
 
 /**
+ * One input's effect on one pass (Decision 52). `input` and `effect` are
+ * literals so a client's switch is exhaustive; `reason` is an explanation, not
+ * a vocabulary the schema freezes.
+ */
+const InputEffectSchema = Type.Object({
+  input: Type.Union([
+    Type.Literal('use_case'),
+    Type.Literal('resolution'),
+    Type.Literal('priority'),
+  ]),
+  effect: Type.Union([
+    Type.Literal('APPLIED'),
+    Type.Literal('NO_EFFECT'),
+    Type.Literal('UNKNOWN'),
+  ]),
+  reason: Type.String(),
+}, { additionalProperties: false, $id: 'InputEffect' });
+
+/**
  * Mirrors `retention/budget-floor.js` computeBudgetFloor exactly. `within_budget`
  * is `boolean | null` because a missing required role makes the floor UNKNOWN
  * (never 0, never `true`) - the project's standing NULL != 0 rule.
@@ -105,6 +133,12 @@ const RecommendationResponseSchema = Type.Object({
   reused: Type.Boolean(),
   reason: Type.Union([Type.String(), Type.Null()]),
   disclaimer: Type.String(),
+  /**
+   * The three inputs, in served order, always all three: an omitted optional
+   * input is reported as `NO_EFFECT`/`NOT_PROVIDED` rather than left out, so a
+   * client never has to infer which question its user skipped.
+   */
+  input_effects: Type.Array(InputEffectSchema),
   served_by: Type.Object({ engine_version: Type.String() }, { additionalProperties: false }),
   builds: Type.Array(BuildSchema),
 }, { additionalProperties: false, $id: 'RecommendationResponse' });
@@ -119,6 +153,7 @@ module.exports = {
   BuildComponentSchema,
   BuildSchema,
   BudgetFloorSchema,
+  InputEffectSchema,
   RecommendationResponseSchema,
   RecommendationParamsSchema,
 };

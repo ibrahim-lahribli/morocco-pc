@@ -1,5 +1,5 @@
 /**
- * E6 (Decision 53) - the CPU eligibility set implied by a DECLARED per-use-case
+ * E6 (Decision 54) - the CPU eligibility set implied by a DECLARED per-use-case
  * `gpu_policy`.
  *
  * Boundary: a pure derivation, no database, no policy storage of its own. It

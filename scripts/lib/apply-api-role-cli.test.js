@@ -34,6 +34,7 @@ const { spawnSync } = require('node:child_process');
 const {
   PASSWORD_ENV,
   createRoleAndGrants,
+  guardLabel,
   parseArgs,
   resolvePassword,
   resolveTarget,
@@ -138,6 +139,21 @@ test('--dry-run needs no restore point, and every other argument rule still hold
   assert.throws(() => parseArgs(ARGV.concat(['--help'])), (error) => error.usage === true && /usage:/.test(error.message));
 });
 
+test('--target-env names a variable, never carries a URL', () => {
+  assert.equal(parseArgs(ARGV.concat(['--dry-run'])).targetEnv, 'DATABASE_URL', 'the default is the shared database');
+  assert.equal(parseArgs(ARGV.concat(['--dry-run', '--target-env=TARGET_DATABASE_URL'])).targetEnv,
+    'TARGET_DATABASE_URL', 'a named variable is kept verbatim');
+  // A URL on the command line would land in shell history and in `ps`, which the
+  // password rule already forbids; naming the variable keeps it in the env file.
+  for (const bad of ['', 'postgres://u:p@ep-x.neon.tech/neondb', 'lower_case', '1ABC']) {
+    assert.throws(() => parseArgs(ARGV.concat(['--dry-run', '--target-env=' + bad])),
+      (error) => error.usage === true, JSON.stringify(bad) + ' must be a usage error');
+  }
+  // The space form is not accepted either: the repo's rule for value-bearing flags.
+  assert.throws(() => parseArgs(ARGV.concat(['--dry-run', '--target-env', 'X'])),
+    (error) => error.usage === true);
+});
+
 test('the password comes from the file or the environment, never from argv', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apply-api-role-cli-'));
   const file = path.join(dir, 'password');
@@ -185,6 +201,22 @@ test('the target is the shared DATABASE_URL, and there is no branch mode to fall
   assert.match(pooled.digest, /^db:[0-9a-f]{12}$/, 'the target is named by a digest, never a host');
   assert.ok(!pooled.digest.includes('neon.tech'));
   assert.ok(!JSON.stringify(pooled.target).includes('owner-s3cret'), 'the descriptor carries no credential');
+  assert.equal(pooled.isShared, true);
+  assert.equal(guardLabel(pooled), 'DATABASE_URL (SHARED)');
+
+  // A NAMED variable is a different target, and the guard line must say which.
+  const named = resolveTarget({
+    DATABASE_URL: FAKE_SHARED,
+    TARGET_DATABASE_URL: 'postgresql://u:p@ep-eu-production-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require',
+  }, 'TARGET_DATABASE_URL');
+  assert.equal(named.target.endpointId, 'ep-eu-production');
+  assert.equal(named.isShared, false);
+  assert.equal(guardLabel(named), 'TARGET_DATABASE_URL (named target)');
+  // An unset NAMED variable fails with ITS OWN name, not the default's.
+  assert.throws(() => resolveTarget({ DATABASE_URL: FAKE_SHARED }, 'TARGET_DATABASE_URL'),
+    /TARGET_DATABASE_URL is not set/);
+  assert.throws(() => resolveTarget({ TARGET_DATABASE_URL: '  ' }, 'TARGET_DATABASE_URL'),
+    /TARGET_DATABASE_URL is not set/);
 });
 
 test('CLI: --help exits 2, a refusal exits 1, and neither prints a stack trace', () => {
@@ -259,5 +291,5 @@ test('requiring the script plans nothing and applies nothing (the require.main g
     }
   );
   assert.equal(child.status, 0, 'require() must exit 0 (stderr: ' + child.stderr + ')');
-  assert.match(child.stdout, /LOADED-GUARD-OK APPLICATION_NAME,PASSWORD_ENV,createRoleAndGrants,parseArgs,planStatements,resolvePassword,resolveTarget,usageText/);
+  assert.match(child.stdout, /LOADED-GUARD-OK APPLICATION_NAME,PASSWORD_ENV,TARGET_ENV_DEFAULT,createRoleAndGrants,guardLabel,parseArgs,parseTargetEnvName,planStatements,resolvePassword,resolveTarget,usageText/);
 });

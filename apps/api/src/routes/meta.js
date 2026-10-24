@@ -9,8 +9,16 @@
  * never an empty array. An empty use-case list would look like a valid answer
  * and would leave a client with a form it can never submit (Decision 36 item
  * 3). Both causes share ONE body, so a client has a single state to handle.
+ *
+ * `inputs_applied` (Decision 52) is derived from the SAME configuration, by
+ * `inputs.js`. It is served HERE, and not on the recommendation response, for a
+ * reason: it answers "does this deployment read the input at all?", which is a
+ * fact a form needs BEFORE it decides which questions to ask. The per-pass
+ * question - what did each input change in this particular answer - is
+ * `input_effects` on the recommendation body.
  */
 
+const inputs = require('../inputs');
 const meta = require('../meta');
 const { MetaOptionsSchema, ErrorResponseSchema } = require('../contracts');
 
@@ -49,7 +57,10 @@ function registerMetaRoutes(app) {
     if (useCases === null) {
       return reply.code(503).send(scoringUnavailable());
     }
-    return reply.code(200).send(meta.buildOptions(useCases));
+    return reply.code(200).send(meta.buildOptions(
+      useCases,
+      inputs.inputsApplied({ configuration: model.configuration })
+    ));
   });
 }
 

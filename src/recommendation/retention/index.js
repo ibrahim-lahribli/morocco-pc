@@ -30,7 +30,7 @@
  *   retainTopKPerRole({ filterResult, candidateScores, topKPerRole, prices })
  *     - the Decision 12 retention stage (see ./retain). `prices` is the Engine 2
  *     Stage 1 carrier and is required since Decision 27. E2 adds the optional
- *     `roleTargets`; E6 (Decision 53) adds the optional `roleExclusions`, which
+ *     `roleTargets`; E6 (Decision 54) adds the optional `roleExclusions`, which
  *     drops policy-ineligible candidates before ordering and the K cap.
  *
  *   excludedCpuProductIds({ gpuPolicy, filteringContext })   (E6)

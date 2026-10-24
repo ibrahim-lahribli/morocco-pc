@@ -841,7 +841,7 @@ test('E2: a use case the model does not declare passes roleTargets null', async 
 });
 
 // ---------------------------------------------------------------------------
-// 6c. E6 (Decision 53): the declared GPU policy reaches retention as a CPU
+// 6c. E6 (Decision 54): the declared GPU policy reaches retention as a CPU
 //     eligibility set, and the SAME resolved policy reaches Engine 3.
 // ---------------------------------------------------------------------------
 

@@ -4,11 +4,12 @@
  * apps/api/src/engine.js - the API's ONLY engine entry point.
  *
  * Boundary: this file exists so the HTTP layer never reaches into an engine
- * module's internals. It requires exactly four PUBLIC BARRELS
+ * module's internals. It requires exactly five PUBLIC BARRELS
  * (`src/recommendation/orchestrator/index.js`,
  * `src/recommendation/candidates/index.js`,
- * `src/recommendation/scoring/index.js` and
- * `src/recommendation/query/index.js`) and re-exports nothing the engine
+ * `src/recommendation/scoring/index.js`,
+ * `src/recommendation/query/index.js` and
+ * `src/recommendation/retention/index.js`) and re-exports nothing the engine
  * does not already export. `import-boundary.test.js` enforces that rule by
  * scanning every file under apps/api/src for a `require` that resolves to a
  * path inside `src/recommendation/` and is neither a stage barrel (`index.js`)
@@ -30,6 +31,7 @@ const orchestrator = require('../../../src/recommendation/orchestrator');
 const candidates = require('../../../src/recommendation/candidates');
 const scoring = require('../../../src/recommendation/scoring');
 const query = require('../../../src/recommendation/query');
+const retention = require('../../../src/recommendation/retention');
 
 /** The API's fixed engine options. Frozen so a caller cannot mutate it. */
 const API_ENGINE_OPTIONS = Object.freeze({ allow_unverified_seed_offers: true });
@@ -137,6 +139,22 @@ async function runFullRun(client, queryId, engineVersion) {
 const catalogVersion = query.catalogVersion;
 
 /**
+ * The engine's GPU spend multiplier for a resolution (Decision 39), forwarded
+ * from the retention barrel.
+ *
+ * `apps/api/src/inputs.js` needs this ONE number to state truthfully whether
+ * `resolution` changed this pass: at 1.0 the GPU target is identical to the one
+ * an omitted resolution produces, which is a different fact from "the target
+ * moved". Re-exporting the engine's function (rather than a copy of its table)
+ * is what keeps the served claim and the arithmetic that produced the build on
+ * one owner - a second table here would let a client be told about a multiplier
+ * retention never used. It is NOT wrapped: `inputs.js` handles a throw as
+ * UNKNOWN, because a stored value outside the vocabulary is a row fact the API
+ * must report rather than crash on.
+ */
+const resolutionMultiplier = retention.resolutionMultiplier;
+
+/**
  * The component-role vocabulary the catalog's `role` filter accepts, in the
  * `component_role` enum's declaration order.
  *
@@ -173,6 +191,7 @@ module.exports = {
   catalogVersion,
   catalogRoles,
   categoryForRole,
+  resolutionMultiplier,
   API_ENGINE_OPTIONS,
   ERROR_CODES: candidates.ERROR_CODES,
   CandidateSelectionError: candidates.CandidateSelectionError,

@@ -46,7 +46,7 @@
  *     |  retainTopKPerRole({ filterResult, candidateScores, topKPerRole,
  *     |                        prices: offerResult.prices,
  *     |                        roleTargets, roleExclusions })
- *     |                     Decision 27 + E2 + E6 (Decision 53)
+ *     |                     Decision 27 + E2 + E6 (Decision 54)
  *     v
  *   retentionResult { results }                  Decision 12/14 retention
  *     |  computeBudgetFloor({ retained, prices, budgetAmount, currency })
@@ -332,7 +332,7 @@ async function runRecommendation(args) {
   // E2: the active model's per-use-case spend targets become per-role price
   // targets. A model that declares no `use_case_profiles`, or no profile for
   // this query's use case, yields null and retention keeps the pre-E2 rule.
-  // E6 (Decision 53): the declared per-use-case `gpu_policy` is resolved ONCE,
+  // E6 (Decision 54): the declared per-use-case `gpu_policy` is resolved ONCE,
   // here, because two stages consume it - retention (which CPUs MAY reach the
   // walk) and Engine 3 (the per-CPU GPU decision). A declared IGPU_ALLOWED
   // excludes CPUs with no verified integrated GPU; every other policy returns

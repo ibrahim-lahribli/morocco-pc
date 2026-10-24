@@ -1,7 +1,7 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
-// E6 (Decision 53): unit tests for the CPU eligibility set implied by a
+// E6 (Decision 54): unit tests for the CPU eligibility set implied by a
 // declared `IGPU_ALLOWED` GPU policy. Pure, DB-free.
 //
 // Scope: the null cases (REQUIRED / absent), the tri-state iGPU semantics

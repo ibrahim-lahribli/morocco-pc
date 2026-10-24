@@ -43,10 +43,18 @@
  *   --fail-days N: failure threshold on days-to-first-non-seed-expiry (default 7)
  * The `=` form is mandatory (`--fail-days=14`); the space form is a usage error
  * by design and exits 2.
- * Exit codes: 0 = gate satisfied; 1 = non-seed offers already expired, or the
- * first non-seed expiry is within --fail-days, or the live data could not be
- * read; 2 = usage error. A stale SEED class is reported but never fails the gate
- * -- the class is not a launch blocker once Decision 35 exists.
+ * `RESULT: PASS` requires at least one VERIFIED offer. With none (today's state:
+ * all 101 rows are seed data) the verdict is `INCONCLUSIVE`, because "no verified
+ * offer has expired" is true and meaningless at the same time -- there is nothing
+ * to be fresh. The gate therefore never prints PASS over a catalog that has never
+ * been refreshed, and the INCONCLUSIVE line says the seed offers must not be
+ * presented as recently verified. That is a WORDING change only: exit stays 0 for
+ * both, since the seed class is a deliberate beta trade-off, not a build breaker.
+ *
+ * Exit codes: 0 = gate satisfied or INCONCLUSIVE; 1 = non-seed offers already
+ * expired, or the first non-seed expiry is within --fail-days, or the live data
+ * could not be read; 2 = usage error. A stale SEED class is reported but never
+ * fails the gate -- the class is not a launch blocker once Decision 35 exists.
  */
 
 require('dotenv').config();
@@ -175,11 +183,22 @@ async function main() {
         'RESULT: FAIL - first VERIFIED offer expires within ' + failDays + ' days; refresh the source before then'
       );
       exitCode = 1;
+    } else if (counts.nonSeedTotal === 0) {
+      // Not a PASS: there is no verified offer whose freshness could be asserted.
+      console.log(
+        'RESULT: INCONCLUSIVE - no VERIFIED offer exists, so nothing here is fresh or stale. The ' +
+          counts.seedTotal +
+          ' SEED/UNVERIFIED offer(s) must not be presented as recently verified.'
+      );
+      console.log(
+        '        Refresh from a real retailer source (docs/IMPORT_OFFERS.md, "Refresh the catalog"),' +
+          ' then re-run this gate and node scripts/check-offer-provenance.js.'
+      );
     } else {
       console.log(
         'RESULT: PASS - no expired VERIFIED offers and first VERIFIED expiry beyond ' + failDays + ' days'
       );
-      if (counts.nonSeedTotal > 0 && firstVerifiedDays !== null && firstVerifiedDays <= warnDays) {
+      if (firstVerifiedDays !== null && firstVerifiedDays <= warnDays) {
         console.log('WARN - first VERIFIED expiry within ' + warnDays + ' days; schedule a source refresh');
       }
     }

@@ -15,12 +15,12 @@ on:
       - "apps/web/**"
       # The web client's types are generated from THIS committed snapshot (S4), so
       # a contract change is a web change even when no file under apps/web moved.
-      - "apps/api/test/unit/openapi-v1.6.json"
+      - "apps/api/test/unit/openapi-v1.7.json"
       - ".github/workflows/web.yml"
   pull_request:
     paths:
       - "apps/web/**"
-      - "apps/api/test/unit/openapi-v1.6.json"
+      - "apps/api/test/unit/openapi-v1.7.json"
       - ".github/workflows/web.yml"
   workflow_dispatch:
 

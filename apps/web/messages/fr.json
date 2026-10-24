@@ -137,6 +137,34 @@
       "limitedCatalog": "Le catalogue ne contenait pas assez de profils distincts pour varier davantage.",
       "unknown": "Un autre facteur a pesé sur ce choix."
     },
+    "inputs": {
+      "title": "Ce que vos choix ont changé",
+      "labels": {
+        "use_case": "Usage",
+        "resolution": "Résolution",
+        "priority": "Priorité"
+      },
+      "effects": {
+        "applied": "pris en compte dans cette configuration.",
+        "noEffect": "sans effet sur cette configuration.",
+        "unknown": "effet non enregistré pour cette recherche."
+      },
+      "reasons": {
+        "USE_CASE_PROFILE": "a choisi le profil de votre usage : politique GPU et répartition du budget.",
+        "GPU_POLICY_ONLY": "a déterminé si un GPU dédié était requis.",
+        "VRAM_FLOOR": "a fixé la mémoire vidéo minimale retenue.",
+        "GPU_TARGET_SCALED": "a ajusté le budget visé pour la carte graphique.",
+        "NEUTRAL_MULTIPLIER": "n'a pas modifié le budget visé pour la carte graphique.",
+        "NO_GPU_TARGET": "n'a rien modifié : ce profil ne vise pas de part GPU.",
+        "NO_RESOLUTION_POLICY": "n'est pas utilisé par le modèle de score actif.",
+        "STRATEGY_ORDER": "a fixé l'ordre des profils essayés, d'où le classement ci-dessous.",
+        "DEFAULT_ORDER": "correspond à l'ordre par défaut : rien ne change par rapport à une priorité non indiquée.",
+        "NO_BUILDS": "rien n'a été assemblé : il n'y avait aucun profil à ordonner.",
+        "NOT_PROVIDED": "n'a pas été indiqué.",
+        "NOT_RECORDED": "n'a pas pu être établi pour cette recherche.",
+        "UNRECOGNISED_VALUE": "n'a pas pu être interprété pour cette recherche."
+      }
+    },
     "zeroTitle": "Aucune configuration pour ce budget",
     "zeroBody": "Nous n'avons trouvé aucune configuration compatible avec ce budget. Augmentez le budget ou changez d'usage, puis relancez la recherche.",
     "zeroBack": "Modifier mon budget",
