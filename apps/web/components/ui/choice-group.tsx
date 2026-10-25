@@ -19,6 +19,7 @@
 import { useId } from "react";
 
 import { ChoiceCard } from "./choice-card";
+import { cn } from "./cn";
 
 export interface ChoiceGroupOption {
   value: string;
@@ -45,6 +46,14 @@ export interface ChoiceGroupProps {
    * never clears a selection.
    */
   error?: string;
+  /**
+   * Extra classes for the `<legend>` (S28). The wizard passes `sr-only` because
+   * its own `<h2>` is the visible question AND the step's focus target: the
+   * heading must be the thing read when focus arrives, and painting the same
+   * sentence twice on screen would be a duplicate, not a heading. The legend
+   * still NAMES the group either way — which is why it is hidden, not removed.
+   */
+  legendClassName?: string;
 }
 
 export function ChoiceGroup({
@@ -55,6 +64,7 @@ export function ChoiceGroup({
   onChange,
   hint,
   error,
+  legendClassName,
 }: ChoiceGroupProps) {
   const hintId = useId();
   const errorId = useId();
@@ -62,7 +72,7 @@ export function ChoiceGroup({
 
   return (
     <fieldset aria-describedby={describedBy}>
-      <legend className="text-body font-semibold text-ink">{legend}</legend>
+      <legend className={cn("text-body font-semibold text-ink", legendClassName)}>{legend}</legend>
       {error !== undefined ? (
         <p id={errorId} className="mt-1 text-caption text-error">
           {error}

@@ -69,7 +69,7 @@ fails a test rather than relying on someone re-reading this file.
 | The wizard is completable **keyboard-only at 360 px** | `e2e/wizard.spec.ts` ("keyboard-only step 1"), `e2e/wizard-steps.spec.ts` (Enter advances the form, no `div` handlers) |
 | Errors announce **and receive focus** | `e2e/wizard-submit.spec.ts` (422 moves back to its field and focuses it; 413/429/503/500 each render as `Alert`) |
 | Loading announces progress | `e2e/wizard-submit.spec.ts` (progress block with a real elapsed clock inside 300 ms, `aria-live` on the status line) |
-| Step changes announce | `e2e/wizard-steps.spec.ts` (the step's legend names the group; the flow's own announcement copy is rendered in an `aria-live` region) |
+| Step changes announce **and move focus** | `e2e/wizard-steps.spec.ts` (the step's `<h2>` is the question, the legend still names the group, focus moves to that heading on a pressed transition and NOT on first load; the flow's own announcement copy is rendered in an `aria-live` region) |
 | Sliders announce an **amount**, not a number | `e2e/kit.spec.ts`, `e2e/wizard-budget.spec.ts` (`aria-valuetext` in DH in both locales) |
 | Zoom to 200 % loses nothing and scrolls nowhere | `e2e/a11y.spec.ts` ("200 % zoom" — 640 px layout on three surfaces) |
 | Contrast of every token pair | `e2e/tokens.spec.ts`, provenance in [TOKEN_MAP.md](TOKEN_MAP.md) |

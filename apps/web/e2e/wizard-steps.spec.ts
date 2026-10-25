@@ -180,3 +180,85 @@ test("the Arabic profile says the same thing about an inert answer", async ({ pa
   // RTL text in an RTL document: the caveat must not be the only LTR run.
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
 });
+
+/**
+ * F2 of the UI audit (2026-10-25): `meta/options` is a French-language contract,
+ * so the Arabic wizard used to print "Jeu / Bureau / Travail" under an Arabic
+ * question. `lib/wizard/option-labels.ts` translates the label BY THE CONTRACT'S
+ * VALUE and keeps the response's word as the fallback, and those are the two
+ * halves pinned here — translation, and the fallback that keeps an option the
+ * overlay has never seen from vanishing.
+ *
+ * The French side is guarded by the tests above: "step 1 renders the labels
+ * meta/options supplies" and the five-priority test both feed labels the
+ * catalogue does not contain and require them verbatim. A French entry in the
+ * overlay would fail those, which is exactly what should happen.
+ */
+test("Arabic translates the contract's option labels by value and falls back for an unknown one", async ({
+  page,
+}) => {
+  await serveMeta(page);
+  await page.goto("/ar/configurer?etape=usage");
+
+  await expect(page.getByRole("radio", { name: "الألعاب" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "المكتب" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "العمل الاحترافي" })).toBeVisible();
+
+  // The words the contract sends must not survive anywhere on the page.
+  const text = await page.locator("body").innerText();
+  expect(text).not.toMatch(/Jeu|Bureau|Travail/);
+
+  await page.goto(
+    "/ar/configurer?etape=priority&use_case=GAMING&budget_amount=7300&resolution=1440p",
+  );
+  await expect(page.getByRole("radio", { name: "السعر أولاً" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "متوازن" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "الأداء أولاً" })).toBeVisible();
+
+  // An option this build has never been taught is still offered, in the API's
+  // own words: the overlay may translate a value, never drop one.
+  await serveMeta(page, {
+    ...META_OPTIONS,
+    use_cases: [{ value: "SERVER", label: "Serveur" }],
+  });
+  await page.goto("/ar/configurer?etape=usage");
+  await expect(page.getByRole("radio", { name: "Serveur" })).toBeVisible();
+});
+
+/**
+ * F3 of the UI audit (2026-10-25): a step change used to leave focus on `<body>`,
+ * so a keyboard user who pressed "Suivant" was sent back to the top of the
+ * document — skip link, brand, language switcher — before reaching the question
+ * they had just advanced to. The step's `<h2>` is now the focus target.
+ *
+ * Three halves matter, so all three are pinned: the PRESSED transition moves
+ * focus, a LOAD does not (focus stealing on first paint is the defect this could
+ * have introduced), and the fieldset keeps the name the hidden legend gives it.
+ */
+test("a pressed step change moves focus to the new step's heading, and a load does not", async ({
+  page,
+}) => {
+  await serveMeta(page);
+  await page.goto("/fr/configurer");
+  await expect(page.getByRole("radio", { name: "Jeu" })).toBeVisible();
+
+  // First paint: nothing has been pressed, so focus stays where the browser put it.
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+
+  await page.locator('label:has(input[value="GAMING"])').click();
+  await page.getByRole("button", { name: "Suivant" }).click();
+
+  const budget = page.getByRole("heading", { level: 2, name: "Quel budget visez-vous ?" });
+  await expect(budget).toBeVisible();
+  await expect(budget).toBeFocused();
+
+  // Back is a pressed navigation too, so the rule holds in both directions.
+  await page.getByRole("button", { name: "Retour" }).click();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Quel est votre usage principal ?" }),
+  ).toBeFocused();
+
+  // Hiding the legend visually must not cost the group its accessible name.
+  await expect(page.getByRole("group", { name: "Quel est votre usage principal ?" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Jeu" })).toBeVisible();
+});

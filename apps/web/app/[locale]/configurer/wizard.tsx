@@ -58,6 +58,7 @@ import type { AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
 import { readAppliedInputs } from "@/lib/wizard/applied";
 import { fill, type WizardCopy } from "@/lib/wizard/copy";
+import { localizedOptionLabel, type LabelledOptionKind } from "@/lib/wizard/option-labels";
 import {
   isPriorityChoice,
   isStepValid,
@@ -79,11 +80,23 @@ import { SubmitPanel } from "./submit-panel";
 
 type OptionsStatus = "loading" | "ready" | "error";
 
-/** `meta/options` items are `{ value, label }`; the group wants strings. */
+/**
+ * `meta/options` items are `{ value, label }`; the group wants strings.
+ *
+ * The label stays the CONTRACT's: `localizedOptionLabel` translates it for the
+ * page's locale and falls back to the response's own word for any value it has
+ * no translation for, so an option the contract adds tomorrow still appears —
+ * it simply appears in the API's language until someone translates it.
+ */
 function asOptions(
   list: readonly { value: string | number; label: string }[],
+  locale: AppLocale,
+  kind: LabelledOptionKind,
 ): ChoiceGroupOption[] {
-  return list.map((option) => ({ value: String(option.value), label: option.label }));
+  return list.map((option) => ({
+    value: String(option.value),
+    label: localizedOptionLabel(kind, option.value, locale, option.label),
+  }));
 }
 
 export function Wizard({ copy, locale }: { copy: WizardCopy; locale: AppLocale }) {
@@ -164,6 +177,23 @@ export function Wizard({ copy, locale }: { copy: WizardCopy; locale: AppLocale }
     router.replace(toHref(pathname, { step: repairTo, answers }), { scroll: false });
   }, [repairTo, answers, pathname, router]);
 
+  // F3 of the UI audit (2026-10-25): a step change used to leave focus on
+  // `<body>`, so a keyboard user restarted at the top of the document — skip
+  // link, brand, language switcher — before reaching the new question. The
+  // heading below is the focus target, and it moves only for a navigation the
+  // user pressed (`goTo`): a first load keeps the skip link as the first stop,
+  // Back/Forward keeps the browser's own focus restoration, and a step repair
+  // keeps whatever the URL change left. The flag is a ref because it must be
+  // true SYNCHRONOUSLY, before the render the push causes.
+  const stepHeading = useRef<HTMLHeadingElement | null>(null);
+  const focusHeadingOnStepChange = useRef(false);
+
+  useEffect(() => {
+    if (!focusHeadingOnStepChange.current) return;
+    focusHeadingOnStepChange.current = false;
+    stepHeading.current?.focus();
+  }, [shownStep]);
+
   const index = steps.indexOf(shownStep);
   const next = nextStep(shownStep, answers, applied);
   const previous = previousStep(shownStep, answers, applied);
@@ -205,6 +235,9 @@ export function Wizard({ copy, locale }: { copy: WizardCopy; locale: AppLocale }
 
   function goTo(target: WizardStep | null) {
     if (target === null) return;
+    // Consumed by the effect above once the new step has rendered. Set here
+    // rather than inside the effect so only a pressed control moves focus.
+    focusHeadingOnStepChange.current = true;
     router.push(toHref(pathname, { step: target, answers }), { scroll: false });
   }
 
@@ -273,7 +306,8 @@ export function Wizard({ copy, locale }: { copy: WizardCopy; locale: AppLocale }
           <ChoiceGroup
             name="use_case"
             legend={copy.steps.usage.legend}
-            options={asOptions(body.use_cases)}
+            legendClassName="sr-only"
+            options={asOptions(body.use_cases, locale, "use_case")}
             value={answers.use_case}
             error={fieldError("use_case")}
             onChange={(value) => setAnswer({ use_case: value })}
@@ -284,7 +318,8 @@ export function Wizard({ copy, locale }: { copy: WizardCopy; locale: AppLocale }
           <ChoiceGroup
             name="resolution"
             legend={copy.steps.resolution.legend}
-            options={asOptions(body.resolutions)}
+            legendClassName="sr-only"
+            options={asOptions(body.resolutions, locale, "resolution")}
             value={answers.resolution}
             hint={inertHint}
             error={fieldError("resolution")}
@@ -296,11 +331,15 @@ export function Wizard({ copy, locale }: { copy: WizardCopy; locale: AppLocale }
           <ChoiceGroup
             name="priority"
             legend={copy.steps.priority.legend}
+            legendClassName="sr-only"
             // Three of the contract's five, and the narrowing is the model's
-            // (`PRIORITY_CHOICES`): labels come from the response, never from a
-            // table here, so 2 and 4 are dropped by value rather than relabelled.
+            // (`PRIORITY_CHOICES`): the labels are the response's (translated by
+            // value in `option-labels`, never relabelled here), so 2 and 4 are
+            // dropped by value rather than given invented copy.
             options={asOptions(
               body.priorities.filter((option) => isPriorityChoice(Number(option.value))),
+              locale,
+              "priority",
             )}
             value={answers.priority === undefined ? undefined : String(answers.priority)}
             hint={inertHint}
@@ -367,6 +406,22 @@ export function Wizard({ copy, locale }: { copy: WizardCopy; locale: AppLocale }
           }
         }}
       >
+        {/*
+          The step's own heading, and the one thing focus lands on after a step
+          change. It is the QUESTION rather than the step's short name because
+          that is what a user navigating by heading wants to jump to — and it is
+          the sentence the `<legend>` used to paint, which is why every group
+          below passes `legendClassName="sr-only"`: the fieldset keeps its
+          accessible name without printing the question twice.
+        */}
+        <h2
+          ref={stepHeading}
+          tabIndex={-1}
+          className="w-fit text-body font-semibold text-ink"
+        >
+          {copy.steps[shownStep].legend}
+        </h2>
+
         {needsOptions && status === "loading" ? <OptionsSkeleton label={copy.loading} /> : null}
 
         {needsOptions && status === "error" ? (
@@ -392,6 +447,7 @@ export function Wizard({ copy, locale }: { copy: WizardCopy; locale: AppLocale }
           <BudgetStep
             saved={answers.budget_amount}
             copy={copy}
+            legendClassName="sr-only"
             locale={locale}
             serverError={fieldError("budget_amount")}
             onCommit={(value) => setAnswer({ budget_amount: value })}

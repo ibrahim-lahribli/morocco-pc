@@ -93,7 +93,7 @@ by hand.
 
 | Component | What it is | Why |
 |---|---|---|
-| `ChoiceGroup` | A `<fieldset>` whose `<legend>` is the question, containing `ChoiceCard`s for a `{ value, label }` list | The GROUP is the question and only a legend gives a group its name. Its `options` is the shape `GET /v1/meta/options` returns, so a list maps straight in and no screen derives a label from an enum |
+| `ChoiceGroup` | A `<fieldset>` whose `<legend>` is the question, containing `ChoiceCard`s for a `{ value, label }` list | The GROUP is the question and only a legend gives a group its name. Its `options` is the shape `GET /v1/meta/options` returns, so a list maps straight in and no screen derives a label from an enum. `legendClassName` exists for the one screen whose visible question is its own `<h2>`: the wizard passes `sr-only`, so the legend still NAMES the group while the heading is what is painted and focused |
 | `LinkButton` | `next/link` with the button's base/size/variant classes | A link that navigates must be a link (open-in-new-tab, context menu, honest role). The classes have one owner, so it cannot drift from `Button`; `disabled` is absent by design |
 
 ## The budget pair (S8)

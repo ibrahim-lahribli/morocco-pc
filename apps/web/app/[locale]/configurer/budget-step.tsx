@@ -45,7 +45,7 @@
  */
 import { useState } from "react";
 
-import { Alert, Slider, TextField } from "@/components/ui";
+import { Alert, Slider, TextField, cn } from "@/components/ui";
 import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { fill, type WizardCopy } from "@/lib/wizard/copy";
 import {
@@ -70,9 +70,27 @@ export interface BudgetStepProps {
   onCommit: (value: number | undefined) => void;
   /** A sentence the service sent back about this field (S10's 422). */
   serverError?: string;
+  /**
+   * Extra classes for the `<legend>` (S28). The wizard passes `sr-only` because
+   * the step's `<h2>` is the visible question and the focus target; the legend
+   * stays in the accessibility tree as the fieldset's name.
+   *
+   * The fieldset carries NO top margin for this reason: it used to be the first
+   * visible thing in the form and paid for the gap itself, and with the legend
+   * hidden that margin became 24 px of dead air under the heading. The step's
+   * heading owns the spacing now, and the controls keep their own `mt-3`.
+   */
+  legendClassName?: string;
 }
 
-export function BudgetStep({ saved, copy, locale, onCommit, serverError }: BudgetStepProps) {
+export function BudgetStep({
+  saved,
+  copy,
+  locale,
+  onCommit,
+  serverError,
+  legendClassName,
+}: BudgetStepProps) {
   // The draft is the only local state: what the user has typed, which may be a
   // half-finished number or out of range. It becomes an answer only through
   // `onCommit`, and only when it is an integer inside the range.
@@ -142,8 +160,10 @@ export function BudgetStep({ saved, copy, locale, onCommit, serverError }: Budge
   }
 
   return (
-    <fieldset className="mt-6">
-      <legend className="text-body font-semibold text-ink">{copy.steps.budget.legend}</legend>
+    <fieldset>
+      <legend className={cn("text-body font-semibold text-ink", legendClassName)}>
+        {copy.steps.budget.legend}
+      </legend>
 
       <div className="mt-3">
         <TextField
