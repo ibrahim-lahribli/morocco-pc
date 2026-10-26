@@ -1568,13 +1568,13 @@ right edge on `/ar`, while the DOM order stays A then B.
 2. Swap producing a compatibility warning → warning shown inline, in words.
 3. CD-8 absent → control disabled with explanation; no request fired.
 
-**Status: NOT STARTED 2026-10-22 — BLOCKED on CD-8, with one buildable slice.** The swap endpoint
+**History 2026-10-22 — NOT STARTED, blocked on CD-8, with one buildable slice.** The swap endpoint
 does not exist and no platform sprint owns it, so the DoD's own fallback is the only honest
 deliverable today: a control rendered disabled with an explanation, firing no request and
 simulating nothing. That slice does not earn a sprint — it must be revisited the moment the endpoint
 lands, and alone it proves nothing about the platform path the sprint exists to exercise.
 
-**Status update 2026-10-25 — the fallback half is SHIPPED; CD-8 is still absent.** Every build card
+**History 2026-10-25 — the fallback half shipped first; CD-8 was still absent.** Every build card
 now carries one disabled control (`data-swap="unavailable"`), labelled « Remplacer un composant » /
 « استبدال مكوّن », with a VISIBLE explanation tied to it by `aria-describedby`. A hover-only tooltip
 was rejected on purpose: a disabled control cannot take focus, so a tooltip on it would be
@@ -1590,7 +1590,7 @@ decision), so S24 stays open — the control must be revisited, not merely re-st
 lands. The engine half then landed the same day (`evaluateBuildReplacement`, six agreement
 tests); the route then landed the same day (contract v1.8.0, see the next update), so this UI is the last piece.
 
-**Status update 2026-10-25 (route) — CD-8 is now SERVED; only this UI is left.** The endpoint exists:
+**History 2026-10-25 — the route landed; only the UI was left.** The endpoint exists:
 `GET /v1/recommendations/:id/builds/:rank/swap-preview` (contract v1.8.0), backed by
 `orchestrator/swap-preview.js`, which takes the SAME Engine 2B -> 2C -> Stage 1 -> 2D path a pass takes
 (full candidate pool on purpose — a narrowed pool would be a second path free to diverge) and hands the
@@ -1601,7 +1601,8 @@ DoD's first bullet is now buildable: the control becomes live, reads the API's `
 `budget` and renders UNKNOWN as its own state (never as compatible) in both locales. The specs flipped WITH
 the UI, in one change — see the closing status below.
 
-**Status: DONE 2026-10-25 — the control is LIVE, in both locales.** `apps/web/components/result/swap-panel.tsx`
+**Status: DONE 2026-10-25, EXTENDED 2026-10-26 — the control is LIVE in both locales, and it both
+previews a swap and keeps one.** `apps/web/components/result/swap-panel.tsx`
 is a client island on every build card, and `lib/result/swap.ts` holds its rules: the roles offered are this
 build's own roles intersected with the engine's `EXPANSION_ORDER` (never a slot the build does not have, never a
 raw enum on screen), the installed component is not offered back, and a GPU choice is one option per SKU — a
@@ -1614,9 +1615,10 @@ from the response; a null operand renders a sentence, never a 0. S24 is also wha
 the catalogue list could name a product only by SLUG, so each row now carries `id` and `variants: [{ id, sku }]`
 (additive; `openapi-v1.9.json` replaces v1.8 and `check:api-types` moved with it).
 **Measured:** `typecheck`, `lint` (0 errors, the pre-existing `postcss.config.mjs` warning), `check:i18n` (80
-files, both catalogues with identical keys and placeholders), `check:tokens`, `check:api-types` (contract 1.9.0,
-9 paths, byte-identical types) and `build` exit 0; the Playwright suite is **373 passed / 2 skipped**, with
-`e2e/swap.spec.ts` at **7 specs** — the live control and its 8-role list, PASS with the API's own 3200 -> 6100,
+files, both catalogues with identical keys and placeholders), `check:tokens`, `check:api-types` (contract 1.10.0
+now, 1.9.0 when this block was written; 10 paths, byte-identical types) and `build` exit 0; the Playwright
+suite was **373 passed / 2 skipped** of 375 then, with `e2e/swap.spec.ts` at **7 specs** (10 since the apply
+landed) — the live control and its 8-role list, PASS with the API's own 3200 -> 6100,
 +2900, 11 494 of 15 000 and the variant-carrying request, FAIL as a 200 result said in words with no enum on
 screen, UNKNOWN as its own state with its price and "Démo" badge intact, `NO_ELIGIBLE_OFFER` with no price and
 no bar, the Arabic/RTL panel, and 360 px with no sideways scroll. The fixture mock answers the swap route by the
@@ -1630,9 +1632,10 @@ engine explanation, all from the served build rather than panel state. Contract 
 widens `explanation` to nullable and adds `swapped`; `check:api-types` moved to 10 paths with
 `openapi-v1.10.json`. `e2e/swap.spec.ts` is now **10 specs**: the seven above plus the apply that posts the
 preview's triple and shows the 201's own total, a FAIL offering no apply at all, and a build the API serves as
-swapped (badge, plus the "no explanation" sentence). The 373/2 suite figure above is the run BEFORE those three
-commit specs. One swap per build is the API's rule, so a second attempt's `409 SWAP_ALREADY_COMMITTED` is
-reported in its own words instead of being retried.
+swapped (badge, plus the "no explanation" sentence). Measured 2026-10-26 on a fresh `next build`: the suite is
+**378 specs, 376 passed / 2 skipped**, with `e2e/swap.spec.ts` at **10 specs** (the 373/2 figure above was the
+run BEFORE those three commit specs). One swap per build is the API's rule, so a second attempt's
+`409 SWAP_ALREADY_COMMITTED` is reported in its own words instead of being retried.
 
 #### S25 — Price history + saved builds (2 h, post-beta)
 **Goal:** Price history for components/builds, and saved builds (local-first, no account).
