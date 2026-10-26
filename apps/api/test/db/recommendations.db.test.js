@@ -65,6 +65,15 @@ async function cleanup(pool, queryIds) {
   if (queryIds.length === 0) {
     return;
   }
+  // The committed swap (023) references the result AND the derived candidate, so
+  // a swapped pass cannot be deleted without it going first.
+  await pool.query(
+    'DELETE FROM recommendation_swap WHERE source_result_id IN'
+    + ' (SELECT id FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[]))'
+    + ' OR build_candidate_id IN'
+    + ' (SELECT id FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[]))',
+    [queryIds]
+  );
   await pool.query('DELETE FROM build_rejection WHERE recommendation_query_id = ANY($1::uuid[])', [queryIds]);
   await pool.query('DELETE FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[])', [queryIds]);
   await pool.query(

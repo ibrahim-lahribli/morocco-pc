@@ -34,9 +34,13 @@
  * recommendation_swap -> build_rejection -> recommendation_result ->
  * build_component -> build_candidate -> recommendation_query ->
  * recommendation_profile. The swap goes FIRST because it holds FKs to the
- * result and to the derived candidate. A leftover `recommendation_query` row
- * would block `npm run eval:scenarios`'s preflight, so residue is asserted zero
- * AND whole-table counts are compared with the pre-run snapshot.
+ * result and to the derived candidate. The order is NOT written in this file: it
+ * is `scripts/lib/pass-rows.js` `deletePassRows`, the helper the role rehearsal
+ * and the production smoke test clean up with, so this file doubles as its live
+ * proof - a swapped pass deleted through it, with residue asserted zero. A
+ * leftover `recommendation_query` row would block `npm run eval:scenarios`'s
+ * preflight, so residue is asserted zero AND whole-table counts are compared with
+ * the pre-run snapshot.
  */
 
 require('dotenv').config();
@@ -46,6 +50,7 @@ const assert = require('node:assert/strict');
 const { Pool } = require('pg');
 
 const { resolveTestDbUrl } = require('../../../../scripts/lib/db-url');
+const passRows = require('../../../../scripts/lib/pass-rows');
 const { buildApp } = require('../../src/app');
 const repository = require('../../src/repository');
 const engine = require('../../src/engine');
@@ -76,36 +81,25 @@ function createApp(pool) {
   });
 }
 
+/**
+ * Reverse-dependency cleanup through the SHARED helper, not a copy of its SQL.
+ *
+ * A pass with a committed swap is exactly the case that used to be undeletable:
+ * `recommendation_swap` holds FKs to the source result and to the derived
+ * candidate, so deleting either first raises 23503. Delegating is also the point
+ * - the order proven here is the order the role rehearsal and the production
+ * smoke test run.
+ */
 async function cleanup(pool, queryIds) {
-  if (queryIds.length === 0) {
-    return;
-  }
-  // The swap holds FKs to both the source result and the derived candidate, so
-  // it is the first row to go - otherwise the two DELETEs below violate it.
-  await pool.query(
-    'DELETE FROM recommendation_swap WHERE source_result_id IN'
-    + ' (SELECT id FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[]))',
-    [queryIds]
-  );
-  await pool.query('DELETE FROM build_rejection WHERE recommendation_query_id = ANY($1::uuid[])', [queryIds]);
-  await pool.query('DELETE FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[])', [queryIds]);
-  await pool.query(
-    'DELETE FROM build_component WHERE build_candidate_id IN'
-    + ' (SELECT id FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[]))',
-    [queryIds]
-  );
-  await pool.query('DELETE FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[])', [queryIds]);
-
-  const profiles = (await pool.query(
-    'SELECT DISTINCT recommendation_profile_id AS id FROM recommendation_query'
-    + ' WHERE id = ANY($1::uuid[]) AND recommendation_profile_id IS NOT NULL',
-    [queryIds]
-  )).rows.map((row) => row.id);
-
-  await pool.query('DELETE FROM recommendation_query WHERE id = ANY($1::uuid[])', [queryIds]);
-
-  if (profiles.length > 0) {
-    await pool.query('DELETE FROM recommendation_profile WHERE id = ANY($1::uuid[])', [profiles]);
+  for (const queryId of queryIds) {
+    const attached = (await pool.query(
+      'SELECT recommendation_profile_id FROM recommendation_query WHERE id = $1::uuid',
+      [queryId]
+    )).rows[0];
+    await passRows.deletePassRows(pool, {
+      queryId,
+      profileId: attached ? attached.recommendation_profile_id : null,
+    });
   }
 }
 

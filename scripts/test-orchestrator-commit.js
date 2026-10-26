@@ -38,6 +38,7 @@ const { randomUUID } = require('node:crypto');
 const { Client } = require('pg');
 
 const { getWriteTestDbUrl } = require('./lib/db-url');
+const passRows = require('./lib/pass-rows');
 const { runRecommendationCommit } = require('../src/recommendation/orchestrator/commit');
 const { ERROR_CODES, CandidateSelectionError } = require('../src/recommendation/candidates/errors');
 
@@ -177,7 +178,12 @@ async function insertQuery(client, scoringModelId) {
 /** Reverse-dependency cleanup of exactly the ids this run created. */
 async function cleanup(client, queryIds) {
   if (queryIds.length === 0) return;
-  // build_rejection first (dependents before parent, AGENTS section 8), even
+  // The committed swap first: it holds FKs to the result and the derived
+  // candidate, so either delete below raises 23503 while one survives. Nothing
+  // this script writes is swapped, and the helper skips the table on a database
+  // below 023, so this cannot break the probe it is part of.
+  await passRows.deleteSwaps(client, queryIds);
+  // build_rejection next (dependents before parent, AGENTS section 8), even
   // though the query FK would CASCADE it - explicit so a residue check proves
   // the delete happened rather than assuming the cascade did.
   await client.query(

@@ -56,6 +56,7 @@ require('dotenv').config();
 const { Client } = require('pg');
 const { getWriteTestDbUrl } = require('./lib/db-url');
 const modelPin = require('./lib/model-pin');
+const passRows = require('./lib/pass-rows');
 
 // Namespace seams (all called through their module namespace by the engine).
 const run = require('../src/recommendation/orchestrator/run');
@@ -339,6 +340,9 @@ function aggregate() {
 
 async function cleanup(client, ids) {
   if (!ids.queryId) return;
+  // The committed swap first: it references the result and the derived candidate
+  // (023). No-op on a database below 023.
+  await passRows.deleteSwaps(client, ids.queryId);
   await client.query('DELETE FROM build_rejection WHERE recommendation_query_id = $1::uuid', [ids.queryId]);
   await client.query('DELETE FROM recommendation_result WHERE recommendation_query_id = $1::uuid', [ids.queryId]);
   await client.query(

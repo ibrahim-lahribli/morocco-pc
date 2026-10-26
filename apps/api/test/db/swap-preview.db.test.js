@@ -71,6 +71,16 @@ async function cleanup(pool, queryIds) {
   if (queryIds.length === 0) {
     return;
   }
+  // A swap COMMIT could have run against one of this run's builds (the file
+  // shares its pass fixtures), and `recommendation_swap` holds FKs to BOTH the
+  // result and the derived candidate: it is the first row to go.
+  await pool.query(
+    'DELETE FROM recommendation_swap WHERE source_result_id IN'
+    + ' (SELECT id FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[]))'
+    + ' OR build_candidate_id IN'
+    + ' (SELECT id FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[]))',
+    [queryIds]
+  );
   await pool.query('DELETE FROM build_rejection WHERE recommendation_query_id = ANY($1::uuid[])', [queryIds]);
   await pool.query('DELETE FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[])', [queryIds]);
   await pool.query(

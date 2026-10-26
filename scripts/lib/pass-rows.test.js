@@ -7,50 +7,100 @@
 // back to `recommendation_query` is ON DELETE NO ACTION and the query's own FK
 // points at `recommendation_profile`, so a wrong order raises a constraint
 // violation mid-cleanup and leaves rows the golden harness preflight refuses to
-// run behind. A fake client pins the order, the scoping and the round-trip count
-// without a database; the live proof is the twice-green rehearsal in
-// `docs/API.md`.
+// run behind. `recommendation_swap` (023) holds FKs to BOTH the source result and
+// the derived candidate, so it must be deleted before either — a swapped pass is
+// otherwise undeletable, and a swapped pass is exactly what a crashed API probe
+// leaves behind. A fake client pins the order, the scoping and the round-trip
+// count without a database; the live proof is the twice-green rehearsal in
+// `docs/API.md` and `apps/api/test/db/swap-commit.db.test.js`, which deletes a
+// REAL swapped pass through `deletePassRows`.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { DELETE_ORDER, LAYER4_TABLES, deletePassRows, layer4Counts, residueDrift } = require('./pass-rows');
+const {
+  DELETE_ORDER,
+  LAYER4_TABLES,
+  SWAP_TABLE,
+  deletePassRows,
+  deleteSwaps,
+  layer4Counts,
+  residueDrift,
+} = require('./pass-rows');
 
-/** A fake pg client that records what it was asked to run. */
-function recordingClient(rowsPerStatement) {
+/** The six tables that exist with or without 023. */
+const SIX_FLAT_TABLES = [
+  'build_rejection',
+  'recommendation_result',
+  'build_component',
+  'build_candidate',
+  'recommendation_query',
+  'recommendation_profile',
+];
+
+/**
+ * A fake pg client that records what it was asked to run.
+ *
+ * `swapPresent` answers the `to_regclass` probe (default true, i.e. a database at
+ * 023+); `rowsPerStatement` lets a test answer a real SELECT.
+ */
+function recordingClient(options) {
+  const opts = Array.isArray(options) ? { rows: options } : (options || {});
   const calls = [];
   const client = {
     calls,
     async query(sql, params) {
       calls.push({ sql, params });
-      if (Array.isArray(rowsPerStatement)) return { rows: rowsPerStatement, rowCount: 1 };
+      if (/to_regclass/.test(sql)) {
+        return { rows: [{ present: opts.swapPresent !== false }], rowCount: 0 };
+      }
+      if (Array.isArray(opts.rows)) return { rows: opts.rows, rowCount: 1 };
       return { rows: [], rowCount: 1 };
     },
   };
   return client;
 }
 
-test('the delete order covers all six tables exactly once, children first', () => {
+test('the delete order covers the six Layer 4 tables plus the swap, children first', () => {
   assert.deepEqual(
     DELETE_ORDER,
-    ['build_rejection', 'recommendation_result', 'build_component', 'build_candidate', 'recommendation_query', 'recommendation_profile'],
-    'the order IS the contract: children first, the query before its profile'
+    [SWAP_TABLE].concat(SIX_FLAT_TABLES),
+    'the order IS the contract: the swap first, then children first, the query before its profile'
   );
   assert.equal(new Set(DELETE_ORDER).size, DELETE_ORDER.length);
-  assert.deepEqual(DELETE_ORDER.slice().sort(), LAYER4_TABLES.slice().sort(), 'the same six tables, in a different order');
+  assert.deepEqual(
+    DELETE_ORDER.slice().sort(),
+    LAYER4_TABLES.concat([SWAP_TABLE]).sort(),
+    'the six tables whose residue is compared, plus the swap, in a different order'
+  );
+  // The swap references the result and the derived candidate, so it cannot come
+  // after either of them.
+  assert.equal(DELETE_ORDER[0], SWAP_TABLE, 'the swap is deleted BEFORE every row it points at');
+  assert.ok(DELETE_ORDER.indexOf(SWAP_TABLE) < DELETE_ORDER.indexOf('recommendation_result'));
+  assert.ok(DELETE_ORDER.indexOf(SWAP_TABLE) < DELETE_ORDER.indexOf('build_candidate'));
   // The parent really is last among the rows that reference it.
   assert.ok(DELETE_ORDER.indexOf('recommendation_query') < DELETE_ORDER.indexOf('recommendation_profile'));
   assert.equal(DELETE_ORDER[DELETE_ORDER.length - 1], 'recommendation_profile');
 });
 
-test('deletePassRows issues the deletes in dependency order, scoped to the one query', async () => {
+test('deletePassRows deletes the swap FIRST, then the six tables in dependency order', async () => {
   const client = recordingClient();
   const removed = await deletePassRows(client, { queryId: 'Q', profileId: 'P' });
 
-  assert.equal(client.calls.length, DELETE_ORDER.length, 'one statement per table');
+  // One presence probe, then one DELETE per table this database has.
+  assert.equal(client.calls.length, DELETE_ORDER.length + 1, 'a probe plus one statement per table');
+  assert.match(client.calls[0].sql, /to_regclass\('public\.recommendation_swap'\)/, 'the probe names the table');
+
+  const swapCall = client.calls[1];
+  assert.match(swapCall.sql, /^DELETE FROM recommendation_swap\b/, 'the swap delete is the first DELETE');
+  assert.deepEqual(swapCall.params, [['Q']], 'and it is scoped to the one pass, by parameter');
+  assert.match(swapCall.sql, /source_result_id IN \(SELECT id FROM recommendation_result WHERE recommendation_query_id = ANY\(\$1::uuid\[\]\)\)/);
+  assert.match(swapCall.sql, /build_candidate_id IN \(SELECT id FROM build_candidate WHERE recommendation_query_id = ANY\(\$1::uuid\[\]\)\)/);
+
   for (let i = 0; i < DELETE_ORDER.length; i += 1) {
     const table = DELETE_ORDER[i];
-    const call = client.calls[i];
+    if (table === SWAP_TABLE) continue;
+    const call = client.calls[i + 1];
     assert.match(call.sql, new RegExp('^DELETE FROM ' + table + '\\b'), 'statement ' + i + ' must delete from ' + table);
     // Every statement is scoped by a parameter — never interpolated — and the
     // build_component delete reaches its parent through a subselect, not a join
@@ -70,28 +120,58 @@ test('deletePassRows issues the deletes in dependency order, scoped to the one q
   assert.deepEqual(Object.keys(removed), DELETE_ORDER, 'the counts come back per table');
 });
 
+test('deletePassRows still works on a database below 023: the swap step is SKIPPED, not fatal', async () => {
+  const client = recordingClient({ swapPresent: false });
+  const removed = await deletePassRows(client, { queryId: 'Q' });
+
+  assert.equal(client.calls.length, SIX_FLAT_TABLES.length - 1 + 1, 'the probe plus the deletes that can run');
+  assert.ok(
+    !client.calls.some((call) => /^DELETE FROM recommendation_swap/.test(call.sql)),
+    'never a statement against a table that does not exist (42P01 mid-cleanup)'
+  );
+  assert.deepEqual(
+    Object.keys(removed),
+    SIX_FLAT_TABLES.filter((table) => table !== 'recommendation_profile'),
+    'the returned keys are the tables this database actually has'
+  );
+});
+
+test('deleteSwaps accepts one id or an array, and never runs unscoped', async () => {
+  const single = recordingClient();
+  assert.deepEqual(await deleteSwaps(single, 'Q'), { present: true, deleted: 1 });
+  assert.deepEqual(single.calls[1].params, [['Q']], 'a single id is wrapped, so one SQL shape serves both callers');
+
+  const many = recordingClient();
+  await deleteSwaps(many, ['A', 'B']);
+  assert.deepEqual(many.calls[1].params, [['A', 'B']], 'an array passes through, still by parameter');
+
+  for (const empty of [[], [null], [''], null, undefined]) {
+    const client = recordingClient();
+    const outcome = await deleteSwaps(client, empty);
+    assert.deepEqual(outcome, { present: false, deleted: 0 }, 'no ids means no statement at all');
+    assert.equal(client.calls.length, 0);
+  }
+});
+
 test('deletePassRows with no query id issues NOTHING (never a bare DELETE)', async () => {
-  for (const ids of [{}, { queryId: null }, { queryId: '' }, null, undefined]) {
+  for (const ids of [{}, { queryId: null }, { queryId: '' }, { profileId: 'P' }, null, undefined]) {
     const client = recordingClient();
     const removed = await deletePassRows(client, ids);
     assert.equal(client.calls.length, 0, 'no ids means no statements: a DELETE without a scope would be catastrophic here');
     assert.deepEqual(removed, {});
   }
-  // A profile id alone is not a pass either.
-  const client = recordingClient();
-  await deletePassRows(client, { profileId: 'P' });
-  assert.equal(client.calls.length, 0);
 });
 
 test('deletePassRows without a profile id simply skips that step', async () => {
   const client = recordingClient();
   await deletePassRows(client, { queryId: 'Q' });
-  assert.equal(client.calls.length, DELETE_ORDER.length - 1);
+  assert.equal(client.calls.length, DELETE_ORDER.length, 'the probe and every table but the profile');
   assert.ok(!client.calls.some((call) => /recommendation_profile/.test(call.sql)));
 });
 
 test('deletePassRows refuses a non-client, rather than silently doing nothing', async () => {
   await assert.rejects(() => deletePassRows({}, { queryId: 'Q' }), /pg-compatible client/);
+  await assert.rejects(() => deleteSwaps(null, 'Q'), /pg-compatible client/);
   await assert.rejects(() => layer4Counts(null), /pg-compatible client/);
 });
 

@@ -9,8 +9,9 @@
 // `scripts/smoke-api-role.js` both drive a real pass and must remove what it
 // wrote), and its ORDER is load-bearing rather than incidental:
 //
-//   build_rejection -> recommendation_result -> build_component ->
-//   build_candidate -> recommendation_query -> recommendation_profile
+//   recommendation_swap -> build_rejection -> recommendation_result ->
+//   build_component -> build_candidate -> recommendation_query ->
+//   recommendation_profile
 //
 // Every FK back to `recommendation_query` is ON DELETE NO ACTION and the query's
 // own FK points at `recommendation_profile`, so deleting the parent first raises
@@ -18,6 +19,17 @@
 // a probe that threw inside its own cleanup once left rows that blocked the
 // golden harness preflight, which refuses to run while ANY unmarked
 // `recommendation_query` row exists.
+//
+// `recommendation_swap` (023, Decision 56) is FIRST for the same reason and comes
+// before everything else: it holds FKs to BOTH the source `recommendation_result`
+// and the derived `build_candidate`, so either of those deletes raises 23503
+// while a swap row survives. A pass that has been swapped through the API is
+// therefore unremovable by the order this module used before that table existed,
+// and cleanup paths are exactly where a swapped pass turns up, because a crashed
+// API probe or an orphan swept by the golden harness is a normal occurrence.
+// The swap delete is guarded: a database below 023 has no such table (shared was
+// still at 022 when this was written), so `deleteSwaps` probes first and reports
+// `present: false` instead of raising 42P01 in the middle of a cleanup.
 //
 // I/O lives here and only here, in a parameterised form: every function takes a
 // pg-compatible client, so the caller keeps ownership of the connection and this
@@ -33,8 +45,12 @@ const LAYER4_TABLES = Object.freeze([
   'build_rejection',
 ]);
 
+/** The table a committed swap lives in (023); absent on a database below it. */
+const SWAP_TABLE = 'recommendation_swap';
+
 /** The DELETE order, children first (see the header). */
 const DELETE_ORDER = Object.freeze([
+  SWAP_TABLE,
   'build_rejection',
   'recommendation_result',
   'build_component',
@@ -75,6 +91,40 @@ async function layer4Counts(client) {
 }
 
 /**
+ * Delete the committed swaps of one or more passes. Runs BEFORE any result or
+ * candidate delete (see the header), and is a no-op on a database that predates
+ * 023 - the probe answers `present: false` there, and so does the FK.
+ *
+ * Both FK directions are matched: `source_result_id` through the pass's results
+ * and `build_candidate_id` through the pass's candidates. Today's write path puts
+ * both in the same pass, so the first arm alone would delete every row - the
+ * second is what keeps this correct if a swap is ever anchored from a candidate
+ * whose source result the query no longer owns. Either arm matching means the row
+ * blocks one of the deletes that follow, so deleting it is right.
+ *
+ * @param {object} client pg-compatible client
+ * @param {string|string[]} queryIds one pass id or an array of them
+ * @returns {Promise<{present: boolean, deleted: number}>}
+ */
+async function deleteSwaps(client, queryIds) {
+  assertClient(client);
+  const ids = (Array.isArray(queryIds) ? queryIds : [queryIds]).filter(Boolean);
+  if (ids.length === 0) return { present: false, deleted: 0 };
+  const probe = await client.query(
+    "SELECT to_regclass('public." + SWAP_TABLE + "') IS NOT NULL AS present"
+  );
+  if (!probe.rows[0] || probe.rows[0].present !== true) return { present: false, deleted: 0 };
+  const result = await client.query(
+    'DELETE FROM ' + SWAP_TABLE + ' WHERE source_result_id IN'
+    + ' (SELECT id FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[]))'
+    + ' OR build_candidate_id IN'
+    + ' (SELECT id FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[]))',
+    [ids]
+  );
+  return { present: true, deleted: result.rowCount };
+}
+
+/**
  * Delete the rows of ONE pass, children first, strictly scoped to its ids.
  *
  * Runs as whoever owns the connection: the API role cannot delete
@@ -90,6 +140,11 @@ async function deletePassRows(client, ids) {
   const source = ids || {};
   const removed = {};
   if (!source.queryId) return removed;
+  // First, always: the swap holds FKs to the result and the derived candidate
+  // both. Omitted from `removed` when the table does not exist, so the returned
+  // keys stay exactly the tables this database actually has.
+  const swaps = await deleteSwaps(client, source.queryId);
+  if (swaps.present) removed[SWAP_TABLE] = swaps.deleted;
   const steps = [
     ['build_rejection', 'DELETE FROM build_rejection WHERE recommendation_query_id = $1::uuid'],
     ['recommendation_result', 'DELETE FROM recommendation_result WHERE recommendation_query_id = $1::uuid'],
@@ -126,7 +181,9 @@ function residueDrift(before, after) {
 module.exports = {
   DELETE_ORDER,
   LAYER4_TABLES,
+  SWAP_TABLE,
   deletePassRows,
+  deleteSwaps,
   layer4Counts,
   residueDrift,
 };

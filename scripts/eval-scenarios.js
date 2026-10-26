@@ -66,6 +66,7 @@ const orchestrator = require('../src/recommendation/orchestrator');
 const ranking = require('../src/recommendation/ranking');
 const scenarioEval = require('./lib/scenario-eval');
 const orphans = require('./lib/harness-orphans');
+const passRows = require('./lib/pass-rows');
 const modelPin = require('./lib/model-pin');
 
 const DEFAULT_SCENARIO_FILE = 'test/golden/scenarios.json';
@@ -196,6 +197,11 @@ async function insertQueries(client, scoringModelId, scenarios, profileId) {
 async function cleanup(client, ids, profileId) {
   if (ids.length === 0 && !profileId) return { q: 0, bc: 0, comp: 0, res: 0, rej: 0 };
   if (ids.length > 0) {
+    // The committed swap goes FIRST: it holds FKs to the result and the derived
+    // candidate, so either delete below raises 23503 while one survives. A pass
+    // this harness never swaps can still ARRIVE swapped (a crashed API probe's
+    // orphan), which is why this is not conditional. No-op below 023.
+    await passRows.deleteSwaps(client, ids);
     await client.query('DELETE FROM build_rejection WHERE recommendation_query_id = ANY($1::uuid[])', [ids]);
     await client.query('DELETE FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[])', [ids]);
     await client.query(
@@ -270,6 +276,9 @@ async function cleanupOrphans(client) {
   await client.query('BEGIN');
   try {
     if (queryIds.length > 0) {
+      // Orphans can be SWAPPED passes (a crashed swap probe), so the swap row is
+      // removed before the result and candidate it points at. No-op below 023.
+      const swaps = await passRows.deleteSwaps(client, queryIds);
       const rej = await client.query('DELETE FROM build_rejection WHERE recommendation_query_id = ANY($1::uuid[])', [queryIds]);
       const res = await client.query('DELETE FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[])', [queryIds]);
       const comp = await client.query(
@@ -279,7 +288,7 @@ async function cleanupOrphans(client) {
       );
       const bc = await client.query('DELETE FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[])', [queryIds]);
       await client.query('DELETE FROM recommendation_query WHERE id = ANY($1::uuid[])', [queryIds]);
-      report.dependents = rej.rowCount + res.rowCount + comp.rowCount + bc.rowCount;
+      report.dependents = swaps.deleted + rej.rowCount + res.rowCount + comp.rowCount + bc.rowCount;
       report.queries = queryIds.length;
     }
     if (owned.length > 0) {

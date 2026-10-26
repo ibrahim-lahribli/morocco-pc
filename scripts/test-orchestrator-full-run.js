@@ -23,6 +23,7 @@ const { getWriteTestDbUrl } = require('./lib/db-url');
 const { runRecommendationFullRun } = require('../src/recommendation/orchestrator/full-run');
 const { ERROR_CODES, CandidateSelectionError } = require('../src/recommendation/candidates/errors');
 const modelPin = require('./lib/model-pin');
+const passRows = require('./lib/pass-rows');
 
 let passed = 0;
 let failed = 0;
@@ -176,6 +177,9 @@ async function insertQuery(client, scoringModelId) {
 
 async function cleanup(client, queryIds) {
   if (queryIds.length === 0) return;
+  // The committed swap first: it references the result and the derived candidate
+  // (023). No-op on a database below 023, so the probe stays runnable there.
+  await passRows.deleteSwaps(client, queryIds);
   await client.query(
     'DELETE FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[])',
     [queryIds]

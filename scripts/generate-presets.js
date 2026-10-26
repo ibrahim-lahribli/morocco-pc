@@ -73,6 +73,7 @@ const { Client } = require('pg');
 
 const { getWriteTestDbUrl } = require('./lib/db-url');
 const modelPin = require('./lib/model-pin');
+const passRows = require('./lib/pass-rows');
 
 const repository = require('../apps/api/src/repository');
 const engine = require('../apps/api/src/engine');
@@ -263,6 +264,10 @@ async function deletePasses(client, queryIds) {
   }
   await client.query('BEGIN');
   try {
+    // A superseded pass may be swapped (the API can commit against any served
+    // build), and the swap points at both the result and the derived candidate,
+    // so it is removed first. No-op on a database below 023.
+    await passRows.deleteSwaps(client, queryIds);
     await client.query(
       'DELETE FROM build_rejection WHERE recommendation_query_id = ANY($1::uuid[])',
       [queryIds]
