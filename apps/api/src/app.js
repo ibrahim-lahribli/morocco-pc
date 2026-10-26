@@ -291,7 +291,32 @@ function buildApp(options) {
         // it in a way that shaped the answer. ADDS, never replaces: a client on
         // 1.6 keeps working, and the web client treats an absent
         // `input_effects` as silence rather than as `[]`.
-        version: '1.7.0',
+        // 1.8.0 (2026-10-25): the swap PREVIEW (Decision 55) - ONE new path,
+        // GET /v1/recommendations/{id}/builds/{rank}/swap-preview, and no field
+        // on any existing response. It is READ-ONLY: the verdict is Engine 3's
+        // `evaluateBuildReplacement` over the same pairwise table assembly uses,
+        // the price is Stage 1's own carrier, and nothing is persisted. A FAIL
+        // verdict is a 200 RESULT; a build that no longer reconstructs from the
+        // live catalog is 404 BUILD_NOT_EVALUABLE.
+        // 1.9.0 (2026-10-25): product IDENTITY on the catalog list (S24) - TWO
+        // ADDITIVE fields per GET /v1/catalog/products row: `id` (the
+        // `product.id`) and `variants: [{ id, sku }]` in the engine's own order,
+        // `[]` when the product has none. A GPU candidate is variant-keyed
+        // (Engine 2B) and `specs` strips `product_variant_id` as identity, so
+        // without these the catalogue could name a product by SLUG only: it had
+        // no way to address the thing a route prices or swaps, and the swap
+        // preview requires the variant for role GPU. No path and no existing
+        // field changed.
+        // 1.10.0 (2026-10-26): the swap COMMIT (Decision 56) - ONE new path,
+        // POST /v1/recommendations/{id}/builds/{rank}/swap, plus TWO changes to
+        // the build object: `swapped` (the committed replacement, or null) and
+        // `explanation` widened to NULLABLE. The second is a fix, not a
+        // feature: recommendation_result.explanation is a nullable column, and
+        // a swapped build genuinely has no engine explanation - the stored text
+        // describes the parts it no longer carries. Nothing is edited: a commit
+        // APPENDS a derived build, so rank, strategy_key, the dedupe key and the
+        // presets keep describing the pass.
+        version: '1.10.0',
       },
     },
   });

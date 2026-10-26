@@ -33,6 +33,10 @@
  *     the walk uses, returning frozen `{ status, pairs,
  *     unknown_pairwise_count }`. Read-only: nothing is mutated, priced,
  *     persisted or re-ranked (see ./assemble).
+ *   evaluateBuild() - Decision 56: the same verdict for the WHOLE picked map
+ *     (every check, not only those naming one role), which is what a COMMITTED
+ *     swap persists as `build_candidate.compatibility_status`. Same table, same
+ *     pair records, same aggregate - read-only (see ./assemble).
  *
  * Still NOT owned here: price selection (upstream, Engine 2 Stage 1), the
  * DB-backed loaders (Engine 2B / Stage 1 / 2D context / Decision 11 scoring
@@ -43,7 +47,12 @@
 const { validateEngine3Input } = require('./input');
 const { priceKey, validatePrices, lookupPrice } = require('./prices');
 const { resolveGpuRequirement } = require('./gpu-policy');
-const { assembleBuilds, EXPANSION_ORDER, evaluateBuildReplacement } = require('./assemble');
+const {
+  assembleBuilds,
+  EXPANSION_ORDER,
+  evaluateBuild,
+  evaluateBuildReplacement,
+} = require('./assemble');
 const { buildGpuInputs } = require('./gpu-input');
 const { assembleBuildsForRecommendation } = require('./pipeline');
 
@@ -57,5 +66,6 @@ module.exports = {
   EXPANSION_ORDER,
   buildGpuInputs,
   assembleBuildsForRecommendation,
+  evaluateBuild,
   evaluateBuildReplacement,
 };

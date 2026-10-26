@@ -56,7 +56,7 @@ the API catches up.
 | CD-5 | `GET /v1/catalog/products` and `/…/{slug}` | **SHIPPED** (contract v1.5, Decision 50) |
 | CD-6 | An honest per-price obsolescence label | **PARTIAL, resolved as far as the contract allows (S12).** `generated_at` dates the PASS, not a shop survey, so the verified badge says "Vérifié · calculé le …" instead of "prix constatés le …". A true per-price observation date is still absent, and the badge must not pretend to have one |
 | CD-7 | `budget_floor` present on the GET revisit | **SHIPPED** (migration 019 + Decision 46; both verbs carry it) |
-| CD-8 | A swap endpoint | **CONTRACT DECIDED (Decision 55), ENGINE HALF BUILT (2026-10-25), ROUTE NOT BUILT** — a read-only `GET /v1/recommendations/:id/builds/:rank/swap-preview` over one new engine export (`evaluateBuildReplacement`, landed with 6 agreement tests), with a mutating swap left to its own decision. S24's disabled-with-explanation control SHIPPED 2026-10-25 (`e2e/swap.spec.ts`, 4 specs, no request fired) |
+| CD-8 | A swap endpoint | **SHIPPED (contract v1.10.0, Decisions 55 + 56).** `GET /v1/recommendations/:id/builds/:rank/swap-preview` previews ONE replacement, read-only, over `assembly.evaluateBuildReplacement`; `POST /v1/recommendations/:id/builds/:rank/swap` KEEPS it as an APPENDED derived build (its own `build_candidate` and `build_component` rows plus one `recommendation_swap` link, migration 023), reusing the preview's own composition and never editing the pass. One swap per build. S24's control shipped 2026-10-25 and gained its apply control 2026-10-26 (`e2e/swap.spec.ts`, 10 specs) |
 
 ### 2.2 Findings (V-*)
 

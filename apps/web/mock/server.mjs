@@ -23,7 +23,22 @@
  *                                 (429) - are error states an SSR page can select
  *                                 through the id alone)
  *   GET /v1/presets               ?state=ok | empty | 503
- *   GET /v1/catalog/products      ?state=ok | 503
+ *   GET /v1/catalog/products      ?state=ok | 503; `?role=` narrows by category
+ *                                 (and an unknown role is a 422), like the API
+ *   GET /v1/recommendations/:id/builds/:rank/swap-preview
+ *                                 the swap ANSWER is chosen by the `product_id`
+ *                                 (S24): rtx-4070 is a PASS, rx-7600 a FAIL, the
+ *                                 Ti an UNKNOWN, kit-ddr5 not evaluable. The
+ *                                 role and the GPU variant are validated as the
+ *                                 API validates them; ?state=429|503 forces the
+ *                                 error paths.
+ *   POST /v1/recommendations/:id/builds/:rank/swap
+ *                                 S24's COMMIT (contract v1.10, Decision 56).
+ *                                 A PASS/UNKNOWN answer is a 201 carrying the
+ *                                 preview's three facts plus `swapped`; a build
+ *                                 whose fixture already names a swap is a 409
+ *                                 SWAP_ALREADY_COMMITTED, and a FAIL scenario is
+ *                                 a 409 SWAP_NOT_COMMITTABLE.
  *   GET /v1/catalog/products/:slug/price-history
  *                                 ?state=ok | 503 (an unknown slug is a 404; a
  *                                 known slug with no readings answers 200 with
@@ -55,6 +70,8 @@ import http from "node:http";
 import {
   CATALOG_LIST_OK,
   CATALOG_PRODUCTS_BY_SLUG,
+  CATALOG_VERSION,
+  ENGINE_VERSION,
   DISCLAIMER,
   ERRORS,
   HEALTH_OK,
@@ -63,11 +80,15 @@ import {
   PRESETS_EMPTY,
   PRESETS_OK,
   PRICE_HISTORY_BY_SLUG,
+  PRODUCT_IDS_BY_SLUG,
   RECOMMENDATIONS_BY_ID,
   RECOMMENDATION_OK,
   RECOMMENDATION_REUSED,
   RECOMMENDATION_ZERO_BUILD,
   RECOMMENDATION_ZERO_BUILD_NO_FLOOR,
+  SWAP_PAIRS_BY_ROLE,
+  SWAP_SCENARIO_BY_SLUG,
+  VARIANTS_BY_SLUG,
 } from "./fixtures.mjs";
 
 const PORT = Number(process.env.MOCK_API_PORT || 3211);
@@ -170,6 +191,124 @@ function validateCreate(body) {
     return [{ field: "use_case", message: "must not be empty" }];
   }
   return [];
+}
+
+/**
+ * The role -> product-category map the API itself applies (`engine.categoryForRole`,
+ * read through the boundary). The mock restates it so `?role=GPU` cannot answer
+ * with a CPU: a picker built against a mock that ignored the filter would look
+ * correct and be wrong against the real catalogue.
+ */
+const CATEGORY_BY_ROLE = {
+  CPU: "CPU",
+  GPU: "GPU",
+  MOTHERBOARD: "MOTHERBOARD",
+  RAM: "MEMORY",
+  SSD_BOOT: "STORAGE",
+  SSD_SECONDARY: "STORAGE",
+  PSU: "PSU",
+  CASE: "CASE",
+  CPU_COOLER: "COOLER",
+};
+
+/**
+ * One swap preview (contract v1.8, Decision 55), built from the fixtures.
+ *
+ * The NUMBERS are derived the way the engine derives them - the build's recorded
+ * total, less the part being replaced, plus the catalogue's own `from_price` -
+ * so the card behind the panel and the panel itself cannot disagree. It is the
+ * mock pretending to be the engine; the CLIENT still re-derives nothing.
+ *
+ * Returns `null` when the build or the product is not one this mock serves, so
+ * the caller answers the API's own 404 rather than inventing a verdict.
+ */
+function swapPreviewBody({ recommendation, build, role, productId }) {
+  const slug = Object.keys(PRODUCT_IDS_BY_SLUG).find(
+    (candidate) => PRODUCT_IDS_BY_SLUG[candidate] === productId
+  );
+  if (slug === undefined) return null;
+  const scenario = SWAP_SCENARIO_BY_SLUG[slug] ?? { status: "PASS" };
+  const product = CATALOG_PRODUCTS_BY_SLUG[slug];
+
+  const installed = build.components.find((component) => component.role === role) ?? null;
+  const previous = installed === null ? null : installed.price_used;
+  const offer = product.offers.length === 0 ? null : product.offers[0];
+  const next = offer === null ? null : offer.price;
+  const delta =
+    offer === null || previous === null ? null : Number((next - previous).toFixed(2));
+  const total =
+    delta === null || typeof build.total_price !== "number"
+      ? null
+      : Number((build.total_price + delta).toFixed(2));
+  const budgetAmount =
+    typeof recommendation.budget_amount === "number" ? recommendation.budget_amount : null;
+
+  // Not evaluable at all: ONE synthetic `eligibility` pair, no price, and a
+  // FAIL that is a RESULT rather than an error (Decision 55 items 4 and 5).
+  if (scenario.eligibility !== undefined) {
+    return {
+      compatibility: {
+        status: "FAIL",
+        pairs: [
+          {
+            check: "eligibility",
+            role,
+            partner_role: null,
+            status: "FAIL",
+            reason: scenario.eligibility,
+            evidence: [],
+          },
+        ],
+        unknown_pairwise_count: 0,
+      },
+      price: { previous, next: null, delta: null, offer_class: null, price_status: null },
+      budget: { budget_amount: budgetAmount, total: null, delta: null, within_budget: null },
+      catalog_version: CATALOG_VERSION,
+      engine_version: ENGINE_VERSION,
+    };
+  }
+
+  const relationships = SWAP_PAIRS_BY_ROLE[role] ?? [];
+  const pairs = relationships.map((relationship, index) => {
+    const status =
+      scenario.failing !== undefined && index < scenario.failing
+        ? "FAIL"
+        : scenario.unknown !== undefined && index < scenario.unknown
+          ? "UNKNOWN"
+          : "PASS";
+    return {
+      check: relationship.check,
+      role: relationship.role,
+      partner_role: relationship.partner_role,
+      status,
+      reason: null,
+      evidence: [],
+    };
+  });
+
+  return {
+    compatibility: {
+      status: scenario.status,
+      pairs,
+      unknown_pairwise_count: pairs.filter((pair) => pair.status === "UNKNOWN").length,
+    },
+    price: {
+      previous,
+      next,
+      delta,
+      offer_class: offer === null ? null : offer.offer_class,
+      price_status: offer === null ? null : offer.offer_class === "VERIFIED" ? "verified" : "indicative",
+    },
+    budget: {
+      budget_amount: budgetAmount,
+      total,
+      delta,
+      within_budget:
+        total === null || budgetAmount === null ? null : total <= budgetAmount,
+    },
+    catalog_version: CATALOG_VERSION,
+    engine_version: ENGINE_VERSION,
+  };
 }
 
 /**
@@ -284,6 +423,174 @@ async function handle(req, res) {
     return;
   }
 
+  // S24: the swap preview (contract v1.8). The role is validated and the GPU
+  // variant required exactly as the API does it, so a client that forgot the
+  // variant fails here the same way it would in production.
+  const swapMatch = path.match(/^\/v1\/recommendations\/([^/]+)\/builds\/([0-9]+)\/swap-preview$/);
+  if (req.method === "GET" && swapMatch !== null) {
+    if (state === "503") return sendError(res, "unavailable");
+    if (state === "429") return sendError(res, "rateLimited");
+
+    const recommendation = RECOMMENDATIONS_BY_ID[decodeURIComponent(swapMatch[1])];
+    if (recommendation === undefined) return sendError(res, "notFound");
+    const build = recommendation.builds.find((entry) => entry.rank === Number(swapMatch[2]));
+    if (build === undefined) return sendError(res, "notFound");
+
+    const role = url.searchParams.get("role") ?? "";
+    if (!Object.prototype.hasOwnProperty.call(CATEGORY_BY_ROLE, role)) {
+      return send(res, 422, {
+        error: "VALIDATION_ERROR",
+        message: "Request validation failed",
+        details: [
+          { field: "role", message: "role must be one of: " + Object.keys(CATEGORY_BY_ROLE).join(", ") },
+        ],
+      });
+    }
+    const variantId = url.searchParams.get("product_variant_id");
+    if (role === "GPU" && variantId === null) {
+      return send(res, 422, {
+        error: "VALIDATION_ERROR",
+        message: "Request validation failed",
+        details: [
+          {
+            field: "product_variant_id",
+            message: "a GPU swap must name product_variant_id: GPU candidates are variant-keyed",
+          },
+        ],
+      });
+    }
+    if (role !== "GPU" && variantId !== null) {
+      return send(res, 422, {
+        error: "VALIDATION_ERROR",
+        message: "Request validation failed",
+        details: [{ field: "product_variant_id", message: "product_variant_id is only accepted for role GPU" }],
+      });
+    }
+
+    const body = swapPreviewBody({
+      recommendation,
+      build,
+      role,
+      productId: url.searchParams.get("product_id") ?? "",
+    });
+    if (body === null) {
+      return send(res, 404, {
+        error: "BUILD_NOT_EVALUABLE",
+        message:
+          "This build can no longer be evaluated: the persisted "
+          + role
+          + " pick is not a candidate in the live catalog",
+      });
+    }
+    return send(res, 200, body, { "cache-control": "no-store" });
+  }
+
+  // S24: the swap COMMIT (contract v1.10, Decision 56).
+  //
+  // The mock has no database, so "committing" is a mutation of the SERVED
+  // fixture - which is exactly what makes this useful: the badge, the replaced
+  // component, the new total and the missing explanation are the SAME read path
+  // the real API serves after a commit, so a spec can assert that a refresh
+  // shows the stored swap rather than the panel's opinion of it. The three
+  // refusals the screen can meet are reproduced too (already committed,
+  // incompatible, not evaluable), because a mock that only ever says yes cannot
+  // test an error state.
+  const commitMatch = path.match(/^\/v1\/recommendations\/([^/]+)\/builds\/([0-9]+)\/swap$/);
+  if (req.method === "POST" && commitMatch !== null) {
+    if (state === "503") return sendError(res, "unavailable");
+    if (state === "429") return sendError(res, "rateLimited");
+
+    const recommendation = RECOMMENDATIONS_BY_ID[decodeURIComponent(commitMatch[1])];
+    if (recommendation === undefined) return sendError(res, "notFound");
+    const build = recommendation.builds.find((entry) => entry.rank === Number(commitMatch[2]));
+    if (build === undefined) return sendError(res, "notFound");
+
+    if (build.swapped !== null && build.swapped !== undefined) {
+      return send(res, 409, {
+        error: "SWAP_ALREADY_COMMITTED",
+        message: "This build already carries a swap; a build holds one committed replacement",
+      });
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse((await readBody(req)) || "{}");
+    } catch {
+      return send(res, 400, { error: "INVALID_JSON", message: "Body is not valid JSON" });
+    }
+
+    const role = typeof payload.role === "string" ? payload.role : "";
+    if (!Object.prototype.hasOwnProperty.call(CATEGORY_BY_ROLE, role)) {
+      return send(res, 422, {
+        error: "VALIDATION_ERROR",
+        message: "Request validation failed",
+        details: [
+          { field: "role", message: "role must be one of: " + Object.keys(CATEGORY_BY_ROLE).join(", ") },
+        ],
+      });
+    }
+    const productId = typeof payload.product_id === "string" ? payload.product_id : "";
+    const variantId =
+      typeof payload.product_variant_id === "string" ? payload.product_variant_id : null;
+    if (role === "GPU" && variantId === null) {
+      return send(res, 422, {
+        error: "VALIDATION_ERROR",
+        message: "Request validation failed",
+        details: [
+          {
+            field: "product_variant_id",
+            message: "a GPU swap must name product_variant_id: GPU candidates are variant-keyed",
+          },
+        ],
+      });
+    }
+    if (role !== "GPU" && variantId !== null) {
+      return send(res, 422, {
+        error: "VALIDATION_ERROR",
+        message: "Request validation failed",
+        details: [{ field: "product_variant_id", message: "product_variant_id is only accepted for role GPU" }],
+      });
+    }
+
+    const preview = swapPreviewBody({ recommendation, build, role, productId });
+    if (preview === null) {
+      return send(res, 404, {
+        error: "BUILD_NOT_EVALUABLE",
+        message:
+          "This build can no longer be evaluated: the persisted "
+          + role
+          + " pick is not a candidate in the live catalog",
+      });
+    }
+    if (preview.compatibility.status === "FAIL") {
+      return send(res, 409, {
+        error: "SWAP_NOT_COMMITTABLE",
+        message: "The replacement would not fit this build",
+      });
+    }
+
+    // STATELESS ON PURPOSE. The suite runs with `fullyParallel`, and the SSR
+    // read comes from a SECOND instance of this mock (port 3211) while the
+    // browser's POST comes here (port 3000) - two processes, so a mutation
+    // could never be observed by a refresh, and would leak between workers if
+    // it could. The POST therefore only ANSWERS; the build that already carries
+    // a swap is its own fixture (`IDS.swapped`), which is what makes the badge
+    // and the missing explanation testable at all.
+    return send(
+      res,
+      201,
+      {
+        ...preview,
+        swapped: {
+          role,
+          committed_at: new Date().toISOString(),
+          engine_version: ENGINE_VERSION,
+        },
+      },
+      { "cache-control": "no-store" }
+    );
+  }
+
   if (req.method === "GET" && path === "/v1/catalog/products") {
     if (state === "503") return sendError(res, "unavailable");
     if (CATALOG_SLOW) {
@@ -302,7 +609,27 @@ async function handle(req, res) {
       });
       return;
     }
-    send(res, 200, CATALOG_LIST_OK);
+    // The role filter the API applies: `?role=GPU` answers GPU rows only, and
+    // an unknown role is the same 422 that names the vocabulary.
+    const role = url.searchParams.get("role");
+    if (role === null) {
+      send(res, 200, CATALOG_LIST_OK);
+      return;
+    }
+    const category = CATEGORY_BY_ROLE[role];
+    if (category === undefined) {
+      return send(res, 422, {
+        error: "VALIDATION_ERROR",
+        message: "Request validation failed",
+        details: [
+          { field: "role", message: "role must be one of: " + Object.keys(CATEGORY_BY_ROLE).join(", ") },
+        ],
+      });
+    }
+    send(res, 200, {
+      products: CATALOG_LIST_OK.products.filter((product) => product.category === category),
+      next_cursor: null,
+    });
     return;
   }
 

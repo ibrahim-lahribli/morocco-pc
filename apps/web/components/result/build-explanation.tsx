@@ -73,7 +73,14 @@ export async function BuildExplanation({ build, locale }: BuildExplanationProps)
       </summary>
       <div className="mt-2">
         {views.length === 0 ? (
-          <p className="max-w-prose text-compact text-muted">{build.explanation}</p>
+          // Decision 56: a committed swap leaves NO explanation - the stored
+          // text described parts the build no longer carries - so the
+          // disclosure says that instead of opening onto an empty panel.
+          <p className="max-w-prose text-compact text-muted">
+            {build.swapped !== null && build.swapped !== undefined
+              ? t("explanationSwapped")
+              : build.explanation}
+          </p>
         ) : (
           <ul className="list-disc space-y-1 ps-4 text-compact text-muted">
             {views.map((view, index) => (

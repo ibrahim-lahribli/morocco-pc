@@ -5,22 +5,23 @@
  * pinned (Sprint 4 of PLAN_PLATFORM_P0.md: v1.1 pass facts, v1.2 product
  * identity; Platform P1 Sprint 5: v1.3 request dedupe; Platform P1 Sprint 6:
  * v1.4 the presets ribbon; Platform P2 Sprint 3: v1.5 the read-only catalog;
- * v1.6 the price history; v1.7 input effects).
+ * v1.6 the price history; v1.7 input effects; v1.8 the swap preview; v1.9
+ * product variants on the catalog list; v1.10 the committed swap).
  *
  * A committed snapshot is the only thing that makes a published contract a
  * CLAIM rather than a description: without it, the document can lose a field,
  * change a type or gain a path and every test still passes, because the tests
- * assert against the same code that generates the document. `openapi-v1.6.json`
+ * assert against the same code that generates the document. `openapi-v1.10.json`
  * is the served bytes, not a hand-written file - regenerate it, never edit it.
  * There is exactly ONE snapshot on purpose: each superseded file (v1.1 through
- * v1.5) was DELETED when the next landed, because two plausible contracts in the
+ * v1.7) was DELETED when the next landed, because two plausible contracts in the
  * tree is worse than none - a reader cannot tell which one the service serves.
  *
  * How to regenerate (deliberate contract change only):
  *
  *   node -e "const fs=require('fs');const stub=require('./apps/api/test/helpers/stub');\
  *   stub.createTestApp().inject({method:'GET',url:'/v1/docs/json'})\
- *   .then(r=>fs.writeFileSync('apps/api/test/unit/openapi-v1.7.json',r.body+'\n'))"
+ *   .then(r=>fs.writeFileSync('apps/api/test/unit/openapi-v1.10.json',r.body+'\n'))"
  *
  * v1.7 (Decision 52) adds TWO fields and no path: `inputs_applied` on
  * GET /v1/meta/options and `input_effects` on both recommendation verbs. Both
@@ -62,7 +63,7 @@ const path = require('node:path');
 
 const stub = require('../helpers/stub');
 
-const SNAPSHOT_PATH = path.join(__dirname, 'openapi-v1.7.json');
+const SNAPSHOT_PATH = path.join(__dirname, 'openapi-v1.10.json');
 
 async function servedDocument() {
   const response = await stub.createTestApp().inject({ method: 'GET', url: '/v1/docs/json' });
@@ -78,23 +79,27 @@ function responsesFor(document) {
   ];
 }
 
-test('the served OpenAPI document is byte-identical to the committed v1.7 snapshot', async () => {
+test('the served OpenAPI document is byte-identical to the committed v1.10 snapshot', async () => {
   const { raw } = await servedDocument();
   const committed = fs.readFileSync(SNAPSHOT_PATH, 'utf8');
 
   assert.equal(
     raw,
     committed.replace(/\n$/, ''),
-    'the served document differs from openapi-v1.7.json. If the change is deliberate, regenerate the '
+    'the served document differs from openapi-v1.10.json. If the change is deliberate, regenerate the '
       + 'snapshot with the command in this file\'s header and commit it together with the schema change; '
       + 'if it is not, the contract has drifted and this is the gate that noticed.'
   );
 });
 
-test('the v1.7 document advertises the persisted pass facts on BOTH verbs', async () => {
+test('the served document advertises the persisted pass facts on BOTH verbs', async () => {
   const { document } = await servedDocument();
 
-  assert.equal(document.info.version, '1.7.0', 'the version names the current surface (adds input effects)');
+  assert.equal(
+    document.info.version,
+    '1.10.0',
+    'the version names the current surface (adds the committed swap)'
+  );
 
   // Both verbs serve the same response schema, and that sameness is the
   // contract: a client may read either and see the same fields.
@@ -140,7 +145,7 @@ test('the v1.7 document advertises the persisted pass facts on BOTH verbs', asyn
   );
 });
 
-test('the v1.7 document declares the dedupe fields on BOTH verbs', async () => {
+test('the served document declares the dedupe fields on BOTH verbs', async () => {
   const { document } = await servedDocument();
 
   for (const [label, response] of responsesFor(document)) {
@@ -178,7 +183,7 @@ test('the v1.7 document declares the dedupe fields on BOTH verbs', async () => {
   assert.deepEqual(servedBy.required, ['engine_version'], 'served_by still carries exactly its one field');
 });
 
-test('the v1.7 document declares components[].slug on BOTH verbs, nullable like its column', async () => {
+test('the served document declares components[].slug on BOTH verbs, nullable like its column', async () => {
   const { document } = await servedDocument();
 
   // `slug` is served from the persisted column (migration 020), so it belongs in
@@ -207,7 +212,7 @@ test('the v1.7 document declares components[].slug on BOTH verbs, nullable like 
   );
 });
 
-test('the v1.7 document declares both catalog reads, with provenance beside every price', async () => {
+test('the served document declares both catalog reads, with provenance beside every price', async () => {
   const { document } = await servedDocument();
 
   const list = document.paths['/v1/catalog/products'];
@@ -236,9 +241,28 @@ test('the v1.7 document declares both catalog reads, with provenance beside ever
   // both fields are required and BOTH are nullable: a product with no eligible
   // offer reports null, never 0 and never "verified".
   const item = page.properties.products.items;
+  // Contract v1.9 adds the product's identity beside its slug: the swap preview
+  // takes a product id, so a catalogue that served only slugs could not ask it
+  // about the thing it had just shown.
+  assert.deepEqual(item.properties.id, { type: 'string' });
   assert.deepEqual(item.properties.from_price, { type: 'number', nullable: true });
   assert.deepEqual(item.properties.offer_class, { type: 'string', nullable: true });
   assert.deepEqual(item.properties.has_offer, { type: 'boolean' });
+
+  // Contract v1.9: a product publishes its SKUs - the identity a variant-keyed
+  // GPU candidate is addressed by - ordered by id, and `[]` for a product with
+  // none. Neither field is nullable: `sku` is NOT NULL in migration 003, and an
+  // entry with no `id` could not be addressed at all.
+  assert.deepEqual(item.properties.variants, {
+    type: 'array',
+    items: {
+      additionalProperties: false,
+      type: 'object',
+      required: ['id', 'sku'],
+      properties: { id: { type: 'string' }, sku: { type: 'string' } },
+      title: 'CatalogVariant',
+    },
+  });
 
   const product = detail.get.responses['200'].content['application/json'].schema;
   assert.deepEqual(
@@ -261,7 +285,7 @@ test('the v1.7 document declares both catalog reads, with provenance beside ever
   assert.match(status, /null/);
 });
 
-test('the v1.7 document declares the price history, and says when a trend is unknown', async () => {
+test('the served document declares the price history, and says when a trend is unknown', async () => {
   const { document } = await servedDocument();
 
   const history = document.paths['/v1/catalog/products/{slug}/price-history'];
@@ -326,7 +350,7 @@ function enumMembers(schema) {
   return branches.flatMap((branch) => (Array.isArray(branch.enum) ? branch.enum : []));
 }
 
-test('the v1.7 document declares input effects, with closed vocabularies', async () => {
+test('the served document declares input effects, with closed vocabularies', async () => {
   const { document } = await servedDocument();
 
   // The DEPLOYMENT half (Decision 52): which inputs the active model reads at
@@ -372,4 +396,151 @@ test('the v1.7 document declares input effects, with closed vocabularies', async
     // `effect`.
     assert.deepEqual(item.properties.reason, { type: 'string' });
   }
+});
+
+test('the served document declares the swap preview as READ-ONLY, with every branch representable', async () => {
+  const { document } = await servedDocument();
+
+  const operation = document.paths['/v1/recommendations/{id}/builds/{rank}/swap-preview'];
+  assert.ok(operation && operation.get, 'the preview is a GET: a pure function of (build, live catalog)');
+  assert.equal(operation.post, undefined, 'nothing about a preview is created, so there is no POST');
+
+  // 200 is the RESULT door - a FAIL verdict is one of its answers, not an error
+  // - and the four error doors Decision 55 item 8 names are all declared.
+  assert.deepEqual(Object.keys(operation.get.responses).sort(), ['200', '404', '422', '429', '500']);
+  for (const code of ['404', '422', '429', '500']) {
+    assert.ok(
+      operation.get.responses[code].content['application/json'].schema,
+      code + ' declares the shared error envelope'
+    );
+  }
+
+  // `role` and `product_id` are required; the VARIANT is optional at the schema
+  // level because only GPU accepts one - the route is what refuses it elsewhere.
+  const query = operation.get.parameters.filter((parameter) => parameter.in === 'query');
+  assert.deepEqual(query.map((parameter) => parameter.name).sort(), ['product_id', 'product_variant_id', 'role']);
+  assert.deepEqual(
+    query.filter((parameter) => parameter.required === true).map((parameter) => parameter.name).sort(),
+    ['product_id', 'role']
+  );
+
+  const body = operation.get.responses['200'].content['application/json'].schema;
+  assert.deepEqual(body.required, ['compatibility', 'price', 'budget', 'catalog_version', 'engine_version']);
+
+  // THE VERDICT: three closed values on the preview AND on every pair, because a
+  // client switches on them and must render UNKNOWN as its own state.
+  assert.deepEqual(enumMembers(body.properties.compatibility.properties.status).sort(), ['FAIL', 'PASS', 'UNKNOWN']);
+  const pair = body.properties.compatibility.properties.pairs.items;
+  assert.deepEqual(
+    pair.required,
+    ['check', 'role', 'partner_role', 'status', 'reason', 'evidence'],
+    'a pair is exactly Decision 55 item 1\'s shape'
+  );
+  assert.deepEqual(enumMembers(pair.properties.status).sort(), ['FAIL', 'PASS', 'UNKNOWN']);
+
+  // A null `partner_role` is the synthetic `eligibility` pair (an ineligible
+  // candidate has no partner) and a null `reason` is a PASS pair; both must stay
+  // representable or a real answer would be unserializable.
+  assert.deepEqual(pair.properties.partner_role, { type: 'string', nullable: true });
+  assert.deepEqual(pair.properties.reason, { type: 'string', nullable: true });
+
+  // `check` is NOT an enum: PAIRWISE_CHECKS keys plus the non-pairwise
+  // `eligibility` value, and a new relation must not force an API bump.
+  assert.deepEqual(pair.properties.check, { type: 'string' });
+
+  // `evidence` is OPEN, exactly like the catalog's `specs`, so a future rule's
+  // fields are an addition rather than a breaking change.
+  assert.equal(pair.properties.evidence.items.additionalProperties, true);
+  assert.equal(pair.properties.evidence.items.type, 'object');
+
+  // THE MONEY: every arithmetic field is nullable, and none of them may ever be
+  // forced to 0 - an unknown operand is UNKNOWN.
+  for (const field of ['previous', 'next', 'delta']) {
+    assert.deepEqual(
+      body.properties.price.properties[field],
+      { type: 'number', nullable: true },
+      field + ' is declared a nullable number'
+    );
+  }
+  for (const field of ['total', 'delta']) {
+    assert.deepEqual(
+      body.properties.budget.properties[field],
+      { type: 'number', nullable: true },
+      'budget.' + field + ' is declared a nullable number'
+    );
+  }
+  assert.deepEqual(
+    body.properties.budget.properties.within_budget,
+    { type: 'boolean', nullable: true },
+    'an unknown total is never "within budget", and never "over" either'
+  );
+
+  // `price_status` keeps the catalog's and the build's vocabulary, and adds the
+  // null branch an ineligible candidate needs.
+  const priceStatus = JSON.stringify(body.properties.price.properties.price_status);
+  assert.match(priceStatus, /indicative/);
+  assert.match(priceStatus, /verified/);
+  assert.match(priceStatus, /null/);
+
+  // The live catalog digest, nullable like the column the POST serves it from,
+  // and the ANSWERING deploy - the same pair a recommendation response carries.
+  assert.deepEqual(body.properties.catalog_version, { type: 'string', nullable: true });
+  assert.deepEqual(body.properties.engine_version, { type: 'string' });
+});
+
+test('the v1.10 document declares the COMMIT as a POST, with every refusal representable', async () => {
+  const { document } = await servedDocument();
+
+  const path = document.paths['/v1/recommendations/{id}/builds/{rank}/swap'];
+  assert.ok(path && path.post, 'the commit is a POST: it APPENDS a derived build (Decision 56)');
+  assert.equal(path.get, undefined, 'reading a commit is the recommendation GET, not this path');
+
+  // Six doors: 201 is the CREATION, and each refusal has its own status because
+  // the reader's next action differs for each (another part, another build,
+  // another rank).
+  assert.deepEqual(Object.keys(path.post.responses).sort(), ['201', '404', '409', '422', '429', '500']);
+  for (const code of ['404', '409', '422', '429', '500']) {
+    assert.ok(
+      path.post.responses[code].content['application/json'].schema,
+      code + ' declares the shared error envelope'
+    );
+  }
+
+  const body = path.post.responses['201'].content['application/json'].schema;
+  assert.deepEqual(
+    body.required,
+    ['compatibility', 'price', 'budget', 'swapped', 'catalog_version', 'engine_version'],
+    'a 201 carries the three preview facts PLUS the persisted link'
+  );
+
+  // The verdict is the WHOLE build's - the value that was persisted as
+  // build_candidate.compatibility_status - on a closed vocabulary.
+  assert.deepEqual(
+    enumMembers(body.properties.compatibility.properties.status).sort(),
+    ['FAIL', 'PASS', 'UNKNOWN']
+  );
+
+  // Every arithmetic field stays nullable: a commit cannot invent a price.
+  for (const field of ['previous', 'next', 'delta']) {
+    assert.deepEqual(body.properties.price.properties[field], { type: 'number', nullable: true });
+  }
+  for (const field of ['total', 'delta']) {
+    assert.deepEqual(body.properties.budget.properties[field], { type: 'number', nullable: true });
+  }
+
+  // `swapped` is REQUIRED and NOT nullable here - the one place it differs from
+  // the build object the GET serves, where most builds have none.
+  const swapped = body.properties.swapped;
+  assert.deepEqual(swapped.required, ['role', 'committed_at', 'engine_version']);
+  assert.equal(swapped.nullable, undefined, 'a 201 that named no commit would be a preview');
+
+  // ...and on the GET's build object it IS nullable, because an untouched pass
+  // has no swap and no row would answer it.
+  const build = document.paths['/v1/recommendations'].post.responses['201']
+    .content['application/json'].schema.properties.builds.items;
+  assert.ok(build.required.includes('swapped'), 'every build reports the question, even with a null answer');
+  assert.equal(build.properties.swapped.nullable, true);
+  // Decision 56 item 7 made explanation nullable: a swapped build genuinely has
+  // none, and the stored text describes parts it no longer carries.
+  assert.deepEqual(build.properties.explanation, { type: 'string', nullable: true });
 });

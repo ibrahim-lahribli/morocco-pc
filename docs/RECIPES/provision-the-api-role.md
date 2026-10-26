@@ -10,10 +10,10 @@ Two scripts do the work, and each refuses the ways it could do harm:
 
 | Script | What it is | Writes |
 |---|---|---|
-| `node scripts/apply-api-role.js` | the Apply — creates the role and the 20-grant block | DDL on the target database (default `DATABASE_URL` = shared; `--target-env=NAME` names another) |
+| `node scripts/apply-api-role.js` | the Apply — creates the role and the 21-grant block | DDL on the target database (default `DATABASE_URL` = shared; `--target-env=NAME` names another) |
 | `node scripts/smoke-api-role.js` | the Smoke test — runs the API as the role and removes what it wrote | one Layer 4 pass, deleted again |
 
-The role's contract — the 20 privilege answers, the GRANT block, the self-check SQL, the teardown
+The role's contract — the 21 privilege answers, the GRANT block, the self-check SQL, the teardown
 sweep — lives in **one** module, `scripts/lib/api-role.js`, consumed by both scripts and by the
 branch rehearsal (`scripts/rehearse-api-role.js`). If you need to change a grant, change it there:
 `npm run test:scripts` pins the fixture, the statements and the satisfiability of every `true`
@@ -111,7 +111,7 @@ restore point (see `docs/RECIPES/add-a-migration.md`), then this recipe.
    node scripts/apply-api-role.js --restore-point=<br-id> --password-file="$HOME/.morocco-pc/api-role.password"
    ```
 
-   Expected on green: `APPLIED: morocco_pc_api on db:<12 hex>, self-check 20/20`, and in the JSON
+   Expected on green: `APPLIED: morocco_pc_api on db:<12 hex>, self-check 21/21`, and in the JSON
    report `statements_applied: 8`, `role_exists_after: true`, `rolled_back: false`, plus a
    `record_for_development_notes` line to paste in step 6.
 
@@ -170,7 +170,7 @@ restore point (see `docs/RECIPES/add-a-migration.md`), then this recipe.
 6. **Record the outcome** — an owner action is recorded, not implied:
 
    * `DEVELOPMENT_NOTES.md`: a dated entry with the restore point, the git sha, the digest, the
-     self-check result (20/20) and the smoke test's line. The apply's
+     self-check result (21/21) and the smoke test's line. The apply's
      `record_for_development_notes` field is written to be pasted here.
    * `docs/API.md` § Production mode: retitle the section (it read "designed 2026-10-07, not yet
      applied"), state the apply date and the digest, and drop the claim that the

@@ -727,6 +727,26 @@ function validatePicked(picked) {
 }
 
 /**
+ * The ONE pair record every build-level evaluation answers with.
+ *
+ * `check` is the relationship key, `role` the entry's keyed role and
+ * `partner_role` its partner - the TABLE's own orientation, so the same pair is
+ * described identically wherever it is reported. Shared by
+ * `evaluateBuildReplacement` (Decision 55) and `evaluateBuild` (Decision 56) so
+ * the two cannot answer the same relation in two shapes.
+ */
+function pairRecord(keyedRole, check, pair) {
+  return Object.freeze({
+    check: check.key,
+    role: keyedRole,
+    partner_role: check.partnerRole,
+    status: pair.status,
+    reason: pair.reason,
+    evidence: Object.freeze(pair.evidence),
+  });
+}
+
+/**
  * Decision 55 (CD-8 engine half): evaluate ONE hypothetical replacement
  * against an already-picked build and return the verdict, WITHOUT touching
  * the build. Nothing is mutated, persisted or re-ranked, and no price is read
@@ -804,16 +824,60 @@ function evaluateBuildReplacement(input) {
       return;
     }
     const pair = evaluatePairCheck(filteringContext, check, keyedVerdict, partnerVerdict);
-    pairs.push(
-      Object.freeze({
-        check: check.key,
-        role: keyedRole,
-        partner_role: check.partnerRole,
-        status: pair.status,
-        reason: pair.reason,
-        evidence: Object.freeze(pair.evidence),
-      })
-    );
+    pairs.push(pairRecord(keyedRole, check, pair));
+  });
+  const frozenPairs = Object.freeze(pairs);
+  return Object.freeze({
+    status: aggregateCompatibilityResults(frozenPairs).status,
+    pairs: frozenPairs,
+    unknown_pairwise_count: frozenPairs.filter(
+      (pair) => pair.status === FINAL_STATUSES.UNKNOWN
+    ).length,
+  });
+}
+
+/**
+ * Decision 56 (committed swap, engine half): the verdict of an ALREADY-BUILT
+ * picked map - every pair of the whole build, over the SAME `PAIRWISE_CHECKS`
+ * table `assembleBuilds` walks, answered in `{ status, pairs,
+ * unknown_pairwise_count }`.
+ *
+ * WHY THIS IS NOT `evaluateBuildReplacement` WITH A SELF-SUBSTITUTION. That
+ * call evaluates only the checks naming the replaced role - a proper SUBSET -
+ * and its aggregate is the aggregate of that subset, which for a build status
+ * is exactly the wrong number: a commit has to persist ONE status for the WHOLE
+ * build, and a status computed from a fraction of its relations would report
+ * PASS over an unreported FAIL elsewhere. This function is the whole build's
+ * answer, and the commit uses it for `build_candidate.compatibility_status` and
+ * for the UNKNOWN count Engine 4 reads (Decision 13 STEP 3).
+ *
+ * The traversal (`forEachPickedCheck`) and the per-pair construction
+ * (`evaluatePairCheck`) are the walk's own internals, so "what assembly would
+ * have said about this build" has ONE implementation. Nothing is mutated,
+ * persisted, priced or re-ranked, and a REJECT inside `picked` is refused by
+ * `validatePicked` because a build never holds one.
+ *
+ * @param {object} input { picked, filteringContext }
+ * @returns {object} frozen { status, pairs, unknown_pairwise_count }
+ */
+function evaluateBuild(input) {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    fail(ERROR_CODES.INVALID_INPUT, 'input', '"input" must be an object');
+  }
+  const { picked, filteringContext } = input;
+  if (
+    filteringContext === null ||
+    typeof filteringContext !== 'object' ||
+    Array.isArray(filteringContext)
+  ) {
+    fail(ERROR_CODES.INVALID_INPUT, 'filteringContext', '"filteringContext" must be an object');
+  }
+  validatePicked(picked);
+
+  const pairs = [];
+  forEachPickedCheck(picked, (keyedRole, check, keyedVerdict, partnerVerdict) => {
+    const pair = evaluatePairCheck(filteringContext, check, keyedVerdict, partnerVerdict);
+    pairs.push(pairRecord(keyedRole, check, pair));
   });
   const frozenPairs = Object.freeze(pairs);
   return Object.freeze({
@@ -1043,5 +1107,5 @@ function assembleBuilds(engine3Input) {
   return deepFreeze({ builds: Object.freeze(builds) });
 }
 
-module.exports = { assembleBuilds, EXPANSION_ORDER, evaluateBuildReplacement };
+module.exports = { assembleBuilds, EXPANSION_ORDER, evaluateBuild, evaluateBuildReplacement };
 

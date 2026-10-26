@@ -41,6 +41,10 @@ export type CatalogListResponse = JsonOf<paths["/v1/catalog/products"]["get"]["r
 export type CatalogListQuery = paths["/v1/catalog/products"]["get"]["parameters"]["query"];
 export type CatalogProductResponse =
   JsonOf<paths["/v1/catalog/products/{slug}"]["get"]["responses"][200]>;
+export type SwapPreviewResponse =
+  JsonOf<paths["/v1/recommendations/{id}/builds/{rank}/swap-preview"]["get"]["responses"][200]>;
+export type SwapCommitResponse =
+  JsonOf<paths["/v1/recommendations/{id}/builds/{rank}/swap"]["post"]["responses"][201]>;
 export type ErrorEnvelope = JsonOf<paths["/v1/health"]["get"]["responses"][429]>;
 
 /** The kinds of failure the wizard has to distinguish (S10's error map). */
@@ -451,6 +455,105 @@ export async function getCatalogProduct(
   init?: RequestInit
 ): Promise<CatalogProductResponse> {
   return getJson<CatalogProductResponse>(catalogProductPath(slug), init);
+}
+
+/**
+ * The swap preview's query, as the control builds it (S24).
+ *
+ * `productVariantId` is REQUIRED for role `GPU` and refused for every other
+ * role by the API: a GPU candidate is variant-keyed, and a variant on a
+ * product-keyed role would name a row that has no candidate. The control
+ * therefore never sends it speculatively - it sends what the catalogue's own
+ * `variants` array gave it.
+ */
+export interface SwapPreviewRequest {
+  id: string;
+  rank: number;
+  role: string;
+  productId: string;
+  productVariantId?: string | undefined;
+}
+
+/** `/v1/recommendations/:id/builds/:rank/swap-preview?…` - built in one place. */
+function swapPreviewPath(request: SwapPreviewRequest): string {
+  const search = new URLSearchParams({ role: request.role, product_id: request.productId });
+  if (request.productVariantId !== undefined) {
+    search.set("product_variant_id", request.productVariantId);
+  }
+  return (
+    recommendationPath(request.id)
+    + `/builds/${request.rank}/swap-preview?${search.toString()}`
+  );
+}
+
+/**
+ * GET /v1/recommendations/:id/builds/:rank/swap-preview (S24, contract v1.8).
+ *
+ * A BROWSER read: the control is a client island and the answer depends on a
+ * choice made after the page rendered, so there is nothing for the server to
+ * pre-fetch. `cache: "no-store"` is the API's own policy for this route (the
+ * verdict is a function of the LIVE catalogue), and honouring it here keeps a
+ * preview from being answered out of the HTTP cache after the catalogue moved.
+ *
+ * A `FAIL` verdict is a 200 RESULT, not a rejection: only a non-2xx throws, so a
+ * caller cannot mistake "it does not fit" for "the request failed".
+ */
+export async function getSwapPreview(
+  request: SwapPreviewRequest,
+  init?: RequestInit
+): Promise<SwapPreviewResponse> {
+  return getJson<SwapPreviewResponse>(
+    swapPreviewPath(request),
+    { cache: "no-store", ...init },
+    apiBaseUrl()
+  );
+}
+
+/** `/v1/recommendations/:id/builds/:rank/swap` - the same address, one verb on. */
+function swapCommitPath(request: SwapPreviewRequest): string {
+  return recommendationPath(request.id) + `/builds/${request.rank}/swap`;
+}
+
+/**
+ * POST /v1/recommendations/:id/builds/:rank/swap (S24, contract v1.10).
+ *
+ * The MUTATING half of CD-8 (Decision 56): it appends ONE derived build and
+ * returns the same three facts the preview answered with plus `swapped`. The
+ * body is the same triple the preview takes, because a commit is "the preview,
+ * but keep it" - a different payload would let the two ask different questions.
+ *
+ * `cache: "no-store"` because a commit's answer is never reusable, and the
+ * request carries no `next.revalidate`: unlike the preview this is not merely a
+ * read that depends on live data, it writes.
+ *
+ * Every refusal (409 `SWAP_ALREADY_COMMITTED` / `SWAP_NOT_COMMITTABLE` /
+ * `SWAP_ROLE_ABSENT`, 404 `BUILD_NOT_EVALUABLE`) arrives as an `ApiError`, so a
+ * caller can tell "this build already carries a swap" from "the catalogue
+ * moved" by `code` and `status`.
+ */
+export async function commitSwap(
+  swap: SwapPreviewRequest,
+  init?: RequestInit
+): Promise<SwapCommitResponse> {
+  const body: Record<string, string> = {
+    role: swap.role,
+    product_id: swap.productId,
+  };
+  if (swap.productVariantId !== undefined) {
+    body.product_variant_id = swap.productVariantId;
+  }
+  return (
+    await request<SwapCommitResponse>(
+      swapCommitPath(swap),
+      {
+        ...init,
+        method: "POST",
+        cache: "no-store",
+        body: JSON.stringify(body),
+      },
+      apiBaseUrl(),
+    )
+  ).body;
 }
 
 /**

@@ -33,12 +33,17 @@ export interface paths {
                     content: {
                         "application/json": {
                             products: {
+                                id: string;
                                 slug: string;
                                 display_name: string;
                                 category: string;
                                 from_price: number | null;
                                 offer_class: string | null;
                                 has_offer: boolean;
+                                variants: {
+                                    id: string;
+                                    sku: string;
+                                }[];
                             }[];
                             next_cursor: string | null;
                         };
@@ -753,7 +758,13 @@ export interface paths {
                                 total_price: number | null;
                                 build_score: number | null;
                                 compatibility_status: string;
-                                explanation: string;
+                                explanation: string | null;
+                                /** Swapped */
+                                swapped: {
+                                    role: string;
+                                    committed_at: string | null;
+                                    engine_version: string | null;
+                                } | null;
                                 price_status: "indicative" | "verified";
                                 components: {
                                     role: string;
@@ -811,7 +822,12 @@ export interface paths {
                                 total_price: number | null;
                                 build_score: number | null;
                                 compatibility_status: string;
-                                explanation: string;
+                                explanation: string | null;
+                                swapped: {
+                                    role: string;
+                                    committed_at: string | null;
+                                    engine_version: string | null;
+                                } | null;
                                 price_status: "indicative" | "verified";
                                 components: {
                                     role: string;
@@ -972,7 +988,12 @@ export interface paths {
                                 total_price: number | null;
                                 build_score: number | null;
                                 compatibility_status: string;
-                                explanation: string;
+                                explanation: string | null;
+                                swapped: {
+                                    role: string;
+                                    committed_at: string | null;
+                                    engine_version: string | null;
+                                } | null;
                                 price_status: "indicative" | "verified";
                                 components: {
                                     role: string;
@@ -1049,6 +1070,332 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/recommendations/{id}/builds/{rank}/swap-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview one component swap against a persisted build (read-only) */
+        get: {
+            parameters: {
+                query: {
+                    role: string;
+                    product_id: string;
+                    product_variant_id?: string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                    rank: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            compatibility: {
+                                status: "PASS" | "UNKNOWN" | "FAIL";
+                                pairs: {
+                                    check: string;
+                                    role: string;
+                                    partner_role: string | null;
+                                    status: "PASS" | "UNKNOWN" | "FAIL";
+                                    reason: string | null;
+                                    evidence: {
+                                        [key: string]: unknown;
+                                    }[];
+                                }[];
+                                unknown_pairwise_count: number;
+                            };
+                            price: {
+                                previous: number | null;
+                                next: number | null;
+                                delta: number | null;
+                                offer_class: string | null;
+                                price_status: "indicative" | "verified" | (never | null);
+                            };
+                            budget: {
+                                budget_amount: number | null;
+                                total: number | null;
+                                delta: number | null;
+                                within_budget: boolean | null;
+                            };
+                            catalog_version: string | null;
+                            engine_version: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/recommendations/{id}/builds/{rank}/swap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Commit one component swap: appends a derived build (never edits the pass) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    rank: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        role: string;
+                        product_id: string;
+                        product_variant_id?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            compatibility: {
+                                status: "PASS" | "UNKNOWN" | "FAIL";
+                                pairs: {
+                                    check: string;
+                                    role: string;
+                                    partner_role: string | null;
+                                    status: "PASS" | "UNKNOWN" | "FAIL";
+                                    reason: string | null;
+                                    evidence: {
+                                        [key: string]: unknown;
+                                    }[];
+                                }[];
+                                unknown_pairwise_count: number;
+                            };
+                            price: {
+                                previous: number | null;
+                                next: number | null;
+                                delta: number | null;
+                                offer_class: string | null;
+                                price_status: "indicative" | "verified" | (never | null);
+                            };
+                            budget: {
+                                budget_amount: number | null;
+                                total: number | null;
+                                delta: number | null;
+                                within_budget: boolean | null;
+                            };
+                            swapped: {
+                                role: string;
+                                committed_at: string | null;
+                                engine_version: string | null;
+                            };
+                            catalog_version: string | null;
+                            engine_version: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;

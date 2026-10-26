@@ -10,7 +10,7 @@
 // pinned in `rehearse-api-role-cli.test.js`.
 //
 // The pins, in order: the fixture is WELL-FORMED and its composition is the one
-// docs/API.md documents (20 answers: the six INSERT targets, two row-wide UPDATEs
+// docs/API.md documents (21 answers: the SEVEN INSERT targets, two row-wide UPDATEs
 // false, three column-scoped UPDATEs true) with a golden id set, so dropping one
 // is a failure rather than a smaller rehearsal; every `true` answer is
 // SATISFIABLE by the statements the grant builder emits; an expectation with no
@@ -40,7 +40,7 @@ const {
   roleConnectionString,
 } = require('./api-role');
 
-/** The 20 ids this contract is defined by, spelled out (golden). */
+/** The 21 ids this contract is defined by, spelled out (golden). */
 const GOLDEN_IDS = [
   'build_candidate_insert',
   'build_component_delete',
@@ -59,6 +59,7 @@ const GOLDEN_IDS = [
   'recommendation_result_insert',
   'recommendation_result_strategy_key_update',
   'recommendation_result_update',
+  'recommendation_swap_insert',
   'schema_public_create',
   'store_offer_delete',
   'store_offer_insert',
@@ -71,8 +72,8 @@ function correctAnswers() {
   return PRIVILEGE_EXPECTATIONS.map((entry) => ({ id: entry.id, allowed: entry.expected }));
 }
 
-test('the fixture is well-formed: 20 uniquely-identified answers, each with a known kind', () => {
-  assert.equal(PRIVILEGE_EXPECTATIONS.length, 20, 'the plan and docs/API.md both say 20');
+test('the fixture is well-formed: 21 uniquely-identified answers, each with a known kind', () => {
+  assert.equal(PRIVILEGE_EXPECTATIONS.length, 21, 'the plan and docs/API.md both say 21');
   const ids = PRIVILEGE_EXPECTATIONS.map((entry) => entry.id);
   assert.equal(new Set(ids).size, ids.length, 'ids must be unique — an id is the join key to an answer');
   assert.deepEqual(ids.slice().sort(), GOLDEN_IDS, 'the id set is golden: dropping one must fail, not shrink the rehearsal');
@@ -90,13 +91,13 @@ test('the fixture is well-formed: 20 uniquely-identified answers, each with a kn
   }
 });
 
-test('the composition is the one docs/API.md documents, not merely 20 entries', () => {
+test('the composition is the one docs/API.md documents, not merely 21 entries', () => {
   for (const table of WRITE_TARGET_TABLES) {
     assert.equal(expectedOf(table + '_insert'), true, table + ' must be INSERTable by the role');
   }
   assert.deepEqual(
     WRITE_TARGET_TABLES,
-    ['recommendation_profile', 'recommendation_query', 'build_candidate', 'build_component', 'recommendation_result', 'build_rejection']
+    ['recommendation_profile', 'recommendation_query', 'build_candidate', 'build_component', 'recommendation_result', 'build_rejection', 'recommendation_swap']
   );
 
   assert.equal(expectedOf('product_insert'), false);
@@ -152,7 +153,7 @@ test('the grant script is the documented one: CREATE ROLE first, then the least 
 
   const insert = statements.find((s) => s.startsWith('GRANT INSERT'));
   for (const table of WRITE_TARGET_TABLES) assert.ok(insert.includes(table), table + ' must be INSERTable');
-  assert.equal(statements.filter((s) => s.startsWith('GRANT INSERT')).length, 1, 'one INSERT grant, listing the six tables');
+  assert.equal(statements.filter((s) => s.startsWith('GRANT INSERT')).length, 1, 'one INSERT grant, listing the seven tables');
 
   assert.ok(statements.includes('GRANT DELETE ON build_rejection TO morocco_pc_api'));
   assert.equal(statements.filter((s) => s.startsWith('GRANT DELETE')).length, 1, 'DELETE is granted once, on one table');
@@ -225,10 +226,10 @@ test('the role connection swaps the identity and never carries the owner credent
   assert.ok(!asRole.includes('owner-s3cret'), 'the owner password must not survive into the role URL');
 });
 
-test('comparePrivilegeAnswers: all 20 correct is the only PASS', () => {
+test('comparePrivilegeAnswers: all 21 correct is the only PASS', () => {
   const verdict = comparePrivilegeAnswers(correctAnswers(), API_ROLE_NAME);
   assert.equal(verdict.ok, true);
-  assert.equal(verdict.checks.length, 20);
+  assert.equal(verdict.checks.length, 21);
   assert.deepEqual(verdict.missing, []);
   assert.deepEqual(verdict.mismatches, []);
   assert.deepEqual(verdict.unexpected, []);
@@ -238,7 +239,7 @@ test('comparePrivilegeAnswers: all 20 correct is the only PASS', () => {
 test('a MISSING answer is a failure, never a skip', () => {
   const rows = correctAnswers().filter((row) => row.id !== 'recommendation_query_update');
   const verdict = comparePrivilegeAnswers(rows, API_ROLE_NAME);
-  assert.equal(verdict.ok, false, '19 of 20 answers must not read as a pass');
+  assert.equal(verdict.ok, false, '20 of 21 answers must not read as a pass');
   assert.deepEqual(verdict.missing, ['recommendation_query_update']);
   assert.equal(verdict.mismatches.length, 0, 'nothing was WRONG — one expectation was never asked');
   const dropped = verdict.checks.find((check) => check.id === 'recommendation_query_update');

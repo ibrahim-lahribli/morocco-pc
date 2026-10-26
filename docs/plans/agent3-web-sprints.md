@@ -7,12 +7,11 @@ keyboard-reachable with visible focus, no raw API enum text rendered, fr copy in
 Contract dependencies (CD-*) and findings (V*) are defined in the plan §2 — the API and engine
 are in progress, so every contract-dependent sprint has a fixtures-first path.
 
-**Board state, 2026-10-23 (S25 landed whole: saved builds and the price history).** 27
-sprints: **25 DONE** (S1–S23, S25 and S27, whose status lines below carry the evidence), **1 NOT
-STARTED** (S24, W5/post-beta, deliberately outside the M3 gate) and **1 BLOCKED** (S26, which needs a
-deployed API and a deployed web environment - the host is decided, Cloudflare Workers, 2026-10-23).
-What is left is not one block: S24 waits on CD-8, and only S26
-needs a deployment.
+**Board state, 2026-10-25 (S24 landed last: the swap control is live).** 27
+sprints: **26 DONE** (S1–S25 and S27, whose status lines below carry the evidence) and **1 BLOCKED**
+(S26, which needs a deployed API and a deployed web environment - the host is decided, Cloudflare
+Workers, 2026-10-23). What is left is one deployment, not one feature: S24 was the last sprint
+waiting on a contract, and CD-8 was served and consumed on 2026-10-25.
 
 **Update 2026-10-25:** S24 is no longer NOT STARTED. Its honest half SHIPPED — the disabled
 control with a visible explanation, in both locales, pinned by 4 specs in `e2e/swap.spec.ts` — while
@@ -21,7 +20,11 @@ an open question: **Decision 55** (2026-10-25) fixes it as a READ-ONLY preview (
 /v1/recommendations/:id/builds/:rank/swap-preview`) over one new pure engine export, with nothing
 persisted and a mutating swap left to its own decision.
 
-**Update 2026-10-25 (later):** CD-8's ENGINE half landed — `assembly` `evaluateBuildReplacement`, six agreement tests in `assembly/assemble.test.js` including the CPU-as-partner case — so what remains is the route (b), this UI (c) and the `; IMPLEMENTED` flip (d). Nothing is served yet and the control stays disabled.
+**Update 2026-10-26:** Decision 56 answered Decision 55's open item 9 — a committed swap is an APPENDED
+derived build (migration 023, `POST /v1/recommendations/:id/builds/:rank/swap`, contract v1.10.0), and S24's
+panel now offers apply on a PASS/UNKNOWN preview. The pass itself is never edited.
+
+**Update 2026-10-25 (later):** CD-8's ENGINE half landed — `assembly` `evaluateBuildReplacement`, six agreement tests in `assembly/assemble.test.js` including the CPU-as-partner case — then the ROUTE (b) landed 2026-10-25 as contract v1.8.0 (`orchestrator/swap-preview.js` + `GET /v1/recommendations/:id/builds/:rank/swap-preview`). **S24 then CLOSED the same day:** the UI (c) shipped live against the endpoint, contract v1.9 published the catalogue variant identity that UI needs, and Decision 55 flipped to IMPLEMENTED (d) — see the S24 status section.
 
 ## Sprints
 
@@ -1585,7 +1588,51 @@ locales. Measured: `typecheck`, `lint` (0 errors, the pre-existing `postcss.conf
 unbuilt, though its contract is now **Decision 55** (read-only preview; a mutation needs its own
 decision), so S24 stays open — the control must be revisited, not merely re-styled, the moment CD-8
 lands. The engine half then landed the same day (`evaluateBuildReplacement`, six agreement
-tests); the route and this UI are still unbuilt, so the control stays disabled.
+tests); the route then landed the same day (contract v1.8.0, see the next update), so this UI is the last piece.
+
+**Status update 2026-10-25 (route) — CD-8 is now SERVED; only this UI is left.** The endpoint exists:
+`GET /v1/recommendations/:id/builds/:rank/swap-preview` (contract v1.8.0), backed by
+`orchestrator/swap-preview.js`, which takes the SAME Engine 2B -> 2C -> Stage 1 -> 2D path a pass takes
+(full candidate pool on purpose — a narrowed pool would be a second path free to diverge) and hands the
+result to `assembly.evaluateBuildReplacement`. It answers `compatibility` / `price` / `budget` and nothing
+else, persists nothing, and is served `Cache-Control: no-store` at 30/min. A FAIL verdict is a 200
+RESULT; a build that no longer reconstructs from the live catalog is 404 `BUILD_NOT_EVALUABLE`. So the
+DoD's first bullet is now buildable: the control becomes live, reads the API's `compatibility` / `price` /
+`budget` and renders UNKNOWN as its own state (never as compatible) in both locales. The specs flipped WITH
+the UI, in one change — see the closing status below.
+
+**Status: DONE 2026-10-25 — the control is LIVE, in both locales.** `apps/web/components/result/swap-panel.tsx`
+is a client island on every build card, and `lib/result/swap.ts` holds its rules: the roles offered are this
+build's own roles intersected with the engine's `EXPANSION_ORDER` (never a slot the build does not have, never a
+raw enum on screen), the installed component is not offered back, and a GPU choice is one option per SKU — a
+GPU candidate is variant-keyed, so a product-keyed picker could only produce the API's 422. Opening the panel
+is local state; the catalogue read fires when a ROLE is chosen and the preview only on the button, because the
+endpoint costs a pass's read half (30/min). The verdict is the API's: PASS / UNKNOWN / FAIL each get their own
+word and sentence, UNKNOWN is never folded into "compatible", relations are named by their ROLES in words, and
+the three eligibility codes get three sentences. Price, delta, provenance word and the budget bar all come
+from the response; a null operand renders a sentence, never a 0. S24 is also what forced **contract v1.9**:
+the catalogue list could name a product only by SLUG, so each row now carries `id` and `variants: [{ id, sku }]`
+(additive; `openapi-v1.9.json` replaces v1.8 and `check:api-types` moved with it).
+**Measured:** `typecheck`, `lint` (0 errors, the pre-existing `postcss.config.mjs` warning), `check:i18n` (80
+files, both catalogues with identical keys and placeholders), `check:tokens`, `check:api-types` (contract 1.9.0,
+9 paths, byte-identical types) and `build` exit 0; the Playwright suite is **373 passed / 2 skipped**, with
+`e2e/swap.spec.ts` at **7 specs** — the live control and its 8-role list, PASS with the API's own 3200 -> 6100,
++2900, 11 494 of 15 000 and the variant-carrying request, FAIL as a 200 result said in words with no enum on
+screen, UNKNOWN as its own state with its price and "Démo" badge intact, `NO_ELIGIBLE_OFFER` with no price and
+no bar, the Arabic/RTL panel, and 360 px with no sideways scroll. The fixture mock answers the swap route by the
+CHOSEN `product_id` (so a spec picks a scenario by picking a component) and validates the role and the GPU
+variant as the API does.
+
+**Update 2026-10-26 — the MUTATION landed (Decision 56), so the panel has an apply affordance.** A PASS or
+UNKNOWN preview shows an apply button (a FAIL never does); it POSTs `.../swap`, and the card then shows the
+build the SERVER holds - the replacement's components, the recomputed total and score, a `swapped` badge and no
+engine explanation, all from the served build rather than panel state. Contract **1.10.0** adds that one path,
+widens `explanation` to nullable and adds `swapped`; `check:api-types` moved to 10 paths with
+`openapi-v1.10.json`. `e2e/swap.spec.ts` is now **10 specs**: the seven above plus the apply that posts the
+preview's triple and shows the 201's own total, a FAIL offering no apply at all, and a build the API serves as
+swapped (badge, plus the "no explanation" sentence). The 373/2 suite figure above is the run BEFORE those three
+commit specs. One swap per build is the API's rule, so a second attempt's `409 SWAP_ALREADY_COMMITTED` is
+reported in its own words instead of being retried.
 
 #### S25 — Price history + saved builds (2 h, post-beta)
 **Goal:** Price history for components/builds, and saved builds (local-first, no account).
@@ -1772,6 +1819,6 @@ component's own arithmetic.
   2026-10-22) — each 1–2 h of agent work. Nominal sums: W0–W4 + exit ≈ 40 h, W5 ≈ 6 h,
   S27 ≈ 1.5 h.
 
-**State, 2026-10-23 (S25 landed whole):** every node on this map through S22 is DONE,
-and so are S27, S23 and both halves of S25, which sit outside it. The hard order’s only remaining node
-is S26, and a deployment gates it. What is left: S24, which waits on CD-8 — nobody has scheduled it.
+**State, 2026-10-25 (S24 landed last):** every node on this map through S22 is DONE,
+and so are S27, S23, both halves of S25 and S24, which sit outside it. The hard order’s only remaining
+node is S26, and a deployment gates it. No sprint waits on a contract any more.

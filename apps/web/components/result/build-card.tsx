@@ -50,7 +50,7 @@
 import { getTranslations } from "next-intl/server";
 
 import { SaveBuildButton } from "@/components/saved/save-build-button";
-import { Alert, Badge, Button, ProgressBar, cn } from "@/components/ui";
+import { Alert, Badge, ProgressBar, cn } from "@/components/ui";
 import { formatDate, formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
 import {
@@ -59,13 +59,17 @@ import {
   overBudgetBy,
   priceProvenance,
   remainingBudget,
+  roleLabel,
   strategyLabel,
   type Build,
   type PriceProvenance,
 } from "@/lib/result/model";
 
+import { swappableRoles } from "@/lib/result/swap";
+
 import { BuildExplanation } from "./build-explanation";
 import { ComponentRow } from "./component-row";
+import { SwapPanel } from "./swap-panel";
 
 export interface BuildCardProps {
   build: Build;
@@ -103,8 +107,6 @@ export async function BuildCard({
   // word, and the same strings are read by the page that lists it.
   const tSaved = await getTranslations({ locale, namespace: "saved" });
   const headingId = `build-${position}-heading`;
-  // Per-card, so two cards never share a described-by target.
-  const swapNoteId = `build-${position}-swap-note`;
 
   const total = build.total_price;
   const bar = barFigures(total, budget);
@@ -144,8 +146,19 @@ export async function BuildCard({
         )}
       </div>
 
-      <div className="mt-2">
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <Badge tone={provenance}>{badgeText}</Badge>
+        {/* Decision 56: a committed swap is a fact about THIS build, served by
+            the API (`swapped`), never client state. `router.refresh()` after a
+            commit is what makes this appear - the card renders the build the
+            server holds, not the one the panel hoped for. */}
+        {build.swapped === null ? null : (
+          <p data-swap-badge={build.swapped.role} className="text-caption text-ink">
+            {t("swap.swappedBadge", {
+              role: t(`roles.${roleLabel(build.swapped.role)}`),
+            })}
+          </p>
+        )}
       </div>
 
       {/* Saving is this browser's business, so the control is the card's ONE
@@ -210,31 +223,98 @@ export async function BuildCard({
         ))}
       </ul>
 
-      {/* S24's buildable half (shipped 2026-10-25). CD-8 — a swap endpoint —
-          does not exist, so the control is PRESENT and DISABLED rather than
-          hidden: an honest future state, and no swap is simulated here. There
-          is no handler and no fetch, so there is no code path that could fire a
-          request. The explanation is VISIBLE TEXT, not a hover-only tooltip —
-          a disabled button cannot take focus, so a tooltip on it would be
-          unreachable by keyboard and by touch at 360 px — and
-          `aria-describedby` still ties the sentence to the control for anyone
-          who reaches it with a virtual cursor. `data-swap` states the state for
-          the spec and for the change that lands when the endpoint exists. */}
-      <div className="mt-3">
-        <Button
-          variant="secondary"
-          size="compact"
-          className="w-full"
-          disabled
-          aria-describedby={swapNoteId}
-          data-swap="unavailable"
-        >
-          {t("swap.label")}
-        </Button>
-        <p id={swapNoteId} className="mt-1.5 text-caption text-muted">
-          {t("swap.explanation")}
-        </p>
-      </div>
+      {/* S24: the swap control, live since CD-8 was served (contract v1.8) and
+          able to KEEP an answer since v1.10 (Decision 56). The card passes
+          IDENTITY and WORDS; the panel owns the questions and both calls. A
+          commit APPENDS a derived build - the pass keeps its rank, its score
+          provenance and its components - and the badge above says so.
+
+          Only roles this build actually carries are offered (`swappableRoles`),
+          and only the roles the ENGINE can assemble: a swap question about a
+          slot the build does not have is not a swap. The installed product is
+          passed along so the picker cannot offer it back. */}
+      <SwapPanel
+        resultId={resultId}
+        rank={build.rank}
+        roles={swappableRoles(build.components.map((component) => component.role)).map(
+          (role) => ({ role, label: t(`roles.${roleLabel(role)}`) }),
+        )}
+        installed={Object.fromEntries(
+          build.components.map((component) => [component.role, component.product_id]),
+        )}
+        locale={locale}
+        labels={{
+          label: t("swap.label"),
+          intro: t("swap.intro"),
+          roleLabel: t("swap.roleLabel"),
+          rolePlaceholder: t("swap.rolePlaceholder"),
+          candidateLabel: t("swap.candidateLabel"),
+          candidatePlaceholder: t("swap.candidatePlaceholder"),
+          loading: t("swap.loading"),
+          noCandidates: t("swap.noCandidates"),
+          loadError: t("swap.loadError"),
+          preview: t("swap.preview"),
+          previewing: t("swap.previewing"),
+          verdictTitle: t("swap.verdictTitle"),
+          verdict: {
+            PASS: t("swap.verdict.PASS"),
+            UNKNOWN: t("swap.verdict.UNKNOWN"),
+            FAIL: t("swap.verdict.FAIL"),
+          },
+          verdictNote: {
+            PASS: t("swap.verdictNote.PASS"),
+            UNKNOWN: t("swap.verdictNote.UNKNOWN"),
+            FAIL: t("swap.verdictNote.FAIL"),
+          },
+          unknownCount: t("swap.unknownCount"),
+          pairLine: t("swap.pairLine"),
+          pairSelf: t("swap.pairSelf"),
+          otherRoleLabel: t("roles.OTHER"),
+          eligibility: {
+            NO_ELIGIBLE_OFFER: t("swap.eligibility.NO_ELIGIBLE_OFFER"),
+            PRODUCT_NOT_CANDIDATE: t("swap.eligibility.PRODUCT_NOT_CANDIDATE"),
+            INCOMPATIBLE: t("swap.eligibility.INCOMPATIBLE"),
+          },
+          provenance: {
+            demo: t("provenance.demo"),
+            indicative: t("provenance.indicative"),
+            verified: t("provenance.verified"),
+          },
+          priceTitle: t("swap.priceTitle"),
+          pricePair: t("swap.pricePair"),
+          priceNewOnly: t("swap.priceNewOnly"),
+          priceUnknown: t("swap.priceUnknown"),
+          priceUp: t("swap.priceUp"),
+          priceDown: t("swap.priceDown"),
+          priceSame: t("swap.priceSame"),
+          budgetTitle: t("swap.budgetTitle"),
+          barLabel: t("swap.barLabel"),
+          barValueText: t("swap.barValueText"),
+          barRemaining: t("swap.barRemaining"),
+          barOver: t("swap.barOver"),
+          budgetUnknown: t("swap.budgetUnknown"),
+          overBudget: t("swap.overBudget"),
+          errors: {
+            notEvaluable: t("swap.errors.notEvaluable"),
+            rateLimited: t("swap.errors.rateLimited"),
+            invalid: t("swap.errors.invalid"),
+            generic: t("swap.errors.generic"),
+          },
+          apply: t("swap.apply"),
+          applying: t("swap.applying"),
+          appliedTitle: t("swap.appliedTitle"),
+          appliedNote: t("swap.appliedNote"),
+          appliedWhen: t("swap.appliedWhen"),
+          commitErrors: {
+            alreadyCommitted: t("swap.commitErrors.alreadyCommitted"),
+            refused: t("swap.commitErrors.refused"),
+            notEvaluable: t("swap.commitErrors.notEvaluable"),
+            rateLimited: t("swap.commitErrors.rateLimited"),
+            invalid: t("swap.commitErrors.invalid"),
+            generic: t("swap.commitErrors.generic"),
+          },
+        }}
+      />
 
       <BuildExplanation build={build} locale={locale} />
     </article>

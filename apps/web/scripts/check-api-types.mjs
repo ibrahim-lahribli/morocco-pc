@@ -4,9 +4,9 @@
  *
  * Three things fail this gate, in the order a human would want to hear them:
  *
- *   1. the snapshot is not contract 1.7.0 (the API raised or dropped a version
+ *   1. the snapshot is not contract 1.10.0 (the API raised or dropped a version
  *      and the web client was not revisited);
- *   2. the path set is not the eight the web app consumes (a path appeared or
+ *   2. the path set is not the ten the web app consumes (a path appeared or
  *      vanished, so a screen may be silently unreachable);
  *   3. `lib/api/schema.d.ts` does not match what the generator produces from
  *      the CURRENT snapshot — the committed types are stale.
@@ -14,7 +14,7 @@
  * The generator is invoked exactly as `npm run gen:api-types` does, so "equal"
  * means byte-equal to the committed artifact, not merely semantically similar.
  *
- * Why the snapshot is the API's file: `apps/api/test/unit/openapi-v1.7.json` is
+ * Why the snapshot is the API's file: `apps/api/test/unit/openapi-v1.10.json` is
  * already the API team's gated artifact (its own snapshot test fails if the
  * served document drifts from it). Copying it into apps/web would create the
  * exact hazard this repo keeps closing elsewhere — two plausible contracts in
@@ -30,10 +30,14 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(HERE, "..");
-const SNAPSHOT = path.resolve(WEB_ROOT, "..", "api", "test", "unit", "openapi-v1.7.json");
+const SNAPSHOT = path.resolve(WEB_ROOT, "..", "api", "test", "unit", "openapi-v1.10.json");
 const TYPES = path.join(WEB_ROOT, "lib", "api", "schema.d.ts");
 
-const EXPECTED_VERSION = "1.7.0";
+const EXPECTED_VERSION = "1.10.0";
+// The TEN paths of contract 1.10.0. Both halves of CD-8 are consumed by S24 -
+// the read-only PREVIEW (Decision 55) and the COMMIT (Decision 56) - and they
+// are listed here because this gate answers "is the client pinned to what the
+// API serves", not "is every screen finished".
 const EXPECTED_PATHS = [
   "/v1/catalog/products",
   "/v1/catalog/products/{slug}",
@@ -43,6 +47,8 @@ const EXPECTED_PATHS = [
   "/v1/presets",
   "/v1/recommendations",
   "/v1/recommendations/{id}",
+  "/v1/recommendations/{id}/builds/{rank}/swap",
+  "/v1/recommendations/{id}/builds/{rank}/swap-preview",
 ].sort();
 
 function fail(message) {

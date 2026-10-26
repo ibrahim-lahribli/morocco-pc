@@ -37,11 +37,52 @@
  * spec-table migration a breaking API change, and the columns are already the
  * schema's documented truth (`docs/SCHEMA_REFERENCE.md`). The stable part is the
  * SHAPE - one flat object per product, identity columns stripped.
+ *
+ * 4. A VARIANT-KEYED PRODUCT PUBLISHES ITS VARIANTS (contract v1.9). `specs`
+ *    strips `product_variant_id` because it is identity, not specification - and
+ *    that left a GPU's identity unreachable from the catalogue at all: a GPU
+ *    candidate IS a (product, variant) pair (Engine 2B), so a surface that can
+ *    only name the product cannot name the thing that is bought, priced or
+ *    swapped. Each LIST row therefore carries `variants`, an array of
+ *    `{ id, sku }`, ordered by `id` - the same total order Engine 2B's candidate
+ *    statement uses, so "the first variant" means the same thing in both places.
+ *    An empty array is the truthful answer for a product with no variant rows,
+ *    and it is never null: the array is the shape, the emptiness is the data.
+ *    The row also carries `id` (the `product.id`), because a variant id alone is
+ *    not addressable either: the swap preview takes a `product_id` and a
+ *    `product_variant_id` together. A product id is not a secret - the
+ *    recommendation response already serves one per component
+ *    (`BuildComponentSchema.product_id`) - and a catalogue that can only name a
+ *    SLUG cannot ask any ID-taking route about the thing it just showed.
+ *    Both fields are ADDITIVE - no existing field or path changed - and together
+ *    they are what lets S24's swap control name a component at all (Decision 55
+ *    item 2 requires a `product_variant_id` for a GPU swap).
  */
 
 const { Type } = require('@sinclair/typebox');
 
+/**
+ * One purchasable SKU of a product (contract v1.9).
+ *
+ * `id` is the `product_variant.id` a caller must name to address the thing
+ * itself: a GPU candidate is variant-keyed, so this is the identity a swap or a
+ * price comparison needs. `sku` is the vendor's own code (`NOT NULL` in
+ * migration 003), which is what a person recognises a specific card by. Neither
+ * field is derived here - both are the row's own values.
+ */
+const CatalogVariantSchema = Type.Object({
+  id: Type.String(),
+  sku: Type.String(),
+}, { additionalProperties: false, $id: 'CatalogVariant' });
+
 const CatalogProductSchema = Type.Object({
+  /**
+   * The product's `product.id` (contract v1.9). Needed to ADDRESS the product on
+   * the routes that take an id - the swap preview takes a product id and, for a
+   * GPU, its variant. Not a secret: a recommendation response already serves
+   * `product_id` per component.
+   */
+  id: Type.String(),
   /** The stable URL identifier (migration 020's `uq_product_slug`). */
   slug: Type.String(),
   /** `COALESCE(product.display_name, product.name)` - never the `Seed ` prefix. */
@@ -53,6 +94,12 @@ const CatalogProductSchema = Type.Object({
   /** Decision 35 provenance of THAT price; null when there is no price. */
   offer_class: Type.Union([Type.String(), Type.Null()]),
   has_offer: Type.Boolean(),
+  /**
+   * This product's SKUs, ordered by `id` (contract v1.9). `[]` when the product
+   * has no variant rows - never null, because the shape is the array and the
+   * emptiness is the data.
+   */
+  variants: Type.Array(CatalogVariantSchema),
 }, { additionalProperties: false, $id: 'CatalogProduct' });
 
 const CatalogListResponseSchema = Type.Object({

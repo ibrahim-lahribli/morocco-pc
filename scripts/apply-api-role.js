@@ -29,7 +29,7 @@
 //     (one trailing newline is stripped). It is never printed, and no URL or host
 //     is either — the target is named by `applyLogTarget`'s `db:<12 hex>` digest.
 //
-// AFTER the grants it runs the 20-answer self-check from `scripts/lib/api-role.js`
+// AFTER the grants it runs the 21-answer self-check from `scripts/lib/api-role.js`
 // and compares it to the fixture. Green prints a report and a ready-to-paste
 // record for `DEVELOPMENT_NOTES.md`. Red ROLLS BACK — it removes the role it just
 // created (REVOKE sweep, then DROP ROLE) and exits 1 — because a mis-privileged

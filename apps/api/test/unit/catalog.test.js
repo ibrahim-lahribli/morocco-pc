@@ -2,7 +2,7 @@
 
 /**
  * apps/api/test/unit/catalog.test.js - the read-only catalog routes, DB-free
- * (Platform P2 Sprint 3, contract v1.5).
+ * (Platform P2 Sprint 3, contract v1.5; the list rows gained `variants` in v1.9).
  *
  * What belongs here is the ROUTE's half of the contract: shape, presentation,
  * parameter validation and the keyset's cursor arithmetic. The SQL half - is
@@ -28,11 +28,13 @@ function createApp(overrides) {
 
 function listRow(overrides) {
   return Object.assign({
+    id: '9a1d5f6e-0000-4000-8000-000000000001',
     slug: 'amd-ryzen-5-5600',
     display_name: 'AMD Ryzen 5 5600',
     category: 'CPU',
     from_price: '899.00',
     offer_class: 'SEED_UNVERIFIED',
+    variants: [],
   }, overrides || {});
 }
 
@@ -49,24 +51,56 @@ test('the list serves the advertised shape and converts NUMERIC strings', async 
   const body = response.json();
 
   assert.deepEqual(body.products[0], {
+    id: '9a1d5f6e-0000-4000-8000-000000000001',
     slug: 'amd-ryzen-5-5600',
     display_name: 'AMD Ryzen 5 5600',
     category: 'CPU',
     from_price: 899,
     offer_class: 'SEED_UNVERIFIED',
     has_offer: true,
+    variants: [],
   });
   // A product with no eligible offer is STILL a row: silently dropping it would
   // make a partial catalog look complete.
   assert.deepEqual(body.products[1], {
+    id: '9a1d5f6e-0000-4000-8000-000000000001',
     slug: 'gpu-without-offer',
     display_name: 'AMD Ryzen 5 5600',
     category: 'GPU',
     from_price: null,
     offer_class: null,
     has_offer: false,
+    variants: [],
   });
   assert.equal(body.next_cursor, null, 'no extra row was returned, so this is the last page');
+
+  await app.close();
+});
+
+test('a row publishes its SKUs in order, and a product with none says so with an empty array', async () => {
+  const variants = [
+    { id: '11111111-1111-4111-8111-111111111101', sku: 'SEED-RTX4060-DUAL-8G' },
+    { id: '11111111-1111-4111-8111-111111111102', sku: 'SEED-RTX4060-TRIO-OC-8G' },
+  ];
+  const repository = stub.createRepositoryStub({
+    async selectCatalogProducts() {
+      return [
+        listRow({ slug: 'gpu-with-two-skus', category: 'GPU', variants }),
+        // `null` is what a product with no variant rows aggregates to in SQL
+        // (COALESCE'd there); the presenter must serve `[]`, never null and
+        // never an invented entry.
+        listRow({ slug: 'cpu-with-none', variants: null }),
+      ];
+    },
+  });
+  const app = createApp({ repository });
+
+  const response = await app.inject({ method: 'GET', url: '/v1/catalog/products' });
+  assert.equal(response.statusCode, 200);
+  const body = response.json();
+
+  assert.deepEqual(body.products[0].variants, variants, 'the SKUs are served in the order the aggregate returned');
+  assert.deepEqual(body.products[1].variants, [], 'a product with no variants is an empty array, not null');
 
   await app.close();
 });

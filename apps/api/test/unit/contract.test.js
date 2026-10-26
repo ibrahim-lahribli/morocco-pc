@@ -339,7 +339,11 @@ test('the OpenAPI document is served as JSON at /v1/docs/json', async () => {
   const document = response.json();
   assert.equal(document.openapi, '3.0.3');
   assert.equal(document.info.title, 'morocco-pc API');
-  assert.equal(document.info.version, '1.7.0', 'the contract version names the current surface (adds input effects)');
+  assert.equal(
+    document.info.version,
+    '1.10.0',
+    'the contract version names the current surface (adds the committed swap)'
+  );
   assert.ok(document.paths['/v1/recommendations'], 'the recommendation path is documented');
   assert.ok(document.paths['/v1/recommendations/{id}'], 'the read path is documented');
 });

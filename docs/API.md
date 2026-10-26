@@ -14,7 +14,7 @@ databases now carry the schema it reads (019 + 020; shared applied 2026-10-15), 
 the write-safety default still points the API at the isolated branch - see *Database
 target*.
 
-**Contract v1.7 (2026-10-24):** v1.1 (2026-10-14) surfaced the persisted pass
+**Contract v1.9 (2026-10-25):** v1.1 (2026-10-14) surfaced the persisted pass
 facts - `budget_floor`, `engine_version` and each build's `strategy_key` became
 columns in migration `019_recommendation_pass_facts.sql` (Decision 46), so POST
 and GET no longer differ on any persisted field. v1.2 adds product identity:
@@ -42,7 +42,20 @@ cheapest price, and a summary whose change fields stay `null` until there are tw
 See *GET /v1/catalog/products/:slug/price-history*. **v1.7 adds input effects** (Decision 52):
 `GET /v1/meta/options` names which inputs the active model READS (`inputs_applied`), and every
 recommendation reply states what each input changed in THAT pass (`input_effects`). Additive only:
-no path and no existing field changed. See *What each input changes*.
+no path and no existing field changed. See *What each input changes*. **v1.8 adds the swap
+preview** (Decision 55): `GET /v1/recommendations/:id/builds/:rank/swap-preview` is ONE new path
+and changes no existing field; a FAIL verdict is a 200 result. **v1.9 adds product identity to
+the catalogue list** (S24): each `GET /v1/catalog/products` row now carries `id` (the
+`product.id`) and `variants` (`[{ id, sku }]`, in the engine variant order, `[]` when the
+product has none), because a GPU candidate is variant-keyed and the swap preview requires
+`product_variant_id` for role `GPU` - the catalogue could otherwise name a product only by
+slug. Additive only: no path and no existing field changed. **v1.10 adds the committed
+swap** (Decision 56): `POST /v1/recommendations/:id/builds/:rank/swap` APPENDS one derived
+build (its own `build_candidate` and `build_component` rows plus one `recommendation_swap`
+link) and returns the preview's three facts plus `swapped`; the pass itself is never edited.
+The read path then serves the derived build at that rank, with `swapped` naming the replaced
+role and `explanation: null`. `explanation` also became nullable on every build, which is
+what its column always was.
 
 **`catalog_version` and the preset ribbon are served on BOTH databases since 2026-10-19.**
 Migrations 021 and 022 were applied to the shared database that day from restore point
@@ -170,7 +183,7 @@ rather than the owner's - that rotation is an owner step (OG-54), not something 
 ### The database role
 
 The API must not connect as the project owner. The engine's commit path issues
-INSERTs into the six Layer 4 tables and exactly ONE DELETE — verified from
+INSERTs into the seven Layer 4 tables and exactly ONE DELETE — verified from
 `src/recommendation/orchestrator/commit.js` and
 `src/recommendation/persistence/persist-rejections.js`: Decision 31's
 replace-idempotence clears this query's `build_rejection` rows before
@@ -233,7 +246,7 @@ rehearsal proved the block; applying it is now scripted rather than transcribed.
 enforces — refuses an existing role instead of recreating it, takes the password from
 `API_ROLE_PASSWORD` or `--password-file` and never from argv, prints the `db:<12 hex>` audit
 digest beside the plan with the password redacted, and after the grants runs the self-check
-above and compares all 20 answers to a fixture: a missing, unexpected or NULL answer is a
+above and compares all 21 answers to a fixture: a missing, unexpected or NULL answer is a
 FAILURE and a red self-check ROLLS THE ROLE BACK. `node scripts/smoke-api-role.js
 --confirm-shared` then runs the API itself as the role — its own shared-pool path, health on
 the BODY, one real POST asserting `reused === false` and at least one committed build (zero
@@ -259,7 +272,7 @@ before any shared apply):
 start if the role exists, applies the `CREATE ROLE` / `GRANT` block verbatim as the database
 owner, opens a SECOND connection authenticated as `morocco_pc_api`, drives the API's POST write
 path on it, asserts the self-check against a hard-coded fixture, proves the negative, then
-removes both the role and the rows the pass wrote. Its pure half — the 20-answer table, the
+removes both the role and the rows the pass wrote. Its pure half — the 21-answer table, the
 grant script and the self-check SQL — is unit-tested by
 `scripts/lib/api-role.test.js` (11 DB-free tests) and its own CLI and cleanup policy by
 `scripts/lib/rehearse-api-role-cli.test.js` (9), all in `npm run test:scripts`. It calls
@@ -269,7 +282,7 @@ writes timing rows and neither is something a privilege rehearsal should vary.
 
 Target: endpoint `ep-dry-mountain-ax6b5wu6` (DIRECT host), database `neondb`. Recorded from two
 consecutive runs whose hard assertions were **identical** (25 builds, 61 statements as the role,
-20/20 answers, same residue, same negative proof).
+21/21 answers, same residue, same negative proof).
 
 | # | Privilege answer | Expected | Actual |
 |---|---|---|---|
@@ -394,8 +407,10 @@ All routes are under `/v1` and speak JSON.
 | GET | `/v1/meta/options` | 120/min | Accepted use cases, currencies, resolutions, priorities |
 | POST | `/v1/recommendations` | 30/min | Run one full engine pass and persist it — or reuse an equivalent stored pass |
 | GET | `/v1/recommendations/:id` | 120/min | Read a persisted recommendation |
+| GET | `/v1/recommendations/:id/builds/:rank/swap-preview` | 30/min | Preview ONE component swap against a persisted build, read-only (contract v1.8, Decision 55) |
+| POST | `/v1/recommendations/:id/builds/:rank/swap` | 30/min | Commit ONE swap: appends a derived build, never edits the pass (contract v1.10, Decision 56) |
 | GET | `/v1/presets` | 120/min | Generated landing-page presets for one use case and currency (current catalog version) |
-| GET | `/v1/catalog/products` | 120/min | Paginated ACTIVE catalogue, keyset-ordered by `slug` (contract v1.5) |
+| GET | `/v1/catalog/products` | 120/min | Paginated ACTIVE catalogue, keyset-ordered by `slug` (contract v1.5; rows carry `id` + `variants` since v1.9) |
 | GET | `/v1/catalog/products/:slug` | 120/min | One product: spec row, eligible offers, provenance, disclaimer |
 | GET | `/v1/catalog/products/:slug/price-history` | 120/min | The recorded observations behind one product's price, oldest first (contract v1.6) |
 | GET | `/v1/docs/json` | 120/min | OpenAPI 3.0 document |
@@ -548,6 +563,146 @@ Status codes:
 - GET **never re-runs the engine** and never recomputes a floor. The DB-backed
   suite proves this with a spy, not by inspection.
 
+### GET /v1/recommendations/:id/builds/:rank/swap-preview
+
+What the build would become if ONE role held another product (contract v1.8, Decision 55).
+**Read-only: nothing is persisted, no build row is rewritten, and no pass is re-run.**
+
+```
+GET /v1/recommendations/:id/builds/:rank/swap-preview?role=CPU&product_id=<uuid>
+GET /v1/recommendations/:id/builds/:rank/swap-preview?role=GPU&product_id=<uuid>&product_variant_id=<uuid>
+```
+
+```json
+{
+  "compatibility": {
+    "status": "FAIL",
+    "pairs": [
+      { "check": "cpu_motherboard", "role": "MOTHERBOARD", "partner_role": "CPU",
+        "status": "PASS", "reason": null, "evidence": [] },
+      { "check": "eligibility", "role": "RAM", "partner_role": null,
+        "status": "FAIL", "reason": "NO_ELIGIBLE_OFFER", "evidence": [] }
+    ],
+    "unknown_pairwise_count": 0
+  },
+  "price":  { "previous": 1999, "next": null, "delta": null,
+              "offer_class": null, "price_status": null },
+  "budget": { "budget_amount": 20000, "total": null, "delta": null, "within_budget": null },
+  "catalog_version": "0123456789abcdef0123456789abcdef",
+  "engine_version": "dev"
+}
+```
+
+- **Three facts, and nothing else**: `compatibility`, `price`, `budget` (Decision 55 item 3).
+  There is no re-ranked list, no new `strategy_key` and no "updated build".
+- **The verdict is the ENGINE's.** `compatibility.status` is `PASS | UNKNOWN | FAIL` by
+  aggregation over `pairs`, each `{ check, role, partner_role, status, reason, evidence }`, from
+  `assembly.evaluateBuildReplacement` over the SAME `PAIRWISE_CHECKS` table assembly uses.
+  `evidence` is OPEN: its items are rule-specific objects, so a new rule's fields are an addition
+  rather than a breaking change. `check` is not an enum for the same reason - it carries the
+  relationship keys plus the non-pairwise `eligibility` value.
+- **UNKNOWN is reported, never collapsed.** A client MUST render it as its own state; it is never
+  "compatible". `unknown_pairwise_count` counts UNKNOWN pairs only (never "not PASS").
+- **A FAIL verdict is a 200 RESULT, not an error**: the caller asked what would happen, and "it
+  would not fit" is the answer.
+- **An ineligible candidate** answers `FAIL` with ONE synthetic pair `check: "eligibility"`
+  (`partner_role: null`) and a null price. Three reasons stay distinguishable: the filtering
+  verdict's own code (e.g. `CPU_SOCKET_MISMATCH`), `NO_ELIGIBLE_OFFER` (a candidate Stage 1
+  dropped: no offer in this currency, out of stock, outside the freshness window) and
+  `PRODUCT_NOT_CANDIDATE` (never in the pool - unknown, inactive, or the wrong category for the role).
+- **Every arithmetic field is nullable, and null means UNKNOWN - never 0.** `price.previous` is the
+  persisted component's `price_used`, null when the role was omitted (the GPU-less build);
+  `price.next` is null for an ineligible candidate; when either is null, `price.delta`,
+  `budget.total`, `budget.delta` and `budget.within_budget` are null too.
+- **`offer_class` and `price_status` travel with the number**, so a client can say what kind of
+  price it is showing: `price_status` is `verified` only when `next` is `VERIFIED`, `indicative`
+  otherwise, and `null` when there is no number to describe.
+- **`role` is one of the engine's eight**: `CPU, MOTHERBOARD, RAM, GPU, PSU, CASE, CPU_COOLER,
+  SSD_BOOT`. A GPU swap MUST name `product_variant_id` (GPU candidates are variant-keyed); every
+  other role must not name one. The `product_id` and that variant both come from
+  `GET /v1/catalog/products`, whose rows carry `id` and `variants` since contract v1.9 - before
+  that the catalogue served slugs only, and a GPU swap could not be constructed by a client at all.
+- **The catalog version is the LIVE one**, not the pass's recorded one: the verdict is a function
+  of the catalog as it is now, so labelling it with the pass's catalog would be a false statement.
+  It is `null` when the digest is unavailable - the same honest degradation POST uses.
+- **It always describes the build the GET serves.** Once a commit has happened (contract v1.10,
+  Decision 56) the EFFECTIVE build at that rank IS the derived one, so a preview prices the part that
+  is installed now and evaluates the current pick set - previewing the installed part back is a valid
+  question with a valid answer, while a second COMMIT stays `409 SWAP_ALREADY_COMMITTED`.
+- **Status codes**: 200 (including FAIL and UNKNOWN), 404 (unknown id, unknown rank, a build with no
+  component rows, or `BUILD_NOT_EVALUABLE` when a persisted pick is no longer a candidate in the
+  live catalog - the message names the role), 422 (malformed rank / product id / variant, or a role
+  outside the eight), 429 (30/min: a preview pays roughly a pass's read half, so it is priced like
+  a POST rather than like a GET), 500.
+- **`Cache-Control: no-store`** on the 200: the answer outlives neither the catalog nor the
+  persisted build.
+- **What it does NOT do**: it does not mutate `build_component` and does not create a
+  `recommendation_query` row (an unmarked row blocks the golden harness). Keeping an answer is
+  the OTHER verb on the same path - see *POST .../swap* (Decision 56).
+
+### POST /v1/recommendations/:id/builds/:rank/swap
+
+Keep the preview's answer (contract v1.10, Decision 56). **It APPENDS a derived build and
+never edits the pass**: the pass's own `recommendation_result`, `build_candidate`,
+`build_component`, rank, `strategy_key`, `engine_version` and Decision 47 dedupe key stay
+exactly what they were.
+
+```
+POST /v1/recommendations/:id/builds/:rank/swap
+Content-Type: application/json
+
+{ "role": "GPU", "product_id": "<uuid>", "product_variant_id": "<uuid>" }
+```
+
+The body is the preview's query string, field for field (`product_variant_id` is required for
+role `GPU` and refused for every other role), because a commit is "the preview, but keep it" - a
+different payload would let the two ask different questions.
+
+```json
+{
+  "compatibility": { "status": "PASS", "pairs": [ /* same shape as the preview */ ],
+                     "unknown_pairwise_count": 0 },
+  "price":  { "previous": 1999, "next": 3200, "delta": 1201,
+              "offer_class": "SEED_UNVERIFIED", "price_status": "indicative" },
+  "budget": { "budget_amount": 20000, "total": 13201, "delta": 1201, "within_budget": true },
+  "swapped": { "role": "CPU", "committed_at": "2026-10-25T12:00:00.000Z",
+               "engine_version": "dev" },
+  "catalog_version": "0123456789abcdef0123456789abcdef",
+  "engine_version": "dev"
+}
+```
+
+- **201, and `swapped` is never null.** A 201 that did not name the commit it just made would be
+  indistinguishable from a preview.
+- **The verdict is the WHOLE build's**, not the preview's role-scoped one: it is what was
+  persisted as `build_candidate.compatibility_status`, computed by `assembly.evaluateBuild` over
+  the SAME `PAIRWISE_CHECKS` table. A `FAIL` verdict is REFUSED (`409`), so a stored build never
+  gains a status a reader has to disbelieve. `UNKNOWN` COMMITS - a pass persists UNKNOWN builds
+  too - and it is stored as UNKNOWN, never laundered into PASS.
+- **The money is the preview's arithmetic**: `total = persisted total - previous + next`, and the
+  OTHER roles keep their persisted prices (a swap must not silently reprice the whole build at
+  today's offers). Every field is nullable in the same places as the preview, and null is never 0.
+- **The derived build** gets its own `build_candidate` (total, score, status) and its own
+  `build_component` rows, plus ONE `recommendation_swap` row linking it to the result it was
+  derived from. It holds no `recommendation_result` row, so it cannot become a rank, a preset
+  target or a dedupe match. Its `score` is recomputed under the PASS's own pinned model and the
+  derived build's UNKNOWN count: copying the old score would leave a number describing parts that
+  are gone.
+- **One swap per build.** A second commit is `409 SWAP_ALREADY_COMMITTED`; the UNIQUE index on
+  `recommendation_swap.source_result_id` is the race guard, so two concurrent commits cannot both
+  win.
+- **The GET that follows serves the derived build** at that rank (`swapped` names the role,
+  `explanation` is null because the stored text described the replaced part). The rank does not
+  move and no new rank appears.
+- **Status codes**: 201, 404 (unknown id/rank, a build with no component rows, or
+  `BUILD_NOT_EVALUABLE` naming the role), 409 (`SWAP_ALREADY_COMMITTED`, `SWAP_ROLE_ABSENT` when
+  the build has no such role to replace, `SWAP_NOT_COMMITTABLE` for an ineligible or incompatible
+  replacement - nothing is written), 422 (malformed rank / product id / variant, or a role outside
+  the eight), 429 (30/min: it pays a preview's read half), 500.
+- **What it never does**: no UPDATE and no DELETE anywhere. The production role has no row-wide
+  UPDATE privilege precisely so a pass cannot be quietly rewritten, which is also why
+  `recommendation_swap` had to be added to its INSERT grant (Decision 56 item 10).
+
 ### GET /v1/presets
 
 The read-only landing-page ribbon (Platform P1 Sprint 6 / Decision 48):
@@ -618,12 +773,14 @@ The read-only catalogue page (Platform P2 Sprint 3, contract v1.5, Decision 50):
 {
   "products": [
     {
+      "id": "6f0c1c9e-0b7f-4f5a-9d1e-2b8a7c6d5e4f",
       "slug": "amd-ryzen-5-5600",
       "display_name": "AMD Ryzen 5 5600",
       "category": "CPU",
       "from_price": 899,
       "offer_class": "SEED_UNVERIFIED",
-      "has_offer": true
+      "has_offer": true,
+      "variants": []
     }
   ],
   "next_cursor": "amd-ryzen-5-5600"
@@ -643,6 +800,15 @@ The read-only catalogue page (Platform P2 Sprint 3, contract v1.5, Decision 50):
 - There is **no `use_case` parameter**, although the sprint sketch listed one: the active model
   exposes no per-use-case product filter, so it could only be inert, and this API refuses a
   query parameter it would ignore. `PLAN_PLATFORM_P2.md` records the deviation.
+- **`id` and `variants` (contract v1.9) exist so the row can be ADDRESSED**, not to enrich the
+  page. A GPU candidate is a `(product, variant)` pair (Engine 2B), so a surface that knows only
+  the slug cannot name the thing a route prices or swaps: the swap preview takes a `product_id`
+  and, for role `GPU`, a `product_variant_id`. `variants` is ordered by `id` - the engine's own
+  total order, so "the first variant" means the same row in both places - and is `[]`, never
+  `null`, when the product has no variant rows. Neither field is a secret: a recommendation
+  response already serves `product_id` per component, and `product_variant_id` is the SKU's own
+  row key. The list is the only catalogue route that carries them; the detail page's `specs`
+  block still strips identity columns, because its spec belongs to ONE variant already.
 
 ### GET /v1/catalog/products/:slug
 
@@ -716,7 +882,7 @@ observation MOMENT, oldest first.
   "may this offer be recommended now", and pruning history by it would rewrite the past.
 - **Nothing else changed.** v1.6 adds this one path - no field on the existing paths gained,
   lost or changed type - and the served document is pinned byte-for-byte by
-  `apps/api/test/unit/openapi-v1.7.json`.
+  `apps/api/test/unit/openapi-v1.10.json` (the one snapshot in the tree).
 
 ## Response shape
 

@@ -184,10 +184,118 @@ const SAMPLE_ROWS = [
   },
 ];
 
+/**
+ * The persisted rank-1 build as `readBuildForSwap` returns it, with pg's wire
+ * shapes (NUMERIC as strings). CPU 1999 / GPU 3200 and a 12000 total are
+ * DELIBERATELY the plan's worked example: a 3200 swap for the 1999 CPU is a
+ * 1201 delta and a 13201 total, so an arithmetic regression shows up as a
+ * number rather than as a shape.
+ */
+const SWAP_BUILD = Object.freeze({
+  // Decision 56: the commit derives from a recommendation_result ROW, so the
+  // read carries its id; the preview ignores it.
+  result_id: 'r-result-1',
+  rank: 1,
+  total_price: '12000.00',
+  budget_amount: '20000',
+  catalog_version: TEST_CATALOG_VERSION,
+  components: Object.freeze([
+    Object.freeze({
+      role: 'CPU',
+      product_id: 'p-cpu',
+      product_variant_id: null,
+      selected_price: '1999.00',
+      currency: 'MAD',
+      store_id: 's-1',
+      price_checked_at: '2026-10-01T00:00:00.000Z',
+      offer_class: 'SEED_UNVERIFIED',
+      store_offer_id: 'o-1',
+    }),
+    Object.freeze({
+      role: 'GPU',
+      product_id: 'p-gpu',
+      product_variant_id: 'v-gpu',
+      selected_price: '3200.00',
+      currency: 'MAD',
+      store_id: 's-2',
+      price_checked_at: '2026-10-01T00:00:00.000Z',
+      offer_class: 'SEED_UNVERIFIED',
+      store_offer_id: 'o-2',
+    }),
+  ]),
+});
+
+/**
+ * The engine's COMMIT answer (Decision 56) - the same three facts as a preview
+ * plus the persisted link, shaped like the real `commitSwap` envelope.
+ */
+const SAMPLE_SWAP_COMMIT = Object.freeze({
+  committed: true,
+  reason: null,
+  role: 'CPU',
+  blocked_role: null,
+  eligibility: null,
+  compatibility: Object.freeze({
+    status: 'PASS',
+    pairs: Object.freeze([
+      Object.freeze({
+        check: 'cpu_motherboard',
+        role: 'MOTHERBOARD',
+        partner_role: 'CPU',
+        status: 'PASS',
+        reason: null,
+        evidence: Object.freeze([]),
+      }),
+    ]),
+    unknown_pairwise_count: 0,
+  }),
+  price: Object.freeze({ next: 3200, offer_class: 'SEED_UNVERIFIED' }),
+  build: Object.freeze({
+    build_candidate_id: 'b-derived-1',
+    total_price: 13201,
+    score: 71.5,
+    compatibility_status: 'PASS',
+    components: Object.freeze([]),
+  }),
+  swap: Object.freeze({
+    role: 'CPU',
+    product_id: 'p-cpu-2',
+    product_variant_id: null,
+    created_at: new Date('2026-10-25T12:00:00.000Z'),
+    engine_version: 'test-deploy',
+  }),
+});
+
+/**
+ * The engine's preview answer: one PASS pair and a 3200 price. Shaped like the
+ * real `evaluateSwapPreview` envelope, so a presenter that read a field the
+ * engine does not produce fails here rather than in production.
+ */
+const SAMPLE_SWAP_PREVIEW = Object.freeze({
+  evaluable: true,
+  blocked_role: null,
+  compatibility: Object.freeze({
+    status: 'PASS',
+    pairs: Object.freeze([
+      Object.freeze({
+        check: 'cpu_motherboard',
+        role: 'MOTHERBOARD',
+        partner_role: 'CPU',
+        status: 'PASS',
+        reason: null,
+        evidence: Object.freeze([]),
+      }),
+    ]),
+    unknown_pairwise_count: 0,
+  }),
+  price: Object.freeze({ next: 3200, offer_class: 'SEED_UNVERIFIED' }),
+});
+
 function createRepositoryStub(overrides) {
   const state = {
     createCalls: [],
     readCalls: [],
+    swapReadCalls: [],
     findCalls: [],
     presetCalls: [],
     // Catalog call logs: the arguments matter as much as the rows, because the
@@ -214,6 +322,12 @@ function createRepositoryStub(overrides) {
     async readRecommendationResult(_db, queryId) {
       state.readCalls.push(queryId);
       return { found: true, query: QUERY_ROW, rows: SAMPLE_ROWS };
+    },
+    // A MISS by default, for the same reason `readCatalogProduct` is: "no such
+    // build" is the ordinary 404, and a test that wants a rank has to opt in.
+    async readBuildForSwap(_db, queryId, rank) {
+      state.swapReadCalls.push({ queryId, rank });
+      return { found: false };
     },
     // An EMPTY ribbon by default: the ordinary case, and the one a test that
     // wants rows has to opt into explicitly rather than inherit.
@@ -245,6 +359,7 @@ function createEngineStub(runFullRun) {
   return {
     calls,
     catalogCalls: [],
+    swapCalls: [],
     useCaseVocabulary: realEngine.useCaseVocabulary,
     // The REAL multiplier table, forwarded for the same reason: `input_effects`
     // claims whether resolution moved the GPU target, and a stub with its own
@@ -273,6 +388,30 @@ function createEngineStub(runFullRun) {
         return runFullRun(client, queryId, engineVersion);
       }
       return { budget_floor: SAMPLE_BUDGET_FLOOR };
+    },
+    // Decision 55: the role vocabulary and the argument envelope are the
+    // ENGINE's (a copy here could agree with a test while the API disagreed with
+    // itself), so the stub forwards the real derivation and only the ANSWER is
+    // stubbed - it needs a database.
+    swapPreviewRoles: realEngine.swapPreviewRoles,
+    swapPreviewArgs: realEngine.swapPreviewArgs,
+    async evaluateSwapPreviewSnapshot(client, args) {
+      this.swapCalls.push({ client, args });
+      return SAMPLE_SWAP_PREVIEW;
+    },
+    // Decision 56: same rule - the argument envelope and the one-swap read are
+    // forwarded from the real engine (a copy here could agree with a test while
+    // the API disagreed with itself); only the commit's ANSWER is stubbed.
+    commitSwapArgs: realEngine.commitSwapArgs,
+    commitCalls: [],
+    async readCommittedSwap(_db, sourceResultId) {
+      this.commitReads = this.commitReads || [];
+      this.commitReads.push(sourceResultId);
+      return { found: false };
+    },
+    async commitSwapInTransaction(client, args) {
+      this.commitCalls.push({ client, args });
+      return SAMPLE_SWAP_COMMIT;
     },
   };
 }
@@ -342,6 +481,9 @@ module.exports = {
   QUERY_ROW,
   SAMPLE_BUDGET_FLOOR,
   SAMPLE_ROWS,
+  SWAP_BUILD,
+  SAMPLE_SWAP_COMMIT,
+  SAMPLE_SWAP_PREVIEW,
   TEST_ENGINE_VERSION,
   TEST_CATALOG_VERSION,
   createRepositoryStub,

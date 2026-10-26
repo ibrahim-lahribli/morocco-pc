@@ -284,6 +284,45 @@ card draw the RANK-1 build's total and the badge's own word, from a request-scop
 gets a numberless preview, never a 0. `check:tokens` exempts the card's hex literals only,
 because Satori speaks neither CSS nor Tailwind.
 
+## The swap panel (S24)
+
+Every build card carries one CONTROL, and it is the app's first question asked AFTER the page rendered:
+`components/result/swap-panel.tsx` is a client island and `lib/result/swap.ts` holds its rules, so the card
+keeps composing and the panel keeps deciding. Opening it is local state - the catalogue read
+(`GET /v1/catalog/products?role=…`) fires when a ROLE is chosen, and the preview only on the button, because
+the endpoint costs roughly a pass's read half (30/min) and an eager fetch per card would spend it on curiosity.
+
+**The roles are the engine's; the SKUs are the GPU's.** `swappableRoles()` intersects this build's own
+components with `EXPANSION_ORDER` - a slot the build does not have is not a swap - and `swapOptions()` turns
+each non-GPU product into one choice and each GPU VARIANT into one, because a GPU candidate is variant-keyed
+and the endpoint refuses a GPU swap without its `product_variant_id`. The installed product is never offered
+back: a swap to the part already there answers a question nobody asked. Both pickers are native `<select>`
+elements with visible labels, so the platform owns keyboard support, the list semantics and RTL, and there is
+no ninth kit primitive to keep in step.
+
+**The answer is rendered, never recomputed.** The verdict is the API's aggregate, word for word, and
+`UNKNOWN` keeps its own word, its own sentence and its own `data-verdict` - a relationship nobody checked is
+not one that holds. Relations are named by their two ROLES in the reader's language, never by a check key or
+a reason code; the synthetic `eligibility` pair is separated from the relations and its three reasons get
+three sentences. Price, delta, the offer's provenance word and the budget bar all come from the response -
+the browser computes no total and no delta, and a null operand renders a sentence instead of a 0. The result
+region is `aria-live="polite"` from the first render, and the copy arrives as props from the server, because
+the app ships no client message catalogue.
+
+**Keeping the answer is a second question.** A PASS or UNKNOWN preview shows an apply button; a FAIL one
+never does, because a verdict that says "this would not fit" has nothing to keep. The commit repeats the same
+triple rather than echoing the preview (the catalogue may have moved between the two calls) and renders the
+`201`'s own numbers - its `budget.total`, its `swapped.committed_at`, its persist-the-whole-build verdict -
+then calls `router.refresh()`: the CARD shows the parts the server now holds, and its `swapped` badge plus its
+"no explanation" sentence come from that served build, never from panel state. One swap per build is the
+API's rule (409 `SWAP_ALREADY_COMMITTED`), so the panel reports that refusal in its own words instead of
+inventing a second apply.
+
+`e2e/swap.spec.ts` (10 specs) pins the inertness before the button, the four verdict shapes, the GPU request
+carrying both identities, the Arabic panel, the 360 px layout, the apply button's two states (a PASS that
+posts the preview's triple and shows the 201's total, and a FAIL that offers no apply) and the swapped
+build's badge with its missing explanation.
+
 ## Not in the kit
 
 - The step indicator (§5) and share bar (§14) are composition, not primitives — they belong

@@ -30,6 +30,10 @@
  *   4. A GPU spec belongs to the VARIANT that was priced. One live GPU product
  *      has two variants (measured 2026-10-17), so "whatever row came back" would
  *      be a real defect rather than a hypothetical one.
+ *   5. The list's `variants` aggregate is REAL (contract v1.9): the SKUs served
+ *      for a GPU product match the rows in `product_variant`, in the engine's
+ *      own order, so the identity a swap is addressed by is the database's and
+ *      not the aggregate's invention.
  */
 
 require('dotenv').config();
@@ -346,6 +350,70 @@ test('a real price history is one point per observation moment, cheapest price f
     const missing = await getJson(app, '/v1/catalog/products/no-such-product-slug/price-history');
     assert.equal(missing.status, 404);
     assert.deepEqual(missing.body, { error: 'NOT_FOUND', message: 'No product with that slug' });
+  } finally {
+    await app.close();
+    await pool.end();
+  }
+});
+
+test('a product publishes the SKUs the database holds, in the engine’s own variant order', async () => {
+  const pool = createPool();
+  const app = createApp(pool);
+  try {
+    // Anchor on a product with MORE THAN ONE variant: a single-variant row would
+    // pass against an aggregate that dropped or duplicated entries only by luck,
+    // and ordering is exactly what a swap is addressed by.
+    const anchor = (await pool.query(
+      'SELECT p.id, p.slug'
+      + ' FROM product p'
+      + ' JOIN product_variant v ON v.product_id = p.id'
+      + " WHERE p.lifecycle_status = 'ACTIVE' AND p.slug IS NOT NULL"
+      + ' GROUP BY p.id, p.slug'
+      + ' HAVING count(v.id) > 1'
+      + ' ORDER BY p.slug ASC LIMIT 1'
+    )).rows[0];
+    assert.ok(anchor, 'the branch must hold a product with more than one variant');
+
+    const expected = (await pool.query(
+      'SELECT v.id, v.sku FROM product_variant v'
+      + ' JOIN product p ON p.id = v.product_id'
+      + ' WHERE p.slug = $1 ORDER BY v.id ASC',
+      [anchor.slug]
+    )).rows;
+
+    // Walk until both anchors are seen: 100 products do not fit one page of 20,
+    // and picking a page boundary by hand would make this test depend on the
+    // catalogue's current size.
+    let cursor = null;
+    let listed = null;
+    let bare = null;
+    for (let page = 0; page < 20; page += 1) {
+      const url = '/v1/catalog/products?limit=100'
+        + (cursor === null ? '' : '&cursor=' + encodeURIComponent(cursor));
+      const response = await getJson(app, url);
+      assert.equal(response.status, 200);
+      if (listed === null) {
+        listed = response.body.products.find((product) => product.slug === anchor.slug) || null;
+      }
+      if (bare === null) {
+        bare = response.body.products.find(
+          (product) => product.category !== 'GPU' && product.variants.length === 0
+        ) || null;
+      }
+      cursor = response.body.next_cursor;
+      if ((listed !== null && bare !== null) || cursor === null) break;
+    }
+
+    assert.ok(listed, 'the variant-keyed product appears in the list');
+    assert.equal(listed.id, anchor.id, 'the row carries the product id a swap takes, not only the slug');
+    assert.deepEqual(
+      listed.variants,
+      expected,
+      'the SKUs are the variant rows themselves, ordered by id, with the sku string as stored'
+    );
+
+    assert.ok(bare, 'the branch must hold a product-keyed row to prove the empty case');
+    assert.deepEqual(bare.variants, [], 'a product with no variant rows answers [] - never null');
   } finally {
     await app.close();
     await pool.end();

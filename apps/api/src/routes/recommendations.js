@@ -60,6 +60,32 @@
  *        id can match no row, so it is a 404 rather than a 500)
  *   422  schema validation, or a value outside the advertised vocabulary
  *   503  no active scoring model
+ *
+ * SWAP PREVIEW (Decision 55, contract v1.8.0). `GET
+ * /v1/recommendations/:id/builds/:rank/swap-preview?role=&product_id=[&variant=]`
+ * is the ONE read that is not about the persisted pass: it answers what the
+ * build would become if one role held another product. Everything it claims
+ * comes from elsewhere - the verdict from `assembly.evaluateBuildReplacement`,
+ * the price from Stage 1's carrier, the eligibility from Engine 2D - and this
+ * module only adds the envelope, the arithmetic a client should not re-derive,
+ * and the status codes. It persists NOTHING, so it serves `Cache-Control:
+ * no-store`: the verdict is a function of the live catalog AND the persisted
+ * build, and a cached copy could outlive either (Decision 55 item 7).
+ *
+ * Its rate limit is POST's, not GET's: a preview pays roughly a pass's read half
+ * (Decision 55 item 4 takes the full candidate pool on purpose), so it is a
+ * costly GET rather than a cheap one.
+ *
+ * SWAP COMMIT (Decision 56, contract v1.10.0). `POST
+ * /v1/recommendations/:id/builds/:rank/swap` is the mutation Decision 55 item 9
+ * left open, and it APPENDS: one `build_candidate` plus its components plus one
+ * `recommendation_swap` row, in one engine-owned transaction. No row of the pass
+ * is updated, so `rank`, `strategy_key`, the dedupe key and the presets keep
+ * describing the assembly that produced them, and GET serves the derived build
+ * in place of the pass's own for that rank (`swapped` says so). A FAIL, an
+ * ineligible candidate, or a role the build does not have is a 409 and writes
+ * nothing; a second commit on the same build is a 409 too, because the
+ * alternatives are an UPDATE or a chain the wire cannot address.
  */
 
 const inputs = require('../inputs');
@@ -69,14 +95,32 @@ const {
   CreateRecommendationBodySchema,
   RecommendationParamsSchema,
   RecommendationResponseSchema,
+  SwapPreviewParamsSchema,
+  SwapPreviewQuerySchema,
+  SwapPreviewResponseSchema,
+  SwapCommitParamsSchema,
+  SwapCommitBodySchema,
+  SwapCommitResponseSchema,
   ErrorResponseSchema,
 } = require('../contracts');
 
 const POST_RATE_LIMIT = Object.freeze({ max: 30, timeWindow: '1 minute' });
 const GET_RATE_LIMIT = Object.freeze({ max: 120, timeWindow: '1 minute' });
+/**
+ * A preview costs ~a pass's read half, so it is priced like a POST. The single
+ * most consequential line in the Decision 55 plan: the full pool is what makes
+ * the answer truthful, and this is what keeps it affordable.
+ */
+const PREVIEW_RATE_LIMIT = Object.freeze({ max: 30, timeWindow: '1 minute' });
 
 /** An id that cannot be a uuid cannot match a row; the answer is 404, not 22P02. */
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+/** A rank is a positive integer in the path; `0`, `-1` and `1.5` are 422. */
+const RANK_RE = /^[1-9][0-9]*$/;
+
+/** The one role whose candidates are variant-keyed (Engine 2B/2C identity). */
+const GPU_ROLE = 'GPU';
 
 /** pg returns NUMERIC as a string; a missing value stays null, never 0. */
 function toNumberOrNull(value) {
@@ -199,7 +243,19 @@ function groupBuilds(rows) {
         total_price: toNumberOrNull(row.total_price),
         build_score: toNumberOrNull(row.build_score),
         compatibility_status: row.compatibility_status === undefined ? null : row.compatibility_status,
-        explanation: row.explanation === null || row.explanation === undefined ? '' : String(row.explanation),
+        // NULL means "no engine explanation for this build" - which is exactly
+        // what a swapped build has (Decision 56 item 7): the stored text
+        // describes the parts it no longer carries.
+        explanation: row.explanation === null || row.explanation === undefined ? null : String(row.explanation),
+        // Decision 56: what this build's swap replaced, or null. The effective
+        // build IS the swapped one when this is set - the read path joins it.
+        swapped: row.swapped_role === null || row.swapped_role === undefined
+          ? null
+          : {
+            role: row.swapped_role,
+            committed_at: toIsoOrNull(row.swapped_committed_at),
+            engine_version: row.swapped_engine_version === undefined ? null : row.swapped_engine_version,
+          },
         created_at: row.result_created_at,
         components: [],
       };
@@ -278,6 +334,7 @@ function presentRecommendationResult(source) {
       build_score: build.build_score,
       compatibility_status: build.compatibility_status,
       explanation: build.explanation,
+      swapped: build.swapped,
       price_status: priceStatusFor(build.components),
       components: build.components,
     };
@@ -319,6 +376,108 @@ function presentRecommendationResult(source) {
     disclaimer: DISCLAIMER,
     served_by: { engine_version: deployVersion },
     builds,
+  };
+}
+
+/**
+ * Money arithmetic at the currency's own precision.
+ *
+ * `selected_price` and `total_price` are NUMERIC(._,2) strings, but subtraction
+ * in JS floats does not respect that: a 1999.10 -> 1999.30 delta is
+ * 0.1999999999998181 without this. Two decimals is what the database stores, so
+ * two decimals is what the wire may claim - and NULL passes through untouched,
+ * because an unknown operand must never become 0.
+ */
+function toMoneyOrNull(value) {
+  if (value === null) {
+    return null;
+  }
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * Present one preview as the wire contract. Pure, and fed by persisted rows
+ * (the build, for `previous` / total / budget) plus the ENGINE's answer (the
+ * verdict and the substituted price).
+ *
+ * The arithmetic here is the only thing this module owns, and it is arithmetic
+ * rather than policy: a client displaying "+1201 MAD, still within budget"
+ * should not have to re-derive it from two prices and a total, and should not be
+ * able to derive it DIFFERENTLY from the API.
+ *
+ * Every field is null - never 0 - when an operand is unknown:
+ *   - the role was omitted from the build (the GPU-less path): `previous` is
+ *     null, so `delta`, `total`, `budget.delta` and `within_budget` are null;
+ *   - the candidate is ineligible: `next` is null, with the same consequences.
+ * `price_status` is derived from `next`'s provenance alone (one number is being
+ * shown, so "every component verified" would be the wrong question), and is
+ * null - not 'indicative' - when there is no number to describe.
+ *
+ * @param {object} source { build, preview, role, deployVersion, catalogVersion }
+ * @returns {object} the SwapPreviewResponse body
+ */
+function presentSwapPreview(source) {
+  const { build, preview, role, deployVersion, catalogVersion } = source;
+
+  let previous = null;
+  for (const component of build.components) {
+    if (component.role === role) {
+      previous = toNumberOrNull(component.selected_price);
+      break;
+    }
+  }
+
+  const next = preview.price === null ? null : toNumberOrNull(preview.price.next);
+  const offerClass = preview.price === null || preview.price.offer_class === null
+    ? null
+    : preview.price.offer_class;
+
+  const persistedTotal = toNumberOrNull(build.total_price);
+  const budgetAmount = toNumberOrNull(build.budget_amount);
+
+  const delta = previous === null || next === null ? null : toMoneyOrNull(next - previous);
+  const total = previous === null || next === null || persistedTotal === null
+    ? null
+    : toMoneyOrNull(persistedTotal - previous + next);
+  const budgetDelta = total === null ? null : toMoneyOrNull(total - persistedTotal);
+  const withinBudget = total === null || budgetAmount === null ? null : total <= budgetAmount;
+
+  return {
+    compatibility: {
+      status: preview.compatibility.status,
+      pairs: preview.compatibility.pairs.map((pair) => ({
+        check: pair.check,
+        role: pair.role,
+        // Nullable on purpose: the synthetic `eligibility` pair has no partner.
+        partner_role: pair.partner_role === undefined ? null : pair.partner_role,
+        status: pair.status,
+        reason: pair.reason === undefined ? null : pair.reason,
+        // Open, rule-specific objects - passed through, never narrowed.
+        evidence: Array.isArray(pair.evidence) ? pair.evidence : [],
+      })),
+      unknown_pairwise_count: preview.compatibility.unknown_pairwise_count,
+    },
+    price: {
+      previous,
+      next,
+      delta,
+      offer_class: offerClass,
+      // Derived, never stored - and reusing the route's ONE derivation, so a
+      // preview and a served build cannot classify a price differently.
+      price_status: next === null ? null : priceStatusFor([{ offer_class: offerClass }]),
+    },
+    budget: {
+      budget_amount: budgetAmount,
+      total,
+      delta: budgetDelta,
+      within_budget: withinBudget,
+    },
+    // The LIVE digest, not the pass's recorded one: the verdict is a function of
+    // the catalog as it is NOW, so labelling it with the pass's catalog would be
+    // a false statement (Decision 55 item 7). NULL is the honest degradation
+    // when the digest is unavailable (resolveCatalogVersion).
+    catalog_version: catalogVersion,
+    engine_version: deployVersion,
   };
 }
 
@@ -514,11 +673,402 @@ function registerRecommendationRoutes(app) {
       resolutionMultiplier: app.engine.resolutionMultiplier,
     }));
   });
+
+  /**
+   * Decision 55 item 2: ONE read-only hypothetical swap.
+   *
+   * Status codes, and why each is what it is:
+   *   200  a verdict was reached - INCLUDING FAIL and UNKNOWN. A FAIL is a
+   *        RESULT, not an error (item 5): the caller asked what would happen and
+   *        the answer is "it would not fit".
+   *   404  no build at that rank (unknown query, unknown rank, or a candidate
+   *        with no component rows), or a build that can no longer be
+   *        reconstructed from the live catalog (`BUILD_NOT_EVALUABLE`, naming the
+   *        role) - a distinct code, because "no such build" and "this build is
+   *        no longer evaluable" are different answers.
+   *   422  schema validation, a malformed rank/product id, a role outside
+   *        EXPANSION_ORDER, or a variant where the role does not accept one.
+   *   429  the preview's own 30/min budget.
+   *   500  a genuine failure; the generic envelope, with a request id.
+   */
+  app.get('/v1/recommendations/:id/builds/:rank/swap-preview', {
+    config: { rateLimit: PREVIEW_RATE_LIMIT },
+    schema: {
+      tags: ['recommendations'],
+      summary: 'Preview one component swap against a persisted build (read-only)',
+      params: SwapPreviewParamsSchema,
+      querystring: SwapPreviewQuerySchema,
+      response: {
+        200: SwapPreviewResponseSchema,
+        404: ErrorResponseSchema,
+        422: ErrorResponseSchema,
+        429: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const id = request.params.id;
+    // A malformed id can match no row, so it is the same 404 a GET of it is - not
+    // a 22P02 and not a 500.
+    if (typeof id !== 'string' || !UUID_RE.test(id)) {
+      return reply.code(404).send({ error: 'NOT_FOUND', message: 'No recommendation with that id' });
+    }
+
+    // A rank PRESENT but not a positive integer (`0`, `-1`, `1.5`, `abc`) is a
+    // 422: a pass can only ever have written ranks 1..n. A rank segment MISSING
+    // altogether (`/builds/swap-preview`) does not match this route at all, so
+    // Fastify answers 404 before this handler runs - which is the other half of
+    // Decision 55's "missing rank is a 404".
+    const rankRaw = request.params.rank;
+    if (typeof rankRaw !== 'string' || !RANK_RE.test(rankRaw)) {
+      return reply.code(422).send(fieldError('rank', 'rank must be a positive integer'));
+    }
+    const rank = Number(rankRaw);
+    if (!Number.isSafeInteger(rank)) {
+      return reply.code(422).send(fieldError('rank', 'rank must be a positive integer'));
+    }
+
+    // The vocabulary is the ENGINE's (Decision 55 item 2). Restating the eight
+    // roles here would let the API accept a swap assembly has no table for.
+    const roles = app.engine.swapPreviewRoles();
+    const role = request.query.role;
+    if (!roles.includes(role)) {
+      return reply.code(422).send(fieldError('role', 'role must be one of: ' + roles.join(', ')));
+    }
+
+    const productId = request.query.product_id;
+    if (!UUID_RE.test(productId)) {
+      return reply.code(422).send(fieldError('product_id', 'product_id must be a uuid'));
+    }
+
+    // Variant identity (Engine 2B/2C): a GPU candidate is variant-keyed, so a
+    // GPU swap MUST name its variant; every other role MUST NOT.
+    const variant = request.query.product_variant_id;
+    if (role === GPU_ROLE) {
+      if (variant === undefined) {
+        return reply.code(422).send(fieldError(
+          'product_variant_id',
+          'a GPU swap must name product_variant_id: GPU candidates are variant-keyed'
+        ));
+      }
+      if (!UUID_RE.test(variant)) {
+        return reply.code(422).send(fieldError('product_variant_id', 'product_variant_id must be a uuid'));
+      }
+    } else if (variant !== undefined) {
+      return reply.code(422).send(fieldError(
+        'product_variant_id',
+        'product_variant_id is only accepted for role GPU'
+      ));
+    }
+
+    // The build must EXIST before anything is evaluated, and the read is one
+    // statement (Decision 55's rank resolution: through recommendation_result,
+    // with a candidate and at least one component).
+    const snapshot = await app.repo.readBuildForSwap(app.pool, id, rank);
+    if (!snapshot.found) {
+      return reply.code(404).send({
+        error: 'NOT_FOUND',
+        message: 'No build at that rank for this recommendation',
+      });
+    }
+
+    const client = await app.pool.connect();
+    try {
+      // The LIVE catalog version, read OUTSIDE the engine's snapshot on purpose:
+      // perfect atomicity with a cache key is not worth a second error policy,
+      // and this reuses the derivation POST already relies on.
+      const catalogVersion = await resolveCatalogVersion(app, request, client);
+
+      let preview;
+      try {
+        preview = await app.engine.evaluateSwapPreviewSnapshot(
+          client,
+          app.engine.swapPreviewArgs({
+            queryId: id,
+            role,
+            productId,
+            productVariantId: variant,
+            // IDENTITIES only (role, product, variant). The engine re-derives
+            // every verdict from the live catalog; handing it persisted
+            // statuses would let it judge a swap against yesterday's
+            // relationships.
+            buildComponents: snapshot.build.components,
+          })
+        );
+      } catch (error) {
+        // The live catalog has no eligible offer for ANY role, so there is
+        // nothing to preview against. That is the same class of answer as a
+        // build that no longer reconstructs - not an internal failure.
+        if (error && error.code === 'EMPTY_CANDIDATE_POOL') {
+          return reply.code(404).send({
+            error: 'BUILD_NOT_EVALUABLE',
+            message: 'This build can no longer be evaluated: the live catalog has no eligible offer',
+          });
+        }
+        throw error;
+      }
+
+      if (preview.evaluable !== true) {
+        return reply.code(404).send({
+          error: 'BUILD_NOT_EVALUABLE',
+          message: 'This build can no longer be evaluated: the persisted '
+            + String(preview.blocked_role)
+            + ' pick is not a candidate in the live catalog',
+        });
+      }
+
+      return reply
+        .header('Cache-Control', 'no-store')
+        .code(200)
+        .send(presentSwapPreview({
+          build: snapshot.build,
+          preview,
+          role,
+          deployVersion: app.engineVersion,
+          catalogVersion,
+        }));
+    } finally {
+      client.release();
+    }
+  });
+
+  /**
+   * Decision 56: commit ONE swap against a persisted build.
+   *
+   * Status codes, and why each is what it is:
+   *   201  a derived build was APPENDED. `swapped` names what it replaced, and
+   *        `compatibility` is the WHOLE build's verdict - the one persisted.
+   *   404  no build at that rank (unknown query, unknown rank, no component
+   *        rows), or a build that no longer reconstructs from the live catalog
+   *        (`BUILD_NOT_EVALUABLE`, naming the role).
+   *   409  `SWAP_ALREADY_COMMITTED` (one swap per build, item 6),
+   *        `SWAP_ROLE_ABSENT` (the build has no such role to replace),
+   *        `SWAP_NOT_COMMITTABLE` (the engine's verdict is FAIL, or the candidate
+   *        is not a candidate / has no eligible offer). Nothing is written.
+   *   422  schema validation, a malformed rank/product id, a role outside
+   *        EXPANSION_ORDER, or a variant where the role does not accept one.
+   *   429  the commit's own 30/min budget (it pays a preview's read half).
+   *   500  a genuine failure; the generic envelope, with a request id.
+   */
+  app.post('/v1/recommendations/:id/builds/:rank/swap', {
+    config: { rateLimit: PREVIEW_RATE_LIMIT },
+    schema: {
+      tags: ['recommendations'],
+      summary: 'Commit one component swap: appends a derived build (never edits the pass)',
+      params: SwapCommitParamsSchema,
+      body: SwapCommitBodySchema,
+      response: {
+        201: SwapCommitResponseSchema,
+        404: ErrorResponseSchema,
+        409: ErrorResponseSchema,
+        422: ErrorResponseSchema,
+        429: ErrorResponseSchema,
+        500: ErrorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const id = request.params.id;
+    if (typeof id !== 'string' || !UUID_RE.test(id)) {
+      return reply.code(404).send({ error: 'NOT_FOUND', message: 'No recommendation with that id' });
+    }
+
+    const rankRaw = request.params.rank;
+    if (typeof rankRaw !== 'string' || !RANK_RE.test(rankRaw)) {
+      return reply.code(422).send(fieldError('rank', 'rank must be a positive integer'));
+    }
+    const rank = Number(rankRaw);
+    if (!Number.isSafeInteger(rank)) {
+      return reply.code(422).send(fieldError('rank', 'rank must be a positive integer'));
+    }
+
+    const roles = app.engine.swapPreviewRoles();
+    const role = request.body.role;
+    if (!roles.includes(role)) {
+      return reply.code(422).send(fieldError('role', 'role must be one of: ' + roles.join(', ')));
+    }
+
+    const productId = request.body.product_id;
+    if (!UUID_RE.test(productId)) {
+      return reply.code(422).send(fieldError('product_id', 'product_id must be a uuid'));
+    }
+
+    const variant = request.body.product_variant_id;
+    if (role === GPU_ROLE) {
+      if (variant === undefined) {
+        return reply.code(422).send(fieldError(
+          'product_variant_id',
+          'a GPU swap must name product_variant_id: GPU candidates are variant-keyed'
+        ));
+      }
+      if (!UUID_RE.test(variant)) {
+        return reply.code(422).send(fieldError('product_variant_id', 'product_variant_id must be a uuid'));
+      }
+    } else if (variant !== undefined) {
+      return reply.code(422).send(fieldError(
+        'product_variant_id',
+        'product_variant_id is only accepted for role GPU'
+      ));
+    }
+
+    const snapshot = await app.repo.readBuildForSwap(app.pool, id, rank);
+    if (!snapshot.found) {
+      return reply.code(404).send({
+        error: 'NOT_FOUND',
+        message: 'No build at that rank for this recommendation',
+      });
+    }
+
+    // Decision 56 item 6: ONE committed swap per build. Asked BEFORE the
+    // engine composes anything, so a second attempt costs one statement rather
+    // than a pass's read half. The UNIQUE index on the column is the race guard
+    // - two concurrent commits can both read "none" and only one INSERT wins.
+    const existing = await app.engine.readCommittedSwap(app.pool, snapshot.build.result_id);
+    if (existing.found) {
+      return reply.code(409).send({
+        error: 'SWAP_ALREADY_COMMITTED',
+        message: 'This build already carries a swap; a build holds one committed replacement '
+          + '(Decision 56 item 6)',
+      });
+    }
+
+    const client = await app.pool.connect();
+    try {
+      // The LIVE catalog version, read OUTSIDE the snapshot for the same reason
+      // the preview reads it there, then STORED: the swap row names the catalog
+      // its verdict was judged against (Decision 47/56).
+      const catalogVersion = await resolveCatalogVersion(app, request, client);
+
+      let committed;
+      try {
+        committed = await app.engine.commitSwapInTransaction(
+          client,
+          app.engine.commitSwapArgs({
+            queryId: id,
+            sourceResultId: snapshot.build.result_id,
+            role,
+            productId,
+            productVariantId: variant,
+            buildComponents: snapshot.build.components,
+            persistedTotalPrice: toNumberOrNull(snapshot.build.total_price),
+            catalogVersion,
+            engineVersion: app.engineVersion,
+          })
+        );
+      } catch (error) {
+        if (error && error.code === 'EMPTY_CANDIDATE_POOL') {
+          return reply.code(404).send({
+            error: 'BUILD_NOT_EVALUABLE',
+            message: 'This build can no longer be evaluated: the live catalog has no eligible offer',
+          });
+        }
+        // Two concurrent commits on one build: the loser's UNIQUE violation is
+        // the same answer the pre-check gives a sequential second attempt.
+        if (error && error.code === '23505') {
+          return reply.code(409).send({
+            error: 'SWAP_ALREADY_COMMITTED',
+            message: 'This build already carries a swap; a build holds one committed replacement '
+              + '(Decision 56 item 6)',
+          });
+        }
+        throw error;
+      }
+
+      if (committed.committed !== true) {
+        return refuseSwapCommit(reply, committed);
+      }
+
+      return reply
+        .header('Cache-Control', 'no-store')
+        .code(201)
+        .send(presentSwapCommit({
+          build: snapshot.build,
+          committed,
+          role,
+          deployVersion: app.engineVersion,
+          catalogVersion,
+        }));
+    } finally {
+      client.release();
+    }
+  });
+}
+
+/**
+ * Map one engine refusal onto its status code and its message.
+ *
+ * The reasons stay DISTINGUISHABLE on the wire because the reader's next action
+ * differs for each: "pick another part" (incompatible), "pick a part that has a
+ * price" (ineligible), "this build cannot be evaluated at all" (not evaluable),
+ * and "there is nothing to replace in that slot" (role absent).
+ *
+ * @param {object} reply the Fastify reply
+ * @param {object} committed the engine's refusal envelope
+ * @returns {object} the reply
+ */
+function refuseSwapCommit(reply, committed) {
+  if (committed.reason === 'NOT_EVALUABLE') {
+    return reply.code(404).send({
+      error: 'BUILD_NOT_EVALUABLE',
+      message: 'This build can no longer be evaluated: the persisted '
+        + String(committed.blocked_role)
+        + ' pick is not a candidate in the live catalog',
+    });
+  }
+  if (committed.reason === 'ROLE_ABSENT') {
+    return reply.code(409).send({
+      error: 'SWAP_ROLE_ABSENT',
+      message: 'This build has no ' + String(committed.role) + ' to replace',
+    });
+  }
+  if (committed.reason === 'INELIGIBLE') {
+    const reason = committed.eligibility === null ? 'INCOMPATIBLE' : committed.eligibility.reason;
+    return reply.code(409).send({
+      error: 'SWAP_NOT_COMMITTABLE',
+      message: 'The replacement cannot be committed: ' + String(reason),
+    });
+  }
+  return reply.code(409).send({
+    error: 'SWAP_NOT_COMMITTABLE',
+    message: 'The replacement would not fit this build',
+  });
+}
+
+/**
+ * Present one committed swap as the wire contract.
+ *
+ * It is the PREVIEW's presenter plus the persisted link, on purpose: the three
+ * facts a client shows (compatibility, price, budget) are the same three, and
+ * re-deriving the money here would let the number the reader approved and the
+ * number the API reports diverge. The ONLY difference is `swapped`, which is
+ * never null on a 201 - and `compatibility`, which is the WHOLE build's verdict
+ * (Decision 56 item 3) because that is what was persisted.
+ *
+ * @param {object} source { build, committed, role, deployVersion, catalogVersion }
+ * @returns {object} the SwapCommitResponse body
+ */
+function presentSwapCommit(source) {
+  const { build, committed, role, deployVersion, catalogVersion } = source;
+  const body = presentSwapPreview({
+    build,
+    preview: { compatibility: committed.compatibility, price: committed.price },
+    role,
+    deployVersion,
+    catalogVersion,
+  });
+  return Object.assign({}, body, {
+    swapped: {
+      role,
+      committed_at: toIsoOrNull(committed.swap.created_at),
+      engine_version: toStringOrNull(committed.swap.engine_version),
+    },
+  });
 }
 
 module.exports = {
   registerRecommendationRoutes,
   presentRecommendationResult,
+  presentSwapPreview,
+  presentSwapCommit,
   groupBuilds,
   parseFloor,
   priceStatusFor,
@@ -527,6 +1077,8 @@ module.exports = {
   resolveCatalogVersion,
   toIsoOrNull,
   UUID_RE,
+  RANK_RE,
   POST_RATE_LIMIT,
   GET_RATE_LIMIT,
+  PREVIEW_RATE_LIMIT,
 };

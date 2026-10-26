@@ -23,7 +23,7 @@
 //      whole POST write path — selectActiveScoringModel -> catalogVersion ->
 //      createRecommendationQuery -> runFullRun -> readRecommendationResult —
 //      issuing ZERO statements that fail 42501 (insufficient_privilege);
-//   4. the self-check's 20 privilege answers match the fixture exactly: an
+//   4. the self-check's 21 privilege answers match the fixture exactly: an
 //      expectation with no answer is a FAILURE, never a skip;
 //   5. the NEGATIVE direction: a row-wide UPDATE is DENIED 42501 while the three
 //      column-scoped UPDATEs SUCCEED. A privilege test that only walks the
@@ -292,7 +292,7 @@ async function main() {
     report.assertions.role_is_not_superuser = report.role_row.rolsuper === false;
     report.assertions.no_probed_table_is_owned_by_the_role = report.table_owners.every((row) => row.tableowner !== roleName);
 
-    // ---- Step 1/3: the 20-answer self-check, compared to the fixture ---------
+    // ---- Step 1/3: the 21-answer self-check, compared to the fixture ---------
     const selfCheck = await owner.query(apiRole.buildSelfCheckSql(roleName));
     const verdict = apiRole.comparePrivilegeAnswers(selfCheck.rows, roleName);
     report.privilege_self_check = {

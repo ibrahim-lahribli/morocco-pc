@@ -28,7 +28,7 @@ the engine's public barrels (`src/recommendation/*/index.js`), the `scripts/` CL
    testing lessons. Read before touching migrations or DB scripts.
 4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
-5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–55). Check here
+5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–56). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
    `grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` answers "is X decided, and how?"
    To ADD a decision entry, follow `docs/decisions/TEMPLATE.md` (audit A10) — its post-write
@@ -74,7 +74,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 | `docs/GLOSSARY.md` | Load-bearing vocabulary (status vocabulary, decision ids, the `D2` vs `Decision 2` collision) |
 | `docs/TEST_MAP.md` | Which test pins which contract — check before changing pinned behavior |
 | `docs/RECIPES/` | Task checklists: add a migration/seed/scoring-model/pair-evaluator/stage/status-claim, provision the API role, refresh/import offers, deploy the EU colocation, and the first-launch owner sequence |
-| `database/migrations/` | Authoritative schema (`001`–`022`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
+| `database/migrations/` | Authoritative schema (`001`–`023`, apply in filename order; applied state tracked in `schema_migrations`, OG-14) |
 | `database/seeds/` | DML-only, idempotent seed data |
 | `database/LAYER4_RECONCILIATION_PLAN.md` | Historical Layer 4 reconciliation record |
 | `scripts/` | CLIs: migrations, seeds, schema verifiers, engine checks |
@@ -252,7 +252,7 @@ remote already stores (`ref` = the branch to run on) — keep that token out of 
 untouched). On `push`/`pull_request` touching `apps/web/**` (and `workflow_dispatch`; never
 `schedule`), a `web` job runs in `apps/web`: `npm ci`, then `typecheck`, `lint`, `check:tokens`,
 `check:i18n`, `check:api-types` (the S4 contract-drift gate, so the triggers also include
-`apps/api/test/unit/openapi-v1.7.json`), `build`, `playwright install --with-deps chromium`,
+`apps/api/test/unit/openapi-v1.10.json`), `build`, `playwright install --with-deps chromium`,
 `npm test` and `test:lighthouse` (the ENFORCED budgets on a fixture result page — `error` level,
 median of three, since S19) on Node 22
 — uploading `apps/web/test-results` when a run fails and `apps/web/.lighthouseci` always. It
@@ -277,7 +277,7 @@ Arabic guide bodies, `ar` hreflang + sitemap entries, and a locale key/placehold
 states (`e2e/legal.spec.ts`, `e2e/analytics.spec.ts`, `e2e/states.spec.ts`), S23 the compare view
 (`e2e/compare.spec.ts`, 11 specs) and S25's saved builds at `/{locale}/enregistrements`
 (`e2e/saved.spec.ts` 11, `e2e/saved-model.spec.ts` 12, plus 2 footer-entry specs in
-`e2e/shell.spec.ts`) plus S26's input effects (`e2e/inputs-applied.spec.ts`, 5 specs, Decision 52): the suite is **366 specs**, measured 2026-10-24 without `E2E_BROWSER_API` as **364 passed / 2 skipped** (the earlier 361 was measured 2026-10-23 with `E2E_BROWSER_API=1` —
+`e2e/shell.spec.ts`) plus S26's input effects (`e2e/inputs-applied.spec.ts`, 5 specs, Decision 52) plus S24's live swap control (`e2e/swap.spec.ts`, 7 specs, Decision 55): the suite is **375 specs**, measured 2026-10-25 without `E2E_BROWSER_API` as **373 passed / 2 skipped** (the earlier 361 was measured 2026-10-23 with `E2E_BROWSER_API=1` —
 **360 passed and 1 skipped**, the skip being `e2e/wizard-engine.spec.ts` (the opt-in real-engine
 harness below); without that env var it is 359 passed and 2 skipped. The last CI evidence for this
 job is the S22 runs listed below — S23 and S25 are local commits, not pushed, so their figures are
@@ -406,7 +406,7 @@ of repository inactivity** — an idle repo silently stops getting the nightly g
     `git diff` is empty (CRLF/stat-cache); `git update-index --refresh` or `git checkout --` settles it.
 15. **Node-version trap: `node --test` cancels an accidentally-nested test on Node 22 (`cancelledByParent`) but silently runs it on Node 24 — and both CI jobs pin Node 22, so a green local run on 24 can hide a red CI job.** A file with an unterminated `test(...)` registers the tests written after it as its subtests; Node 22 finalizes the parent first and cancels them. Reproduce the CI leg with `npx -y node@22 --test "src/**/*.test.js"` (and `... "scripts/lib/*.test.js"`), and read the `# cancelled` line — a cancelled test is NOT counted as `fail`. There is no `engines` field and no `.nvmrc`.
 16. **`node-postgres` returns a `NUMERIC` column as a STRING, so any pure function that claims a read-path caller must accept that shape.** Verified 2026-10-14: `SELECT 1000.00::numeric` -> `"1000.00"` while `3::integer` -> `3` — NUMERIC is deliberately left unparsed (exact decimal vs double). `recommendation_query.budget_amount`, `build_candidate.total_price`, `build_candidate.score` and `build_component.selected_price` are all NUMERIC, which is why the repo's loaders coerce (`offers/select.js` `Number(row.price)`, `filtering/context-loader.js` `Number(row.width_slots)`) and the API presenter has `toNumberOrNull`. A fixture that uses JS numbers for those passes while the LIVE read path throws `INVALID_FIELD_VALUE` — E7 shipped that defect until a read-path probe caught it, so any read-path claim needs a `toFixed(2)`-string fixture.
-17. **The API's read path is `apps/api/src/repository.js` `readRecommendationResult(db, queryId)` — probe through it rather than re-writing its SQL.** Two traps: `SELECT_QUERY_SQL` returns only `id, budget_amount, currency, use_case, created_at` (the `priority` and `resolution` columns EXIST but are not fetched, so a read-path derivation of those two needs its own SELECT), and `SELECT_BUILDS_SQL` INNER-joins `recommendation_result`, so a fixture that inserts only `build_candidate` + `build_component` reads back **0 rows**. Order is `recommendation_query` -> `build_candidate` -> `recommendation_result` -> `build_component` (its `product_id` needs a real `product` row); delete children first and assert residue 0 LAST, because a leftover `recommendation_query` row blocks the golden harness preflight.
+17. **The API's read path is `apps/api/src/repository.js` `readRecommendationResult(db, queryId)` — probe through it rather than re-writing its SQL.** Two traps: `SELECT_QUERY_SQL` returns only `id, budget_amount, currency, use_case, created_at` (the `priority` and `resolution` columns EXIST but are not fetched, so a read-path derivation of those two needs its own SELECT), and `SELECT_BUILDS_SQL` INNER-joins `recommendation_result`, so a fixture that inserts only `build_candidate` + `build_component` reads back **0 rows**. Order is `recommendation_query` -> `build_candidate` -> `recommendation_result` -> `build_component` (its `product_id` needs a real `product` row); delete children first and assert residue 0 LAST, because a leftover `recommendation_query` row blocks the golden harness preflight. Since Decision 56 a committed swap adds a `recommendation_swap` row holding FKs to BOTH the result and the derived candidate, so ANY cleanup that deletes those rows must delete `recommendation_swap` first (or its FK raises and the whole delete leaks).
 18. **The golden harness's landing escalation is armed by DATA, not by code landing.** `test/golden/scenarios.json` `current_epic` (currently `"E8"`, advanced from `"E1"` on 2026-10-24 by the H3 review) is compared against each scenario's `expect_builds_after`, and ANY MEASURED UNKNOWN becomes a HARD FAIL (exit 1) once `current_epic >= that epic` — so S17/S18 (`expect_builds_after: "E6"`) turn the gate RED the moment the pointer reaches E6 without GPU-less OFFICE builds; they now build, so the escalation is armed and green. A row whose ARTIFACT was never produced is `unmeasured` and never escalates, because `--filter=S06,S17,S18` leaves peer scenarios (A6's `S03` reference, A4/A5's pair partner) absent by construction and a narrowed run must not report RED for inputs it deliberately did not measure. Advancing `current_epic` is a gate-affecting act, never a status edit.
 
 ## 8. Hard rules

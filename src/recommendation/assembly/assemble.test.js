@@ -5,7 +5,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { assembleBuilds, EXPANSION_ORDER, evaluateBuildReplacement } = require('./assemble');
+const {
+  assembleBuilds,
+  EXPANSION_ORDER,
+  evaluateBuild,
+  evaluateBuildReplacement,
+} = require('./assemble');
 const { priceKey, validatePrices } = require('./prices');
 const { selectDiverseTop } = require('../ranking/select-diverse');
 const { validateEngine3Input } = require('./input');
@@ -1609,11 +1614,12 @@ test('Decision 16: a malformed filtering_context fails fast before expansion', (
   }
 });
 
-test('public surface is assembleBuilds plus the Decision 55 preview', () => {
+test('public surface is assembleBuilds plus the Decision 55/56 verdicts', () => {
   const api = require('./assemble');
   assert.deepEqual(Object.keys(api).sort(), [
     'EXPANSION_ORDER',
     'assembleBuilds',
+    'evaluateBuild',
     'evaluateBuildReplacement',
   ]);
   assert.equal(typeof assembleBuilds, 'function');
@@ -1621,6 +1627,9 @@ test('public surface is assembleBuilds plus the Decision 55 preview', () => {
   assert.equal(typeof evaluateBuildReplacement, 'function');
   // One argument object, like assembleBuilds: no positional overload.
   assert.equal(evaluateBuildReplacement.length, 1);
+  // Decision 56's whole-build verdict takes the same single argument object.
+  assert.equal(typeof evaluateBuild, 'function');
+  assert.equal(evaluateBuild.length, 1);
   assert.deepEqual([...EXPANSION_ORDER], [
     'CPU',
     'MOTHERBOARD',
@@ -1683,9 +1692,12 @@ test('assemble.js uses only the five allowed engine requires', () => {
   const exportsFound = [...ASSEMBLE_SOURCE.matchAll(/module\.exports\s*=\s*\{([^}]*)\}/g)].map((m) =>
     m[1].replace(/\s/g, '')
   );
-  // Decision 55 adds the swap preview; the one-table/one-evaluator pin above
-  // is what keeps it from growing a second vocabulary.
-  assert.deepEqual(exportsFound, ['assembleBuilds,EXPANSION_ORDER,evaluateBuildReplacement']);
+  // Decision 55 adds the swap preview and Decision 56 the whole-build verdict
+  // the committed swap persists; the one-table/one-evaluator pin above is what
+  // keeps either from growing a second vocabulary.
+  assert.deepEqual(exportsFound, [
+    'assembleBuilds,EXPANSION_ORDER,evaluateBuild,evaluateBuildReplacement',
+  ]);
 });
 
 // ---------------------------------------------------------------------------

@@ -5468,7 +5468,7 @@ Partly supersedes Decision 43's REJECTED alternative #3 ("Read the policy in ret
 
 ## Decision 55 — a swap PREVIEW is a read-only evaluation: the engine owns the verdict and the persisted pass stays a record
 
-Status: RESOLVED 2026-10-25 — CD-8 is ONE read-only evaluation route backed by ONE new pure Engine 3 export over the SAME pairwise-check table assembly uses; nothing is persisted, no build row is rewritten, and a mutating "commit swap" is explicitly left to its own future decision. ENGINE HALF IMPLEMENTED 2026-10-25 (`assembly` `evaluateBuildReplacement` + agreement tests); the route, the UI and the `; IMPLEMENTED` flip are still open, so S24's control stays disabled.
+Status: RESOLVED 2026-10-25 — CD-8 is ONE read-only evaluation route backed by ONE new pure Engine 3 export over the SAME pairwise-check table assembly uses; nothing is persisted, no build row is rewritten, and a mutating "commit swap" is explicitly left to its own future decision (answered 2026-10-26 by Decision 56, which APPENDS a derived build instead of editing the pass). IMPLEMENTED 2026-10-25 in three parts: the ENGINE HALF (`assembly` `evaluateBuildReplacement` + agreement tests), the ROUTE (contract v1.8.0, `orchestrator/swap-preview.js` + `GET /v1/recommendations/:id/builds/:rank/swap-preview`), and S24's UI (`apps/web/components/result/swap-panel.tsx`, contract v1.9 for the catalogue variant identity it needs).
 
 Date: 2026-10-25. Defines CD-8 (`docs/plans/agent3-web-plan.md` §2.1), the contract S24 was waiting on, BEFORE any code exists, so the engine, the API and the web UI cannot invent three versions of "swappable". It closes no gap row: it is the missing contract, not a defect fix. NOT a migration, no seed, no engine behaviour change until the export lands, and NOT the mutation that would persist a swapped build (item 9).
 
@@ -5532,4 +5532,169 @@ A REJECT candidate is REFUSED (`INVALID_FIELD_VALUE`) rather than previewed: rej
 
 Measured: `npm run test:unit` 1191 pass / 0 fail / 0 cancelled on Node 24.21.0 AND on the Node 22 CI leg (`npx -y node@22 --test "src/**/*.test.js"`), up from 1185; `assembly/assemble.test.js` alone 90/90. No migration, no seed, no API change, no web change.
 
-Still open, in the order of items (b)-(d): the route + contract v1.8.0 + the coverage / `check:api-types` gates; S24's UI reading `compatibility` / `price` / `budget`; then the `; IMPLEMENTED <date>` flip.
+Still open at the time of that update, in the order of items (b)-(d): the route + contract v1.8.0 + the coverage / `check:api-types` gates; S24's UI reading `compatibility` / `price` / `budget`; then the `; IMPLEMENTED <date>` flip. (b) landed the same day - see the next UPDATE.
+
+### UPDATE 2026-10-25 (later) — the route landed (b); the UI and the flip did not
+
+`GET /v1/recommendations/:id/builds/:rank/swap-preview` is served as **contract v1.8.0**: one new path,
+no field on any existing response, `openapi-v1.8.json` replacing v1.7 (one snapshot in the tree), the
+coverage gate declaring 200/404/422/429/500, and `apps/web`'s `check:api-types` moved to 1.8.0 / nine
+paths with `schema.d.ts` regenerated in the same change.
+
+The composition lives in `src/recommendation/orchestrator/swap-preview.js`, not in `apps/api`, because
+`import-boundary.test.js` pins the API to stage barrels and forbids a route from importing the engine at
+all: composing loaders plus pure stages is orchestrator work. `engine.js` therefore forwards
+`evaluateSwapPreviewSnapshot` by identity (like `catalogVersion`) and exposes `swapPreviewRoles()` from the
+ASSEMBLY barrel, which is the sixth barrel it requires — a deliberate edit to that test, with a comment.
+
+**The full pool, not a narrowed one.** The preview runs `loadQueryInput -> loadCandidates ->
+selectCandidatePool -> selectOfferPrices -> loadFilteringContext -> filterCandidates`, exactly as a pass
+does, because item 4 says "the same filtering and offer-selection path". A narrowed pool would be a second
+path free to diverge while looking correct on a fixture. The cost is a pass's read half, which is why the
+route takes POST's 30/min rather than GET's 120/min.
+
+**The scoring model is NOT loaded.** A pass loads it for retention, scoring and Engine 3; a preview runs
+none of those, and every stage it does run takes no configuration. Loading it would add a statement and a
+failure mode (`SCORING_MODEL_UNAVAILABLE` over a perfectly reconstructable build) for a value nothing
+downstream reads.
+
+**`picked` is rebuilt from the live verdicts, never from the rows.** `build_component` supplies IDENTITY
+(which product is in which role); Engine 2D supplies the verdict. Fabricating one from a row would invent a
+status, and would judge the hypothetical swap against relationships nobody evaluated. A persisted pick with
+no live verdict — or whose live verdict is REJECT — makes the build NOT EVALUABLE, and `blocked_role` names
+the first such role in `EXPANSION_ORDER`; the route turns that into `404 BUILD_NOT_EVALUABLE`. The rank is
+resolved through `recommendation_result` in ONE statement (`SELECT_BUILD_FOR_SWAP_SQL`), requiring a
+`build_candidate` (an INNER JOIN, so `build_candidate_id IS NOT NULL` holds) and at least one component
+row, which the repository enforces because a LEFT-JOIN null row cannot express it — an empty `picked` would
+otherwise answer a confident PASS over nothing.
+
+**An ineligible candidate is REFUSED, not previewed.** It answers one synthetic pair
+`{ check: "eligibility", role, partner_role: null, status: "FAIL", reason, evidence: [] }` with
+`status: "FAIL"` and a null price — one vocabulary, no new top-level field — and `evaluateBuildReplacement`
+is never called. The three reasons stay distinguishable: the REJECT verdict's own code,
+`NO_ELIGIBLE_OFFER` (in the 2C pool, dropped by Stage 1) and `PRODUCT_NOT_CANDIDATE` (never in the pool),
+with `INCOMPATIBLE` as the honest fallback for a rejection that recorded no code.
+
+**`catalog_version` is the LIVE digest**, not the build's recorded one, because the verdict is a function
+of the catalog as it is now; the route reuses `resolveCatalogVersion`, so a broken digest degrades to `null`
+rather than a 500 over a label. The 200 is served `Cache-Control: no-store`.
+
+**Measured:** `npm run test:unit` **1213 pass / 0 fail / 0 cancelled** on Node 24.21.0 AND on the Node 22 CI leg
+(`npx -y node@22 --test "src/**/*.test.js"`), including the new `orchestrator/swap-preview.test.js` (22) and
+the re-pinned `orchestrator/index.test.js`; `npm run test:api` **163 pass / 0 fail**, including
+`swap-preview.test.js` (23) and the snapshot/coverage/contract gates; `npm run test:api:db` **11 passed /
+0 failed** on the TEST branch, including the new end-to-end preview (a real 20000 MAD GAMING pass, a
+self-swap that reproduces the persisted total, a real socket-mismatch FAIL, residue 0);
+`apps/web` `gen:api-types` + `check:api-types` report "contract 1.8.0, 9 paths, schema.d.ts byte-identical".
+No migration, no seed and no new grant: `morocco_pc_api`'s existing SELECTs are enough, so `verify:replay`
+is untouched.
+
+**Still open after that update:** items (c) and (d) - S24's UI and the `; IMPLEMENTED` flip. Both landed
+the same day; see the UPDATE below, which supersedes this paragraph.
+
+**UPDATE 2026-10-25 (c)+(d) - S24's control is LIVE, and this decision is IMPLEMENTED.**
+
+`apps/web/components/result/swap-panel.tsx` is a client island on EVERY build card (V13: swapping belongs to a
+build, not to rank 1), replacing the disabled placeholder the sprint shipped as its honest fallback. The rules
+live in `lib/result/swap.ts` so they are stated once: the roles offered are the INTERSECTION of the build's own
+components with the engine's `EXPANSION_ORDER` (a slot the build does not have is not a swap, and
+`SSD_SECONDARY` is never offered because the API refuses it), the component already installed is not offered
+back, and a GPU choice is one option per SKU - the variant is what the endpoint requires for role GPU, so the
+picker cannot be product-keyed without producing a 422.
+
+**What the control asks, and when.** Opening the panel is local state. The catalogue read
+(`GET /v1/catalog/products?role=<role>`) happens when a ROLE is chosen, and the preview only when the button is
+pressed - the endpoint is priced like a POST (30/min) because a preview pays a pass's read half, so an eager
+fetch per card would spend that budget on curiosity. `e2e/swap.spec.ts` pins it: opening the panel and listing
+roles fires NO `/swap-preview` request, and no catalogue read either. The client asks with
+`cache: "no-store"`, honouring the route's own policy, and sends `product_variant_id` only where the catalogue
+gave it one.
+
+**What it renders, and what it refuses to invent.** The verdict is the API's aggregate, word for word:
+`PASS` / `UNKNOWN` / `FAIL` each get their own word and their own sentence, and UNKNOWN is never folded into
+"compatible" - the three-state vocabulary is load-bearing. Pairs are named by their ROLES and their status in
+words (`Processeur et Carte mère : incompatible.`), never by a check key or a reason code; the synthetic
+`eligibility` pair is separated from the relations and its three reason codes get three sentences, because "not a
+candidate", "no eligible offer" and "incompatible" ask the reader to do different things. The price line, the
+delta, the offer's provenance word and the budget bar all come from the response (`price.*`, `budget.*`): the
+browser computes no total and no delta, and a null operand renders a sentence instead of a 0. The result region
+is `aria-live="polite"` from the first render, so the verdict is announced rather than silently painted.
+
+**Contract v1.9 was required, and it is additive.** A GPU candidate is a `(product, variant)` pair (Engine 2B)
+while `GET /v1/catalog/products` served SLUGS only and the detail page strips `product_variant_id` as identity -
+so no client could construct a GPU swap at all. Each list row now carries `id` (the `product.id`) and
+`variants: [{ id, sku }]` in the engine's own variant order (`[]` when the product has none); no path and no
+existing field changed. The snapshot is `apps/api/test/unit/openapi-v1.9.json` (v1.8 deleted, one in the tree)
+and `apps/web`'s `check:api-types` moved to 1.9.0 / nine paths in the same change, as item 8 requires.
+
+**Measured:** `npm run test:api` **164 pass / 0 fail** (the catalogue gains a variants test and the snapshot
+assertions for `id` + `variants`); `npm run test:api:db` **12 passed / 0 failed** on the TEST branch, including
+a new catalogue test that compares a variant-keyed product's served SKUs against `product_variant` itself;
+`apps/web` `typecheck`, `lint`, `check:tokens`, `check:i18n` (both catalogues, identical keys and placeholders),
+`check:api-types` and `build` green; the Playwright suite **373 passed / 2 skipped**, with `e2e/swap.spec.ts`
+now 7 specs (live control and its role list, PASS with the API's numbers and the variant-carrying request, FAIL
+as a 200 result said in words with no enum on screen, UNKNOWN as its own state with its price intact,
+`NO_ELIGIBLE_OFFER` with no price and no bar, the Arabic/RTL panel, and 360 px with no sideways scroll). The
+fixture mock answers the swap route by the CHOSEN `product_id`, and validates the role and the GPU variant
+exactly as the API does.
+
+**Still open, and deliberately not faked (as written on 2026-10-25):** a MUTATING swap - persisting a
+replacement - is not this decision and would need its own (item 9); S24's control has no "apply" affordance, by
+design. **Answered 2026-10-26 by Decision 56**, which appends a derived build rather than editing the pass, and
+with it S24 gained its apply control. The engine half, the route
+and the UI are all measured against the TEST branch or the fixture mock; nothing here has been exercised
+against a deployed origin, which S26 owns.
+
+## Decision 56 — a committed swap is an APPENDED derived build: the pass stays a record
+
+Status: RESOLVED 2026-10-25 — Decision 55 item 9's mutation, implemented as an APPEND: one `recommendation_swap` row (migration 023) plus its OWN `build_candidate` and `build_component` rows, written in one transaction. No UPDATE and no DELETE anywhere, so the pass's rank, dedupe key, preset pointer, `strategy_key` and explanation stay the record they claim to be, and the API serves the user's swapped build for that rank. IMPLEMENTED 2026-10-26 in four parts: migration `023_recommendation_swap.sql` (applied to the TEST branch; the shared apply is the owner's restore-point-guarded step), the ENGINE HALF (`assembly.evaluateBuild`, `orchestrator/swap-commit.js`, the `composeSwap` reuse and `readCommittedSwap`), the ROUTE (contract v1.10.0 `POST /v1/recommendations/:id/builds/:rank/swap`, the effective-build read path, `swapped` and the nullable `explanation`) and S24's apply control; `recommendation_swap` joined the production role's INSERT grant, so its self-check is 21/21 (rehearsed green on the TEST branch).
+
+Date: 2026-10-25. Answers the one question Decision 55 refused to answer (`; item 9: "A mutating swap is OUT of scope, deliberately"`) and closes no gap row: it is the missing mutation contract, not a defect fix. It does NOT change the preview, does not re-run a pass, and does not make a pass editable.
+
+### Current situation
+
+- The pass is a record with a stable address: `recommendation_result` is unique on `(recommendation_query_id, rank)`, `build_candidate` carries `total_price` / `score` / `compatibility_status`, and each part is one `build_component` row per role (`uq_build_component_role_singular`) holding `product_id`, `product_variant_id`, `selected_price`, `currency`, `store_id`, `price_checked_at`, `offer_class` and `store_offer_id` (the Decision 35 provenance snapshot).
+- The wire addresses a build by `(query id, rank)` only; there is no build id on the contract.
+- The production role `morocco_pc_api` holds SELECT on `public`, INSERT on the six Layer 4 tables, DELETE on `build_rejection` only, and THREE column-scoped UPDATEs — never a row-wide one (Decision 46 item 7). A mutation expressed as an UPDATE is therefore not merely undesirable: it is ungranted.
+- Decision 55 shipped the read-only preview (`evaluateBuildReplacement`, `orchestrator/swap-preview.js`, `GET .../swap-preview`, S24's UI) and named the four things a mutation would have to settle: pass immutability, the dedupe key, the presets, and rank / `strategy_key` invalidation.
+
+### Problem
+
+A reader who previews a replacement and accepts it needs the build they own to BE the swapped one — after a reload, on another device, next to a saved build. Three cheap implementations each break something the pass guarantees:
+
+1. **Edit `build_component` in place.** The pass stops being a record: `rank`, `strategy_key`, `engine_version`, the Decision 47 dedupe key, `recommendation_preset` pointers and the golden harness's fingerprints all describe the ORIGINAL assembly, and a later reader could not tell an engine-produced build from an edited one. The role's grants also forbid it by design.
+2. **Re-run the pass with a role pinned.** Assembly has no pin, and a re-run is a NEW pass — new scores, a new rank, a new `recommendation_query` row that would enter dedupe, the presets and the golden harness's preflight (an unmarked row blocks `eval:scenarios`).
+3. **Keep the swap in the browser.** It dies on reload, which is exactly what the reader asked to keep.
+
+### Decision
+
+1. **Append, never edit.** A commit INSERTs one `build_candidate`, its `build_component` rows and one `recommendation_swap` row, in ONE transaction. It issues no UPDATE and no DELETE, touches no `recommendation_result` row, and needs no new grant beyond INSERT on the new table.
+2. **What the derived build IS.** Its components are the source build's own rows, copied verbatim, with the swapped role's row replaced by the candidate and its Stage 1 carrier price (`selected_price`, `currency`, `store_id`, `price_checked_at`, `offer_class`, `store_offer_id` — the same snapshot Decision 35 writes). `total_price` is `persisted total - previous + next`: the SAME arithmetic `presentSwapPreview` performs, so the commit and the preview the reader just saw cannot disagree about the number.
+3. **The verdict and the score are the engine's, over the WHOLE build.** `compatibility_status` comes from a NEW export, `assembly.evaluateBuild({ picked, filteringContext })`, which evaluates every pair of the substituted build over the SAME `PAIRWISE_CHECKS` table `assembleBuilds` uses — not from the role-scoped preview aggregate, which is a proper subset by construction and would report a build status computed from a fraction of its relations. `score` is Engine 4's `computeBuildScore` under the pass's OWN pinned model (`recommendation_query.scoring_model_id`), because a stored score that did not move with the parts would be a lie.
+4. **The refusal rule is assembly's, not a new one.** PASS and UNKNOWN commit and the verdict is STORED, never laundered — a pass persists UNKNOWN builds and counts them (Decision 15/23), so refusing UNKNOWN here would make the API stricter than the engine. FAIL and an ineligible candidate are refused with `409 SWAP_NOT_COMMITTABLE`, and the message carries the verdict.
+5. **A swap replaces a part that is THERE.** `previous === null` (the GPU-less build being given a GPU) is refused `409 SWAP_ROLE_ABSENT`. The preview deliberately reports an unknown total for that case (Decision 55 item 3's NULL-never-0 rule), while a commit must persist a KNOWN `total_price`; adding a part is a different operation from replacing one, and it needs its own arithmetic and its own decision.
+6. **ONE committed swap per build.** `UNIQUE (source_result_id)`. A second attempt — identical or not — answers `409 SWAP_ALREADY_COMMITTED`, because the alternatives are an UPDATE (forbidden by item 1) or a chain the wire has no address for (a derived build has no rank). Stacking swaps is a future decision, and the read path labels the one that exists.
+7. **The read path serves the user's build, labelled.** `SELECT_BUILDS_SQL` LEFT JOINs `recommendation_swap` on the source result and joins the EFFECTIVE candidate (`COALESCE(sw.build_candidate_id, r.build_candidate_id)`), so POST and GET both show the swapped parts, the recomputed total and the recomputed score, plus `swapped: { role, committed_at, engine_version } | null`. `SELECT_BUILD_FOR_SWAP_SQL` (the PREVIEW's read) joins the same effective candidate, so after a commit a preview prices the part that is installed now and judges the pick set on screen instead of the assembly the pass originally produced - the commit still cannot run twice (item 6). What stays the PASS's: `rank`, `strategy_key`, the dedupe key and the presets. A swapped build has NO engine explanation — the stored one explains parts that are no longer there — so `explanation` becomes NULLABLE on the wire. The column always was (`recommendation_result.explanation` is `text NULL`), which means the old `Type.String()` was also a latent unserializable row, not only a swap question.
+8. **The judge is the preview's own composition.** `orchestrator/swap-preview.js` exposes the ONE pipeline it already runs (`composeSwap`: query loader -> 2B -> 2C -> Stage 1 -> 2D, then the pick rebuild), and `orchestrator/swap-commit.js` consumes it. A commit cannot re-derive eligibility, re-run the pass, or judge a different pool — it asks the same questions the preview asked and writes the answer.
+9. **Contract v1.10.0**: ONE new path `POST /v1/recommendations/:id/builds/:rank/swap` (body `{ role, product_id, product_variant_id? }`, the same validation the preview applies), `swapped` added to the build object, `explanation` widened to nullable. `201` commits, `200` never appears; `404` unknown build / `BUILD_NOT_EVALUABLE`, `409` the three refusals, `422` schema, `429` (30/min — a commit pays a preview's read half), `500`. The snapshot is `apps/api/test/unit/openapi-v1.10.json` (v1.9 deleted, one in the tree) and `apps/web`'s `check:api-types` follows in the same change.
+10. **Grants: one new INSERT target.** `recommendation_swap` joins `WRITE_TARGET_TABLES` (seven tables), so the role's self-check grows from 20 answers to 21 and the rehearsal/apply scripts assert it. No new UPDATE and no DELETE — the append-only shape is what keeps the privilege set honest.
+11. **Migration 023 is BRANCH-FIRST** (the 021/022 pattern). It is applied to the TEST branch in this change; the shared apply is the owner's separate restore-point-guarded step, so `verify:replay --reference=shared` reports exactly 023's objects until then. That drift is the documented signal of a migration waiting for its shared apply (AGENTS.md section 6), never a broken replay.
+
+### Rejected alternatives
+
+- **Edit `build_component` / `build_candidate` in place.** Loses "a pass is a record" and is ungranted by design (Decision 46 item 7). Re-opening the grants to make it possible would be the tail wagging the dog.
+- **A second pass with the role pinned.** No pin exists; a re-run is a new pass with new scores, a new rank and a new query row that enters dedupe, the presets and the golden harness.
+- **A client-side overlay (or a saved-build-only edit).** Dies on reload and leaves the API's build describing neither what the user chose nor what they will be charged.
+- **Storing the swap as PASS when the engine said UNKNOWN.** Launders the three-state vocabulary into a two-state one and puts an unverified relationship into a durable recommendation.
+- **Committing on FAIL with a warning.** The pass never persists a FAIL build (assembly excludes it); a mutation that did would create a build no engine pass could ever produce.
+- **Chained swaps (swapping a derived build).** Needs an address for a derived build and a decision about which link a `previous` price comes from; one level, labelled, is enough for S24 and is reversible by a later decision.
+
+### Verdict for this pass
+
+Design and implementation in the same change, measured 2026-10-26:
+
+- `npm run test:unit` 1229 pass, including the 16 new `orchestrator/swap-commit.test.js` cases; `npm run test:api` 179 pass, including the 14 new route cases and the regenerated v1.10 snapshot.
+- `apps/api/test/db/swap-commit.db.test.js` against the TEST branch: a real 20000 MAD GAMING pass, a FAILING swap refused `409` with the seven Layer 4 table counts unchanged, then a boot-SSD swap to a DIFFERENT, differently priced product `201` whose derived total is exactly `persisted - previous + next`, whose derived candidate/components/link read back, whose pass rows are byte-identical afterwards, whose GET serves the derived candidate with the replacement's components, the recomputed score and `explanation: null`, and whose follow-up preview prices the installed part (the reverse swap lands back on the pass's total) - the assertion that fails when the preview reads the original assembly instead; the second commit is `409 SWAP_ALREADY_COMMITTED` and residue is 0 in `recommendation_swap`, `recommendation_query`, `recommendation_result`, `build_candidate`, `build_component` and `build_rejection`.
+- `node scripts/rehearse-api-role.js` on the TEST branch: `ok: true` with `recommendation_swap_insert` expected `true`, actual `true` - the grant item is proved against a real role, not asserted.
+- `apps/web`: `typecheck`, `lint`, `check:tokens`, `check:i18n`, `check:api-types` (10 paths, contract 1.10.0, byte-identical types) and `build` all pass; `e2e/swap.spec.ts` is 10/10 in a browser against the fixture mock (apply posts the preview's triple and shows the 201's total, FAIL offers no apply, and a build served as swapped shows the badge and the no-explanation sentence), and `result`/`rtl`/`a11y` stay green (84/84).
+- Still open by design: migration 023 has NOT been applied to the shared database (branch-first, owner-gated) and the deployed role has not been re-granted there; until both happen `verify:replay --reference=shared` reports exactly 023's objects.

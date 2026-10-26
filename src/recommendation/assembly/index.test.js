@@ -23,11 +23,11 @@ const assemble = require('./assemble');
 const gpuInput = require('./gpu-input');
 const pipeline = require('./pipeline');
 
-test('assembly barrel exposes exactly the ten-export public API, in order', () => {
-  // The ten expected exports exist - and only those ten, in this order.
+test('assembly barrel exposes exactly the eleven-export public API, in order', () => {
+  // The eleven expected exports exist - and only those eleven, in this order.
   // The Step 1-4 exports keep their original positions; GPU-input loading and
   // the assembly entry point are appended, then Decision 55's read-only
-  // replacement preview.
+  // replacement preview and Decision 56's whole-build verdict.
   assert.deepEqual(Object.keys(assembly), [
     'validateEngine3Input',
     'priceKey',
@@ -38,6 +38,7 @@ test('assembly barrel exposes exactly the ten-export public API, in order', () =
     'EXPANSION_ORDER',
     'buildGpuInputs',
     'assembleBuildsForRecommendation',
+    'evaluateBuild',
     'evaluateBuildReplacement',
   ]);
 });
@@ -59,6 +60,8 @@ test('assembly barrel re-exports every export by identity - no wrapper, no copy'
   assert.strictEqual(assembly.EXPANSION_ORDER, assemble.EXPANSION_ORDER);
   // Decision 55 (CD-8): the swap preview, by identity like everything else.
   assert.strictEqual(assembly.evaluateBuildReplacement, assemble.evaluateBuildReplacement);
+  // Decision 56: the whole-build verdict a committed swap persists.
+  assert.strictEqual(assembly.evaluateBuild, assemble.evaluateBuild);
 
   // GPU-input loading (Step 3 inputs) - by identity, no wrapper, no copy.
   assert.strictEqual(assembly.buildGpuInputs, gpuInput.buildGpuInputs);

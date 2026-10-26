@@ -201,7 +201,15 @@ test('every served API route is documented, with its success and error responses
     'GET /v1/meta/options',
     'GET /v1/presets',
     'GET /v1/recommendations/:id',
+    // Decision 55 (contract v1.8.0): the read-only swap preview. Its position in
+    // this sorted list is pinned deliberately - a route that appeared but was
+    // never documented fails the gap check above, and one that disappeared fails
+    // here rather than passing vacuously.
+    'GET /v1/recommendations/:id/builds/:rank/swap-preview',
+    // Decision 56 (contract v1.10.0): the COMMIT. Same collection direction as
+    // the POST above, so it sorts after it rather than beside the preview.
     'POST /v1/recommendations',
+    'POST /v1/recommendations/:id/builds/:rank/swap',
   ]);
 
   assert.deepEqual(gaps, [], 'a served route that is not in the contract (or lacks 429/500) is a gap');

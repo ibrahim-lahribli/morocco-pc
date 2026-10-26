@@ -216,10 +216,16 @@ const SELECT_REUSABLE_QUERY_SQL = [
 const SELECT_BUILDS_SQL = [
   'SELECT',
   '  r.rank,',
-  '  r.explanation,',
+  // Decision 56 item 7: a swapped build has NO engine explanation - the stored
+  // one explains parts that are no longer there - so it reads back NULL rather
+  // than serving prose about a component the reader replaced.
+  '  CASE WHEN sw.id IS NULL THEN r.explanation ELSE NULL END AS explanation,',
   '  r.engine_version,',
   '  r.strategy_key,',
   '  r.created_at AS result_created_at,',
+  '  sw.component_role AS swapped_role,',
+  '  sw.created_at AS swapped_committed_at,',
+  '  sw.engine_version AS swapped_engine_version,',
   '  b.id AS build_candidate_id,',
   '  b.total_price,',
   '  b.score AS build_score,',
@@ -235,12 +241,88 @@ const SELECT_BUILDS_SQL = [
   '  COALESCE(p.display_name, p.name) AS product_name,',
   '  v.sku AS variant_sku',
   'FROM recommendation_result r',
-  'JOIN build_candidate b ON b.id = r.build_candidate_id',
+  // Decision 56: the committed swap of THIS result, if any. LEFT JOIN, so a
+  // pass with no swap is byte-identical to what it always was.
+  'LEFT JOIN recommendation_swap sw ON sw.source_result_id = r.id',
+  // The EFFECTIVE build: the swapped one when a commit exists, the pass's own
+  // otherwise. `COALESCE` keeps the pre-56 behaviour exactly (a result with no
+  // candidate still joins to nothing).
+  'JOIN build_candidate b ON b.id = COALESCE(sw.build_candidate_id, r.build_candidate_id)',
   'LEFT JOIN build_component c ON c.build_candidate_id = b.id',
   'LEFT JOIN product p ON p.id = c.product_id',
   'LEFT JOIN product_variant v ON v.id = c.product_variant_id',
   'WHERE r.recommendation_query_id = $1',
   'ORDER BY r.rank ASC, c.component_role ASC, c.id ASC',
+].join(' ');
+
+/**
+ * ONE persisted build, addressed by (query id, rank), with the query facts a
+ * swap PREVIEW needs (Decision 55 item 2).
+ *
+ * It reads the EFFECTIVE build - the swapped one when Decision 56's commit has
+ * happened, the pass's own otherwise - exactly as `SELECT_BUILDS_SQL` does, so
+ * the preview describes the build the reader is looking at. Reading the pass's
+ * original components instead would report a `previous` price for a part that
+ * is no longer installed and evaluate the verdicts against a build that is no
+ * longer served. A commit still cannot happen twice: `readCommittedSwap` runs
+ * before the engine composes anything and the UNIQUE index is the race guard.
+ *
+ * It reuses SELECT_BUILDS_SQL's join shape and aliases on purpose - a second
+ * spelling of the same rows would let the preview and the served build disagree
+ * about which component sits in which role.
+ *
+ * THREE conditions decide "this build exists", and all three are in this ONE
+ * statement so they cannot be checked apart from each other:
+ *
+ *   1. `recommendation_result` has a row at (query, rank). The JOIN (never a
+ *      LEFT JOIN) on `build_candidate` also enforces `build_candidate_id IS NOT
+ *      NULL`: a result row with no candidate has no build, and answering "no
+ *      rows" is the honest reading. This is the resolution Decision 55 left
+ *      open - the rank is resolved THROUGH `recommendation_result`, and the
+ *      candidate must be there.
+ *   2. `recommendation_query` exists, because the preview needs the query's
+ *      `budget_amount` and `catalog_version` and must NOT re-derive them.
+ *   3. the build has at least one `build_component` row - enforced by the
+ *      caller (`readBuildForSwap` below), because a LEFT-JOIN null row cannot
+ *      express it in SQL without a second statement. A build with zero
+ *      components is not a build: `evaluateBuildReplacement` would be handed an
+ *      empty `picked` and would answer a confident PASS over nothing.
+ *
+ * ORDER BY is the same total order SELECT_BUILDS_SQL uses (canonical enum order
+ * of component_role, then the component id), so two reads serialize identically.
+ *
+ * $1 uuid  recommendation_query id
+ * $2 int   rank
+ */
+const SELECT_BUILD_FOR_SWAP_SQL = [
+  'SELECT',
+  '  r.id AS result_id,',
+  '  r.rank,',
+  '  b.id AS build_candidate_id,',
+  '  b.total_price,',
+  '  q.budget_amount,',
+  '  q.catalog_version,',
+  '  c.id AS component_id,',
+  '  c.component_role AS role,',
+  '  c.product_id,',
+  '  c.product_variant_id,',
+  '  c.selected_price,',
+  '  c.currency,',
+  '  c.store_id,',
+  '  c.price_checked_at,',
+  '  c.offer_class,',
+  '  c.store_offer_id',
+  'FROM recommendation_result r',
+  // Decision 56 item 7: the derived build REPLACES the pass's own for this
+  // rank, in the preview as in the GET. COALESCE keeps the pre-56 behaviour
+  // exactly when no swap exists.
+  'LEFT JOIN recommendation_swap sw ON sw.source_result_id = r.id',
+  'JOIN build_candidate b ON b.id = COALESCE(sw.build_candidate_id, r.build_candidate_id)',
+  'JOIN recommendation_query q ON q.id = r.recommendation_query_id',
+  'LEFT JOIN build_component c ON c.build_candidate_id = b.id',
+  'WHERE r.recommendation_query_id = $1',
+  '  AND r.rank = $2',
+  'ORDER BY c.component_role ASC, c.id ASC',
 ].join(' ');
 
 /**
@@ -438,7 +520,7 @@ const CATALOG_OFFER_ELIGIBILITY_SQL = [
 
 /**
  * One page of ACTIVE catalog products, ordered by slug, cheapest eligible offer
- * alongside it.
+ * alongside it, and its SKUs (contract v1.9).
  *
  * $1 text    category filter, or NULL for every category
  * $2 text    keyset cursor (the previous page's last slug), or NULL for the first
@@ -452,6 +534,16 @@ const CATALOG_OFFER_ELIGIBILITY_SQL = [
  * LEFT JOIN keeps a product with NO eligible offer in the page - silent
  * omission would make the catalog look complete when it is not - and the
  * caller reports `has_offer: false`.
+ *
+ * `variant_rows` is bounded to the PAGE, not to the catalogue: it aggregates
+ * only the products in `listed`, so the cost of a page is its own rows and not a
+ * full scan of `product_variant` per request. It deliberately applies NO
+ * `support_status` filter, mirroring Engine 2B's candidate statement - a variant
+ * the engine would still consider is one the catalogue must still name, and a
+ * filter here would make the two disagree about what exists. `ORDER BY v.id` is
+ * the engine's own total order for variants, so "the first variant" is the same
+ * row in both places. `COALESCE(..., '[]')` keeps the served shape an array for
+ * a product with no variants.
  */
 const SELECT_CATALOG_PRODUCTS_SQL = [
   'WITH categorized AS (',
@@ -475,14 +567,23 @@ const SELECT_CATALOG_PRODUCTS_SQL = [
   '  FROM store_offer o',
   '  WHERE o.currency = $4',
   '    AND ' + CATALOG_OFFER_ELIGIBILITY_SQL,
+  '),',
+  'variant_rows AS (',
+  '  SELECT v.product_id,',
+  "         jsonb_agg(jsonb_build_object('id', v.id, 'sku', v.sku) ORDER BY v.id) AS variants",
+  '  FROM product_variant v',
+  '  WHERE v.product_id IN (SELECT id FROM listed)',
+  '  GROUP BY v.product_id',
   ')',
-  'SELECT l.slug, l.display_name, l.category,',
+  'SELECT l.id, l.slug, l.display_name, l.category,',
   '       b.price AS from_price,',
   '       CASE WHEN b.product_id IS NULL THEN NULL',
   "            WHEN b.ingestion_record_id IS NULL THEN 'SEED_UNVERIFIED'",
-  "            ELSE 'VERIFIED' END AS offer_class",
+  "            ELSE 'VERIFIED' END AS offer_class,",
+  "       COALESCE(vr.variants, '[]'::jsonb) AS variants",
   'FROM listed l',
   'LEFT JOIN best_offer b ON b.product_id = l.id AND b.rn = 1',
+  'LEFT JOIN variant_rows vr ON vr.product_id = l.id',
   'ORDER BY l.slug ASC',
 ].join('\n');
 
@@ -788,6 +889,80 @@ async function readRecommendationResult(db, queryId) {
 }
 
 /**
+ * ONE persisted build by rank, for the swap preview (Decision 55 item 2).
+ *
+ * "Persisted build" means the EFFECTIVE one: after Decision 56's commit the
+ * derived build is what this rank serves, so that is what a preview must judge
+ * (see `SELECT_BUILD_FOR_SWAP_SQL`).
+ *
+ * Read-only and one statement. NUMERIC columns stay STRINGS here, exactly as
+ * `readRecommendationResult` returns them; the route's presenter converts, so
+ * the row shape keeps being honest about what the database returned.
+ *
+ * `found: false` covers all three "there is no such build" cases at once -
+ * unknown query, unknown rank, or a candidate with no component rows - because
+ * the client's answer is the same 404 for each. The route distinguishes ONE
+ * further case on top: a build that EXISTS but can no longer be reconstructed
+ * from the live catalog is `404 BUILD_NOT_EVALUABLE`, and only the engine can
+ * say that.
+ *
+ * @param {object} db pool or client exposing query(sql, params)
+ * @param {string} queryId recommendation_query id
+ * @param {number} rank the persisted rank (a positive integer)
+ * @returns {Promise<{found: false} | {found: true, build: {rank: number,
+ *   total_price: string|null, budget_amount: string, catalog_version: string|null,
+ *   components: Array<{role, product_id, product_variant_id, selected_price,
+ *   offer_class}>}}>}
+ */
+async function readBuildForSwap(db, queryId, rank) {
+  const result = await db.query(SELECT_BUILD_FOR_SWAP_SQL, [queryId, rank]);
+  const rows = result && Array.isArray(result.rows) ? result.rows : [];
+  if (rows.length === 0) {
+    return { found: false };
+  }
+
+  const components = [];
+  for (const row of rows) {
+    if (row.role === null || row.role === undefined) {
+      continue;
+    }
+    // The WHOLE carrier, not just the identity: Decision 56's commit copies
+    // these five values into the derived `build_component` row, and a swap must
+    // not reprice (or relabel) a component it did not change.
+    components.push({
+      role: row.role,
+      product_id: row.product_id === undefined ? null : row.product_id,
+      product_variant_id: row.product_variant_id === undefined ? null : row.product_variant_id,
+      selected_price: row.selected_price === undefined ? null : row.selected_price,
+      currency: row.currency === undefined ? null : row.currency,
+      store_id: row.store_id === undefined ? null : row.store_id,
+      price_checked_at: row.price_checked_at === undefined ? null : row.price_checked_at,
+      offer_class: row.offer_class === undefined ? null : row.offer_class,
+      store_offer_id: row.store_offer_id === undefined ? null : row.store_offer_id,
+    });
+  }
+  // Condition 3 of SELECT_BUILD_FOR_SWAP_SQL: a candidate row alone is not a
+  // build. Answering "no such build" here is what stops an empty `picked` map
+  // from becoming a confident PASS in the engine.
+  if (components.length === 0) {
+    return { found: false };
+  }
+
+  const first = rows[0];
+  return {
+    found: true,
+    build: {
+      result_id: first.result_id,
+      rank: first.rank,
+      total_price: first.total_price,
+      budget_amount: first.budget_amount,
+      catalog_version: first.catalog_version === undefined ? null : first.catalog_version,
+      components,
+    },
+  };
+}
+
+/**
  * The preset ribbon rows of one (use case, currency, catalog version), cheapest
  * budget first. Rows are RAW pg rows - NUMERIC as strings, timestamps as Dates -
  * exactly as `readRecommendationResult` returns them; the route's presenter
@@ -887,6 +1062,7 @@ module.exports = {
   INSERT_QUERY_SQL,
   SELECT_QUERY_SQL,
   SELECT_BUILDS_SQL,
+  SELECT_BUILD_FOR_SWAP_SQL,
   SELECT_REUSABLE_QUERY_SQL,
   SELECT_PRESETS_SQL,
   FIND_PRESET_QUERY_ID_SQL,
@@ -906,6 +1082,7 @@ module.exports = {
   createRecommendationQuery,
   findReusableQuery,
   readRecommendationResult,
+  readBuildForSwap,
   selectPresets,
   findPresetQueryId,
   upsertPreset,

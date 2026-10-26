@@ -107,8 +107,70 @@
     "overBudget": "Cette configuration dépasse votre budget de {amount}.",
     "componentsLabel": "Composants",
     "swap": {
-      "label": "Remplacer un composant",
-      "explanation": "Bientôt disponible : remplacer une pièce demandera de recalculer sa compatibilité avec le reste de la configuration et son prix."
+        "label": "Remplacer un composant",
+        "intro": "Choisissez la pièce à remplacer, puis le modèle qui la remplacerait. La compatibilité et le prix sont calculés par le moteur ; vous pouvez ensuite enregistrer le remplacement, et la configuration d'origine reste conservée telle quelle.",
+        "roleLabel": "Pièce à remplacer",
+        "rolePlaceholder": "Choisir une pièce",
+        "candidateLabel": "Nouveau modèle",
+        "candidatePlaceholder": "Choisir un modèle",
+        "loading": "Chargement des modèles…",
+        "noCandidates": "Aucun autre modèle disponible pour cette pièce dans le catalogue.",
+        "loadError": "Impossible de charger les modèles du catalogue. Réessayez.",
+        "preview": "Vérifier l'impact",
+        "previewing": "Vérification…",
+        "verdictTitle": "Résultat du remplacement",
+        "verdict": {
+          "PASS": "Compatible",
+          "UNKNOWN": "Compatibilité inconnue",
+          "FAIL": "Incompatible"
+        },
+        "verdictNote": {
+          "PASS": "Le nouveau modèle s'accorde avec le reste de la configuration.",
+          "UNKNOWN": "Une relation entre les pièces n'a pas pu être vérifiée avec les données actuelles : ce n'est pas une confirmation.",
+          "FAIL": "Au moins une relation entre les pièces ne peut pas fonctionner."
+        },
+        "unknownCount": "Relations non vérifiées : {count}.",
+        "pairLine": "{role} et {partner} : {status}.",
+        "pairSelf": "{role} : {status}.",
+        "eligibility": {
+          "NO_ELIGIBLE_OFFER": "Ce modèle n'a aucune offre en vigueur, donc aucun prix à comparer.",
+          "PRODUCT_NOT_CANDIDATE": "Ce modèle n'est pas un candidat valable pour cette pièce dans le catalogue actuel.",
+          "INCOMPATIBLE": "Ce modèle ne peut pas remplacer cette pièce dans cette configuration."
+        },
+        "priceTitle": "Prix",
+        "pricePair": "De {previous} à {next}",
+        "priceNewOnly": "Le prix actuel de cette pièce n'était pas enregistré. Nouveau prix : {next}.",
+        "priceUnknown": "Le prix du nouveau modèle est inconnu : aucune offre éligible.",
+        "priceUp": "Surcoût de {amount}.",
+        "priceDown": "Économie de {amount}.",
+        "priceSame": "Prix inchangé.",
+        "budgetTitle": "Budget",
+        "barLabel": "Total après remplacement",
+        "barValueText": "{total} sur un budget de {budget}.",
+        "barRemaining": "Reste {amount}.",
+        "barOver": "Dépassement de {amount}.",
+        "budgetUnknown": "Le total après remplacement n'est pas calculable.",
+        "overBudget": "Ce remplacement dépasse le budget de {amount}.",
+        "apply": "Enregistrer ce remplacement",
+        "applying": "Enregistrement…",
+        "appliedTitle": "Remplacement enregistré",
+        "appliedNote": "{role} remplacé. Nouveau total de la configuration : {total}.",
+        "appliedWhen": "Enregistré le {when}.",
+        "swappedBadge": "Configuration modifiée : {role} remplacé",
+        "commitErrors": {
+          "alreadyCommitted": "Cette configuration porte déjà un remplacement : elle n'en accepte qu'un. La page a été mise à jour.",
+          "refused": "Ce remplacement n'est plus accepté : le catalogue ou la compatibilité ont changé. Choisissez un autre modèle.",
+          "notEvaluable": "Cette configuration ne peut plus être évaluée : le catalogue a changé depuis le calcul.",
+          "rateLimited": "Trop d'enregistrements en peu de temps. Patientez un instant avant de réessayer.",
+          "invalid": "Cette demande n'est pas valable. Choisissez un autre modèle.",
+          "generic": "L'enregistrement a échoué. Réessayez."
+        },
+        "errors": {
+          "notEvaluable": "Cette configuration ne peut plus être évaluée : le catalogue a changé depuis le calcul.",
+          "rateLimited": "Trop de vérifications en peu de temps. Patientez un instant avant de réessayer.",
+          "invalid": "Cette demande n'est pas valable. Choisissez un autre modèle.",
+          "generic": "La vérification a échoué. Réessayez."
+        }
     },
     "roles": {
       "CPU": "Processeur",
@@ -130,6 +192,7 @@
       "verifiedDated": "Vérifié · calculé le {date}"
     },
     "whySummary": "Pourquoi ce choix",
+    "explanationSwapped": "Cette configuration a été modifiée : l'explication d'origine décrivait les pièces remplacées, elle n'est plus affichée",
     "reasons": {
       "strategy": "Profil retenu : {strategy}.",
       "budget": "{percent} du budget utilisé.",

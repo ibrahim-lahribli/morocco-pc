@@ -4,12 +4,13 @@
  * apps/api/src/engine.js - the API's ONLY engine entry point.
  *
  * Boundary: this file exists so the HTTP layer never reaches into an engine
- * module's internals. It requires exactly five PUBLIC BARRELS
+ * module's internals. It requires exactly six PUBLIC BARRELS
  * (`src/recommendation/orchestrator/index.js`,
  * `src/recommendation/candidates/index.js`,
  * `src/recommendation/scoring/index.js`,
- * `src/recommendation/query/index.js` and
- * `src/recommendation/retention/index.js`) and re-exports nothing the engine
+ * `src/recommendation/query/index.js`,
+ * `src/recommendation/retention/index.js` and, since Decision 55,
+ * `src/recommendation/assembly/index.js`) and re-exports nothing the engine
  * does not already export. `import-boundary.test.js` enforces that rule by
  * scanning every file under apps/api/src for a `require` that resolves to a
  * path inside `src/recommendation/` and is neither a stage barrel (`index.js`)
@@ -28,6 +29,7 @@
  */
 
 const orchestrator = require('../../../src/recommendation/orchestrator');
+const assembly = require('../../../src/recommendation/assembly');
 const candidates = require('../../../src/recommendation/candidates');
 const scoring = require('../../../src/recommendation/scoring');
 const query = require('../../../src/recommendation/query');
@@ -184,6 +186,107 @@ function categoryForRole(role) {
   return candidates.expectedCategoryForRole(role);
 }
 
+/**
+ * ONE read-only hypothetical swap against a persisted build (Decision 55 item
+ * 4), forwarded from the orchestrator barrel by identity.
+ *
+ * NOT wrapped, for the reason `catalogVersion` is not: composing loaders plus
+ * pure stages is orchestrator work, and the HTTP layer's job is only to say
+ * what the answer means. The route supplies the persisted component IDENTITIES
+ * (which it read through the repository) and the candidate the client asked
+ * for; the engine decides eligibility, compatibility and price.
+ *
+ * `options` is deliberately absent: the API's fixed `API_ENGINE_OPTIONS` (the
+ * Decision 35 seed waiver) is what every pass runs with, and a preview that
+ * priced a seed offer differently from the pass it previews would be the exact
+ * disagreement Decision 55 item 4 forbids. The composition takes it from the
+ * caller's options object, and `swapPreviewArgs` below supplies it.
+ */
+const evaluateSwapPreviewSnapshot = orchestrator.evaluateSwapPreviewSnapshot;
+
+/**
+ * The argument object one preview runs with: the caller's fields plus the API's
+ * fixed engine options, so eligibility is judged by the same rules a pass uses.
+ *
+ * @param {object} request { queryId, role, productId, productVariantId,
+ *        buildComponents }
+ * @returns {object} the orchestrator's argument object, frozen
+ */
+function swapPreviewArgs(request) {
+  return Object.freeze({
+    queryId: request.queryId,
+    role: request.role,
+    productId: request.productId,
+    productVariantId: request.productVariantId === undefined ? null : request.productVariantId,
+    buildComponents: request.buildComponents,
+    options: API_ENGINE_OPTIONS,
+  });
+}
+
+/**
+ * The eight swappable component roles, in assembly's traversal order.
+ *
+ * Read from the ASSEMBLY barrel rather than restated in the route for the
+ * reason Decision 37 gives about use cases and Decision 55 item 2 states
+ * outright: a role list that lived in two places would let the API accept a
+ * swap the engine has no relationship table for (or hide one it does). The
+ * array is frozen by the engine - do not mutate it here.
+ *
+ * @returns {readonly string[]} CPU, MOTHERBOARD, RAM, GPU, PSU, CASE,
+ *          CPU_COOLER, SSD_BOOT
+ */
+function swapPreviewRoles() {
+  return assembly.EXPANSION_ORDER;
+}
+
+/**
+ * ONE committed swap (Decision 56), forwarded from the orchestrator barrel by
+ * identity - the same reasoning as `evaluateSwapPreviewSnapshot`: the commit
+ * asks the preview's composition, scores under the pass's own pinned model and
+ * owns its write transaction, and none of that is HTTP work.
+ */
+const commitSwapInTransaction = orchestrator.commitSwapInTransaction;
+
+/**
+ * The committed swap of one result, if there is one: one read-only statement.
+ *
+ * Read through the engine rather than the repository because the table's only
+ * reader and its only writer are the same module (`orchestrator/swap-commit`),
+ * and splitting them would let the pre-check and the insert disagree about
+ * what "already committed" means.
+ */
+const readCommittedSwap = orchestrator.readCommittedSwap;
+
+/**
+ * The argument object one COMMIT runs with: everything a preview needs, plus
+ * the three facts only a write has - the result row it derives from, the
+ * persisted total whose arithmetic the response must share, and the provenance
+ * labels stored beside the rows.
+ *
+ * `options` is the API's fixed `API_ENGINE_OPTIONS` for the same reason
+ * `swapPreviewArgs` sets it: a commit must judge eligibility exactly as the
+ * preview the reader approved did.
+ *
+ * @param {object} request { queryId, sourceResultId, role, productId,
+ *        productVariantId, buildComponents, persistedTotalPrice, catalogVersion,
+ *        engineVersion }
+ * @returns {object} the orchestrator's argument object, frozen
+ */
+function commitSwapArgs(request) {
+  return Object.freeze({
+    queryId: request.queryId,
+    sourceResultId: request.sourceResultId,
+    role: request.role,
+    productId: request.productId,
+    productVariantId: request.productVariantId === undefined ? null : request.productVariantId,
+    buildComponents: request.buildComponents,
+    persistedTotalPrice: request.persistedTotalPrice,
+    catalogVersion: request.catalogVersion === undefined ? null : request.catalogVersion,
+    engineVersion: request.engineVersion === undefined ? null : request.engineVersion,
+    options: API_ENGINE_OPTIONS,
+  });
+}
+
 module.exports = {
   runFullRun,
   engineOptionsFor,
@@ -192,6 +295,12 @@ module.exports = {
   catalogRoles,
   categoryForRole,
   resolutionMultiplier,
+  evaluateSwapPreviewSnapshot,
+  swapPreviewArgs,
+  swapPreviewRoles,
+  commitSwapInTransaction,
+  commitSwapArgs,
+  readCommittedSwap,
   API_ENGINE_OPTIONS,
   ERROR_CODES: candidates.ERROR_CODES,
   CandidateSelectionError: candidates.CandidateSelectionError,

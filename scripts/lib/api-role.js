@@ -25,7 +25,7 @@
 //
 // The privilege set itself is Decision 46 item 1 + item 7: SELECT on the whole
 // `public` schema (the catalog and `scoring_model` are read-only inputs), INSERT
-// on the six Layer 4 tables, DELETE on `build_rejection` ONLY (Decision 31's
+// on the SEVEN Layer 4 tables, DELETE on `build_rejection` ONLY (Decision 31's
 // replace-idempotence), and THREE column-scoped UPDATEs — never a row-wide one,
 // so `has_table_privilege(...,'UPDATE')` stays `f` on both tables while a role
 // cannot rewrite a row it merely inserted.
@@ -36,7 +36,14 @@ const API_ROLE_NAME = 'morocco_pc_api';
 /** A role name is interpolated into DDL, so it is validated, never trusted. */
 const ROLE_NAME_PATTERN = /^[a-z_][a-z0-9_]{0,62}$/;
 
-/** The six Layer 4 tables the API's write path INSERTs into. */
+/**
+ * The seven Layer 4 tables the API's write path INSERTs into.
+ *
+ * `recommendation_swap` joined the set in Decision 56: a committed swap APPENDS
+ * a derived build, and the link row is what makes it reachable. Leaving it out
+ * would make every commit fail with 42501 on a deployed database while a local
+ * owner connection (which holds the privilege implicitly) kept passing.
+ */
 const WRITE_TARGET_TABLES = Object.freeze([
   'recommendation_profile',
   'recommendation_query',
@@ -44,6 +51,7 @@ const WRITE_TARGET_TABLES = Object.freeze([
   'build_component',
   'recommendation_result',
   'build_rejection',
+  'recommendation_swap',
 ]);
 
 /** The ONE table the write path deletes from (Decision 31 replace-idempotence). */
@@ -56,10 +64,10 @@ const COLUMN_UPDATE_GRANTS = Object.freeze([
 ]);
 
 /**
- * The 20 privilege answers the production role must give, written out LITERALLY
+ * The 21 privilege answers the production role must give, written out LITERALLY
  * (see the header). The composition — 3 table-level `false` for `product`
  * (INSERT/UPDATE/DELETE) plus 2 for `store_offer` (INSERT/DELETE), 1 `true` for
- * `product` SELECT, the six INSERT targets all `true`, `build_component` DELETE
+ * `product` SELECT, the SEVEN INSERT targets all `true`, `build_component` DELETE
  * `false` and `build_rejection` DELETE `true`, the two row-wide UPDATEs `false`,
  * and the three column-scoped UPDATEs `true` — is asserted in
  * `scripts/lib/api-role.test.js`.
@@ -78,6 +86,7 @@ const PRIVILEGE_EXPECTATIONS = Object.freeze([
   Object.freeze({ id: 'build_component_insert', kind: 'TABLE', target: 'build_component', privilege: 'INSERT', expected: true }),
   Object.freeze({ id: 'recommendation_result_insert', kind: 'TABLE', target: 'recommendation_result', privilege: 'INSERT', expected: true }),
   Object.freeze({ id: 'build_rejection_insert', kind: 'TABLE', target: 'build_rejection', privilege: 'INSERT', expected: true }),
+  Object.freeze({ id: 'recommendation_swap_insert', kind: 'TABLE', target: 'recommendation_swap', privilege: 'INSERT', expected: true }),
   Object.freeze({ id: 'build_component_delete', kind: 'TABLE', target: 'build_component', privilege: 'DELETE', expected: false }),
   Object.freeze({ id: 'build_rejection_delete', kind: 'TABLE', target: 'build_rejection', privilege: 'DELETE', expected: true }),
   Object.freeze({ id: 'recommendation_query_update', kind: 'TABLE', target: 'recommendation_query', privilege: 'UPDATE', expected: false }),
@@ -133,7 +142,7 @@ function privilegeExpression(entry, roleName) {
 }
 
 /**
- * ONE statement answering all 20 expectations, labelled by id. One round trip,
+ * ONE statement answering all 21 expectations, labelled by id. One round trip,
  * and the labels are what let a missing answer be detected rather than guessed.
  */
 function buildSelfCheckSql(roleName) {
@@ -147,7 +156,7 @@ function buildSelfCheckSql(roleName) {
  *
  * A missing answer, an unexpected answer and a wrong answer are all failures —
  * none is a skip, because a self-check that silently drops a row would report
- * "20 of 20" on a role that was never asked about one of them.
+ * "21 of 21" on a role that was never asked about one of them.
  *
  * @param {Array<{id: string, allowed: boolean|null}>} rows the self-check result rows
  * @param {string} [roleName]

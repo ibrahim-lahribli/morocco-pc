@@ -51,6 +51,17 @@ export const IDS = {
    */
   demo: "5b7e2f9a-4c1d-4a3e-9b8f-7d6c5b4a3928",
   /**
+   * S24's COMMIT (contract v1.10): a build with an id of its OWN, because a
+   * commit mutates what the mock serves and no other spec may inherit that.
+   */
+  swappable: "7c1b9a5d-3e2f-4a8b-9c6d-1f2e3a4b5c6d",
+  /**
+   * The same build AFTER a committed GPU swap (Decision 56): the badge, the new
+   * total and the absent explanation are read from ONE fixture, because the
+   * commit POST is stateless by design (see `mock/server.mjs`).
+   */
+  swapped: "9d2e4f6a-1b3c-4d5e-8f7a-2c4b6d8e0f1a",
+  /**
    * A rank-1 build that is INDICATIVE but not demo: one VERIFIED offer and one
    * SEED_UNVERIFIED placeholder. The API derives `price_status: "indicative"`,
    * and the client's third state does not apply — so the total may be shown,
@@ -266,6 +277,7 @@ function build({ rank, strategy_key, price_status, explanation, components }) {
     total_price,
     build_score: null,
     compatibility_status: "PASS",
+    swapped: null,
     explanation,
     price_status,
     components,
@@ -338,6 +350,7 @@ export const RECOMMENDATION_OK = baseResponse({
       total_price: 5099,
       build_score: 61.25,
       compatibility_status: "PASS",
+      swapped: null,
       explanation: "Configuration équilibrée : processeur récent et carte graphique dédiée.",
       price_status: "verified",
       components: [COMPONENT_CPU_VERIFIED, COMPONENT_GPU_VERIFIED],
@@ -349,6 +362,7 @@ export const RECOMMENDATION_OK = baseResponse({
       total_price: 2548,
       build_score: 48.9,
       compatibility_status: "PASS",
+      swapped: null,
       explanation: "Configuration au meilleur prix : mémoire non vérifiée.",
       price_status: "indicative",
       components: [COMPONENT_CPU_VERIFIED, COMPONENT_RAM_SEED],
@@ -424,6 +438,88 @@ export const RECOMMENDATION_THREE_BUILDS = baseResponse({
 export const RECOMMENDATION_ONE_BUILD = baseResponse({
   id: IDS.oneBuild,
   builds: [RECOMMENDATION_THREE_BUILDS.builds[0]],
+});
+
+/**
+ * ONE build with an id of its own, for S24's COMMIT (contract v1.10).
+ *
+ * The commit POST is answered statelessly (see `mock/server.mjs`), so nothing
+ * about this fixture changes when a spec applies a swap - it is a VIRGIN build
+ * because that is the state a commit starts from.
+ */
+export const RECOMMENDATION_SWAPPABLE = baseResponse({
+  id: IDS.swappable,
+  builds: [
+    build({
+      rank: 1,
+      strategy_key: "BALANCED",
+      price_status: "verified",
+      explanation: "Configuration équilibrée : processeur récent et carte graphique dédiée.",
+      components: [
+        COMPONENT_CPU_VERIFIED,
+        COMPONENT_GPU_VERIFIED,
+        COMPONENT_RAM_VERIFIED,
+        COMPONENT_MOTHERBOARD,
+        COMPONENT_SSD,
+        COMPONENT_PSU,
+        COMPONENT_CASE,
+        COMPONENT_COOLER,
+      ],
+    }),
+  ],
+});
+
+/**
+ * What the API serves AFTER a committed GPU swap (Decision 56, contract v1.10).
+ *
+ * Three facts distinguish it from `RECOMMENDATION_SWAPPABLE`, and all three are
+ * the read path's own work rather than a client's: the GPU is the 4070 that was
+ * committed, the total is `persisted - previous + next` (8594 - 3200 + 6100 =
+ * 11494), and there is NO explanation - the stored text described a card the
+ * build no longer carries. The rank is unchanged: a derived build does not
+ * become a new rank.
+ */
+export const RECOMMENDATION_SWAPPED = baseResponse({
+  id: IDS.swapped,
+  builds: [
+    {
+      ...build({
+        rank: 1,
+        strategy_key: "BALANCED",
+        price_status: "verified",
+        explanation: null,
+        components: [
+          COMPONENT_CPU_VERIFIED,
+          {
+            role: "GPU",
+            // The catalogue's 4070 id, written out: `PRODUCT_IDS_BY_SLUG` is
+            // declared below this fixture, so referencing it here would read a
+            // `const` before it is initialised.
+            product_id: "22222222-2222-4222-8222-222222222223",
+            name: "RTX 4070 12GB",
+            slug: "rtx-4070-12gb",
+            // The SKU, not the variant id: `build_component.variant` in the API
+            // is `product_variant.sku`, and the card prints it verbatim.
+            variant: "MOCK-4070-STD-12G",
+            price_used: 6100,
+            offer_class: "VERIFIED",
+            store_offer_id: null,
+          },
+          COMPONENT_RAM_VERIFIED,
+          COMPONENT_MOTHERBOARD,
+          COMPONENT_SSD,
+          COMPONENT_PSU,
+          COMPONENT_CASE,
+          COMPONENT_COOLER,
+        ],
+      }),
+      swapped: {
+        role: "GPU",
+        committed_at: "2026-10-25T12:00:00.000Z",
+        engine_version: ENGINE_VERSION,
+      },
+    },
+  ],
 });
 
 /**
@@ -611,6 +707,8 @@ export const RECOMMENDATIONS_BY_ID = {
   [IDS.ok]: RECOMMENDATION_OK,
   [IDS.threeBuilds]: RECOMMENDATION_THREE_BUILDS,
   [IDS.oneBuild]: RECOMMENDATION_ONE_BUILD,
+  [IDS.swappable]: RECOMMENDATION_SWAPPABLE,
+  [IDS.swapped]: RECOMMENDATION_SWAPPED,
   [IDS.demo]: RECOMMENDATION_DEMO,
   [IDS.indicative]: RECOMMENDATION_INDICATIVE,
   [IDS.presetApiOnly]: RECOMMENDATION_PRESET_API_ONLY,
@@ -789,9 +887,49 @@ export const CATALOG_PRODUCTS_BY_SLUG = {
   },
 };
 
+/**
+ * The `product.id` behind each slug (contract v1.9's list field).
+ *
+ * Kept BESIDE the detail map rather than inside it: the detail response has no
+ * `id` (its identity is the slug), so putting one in `CATALOG_PRODUCTS_BY_SLUG`
+ * would teach a shape the API never serves. Three of these deliberately match a
+ * component id on the three-build fixture, which is what lets the swap panel
+ * recognise - and refuse to offer back - the part already in the build.
+ */
+export const PRODUCT_IDS_BY_SLUG = {
+  "rtx-4060-8gb": "22222222-2222-4222-8222-222222222222",
+  "rtx-4070-12gb": "22222222-2222-4222-8222-222222222223",
+  "kit-ddr5-16-go": "33333333-3333-4333-8333-333333333331",
+  "rtx-4060-ti-gaming-oc-16-go": "22222222-2222-4222-8222-222222222225",
+  "rx-7600-8gb": "22222222-2222-4222-8222-222222222224",
+  "ssd-nvme-1-to": "55555555-5555-4555-8555-555555555551",
+};
+
+/**
+ * The SKUs behind each slug (contract v1.9's `variants`, S24).
+ *
+ * A GPU candidate is variant-keyed (Engine 2B), so a swap of role GPU must name
+ * one; `rtx-4070-12gb` carries TWO on purpose, which is the case that proves the
+ * picker offers SKUs rather than products. The 60-character product has one, so
+ * its picker label has to survive a long name at 360 px. Products absent from
+ * this map have no variant rows, and the list serves `[]` for them.
+ */
+export const VARIANTS_BY_SLUG = {
+  "rtx-4060-8gb": [{ id: "aaaa1111-0000-4000-8000-000000000001", sku: "MOCK-4060-DUAL-8G" }],
+  "rtx-4070-12gb": [
+    { id: "aaaa1111-0000-4000-8000-000000000011", sku: "MOCK-4070-STD-12G" },
+    { id: "aaaa1111-0000-4000-8000-000000000012", sku: "MOCK-4070-OC-12G" },
+  ],
+  "rtx-4060-ti-gaming-oc-16-go": [
+    { id: "aaaa1111-0000-4000-8000-000000000021", sku: "MOCK-4060TI-VENTUS-16G" },
+  ],
+  "rx-7600-8gb": [{ id: "aaaa1111-0000-4000-8000-000000000031", sku: "MOCK-7600-STD-8G" }],
+};
+
 /** The list page, derived from the map so the two cannot disagree (S17). */
 export const CATALOG_LIST_OK = {
   products: Object.values(CATALOG_PRODUCTS_BY_SLUG).map((product) => ({
+    id: PRODUCT_IDS_BY_SLUG[product.slug],
     slug: product.slug,
     display_name: product.display_name,
     category: product.category,
@@ -801,8 +939,53 @@ export const CATALOG_LIST_OK = {
         : Math.min(...product.offers.map((offer) => offer.price)),
     offer_class: product.offers.length === 0 ? null : product.offers[0].offer_class,
     has_offer: product.offers.length > 0,
+    variants: VARIANTS_BY_SLUG[product.slug] ?? [],
   })),
   next_cursor: null,
+};
+
+/**
+ * Which pairs a swap of each role touches (S24's swap preview).
+ *
+ * These are the REAL `PAIRWISE_CHECKS` keys from `assembly/assemble.js` and the
+ * roles the engine keys them on - a mock that invented check names would let a
+ * UI ship against a vocabulary the engine never emits. Only the roles the
+ * fixture catalogue can actually offer are listed; a role with no entry has no
+ * relations to re-check, and its preview is a PASS over no pairs.
+ */
+export const SWAP_PAIRS_BY_ROLE = {
+  GPU: [
+    { check: "gpu_psu", role: "PSU", partner_role: "GPU" },
+    { check: "gpu_case", role: "CASE", partner_role: "GPU" },
+  ],
+  RAM: [
+    { check: "motherboard_memory", role: "RAM", partner_role: "MOTHERBOARD" },
+    { check: "platform_memory", role: "RAM", partner_role: "CPU" },
+    { check: "mb_memory_slots", role: "RAM", partner_role: "MOTHERBOARD" },
+    { check: "mb_memory_capacity", role: "RAM", partner_role: "MOTHERBOARD" },
+  ],
+  CPU: [
+    { check: "cpu_motherboard", role: "MOTHERBOARD", partner_role: "CPU" },
+    { check: "platform_memory", role: "RAM", partner_role: "CPU" },
+    { check: "cooler_socket", role: "CPU_COOLER", partner_role: "CPU" },
+    { check: "cooler_tdp", role: "CPU_COOLER", partner_role: "CPU" },
+  ],
+};
+
+/**
+ * One swap scenario per catalogue slug, so a spec picks the ANSWER by picking a
+ * component - the same arrangement the price history uses (S25).
+ *
+ *   rtx-4070-12gb                 PASS, and the total rises: the DoD's headline.
+ *   rx-7600-8gb                   FAIL on one pair, which is a 200 RESULT.
+ *   rtx-4060-ti-gaming-oc-16-go   UNKNOWN: a relation nobody could check.
+ *   kit-ddr5-16-go                not evaluable at all: NO_ELIGIBLE_OFFER.
+ */
+export const SWAP_SCENARIO_BY_SLUG = {
+  "rtx-4070-12gb": { status: "PASS" },
+  "rx-7600-8gb": { status: "FAIL", failing: 1 },
+  "rtx-4060-ti-gaming-oc-16-go": { status: "UNKNOWN", unknown: 1 },
+  "kit-ddr5-16-go": { status: "FAIL", eligibility: "NO_ELIGIBLE_OFFER" },
 };
 
 /**

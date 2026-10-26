@@ -2,7 +2,9 @@
 
 /**
  * apps/api/src/routes/catalog.js - the read-only catalog surface (Platform P2
- * Sprint 3, contract v1.6 - three catalog reads plus the price history).
+ * Sprint 3, contract v1.6 - three catalog reads plus the price history; the list
+ * rows gained `variants` in v1.9, which is what lets a surface name a
+ * variant-keyed product at all).
  *
  *   GET /v1/catalog/products?role=&limit=&cursor=
  *   GET /v1/catalog/products/:slug
@@ -153,16 +155,45 @@ function presentCatalogPage(rows, limit) {
     products: page.map((row) => {
       const fromPrice = toNumberOrNull(row.from_price);
       return {
+        // The identity an ID-taking route needs (contract v1.9). A row without
+        // one could not be served as anything but a broken link, but the value
+        // comes from the primary key, so it is passed through as it is.
+        id: row.id,
         slug: row.slug,
         display_name: row.display_name,
         category: row.category,
         from_price: fromPrice,
         offer_class: fromPrice === null ? null : row.offer_class,
         has_offer: fromPrice !== null,
+        // Contract v1.9: the SKUs of the product, in the engine's own order.
+        // `null` (a product with no variant rows, coalesced in SQL) becomes
+        // `[]`, because the shape is an array and the emptiness is the data.
+        variants: presentVariants(row.variants),
       };
     }),
     next_cursor: hasMore ? page[page.length - 1].slug : null,
   };
+}
+
+/**
+ * The `variants` array of one list row (contract v1.9).
+ *
+ * Defensive by SHAPE, not by invention: a row whose aggregate is missing or is
+ * not an array becomes `[]` (the truthful "no variants"), and an entry missing
+ * an id is DROPPED rather than served with a placeholder - a variant the caller
+ * cannot address is not a variant it can use. `sku` is `NOT NULL` in the schema
+ * (migration 003), so it is passed through.
+ *
+ * @param {unknown} raw the row's jsonb aggregate
+ * @returns {Array<{id: string, sku: string}>}
+ */
+function presentVariants(raw) {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .filter((entry) => entry !== null && typeof entry === 'object' && typeof entry.id === 'string')
+    .map((entry) => ({ id: entry.id, sku: typeof entry.sku === 'string' ? entry.sku : '' }));
 }
 
 /**
@@ -401,6 +432,7 @@ function registerCatalogRoutes(app) {
 module.exports = {
   registerCatalogRoutes,
   presentCatalogPage,
+  presentVariants,
   presentCatalogProduct,
   presentPriceHistory,
   offerClassFor,

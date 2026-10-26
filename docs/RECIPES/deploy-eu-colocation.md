@@ -620,8 +620,8 @@ Three outcomes, three meanings:
   check to open a connection, and re-run. Record an outcome only when it is PASS or FAIL.
 
 **Step 5 — prove the write path on the deployed origin.** Rotation is a credential change, and the
-write path is what it can break: the role may INSERT into the six Layer 4 tables and UPDATE exactly
-three columns (Decision 46 item 7). One POST and its read-back (§8.3) must still answer `201` with
+write path is what it can break: the role may INSERT into the seven Layer 4 tables (`recommendation_swap`
+joined them in Decision 56) and UPDATE exactly three columns (Decision 46 item 7). One POST and its read-back (§8.3) must still answer `201` with
 builds, then a `200` whose builds match. A `42501` in `fly logs` means the grant set is wrong and
 the rotation is the moment it surfaced; a `500` with no `42501` is a different bug.
 
