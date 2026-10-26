@@ -61,7 +61,15 @@ what its column always was.
 Migrations 021 and 022 were applied to the shared database that day from restore point
 `br-ancient-cake-axh57vpj` (shared ledger 20 -> 22), so the two degradation modes this section
 used to document are gone: `catalog_version` is recorded and reuse hits, and `GET /v1/presets`
-reads a real table. The fallbacks still describe an OLDER database: against one below 021 every
+reads a real table.
+
+**Migration 023 is BRANCH-ONLY (measured 2026-10-26): the TEST branch is at ledger 23, the shared
+database at 22 and the EU database at 22.** `recommendation_swap` therefore exists on TEST alone, and
+the shared `morocco_pc_api` role still holds the pre-023 grant set (6 INSERT tables, so the recipe's
+21-answer self-check describes the rehearsal contract). Against a database below 023 the swap COMMIT
+answers the generic `500 INTERNAL_ERROR` (`42P01`), exactly as the preset read does below 022; the
+PREVIEW is unaffected because it writes nothing.
+The fallbacks still describe an OLDER database: against one below 021 every
 reply serves `catalog_version: null` (not recorded - NULL means UNKNOWN here) and reuse is
 always a miss, which is a correct answer; against one below 022 the preset read fails `42P01`
 and answers the generic `500 INTERNAL_ERROR`, with no graceful miss.

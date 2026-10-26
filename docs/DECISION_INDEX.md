@@ -3,7 +3,7 @@
 **GENERATED FILE — do not edit by hand.** Regenerate with `node scripts/gen-decision-index.js`
 (or `npm run gen:decisions`) after any change to `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 `node scripts/gen-decision-index.js --check` exits non-zero when this file is stale.
-Generated 2026-10-26 from RECOMMENDATION_ENGINE_DECISIONS.md (5701 lines).
+Generated 2026-10-26 from RECOMMENDATION_ENGINE_DECISIONS.md (5748 lines).
 
 Generated for audit finding **D5** (decision-log navigability): one row per decision with number,
 title, status, date and line anchor. Every status comes from the normalized `Status:` line at the
@@ -17,9 +17,9 @@ section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` a
 
 ## Open decisions
 
-None. All 56 global decisions (including the two nested 4/5 aliases) and all 5 Engine-3-local contracts are `RESOLVED` as of 2026-10-26.
+Open / not-RESOLVED: #57 (production keeps the model it serves, and `launch-v2@2.0.0` is the version evaluated for release).
 
-## Global decisions (54 `## Decision` headings + 2 nested 4/5 aliases = 56)
+## Global decisions (55 `## Decision` headings + 2 nested 4/5 aliases = 57)
 
 | # | Title | Status | Date | DECISIONS.md line |
 |---|---|---|---|---|
@@ -77,6 +77,7 @@ None. All 56 global decisions (including the two nested 4/5 aliases) and all 5 E
 | 54 | a DECLARED `IGPU_ALLOWED` policy narrows retention's CPU pool, so the E6 omit path becomes reachable | RESOLVED 2026-10-24; IMPLEMENTED 2026-10-24 — under a declared `IGPU_ALLOWED` the CPU candidates without a verified integrated GPU are dropped before ordering, the Decision 27 reservation and the K cap; every other policy and role keeps its pool byte-identically. A6 is now green at S17/S18/S19 and OG-49 is closed. | 2026-10-24 | 5422 |
 | 55 | a swap PREVIEW is a read-only evaluation: the engine owns the verdict and the persisted pass stays a record | RESOLVED 2026-10-25 — CD-8 is ONE read-only evaluation route backed by ONE new pure Engine 3 export over the SAME pairwise-check table assembly uses; nothing is persisted, no build row is rewritten, and a mutating "commit swap" is explicitly left to its own future decision (answered 2026-10-26 by Decision 56, which APPENDS a derived build instead of editing the pass). IMPLEMENTED 2026-10-25 in three parts: the ENGINE HALF (`assembly` `evaluateBuildReplacement` + agreement tests), the ROUTE (contract v1.8.0, `orchestrator/swap-preview.js` + `GET /v1/recommendations/:id/builds/:rank/swap-preview`), and S24's UI (`apps/web/components/result/swap-panel.tsx`, contract v1.9 for the catalogue variant identity it needs). | 2026-10-25 | 5469 |
 | 56 | a committed swap is an APPENDED derived build: the pass stays a record | RESOLVED 2026-10-25 — Decision 55 item 9's mutation, implemented as an APPEND: one `recommendation_swap` row (migration 023) plus its OWN `build_candidate` and `build_component` rows, written in one transaction. No UPDATE and no DELETE anywhere, so the pass's rank, dedupe key, preset pointer, `strategy_key` and explanation stay the record they claim to be, and the API serves the user's swapped build for that rank. IMPLEMENTED 2026-10-26 in four parts: migration `023_recommendation_swap.sql` (applied to the TEST branch; the shared apply is the owner's restore-point-guarded step), the ENGINE HALF (`assembly.evaluateBuild`, `orchestrator/swap-commit.js`, the `composeSwap` reuse and `readCommittedSwap`), the ROUTE (contract v1.10.0 `POST /v1/recommendations/:id/builds/:rank/swap`, the effective-build read path, `swapped` and the nullable `explanation`) and S24's apply control; `recommendation_swap` joined the production role's INSERT grant, so its self-check is 21/21 (rehearsed green on the TEST branch). | 2026-10-25 | 5648 |
+| 57 | production keeps the model it serves, and `launch-v2@2.0.0` is the version evaluated for release | PROVISIONAL 2026-10-26 — production keeps `seed-minimal-v1@1.0.0`, `launch-v2@1.0.0` is not the release model and is never activated, and `launch-v2@2.0.0` is the version evaluated for release, where that evaluation is a GATE (A1/A3/A4 are still unreviewed) rather than an activation. | 2026-10-26 | 5702 |
 
 ## Engine 3 contract decisions (Engine-3-local numbering; local 4–5 ARE global Decisions 4–5)
 
@@ -90,12 +91,12 @@ None. All 56 global decisions (including the two nested 4/5 aliases) and all 5 E
 
 ## Reconciliation
 
-- Global decisions: 56 = 54 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
+- Global decisions: 57 = 55 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
 - Engine-3-local contracts: 5 (`### Decision 1–5` under "Engine 3 contract decisions"; local 1–3 are NOT global 1–3, local 4/5 ARE global 4/5 — AGENTS.md §2).
-- Parsed headings: 54 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
+- Parsed headings: 55 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
 - Status source: each entry’s normalized `Status:` line (first content line). The generator exits
   non-zero if a decision is added without one, so this table cannot go stale silently.
-- Open decisions: none.
+- Open decisions: #57.
 
 Precedence when sources conflict: `AGENTS.md` §9. This file is a **lookup aid**, never a source of truth.
 

@@ -6,14 +6,14 @@
 plans. The plans own the HOW; the register owns the open-item ledger; this page owns the
 where-are-we.
 
-**Date:** 2026-10-19, **revised 2026-10-23** for contract v1.6 · **Branch:** `master` (PR #3 merged `agent/platforms` as `b2fe64a`) · **Rules:** [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md).
+**Date:** 2026-10-19, **revised 2026-10-26** for contract v1.10.0 and the ledger split (TEST 23 / shared and EU 22) · **Branch:** `master` (PR #3 merged `agent/platforms` as `b2fe64a`) · **Rules:** [PLAN_PLATFORM_CONSTRAINTS.md](PLAN_PLATFORM_CONSTRAINTS.md).
 Passing-test counts are deliberately not restated here — see the dated entries in
 `DEVELOPMENT_NOTES.md`.
 
 ## Verdict
 
 **16 sprints done, 3 partial, 2 not started. PR #3 landed `agent/platforms` on `master` as `b2fe64a` on 2026-10-18, with identical content on both sides, so what remains is owner actions rather than agent work.**
-**The recurring gates now run from the default branch, and the verdict is measured: `unit-and-docs` is green on `master`, and the one red step — `verify-migrations-replay` — was closed at its cause on 2026-10-19.** That red was never code: the replay diffed a 22-file tree against a shared database at ledger 20 and reported the 021/022 objects as fresh-only. The owner-approved apply (restore point `br-ancient-cake-axh57vpj`, ledger 20 -> 22) makes the same command report **0 drift**, and dispatch run [39207745723](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39207745723) on `master` (`3f0c166`) is the first **wholly green** `recurring-gates` — every step PASS, `unit-and-docs` included. **P1 Sprint 3**'s statement-count half is still measurable on the TEST branch (only its latency table waits for the co-located target). The BETA engine and API surface are live on the TEST branch (schema at ledger 22 on the branch and, since 2026-10-19, on shared too, where the `morocco_pc_api` role is now provisioned); nothing is deployed and nothing is in production. That contract is now **v1.6** (2026-10-23, Decision 51): the product **price history** — `GET /v1/catalog/products/:slug/price-history`, one point per observation MOMENT, oldest first — is the EIGHTH path, it needed no migration (`price_history` dates from migration 009), and `apps/web`'s S25 price-history section consumes it; the pin is `apps/api/test/unit/openapi-v1.6.json`. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency sprints and the deployed-host legs; **P1 Sprint 4** (DONE 2026-10-16) unblocked P1 Sprints 5–6 (both DONE 2026-10-16), and P2 Sprint 3 landed 2026-10-17 (Step 7 decided 2026-10-18: public but unlisted); **P3 Sprint 1** is now DONE because the nightly fires from `master` and its per-step result is recorded.
+**The recurring gates now run from the default branch, and the verdict is measured: `unit-and-docs` is green on `master`, and the one red step — `verify-migrations-replay` — was closed at its cause on 2026-10-19.** That red was never code: the replay diffed a 22-file tree against a shared database at ledger 20 and reported the 021/022 objects as fresh-only. The owner-approved apply (restore point `br-ancient-cake-axh57vpj`, ledger 20 -> 22) makes the same command report **0 drift**, and dispatch run [39207745723](https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/39207745723) on `master` (`3f0c166`) is the first **wholly green** `recurring-gates` — every step PASS, `unit-and-docs` included. **P1 Sprint 3**'s statement-count half is still measurable on the TEST branch (only its latency table waits for the co-located target). The BETA engine and API surface are live on the TEST branch (schema at ledger 22 on the branch and, since 2026-10-19, on shared too, where the `morocco_pc_api` role is now provisioned); nothing is deployed and nothing is in production. That contract is now **v1.10.0** (2026-10-26, Decision 56) with **ten** paths: the product **price history** (`GET /v1/catalog/products/:slug/price-history`, one point per observation MOMENT, oldest first — v1.6, and no migration needed because `price_history` dates from 009), the read-only **swap preview** (v1.8, Decision 55) and the append-only **swap commit** (v1.10, Decision 56) all belong to it, `apps/web`'s S25 price-history section and S24's swap panel consume them, and the pin is `apps/api/test/unit/openapi-v1.10.json`. The unblocking ladder: **P1 Sprint 1** (the EU project + deploy) unblocks the latency sprints and the deployed-host legs; **P1 Sprint 4** (DONE 2026-10-16) unblocked P1 Sprints 5–6 (both DONE 2026-10-16), and P2 Sprint 3 landed 2026-10-17 (Step 7 decided 2026-10-18: public but unlisted); **P3 Sprint 1** is now DONE because the nightly fires from `master` and its per-step result is recorded.
 
 **Web frontend (outside the 21 sprints, recorded here because it shares the deployment gate).**
 `apps/web` has 25 of its 27 sprints done and its host is now DECIDED - **Cloudflare Workers** through
@@ -103,40 +103,30 @@ but the choice stays the owner's, so no host is written into this page as decide
 - **P3 S2** — **DONE 2026-10-19** (Steps 1–4 rehearsed on the TEST branch 2026-10-17; Step 5, the shared apply, ran 2026-10-19).
 - **P3 S5** — **DONE 2026-10-17** (the gate covers non-seed provenance; no migration, no write).
 - **P2 S4 and P2 S5** — **DONE 2026-10-17** (the CORS/429 proof and the OpenAPI-completeness gate; both DB-free).
-- **P2 S3** — **DONE 2026-10-18** (the two read-only catalog endpoints, contract v1.5 at the time, plus Step 7's public-but-unlisted decision); the contract they belong to is v1.6 since 2026-10-23.
+- **P2 S3** — **DONE 2026-10-18** (the two read-only catalog endpoints, contract v1.5 at the time, plus Step 7's public-but-unlisted decision); the contract they belong to is v1.10.0 since 2026-10-26.
 - **P2 S2 Steps 1–3** — **DONE 2026-10-17** (configurable `trustProxy`, default off, with 14 DB-free tests); only Step 4 needs the deployed host.
 
-## The frontend track (its own branch, not this one)
+## The frontend track (merged on this branch since 2026-10-21)
 
-The frontend is NOT on this branch and must not be read as platform work that is "missing".
-`apps/web/` exists only on the **`frontend`** branch (`origin/frontend` at `245638d`; the LOCAL branch is
-rebased onto master `992558c` as `e784add` and is **not pushed**), 25 files: Next.js scaffold, `/fr` shell, its own CI workflow and the S1–S6
-sprint board. **Renamed 2026-10-19:** the old name was
-`freebuff/review-and-web-design-guidelines-tailwind-design-s-618a232c-...`; the six other merged
-remote branches were deleted the same day, after each was proven an ancestor of master. `agent/web`
-was never pushed and no longer exists on the remote. What the
-frontend consumes from here is the API contract, so the platform items that matter to it are four,
-and none of them is agent work left undone:
+`apps/web/` is part of this tree — sprint S1-S27 of `docs/plans/agent3-web-sprints.md`, 26 done and S26
+blocked on a deployment — in its own package with its own lockfile and `.github/workflows/web.yml`. It
+consumes this API through types generated from `apps/api/test/unit/openapi-v1.10.json`, with
+`check:api-types` as the drift gate; measured 2026-10-26 the Playwright suite is 378 specs (376 passed /
+2 skipped on a fresh build), `e2e/swap.spec.ts` carrying 10 of them.
 
-- **A deployed origin** (P1 Sprint 1 Steps 7–9) — without it there is nothing for the web app to
-  point at, and `ALLOWED_ORIGINS` cannot name a real origin (P2 Sprint 2 Step 4).
+What the web app still needs from this side is ONE owner action and three facts:
+
+- **A deployed origin** (P1 Sprint 1 Steps 7-9) — without it there is nothing for the web app to point
+  at, `ALLOWED_ORIGINS` cannot name a real origin (P2 Sprint 2 Step 4), and web S26's staging legs
+  cannot run. The host is DECIDED (Cloudflare Workers via the OpenNext adapter, 2026-10-23, OG-53);
+  nothing is deployed.
 - **Catalogue exposure** — public but unlisted, `noindex` until prices are `VERIFIED` (P2 Sprint 3
-  Step 7, decided 2026-10-18). The list response carries `offer_class` per product but NO
-  `disclaimer` field, so a price grid built from it must render the disclaimer itself.
-- **CORS is already proven, DB-free (measured 2026-10-19).** Driven through the real app with the
-  stub collaborators: an allow-listed origin gets `ACAO` echoed EXACTLY on both the preflight (204)
-  and the served POST (201), a non-listed origin is still served but gets no `ACAO` header, and an
-  invalid body answers 422 `VALIDATION_ERROR` with a per-field `details` array. The served OpenAPI
-  document is 3.0.3 / `info.version 1.6.0` with exactly eight paths (the price history is the eighth). So the browser contract is ready;
-  what is missing is an origin to list, not a capability. `apps/web` at `245638d` made NO API call
-  (no `fetch`/client library anywhere under `apps/web/`); **S4 (2026-10-20, on the `frontend`
-  branch) closed that half** — a typed client generated from this API's committed 1.6.0 snapshot, a
-  fixture mock, and 19 specs (6 driving the client, 13 driving the mock)
-  against it. What S4 cannot prove is anything that needs a real server, so the two hosts must still agree on `ALLOWED_ORIGINS` before the first real
-  request, and "can it talk to the API" stays UNVERIFIED until one is attempted.
-- **The POST contract review** invited before merge: dedupe (200 + `reused: true`), presets
-  (contract v1.4) and the catalogue + price history (v1.5 / v1.6) change what the wizard and the
-  product pages may rely on.
+  Step 7). The list response carries `offer_class` per product but NO `disclaimer` field, so a price
+  grid built from it must render the disclaimer itself.
+- **CORS is proven, DB-free** (2026-10-19): an allow-listed origin gets `ACAO` echoed on both the
+  preflight (204) and the served POST (201), a non-listed origin is served without `ACAO`, and an
+  invalid body answers 422 `VALIDATION_ERROR` with a per-field `details` array. The served document is
+  3.0.3 / `info.version` **1.10.0** with exactly **ten** paths.
 - **A write target that is not the TEST branch** — the Neon `frontend-dev` branch
   (`br-proud-frog-ax80h3nv`) plus the gitignored `.env.frontend-dev`, because every distinct POST
   leaves an unmarked `recommendation_query` row and `eval:scenarios` refuses to run while one
@@ -145,11 +135,10 @@ and none of them is agent work left undone:
 The Tailwind defect that used to be listed here is **SUPERSEDED (2026-10-20, measured)**: the
 committed scaffold ships `postcss.config.mjs` registering `@tailwindcss/postcss`, and `next build`
 emits real Tailwind utilities (`text-2xl`, `mx-auto`, `sr-only`) with no CSS warning, while lint,
-typecheck and the 3 Playwright specs pass. The old claim ("no PostCSS or Turbopack integration
-wired, so `@theme` is never processed") described an uncommitted working tree, not the branch. The
-frontend's real open items are the DEPLOYMENT of its now-decided host (Cloudflare Workers, chosen
-2026-10-23 - see the plan §1/§5/§7) and S24's swap surface (CD-8: Decision 55's read-only preview landed 2026-10-25, then Decision 56's committed swap landed 2026-10-26 - contract v1.10.0, one new POST path, migration 023 branch-first, and S24's panel now both previews AND applies); the "unfunded W0 sprints"
-phrasing above is superseded, because W0 is COMPLETE (S1-S6).
+typecheck and the 3 Playwright specs pass. The old claim (no PostCSS or Turbopack integration
+wired, so `@theme` is never processed) described an uncommitted working tree, not the branch. The
+frontend's real open items are the DEPLOYMENT of its decided host and the swap surface, which has
+landed on both halves (Decision 55's preview 2026-10-25, Decision 56's append-only commit 2026-10-26).
 
 ## Register sync
 

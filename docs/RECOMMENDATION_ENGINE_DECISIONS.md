@@ -5698,3 +5698,50 @@ Design and implementation in the same change, measured 2026-10-26:
 - `node scripts/rehearse-api-role.js` on the TEST branch: `ok: true` with `recommendation_swap_insert` expected `true`, actual `true` - the grant item is proved against a real role, not asserted.
 - `apps/web`: `typecheck`, `lint`, `check:tokens`, `check:i18n`, `check:api-types` (10 paths, contract 1.10.0, byte-identical types) and `build` all pass; `e2e/swap.spec.ts` is 10/10 in a browser against the fixture mock (apply posts the preview's triple and shows the 201's total, FAIL offers no apply, and a build served as swapped shows the badge and the no-explanation sentence), and `result`/`rtl`/`a11y` stay green (84/84).
 - Still open by design: migration 023 has NOT been applied to the shared database (branch-first, owner-gated) and the deployed role has not been re-granted there; until both happen `verify:replay --reference=shared` reports exactly 023's objects.
+
+## Decision 57 — production keeps the model it serves, and `launch-v2@2.0.0` is the version evaluated for release
+
+Status: PROVISIONAL 2026-10-26 — production keeps `seed-minimal-v1@1.0.0`, `launch-v2@1.0.0` is not the release model and is never activated, and `launch-v2@2.0.0` is the version evaluated for release, where that evaluation is a GATE (A1/A3/A4 are still unreviewed) rather than an activation.
+
+Date: 2026-10-26. Scope: which scoring model a release may serve, and what the words "release candidate" are allowed to mean here. The H3 review (`docs/ENGINE_HYPOTHESIS_REVIEW_2026-10-24.md`) made this necessary without stating it: three assertions the engine still misses are `hypothesis`, two `launch-v2` versions are ACTIVE on the TEST branch, and nothing is deployed — so the next deploy had no recorded answer to "which model ships". Documentation only: **no migration, no seed, no row, no grant, no deploy**, and no change to any environment's data.
+
+### Current situation
+
+Measured read-only 2026-10-26: `scoring_model` rows and `schema_migrations` on each database, not a copy of an earlier report.
+
+| Database | Active scoring model(s) | Ledger |
+|---|---|---|
+| SHARED (`DATABASE_URL`, the production stand-in) | `seed-minimal-v1@1.0.0` alone | 22 |
+| TEST branch (`TEST_DATABASE_URL`) | `launch-v2@1.0.0` AND `launch-v2@2.0.0`; `seed-minimal-v1@1.0.0` inactive | 23 |
+| EU (`morocco-pc-eu`) | `launch-v2@1.0.0` (documented by the 2026-10-23 parity run; not re-measured here) | 22 |
+
+`test/golden/scenarios.json` records the review's verdict as data: `A1`, `A3` and `A4` are `hypothesis`; `A2`, `A2b` and `A5`-`A10` are `approved`, so a failure in one of those eight is a HARD FAIL (exit 1). At `launch-v2@2.0.0` the suite is 86 rows — 66 PASS / 19 EXPECTED-RED / 1 UNKNOWN — and the 19 EXPECTED-RED rows are exactly A1 (15) + A3 (3) + A4's strict pair (1). `current_epic` is `E8`.
+
+### Problem
+
+Activation has been an emergent fact rather than a decision: whichever `scoring_model` row is `is_active` is what an environment serves. That is correct for a harness — a pin is a SELECTOR, never an activation (Decision 39 / C-36) — and wrong for a release, because it makes "what ships" a function of the last seed somebody applied.
+
+Two hazards follow. First, TEST deliberately holds TWO active `launch-v2` versions so the pinned A/B evidence resolves: `launch-v2@1.0.0` for the figures quoted before 2026-10-24 and `2.0.0` for the E5/E6 review. A deploy that copies TEST's model state, or a script that resolves "the active model" without a pin, would ship `1.0.0` — the version that declares no `resolution_profiles`, so Decision 42's reviewed VRAM floors would be silently inert again, which is precisely the state Decision 53 ended. Second, treating `1.0.0` as a candidate would ship the version the review superseded: the two differ by that one configuration key, and the review approved the key.
+
+### Decision
+
+1. **Production keeps the model it serves today.** The shared database stays on `seed-minimal-v1@1.0.0`, and the first deployed environment inherits that pin rather than TEST's state. This decision writes nothing: the pin is already true where it applies.
+2. **`launch-v2@1.0.0` is not activated.** It is not the release model and must not be turned on in production. Its row stays on TEST as the pinned A/B reference the pre-E5 figures resolve against — deactivating it there would destroy evidence — so it stays ACTIVE on TEST only.
+3. **`launch-v2@2.0.0` is the version evaluated for release.** "Evaluated" is a gate, not a status: the release evaluation is complete only when `A1`, `A3` and `A4` leave `hypothesis` in `test/golden/scenarios.json`, and when OG-38's remaining half (the missing budget term in `build_score` and GAMING/WORKSTATION non-divergence at high budgets) plus OG-43 and OG-44 (unvalidated band multipliers and pair-quota values) are resolved or explicitly accepted. Until then a 2.0.0 deploy is an evaluation and must be described as one.
+4. **The EU database's pre-existing `launch-v2@1.0.0` row is reconciled at deploy time, by the owner.** `check-target-parity` names the difference until then. This decision does not flip it: activation is a data act (a seed apply, or a `scoring_model` write) with its own restore point, and deciding a model is not writing one.
+5. **A pin is still a selector.** Every comparison harness keeps selecting by `name@version` through `scripts/lib/model-pin.js`, so a two-active branch stays measurable and this decision changes no harness default. The default pin is `seed-minimal-v1@1.0.0`, which is INACTIVE on TEST, which is why a run there must pass `--model=launch-v2@2.0.0`.
+
+### Rejected alternatives
+
+- **Activate `launch-v2@2.0.0` now.** Rejected: `A1`, `A3` and `A4` are unreviewed and currently red, so activating would turn an open hypothesis into a released claim, and there is no deployed environment to activate it on.
+- **Ship `launch-v2@1.0.0` as the release model.** Rejected on content rather than taste: without `resolution_profiles` the reviewed floors are inert and every A4 floor row stops being differential — the exact regression Decision 53 fixed.
+- **Deactivate `launch-v2@1.0.0` on TEST to remove the ambiguity.** Rejected: the E5/E6 evidence chain (`test/golden/_scratch-v10`, `-v11`, `-v12`) and the pre-2026-10-24 figures resolve against that pin, so removing the row would make the comparison unreproducible in order to solve a labelling problem.
+- **Leave this as a note in the review instead of a decision.** Rejected: the review is a dated measurement, not a contract, and the next deploy needs something citable.
+
+### Verdict for this pass
+
+- Decision recorded: PASS (this entry). The environment table is a fresh read-only measurement taken 2026-10-26.
+- No data changed: PASS by construction — no migration, no seed, no grant, no `scoring_model` write, no deploy.
+- Gate bookkeeping: `verify-docs` decision counts moved 54 headings / 60 `Status:` lines -> 55 / 61, `docs/DECISION_INDEX.md` regenerated, `AGENTS.md` cites "Decisions 1–57".
+- Release evaluation of `launch-v2@2.0.0`: **OPEN**, and item 3 above is where its gate lives. A1/A3/A4 remain `hypothesis`; OG-38, OG-43 and OG-44 remain OPEN.
+- Migration 023 and its re-grant: **out of scope here**. The shared database is measured at ledger 22, with `recommendation_swap` absent and the `morocco_pc_api` role holding exactly 6 INSERT table grants — so the 21-answer self-check in `docs/RECIPES/provision-the-api-role.md` describes the rehearsal contract, not shared's state, until an owner-gated apply lands.
