@@ -16,9 +16,13 @@
  *   3. **A FAIL and an UNKNOWN are RESULTS, not errors.** They keep their own
  *      word and their own sentence, and neither is folded into "compatible" —
  *      the three-state vocabulary is load-bearing.
- *   4. **A GPU is chosen by its SKU.** Engine 2B is variant-keyed, so the picker
- *      offers `RTX 4070 12GB · MOCK-4070-STD-12G`, and the request it builds
- *      names both the product and the variant.
+ *   4. **A GPU is chosen by its VARIANT; its SKU shows only where it must.**
+ *      Engine 2B is variant-keyed, so the picker offers `RTX 4070 12GB ·
+ *      MOCK-4070-STD-12G` (and its OC twin — the code is how a reader tells the
+ *      two apart) and the request it builds names both the product and the
+ *      variant. A one-variant GPU is offered as name · price, with no code the
+ *      picker never needs: nothing on the page distinguishes a lone variant
+ *      from anything.
  *
  * The mock answers by the chosen `product_id`, so a spec selects a scenario by
  * selecting a component — the same arrangement `result.spec.ts` uses for ids.
@@ -58,9 +62,9 @@ function candidateSelect(page: Page, index = 0) {
   return card(page, index).getByLabel("Nouveau modèle", { exact: true });
 }
 
-/** A `<option>`'s text, built the way the panel builds it (name · sku · price). */
-function optionText(name: string, sku: string, price: number): string {
-  return `${name} · ${sku} · ${money(price)}`;
+/** A `<option>`'s text, built the way the panel builds it. */
+function optionText(name: string, sku: string | null, price: number): string {
+  return sku === null ? `${name} · ${money(price)}` : `${name} · ${sku} · ${money(price)}`;
 }
 
 /** Open one card's panel and pick a role; returns after the catalogue landed. */
@@ -128,8 +132,10 @@ test("a GPU swap answers PASS with the API's price, total, bar and provenance", 
   const candidates = candidateSelect(page);
   await expect(candidates).toBeEnabled();
 
-  // A GPU is chosen by its SKU: the installed 4060 is not offered back, and the
-  // 4070 offers both of its variants.
+  // A GPU is chosen by its VARIANT: the installed 4060 is not offered back, and
+  // the 4070 offers both of its variants. The SKU appears in ITS labels only
+  // because it carries two — a one-variant product's option reads name · price
+  // (the FAIL and UNKNOWN specs below pick such products without a SKU).
   await expect(candidates.locator("option")).toHaveCount(5);
   await expect(
     candidates.locator("option").filter({ hasText: "MOCK-4070-STD-12G" }),
@@ -172,7 +178,7 @@ test("a failing swap is a 200 result, said in words and never as compatible", as
   await page.goto(THREE);
   await chooseRole(page, "Carte graphique");
   await candidateSelect(page).selectOption({
-    label: optionText("Radeon RX 7600 8GB", "MOCK-7600-STD-8G", 3390),
+    label: optionText("Radeon RX 7600 8GB", null, 3390),
   });
   await card(page).getByRole("button", { name: FR_PREVIEW }).click();
 
@@ -204,7 +210,7 @@ test("an unchecked relationship keeps its own state, and is never compatible", a
   await candidateSelect(page).selectOption({
     label: optionText(
       "GeForce RTX 4060 Ti Gaming OC 16 Go Édition Ventus 3X Blanc",
-      "MOCK-4060TI-VENTUS-16G",
+      null,
       4499,
     ),
   });
@@ -365,7 +371,7 @@ test("a FAIL verdict offers no apply button at all", async ({ page }) => {
   await page.goto(THREE);
   await chooseRole(page, "Carte graphique");
   await candidateSelect(page).selectOption({
-    label: optionText("Radeon RX 7600 8GB", "MOCK-7600-STD-8G", 3390),
+    label: optionText("Radeon RX 7600 8GB", null, 3390),
   });
   await card(page).getByRole("button", { name: FR_PREVIEW }).click();
   await expect(card(page).locator("[data-swap-verdict]")).toHaveAttribute(

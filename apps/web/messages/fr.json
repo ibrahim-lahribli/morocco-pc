@@ -227,7 +227,7 @@
         "STRATEGY_ORDER": "a fixé l'ordre des profils essayés, d'où le classement ci-dessous.",
         "DEFAULT_ORDER": "correspond à l'ordre par défaut : rien ne change par rapport à une priorité non indiquée.",
         "NO_BUILDS": "rien n'a été assemblé : il n'y avait aucun profil à ordonner.",
-        "NOT_PROVIDED": "n'a pas été indiqué.",
+        "NOT_PROVIDED": "aucune valeur n'a été fournie.",
         "NOT_RECORDED": "n'a pas pu être établi pour cette recherche.",
         "UNRECOGNISED_VALUE": "n'a pas pu être interprété pour cette recherche."
       }
