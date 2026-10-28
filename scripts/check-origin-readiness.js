@@ -40,7 +40,8 @@ const { spawnSync } = require('node:child_process');
 
 const { parseFlyIps, checkHealth, healthUrl } = require('./lib/origin-readiness');
 
-const USAGE = 'usage: node scripts/check-origin-readiness.js [--app=<name>] [--origin=<url>] [--help]';
+const USAGE = 'usage: node scripts/check-origin-readiness.js [--app=<name>] [--origin=<url>] [--platform=fly|koyeb] [--help]';
+const PLATFORMS = ['fly', 'koyeb'];
 const DEFAULT_APP = 'morocco-pc-api';
 const HEALTH_TIMEOUT_MS = 10000;
 const FLY_TIMEOUT_MS = 30000;
@@ -51,10 +52,10 @@ const FLY_TIMEOUT_MS = 30000;
  * (checks-target-parity.js states the same rule).
  *
  * @param {string[]} argv
- * @returns {{help: boolean, app: string, origin: string|null}}
+ * @returns {{help: boolean, app: string, origin: string|null, platform: string}}
  */
 function parseArgs(argv) {
-  const parsed = { help: false, app: DEFAULT_APP, origin: null };
+  const parsed = { help: false, app: DEFAULT_APP, origin: null, platform: 'fly' };
   for (const arg of argv) {
     if (arg === '--help' || arg === '-h') {
       parsed.help = true;
@@ -66,6 +67,13 @@ function parseArgs(argv) {
     }
     if (arg.startsWith('--origin=')) {
       parsed.origin = arg.slice('--origin='.length).trim();
+      continue;
+    }
+    if (arg.startsWith('--platform=')) {
+      parsed.platform = arg.slice('--platform='.length).trim();
+      if (!PLATFORMS.includes(parsed.platform)) {
+        throw new Error('--platform must be one of: ' + PLATFORMS.join(', '));
+      }
       continue;
     }
     throw new Error('unknown argument: ' + arg);
@@ -133,6 +141,33 @@ function messageOf(error) {
   return error && error.message ? error.message : String(error);
 }
 
+/** The health half of the preflight, for platforms with no `fly ips list` step. */
+async function checkHealthOnly(origin, fetchHealth, log, logError) {
+  const url = healthUrl(origin);
+  let response;
+  try {
+    response = await fetchHealth(url);
+  } catch (error) {
+    logError('FAIL preflight: GET ' + url + ' did not answer 2xx (' + messageOf(error) + ').');
+    return 1;
+  }
+  const verdict = checkHealth(response && response.status, response && response.bodyText);
+  if (!verdict.ok) {
+    if (verdict.code === 'HTTP_STATUS') {
+      logError('FAIL preflight: GET ' + url + ' did not answer 2xx (' + verdict.detail + ').');
+      return 1;
+    }
+    if (verdict.code === 'NOT_OK') {
+      logError('FAIL preflight: ' + verdict.detail + ' - fix the deploy, then re-run this check');
+      return 1;
+    }
+    logError('FAIL preflight: ' + verdict.detail);
+    return 1;
+  }
+  log('PREFLIGHT OK - origin: ' + origin);
+  return 0;
+}
+
 async function main(argv, deps) {
   const options = deps || {};
   const runFly = options.runFly || defaultRunFly;
@@ -162,6 +197,10 @@ async function main(argv, deps) {
 
   let origin;
   try {
+    if (args.platform === 'koyeb' && args.origin === null) {
+      // Koyeb assigns the public hostname, so it cannot be guessed from the app name.
+      throw new Error('--platform=koyeb needs an explicit --origin, e.g. https://<service>.koyeb.app');
+    }
     // The runbook's origin is the app's own host; a custom domain is passed
     // explicitly rather than guessed.
     origin = normalizeOrigin(args.origin === null ? 'https://' + args.app + '.fly.dev' : args.origin);
@@ -169,6 +208,12 @@ async function main(argv, deps) {
     logError('ERROR: ' + error.message);
     logError(USAGE);
     return 2;
+  }
+
+  if (args.platform === 'koyeb') {
+    // Koyeb has no IP-allocation step to assert; the health probe below is the
+    // whole check, so the verdict says so rather than claiming an address.
+    return checkHealthOnly(origin, fetchHealth, log, logError);
   }
 
   // Print the table first: on a failure it is the operator's evidence for what
