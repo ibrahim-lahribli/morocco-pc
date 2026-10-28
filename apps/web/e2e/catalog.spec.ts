@@ -166,6 +166,15 @@ test("the /composants index lists every catalogue product under its category", a
   expect(h2s).toContain("Mémoire");
   expect(h2s).toContain("Stockage");
   expect(h2s).not.toContain("GPU");
+
+  // Each row IS one block link, so the row is the hit area: the accessibility
+  // minimum is the design board's 44 px tap floor at 360 px, not 36 px.
+  const rowHeights = await page
+    .locator("main ul > li > a")
+    .evaluateAll((anchors) =>
+    anchors.map((anchor) => Math.round(anchor.getBoundingClientRect().height)),
+  );
+  expect(Math.min(...rowHeights), "tap floor").toBeGreaterThanOrEqual(44);
 });
 
 test("the index answers the bare prefix, not the 404, in both locales", async ({

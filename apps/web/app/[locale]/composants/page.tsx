@@ -104,7 +104,7 @@ export default async function CatalogIndexPage({
               <li key={product.slug}>
                 <Link
                   href={localePath(locale, `/composants/${product.slug}`)}
-                  className="block px-4 py-2 text-compact text-primary underline-offset-4 hover:underline"
+                  className="block px-4 py-3 text-compact break-words text-primary underline-offset-4 hover:underline"
                 >
                   <span dir="auto">{product.display_name}</span>
                 </Link>
@@ -124,7 +124,7 @@ export default async function CatalogIndexPage({
                 <li key={product.slug}>
                   <Link
                     href={localePath(locale, `/composants/${product.slug}`)}
-                    className="block px-4 py-2 text-compact text-primary underline-offset-4 hover:underline"
+                    className="block px-4 py-3 text-compact break-words text-primary underline-offset-4 hover:underline"
                   >
                     <span dir="auto">{product.display_name}</span>
                   </Link>
