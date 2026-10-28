@@ -431,6 +431,15 @@
       "with": "Avec {name}",
       "open": "Ouvrir la comparaison"
     },
+    "index": {
+      "title": "Composants du catalogue",
+      "intro": "Le catalogue que le moteur assemble, catégorie par catégorie. Chaque composant renvoie à sa fiche.",
+      "unavailable": "Le catalogue ne répond pas pour le moment. Réessayez plus tard, ou lancez directement une configuration.",
+      "meta": {
+        "title": "Composants du catalogue — morocco-pc",
+        "description": "La liste des composants que le moteur assemble, catégorie par catégorie : chaque fiche porte ses offres et les configurations qui l'utilisent."
+      }
+    },
     "fromPrice": "À partir de {amount}",
     "noPrice": "Aucun prix disponible",
     "cta": "Configurer mon PC"
