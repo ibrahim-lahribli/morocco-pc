@@ -15,7 +15,7 @@
  * which a build can store but the engine never assembles, is deliberately
  * absent — the API refuses it too).
  *
- * ## 2. A GPU is chosen by its SKU, everything else by its product
+ * ## 2. A GPU is chosen by its VARIANT, and the SKU shows only when two choices would otherwise look the same
  *
  * Engine 2B is variant-keyed for GPUs: a candidate IS a `(product, variant)`
  * pair, and the preview endpoint requires `product_variant_id` for role GPU and
@@ -24,6 +24,13 @@
  * into one, and the request it builds can name exactly what the engine keys on.
  * A GPU product whose `variants` array is empty offers no choice at all: there
  * is nothing addressable to send.
+ *
+ * The choice's own `sku` is set ONLY when the PRODUCT carries more than one
+ * variant: a lone variant has nothing to be told apart from (its variant id
+ * still travels in the request), and a picker that shows two IDENTICAL labels
+ * for a product's STD and OC parts cannot be answered honestly — the SKU is
+ * the only word the catalogue artwork distinguishes them by, so it appears
+ * where it earns its place. Option keys remain unique whether or not one is.
  *
  * ## 3. The current part is not offered back
  *
@@ -99,7 +106,7 @@ export interface SwapOption {
   productVariantId: string | undefined;
   /** The catalogue's display name — data, printed verbatim. */
   name: string;
-  /** The SKU, when the choice is a variant. */
+  /** The variant's SKU — set only when the product carries more than one variant. */
   sku: string | null;
   /** The catalogue's own `from_price`, or null when it has no eligible offer. */
   price: number | null;
@@ -139,17 +146,22 @@ export function swapOptions(
       price: product.from_price,
     }));
   }
-  return offered.flatMap((product) =>
-    product.variants.map((variant) => ({
+  return offered.flatMap((product) => {
+    // The SKU is a DISAMBIGUATOR, not decoration: a lone variant has no twin to
+    // disambiguate from, so its code stays out of the label (the variants
+    // remain addressable — `productVariantId` still goes in the request). When a
+    // product carries two or more variants, every label carries its code.
+    const disambiguate = product.variants.length > 1;
+    return product.variants.map((variant) => ({
       key: `${product.id}:${variant.id}`,
       role,
       productId: product.id,
       productVariantId: variant.id,
       name: product.display_name,
-      sku: variant.sku,
+      sku: disambiguate ? variant.sku : null,
       price: product.from_price,
-    })),
-  );
+    }));
+  });
 }
 
 /** The engine's three-state compatibility vocabulary. */

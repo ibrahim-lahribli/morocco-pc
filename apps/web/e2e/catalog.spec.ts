@@ -130,3 +130,76 @@ test("a component page is ISR: it advertises the catalogue's revalidation window
   expect(cacheControl).toContain("s-maxage=3600");
   expect(cacheControl).not.toContain("no-store");
 });
+
+/**
+ * The `/composants` index — the route the bare prefix lands on, from a catch-all
+ * 404. Every fixture product is listed once, a link from the index resolves, and
+ * the page carries the SAME ISR window the product pages do.
+ */
+test("the /composants index lists every catalogue product under its category", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/fr/composants");
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Composants du catalogue",
+  );
+
+  // Every fixture product appears exactly once, and each entry is a link that
+  // opens its real product page. The locator insists on the list rows so the
+  // h1's own text cannot double-count a name.
+  const slugs = Object.keys(CATALOG_PRODUCTS_BY_SLUG) as (keyof typeof CATALOG_PRODUCTS_BY_SLUG)[];
+  for (const slug of slugs) {
+    const product = CATALOG_PRODUCTS_BY_SLUG[slug];
+    const entry = page.locator("li > a", { has: page.getByText(product.display_name) });
+    await expect(entry, slug).toHaveCount(1);
+    const href = (await entry.getAttribute("href")) ?? "";
+    expect(href, slug).toBe(`/fr/composants/${slug}`);
+    expect((await request.get(href)).status(), href).toBe(200);
+  }
+
+  // The grouping is words, never the enum: a category heading exists for each
+  // category the fixtures actually use.
+  const h2s = await page.getByRole("heading", { level: 2 }).allInnerTexts();
+  expect(h2s).toContain("Carte graphique");
+  expect(h2s).toContain("Mémoire");
+  expect(h2s).toContain("Stockage");
+  expect(h2s).not.toContain("GPU");
+
+  // Each row IS one block link, so the row is the hit area: the accessibility
+  // minimum is the design board's 44 px tap floor at 360 px, not 36 px.
+  const rowHeights = await page
+    .locator("main ul > li > a")
+    .evaluateAll((anchors) =>
+    anchors.map((anchor) => Math.round(anchor.getBoundingClientRect().height)),
+  );
+  expect(Math.min(...rowHeights), "tap floor").toBeGreaterThanOrEqual(44);
+});
+
+test("the index answers the bare prefix, not the 404, in both locales", async ({
+  page,
+}) => {
+  for (const path of ["/fr/composants", "/ar/composants"]) {
+    const response = await page.goto(path);
+    expect(response?.status(), path).toBe(200);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      path.startsWith("/ar") ? "مكوّنات الكتالوج" : "Composants du catalogue",
+    );
+  }
+});
+
+/** The document's `<link rel="canonical">` href, or null — the seo spec's shape. */
+function canonicalHref(html: string): string | null {
+  const tag = /<link\b[^>]*\brel="canonical"[^>]*>/.exec(html)?.[0];
+  return tag === undefined ? null : (/\bhref="([^"]*)"/.exec(tag)?.[1] ?? null);
+}
+
+test("the index renders per request and self-canonical", async ({ request }) => {
+  const response = await request.get("/fr/composants");
+  const headers = response.headers();
+  // `force-dynamic` like the comparer route: a build with no API cannot be
+  // allowed to freeze an empty listing into cached HTML.
+  expect(headers["cache-control"] ?? "").toContain("no-store");
+  expect(canonicalHref(await response.text())).toBe("http://localhost:3210/fr/composants");
+});

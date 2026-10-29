@@ -84,8 +84,11 @@ test.describe("the results page states what the inputs changed", () => {
       block.getByText("a choisi le profil de votre usage : politique GPU et répartition du budget."),
     ).toBeVisible();
     // NOT_PROVIDED: the input the request never carried says exactly that -
-    // not "no effect on the build", which the server cannot know.
-    await expect(block.getByText("n'a pas été indiqué.")).toBeVisible();
+    // not "no effect on the build", which the server cannot know. The copy is
+    // not a gender-bearing role word in disguise ("GPU : n'a pas été
+    // indiqué." reads as half a verb after a masculine noun); it is a banner
+    // line in its own right.
+    await expect(block.getByText("aucune valeur n'a été fournie.")).toBeVisible();
     // STRATEGY_ORDER: the priority's real consequence (the ranking below).
     await expect(
       block.getByText("a fixé l'ordre des profils essayés, d'où le classement ci-dessous."),

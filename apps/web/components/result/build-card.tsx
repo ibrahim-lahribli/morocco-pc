@@ -54,6 +54,7 @@ import { Alert, Badge, ProgressBar, cn } from "@/components/ui";
 import { formatDate, formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
 import { localePath } from "@/lib/i18n/paths";
 import {
+  ROLE_ORDER,
   barFigures,
   budgetTone,
   overBudgetBy,
@@ -270,6 +271,16 @@ export async function BuildCard({
           pairLine: t("swap.pairLine"),
           pairSelf: t("swap.pairSelf"),
           otherRoleLabel: t("roles.OTHER"),
+          // The verdict's pair lines name any role the API can name — the
+          // page's WHOLE role vocabulary (interface + data rows), not just the
+          // swap picker's subset: a swapped-in part can make demands of a role
+          // this build does not carry (or carries nothing of), and a role with
+          // no word is dropped from the verdict list rather than printed as
+          // "Autre" with a sentence that answers nothing. The interface commits
+          // carry NO roles array, so the words are the page's own list.
+          roleWords: Object.fromEntries(
+            ROLE_ORDER.map((role) => [role, t(`roles.${roleLabel(role)}`)]),
+          ),
           eligibility: {
             NO_ELIGIBLE_OFFER: t("swap.eligibility.NO_ELIGIBLE_OFFER"),
             PRODUCT_NOT_CANDIDATE: t("swap.eligibility.PRODUCT_NOT_CANDIDATE"),

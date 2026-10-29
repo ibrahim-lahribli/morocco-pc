@@ -45,7 +45,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 
 import { Alert, Badge, Button, ProgressBar } from "@/components/ui";
 import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
@@ -114,6 +114,8 @@ export interface SwapLabels {
   pairSelf: string;
   /** The word for a role this build does not name (never a raw enum). */
   otherRoleLabel: string;
+  /** Every role word the page knows, keyed by the engine's vocabulary. */
+  roleWords: Readonly<Record<string, string>>;
   /** The eligibility sentences, keyed by the API's reason codes. */
   eligibility: Record<EligibilityReasonKey, string>;
   /** The badge words, shared with the card's own price badge (S12). */
@@ -186,6 +188,51 @@ type Commit =
   | { kind: "loading" }
   | { kind: "error"; key: SwapCommitErrorKey }
   | { kind: "done"; body: SwapCommitResponse };
+
+/**
+ * The verdict's relationship lines, or null when none of them carries a name
+ * this page knows.
+ *
+ * One line per PHYSICAL relationship, decided once: the API's pair rows are per
+ * CHECK, so one RAM demand arrives as `motherboard_memory`, `mb_memory_slots`
+ * and `mb_memory_capacity` — three rows that would print the same sentence
+ * three times. Identical (role, partner, status) triples collapse; a pair whose
+ * role this page has no word for is skipped rather than printed as an "other"
+ * role whose sentence answers nothing. The `<li>` key is the collapsed
+ * relationship, not one CHECK of N.
+ */
+function renderPairLines(
+  pairs: readonly SwapPreviewResponse["compatibility"]["pairs"][number][],
+  roleOf: (name: string) => string | undefined,
+  labels: SwapLabels,
+): ReactNode {
+  const seen = new Set<string>();
+  const lines: ReactNode[] = [];
+  for (const pair of pairs) {
+    const roleWord = roleOf(pair.role);
+    const partnerWord = pair.partner_role === null ? null : roleOf(pair.partner_role);
+    if (roleWord === undefined) continue;
+    if (pair.partner_role !== null && partnerWord === undefined) continue;
+    const key = `${pair.role}:${pair.partner_role ?? ""}:${pair.status}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const word = labels.verdict[pair.status];
+    const text =
+      pair.partner_role === null
+        ? labels.pairSelf.replace("{role}", roleWord).replace("{status}", word)
+        : labels.pairLine
+            .replace("{role}", roleWord)
+            .replace("{partner}", partnerWord ?? "")
+            .replace("{status}", word);
+    lines.push(
+      <li key={key} data-pair-status={pair.status} className="text-caption text-ink">
+        {text}
+      </li>,
+    );
+  }
+  if (lines.length === 0) return null;
+  return <ul className="mt-2 space-y-1">{lines}</ul>;
+}
 
 export function SwapPanel({
   resultId,
@@ -406,7 +453,7 @@ export function SwapPanel({
               <Alert tone="warning">{labels.errors[preview.key]}</Alert>
             ) : null}
             {preview.kind === "result" ? (
-              <SwapResult body={preview.body} locale={locale} labels={labels} roles={roles} />
+              <SwapResult body={preview.body} locale={locale} labels={labels} />
             ) : null}
             {commit.kind === "error" ? (
               <div className="mt-2">
@@ -475,12 +522,10 @@ function SwapResult({
   body,
   locale,
   labels,
-  roles,
 }: {
   body: SwapPreviewResponse;
   locale: AppLocale;
   labels: SwapLabels;
-  roles: readonly { role: string; label: string }[];
 }) {
   const status = verdictOf(body);
   const eligibility = eligibilityFailure(body);
@@ -493,10 +538,13 @@ function SwapResult({
   const over = bar === null ? null : overBudgetBy(bar.total, bar.budget);
   const left = bar === null ? null : remainingBudget(bar.total, bar.budget);
   const money = (value: number) => formatMoney(value, locale);
-  // A role is a WORD. An unknown or absent one becomes `otherRoleLabel` rather
-  // than the engine's enum: `SSD_BOOT` on screen is the V5 failure.
-  const roleName = (name: string) =>
-    roles.find((entry) => entry.role === name)?.label ?? labels.otherRoleLabel;
+  // A role is a WORD, resolved from the page's whole role vocabulary
+  // (`roleWords`), not just this build's slots: the API names roles the build
+  // itself may not carry (a swapped-in part can make demands of a role the
+  // build does not assemble). A pair whose role has NO word on the page is
+  // DROPPED from the list — a line that would read "Autre : …" answers
+  // nothing — and the verdict word above still carries the state.
+  const role = (name: string): string | undefined => labels.roleWords[name];
 
   return (
     <div data-swap-verdict={status} className="rounded-control border border-border bg-surface p-3">
@@ -525,26 +573,13 @@ function SwapResult({
         </p>
       ) : null}
 
-      {pairs.length > 0 ? (
-        <ul className="mt-2 space-y-1">
-          {pairs.map((pair, index) => (
-            <li
-              key={`${pair.check}:${pair.role}:${index}`}
-              data-pair-status={pair.status}
-              className="text-caption text-ink"
-            >
-              {pair.partner_role === null
-                ? labels.pairSelf
-                    .replace("{role}", roleName(pair.role))
-                    .replace("{status}", labels.verdict[pair.status])
-                : labels.pairLine
-                    .replace("{role}", roleName(pair.role))
-                    .replace("{partner}", roleName(pair.partner_role))
-                    .replace("{status}", labels.verdict[pair.status])}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {/* One line per PHYSICAL relationship, decided here once: the API's pair
+          rows are per CHECK, so one RAM demand arrives as `motherboard_memory`,
+          `mb_memory_slots` and `mb_memory_capacity` — three lines that would
+          read the same. Identical (role, partner, status) triples collapse; a
+          pair whose role this page cannot name is skipped rather than printed
+          as "Autre". */}
+      {renderPairLines(pairs, role, labels)}
 
       {unknown > 0 ? (
         <p className="mt-2 text-caption text-muted">

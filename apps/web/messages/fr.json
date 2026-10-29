@@ -21,7 +21,17 @@
   "home": {
     "title": "Configurez votre PC, pièce par pièce",
     "intro": "morocco-pc vous propose des configurations compatibles, adaptées à votre budget et à votre usage, avec des prix en dirhams.",
-    "cta": "Configurer mon PC"
+    "cta": "Configurer mon PC",
+    "presetsTitle": "Configurations prêtes à l'emploi",
+    "presetsIntro": "Des configurations déjà calculées par le moteur. Partez de l'une d'elles, ou ajustez le budget avec votre propre réglage.",
+    "presetBuilds": "{count, plural, =0 {aucune configuration calculée} one {# configuration calculée} other {# configurations calculées}}",
+    "presetCta": "Voir cette configuration",
+    "trustTitle": "Pourquoi faire confiance aux prix affichés",
+    "trustCompatibility": "Chaque configuration a passé les règles de compatibilité du moteur avant d'être affichée.",
+    "trustProvenance": "Chaque prix porte l'état de sa vérification\u00a0:",
+    "trustNoAccount": "Sans compte et sans cookie : vos choix restent sur votre appareil.",
+    "exampleEyebrow": "Exemple",
+    "exampleIntro": "Ce que le moteur propose avec une enveloppe de {budget} :"
   },
   "formats": {
     "eyebrow": "Squelette i18n · S5",
@@ -227,7 +237,7 @@
         "STRATEGY_ORDER": "a fixé l'ordre des profils essayés, d'où le classement ci-dessous.",
         "DEFAULT_ORDER": "correspond à l'ordre par défaut : rien ne change par rapport à une priorité non indiquée.",
         "NO_BUILDS": "rien n'a été assemblé : il n'y avait aucun profil à ordonner.",
-        "NOT_PROVIDED": "n'a pas été indiqué.",
+        "NOT_PROVIDED": "aucune valeur n'a été fournie.",
         "NOT_RECORDED": "n'a pas pu être établi pour cette recherche.",
         "UNRECOGNISED_VALUE": "n'a pas pu être interprété pour cette recherche."
       }
@@ -420,6 +430,15 @@
       "hint": "Comparez ses caractéristiques avec celles d’un autre composant de la même catégorie.",
       "with": "Avec {name}",
       "open": "Ouvrir la comparaison"
+    },
+    "index": {
+      "title": "Composants du catalogue",
+      "intro": "Le catalogue que le moteur assemble, catégorie par catégorie. Chaque composant renvoie à sa fiche.",
+      "unavailable": "Le catalogue ne répond pas pour le moment. Réessayez plus tard, ou lancez directement une configuration.",
+      "meta": {
+        "title": "Composants du catalogue — morocco-pc",
+        "description": "La liste des composants que le moteur assemble, catégorie par catégorie : chaque fiche porte ses offres et les configurations qui l'utilisent."
+      }
     },
     "fromPrice": "À partir de {amount}",
     "noPrice": "Aucun prix disponible",

@@ -440,6 +440,56 @@ export async function loadPriceHistory(slug: string): Promise<PriceObservation[]
 /** The request-scoped memo: a render reads the series exactly once. */
 export const loadPriceHistoryCached = cache(loadPriceHistory);
 
+/**
+ * The whole catalogue listing, for the `/composants` index page.
+ *
+ * The SAME keyset walk the sitemap's candidate half makes, minus its
+ * confirmation reads: the index lists what the catalogue SERVES — a product
+ * with a placeholder price is still a real page a reader may open from here —
+ * while the sitemap applies the stricter indexable predicate afterwards.
+ * Deduping by slug is defensive: a keyset boundary moving between pages must
+ * never print a product twice.
+ *
+ * One honest degradation, stated once: a listing the API does not answer (no
+ * API configured, a 5xx, a timeout, a 429) returns NO products rather than
+ * throwing, because the index is a navigation surface and an empty state in
+ * words is what `catalogCandidates()` already does for the compare picker. The
+ * page renders its `unavailable` copy for both "nothing configured" and "the
+ * catalogue did not answer tonight" — the visitor-facing difference between
+ * those two is nil.
+ */
+export async function catalogListing(): Promise<CatalogCandidate[]> {
+  if (!isApiConfigured()) return [];
+
+  const products = new Map<string, CatalogCandidate>();
+  let cursor: string | null = null;
+  for (let page = 0; page < LIST_PAGE_CAP; page += 1) {
+    let body: CatalogListResponse;
+    try {
+      body = await listCatalogProductsForServer(
+        { limit: String(LIST_PAGE_LIMIT), ...(cursor === null ? {} : { cursor }) },
+        {
+          revalidate: CATALOG_REVALIDATE_SECONDS,
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        },
+      );
+    } catch (cause) {
+      console.warn(
+        "catalog index: the listing is unavailable; the page renders empty",
+        cause instanceof Error ? cause.message : cause,
+      );
+      return [];
+    }
+    for (const product of body.products) products.set(product.slug, product);
+    if (body.next_cursor === null || body.next_cursor === "") break;
+    cursor = body.next_cursor;
+  }
+  return [...products.values()];
+}
+
+/** The request-scoped memo: metadata and the body cost ONE walk. */
+export const catalogListingCached = cache(catalogListing);
+
 /** Keyset page size for the compare picker’s one listing read. */
 const CANDIDATE_PAGE_LIMIT = 100;
 
