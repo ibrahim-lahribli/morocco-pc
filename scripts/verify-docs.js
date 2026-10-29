@@ -267,7 +267,44 @@ const decisions = (function checkDecisions() {
   else pass('generated-docs', generated.join(', ') + ' + GLOSSARY/TEST_MAP/RECIPES + gen:schema present');
 })();
 
-// 9. Live read-only structural checks (--live only).
+// 9. Engine enforcement claims: a document may not call an engine rule
+// unenforced while that rule's module is in the tree. Added 2026-10-29 after
+// the engine audit found six passages in the architecture doc still describing
+// the four Decision 26 item B rules as unimplemented - sixteen days after
+// Decision 45 (E8) shipped all four. That is the doc every agent reads first,
+// and it was wrong in the one direction that causes a rule to be implemented
+// twice. Scope is that document deliberately: it is the design baseline whose
+// claims this check keeps honest, while OPEN_GAPS rows quote superseded claims
+// on purpose and DEVELOPMENT_NOTES records what was believed then. Pure half:
+// scripts/lib/enforcement-claims.js, tested by `npm run test:scripts`.
+(function checkEnforcementClaims() {
+  const rel = 'docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md';
+  let found;
+  try {
+    const { findStaleEnforcementClaims } = require(
+      path.join(ROOT, 'scripts', 'lib', 'enforcement-claims')
+    );
+    found = findStaleEnforcementClaims(readRepo(rel), {
+      hasModule: (modulePath) => fs.existsSync(path.join(ROOT, modulePath)),
+    });
+  } catch (err) {
+    fail('engine-enforcement-claims', 'could not scan ' + rel + ': ' + err.message);
+    return;
+  }
+  if (found.length === 0) {
+    pass('engine-enforcement-claims', rel + ': no claim contradicts an implementing module');
+    return;
+  }
+  for (const problem of found) {
+    fail(
+      'engine-enforcement-claims',
+      rel + ':' + problem.line + ' calls the ' + problem.rule + ' rule unenforced, but ' +
+        problem.module + ' implements it'
+    );
+  }
+})();
+
+// 10. Live read-only structural checks (--live only).
 //
 // Includes the schema-digest freshness gate for the generated docs: the DB's
 // structure (tables, columns, enums) is hashed and compared against a digest

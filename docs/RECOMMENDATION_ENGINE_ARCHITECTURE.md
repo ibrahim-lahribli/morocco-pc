@@ -13,10 +13,38 @@ behaviour. Known superseded passages, each marked inline below:
 | S13 third sort key | candidate created order / candidate id ASC | **Decision 18.3**: build_score DESC -> total_price ASC -> signature ASC (code-unit compare) |
 | S13 templates | versioned with the scoring model | templates are code constants in explanation/explain.js; NOT model-versioned |
 | S5.2 connector rule | high-TGP GPU (>=200W) + NULL connector count -> REJECT | **IMPLEMENTED BY DECISION 26** (2026-09-28): Rule 11 returns FAIL `GPU_PSU_CONNECTOR_NULL_HIGH_TGP` when a required, KNOWN connector's PSU availability is NULL and `gpu_board_spec.board_tgp_watts >= 200`; the escalation is decided BEFORE the unknown-name branch, so FAIL outranks UNKNOWN. Before that Rule 11 returned UNKNOWN unconditionally - its own design, never a decision |
-| S5.3/S6 four HARD rules | cooler TDP, cooler height, RAM slots, RAM capacity | **EXPLICITLY DEFERRED BY DECISION 26** (2026-09-28): recorded as UNENFORCED, 0 live violations as of 2026-09-28, binding seed-time re-check trigger - see audit D2 / AGENTS.md S10 |
-| S3 definitive hard list (11 items) | omits all four rules above even though S5.3/S6 call them HARD (internal inconsistency; found by the D2 verification) | audit D2: the list is incomplete as written - item 9 is the only connector rule, and no cooler-TDP / cooler-height / RAM-slot / RAM-capacity item exists. Incomplete BY DESIGN until Decision 26 item B is implemented |
+| S5.3/S6 four HARD rules | cooler TDP, cooler height, RAM slots, RAM capacity | **SUPERSEDED 2026-10-14 by Decision 45 (E8):** all four ship. Three are HARD (AIR-cooler height, RAM slots, RAM capacity -> REJECT); cooler TDP is SOFT on purpose (UNKNOWN, never a REJECT). See "Current enforcement status" below |
+| S3 definitive hard list (11 items) | omits all four rules above even though S5.3/S6 call them HARD (internal inconsistency; found by the D2 verification) | audit D2: the list is incomplete as written - item 9 is the only connector rule, and no cooler-TDP / cooler-height / RAM-slot / RAM-capacity item exists. SUPERSEDED 2026-10-14: the four rules ARE implemented (Decision 45/E8), so this cell now records the original inconsistency only - the S3 banner below points to the enforcement table |
 
-Authoritative for engine behaviour: RECOMMENDATION_ENGINE_DECISIONS.md (Decisions 1-26) and the code.
+### Current enforcement status of the once-deferred rules (2026-10-29)
+
+Decision 26 item B deferred four rules on 2026-09-28 and this document recorded
+each deferral inline. **Decision 45 (E8, 2026-10-14) implemented all four**, so
+this table is now their single home: the historical notes elsewhere in this
+document point here instead of restating a status they can no longer get right.
+
+| Rule | Shipped verdict | Module | Class |
+|---|---|---|---|
+| S5.3 cooler `max_tdp_watts` vs CPU `tdp_watts` | under-spec cooler -> **UNKNOWN** `COOLER_TDP_INSUFFICIENT`; a NULL operand -> UNKNOWN `COOLER_TDP_UNKNOWN` | `compatibility/cooler-tdp.js` | **SOFT on purpose** - a vendor TDP is a marketing figure, so the shortfall is a penalty, never a reject |
+| S5.3 AIR-cooler `height_mm` vs `case_spec.max_cpu_cooler_height_mm` | taller than the published clearance -> **FAIL** `COOLER_TOO_TALL` -> candidate REJECT; a NULL operand -> UNKNOWN `COOLER_HEIGHT_UNKNOWN`; LIQUID coolers are out of scope, not UNKNOWN | `compatibility/cooler-height.js` | HARD |
+| S6 `ram_spec.module_count` vs `motherboard_spec.dimm_slots` | more modules than slots -> **FAIL** `RAM_SLOTS_EXCEEDED` -> REJECT; a NULL operand -> UNKNOWN `RAM_SLOTS_UNKNOWN` | `compatibility/memory-slots.js` | HARD |
+| S6 `module_count * capacity_per_module_gb` vs `max_memory_capacity_gb` | over capacity -> **FAIL** `RAM_CAPACITY_EXCEEDED` -> REJECT; a NULL operand -> UNKNOWN `RAM_CAPACITY_UNKNOWN` | `compatibility/memory-capacity.js` | HARD |
+
+Every boundary is INCLUSIVE (`<=` passes) and a NULL operand is UNKNOWN, never
+PASS. The radiator and AIR-height rules ride the same CPU_COOLER <-> CASE node,
+so the engine registers **eleven relationship keys and twelve verdicts**, in
+BOTH topology sites (`filtering/filter.js` and `assembly/assemble.js`); the
+second site re-checks the same pairs during the Engine 3 walk.
+
+Two gates keep this table true. `node scripts/check-deferred-rules.js` measures
+all four rules against the live catalog and the compatibility-reachable scope,
+and is the binding pre-merge re-check for any CPU/cooler/case/RAM/motherboard
+seed. `npm run verify:docs` (check 9, `engine-enforcement-claims`) FAILS when
+this document calls one of these rules unenforced while its module is in the
+tree.
+
+Authoritative for engine behaviour: RECOMMENDATION_ENGINE_DECISIONS.md
+(Decisions 1-57) and the code.
 
 Date: 2026-09-12. Baseline: migrations 001-011 applied and catalog-verified.
 
@@ -115,7 +143,7 @@ recommendation_result
 | 3 | Assessment lookup | surviving pool | per-product assessment vectors | component_assessment | No | No (feeds scoring) | Yes |
 | 4 | Scoring | assessed pool | component + build scores | component_assessment + scoring_model.configuration | No (soft stage) | YES | Yes (model pinned by query.scoring_model_id) |
 | 5 | Build assembly + budget pruning | top-scoring combos | in-memory builds (budget pruned incrementally during staged expansion) | store_offer, store | YES (budget + hard-incompatible during expansion) | No | Yes (tie-break rules required) |
-| 6 | Build validation | assembled builds | validated builds + build-level compatibility_status | all compatibility tables re-checked as a whole (wattage budget, connector subset, cooler TDP [cooler-TDP half NOT IMPLEMENTED - DEFERRED BY DECISION 26]) | YES | No | Yes |
+| 6 | Build validation | assembled builds | validated builds + build-level compatibility_status | all compatibility tables re-checked as a whole (wattage budget, connector subset, cooler TDP (SOFT: UNKNOWN, never a REJECT)) | YES | No | Yes |
 | 7 | Candidate persistence | validated builds | build_candidate + build_component rows | build_candidate, build_component, store_offer (price snapshot) | No | No | Yes |
 | 8 | Ranking | persisted candidates | ranked candidates | build_candidate (score) | No (presentation) | No | Yes (deterministic tie-break) |
 
@@ -142,7 +170,7 @@ A build candidate must NEVER survive when a hard constraint is definitively
 incompatible. Hard constraints are evaluated in stage 2 (per-pair) and stage 7
 (build-level). The definitive hard list:
 
-> **INCOMPLETE LIST (audit D2, verified 2026-09-28):** this list omits the four HARD rules that S5.3 and S6 prescribe elsewhere (cooler max_tdp_watts vs CPU TDP; air-cooler height_mm vs case max_cpu_cooler_height_mm; RAM module_count vs dimm_slots; total RAM capacity vs max_memory_capacity_gb). None of the four is implemented in code either - so today the list and the code happen to agree, but only because the rules from S5.3/S6 were never built. **EXPLICITLY DEFERRED by Decision 26 (2026-09-28)** as unenforced, with 0 live violations on the shared catalog and a binding re-check trigger for any future cooler/RAM/case/motherboard seed. See the supersession notice above.
+> **HISTORICAL (2026-09-28):** this list omits the four rules S5.3 and S6 prescribe (cooler `max_tdp_watts` vs CPU TDP; AIR-cooler `height_mm` vs case clearance; RAM `module_count` vs `dimm_slots`; total RAM capacity vs `max_memory_capacity_gb`). **SUPERSEDED 2026-10-14 by Decision 45 (E8):** three ship as HARD compatibility rules and cooler TDP ships SOFT. See "Current enforcement status of the once-deferred rules" above - the list below still enumerates the original eleven items.
 
 1. CPU socket vs motherboard socket (`cpu_spec.socket_id` !=
    `motherboard_spec.socket_id` -> structural FAIL; do not even consult rules).
@@ -202,11 +230,11 @@ incompatible. Hard constraints are evaluated in stage 2 (per-pair) and stage 7
 Everything not on the hard list is soft: performance, value, quality,
 upgradeability, thermals, efficiency, price-efficiency, brand tier, PSU
 headroom above minimum wattage, cooler TDP headroom (>= required TDP is soft
-adequacy; insufficient `cooler_spec.max_tdp_watts` vs `cpu_spec.tdp_watts` is
-HARD-REJECT, see section 5).
-[DECISION 26, 2026-09-28: that HARD-REJECT clause is NOT implemented - no code
-reads `max_tdp_watts`. It is DEFERRED and unenforced; see section 5.3 and the
-Decision 26 deferral ledger.]
+adequacy; an under-spec `cooler_spec.max_tdp_watts` vs `cpu_spec.tdp_watts`
+resolves SOFT - UNKNOWN, never a reject; see section 5.3).
+[UPDATED 2026-10-14 (Decision 45, E8): the rule ships and is deliberately SOFT,
+not the HARD-REJECT this paragraph first described. See "Current enforcement
+status of the once-deferred rules" at the top.]
 
 Soft factors never remove a candidate; they only
 reorder it via the scoring model (section 8).
@@ -326,21 +354,25 @@ available in at least the required count
   `gpu.recommended_psu_watts` as the PSU-sizing rule; per-component wattage
   budgeting is a FUTURE enhancement, not a schema gap.
 
-### 5.3 Cooler adequacy (derived, hard)
+### 5.3 Cooler adequacy (derived: height HARD, TDP SOFT)
 
-`cooler_spec.max_tdp_watts < cpu_spec.tdp_watts` -> REJECT (unsafe thermal
-capacity is treated as hard). Equal-or-greater -> PASS. Either NULL -> UNKNOWN
-(penalty). Additionally, air-cooler height vs `case_spec.max_cpu_cooler_height_mm`:
-`height_mm > max` -> REJECT; either NULL -> UNKNOWN.
+Two rules ship (Decision 45, E8), and they are not the same kind of claim:
 
-[DECISION 26, 2026-09-28 - **NOT IMPLEMENTED, EXPLICITLY DEFERRED.** Neither
-rule and neither NULL-fallback is implemented: `cooler_spec.max_tdp_watts`,
-`cooler_spec.height_mm` and `case_spec.max_cpu_cooler_height_mm` are read by
-NOTHING in `src/` (test-fixture scripts only). This is a known, recorded
-contract violation of the Engine 1 readiness bullet in
-RECOMMENDATION_ENGINE_DECISIONS.md, not an oversight: 0 live violations on the
-shared catalog as of 2026-09-28 (coolers 9, TDP known 9 / height known 5; cases
-10, height known 10), with a binding re-check trigger for any future seed.]
+* **AIR-cooler height vs `case_spec.max_cpu_cooler_height_mm`** - HARD:
+  `height_mm > max` -> FAIL `COOLER_TOO_TALL` -> REJECT; either value NULL ->
+  UNKNOWN `COOLER_HEIGHT_UNKNOWN`; LIQUID coolers are out of scope (their
+  `height_mm` is the pump-block height, a different physical constraint), not
+  UNKNOWN.
+* **Cooler TDP: `max_tdp_watts` vs `cpu_spec.tdp_watts`** - SOFT: an under-spec
+  cooler resolves UNKNOWN `COOLER_TDP_INSUFFICIENT` and is NEVER a REJECT,
+  because a vendor TDP is a marketing figure and comparing two of them is not
+  the same kind of claim as an over-slot RAM kit. Equal-or-greater -> PASS;
+  either value NULL -> UNKNOWN `COOLER_TDP_UNKNOWN`.
+
+The 2026-09 design proposed REJECT for both; Decision 45 changed the TDP half
+to SOFT deliberately. Every boundary is INCLUSIVE and a NULL operand is
+UNKNOWN, never PASS. See "Current enforcement status of the once-deferred
+rules" above.
 
 ## 6. RAM compatibility: source of truth
 
@@ -374,15 +406,12 @@ Secondary RAM checks (all soft except capacity):
 * rated speed above/below motherboard official range -> SOFT (adjust score;
   modern platforms down-clock, it is not a hard incompatibility).
 
-[DECISION 26, 2026-09-28 - the two RAM REJECT bullets above are **NOT
-IMPLEMENTED, EXPLICITLY DEFERRED**. `ram_spec.module_count`,
-`ram_spec.capacity_per_module_gb` and `motherboard_spec.dimm_slots` /
-`max_memory_capacity_gb` are read by NOTHING in `src/`. Unlike the cooler half
-(seed 002 D5), this RAM half was SILENT drift until Decision 26. 0 live
-violations on the shared catalog as of 2026-09-28 (RAM kits 7, motherboards 7,
-all four columns fully populated); binding re-check trigger for any future seed.
-The rated-speed soft check is likewise unimplemented - it is a scoring input,
-not a compatibility rule.]
+[SUPERSEDED 2026-10-14 by Decision 45 (E8). Both REJECT bullets ship as HARD
+compatibility rules - `compatibility/memory-slots.js` (`RAM_SLOTS_EXCEEDED`)
+and `compatibility/memory-capacity.js` (`RAM_CAPACITY_EXCEEDED`) - with every
+boundary INCLUSIVE and a NULL operand resolving UNKNOWN. See "Current
+enforcement status of the once-deferred rules" above. The rated-speed soft
+check is still absent: it is a scoring input, not a compatibility rule.]
 
 ## 7. Budget handling
 
@@ -409,8 +438,10 @@ not a compatibility rule.]
   selection into `price_checked_at`. CHECK `store_id IS NULL OR
   price_checked_at IS NOT NULL` holds. After persistence the build NEVER
   re-reads `store_offer` for pricing: later offer mutations must not corrupt
-  the recorded recommendation. `store_offer_id` provenance FK remains FUTURE
-  (explicitly not added).
+  the recorded recommendation. Since migration 018 (Decision 35)
+  `build_component.store_offer_id` also persists the exact listing the price
+  came from, and `offer_class` records whether that price was VERIFIED; the
+  snapshot columns above still govern what the build is priced at.
 * `build_candidate.total_price` = SUM(build_component.selected_price) in the
   single build currency; NULL only if the candidate was persisted without
   complete pricing (validation stage 7 forbids this, so normally always set).
@@ -510,8 +541,10 @@ staged seeded-expansion strategy with early elimination:
                            cpu_motherboard_support boards
 3. RAM                   : per (CPU platform, MB memory_type), keep matching
                            memory_type kits within module-count limits
-                           [NOT IMPLEMENTED - DEFERRED BY DECISION 26: no
-                           module-count / capacity pruning exists]
+                                                      [UPDATED 2026-10-14: module-count /
+                           capacity is a HARD compatibility rule
+                           (Decision 45/E8) on the RAM <-> MB pair;
+                           this SHORTLIST step itself is unchanged]
 4. GPU                   : global shortlist by use_case/resolution band
 5. PSU                   : keep only rated_wattage >= max(gpu.recommended_psu_watts)
                            across the shortlisted GPUs + known CPU draw margin
@@ -519,9 +552,10 @@ staged seeded-expansion strategy with early elimination:
                            form factor and max_gpu_length >= min(shortlisted GPU lengths)
 7. Cooler                : per CPU socket, compatible coolers with
                            max_tdp_watts >= cpu.tdp_watts
-                           [NOT IMPLEMENTED - DEFERRED BY DECISION 26: no
-                           cooler TDP/height shortlist or check exists; the
-                           cooler stage filters on socket support only]
+                                                      [UPDATED 2026-10-14: cooler TDP and
+                           AIR-cooler height are compatibility rules
+                           (Decision 45/E8), not shortlist pruning;
+                           this stage still filters on socket only]
 8. Storage               : shortlist SSD_BOOT by capacity tier for the use case
 9. Validate complete builds (section 5 checks) on assembled top combos only
 10. Score                : only validated builds reach scoring
@@ -543,9 +577,8 @@ Key rules:
   conversion.
 * Elimination ordering matters: CPU->MB filtering removes the largest branch
   factor first (socket is highly selective), then RAM (memory_type), then PSU
-  (wattage), then case (form factor), then cooler (socket + TDP [TDP half NOT
-  IMPLEMENTED - DEFERRED BY DECISION 26: the cooler relationship is
-  socket-support only]).
+  (wattage), then case (form factor), then cooler (socket; cooler TDP is a
+  compatibility rule, not a shortlist filter - see the enforcement table above).
 * Determinism: ordering within each stage uses fixed tie-breaks (product name
   ASC, then product id ASC) so the same DB state + query + scoring_model
   version always yields the same candidates.
@@ -616,13 +649,15 @@ Inputs that influence a result, and where they live (NO new fields needed):
   `price_checked_at` - the immutable snapshot.
 * Product/spec data: Layer 1 tables (changes are auditable via `spec_provenance`
   and `updated_at` on product/product_variant).
-* Selected offers: identified by (product_id, store_id, price_checked_at) from
-  the snapshot; the exact offer row can be re-located via store_offer even
-  without a dedicated FK (FUTURE: store_offer_id column).
+* Selected offers: `build_component.store_offer_id` (migration 018, Decision 35)
+  names the exact listing and `offer_class` records its Decision 35 class; the
+  snapshot-side locator (product_id, store_id, price_checked_at) still resolves
+  the same row for pre-018 components, where the id is NULL.
 * Engine version / configuration: the scoring_model version doubles as the
-  engine configuration version for stages 1-7 parameters; the engine binary
-  version should be recorded in the explanation prefix or release notes
-  (ACCEPTABLE gap until a dedicated field exists).
+  engine configuration version, and since migration 019 (Decision 46) the pass
+  persists `recommendation_result.engine_version`, `.strategy_key` and
+  `recommendation_query.budget_floor`, so which binary produced each rank is
+  recorded rather than inferred (CLOSED - was the OG-18 gap, C-40).
 
 Re-run rule: executing the engine again against the SAME database state,
 query inputs, and scoring_model version must produce identical candidates,
@@ -641,9 +676,13 @@ The build must not depend on mutable current offer data after creation because:
 4. `store_offer.last_checked_at` reflects the SCRAPE time, not the decision
    time; only `build_component.price_checked_at` reflects the decision moment.
 
-Therefore: `store_offer` is read ONLY during stages 1, 3, 6 and 8 (snapshot
-write). After persistence, nothing in the recommendation path joins back to
-`store_offer`. `store_offer_id` provenance is FUTURE and explicitly not added.
+Therefore: `store_offer` is read while a build is being priced (candidate
+selection, offer pre-selection, assembly and the snapshot write). After
+persistence the recommendation path never JOINS `store_offer` to price a build
+again - the snapshot columns are the price - but `build_component.store_offer_id`
+and `.offer_class` (migration 018, Decision 35) do persist WHICH listing that
+price came from, so a component stays traceable without making its price
+mutable.
 
 ## 16. Architecture gaps (classification)
 
@@ -655,16 +694,13 @@ write). After persistence, nothing in the recommendation path joins back to
 | No integrated-graphics requirement expression beyond `integrated_gpu_present` BOOLEAN | ACCEPTABLE | The boolean + use_case mapping covers the engine's needs (section 12); iGPU performance tiering would need more data later |
 | CONDITIONAL semantics only exist in `cpu_motherboard_support` (via `min_bios_version`); not in other compatibility tables | ACCEPTABLE | Only CPU<->MB genuinely needs it today |
 | Multi-currency recommendations | **FUTURE** | No conversion infrastructure; single-currency-per-query policy (section 7) |
-| `store_offer_id` provenance FK on build_component | FUTURE | Already planned; snapshot columns suffice for reproducibility |
+| ~~`store_offer_id` provenance FK on build_component~~ CLOSED 2026-10-07 | **FUTURE** (resolved) | **CLOSED by Decision 35 / migration 018:** `build_component.store_offer_id` (FK to `store_offer`, indexed) and `offer_class` are written by the commit for every component, so a persisted price is traceable to its listing while the snapshot columns remain the price. See section 15 |
 | `recommendation_profile.priority` INTEGER | FUTURE | Documented redesign target in migration 011 notes |
 | Assessment coverage likely sparse at seed time | ACCEPTABLE | Handled by section 9 policy |
-| No engine-version column on results | ACCEPTABLE | scoring_model version covers configuration; binary version recorded in explanation/release notes |
+| ~~No engine-version column on results~~ CLOSED 2026-10-15 | **ACCEPTABLE** (resolved) | **CLOSED by Decision 46 / migration 019 (C-40):** `recommendation_result.engine_version` and `.strategy_key`, plus `recommendation_query.budget_floor`, are persisted and served on BOTH verbs, so the pass facts no longer live only in the explanation text |
 | Fresh 001->011 migration on an empty DB | ACCEPTABLE (environmental) | ~~Standing test limitation~~ **VERIFIED 2026-09-30 (OG-13)**: replayed on a throwaway Neon DB emptied to 0/0 — 39/39 tables, 336/336 columns, 14/14 enums identical; the drift it surfaced is the live-only benchmark hardening row above (OG-25) |
 | ~~No applied-migration tracking (`run-migrations.js` replays all files; `002_enums.sql` bare `CREATE TYPE` makes the runner single-use)~~ CLOSED 2026-10-04 | ~~ACCEPTABLE (tool defect)~~ **CLOSED** | ~~Workaround: apply new migration files individually via a throwaway script (see `AGENTS.md` S8 / `DEVELOPMENT_NOTES.md`); fix = future `schema_migrations`-style tracking table and/or idempotent runner guard — audit D10 (2026-09-28). No such table exists live (verified via `information_schema`, 2026-09-28)~~ **Fixed 2026-10-04 (OG-14 / C-19):** `run-migrations.js` is ledger-driven over a runner-created `schema_migrations` table (pending tail only, one transaction per file, re-runnable; modes `--dry-run`/`--check`/`--offline`/`--baseline`/`--test-db`). The table exists live with a 12-row ledger through `012` on shared + TEST (verified 2026-10-04) |
-| Cooler `max_tdp_watts` vs CPU TDP REJECT (section 5.3) UNENFORCED | **IMPORTANT** (latent) | Decision 26 item B deferral. No code reads `cooler_spec.max_tdp_watts`. 0 live violations as of 2026-09-28; an under-spec cooler can be persisted as "compatible" if a future seed introduces one - re-check the violation query before any cooler/CPU seed. |
-| Air-cooler `height_mm` vs `case_spec.max_cpu_cooler_height_mm` REJECT (section 5.3) UNENFORCED | **IMPORTANT** (latent) | Decision 26 item B deferral. No code reads either column. 0 live violations as of 2026-09-28 (cooler height known for 5 of 9 coolers - the 4 NULLs would be UNKNOWN, never FAIL); re-check before any cooler/case seed. |
-| RAM `module_count` vs `motherboard_spec.dimm_slots` REJECT (section 6) UNENFORCED | **IMPORTANT** (latent) | Decision 26 item B deferral; this half was SILENT drift (no decision, no seed note) until 2026-09-28. 0 live violations; an over-slot kit can be persisted as "compatible" if a future seed introduces one. |
-| Total RAM capacity vs `motherboard_spec.max_memory_capacity_gb` REJECT (section 6) UNENFORCED | **IMPORTANT** (latent) | Decision 26 item B deferral. 0 live violations; an over-capacity kit can be persisted as "compatible" if a future seed introduces one. |
+| Cooler TDP / AIR-cooler height / RAM slots / RAM capacity (sections 5.3 and 6) | **IMPORTANT** (closed) | **CLOSED 2026-10-14 by Decision 45 (E8), recorded as C-38:** all four ship as compatibility rules - three HARD, cooler TDP SOFT - and the standing gate `scripts/check-deferred-rules.js` measures each one. Residual data gap: one cooler carries a NULL `max_tdp_watts`, so its verdict is honestly UNKNOWN (`docs/OPEN_GAPS.md` OG-50). See "Current enforcement status of the once-deferred rules" at the top of this document. |
 | ~~Live-vs-migrations drift: 3 benchmark CHECKs stricter live (`sample_size`/`resolution_width`/`resolution_height` enforce `> 0` with no `IS NULL OR` escape), `chk_benchmark_result_metric_value_finite` live-only, 5 undocumented live-only performance indexes (`idx_benchmark_source_name` UNIQUE, `idx_benchmark_source_id`, `idx_component_assessment_product_id`, `idx_component_assessment_type`, `idx_scoring_model_active`)~~ RECONCILED 2026-10-04 | ~~**IMPORTANT** (latent)~~ **CLOSED (OG-25 / C-18)** | Found by the OG-13 empty-DB replay (2026-09-30); provenance unknown (pre-migration manual work or a lost migration). Engine-irrelevant today — no engine code reads `benchmark_*` or these index targets. ~~Decision needed: **migration 012** to reconcile the drift into the chain, or record live-only provenance in this table + `SCHEMA_REFERENCE.md`. Until then, do not treat a fresh-replay schema as fully equivalent to live.~~ **Resolved 2026-10-04:** migration `012_reconcile_benchmark_drift.sql` adopts the live stricter CHECKs, adds `chk_benchmark_result_metric_value_finite`, and creates the five indexes verbatim (every statement `IF EXISTS`/`IF NOT EXISTS` guarded); applied to shared + TEST, both ledgered at 012. A fresh `001→012` replay produces this hardening by construction, but the replay itself was not re-run this session (`docs/OPEN_GAPS.md` C-19). Track: `docs/OPEN_GAPS.md` OG-25 (CLOSED 2026-10-04) |
 
 No BLOCKING gaps were found: the engine can be fully implemented on the
@@ -679,13 +715,14 @@ Engine 1 - Compatibility resolver
     Pure functions: all checks of sections 3-6, 10. Inputs: spec/compat rows.
     Output: PASS/FAIL/UNKNOWN/CONDITIONAL + reason per pair. Fully unit-testable
     against fixture data without offers or scoring.
-    [DECISION 26 (2026-09-28): "all checks of sections 3-6" overstates the
-    shipped surface. Implemented: the eight pairwise relationships
-    (cpu_motherboard, cooler_socket, motherboard_memory, platform_memory,
-    case_form_factor, case_radiator, gpu_case, gpu_psu - the last including the
-    section 5.2 HIGH-TGP connector escalation). NOT implemented and explicitly
-    deferred: section 5.3 cooler TDP/height and the section 6 RAM
-    slot/capacity hard checks. See the section 16 gap rows.]
+    [UPDATED 2026-10-14 (Decision 45, E8): "all checks of sections 3-6" is now
+    accurate. The engine registers ELEVEN pairwise relationships -
+    cpu_motherboard, cooler_socket, motherboard_memory, platform_memory,
+    case_form_factor, case_radiator (which carries both the radiator rule and the
+    AIR-cooler height rule), gpu_case, gpu_psu (including the section 5.2 HIGH-TGP
+    connector escalation), cooler_tdp, mb_memory_slots and mb_memory_capacity - in
+    both topology sites. See "Current enforcement status of the once-deferred
+    rules" at the top.]
 
 Engine 2 - Candidate component selector
     Stage 1 shortlists + offer pre-selection (cheapest in-currency in-stock
@@ -820,9 +857,12 @@ existing `scripts/test-*.js` transaction/rollback style.
 
 ### Future / non-blocking
 
-* store_offer_id provenance FK; rejection-reason persistence; multi-currency;
-  motherboard dual-memory schema fix; profile priority redesign; explicit
-  status columns on presence-only tables; engine-version column; multi-GPU.
+* Still future: multi-currency; motherboard dual-memory schema fix; profile
+  priority redesign; explicit status columns on presence-only tables; multi-GPU.
+  Three items this list used to carry have since landed: `store_offer_id`
+  provenance (Decision 35 / migration 018), rejection-reason persistence
+  (Decision 29 / migration 014) and the per-result engine version (Decision 46 /
+  migration 019).
 
 ### First implementation task
 
@@ -831,9 +871,10 @@ existing `scripts/test-*.js` transaction/rollback style.
 `scripts/test-compatibility.js` fixture pattern). It touches no Layer 3/4
 tables, creates no migrations, and is verifiable before any candidate
 selection or persistence exists. Do NOT start it in this task.
-[DECISION 26 (2026-09-28): implemented as the eight pairwise relationships
-(see section 17); the section 5.3 cooler TDP/height and section 6 RAM
-slot/capacity hard checks of "sections 3-6" are UNENFORCED deferrals.]
+[UPDATED 2026-10-14 (Decision 45, E8): implemented as the eleven pairwise
+relationships (see section 17), covering sections 3-6 in full - the section 5.3
+and section 6 rules included. See "Current enforcement status of the
+once-deferred rules" at the top for their verdicts and gates.]
 
 ---
 
