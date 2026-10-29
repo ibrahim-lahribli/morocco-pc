@@ -34,11 +34,29 @@
  *                       `{montant}` are both valid Arabic keys with one wrong
  *                       interpolation, which renders the literal brace text.
  *
+ * And one rule about the call sites (2026-10-29):
+ *
+ *   6. TEMPLATE READ    A message with ICU arguments must be read with `t.raw()`
+ *                       when the CALLER fills those arguments (`fill()` in the
+ *                       wizard, `.replace()` in the swap panel), never with
+ *                       `t()`. `t()` FORMATS: with no value for `{count}` it
+ *                       reports FORMATTING_ERROR and returns the KEY PATH, so
+ *                       the page paints `wizard.progress` where "Étape 1 sur 3"
+ *                       belongs. Production hides the error but not the wrong
+ *                       text, which is why the browser suite stayed green while
+ *                       every dev run was red. The namespaces are resolved per
+ *                       BINDING (`const t = await getTranslations({namespace})`,
+ *                       the most recent one before the call), so a file with two
+ *                       translators (`t` and `tResult`) is judged by the right
+ *                       one; a computed key is skipped because it cannot be
+ *                       resolved statically.
+ *
  * Scope: app/, components/ and lib/, minus `lib/i18n/` (the one place allowed
  * to touch Intl). Comments count, as in `check-tokens.mjs`: a comment that
  * shows a literal teaches the next author to write one. That is why this file
  * describes the patterns instead of printing a sample. Rule 5 reads
- * `messages/*.json` instead and uses `fr` as the reference locale.
+ * `messages/*.json` instead and uses `fr` as the reference locale, and rule 6
+ * compares the CALL SITES with that same reference.
  *
  * Exit 1 on any violation, naming file:line (or key), so the gate is actionable.
  */
@@ -213,6 +231,112 @@ if (reference === undefined) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Rule 6: a caller-filled TEMPLATE is read raw, never formatted
+// ---------------------------------------------------------------------------
+
+/** The index of the `)` matching the `(` at `openIndex`, string literals skipped. */
+function matchingParen(source, openIndex) {
+  let depth = 0;
+  for (let i = openIndex; i < source.length; i += 1) {
+    const char = source[i];
+    if (char === '"' || char === "'" || char === "`") {
+      for (i += 1; i < source.length && source[i] !== char; i += 1) {
+        if (source[i] === "\\") i += 1;
+      }
+      continue;
+    }
+    if (char === "(") depth += 1;
+    else if (char === ")") {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+if (reference !== undefined) {
+  /** Every message that interpolates something, with the names it needs. */
+  const templated = new Map();
+  for (const [key, text] of reference) {
+    const names = placeholders(text);
+    if (names.length > 0) templated.set(key, names);
+  }
+
+  for (const file of files) {
+    const source = fs.readFileSync(file, "utf8");
+    const relative = path.relative(ROOT, file).split(path.sep).join("/");
+    const lineAt = (index) => source.slice(0, index).split("\n").length;
+
+    // `const t = await getTranslations({ locale, namespace: "result" })`, and
+    // the `useTranslations("x")` form a client component would use.
+    const bindings = [];
+    const bindingPattern =
+      /\b(?:const|let)\s+([A-Za-z0-9_$]+)\s*=\s*(?:await\s+)?(?:getTranslations|useTranslations)\s*\(/g;
+    for (const match of source.matchAll(bindingPattern)) {
+      const open = match.index + match[0].length - 1;
+      const close = matchingParen(source, open);
+      if (close === -1) continue;
+      const args = source.slice(open + 1, close);
+      const namespace =
+        /namespace:\s*["']([^"']+)["']/.exec(args)?.[1] ?? /^\s*["']([^"']+)["']/.exec(args)?.[1];
+      bindings.push({ name: match[1], namespace: namespace ?? null, index: match.index });
+    }
+    bindings.sort((a, b) => a.index - b.index);
+
+    for (const binding of bindings) {
+      const callPattern = new RegExp(
+        `\\b${binding.name.replace(/\$/g, "\\$")}(?:\\.(raw|rich|markup))?\\s*\\(`,
+        "g",
+      );
+      callPattern.lastIndex = binding.index;
+
+      for (const call of source.matchAll(callPattern)) {
+        // Lexical shadowing, approximated: a later binding of the same name owns
+        // the calls after it, so each call is judged by exactly one binding.
+        const owner = bindings.filter((b) => b.name === binding.name && b.index <= call.index).at(-1);
+        if (owner !== binding) continue;
+        // `t.raw` is the fix this rule asks for: reading a template is not an error.
+        if (call[1] === "raw") continue;
+
+        const open = call.index + call[0].length - 1;
+        const close = matchingParen(source, open);
+        if (close === -1) continue;
+        const args = source.slice(open + 1, close);
+        const quote = args[0];
+        // A computed key (`t(`a.${b}`)`) cannot be resolved here, and a call that
+        // is not a literal is somebody else's question.
+        if (quote !== '"' && quote !== "'") continue;
+        let end = 1;
+        while (end < args.length && args[end] !== quote) {
+          if (args[end] === "\\") end += 1;
+          end += 1;
+        }
+        const key = args.slice(1, end);
+        const rest = args.slice(end + 1).trim();
+        const values = rest.startsWith(",") ? rest.slice(1).trim() : null;
+        const formatted = values !== null && values !== "" && values !== "{}";
+        if (formatted) continue;
+
+        const full = binding.namespace === null ? key : `${binding.namespace}.${key}`;
+        const names = templated.get(full) ?? templated.get(key);
+        if (names === undefined) continue;
+
+        violations.push({
+          file: relative,
+          line: lineAt(call.index),
+          rule: "template-read",
+          found: key,
+          message:
+            values === null
+              ? `interpolates {${names.join(", ")}} but no values are passed; read it with t.raw(...) if the caller fills them`
+              : `interpolates {${names.join(", ")}} but its values object is empty; pass them or read it with t.raw(...)`,
+        });
+      }
+    }
+  }
+}
+
 if (violations.length > 0) {
   for (const v of violations) {
     const where = v.line > 0 ? `${v.file}:${v.line}` : v.file;
@@ -227,5 +351,5 @@ const catalogueSummary =
     ? "1 catalogue"
     : `${catalogues.size} catalogues (${catalogueFiles.join(", ")}) with identical keys and placeholders`;
 console.log(
-  `PASS i18n - ${files.length} file(s), every number and date goes through lib/i18n/format.ts; ${catalogueSummary}`,
+  `PASS i18n - ${files.length} file(s), every number and date goes through lib/i18n/format.ts, every caller-filled template is read with t.raw; ${catalogueSummary}`,
 );

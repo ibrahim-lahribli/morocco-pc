@@ -62,7 +62,7 @@ export default async function ContactPage({
       eyebrow={t("eyebrow")}
       title={t("title")}
       intro={t("intro")}
-      updated={fill(common("updated"), { date: formatDate(LEGAL_UPDATED_AT, appLocale) })}
+      updated={fill(common.raw("updated"), { date: formatDate(LEGAL_UPDATED_AT, appLocale) })}
       sections={sections}
       note={
         <Link

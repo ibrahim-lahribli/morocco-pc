@@ -36,7 +36,7 @@ Run them from `apps/web`. Node 22 or newer.
 | `npm run check:api-types` | Fails when `lib/api/schema.d.ts` drifts from the OpenAPI snapshot |
 | `npm run gen:api-types` | Regenerate that file from the snapshot |
 | `npm run check:tokens` | Fails on a hex literal, a raw palette utility or a physical side class |
-| `npm run check:i18n` | Fails on inline `Intl`, a runtime-locale method, or a hand-written amount/date |
+| `npm run check:i18n` | Fails on inline `Intl`, a runtime-locale method, a hand-written amount/date, a catalogue key/placeholder mismatch, or a `t()` read of a message whose placeholders the caller fills (use `t.raw`) |
 
 `npm test` reuses an already-running server when one holds the port, so stop a
 stale `npm run start` after a rebuild if the specs look out of date.
