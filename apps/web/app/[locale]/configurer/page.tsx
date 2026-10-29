@@ -70,7 +70,12 @@ export default async function ConfigurerPage({
   const copy: WizardCopy = {
     title: t("title"),
     intro: t("intro"),
-    progress: t("progress"),
+    // The sentences below are TEMPLATES the client fills through `fill()`
+    // (`lib/wizard/copy.ts`), so each must be read RAW: `t()` FORMATS a message
+    // and, with no value for a placeholder, reports FORMATTING_ERROR and hands
+    // back the key path instead - which is why a dev run painted
+    // "wizard.progress" instead of "Étape 1 sur 3".
+    progress: t.raw("progress"),
     next: t("next"),
     back: t("back"),
     finish: t("finish"),
@@ -79,23 +84,23 @@ export default async function ConfigurerPage({
     retry: t("retry"),
     budgetLabel: t("budgetLabel"),
     budgetSuffix: t("budgetSuffix"),
-    budgetHint: t("budgetHint"),
-    budgetError: t("budgetError"),
+    budgetHint: t.raw("budgetHint"),
+    budgetError: t.raw("budgetError"),
     budgetSliderLabel: t("budgetSliderLabel"),
-    budgetSnapNote: t("budgetSnapNote"),
-    budgetClampMin: t("budgetClampMin"),
-    budgetClampMax: t("budgetClampMax"),
+    budgetSnapNote: t.raw("budgetSnapNote"),
+    budgetClampMin: t.raw("budgetClampMin"),
+    budgetClampMax: t.raw("budgetClampMax"),
     storedNotApplied: t("storedNotApplied"),
     submitAnnouncement: t("submitAnnouncement"),
     submitProgressLabel: t("submitProgressLabel"),
     submitProgressValueText: t("submitProgressValueText"),
-    submitElapsed: t("submitElapsed"),
+    submitElapsed: t.raw("submitElapsed"),
     errorTooLarge: t("errorTooLarge"),
-    errorRateLimited: t("errorRateLimited"),
+    errorRateLimited: t.raw("errorRateLimited"),
     errorRateLimitedNoWait: t("errorRateLimitedNoWait"),
     errorUnavailable: t("errorUnavailable"),
     errorServer: t("errorServer"),
-    errorRequestId: t("errorRequestId"),
+    errorRequestId: t.raw("errorRequestId"),
     errorFieldUnknown: t("errorFieldUnknown"),
     // One raw read, because the numbers are data: a catalogue that grows a
     // field must not need a code change, and an unknown one falls back in the

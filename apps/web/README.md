@@ -44,6 +44,33 @@ stale `npm run start` after a rebuild if the specs look out of date.
 anything already answers on 3210, because measuring a `next dev` server would
 budget a build that never ships.
 
+### Local development against a deployed API
+
+`npm run dev` with no API configured falls back to `http://localhost:3000`, so a
+machine with nothing serving that port renders the wizard's "options could not be
+loaded" state. To drive the real engine instead, put this pair in
+`.env.development.local` — `next dev` loads that file and nothing else does, so
+the build and the suite keep their fixture path:
+
+```
+NEXT_PUBLIC_API_BASE_URL=/api
+API_BASE_URL=https://morocco-pc.onrender.com
+```
+
+A RELATIVE public base makes this server the API's front door: the browser calls
+`/api/v1/...` on the app's own origin and `next.config.ts` forwards each request
+to `API_BASE_URL` server-to-server. That is what makes a deploy usable from
+`localhost`: its `ALLOWED_ORIGINS` does not list this origin, so a direct browser
+call is refused — with a relative base there is no cross-origin request left for
+CORS to refuse. An absolute base registers no rewrite. `next dev` re-reads the
+target on every start; a production build bakes the rewrite (and its resolved
+destination) into the build manifest, so moving the target there is a rebuild.
+
+One trap, measured: point a LOCAL API at its IP, not its name — `API_BASE_URL`
+`http://127.0.0.1:3000`, never `http://localhost:3000`. Next skips an external
+rewrite whose host matches the app's own, and the dev server is on `localhost`,
+so the localhost target answers 404 instead of proxying.
+
 `npm test` drives the wizard against the FIXTURE mock. The same submit against the REAL engine is one
 opt-in spec, `e2e/wizard-engine.spec.ts`: start the API on 3000 against the TEST branch
 (`ALLOWED_ORIGINS=http://localhost:3210 npm run start:api` at the repo root), then run it ALONE with

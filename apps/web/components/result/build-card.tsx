@@ -267,9 +267,16 @@ export async function BuildCard({
             UNKNOWN: t("swap.verdictNote.UNKNOWN"),
             FAIL: t("swap.verdictNote.FAIL"),
           },
-          unknownCount: t("swap.unknownCount"),
-          pairLine: t("swap.pairLine"),
-          pairSelf: t("swap.pairSelf"),
+          // The sentences below are TEMPLATES, not messages: the panel fills
+          // their `{placeholders}` itself (`renderPairLines`, `AppliedResult`),
+          // so it needs the raw ICU source. `t()` FORMATS a message, and with no
+          // value for a placeholder it reports FORMATTING_ERROR and falls back
+          // to the raw string - the sentence was always right, but a dev console
+          // named thirteen failures per card. `t.raw` asks for that fallback
+          // directly, so reading a template is not an error.
+          unknownCount: t.raw("swap.unknownCount"),
+          pairLine: t.raw("swap.pairLine"),
+          pairSelf: t.raw("swap.pairSelf"),
           otherRoleLabel: t("roles.OTHER"),
           // The verdict's pair lines name any role the API can name — the
           // page's WHOLE role vocabulary (interface + data rows), not just the
@@ -292,19 +299,19 @@ export async function BuildCard({
             verified: t("provenance.verified"),
           },
           priceTitle: t("swap.priceTitle"),
-          pricePair: t("swap.pricePair"),
-          priceNewOnly: t("swap.priceNewOnly"),
+          pricePair: t.raw("swap.pricePair"),
+          priceNewOnly: t.raw("swap.priceNewOnly"),
           priceUnknown: t("swap.priceUnknown"),
-          priceUp: t("swap.priceUp"),
-          priceDown: t("swap.priceDown"),
+          priceUp: t.raw("swap.priceUp"),
+          priceDown: t.raw("swap.priceDown"),
           priceSame: t("swap.priceSame"),
           budgetTitle: t("swap.budgetTitle"),
           barLabel: t("swap.barLabel"),
-          barValueText: t("swap.barValueText"),
-          barRemaining: t("swap.barRemaining"),
-          barOver: t("swap.barOver"),
+          barValueText: t.raw("swap.barValueText"),
+          barRemaining: t.raw("swap.barRemaining"),
+          barOver: t.raw("swap.barOver"),
           budgetUnknown: t("swap.budgetUnknown"),
-          overBudget: t("swap.overBudget"),
+          overBudget: t.raw("swap.overBudget"),
           errors: {
             notEvaluable: t("swap.errors.notEvaluable"),
             rateLimited: t("swap.errors.rateLimited"),
@@ -314,8 +321,8 @@ export async function BuildCard({
           apply: t("swap.apply"),
           applying: t("swap.applying"),
           appliedTitle: t("swap.appliedTitle"),
-          appliedNote: t("swap.appliedNote"),
-          appliedWhen: t("swap.appliedWhen"),
+          appliedNote: t.raw("swap.appliedNote"),
+          appliedWhen: t.raw("swap.appliedWhen"),
           commitErrors: {
             alreadyCommitted: t("swap.commitErrors.alreadyCommitted"),
             refused: t("swap.commitErrors.refused"),
