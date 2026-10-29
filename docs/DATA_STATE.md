@@ -12,7 +12,7 @@ Retention warning (AGENTS.md section 5): retention ties fall through to random
 database reset — reach figures below are one instance's draw, not a property of
 the catalog.
 
-## Row counts (43 tables)
+## Row counts (44 tables)
 
 | Table | Rows |
 |---|---|
@@ -48,11 +48,12 @@ the catalog.
 | `psu_spec` | 11 |
 | `ram_spec` | 7 |
 | `recommendation_preset` | 0 |
-| `recommendation_profile` | 0 |
+| `recommendation_profile` | 1 |
 | `recommendation_query` | 0 |
 | `recommendation_result` | 0 |
+| `recommendation_swap` | 0 |
 | `retailer_listing_alias` | 0 |
-| `schema_migrations` | 22 |
+| `schema_migrations` | 23 |
 | `scoring_model` | 1 |
 | `socket` | 3 |
 | `spec_provenance` | 0 |
@@ -67,7 +68,7 @@ the catalog.
 | 1 — Catalog/Hardware | 7 | 237 |
 | 2 — Performance/Assessment | 5 | 285 |
 | 3 — Market | 3 | 204 |
-| 4 — Recommendation | 5 | 0 |
+| 4 — Recommendation | 5 | 1 |
 
 ## Coverage
 
@@ -76,7 +77,7 @@ the catalog.
 - Offers: 101 (checked 2026-10-04 04:27:21.455192+00 … 2026-10-04 04:27:21.455192+00)
 - GPU variants with NULL width_slots/height_mm: 7 (OG-07)
 - PSUs with NULL connector_12vhpwr: 2 (OG-08)
-- Layer 4 emptiness: ALL five tables 0 rows (write path proven only on the test branch)
+- Layer 4 emptiness: 1 rows present
 
 ---
 

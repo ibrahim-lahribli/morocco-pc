@@ -63,12 +63,27 @@ Migrations 021 and 022 were applied to the shared database that day from restore
 used to document are gone: `catalog_version` is recorded and reuse hits, and `GET /v1/presets`
 reads a real table.
 
-**Migration 023 is BRANCH-ONLY (measured 2026-10-26): the TEST branch is at ledger 23, the shared
-database at 22 and the EU database at 22.** `recommendation_swap` therefore exists on TEST alone, and
-the shared `morocco_pc_api` role still holds the pre-023 grant set (6 INSERT tables, so the recipe's
-21-answer self-check describes the rehearsal contract). Against a database below 023 the swap COMMIT
-answers the generic `500 INTERNAL_ERROR` (`42P01`), exactly as the preset read does below 022; the
-PREVIEW is unaffected because it writes nothing.
+**Migration 023 is applied on ALL THREE databases since 2026-10-29** (the TEST branch on 2026-10-26,
+then shared from restore point `br-royal-block-axu8i4a9` and EU from `br-cool-star-b9whdnt1`), so every
+ledger reads 23 and `recommendation_swap` exists everywhere. Against a database still below 023 the
+swap COMMIT answers the generic `500 INTERNAL_ERROR` (`42P01`), exactly as the preset read does below
+022, and the read path fails the same way: measured on the Render origin 2026-10-28, while the service
+sat on a ledger-022 database, `POST /v1/recommendations` and the read back both answered `500` and the
+pass still COMMITTED (a failed POST is not free: it leaves an unmarked `recommendation_query` row
+behind). The PREVIEW was unaffected throughout because it writes nothing.
+**The GRANT residue is CLOSED (2026-10-29), and the 21-answer self-check describes all three
+databases again.** `morocco_pc_api` answers every one of the 21 expectations on shared
+(`db:54ff6ea3f6e6`) and EU (`db:2d66f26d7ddc`): `GRANT INSERT ON recommendation_swap` was applied
+from restore points `br-silent-cake-ax5q21at` and `br-bitter-sky-b96jh91p`, and
+`scripts/smoke-api-role.js --confirm-shared` then ran the API itself as the role on both — health
+`db:"ok"`, POST 201 with 1 build, 52 statements, no `42501`, and the Layer 4 counts back to their
+pre-run values. Note for the next one: `scripts/apply-api-role.js` REFUSES an existing role, so a
+privilege for a NEW table is an additive `GRANT`, never a re-apply — the procedure is
+`docs/RECIPES/provision-the-api-role.md` "Re-granting after a new Layer 4 table".
+The deployed origin still works only because it runs on WIDER credentials:
+`scripts/check-deployed-role.js --target=env:DATABASE_URL` answers **FAIL** against it (1 of 1
+`morocco-pc-api` session authenticated as `neondb_owner`, measured 2026-10-29) — OG-54 item 1, open
+only until the service's secret is repointed.
 The fallbacks still describe an OLDER database: against one below 021 every
 reply serves `catalog_version: null` (not recorded - NULL means UNKNOWN here) and reuse is
 always a miss, which is a correct answer; against one below 022 the preset read fails `42P01`
@@ -202,7 +217,8 @@ CREATE ROLE morocco_pc_api LOGIN PASSWORD '<from the secret store>';
 GRANT USAGE ON SCHEMA public TO morocco_pc_api;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO morocco_pc_api;
 GRANT INSERT ON recommendation_profile, recommendation_query, build_candidate,
-  build_component, recommendation_result, build_rejection TO morocco_pc_api;
+  build_component, recommendation_result, build_rejection, recommendation_swap
+  TO morocco_pc_api;
 GRANT DELETE ON build_rejection TO morocco_pc_api;
 -- Decision 46: the pass-facts writer UPDATEs exactly three columns. Granted PER
 -- COLUMN, never per table, so the table-level UPDATE answers stay 'f' (see the
@@ -237,6 +253,7 @@ SELECT has_table_privilege('morocco_pc_api','product','INSERT'),            -- f
        has_table_privilege('morocco_pc_api','product','SELECT');            -- t
 SELECT has_table_privilege('morocco_pc_api','build_candidate','INSERT'),    -- t
        has_table_privilege('morocco_pc_api','recommendation_query','INSERT'),  -- t
+       has_table_privilege('morocco_pc_api','recommendation_swap','INSERT'),   -- t
        has_table_privilege('morocco_pc_api','build_component','DELETE'),    -- f
        has_table_privilege('morocco_pc_api','build_rejection','DELETE');    -- t
 -- Decision 46: no ROW-WIDE update, but exactly three COLUMN-scoped ones.

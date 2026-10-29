@@ -81,7 +81,7 @@ Five failure modes this plan's own tests do not fully cover, most likely first.
 **Files:**
 - Create: `scripts/rehearse-api-role.js` (creates the role + grants on the TEST branch, runs the probe as that role, asserts the self-check, then drops the role — cleanup in `finally`, residue asserted last, non-zero exit if cleanup fails)
 - Create: `scripts/lib/api-role.js` (the ONE owner of the privilege contract: the 20-answer fixture, the GRANT block, the self-check SQL, the `REVOKE`-sweep teardown) + `scripts/lib/pass-rows.js` (the Layer 4 row bookkeeping every writer-side cleanup shares)
-- Create: `scripts/apply-api-role.js` (the owner-gated shared apply: refuses without `--restore-point=<id>`, refuses an existing role, self-check 20/20, rolls the role back on red) + `scripts/smoke-api-role.js` (the API itself as the role: `--confirm-shared`, health on the body, one real POST, the six Layer 4 counts asserted back)
+- Create: `scripts/apply-api-role.js` (the owner-gated shared apply: refuses without `--restore-point=<id>`, refuses an existing role, self-check 21/21, rolls the role back on red) + `scripts/smoke-api-role.js` (the API itself as the role: `--confirm-shared`, health on the body, one real POST, the six Layer 4 counts asserted back)
 - Create: `docs/RECIPES/provision-the-api-role.md` (the owner runbook: restore point, apply, smoke, rollback, what to record)
 - Modify: `docs/API.md` §Production mode (record that the rehearsal ran, with the date and the commands)
 - Test: `scripts/lib/*.test.js` for the pure parts (the privilege expectation table), following the `scripts/lib/*.test.js` + `test:scripts` convention
@@ -101,7 +101,7 @@ Five failure modes this plan's own tests do not fully cover, most likely first.
 
 **Definition of done**
 - The rehearsal runs end to end on the branch as `morocco_pc_api` with no `42501`, residue 0, and the role removed at the end.
-- The self-check's 20 answers are asserted against a fixture, including the three `t` column-scoped UPDATEs and the two `f` row-wide ones.
+- The self-check's 21 answers are asserted against a fixture, including the three `t` column-scoped UPDATEs and the two `f` row-wide ones.
 - A forbidden action is proven to fail (Step 4).
 - The shared application is either recorded as done with its restore point, or explicitly recorded as still pending with the reason.
 
@@ -249,7 +249,7 @@ Five failure modes this plan's own tests do not fully cover, most likely first.
 ## Definition of done (whole plan)
 
 1. A dispatched `recurring-gates` run is recorded with its per-step conclusion, and the "UNVERIFIED in CI" wording is updated only where the evidence supports it.
-2. The production role is rehearsed on the branch (full write path, no `42501`, all 20 privilege answers asserted, a forbidden action proven to fail, role removed) and its shared application is either done with a restore point or explicitly pending.
+2. The production role is rehearsed on the branch (full write path, no `42501`, all 21 privilege answers asserted, a forbidden action proven to fail, role removed) and its shared application is either done with a restore point or explicitly pending.
 3. Staging and production exist, the deploy refuses a pending schema, and the rollback is rehearsed.
 4. Error capture and a body-aware uptime check are live, and neither can leak a body, a query string or a credential.
 5. The offer-freshness gate covers non-seed provenance regardless of class, with the boundary and the NULL case pinned.

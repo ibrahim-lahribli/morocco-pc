@@ -8,7 +8,7 @@ live database (`information_schema` / `pg_catalog`). Per `AGENTS.md` section 9,
 generated lookup so "does this column exist?" never requires reading 11 SQL files
 (the question that produced audit finding D2).
 
-<!-- schema-digest: 2006504971c70a90 -->
+<!-- schema-digest: 4110c1517a14a0ef -->
 
 ## Enum vocabularies (14)
 
@@ -29,7 +29,7 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 | `ssd_form_factor` | M_2_2280 \| M_2_2242 \| M_2_2260 \| M_2_22110 \| SATA_25 \| SATA_35 \| U_2 \| PCIE_CARD \| MSATA \| NGFF |
 | `support_status` | ACTIVE \| DISCONTINUED \| END_OF_LIFE |
 
-## Tables (43)
+## Tables (44)
 
 ### `benchmark` (17 columns)
 
@@ -805,6 +805,28 @@ generated lookup so "does this column exist?" never requires reading 11 SQL file
 - `chk_recommendation_result_rank_positive` — CHECK ((rank > 0))
 
 **Indexes:** `idx_recommendation_result_build_candidate_id` · `idx_recommendation_result_recommendation_query_id` · `recommendation_result_pkey` · `uq_recommendation_result_query_rank`
+
+### `recommendation_swap` (9 columns)
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| `id` 🔑 | uuid | NO | gen_random_uuid() |
+| `source_result_id` | uuid | NO |  |
+| `build_candidate_id` | uuid | NO |  |
+| `component_role` | USER-DEFINED | NO |  |
+| `replaced_product_id` | uuid | NO |  |
+| `replaced_product_variant_id` | uuid | YES |  |
+| `catalog_version` | text | YES |  |
+| `engine_version` | text | YES |  |
+| `created_at` | timestamp with time zone | NO | now() |
+
+**Foreign keys:** `recommendation_swap_build_candidate_id_fkey`: `build_candidate_id` → `build_candidate.id` (ON DELETE NO ACTION) · `recommendation_swap_replaced_product_id_fkey`: `replaced_product_id` → `product.id` (ON DELETE NO ACTION) · `recommendation_swap_replaced_product_variant_id_fkey`: `replaced_product_variant_id` → `product_variant.id` (ON DELETE NO ACTION) · `recommendation_swap_source_result_id_fkey`: `source_result_id` → `recommendation_result.id` (ON DELETE NO ACTION)
+
+**CHECK constraints:**
+
+- `chk_recommendation_swap_catalog_version_format` — CHECK (((catalog_version IS NULL) OR (catalog_version ~ '^[0-9a-f]{32}$'::text)))
+
+**Indexes:** `recommendation_swap_pkey` · `uq_recommendation_swap_build_candidate` · `uq_recommendation_swap_source_result`
 
 ### `retailer_listing_alias` (7 columns)
 

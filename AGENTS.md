@@ -134,7 +134,7 @@ deliberately not duplicated here.
 | `node scripts/rehearse-api-role.js [--budget=N] [--use-case=U]` | Creates the production role `morocco_pc_api` on the **TEST branch only** (`getWriteTestDbUrl()` guard), drives the API write path as the role, asserts the 20-answer privilege self-check, proves a row-wide UPDATE is denied `42501`, then removes the role — a REHEARSAL, never the shared apply |
 | `node scripts/apply-api-role.js [--dry-run] --restore-point=<id> [--password-file=<path>]` | The OWNER-GATED apply to a REAL database: default `DATABASE_URL` (shared), or `--target-env=<NAME>` naming another variable (EU production: `TARGET_DATABASE_URL` from `.env.eu`; the guard line always prints which variable). REFUSES (exit 1, nothing written) without a `^[A-Za-z0-9_-]{8,}$` restore point, refuses an existing role instead of recreating it, prints the `db:<12 hex>` audit digest beside a password-redacted plan and connects to NOTHING in `--dry-run`, and runs the self-check after the grants — a red self-check ROLLS THE ROLE BACK. Read `docs/RECIPES/provision-the-api-role.md` first |
 | `node scripts/smoke-api-role.js --confirm-shared` | Runs the API itself as `morocco_pc_api` against a REAL database — `DATABASE_URL` (shared) by default, or `--target-env=<NAME>` (EU: `TARGET_DATABASE_URL`) (health asserted on the BODY, one real POST that must not be a dedupe reuse and must commit >=1 build, no `42501` on the pool), then deletes its rows and asserts the six Layer 4 counts returned. `--confirm-shared` is required and nothing in CI sets it; a 0-build pass is INCONCLUSIVE, not a pass |
-| `node scripts/check-deployed-role.js [--target=env:NAME] [--app=<tag>] [--role=<name>]` | Read-only proof that the DEPLOYED app presents the ROLE's credential, not a wider one: the API tags every pooled connection `application_name = 'morocco-pc-api'` (`apps/api/src/db.js`), so this classifies those `pg_stat_activity` sessions by `usename`. `PASS` only when every tagged session is `morocco_pc_api`; `FAIL` (exit 1) names any other user; `INCONCLUSIVE` (exit 0) when no tagged session was observed — never a pass, because a stopped, undeployed or idle app looks identical. `--target` takes a variable NAME (`env:NAME`, equals form) and the connection string is never printed. Measured 2026-10-23: INCONCLUSIVE on shared and EU (nothing deployed). Pure half `scripts/lib/deployed-role.js`; the rotation procedure and its rollback are `docs/RECIPES/deploy-eu-colocation.md` §8.5 |
+| `node scripts/check-deployed-role.js [--target=env:NAME] [--app=<tag>] [--role=<name>]` | Read-only proof that the DEPLOYED app presents the ROLE's credential, not a wider one: the API tags every pooled connection `application_name = 'morocco-pc-api'` (`apps/api/src/db.js`), so this classifies those `pg_stat_activity` sessions by `usename`. `PASS` only when every tagged session is `morocco_pc_api`; `FAIL` (exit 1) names any other user; `INCONCLUSIVE` (exit 0) when no tagged session was observed — never a pass, because a stopped, undeployed or idle app looks identical. `--target` takes a variable NAME (`env:NAME`, equals form) and the connection string is never printed. Measured 2026-10-23: INCONCLUSIVE on shared and EU (nothing deployed). Re-measured 2026-10-29 against the live Render demo origin: **FAIL** (exit 1), 1 of 1 tagged session authenticated as `neondb_owner` — the first non-INCONCLUSIVE answer this check has produced, and the reason OG-54 item 1 is now a measured defect. Warm the app with `GET /v1/health` first; a spun-down instance answers INCONCLUSIVE again. Pure half `scripts/lib/deployed-role.js`; the rotation procedure and its rollback are `docs/RECIPES/deploy-eu-colocation.md` §8.5 |
 | `npm run test:api` | HTTP API tests (`apps/api/test/unit/*.test.js`) — DB-free: `fastify.inject` + stubbed collaborators. Runs in the push/PR job |
 | `npm run test:api:db` | HTTP API end-to-end tests (`apps/api/test/db/*.db.test.js`) against the **`TEST_DATABASE_URL` branch**: the real engine, the real schema, residue asserted 0. The launcher fails fast (never skips) when `TEST_DATABASE_URL` is missing or targets shared, and fails on zero executed tests. Runs in `recurring-gates` + `workflow_dispatch` only |
 | `npm run start:api` | Start the HTTP API (`apps/api/src/server.js`). Write-capable: refuses to start unless the target is provably the TEST branch, or `API_ALLOW_SHARED=1` is set explicitly |
@@ -334,13 +334,13 @@ of repository inactivity** — an idle repo silently stops getting the nightly g
    and RE-VERIFIED 2026-10-05 through `001→015` with **0 drift by object definition** (C-30). That
    check is now the repeatable `npm run verify:replay` gate, so re-run it after any migration lands
    rather than trusting a one-off measurement. The shared and TEST databases are baselined in the
-   `schema_migrations` ledger (OG-14); BOTH databases stand at **022** as of 2026-10-19 —
-   `021_recommendation_query_catalog_version.sql` (Decision 47, Platform P1 Sprint 5) and
-   `022_recommendation_preset.sql` (Decision 48, Platform P1 Sprint 6) were branch-first and were
-   applied to shared on 2026-10-19 from restore point `br-ancient-cake-axh57vpj` (the same restore
-   point the production role used). `verify:replay`'s default SHARED reference therefore reports
-   **0 drift**; a fresh-only drift of exactly 021's or 022's objects now means a NEW migration is
-   waiting for its shared apply, never a broken replay
+   `schema_migrations` ledger (OG-14); ALL THREE databases stand at **023** as of 2026-10-29 —
+   `023_recommendation_swap.sql` (Decision 56) was branch-first (TEST, 2026-10-26), then applied to
+   shared from restore point `br-royal-block-axu8i4a9` (audit target `db:54ff6ea3f6e6`) and to EU
+   from `br-cool-star-b9whdnt1` (`db:2d66f26d7ddc`), one audit line each. `verify:replay`'s default
+   SHARED reference therefore reports **0 drift over all 23 files**; a fresh-only drift of exactly
+   the newest migration's objects now means a NEW migration is waiting for its shared apply, never a
+   broken replay
    (`docs/RECIPES/add-a-migration.md`). Before 021, both databases stood at **020** on 2026-10-15
    (`013_cooler_radiator_size.sql` / OG-28, `014_build_rejection.sql` / OG-04,
    `015_relax_rejection_partner.sql` / OG-32, `016_og02_og03_memory_and_status.sql` / OG-02+OG-03,
@@ -350,8 +350,8 @@ of repository inactivity** — an idle repo silently stops getting the nightly g
    2026-10-15 from restore point `br-damp-grass-axyri6yl`, so there was no branch-only trail left at
    that point).
    `verify:replay` diffs a fresh replay against `DATABASE_URL` and reports **0 drift** over all
-   22 files (re-run 2026-10-19 after the shared apply; the 20-file measurement of 2026-10-15 was
-   the previous tail). Use `npm run verify:replay -- --test-db --reference=test` to diff against the branch
+   23 files (re-run 2026-10-29 after the 023 apply; the 22-file measurement of 2026-10-19 and the
+   20-file one of 2026-10-15 were the previous tails). Use `npm run verify:replay -- --test-db --reference=test` to diff against the branch
    instead of shared.
 6. **Migration ledger (OG-14, 2026-10-04).** `run-migrations.js` is ledger-driven: it records each
    applied filename in `schema_migrations` and applies only the pending tail, so it is re-runnable

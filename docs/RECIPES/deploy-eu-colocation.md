@@ -18,7 +18,7 @@ measurement runs.
 | Decision | Value | Why |
 |---|---|---|
 | Database region | Neon `aws-eu-central-1` (Frankfurt) | Fly's `fra` and Render's `frankfurt` are the same metro. Neon's only other EU region is `aws-eu-west-2` (London). |
-| Replay source | the **TEST branch**, not the shared database | Both carry the API's contract (ledger 22 on each since 2026-10-19), so either replays an API that can serve. The branch stays the source because the shared dev database accumulates local test rows. |
+| Replay source | the **TEST branch**, not the shared database | Both carry the API's contract (ledger 23 on each since 2026-10-29), so either replays an API that can serve. The branch stays the source because the shared dev database accumulates local test rows. |
 | Host | **Fly.io `fra`** (recommended); Render `frankfurt` as the alternative | See the comparison below. Both build `apps/api/Dockerfile` with the repository root as context. |
 | Contract version at deploy | v1.6 | The served OpenAPI document names it; `/v1/docs/json` is the check. Eight paths as of 2026-10-23 — the price history is the eighth. |
 
@@ -92,7 +92,7 @@ Copy the commands as written; do not "normalise" them.
    node scripts/check-target-parity.js --a=env:TEST_DATABASE_URL --b=env:TEST_DATABASE_URL
    ```
 
-   Expected `RESULT: MATCH`, with `22 files, tail 022_recommendation_preset.sql`,
+   Expected `RESULT: MATCH`, with `23 files, tail 023_recommendation_swap.sql`,
    `product` 100, `store_offer` 101, `component_assessment` 280.
    **These are the numbers step 5 must reproduce.**
 
@@ -138,7 +138,7 @@ one, the apply stops before writing.
 
 ---
 
-## 5. Step 5b — replay the migrations (22 files)
+## 5. Step 5b — replay the migrations (23 files)
 
 ```bash
 # 1) Prove which database you are about to write to. This prints the digest it will log.
@@ -198,7 +198,7 @@ node scripts/check-target-parity.js --a=env:TEST_DATABASE_URL --b=env:TARGET_DAT
 ```
 
 Expected `RESULT: MATCH`, `exit=0`, and on the printed lines:
-`22 files, tail 022_recommendation_preset.sql` on both sides, the same shape digest, and equal
+`23 files, tail 023_recommendation_swap.sql` on both sides, the same shape digest, and equal
 counts for every table.
 
 `RESULT: DIFF` names the first difference (ledger file, table, shape row, or table count) and
@@ -549,8 +549,11 @@ as the running app.
 
 - The app is deployed and answering (§8.2, §8.3). Rotating a secret on an app that has never
   started proves nothing, because there is no session to observe.
-- The role exists on the target: `node scripts/apply-api-role.js --target-env=TARGET_DATABASE_URL
-  --restore-point=<id>` (procedure `provision-the-api-role.md`; applied to EU 2026-10-23, 20/20).
+- The role exists on the target AND is at the current contract: EU was applied 2026-10-23 and
+  re-granted to **21/21** on 2026-10-29 (procedure `provision-the-api-role.md`). `apply-api-role.js`
+  is for a target that does NOT have the role yet — it REFUSES an existing role by design, so a
+  privilege added by a later migration is an additive `GRANT` (same recipe, "Re-granting after a new
+  Layer 4 table"), never a re-apply.
 - The role is SUFFICIENT: the smoke test must be green **first** —
   `node scripts/smoke-api-role.js --confirm-shared --target-env=TARGET_DATABASE_URL`. A red smoke
   test is a grant problem, and rotating onto it turns a working app into a failing one.
@@ -646,8 +649,9 @@ before. If what leaked is the role's PASSWORD, that is not this rollback — iss
 `ALTER ROLE morocco_pc_api PASSWORD '<new>'` as the owner, write the new value to the password
 file, and repeat steps 1–5.
 
-**What rotation does not prove.** It does not re-measure the grant set (the 20/20 self-check at
-apply time and the rehearsal are that measurement), and it does not narrow the role's `SELECT` on
+**What rotation does not prove.** It does not re-measure the grant set (the self-check at
+apply time — 20/20 then, **21/21** after the 2026-10-29 re-grant — and the rehearsal are that
+measurement), and it does not narrow the role's `SELECT` on
 the catalog. It proves exactly one thing: the running app now authenticates as `morocco_pc_api`.
 
 ---

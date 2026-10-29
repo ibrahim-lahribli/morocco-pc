@@ -45,6 +45,16 @@ owner step with its own procedure and its own evidence —
 that proof:** it connects as the role from the operator's machine, which says nothing
 about which credential the deployed app presents.
 
+**RE-GRANTED 2026-10-29 — the 023 privilege, on both databases.** `recommendation_swap` (Decision
+56) was created after both applies ran, so each role held 20 of the 21 answers. `GRANT INSERT ON
+recommendation_swap TO morocco_pc_api` was applied to shared (restore point
+`br-silent-cake-ax5q21at`, audit target `db:54ff6ea3f6e6`) and to EU (`br-bitter-sky-b96jh91p`,
+`db:2d66f26d7ddc`): the self-check answered **21/21** on each, `smoke-api-role.js --confirm-shared`
+was green on both (health `db:"ok"`, POST 201 with 1 build, 52 statements, no `42501`, residue back
+to its pre-run counts), and a behavioural probe as the role got `23503` (referential integrity) from
+an INSERT with random foreign keys where a missing privilege would have given `42501`. The procedure
+that will be reused next time is the section below.
+
 ## Prerequisites
 
 1. `git status` first — shared checkout. Note the HEAD sha; the apply records it.
@@ -195,6 +205,35 @@ restore point (see `docs/RECIPES/add-a-migration.md`), then this recipe.
    session-level `SET`), and let the deploy runbook (P3 Sprint 3) own the listener, the health
    check and the process supervision — this recipe's job ends at "the role exists, is exactly as
    privileged as documented, and the API runs on it".
+
+## Re-granting after a new Layer 4 table
+
+A table the API WRITES needs a privilege, and that is not a migration (023's header says so:
+"GRANT: none here, deliberately"). It is also **not** a second `apply-api-role.js` run — that script
+REFUSES an existing role on purpose, because a silent DROP-then-recreate would discard grants
+someone else may have tuned and would invalidate the password every secret store already holds. So
+an additive privilege is an additive GRANT:
+
+1. **Change the contract first.** Add the table to `WRITE_TARGET_TABLES` (or
+   `COLUMN_UPDATE_GRANTS`) and the matching literal row to `PRIVILEGE_EXPECTATIONS` in
+   `scripts/lib/api-role.js`. `npm run test:scripts` pins that every `true` answer is satisfiable by
+   the statements `buildGrantStatements()` emits, so the fixture and the grants cannot drift apart.
+2. **Record a restore point**, exactly as an apply does — this is DDL on a real database.
+3. **Apply the one statement** as the owner, idempotent and additive:
+   `GRANT INSERT ON <new_table> TO morocco_pc_api`. Re-issuing the whole
+   `GRANT INSERT ON <WRITE_TARGET_TABLES...>` statement is equally safe: granting a held privilege
+   is a no-op.
+4. **Prove it with the contract's OWN self-check** (`buildSelfCheckSql`), expecting an empty
+   `mismatches` list — not a spot check of the one table you touched, because a spot check cannot
+   see a second privilege that drifted.
+5. **Smoke it**: `node scripts/smoke-api-role.js --confirm-shared [--target-env=<NAME>]`, which runs
+   the API itself as the role and asserts the Layer 4 counts return.
+6. **Prove the INSERT behaviourally when the table is new**: as the role, insert a row with random
+   foreign keys and expect `23503` (referential integrity), never `42501`. `has_table_privilege`
+   reports the catalog; this reaches the enforcement path.
+
+Measured 2026-10-29 for `recommendation_swap` on shared and EU: 21/21, smoke green, `23503` from
+both.
 
 ## What green does NOT mean
 

@@ -1986,3 +1986,74 @@ the leftover 3210 server stopped and the app started from the suite's own config
 `e2e/swap.spec.ts` specs for S24's disabled swap control. Rule: before believing a web-suite red,
 check what is listening on 3210 and which env it was started with.
 
+
+## 2026-10-29 — the deployed origin 500s on 023's read path, and a recorded restore point is what makes the fix cheap
+
+PR #8 merged as `e559fe6` (14 files, `apps/web` only) with `web` and `unit-and-docs` green.
+The Render demo origin (`https://morocco-pc.onrender.com`, first deployed 2026-10-28) answered every
+READ — `/v1/health` `db:"ok"`, `/v1/meta/options`, `/v1/catalog/products`, and a `/v1/docs/json` that
+is byte-identical to the committed `openapi-v1.10.json` — but `POST /v1/recommendations` answered 500
+in 4.6 s and its read-back 500'd too. Cause, measured rather than assumed: the service points at the
+SHARED database (asking it for a TEST-branch pass id answers `404 NOT_FOUND` while shared held zero
+passes), shared sat at ledger 022, and `repository.js` LEFT JOINs `recommendation_swap` (Decision 56),
+so both verbs raise `42P01`. **A 500 is not a no-op:** that failed POST still committed 1 query, 1
+candidate, 1 result, 8 components, 2 rejections and 1 profile. Cleanup is swap -> components -> result
+-> rejections -> candidate -> query -> profile, and residue must be asserted 0 LAST.
+
+Fix taken: apply 023 IN PLACE on shared rather than repoint the service at the TEST branch. Repointing
+would have hidden the drift, left shared behind its own ledger, and there is no Render credential in
+this checkout to change env vars anyway. Applied from restore point `br-royal-block-axu8i4a9`
+(`pre-023`, parent LSN `0/5CAEEB8`, audit target `db:54ff6ea3f6e6`); EU followed the same day from
+`br-cool-star-b9whdnt1` (`db:2d66f26d7ddc`). After the apply the deployed origin answered POST 201
+(1 build, 19 894 MAD), GET 200, a swap-preview 200 that found a PASS CPU among FAILing AM4 parts, a
+swap POST 201, and a read-back serving the DERIVED build at 18 744 MAD with `explanation: null` —
+which is the LEFT JOIN resolving a REAL row, not just the null branch every fresh pass exercises.
+The probe rows were then deleted and shared re-asserted at its baseline (1 pre-existing profile, 0
+elsewhere).
+
+Three things this recorded that the docs did not say:
+
+1. `verify-migrations-replay.js --test-db` now replays 23 files at **0 drift** (columns 386/386, checks
+   85/85, fks 65/65, indexes 105/105), so the nightly's replay step is green again at its cause rather
+   than by moving its reference.
+2. **Applying a migration makes `docs/SCHEMA_REFERENCE.md` stale**, and `gen:schema --check` then exits
+   1 — which is exactly what `verify-docs --live` gates on. Regenerate it in the same session as the
+   apply; the generator preserves CRLF and the diff stays small (26 lines).
+3. The GRANT is now the only thing behind: `morocco_pc_api` holds SELECT on `recommendation_swap` and
+   INSERT on the six pre-023 tables on BOTH databases, so a least-privilege deploy cannot commit a
+   swap. `scripts/apply-api-role.js` is the owner step; Render connects as `neondb_owner` — measured, not
+   inferred: `check-deployed-role.js --target=env:DATABASE_URL` answers `RESULT: FAIL - 1 of 1
+   morocco-pc-api session(s) are authenticated as another role: neondb_owner` (2026-10-29, warm app,
+   exit 1), which is why the deployed verbs work regardless. The 2026-10-23 text above called this
+   check INCONCLUSIVE because nothing was deployed; it now has a real answer, and that answer is red.
+
+Two comparisons worth not misreading, both measured this session: shared <-> EU is `RESULT: DIFF` on
+`scoring-model-pins` alone (shared serves `seed-minimal-v1@1.0.0`, EU serves `launch-v2@1.0.0` active)
+— the OG-54 residue, not schema drift — and TEST <-> EU is `RESULT: DIFF` on pins, offers (103 vs 101),
+stores (5 vs 2) and the 5 unmarked test passes the branch is carrying, while ledger, tables and schema
+shape all MATCH. On both pairs a `RESULT: DIFF` is the EXPECTED answer: read the per-check table, never
+the exit code alone.
+
+## 2026-10-29 (later) — the 023 re-grant, and why `apply-api-role.js` is the wrong tool for it
+
+The GRANT that 023 left behind was closed on both databases: `GRANT INSERT ON recommendation_swap
+TO morocco_pc_api`, from restore points `br-silent-cake-ax5q21at` (shared, audit target
+`db:54ff6ea3f6e6`, parent LSN `0/5D29E78`) and `br-bitter-sky-b96jh91p` (EU, `db:2d66f26d7ddc`,
+`0/20AA1A8`). Before: 20/21 on each, the single mismatch `recommendation_swap_insert`, 6 INSERT
+tables. After: **21/21** on each, 7 INSERT tables, and `smoke-api-role.js --confirm-shared` green on
+BOTH — health `db:"ok"`, POST 201 with 1 build, 52 statements, no `42501`, and the Layer 4 counts
+back to their pre-run values (shared 1 pre-existing profile, EU 0). A behavioural check closed the gap
+between "the catalog says yes" and "the engine can do it": connecting AS the role and inserting into
+`recommendation_swap` with random foreign keys failed `23503` (referential integrity) rather than
+`42501`, so the privilege check really ran and passed, and nothing was written either way.
+
+The lesson worth keeping: **`scripts/apply-api-role.js` cannot re-grant.** It refuses an existing
+role by design — a DROP-then-recreate would discard tuned grants and invalidate the password every
+secret store holds — which means every doc that said "re-run apply-api-role.js" described a command
+that exits 1. The additive path is an additive `GRANT` plus the contract's own self-check, now
+written down as `docs/RECIPES/provision-the-api-role.md` § "Re-granting after a new Layer 4 table".
+
+What this does NOT change: the deployed Render origin still runs as `neondb_owner`
+(`check-deployed-role.js --target=env:DATABASE_URL` -> FAIL, exit 1, unchanged), so its swap verb
+works because of WIDER credentials, not because of this grant. The secret rotation
+(`docs/RECIPES/deploy-eu-colocation.md` §8.5) is still the open owner step.

@@ -44,8 +44,11 @@ variable is read only by the `dotenv/config` PRELOAD (measured 2026-10-23). Use 
 ```bash
 export APP="https://morocco-pc-api.fly.dev"
 
-# TEST <-> EU: expected RESULT: MATCH (measured 2026-10-23: ledger 22/22, 43 tables,
-# launch-v2@1.0.0|active on both, equal catalog and Layer 4 counts).
+# TEST <-> EU: expect ledger-files, tables and schema-shape MATCH, and the DATA checks to DIFF by
+# design. Measured 2026-10-29 after both sides reached ledger 23: 44 tables and an identical shape,
+# but the branch carries launch-v2@2.0.0 ACTIVE beside 1.0.0, 103 vs 101 offers, 5 vs 2 stores and 5
+# unmarked test passes — so scoring-model-pins and the row counts DIFF and the command exits 1.
+# RESULT: DIFF here is the EXPECTED answer: read the per-check table, never the exit code alone.
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-target-parity.js \
   --a=env:TEST_DATABASE_URL --b=env:TARGET_DATABASE_URL
 
