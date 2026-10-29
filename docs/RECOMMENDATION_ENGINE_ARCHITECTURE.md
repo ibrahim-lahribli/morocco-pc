@@ -44,7 +44,7 @@ this document calls one of these rules unenforced while its module is in the
 tree.
 
 Authoritative for engine behaviour: RECOMMENDATION_ENGINE_DECISIONS.md
-(Decisions 1-57) and the code.
+(Decisions 1-58) and the code.
 
 Date: 2026-09-12. Baseline: migrations 001-011 applied and catalog-verified.
 

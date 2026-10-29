@@ -966,6 +966,16 @@ observation MOMENT, oldest first.
 }
 ```
 
+`budget_floor` is a **candidate** floor, not a promise of a build. `cheapest_total` sums the
+cheapest eligible candidate for each role the pass requires, so it says what an assembly *could*
+pay if those cheapest picks were pairwise compatible - which the Decision 16 gate may still
+abandon. A query can therefore answer `within_budget: true` with `builds: []`: on the seed
+catalog the golden baseline records a 4477 MAD floor against a 7677 MAD cheapest assembled
+build. The two fields answer different questions (is the cheapest eligible part set inside the
+budget? / does a compatible combination assemble?), `within_budget` is `null` - never `true` -
+when a required role is missing, and the field is informational: the zero-build answer in that
+band is a compatibility outcome, not a budget shortfall.
+
 ### POST and GET differ in no persisted field
 
 POST and GET present the response through the **same** function over the **same**

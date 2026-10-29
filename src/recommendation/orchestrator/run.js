@@ -262,7 +262,10 @@ function withBuildScore(build, buildScore) {
  * Decision 38: options.asOf is optional ISO time with an explicit timezone;
  * when supplied it pins scoring/offer freshness, otherwise the transaction clock remains.
  * @returns {Promise<object>} frozen { query_id, scoring_model_id, builds,
- *        budget_amount, currency, build_contributions, budget_floor } - builds
+ *        budget_amount, currency, priority, archetype_objectives,
+ *        build_contributions, budget_floor } (Decision 58 adds
+ *        `archetype_objectives`: the use case's weights, or null when the model
+ *        does not opt in) - builds
  *        in Engine 3 discovery order, each an Engine 3 build plus build_score,
  *        empty when no complete build fits the budget; build_contributions is
  *        the Decision 22 item-1 contribution list, index-aligned with builds;
@@ -432,6 +435,9 @@ async function runRecommendation(args) {
     // E4 (Decision 41): carried VERBATIM as a sibling (same pattern as E2's
     // resolution); only the archetype selection reads it.
     priority: queryInput.priority,
+    // Decision 58: the use case's archetype weights, or null when the model
+    // does not opt in. Only the archetype selection reads this one either.
+    archetype_objectives: resolveArchetypeObjectives(configuration, queryInput),
     build_contributions: buildContributions.contributions,
     // Decision 27: last, so the two index-aligned fields stay adjacent.
     budget_floor: budgetFloor,
@@ -493,6 +499,40 @@ function resolveRoleTargets(configuration, queryInput) {
     budgetAmount: queryInput.input.budget_amount,
     resolution: queryInput.resolution,
   });
+}
+
+/**
+ * Decision 58: the per-use-case archetype weights for this pass, or null.
+ *
+ * Reads the ACTIVE model's `use_case_profiles[queryInput.input.use_case]
+ * .archetype_objectives` ONLY when the model opts in with
+ * `apply_archetype_objectives: true`. The flag is what keeps a version bump
+ * meaningful: a model that declares the objectives but not the flag keeps the
+ * pre-Decision-58 `priority`-only order, so an older pinned version cannot
+ * silently start meaning something else. The profile shape is already
+ * validated by validateScoringModelConfiguration at load time; this only
+ * routes it.
+ */
+function resolveArchetypeObjectives(configuration, queryInput) {
+  if (configuration === null || typeof configuration !== 'object') {
+    return null;
+  }
+  if (configuration.apply_archetype_objectives !== true) {
+    return null;
+  }
+  const profiles = configuration.use_case_profiles;
+  if (profiles === null || typeof profiles !== 'object' || Array.isArray(profiles)) {
+    return null;
+  }
+  const profile = profiles[queryInput.input.use_case];
+  if (profile === null || typeof profile !== 'object') {
+    return null;
+  }
+  const objectives = profile.archetype_objectives;
+  if (objectives === null || typeof objectives !== 'object' || Array.isArray(objectives)) {
+    return null;
+  }
+  return objectives;
 }
 
 /**

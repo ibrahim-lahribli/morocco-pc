@@ -21,7 +21,7 @@
  *       "gpu_policy":           "REQUIRED" | "IGPU_ALLOWED",
  *       "spend_targets":        { "<component_role>": <relative weight, 0..1> },
  *       "role_weights":         { "<role>": { "<assessment_type>": <number> } },   // optional
- *       "archetype_objectives": { "<ARCHETYPE>": <number> }                        // optional
+ *       "archetype_objectives": { "<ARCHETYPE>": <number> }                        // optional; PERFORMANCE|BALANCED|VALUE, weights >= 0
  *     }
  *   }
  *
@@ -52,6 +52,14 @@ const USE_CASE_PROFILES_KEY = 'use_case_profiles';
 
 /** The frozen GPU-policy vocabulary (Decision 37). */
 const GPU_POLICIES = Object.freeze(['REQUIRED', 'IGPU_ALLOWED']);
+
+/**
+ * The Decision 41 archetype strategies an `archetype_objectives` map may name.
+ * Deliberately a COPY of `ranking/select-archetypes.js` `STRATEGIES` (the two
+ * layers must not import each other); `select-archetypes.test.js` pins that the
+ * load-time and runtime vocabularies agree.
+ */
+const ARCHETYPE_STRATEGIES = Object.freeze(['PERFORMANCE', 'BALANCED', 'VALUE']);
 
 /** Fields a profile MAY declare. */
 const PROFILE_FIELDS = Object.freeze([
@@ -177,18 +185,46 @@ function validateProfileRoleWeights(role_weights, basePath) {
   return copy;
 }
 
-/** `archetype_objectives`: { <ARCHETYPE>: <number> } (consumed by E4). */
+/**
+ * `archetype_objectives`: { <ARCHETYPE>: <number> } (consumed by E4).
+ *
+ * Decision 58: the load-time contract is the WHOLE runtime contract, so a model
+ * that validates here cannot later abort every pass that reaches the archetype
+ * selection. Unknown strategy names, negative weights, non-finite weights and a
+ * non-positive sum are all refused HERE, where the model declares them; the
+ * runtime guard (`ranking/select-archetypes.js` `validateObjectives`) enforces
+ * the same rules at its own boundary.
+ */
 function validateArchetypeObjectives(objectives, basePath) {
   if (!isJsonObject(objectives)) {
     fail(ERROR_CODES.INVALID_FIELD_VALUE, basePath, `"${basePath}" must be an object keyed by archetype`);
   }
   const copy = {};
+  let total = 0;
   for (const archetype of Object.keys(objectives)) {
     requireKeyName(archetype, basePath, `"${basePath}" keys must be non-blank archetype strings`);
+    if (!ARCHETYPE_STRATEGIES.includes(archetype)) {
+      fail(
+        ERROR_CODES.INVALID_FIELD_VALUE,
+        `${basePath}.${archetype}`,
+        `"${basePath}.${archetype}" must be one of ${ARCHETYPE_STRATEGIES.join(', ')}`
+      );
+    }
     if (!isFiniteNumber(objectives[archetype])) {
       fail(ERROR_CODES.INVALID_FIELD_VALUE, `${basePath}.${archetype}`, `"${basePath}.${archetype}" must be a finite number`);
     }
+    if (objectives[archetype] < 0) {
+      fail(ERROR_CODES.INVALID_FIELD_VALUE, `${basePath}.${archetype}`, `"${basePath}.${archetype}" must be >= 0`);
+    }
     copy[archetype] = objectives[archetype];
+    total += objectives[archetype];
+  }
+  if (total <= 0) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      basePath,
+      `"${basePath}" must weight at least one archetype above zero`
+    );
   }
   return copy;
 }
@@ -292,6 +328,7 @@ function listUseCases(configuration) {
 module.exports = {
   USE_CASE_PROFILES_KEY,
   GPU_POLICIES,
+  ARCHETYPE_STRATEGIES,
   PROFILE_FIELDS,
   REQUIRED_PROFILE_FIELDS,
   validateUseCaseProfiles,

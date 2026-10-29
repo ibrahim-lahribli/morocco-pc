@@ -552,7 +552,7 @@ function renderBaseline({ meta, suite, selected, artifacts, results, summary, fu
   lines.push('- engine `budget_floor.cheapest_total` - the sum of the cheapest eligible candidate per role, a LOWER BOUND, not a build: ' + short(engineFloor));
   lines.push('- cheapest total that actually assembles among these scenarios: ' + short(cheapestAssembled));
   lines.push('- budgets between the two (sub-8000 MAD here) therefore legitimately return ZERO builds while `within_budget` is TRUE: the');
-  lines.push('  emptiness is a compatibility limit, not a budget shortfall. Tracked as open gap OG-40.');
+  lines.push('  emptiness is a compatibility limit, not a budget shortfall: the floor is a candidate floor, not a promise of a build (OG-40, closed 2026-10-29 -> C-45).');
   lines.push('');
   lines.push('## Full-run coverage (ranking -> selection -> commit)');
   lines.push('');
@@ -729,17 +729,22 @@ async function main() {
         const rankedFirst = ranking.rankBuilds({ builds: first.builds });
         // E4 (Decision 41): the archetype selection replaces the DiverseTop walk
         // as the pre-persistence showcase; both pins get the same E4 arguments
-        // the full-run wiring passes.
+        // the full-run wiring passes. That includes Decision 58's
+        // `archetypeObjectives` (snapshot-carried): omitting it here would make
+        // A1/A10/A8 measure an order the engine never produces, silently hiding
+        // the very behaviour change a scoring-model bump exists to express.
         const selectedFirst = ranking.selectArchetypes({
           ranked: rankedFirst.ranked,
           budget: { amount: first.budget_amount, currency: first.currency },
           priority: first.priority,
+          archetypeObjectives: first.archetype_objectives,
         });
         const rankedSecond = ranking.rankBuilds({ builds: second.builds });
         const selectedSecond = ranking.selectArchetypes({
           ranked: rankedSecond.ranked,
           budget: { amount: second.budget_amount, currency: second.currency },
           priority: second.priority,
+          archetypeObjectives: second.archetype_objectives,
         });
         artifacts.set(scenario.id, scenarioEval.projectArtifact(scenario.id, first, rankedFirst, selectedFirst, maps));
         artifactsSecond.set(scenario.id, scenarioEval.projectArtifact(scenario.id, second, rankedSecond, selectedSecond, maps));
@@ -790,6 +795,9 @@ async function main() {
       artifacts,
       artifactsSecond,
       pi1,
+      // Decision 58 follow-up: lets a manifest assertion scope its approved
+      // expectation to this pin (A10 carries a separate order per model).
+      modelPin: pin,
     });
 
     printTable(results);

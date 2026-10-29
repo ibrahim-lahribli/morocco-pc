@@ -120,6 +120,10 @@ function happyStubs() {
       budget_amount: 12000,
       currency: 'MAD',
       priority: null,
+      // Decision 58: the snapshot carries the use case's archetype weights, or
+      // null when the active model does not opt in. The stub mirrors the real
+      // runRecommendation shape, so a missing key here would hide a dropped field.
+      archetype_objectives: null,
       build_contributions: buildContributions,
       filter_verdicts: Object.freeze([]),
       budget_floor: Object.freeze({
@@ -201,7 +205,13 @@ test('full-run: rank takes snapshot builds; select takes FULL ranked with budget
     assert.deepEqual(Object.keys(stub.rankCalls[0]), ['builds']);
     assert.equal(stub.rankCalls[0].builds, fx.builds);
     assert.equal(stub.selectCalls.length, 1);
-    assert.deepEqual(Object.keys(stub.selectCalls[0]).sort(), ['budget', 'priority', 'ranked']);
+    // Decision 58: the use case's archetype weights ride along (null when the
+    // active model does not opt in), so the selection is their only reader.
+    assert.deepEqual(
+      Object.keys(stub.selectCalls[0]).sort(),
+      ['archetypeObjectives', 'budget', 'priority', 'ranked']
+    );
+    assert.equal(stub.selectCalls[0].archetypeObjectives, null);
     assert.equal(stub.selectCalls[0].ranked, fx.ranked);
     assert.ok(stub.selectCalls[0].ranked !== fx.topN, 'selection must not receive top_n');
     assert.deepEqual(stub.selectCalls[0].budget, { amount: 12000, currency: 'MAD' });
@@ -376,6 +386,9 @@ test('full-run.js keeps its source boundary (no SQL, no tx control, no driver)',
   assert.ok(source.includes('ranking.selectArchetypes({'));
   assert.ok(source.includes('budget: { amount: snap.budget_amount, currency: snap.currency }'));
   assert.ok(source.includes('priority: snap.priority'));
+  // Decision 58: the use case's weights are forwarded too (null when the model
+  // does not opt in), so the selection is the only reader of them.
+  assert.ok(source.includes('archetypeObjectives: snap.archetype_objectives'));
   assert.ok(source.includes('explanation.explainSelection('));
   // OG-04: the pass's Engine 2D verdicts are forwarded as the 4th argument so
   // the commit wrapper can persist rejection reasons in the same transaction.

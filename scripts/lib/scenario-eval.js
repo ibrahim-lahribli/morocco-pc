@@ -118,6 +118,22 @@ function validateExpectation(entry, path) {
 }
 
 /**
+ * Decision 58 follow-up: a pin-scoped assertion applies ONLY to its own model
+ * pin, and REPLACES an unscoped assertion with the same id for that run. That
+ * is what lets two pins carry separate approved expectations (the A10 strategy
+ * order) without double-emitting rows, and without dropping the assertion on
+ * every other pin. A malformed pin is refused rather than matching nothing.
+ */
+function assertionApplies(assertion, modelPin) {
+  if (assertion.model_pin === undefined) return true;
+  if (typeof assertion.model_pin !== 'string' || !/^[^@\s]+@[^@\s]+$/.test(assertion.model_pin)) {
+    throw new Error('scenario-eval: assertion[' + assertion.id + '] has a malformed "model_pin" '
+      + JSON.stringify(assertion.model_pin) + ' (expected "name@version")');
+  }
+  return modelPin !== undefined && modelPin !== null && assertion.model_pin === modelPin;
+}
+
+/**
  * A scenario's builds are expected once the epic named by `expect_builds_after`
  * has LANDED, i.e. `current_epic >= that label`. Before then an UNKNOWN outcome
  * is pending; once the epic lands, ANY UNKNOWN row for that scenario escalates to
@@ -925,8 +941,10 @@ function a10(assertion, get) {
  * @param {Map<string, object>} artifacts first-pass projections
  * @param {Map<string, object>} artifactsSecond second-pass projections (A8)
  * @param {object|null} pi1 { status, code } from the caller, or null
+ * @param {string} [modelPin] the resolved `name@version` this run measures;
+ *        required to apply a pin-scoped assertion (Decision 58 follow-up)
  */
-function evaluateSuite({ suite, artifacts, artifactsSecond, pi1 }) {
+function evaluateSuite({ suite, artifacts, artifactsSecond, pi1, modelPin }) {
   const byId = new Map(suite.scenarios.map((scenario) => [scenario.id, scenario]));
   const get = (id) => (artifacts.has(id) ? artifacts.get(id) : null);
   const getSecond = (id) => (artifactsSecond.has(id) ? artifactsSecond.get(id) : null);
@@ -945,14 +963,33 @@ function evaluateSuite({ suite, artifacts, artifactsSecond, pi1 }) {
     validateExpectation(entry, 'threshold[' + key + ']');
   }
 
-  // Validate every assertion's expectation up front: an approved/waived entry
-  // missing its reviewer/reviewed_on(/reason) fails fast here.
-  const expectationByAssertion = new Map();
+  // Validate every assertion's expectation up front - INCLUDING a pin-scoped
+  // entry this run will not use - so a malformed approval fails fast instead of
+  // sitting dormant until someone pins that model.
+  const expectationByAssertionObject = new Map();
   for (const assertion of suite.assertions) {
-    expectationByAssertion.set(assertion.id, validateExpectation(assertion, 'assertion[' + assertion.id + ']'));
+    expectationByAssertionObject.set(
+      assertion,
+      validateExpectation(assertion, 'assertion[' + assertion.id + ']')
+    );
   }
 
-  for (const assertion of suite.assertions) {
+  // A pin-scoped assertion REPLACES the unscoped assertion with the same id on
+  // its own pin (Decision 58 follow-up): exactly one row per assertion per run,
+  // judged by that pin's own approved expectation.
+  const applicable = suite.assertions.filter((assertion) => assertionApplies(assertion, modelPin));
+  const pinnedIds = new Set(applicable
+    .filter((assertion) => assertion.model_pin !== undefined)
+    .map((assertion) => assertion.id));
+  const runAssertions = applicable.filter(
+    (assertion) => assertion.model_pin !== undefined || !pinnedIds.has(assertion.id)
+  );
+  const expectationByAssertion = new Map();
+  for (const assertion of runAssertions) {
+    expectationByAssertion.set(assertion.id, expectationByAssertionObject.get(assertion));
+  }
+
+  for (const assertion of runAssertions) {
     switch (assertion.type) {
       case 'min_distinct_cpu_gpu_pairs':
         results.push(...a1(assertion, thresholds.A1_min_distinct_pairs.value, get));

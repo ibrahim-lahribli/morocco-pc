@@ -2,7 +2,7 @@
   "version": 1,
   "as_of": "2026-10-08T20:00:00.000Z",
   "current_epic": "E8",
-  "note": "E0 golden scenarios (docs/briefs/engine.md). Data only: the assertion LOGIC lives in scripts/lib/scenario-eval.js; scenarios, thresholds and application rules live here so they can change without touching code. Every threshold and assertion carries an expectation status: hypothesis (unreviewed, failure is EXPECTED-RED), approved (reviewed; failure is a HARD FAIL, requires reviewer + reviewed_on) or waived (requires a reason). The H3 review of 2026-10-24 (docs/ENGINE_HYPOTHESIS_REVIEW_2026-10-24.md) approved the values it could defend from measurement; A1, A3 and A4 stay hypothesis because the engine does not yet meet them. Changing an approved value requires a test/golden/CHANGELOG.md entry naming the reviewer.",
+  "note": "E0 golden scenarios (docs/briefs/engine.md). Data only: the assertion LOGIC lives in scripts/lib/scenario-eval.js; scenarios, thresholds and application rules live here so they can change without touching code. Every threshold and assertion carries an expectation status: hypothesis (unreviewed, failure is EXPECTED-RED), approved (reviewed; failure is a HARD FAIL, requires reviewer + reviewed_on) or waived (requires a reason). The H3 review of 2026-10-24 (docs/ENGINE_HYPOTHESIS_REVIEW_2026-10-24.md) approved the values it could defend from measurement; A1, A3 and A4 stay hypothesis because the engine does not yet meet them. Changing an approved value requires a test/golden/CHANGELOG.md entry naming the reviewer. An assertion may additionally be scoped to ONE model pin with `model_pin`; on that pin it REPLACES the unscoped assertion with the same id, so each pin is judged only by its own approved expectation.",
   "thresholds": {
     "A1_min_budget": {
       "value": 10000,
@@ -206,6 +206,21 @@
         { "id": "S11", "expected_strategies": ["PERFORMANCE", "BALANCED"] },
         { "id": "S18", "expected_strategies": ["BALANCED"] },
         { "id": "S19", "expected_strategies": ["BALANCED", "PERFORMANCE"] }
+      ]
+    },
+    {
+      "id": "A10",
+      "type": "archetype_strategies",
+      "model_pin": "launch-v2@2.1.0",
+      "status": "approved",
+      "reviewer": "Ibrahim Lahribli",
+      "reviewed_on": "2026-10-29",
+      "scenarios": [
+        { "id": "S03", "expected_strategies": ["PERFORMANCE", "BALANCED"] },
+        { "id": "S10", "expected_strategies": ["VALUE", "PERFORMANCE"] },
+        { "id": "S11", "expected_strategies": ["PERFORMANCE", "BALANCED"] },
+        { "id": "S18", "expected_strategies": ["BALANCED"] },
+        { "id": "S19", "expected_strategies": ["BALANCED", "VALUE"] }
       ]
     }
   ]

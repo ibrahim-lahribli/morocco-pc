@@ -498,6 +498,92 @@ test('A10: duplicate pairs FAIL; a reason code outside NO_*/EMPTY_RANKED FAILs; 
 });
 
 // ---------------------------------------------------------------------------
+// Pin-scoped expectations (Decision 58 follow-up): an assertion may declare
+// model_pin; for that pin it REPLACES the unscoped assertion with the same id.
+// ---------------------------------------------------------------------------
+
+const A10_BASE = {
+  id: 'A10', type: 'archetype_strategies', status: 'approved',
+  reviewer: 'R', reviewed_on: '2026-10-24',
+  scenarios: [{ id: 'S03', expected_strategies: ['BALANCED', 'PERFORMANCE'] }],
+};
+const A10_PINNED = {
+  id: 'A10', type: 'archetype_strategies', model_pin: 'launch-v2@2.1.0',
+  status: 'approved', reviewer: 'R', reviewed_on: '2026-10-29',
+  scenarios: [{ id: 'S03', expected_strategies: ['PERFORMANCE', 'BALANCED'] }],
+};
+
+function a10Artifact(strategies) {
+  return art({
+    selected: [
+      { signature: 'a', total_price: 1000, has_gpu: true, compatibility_status: 'PASS', pair_key: 'p1' },
+      { signature: 'b', total_price: 1000, has_gpu: true, compatibility_status: 'PASS', pair_key: 'p2' },
+    ],
+    archetype_strategies: strategies,
+    archetype_reason_codes: [],
+  });
+}
+
+function evaluateA10(strategies, modelPin) {
+  return evaluateSuite({
+    suite: { scenarios: [{ id: 'S03' }], thresholds: {}, assertions: [A10_BASE, A10_PINNED] },
+    artifacts: new Map([['S03', a10Artifact(strategies)]]),
+    artifactsSecond: new Map(),
+    pi1: null,
+    modelPin,
+  }).results;
+}
+
+test('a pin-scoped assertion replaces the unscoped one for its pin only, one row per run', () => {
+  const atPinned = evaluateA10(['PERFORMANCE', 'BALANCED'], 'launch-v2@2.1.0');
+  assert.equal(atPinned.length, 1, 'the unscoped A10 must not also emit a row');
+  assert.equal(atPinned[0].status, STATUSES.PASS);
+  assert.match(atPinned[0].expected, /["PERFORMANCE","BALANCED"]/);
+
+  const atBasePin = evaluateA10(['BALANCED', 'PERFORMANCE'], 'launch-v2@2.0.0');
+  assert.equal(atBasePin.length, 1);
+  assert.equal(atBasePin[0].status, STATUSES.PASS);
+
+  // The 2.1.0 order against the unscoped pin's approved expectation is a HARD FAIL.
+  const wrongOrder = evaluateA10(['PERFORMANCE', 'BALANCED'], 'launch-v2@2.0.0');
+  assert.equal(wrongOrder[0].status, STATUSES.FAIL);
+  assert.equal(wrongOrder[0].disposition, DISPOSITIONS.FAIL);
+
+  // An unpinned call (no modelPin) keeps the pre-existing behaviour: unscoped wins.
+  const unpinned = evaluateA10(['BALANCED', 'PERFORMANCE'], undefined);
+  assert.equal(unpinned.length, 1);
+  assert.equal(unpinned[0].status, STATUSES.PASS);
+});
+
+test('a malformed model_pin is refused rather than silently matching nothing', () => {
+  assert.throws(() => evaluateSuite({
+    suite: { scenarios: [], thresholds: {}, assertions: [
+      { id: 'A10', type: 'archetype_strategies', model_pin: 'launch-v2', scenarios: [] },
+    ] },
+    artifacts: new Map(), artifactsSecond: new Map(), pi1: null,
+    modelPin: 'launch-v2@2.1.0',
+  }), /malformed "model_pin"/);
+  // A valid pin containing the letter "s" must not be mistaken for whitespace.
+  assert.doesNotThrow(() => evaluateSuite({
+    suite: { scenarios: [], thresholds: {}, assertions: [
+      { id: 'A10', type: 'archetype_strategies', model_pin: 'seed-minimal-v1@1.0.0', scenarios: [] },
+    ] },
+    artifacts: new Map(), artifactsSecond: new Map(), pi1: null,
+    modelPin: 'seed-minimal-v1@1.0.0',
+  }));
+});
+
+test('a pin-scoped assertion still requires its own approval fields', () => {
+  assert.throws(() => evaluateSuite({
+    suite: { scenarios: [], thresholds: {}, assertions: [
+      { id: 'A10', type: 'archetype_strategies', model_pin: 'launch-v2@2.1.0', status: 'approved', scenarios: [] },
+    ] },
+    artifacts: new Map(), artifactsSecond: new Map(), pi1: null,
+    modelPin: 'launch-v2@2.1.0',
+  }), /requires a non-empty "reviewer"/);
+});
+
+// ---------------------------------------------------------------------------
 // A8 / A9
 // ---------------------------------------------------------------------------
 

@@ -254,3 +254,153 @@ test('E4/E3: the pair key agrees with select-diverse across GPU variants and the
   const signatures = (entries) => entries.map((e) => e.signature).sort();
   assert.deepEqual(signatures(diverse.selected), signatures(archetypes.archetypes));
 });
+
+// ---------------------------------------------------------------------------
+// Decision 58: per-use-case `archetype_objectives` order the strategies.
+//
+// The weights apply ONLY where `priority` is neutral (null/3). 1/2/4/5 stay an
+// explicit lean, so the approved A5 priority contract is untouched.
+// ---------------------------------------------------------------------------
+
+const GAMING_OBJECTIVES = { PERFORMANCE: 0.5, BALANCED: 0.3, VALUE: 0.2 };
+const WORKSTATION_OBJECTIVES = { PERFORMANCE: 0.4, BALANCED: 0.4, VALUE: 0.2 };
+
+function threeDistinctBuilds() {
+  return [
+    rankedEntry(0, { build_score: 90, total_price: 9000, cpu: 'cpu-a', gpu: 'gpu-a' }),
+    rankedEntry(1, { build_score: 80, total_price: 9000, cpu: 'cpu-b', gpu: 'gpu-b' }),
+    rankedEntry(2, { build_score: 70, total_price: 9000, cpu: 'cpu-c', gpu: 'gpu-c' }),
+  ];
+}
+
+test('Decision 58: GAMING weights put PERFORMANCE first at the neutral priority', () => {
+  const result = selectArchetypes({
+    ranked: threeDistinctBuilds(),
+    budget: BUDGET,
+    priority: 3,
+    archetypeObjectives: GAMING_OBJECTIVES,
+  });
+  assert.deepEqual(
+    result.archetypes.map((a) => a.strategy_key),
+    ['PERFORMANCE', 'BALANCED', 'VALUE']
+  );
+  assert.equal(result.archetypes[0].persisted_rank, 1);
+  assert.equal(result.archetypes[0].build_score, 90);
+});
+
+test('Decision 58: WORKSTATION equal weights fall back to the base order, so the two use cases diverge', () => {
+  const ranked = threeDistinctBuilds();
+  const gaming = selectArchetypes({
+    ranked, budget: BUDGET, priority: 3, archetypeObjectives: GAMING_OBJECTIVES,
+  });
+  const workstation = selectArchetypes({
+    ranked, budget: BUDGET, priority: 3, archetypeObjectives: WORKSTATION_OBJECTIVES,
+  });
+  // 0.4 == 0.4 -> position in the priority-3 base order (BALANCED first).
+  assert.deepEqual(
+    workstation.archetypes.map((a) => a.strategy_key),
+    ['BALANCED', 'PERFORMANCE', 'VALUE']
+  );
+  // The SAME builds, the same priority, a different rank-1 strategy: that is
+  // the observable difference OG-38 asked for.
+  assert.notEqual(gaming.archetypes[0].strategy_key, workstation.archetypes[0].strategy_key);
+});
+
+test('Decision 58: an explicit priority still wins over the objectives', () => {
+  const result = selectArchetypes({
+    ranked: threeDistinctBuilds(),
+    budget: BUDGET,
+    priority: 1,
+    archetypeObjectives: GAMING_OBJECTIVES,
+  });
+  assert.deepEqual(
+    result.archetypes.map((a) => a.strategy_key),
+    ['VALUE', 'PERFORMANCE', 'BALANCED']
+  );
+  // priority 5 is the other explicit lean, in the opposite direction.
+  const performanceFirst = selectArchetypes({
+    ranked: threeDistinctBuilds(),
+    budget: BUDGET,
+    priority: 5,
+    archetypeObjectives: { PERFORMANCE: 0.2, BALANCED: 0.3, VALUE: 0.5 },
+  });
+  assert.deepEqual(
+    performanceFirst.archetypes.map((a) => a.strategy_key),
+    ['PERFORMANCE', 'BALANCED', 'VALUE']
+  );
+});
+
+test('Decision 58: an absent or null objectives object is byte-identical to the pre-58 order', () => {
+  const ranked = threeDistinctBuilds();
+  const before = selectArchetypes({ ranked, budget: BUDGET, priority: 3 });
+  const withNull = selectArchetypes({
+    ranked, budget: BUDGET, priority: 3, archetypeObjectives: null,
+  });
+  assert.deepEqual(withNull, before);
+  // null priority is neutral too, and stays the default order without weights.
+  assert.deepEqual(
+    selectArchetypes({ ranked, budget: BUDGET }).archetypes.map((a) => a.strategy_key),
+    ['BALANCED', 'PERFORMANCE', 'VALUE']
+  );
+});
+
+test('Decision 58: a partial objectives object weighs the missing strategies at zero', () => {
+  const result = selectArchetypes({
+    ranked: threeDistinctBuilds(),
+    budget: BUDGET,
+    priority: 3,
+    archetypeObjectives: { VALUE: 0.1 },
+  });
+  // VALUE is the only non-zero weight -> first; the other two keep base order.
+  assert.deepEqual(
+    result.archetypes.map((a) => a.strategy_key),
+    ['VALUE', 'BALANCED', 'PERFORMANCE']
+  );
+});
+
+test('Decision 58: malformed objectives are refused at the boundary', () => {
+  const bads = [
+    ['unknown strategy', { PERFORMANCE: 0.5, TURBO: 0.5 }, 'archetypeObjectives'],
+    ['negative weight', { PERFORMANCE: -0.1, BALANCED: 0.5 }, 'archetypeObjectives.PERFORMANCE'],
+    ['non-finite weight', { PERFORMANCE: Number.NaN }, 'archetypeObjectives.PERFORMANCE'],
+    ['zero sum', { PERFORMANCE: 0, BALANCED: 0, VALUE: 0 }, 'archetypeObjectives'],
+    ['empty map', {}, 'archetypeObjectives'],
+    ['array', ['PERFORMANCE'], 'archetypeObjectives'],
+    ['string', 'PERFORMANCE', 'archetypeObjectives'],
+  ];
+  for (const [label, value, field] of bads) {
+    assert.throws(
+      () => selectArchetypes({ ranked: threeDistinctBuilds(), budget: BUDGET, priority: 3, archetypeObjectives: value }),
+      (error) => error instanceof CandidateSelectionError
+        && error.code === ERROR_CODES.INVALID_FIELD_VALUE
+        && error.field === field,
+      'expected INVALID_FIELD_VALUE on ' + field + ' for: ' + label
+    );
+  }
+});
+
+test('Decision 58: the load-time archetype vocabulary matches the runtime one', () => {
+  const { ARCHETYPE_STRATEGIES, validateUseCaseProfiles } = require('../scoring/use-cases');
+  // The two layers deliberately keep separate copies of the vocabulary (neither
+  // may import the other), so this pin is what stops a future strategy rename
+  // from validating at load and then failing every pass at the runtime boundary.
+  assert.deepEqual([...ARCHETYPE_STRATEGIES], [...STRATEGIES]);
+  const profile = (objectives) => ({
+    GAMING: { gpu_policy: 'REQUIRED', spend_targets: { CPU: 1 }, archetype_objectives: objectives },
+  });
+  for (const strategy of STRATEGIES) {
+    assert.doesNotThrow(() => validateUseCaseProfiles(profile({ [strategy]: 1 })));
+  }
+  assert.throws(
+    () => validateUseCaseProfiles(profile({ TURBO: 1 })),
+    (error) => error instanceof CandidateSelectionError
+      && error.field === 'use_case_profiles.GAMING.archetype_objectives.TURBO'
+  );
+});
+
+test('Decision 58: the objectives order is deterministic across repeated calls', () => {
+  const ranked = threeDistinctBuilds();
+  const first = selectArchetypes({ ranked, budget: BUDGET, priority: 3, archetypeObjectives: GAMING_OBJECTIVES });
+  const second = selectArchetypes({ ranked, budget: BUDGET, priority: 3, archetypeObjectives: GAMING_OBJECTIVES });
+  assert.deepEqual(first, second);
+});

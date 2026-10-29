@@ -10,7 +10,7 @@
  *     its own transaction without writing
  *     -> rankBuilds({ builds })                  - Engine 5a, pure, full
  *        ranked list plus the top_n slice
- *     -> ranking.selectArchetypes({ ranked, budget, priority }) - E4 / Decision
+ *     -> ranking.selectArchetypes({ ranked, budget, priority, archetypeObjectives }) - E4 / Decision
  *        41, which REPLACED the Decision 20 selectDiverseTop walk here; up to
  *        three pair-distinct archetypes, output-ordered by priority
  *     -> explainSelection({ selected, builds, contributions, budget }) - Engine
@@ -82,6 +82,9 @@ async function runRecommendationFullRun(client, queryId, options) {
     ranked: rankedResult.ranked,
     budget: { amount: snap.budget_amount, currency: snap.currency },
     priority: snap.priority,
+    // Decision 58: the use case's archetype weights when the active model opts
+    // in, otherwise null - which keeps the pre-Decision-58 order byte-identical.
+    archetypeObjectives: snap.archetype_objectives,
   });
   // Decision 22 item 3: Engine 6 fills the pre-write seam - pure, DB-free, and
   // copies only (the frozen selection is never mutated). The committed and

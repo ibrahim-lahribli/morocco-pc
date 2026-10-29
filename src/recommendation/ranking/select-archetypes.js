@@ -19,6 +19,14 @@ const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors')
  * if fewer than three genuinely distinct builds exist, return fewer with a
  * reason code instead of padding.
  *
+ * Decision 58: a model may OPT IN (`configuration.apply_archetype_objectives`)
+ * to ordering the strategies by the query's use-case `archetype_objectives`
+ * weights. The weights apply ONLY where `priority` is neutral (null or 3);
+ * 1/2/4/5 stay an explicit lean and keep the order above, so a user's stated
+ * preference is never overruled. Equal weights fall back to the base order's
+ * position, so the result stays total and deterministic - the tie-break is a
+ * fixed position, never `localeCompare` and never sort stability.
+ *
  * RETURN SHAPE: frozen { archetypes, reason_codes } where each element of
  * `archetypes` is a frozen { strategy_key, persisted_rank, build_score,
  * total_price, compatibility_status, signature, explanation (null - Engine 6
@@ -173,6 +181,65 @@ function pickForStrategy(strategy, entries, claimedPairs) {
 }
 
 /**
+ * Decision 58: validate the caller-supplied objective weights.
+ *
+ * The scoring-model validator already guarantees this shape at load time; this
+ * is the same contract enforced at the boundary the function actually reads, so
+ * a direct caller cannot smuggle an unknown strategy or a zero-sum object into
+ * the sort. Partial objects are allowed (an absent strategy weighs 0).
+ */
+function validateObjectives(objectives) {
+  if (objectives === null || typeof objectives !== 'object' || Array.isArray(objectives)) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'archetypeObjectives',
+      '"archetypeObjectives" must be an object keyed by strategy'
+    );
+  }
+  let total = 0;
+  for (const name of Object.keys(objectives)) {
+    if (!STRATEGIES.includes(name)) {
+      fail(
+        ERROR_CODES.INVALID_FIELD_VALUE,
+        'archetypeObjectives',
+        `"archetypeObjectives" has unknown strategy "${name}" (expected ${STRATEGIES.join(', ')})`
+      );
+    }
+    const weight = objectives[name];
+    if (!isFiniteNumber(weight) || weight < 0) {
+      fail(
+        ERROR_CODES.INVALID_FIELD_VALUE,
+        `archetypeObjectives.${name}`,
+        `"archetypeObjectives.${name}" must be a finite number >= 0`
+      );
+    }
+    total += weight;
+  }
+  if (total <= 0) {
+    fail(
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'archetypeObjectives',
+      '"archetypeObjectives" must sum to a positive number'
+    );
+  }
+}
+
+/**
+ * Decision 58: weight DESC, ties by the base order's position.
+ * `validateObjectives` has already checked the shape.
+ */
+function objectiveOrder(objectives, baseOrder) {
+  const weightOf = (strategy) => (objectives[strategy] === undefined ? 0 : objectives[strategy]);
+  return baseOrder.slice().sort((a, b) => {
+    const difference = weightOf(b) - weightOf(a);
+    if (difference !== 0) {
+      return difference;
+    }
+    return baseOrder.indexOf(a) - baseOrder.indexOf(b);
+  });
+}
+
+/**
  * E4 boundary function. Arguments:
  *   ranked         - Engine 5a ranked output (array of ranked entries; each
  *                    carrying build, build_score, total_price, signature,
@@ -180,8 +247,11 @@ function pickForStrategy(strategy, entries, claimedPairs) {
  *   budget         - { amount, currency } (amount finite > 0), the pinned
  *                    query budget - used ONLY for the PERFORMANCE floor.
  *   priority       - optional 1..5 (null/undefined = 3 default order).
+ *   archetypeObjectives - Decision 58: optional per-strategy weights from the
+ *                    query's use-case profile. Absent/null keeps the
+ *                    pre-Decision-58 order byte-identically.
  */
-function selectArchetypes({ ranked, budget, priority } = {}) {
+function selectArchetypes({ ranked, budget, priority, archetypeObjectives } = {}) {
   if (ranked === undefined || ranked === null) {
     ranked = [];
   }
@@ -196,6 +266,12 @@ function selectArchetypes({ ranked, budget, priority } = {}) {
   }
   if (priority !== undefined && priority !== null && (!Number.isInteger(priority) || priority < 1 || priority > 5)) {
     fail(ERROR_CODES.INVALID_FIELD_VALUE, 'priority', '"priority" must be 1..5 or null');
+  }
+  const hasObjectives = archetypeObjectives !== undefined && archetypeObjectives !== null;
+  if (hasObjectives) {
+    // Validate even when an explicit priority will win the order: a malformed
+    // input is a caller bug, not something the priority happens to hide.
+    validateObjectives(archetypeObjectives);
   }
 
   // Annotate every ranked entry with the pinned query budget; pickForStrategy
@@ -216,7 +292,13 @@ function selectArchetypes({ ranked, budget, priority } = {}) {
     return deepFreeze({ archetypes: [], reason_codes: [REASON_CODES.EMPTY_RANKED] });
   }
 
-  const order = strategyOrder(priority);
+  const baseOrder = strategyOrder(priority);
+  // Decision 58: priority 1/2/4/5 is an explicit lean and stays authoritative;
+  // null and 3 are neutral, where the use case's objectives decide the order.
+  const neutralPriority = priority === undefined || priority === null || priority === 3;
+  const order = hasObjectives && neutralPriority
+    ? objectiveOrder(archetypeObjectives, baseOrder)
+    : baseOrder;
   const claimedPairs = new Set();
   const archetypes = [];
 

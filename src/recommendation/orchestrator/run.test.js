@@ -370,6 +370,9 @@ test('runRecommendation: one pass returns the frozen Decision 17.2 shape', async
     // E4 (Decision 41): carried VERBATIM as a sibling, same pattern as the
     // E2 resolution sibling that follows the same loader contract.
     'priority',
+    // Decision 58: the use case's archetype weights, or null when the model
+    // does not opt in - the same "sibling" contract as `priority`.
+    'archetype_objectives',
     'build_contributions',
     // Decision 27: last, so the two index-aligned fields stay adjacent.
     'budget_floor',
@@ -1121,4 +1124,77 @@ test("Decision 38: malformed explicit asOf fails closed", async () => {
   for (const asOf of [null, 0, "2026-02-30T00:00:00Z", "2026-10-08", "2026-10-08T10:00:00"]) {
     await assert.rejects(runRecommendation({ db: createDb(), queryId: QUERY_ID, options: { asOf } }), e => e.code === ERROR_CODES.INVALID_FIELD_VALUE && e.field === "asOf");
   }
+});
+
+// ---------------------------------------------------------------------------
+// Decision 58: the per-use-case archetype weights are a gated sibling.
+// ---------------------------------------------------------------------------
+
+const GAMING_WEIGHTS = { PERFORMANCE: 0.5, BALANCED: 0.3, VALUE: 0.2 };
+
+function profilesWithWeights() {
+  return {
+    GAMING: {
+      gpu_policy: 'REQUIRED',
+      spend_targets: { CPU: 0.17, GPU: 0.38, MOTHERBOARD: 0.10 },
+      archetype_objectives: GAMING_WEIGHTS,
+    },
+  };
+}
+
+test('Decision 58: a model that opts in carries the query use case’s archetype weights', async () => {
+  const db = createDb({
+    routes: {
+      configuration: {
+        apply_archetype_objectives: true,
+        use_case_profiles: profilesWithWeights(),
+      },
+    },
+  });
+  const result = await runRecommendation({ db, queryId: QUERY_ID });
+  assert.deepEqual(result.archetype_objectives, GAMING_WEIGHTS);
+  // Deep-frozen with the rest of the result: the selection must not mutate it.
+  assert.ok(Object.isFrozen(result.archetype_objectives));
+});
+
+test('Decision 58: the flag gates the weights - declaring them without it carries null', async () => {
+  const db = createDb({
+    routes: {
+      configuration: {
+        use_case_profiles: profilesWithWeights(),
+      },
+    },
+  });
+  const result = await runRecommendation({ db, queryId: QUERY_ID });
+  assert.equal(result.archetype_objectives, null);
+});
+
+test('Decision 58: a use case the model does not declare carries null even with the flag on', async () => {
+  const db = createDb({
+    routes: {
+      configuration: {
+        apply_archetype_objectives: true,
+        use_case_profiles: {
+          OFFICE: { gpu_policy: 'IGPU_ALLOWED', spend_targets: { CPU: 0.22 } },
+        },
+      },
+    },
+  });
+  const result = await runRecommendation({ db, queryId: QUERY_ID });
+  assert.equal(result.archetype_objectives, null);
+});
+
+test('Decision 58: a profile that declares no objectives carries null even with the flag on', async () => {
+  const db = createDb({
+    routes: {
+      configuration: {
+        apply_archetype_objectives: true,
+        use_case_profiles: {
+          GAMING: { gpu_policy: 'REQUIRED', spend_targets: { CPU: 0.17, GPU: 0.38 } },
+        },
+      },
+    },
+  });
+  const result = await runRecommendation({ db, queryId: QUERY_ID });
+  assert.equal(result.archetype_objectives, null);
 });

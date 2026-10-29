@@ -19,7 +19,9 @@
  *                            (LEGACY walk since E4 / Decision 41: still exported and
  *                            still the Decision 20 contract, no longer the showcase)
  *   MAX_PER_PAIR           -> 3 (per-pair cap, Decision 20 section 3)
- *   selectArchetypes({ ranked, budget, priority }) -> deeply frozen { archetypes, reason_codes }
+ *   selectArchetypes({ ranked, budget, priority, archetypeObjectives }) ->
+ *     deeply frozen { archetypes, reason_codes }  (archetypeObjectives is
+ *     Decision 58's optional per-use-case weights; absent = pre-58 order)
  *                            (E4 / Decision 41; strategy_key persistence LANDED
  *                            in Platform migration 019 - applied on both databases)
  *   PERFORMANCE_FLOOR      -> 0.85 (E4 spend threshold, Decision 41)

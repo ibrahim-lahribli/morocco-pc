@@ -523,3 +523,40 @@ test('Decision 42: resolution_profiles fails fast on every shape violation', () 
     );
   }
 });
+
+// ---------------------------------------------------------------------------
+// Decision 58: OPTIONAL `apply_archetype_objectives` opt-in.
+//
+// The flag is what keeps a model VERSION meaningful: declaring the per-use-case
+// weights changes nothing until a model opts in, so an older pinned version
+// cannot silently start ordering its archetypes differently.
+// ---------------------------------------------------------------------------
+
+test('Decision 58: apply_archetype_objectives is optional and preserved when declared', () => {
+  const absent = validateScoringModelConfiguration(makeConfiguration());
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(absent, 'apply_archetype_objectives'),
+    false,
+    'an undeclared flag must not appear in the validated object'
+  );
+
+  for (const value of [true, false]) {
+    const validated = validateScoringModelConfiguration(
+      makeConfiguration({ apply_archetype_objectives: value })
+    );
+    assert.equal(validated.apply_archetype_objectives, value);
+    assert.ok(Object.isFrozen(validated));
+  }
+});
+
+test('Decision 58: a non-boolean apply_archetype_objectives is refused, never truthy-coerced', () => {
+  for (const value of ['true', 1, 0, null, {}, []]) {
+    assert.throws(
+      () => validateScoringModelConfiguration(makeConfiguration({ apply_archetype_objectives: value })),
+      (error) => error instanceof CandidateSelectionError
+        && error.code === ERROR_CODES.INVALID_FIELD_VALUE
+        && error.field === 'apply_archetype_objectives',
+      'expected INVALID_FIELD_VALUE for ' + JSON.stringify(value)
+    );
+  }
+});

@@ -112,6 +112,39 @@ test('preserves optional role_weights overrides and archetype_objectives', () =>
   assert.deepEqual(validated.GAMING.archetype_objectives, { PERFORMANCE: 0.6, BALANCED: 0.3, VALUE: 0.1 });
 });
 
+// Decision 58 made `archetype_objectives` LIVE, so the load-time contract must
+// match the runtime one: weights that can order nothing are refused HERE rather
+// than aborting the first pass that reaches `selectArchetypes`.
+test('Decision 58: rejects archetype_objectives that can order nothing', () => {
+  assertFailure(
+    () => validateUseCaseProfiles({ GAMING: profile({ archetype_objectives: {} }) }),
+    ERROR_CODES.INVALID_FIELD_VALUE,
+    'use_case_profiles.GAMING.archetype_objectives'
+  );
+  assertFailure(
+    () => validateUseCaseProfiles({
+      GAMING: profile({ archetype_objectives: { PERFORMANCE: 0, BALANCED: 0, VALUE: 0 } }),
+    }),
+    ERROR_CODES.INVALID_FIELD_VALUE,
+    'use_case_profiles.GAMING.archetype_objectives'
+  );
+});
+
+test('Decision 58: rejects unknown archetypes and negative weights, like the runtime guard', () => {
+  assertFailure(
+    () => validateUseCaseProfiles({ GAMING: profile({ archetype_objectives: { TURBO: 1 } }) }),
+    ERROR_CODES.INVALID_FIELD_VALUE,
+    'use_case_profiles.GAMING.archetype_objectives.TURBO'
+  );
+  assertFailure(
+    () => validateUseCaseProfiles({
+      GAMING: profile({ archetype_objectives: { PERFORMANCE: -1, BALANCED: 2 } }),
+    }),
+    ERROR_CODES.INVALID_FIELD_VALUE,
+    'use_case_profiles.GAMING.archetype_objectives.PERFORMANCE'
+  );
+});
+
 test('rejects a non-object map, an empty map and a non-object profile', () => {
   assertFailure(() => validateUseCaseProfiles(null), ERROR_CODES.INVALID_FIELD_VALUE, USE_CASE_PROFILES_KEY);
   assertFailure(() => validateUseCaseProfiles([]), ERROR_CODES.INVALID_FIELD_VALUE, USE_CASE_PROFILES_KEY);

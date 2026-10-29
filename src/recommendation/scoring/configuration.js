@@ -74,9 +74,18 @@ const SCORING_MODEL_CONFIGURATION_KEYS = Object.freeze([
 /** OPTIONAL top-level key (Decision 42, E5): per-resolution policy profiles. */
 const RESOLUTION_PROFILES_KEY = 'resolution_profiles';
 
+/**
+ * OPTIONAL top-level key (Decision 58): OPT IN to consuming the per-use-case
+ * `archetype_objectives` weights when ordering the archetype strategies.
+ * Absent or false keeps the pre-Decision-58 `priority`-only order, which is
+ * what lets a model VERSION isolate the behaviour change.
+ */
+const APPLY_ARCHETYPE_OBJECTIVES_KEY = 'apply_archetype_objectives';
+
 const OPTIONAL_CONFIGURATION_KEYS = Object.freeze([
   USE_CASE_PROFILES_KEY,
   RESOLUTION_PROFILES_KEY,
+  APPLY_ARCHETYPE_OBJECTIVES_KEY,
 ]);
 
 /** `resolution_profiles.<resolution>` is a strict closed one-field contract. */
@@ -508,6 +517,20 @@ function validateScoringModelConfiguration(configuration) {
       configuration[RESOLUTION_PROFILES_KEY]
     );
   }
+  // Optional (Decision 58): a BOOLEAN opt-in, preserved iff declared. A
+  // non-boolean is refused rather than truthy-coerced, because the flag's whole
+  // job is to keep an older pinned version's behaviour fixed.
+  if (Object.prototype.hasOwnProperty.call(configuration, APPLY_ARCHETYPE_OBJECTIVES_KEY)) {
+    const flag = configuration[APPLY_ARCHETYPE_OBJECTIVES_KEY];
+    if (typeof flag !== 'boolean') {
+      fail(
+        ERROR_CODES.INVALID_FIELD_VALUE,
+        APPLY_ARCHETYPE_OBJECTIVES_KEY,
+        `"${APPLY_ARCHETYPE_OBJECTIVES_KEY}" must be a boolean`
+      );
+    }
+    validated[APPLY_ARCHETYPE_OBJECTIVES_KEY] = flag;
+  }
 
   return deepFreeze(validated);
 }
@@ -517,5 +540,6 @@ module.exports = {
   SCORING_MODEL_CONFIGURATION_KEYS,
   OPTIONAL_CONFIGURATION_KEYS,
   RESOLUTION_PROFILES_KEY,
+  APPLY_ARCHETYPE_OBJECTIVES_KEY,
   validateResolutionProfiles,
 };
