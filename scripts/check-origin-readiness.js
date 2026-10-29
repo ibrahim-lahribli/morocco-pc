@@ -7,6 +7,7 @@
  *
  *   node scripts/check-origin-readiness.js --app=morocco-pc-api
  *   node scripts/check-origin-readiness.js --app=<name> --origin=https://host
+ *   node scripts/check-origin-readiness.js --platform=render --origin=https://host
  *
  * The runbook pins TRUST_PROXY from evidence read off a live origin, so this
  * script asserts the two facts every later step assumes, BEFORE anything is
@@ -15,13 +16,15 @@
  *   1. `fly ips list` succeeds AND yields at least one address. Those addresses
  *      are the second half of the pin (Fly's rightmost X-Forwarded-For entry is
  *      an address assigned to the app), so an addressless app has nothing to
- *      pin and `*.fly.dev` cannot answer.
+ *      pin and `*.fly.dev` cannot answer. On `--platform=northflank|render`
+ *      this fact has no equivalent - the platform assigns the hostname - so the
+ *      health probe below is the whole check and the verdict names no address.
  *   2. `GET <origin>/v1/health?probe=preflight` answers 2xx with `status: "ok"`
  *      and `db: "ok"`. A 200 with `db: "down"` proves the process, not the
  *      deploy, and per-IP bucket counts taken against it would be worthless.
  *
- * READ-ONLY: one `fly ips list` and one GET. Nothing is deployed, written or
- * changed, and no credential is read or printed.
+ * READ-ONLY: at most one `fly ips list` and one GET. Nothing is deployed,
+ * written or changed, and no credential is read or printed.
  *
  * Exit codes:
  *   0  both facts held; `PREFLIGHT OK - addresses:` and the address set print
@@ -40,10 +43,19 @@ const { spawnSync } = require('node:child_process');
 
 const { parseFlyIps, checkHealth, healthUrl } = require('./lib/origin-readiness');
 
-const USAGE = 'usage: node scripts/check-origin-readiness.js [--app=<name>] [--origin=<url>] [--platform=fly|koyeb] [--help]';
-const PLATFORMS = ['fly', 'koyeb'];
+const USAGE = 'usage: node scripts/check-origin-readiness.js [--app=<name>] [--origin=<url>] [--platform=fly|northflank|render] [--help]';
+const PLATFORMS = ['fly', 'northflank', 'render'];
+// Platforms with no `fly ips list` equivalent: the hostname is assigned by the
+// platform, so the health probe is the whole check.
+const HEALTH_ONLY_PLATFORMS = ['northflank', 'render'];
 const DEFAULT_APP = 'morocco-pc-api';
 const HEALTH_TIMEOUT_MS = 10000;
+// A host that scales to zero needs a cold start before it can answer: Render
+// Free spins down after 15 idle minutes and took more than 10 s to answer this
+// probe (measured 2026-10-29 against https://morocco-pc.onrender.com). The 10 s
+// budget above suits an always-on Fly machine and would report a healthy but
+// cold deploy as a FAIL, so the health-only platforms get this instead.
+const COLD_START_TIMEOUT_MS = 60000;
 const FLY_TIMEOUT_MS = 30000;
 
 /**
@@ -128,11 +140,11 @@ function defaultRunFly(app) {
  * which is exactly the false readiness the preflight exists to prevent. A 3xx
  * comes back with its status and fails the check.
  */
-async function defaultFetchHealth(url) {
+async function defaultFetchHealth(url, timeoutMs = HEALTH_TIMEOUT_MS) {
   const response = await fetch(url, {
     redirect: 'manual',
     headers: { accept: 'application/json' },
-    signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   return { status: response.status, bodyText: await response.text() };
 }
@@ -146,7 +158,7 @@ async function checkHealthOnly(origin, fetchHealth, log, logError) {
   const url = healthUrl(origin);
   let response;
   try {
-    response = await fetchHealth(url);
+    response = await fetchHealth(url, COLD_START_TIMEOUT_MS);
   } catch (error) {
     logError('FAIL preflight: GET ' + url + ' did not answer 2xx (' + messageOf(error) + ').');
     return 1;
@@ -185,8 +197,10 @@ async function main(argv, deps) {
   }
   if (args.help) {
     log(USAGE);
-    log('Read-only deployed-origin preflight: asserts `fly ips list` returns an address and');
-    log('GET /v1/health answers 2xx with status "ok" and db "ok". Exit 0 pass, 1 fail, 2 usage.');
+    log('Read-only deployed-origin preflight. --platform=fly asserts `fly ips list` returns');
+    log('an address; northflank|render assign the hostname, so they need --origin and');
+    log('assert the health probe only. Both check GET /v1/health answers 2xx with status');
+    log('"ok" and db "ok". Exit 0 pass, 1 fail, 2 usage.');
     return 0;
   }
   if (args.app === '') {
@@ -197,9 +211,9 @@ async function main(argv, deps) {
 
   let origin;
   try {
-    if (args.platform === 'koyeb' && args.origin === null) {
-      // Koyeb assigns the public hostname, so it cannot be guessed from the app name.
-      throw new Error('--platform=koyeb needs an explicit --origin, e.g. https://<service>.koyeb.app');
+    if (HEALTH_ONLY_PLATFORMS.includes(args.platform) && args.origin === null) {
+      // The hostname is assigned by the platform, so it cannot be guessed from the app name.
+      throw new Error('--platform=' + args.platform + ' needs an explicit --origin, e.g. https://<your-service-host>');
     }
     // The runbook's origin is the app's own host; a custom domain is passed
     // explicitly rather than guessed.
@@ -210,9 +224,9 @@ async function main(argv, deps) {
     return 2;
   }
 
-  if (args.platform === 'koyeb') {
-    // Koyeb has no IP-allocation step to assert; the health probe below is the
-    // whole check, so the verdict says so rather than claiming an address.
+  if (HEALTH_ONLY_PLATFORMS.includes(args.platform)) {
+    // These hosts have no IP-allocation step to assert; the health probe below
+    // is the whole check, so the verdict says so rather than claiming an address.
     return checkHealthOnly(origin, fetchHealth, log, logError);
   }
 
@@ -300,5 +314,6 @@ module.exports = {
   main,
   USAGE,
   DEFAULT_APP,
+  COLD_START_TIMEOUT_MS,
   HEALTH_TIMEOUT_MS,
 };

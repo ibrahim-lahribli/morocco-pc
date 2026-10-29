@@ -27,6 +27,7 @@ const assert = require('node:assert/strict');
 const {
   parseArgs,
   normalizeOrigin,
+  COLD_START_TIMEOUT_MS,
   defaultFetchHealth,
   main,
   USAGE,
@@ -43,15 +44,16 @@ const TABLE = [
 function harness(overrides) {
   const lines = [];
   const errors = [];
-  const calls = { fly: [], health: [] };
+  const calls = { fly: [], health: [], healthTimeouts: [] };
   const deps = Object.assign(
     {
       runFly: (app) => {
         calls.fly.push(app);
         return { status: 0, stdout: TABLE, stderr: '', error: null };
       },
-      fetchHealth: async (url) => {
+      fetchHealth: async (url, timeoutMs) => {
         calls.health.push(url);
+        calls.healthTimeouts.push(timeoutMs);
         return { status: 200, bodyText: '{"status":"ok","db":"ok"}' };
       },
       log: (line) => lines.push(line),
@@ -211,31 +213,43 @@ test('the address table is printed even when a later check fails', async () => {
   assert.doesNotMatch(h.out(), /PREFLIGHT OK/);
 });
 
-test('--platform=koyeb skips fly ips list and probes only the explicit origin', async () => {
+test('--platform=koyeb is rejected: the free tier is gone, so the name is not a target', async () => {
   const h = harness();
-  const code = await main(['--platform=koyeb', '--origin=https://morocco-pc-api.koyeb.app/'], h.deps);
-  assert.equal(code, 0);
-  assert.equal(h.calls.fly.length, 0, 'fly must not run on koyeb');
-  assert.deepEqual(h.calls.health, ['https://morocco-pc-api.koyeb.app/v1/health?probe=preflight']);
-  assert.equal(h.out(), 'PREFLIGHT OK - origin: https://morocco-pc-api.koyeb.app');
+  assert.equal(await main(['--platform=koyeb', '--origin=https://x.koyeb.app'], h.deps), 2);
+  assert.match(h.err(), /--platform must be one of: fly, northflank, render/);
+  assert.equal(h.calls.fly.length, 0);
+  assert.equal(h.calls.health.length, 0, 'an unknown platform must not probe');
 });
 
-test('--platform=koyeb without --origin is a usage error, nothing is probed', async () => {
+test('--platform=render without --origin is a usage error, nothing is probed', async () => {
   const h = harness();
-  assert.equal(await main(['--platform=koyeb'], h.deps), 2);
+  assert.equal(await main(['--platform=render'], h.deps), 2);
   assert.match(h.err(), /needs an explicit --origin/);
   assert.equal(h.calls.fly.length, 0);
   assert.equal(h.calls.health.length, 0);
 });
 
-test('--platform=koyeb fails on a non-OK health body and on an unknown platform', async () => {
+test('--platform=northflank and render are health-only too', async () => {
+  for (const platform of ['northflank', 'render']) {
+    const h = harness();
+    const code = await main(['--platform=' + platform, '--origin=https://svc.example.test'], h.deps);
+    assert.equal(code, 0);
+    assert.equal(h.calls.fly.length, 0, 'fly must not run on ' + platform);
+    assert.deepEqual(h.calls.health, ['https://svc.example.test/v1/health?probe=preflight']);
+    assert.equal(h.out(), 'PREFLIGHT OK - origin: https://svc.example.test');
+    assert.equal(h.calls.healthTimeouts[0], COLD_START_TIMEOUT_MS,
+      'a health-only probe must allow a cold start, not the 10s Fly budget');
+  }
+});
+
+test('--platform=render fails on a non-OK health body and on an unknown platform', async () => {
   const bad = harness({ fetchHealth: async () => ({ status: 200, bodyText: '{"status":"ok","db":"down"}' }) });
-  assert.equal(await main(['--platform=koyeb', '--origin=https://x.koyeb.app'], bad.deps), 1);
+  assert.equal(await main(['--platform=render', '--origin=https://svc.example.test'], bad.deps), 1);
   assert.match(bad.err(), /db=down/);
 
   const unknown = harness();
   assert.equal(await main(['--platform=heroku', '--origin=https://x.test'], unknown.deps), 2);
-  assert.match(unknown.err(), /--platform must be one of: fly, koyeb/);
+  assert.match(unknown.err(), /--platform must be one of: fly, northflank, render/);
 });
 
 test('normalizeOrigin accepts http(s) and strips trailing slashes', () => {
