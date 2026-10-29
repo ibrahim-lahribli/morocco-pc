@@ -148,14 +148,22 @@ test("clearing this browser's storage is the empty state, not an error", async (
   await expect(rows(page)).toHaveCount(1);
 
   // What a reader does when they clear site data: the page must recover, and
-  // must not report an error it did not have. `networkidle` is what makes the
-  // assertion about the HYDRATED page rather than about the server's empty state.
+  // must not report an error it did not have. The recovery itself is asserted by
+  // the three auto-retrying expectations below; that they run against the HYDRATED
+  // page (and not the server's identical empty state) is proven by the absence of
+  // a page error — a hydration that crashed throws before it could paint anything
+  // else. `waitForLoadState("networkidle")` was the previous hydrator gate, and
+  // turned hostile on master: the layout's prefetch of the (now ISR-revalidated)
+  // home route starves networkidle for ~30 s on a reload, so the gate itself
+  // became the failure instead of the state it was checking.
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
   await page.evaluate(() => window.localStorage.clear());
   await page.reload();
-  await page.waitForLoadState("networkidle");
   await expect(rows(page)).toHaveCount(0);
   await expect(page.getByRole("heading", { name: fr.saved.emptyTitle })).toBeVisible();
   await expect(page.getByRole("link", { name: fr.saved.emptyCta })).toBeVisible();
+  expect(errors).toEqual([]);
 });
 
 test("a browser that refuses storage says nothing was saved, and does not crash", async ({
