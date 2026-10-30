@@ -1952,6 +1952,80 @@ test('E3: a non-positive or non-integer quota fails with the nested path', () =>
   }
 });
 
+// OG-57 (2026-10-30): the quota covers the GPU-OMITTED path too. Before this,
+// a GPU-less build carried no pair (`pair` was null whenever no GPU was picked),
+// so an iGPU pass (Decision 43) spent the whole max_builds_per_query halt on the
+// first CPU and never reached the next one - measured as 25 builds on 1 pair for
+// golden S19, and the reason deeper retention moved OFFICE backwards.
+// ---------------------------------------------------------------------------
+
+/** Three iGPU CPUs and four coolers: an ungated omit path fills the halt on cpu-1. */
+function omittedPairFixture() {
+  return [
+    verdict('CPU', 'cpu-1'),
+    verdict('CPU', 'cpu-2'),
+    verdict('CPU', 'cpu-3'),
+    verdict('MOTHERBOARD', 'mb-1'),
+    verdict('RAM', 'ram-1'),
+    verdict('GPU', 'g1'),
+    verdict('GPU', 'g2'),
+    verdict('PSU', 'psu-1'),
+    verdict('CASE', 'case-1'),
+    verdict('CPU_COOLER', 'cool-1'),
+    verdict('CPU_COOLER', 'cool-2'),
+    verdict('CPU_COOLER', 'cool-3'),
+    verdict('CPU_COOLER', 'cool-4'),
+    verdict('SSD_BOOT', 'ssd-1'),
+  ];
+}
+
+function assembleOmittedWithQuota(maxBuildsPerPair) {
+  const input = engineInput({
+    results: omittedPairFixture(),
+    useCase: 'OFFICE',
+    gpuRequired: ['GAMING'],
+    integrated: { 'cpu-1': true, 'cpu-2': true, 'cpu-3': true },
+    maxBuilds: 6,
+  });
+  input.gpu_policy = 'IGPU_ALLOWED';
+  if (maxBuildsPerPair !== undefined) {
+    input.candidate_caps = { ...input.candidate_caps, max_builds_per_pair: maxBuildsPerPair };
+  }
+  return assembleBuilds(input).builds;
+}
+
+function cpuIds(builds) {
+  return builds.map((build) => idsOf(build).CPU);
+}
+
+test('OG-57: an absent quota keeps the pre-fix iGPU walk - the halt is spent on one CPU', () => {
+  const builds = assembleOmittedWithQuota(undefined);
+  assert.equal(builds.length, 6);
+  assert.deepEqual(cpuIds(builds), ['cpu-1', 'cpu-1', 'cpu-1', 'cpu-1', 'cpu-2', 'cpu-2']);
+  assert.equal(new Set(cpuIds(builds)).size, 2);
+  assert.ok(
+    builds.every((build) => idsOf(build).GPU === undefined),
+    'a declared IGPU_ALLOWED policy still emits no discrete GPU'
+  );
+});
+
+test('OG-57: the quota spreads a GPU-less pass across CPUs instead of one pair', () => {
+  const builds = assembleOmittedWithQuota(2);
+  assert.equal(builds.length, 6);
+  assert.deepEqual(cpuIds(builds), ['cpu-1', 'cpu-1', 'cpu-2', 'cpu-2', 'cpu-3', 'cpu-3']);
+  assert.equal(new Set(cpuIds(builds)).size, 3);
+});
+
+test('OG-57: the omitted-pair quota is deterministic run over run', () => {
+  assert.deepEqual(assembleOmittedWithQuota(2), assembleOmittedWithQuota(2));
+});
+
+test('OG-57: a quota of 1 walks one GPU-less build per CPU, in CPU order', () => {
+  const builds = assembleOmittedWithQuota(1);
+  assert.equal(builds.length, 3);
+  assert.deepEqual(cpuIds(builds), ['cpu-1', 'cpu-2', 'cpu-3']);
+});
+
 test('E3/E4: the quota partition and the ranking pair key agree on the same builds', () => {
   // Engine 3's quota keys a 4-tuple (product AND variant of both sides); the
   // ranking pair key (select-diverse / select-archetypes) is

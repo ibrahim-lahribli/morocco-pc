@@ -21,6 +21,15 @@
  * inside the walk, so the max_builds_per_query halt is not spent on one pair.
  * Declared-absent keeps the pre-E3 walk exactly.
  *
+ * OG-57 (2026-10-30): the quota covers the GPU-OMITTED path too. A build with no
+ * GPU is identified by its CPU alone (see omittedPairKey), the omit branch is
+ * skipped once that pair is full, and such a build counts toward the pair and
+ * the halt. Before this, `pair` was null whenever no GPU was picked, so an iGPU
+ * pass (Decision 43) could spend the entire cap on one CPU - measured as 25
+ * builds on 1 pair for golden S19, and the reason deeper retention moved
+ * OFFICE backwards. Declared-absent still changes nothing: with no quota there
+ * is no pair and no gate.
+ *
  * A path ends as soon as its running total moves past budget_amount; an
  * exact match walks on. Traversal halts once max_builds_per_query builds
  * are held. The per-role cap from the input contract is left alone here.
@@ -163,6 +172,35 @@ function pairKey(cpu, gpu) {
 
 function pairIsFull(pairCounts, cpu, gpu, maxPerPair) {
   return (pairCounts.get(pairKey(cpu, gpu)) || 0) >= maxPerPair;
+}
+
+/**
+ * The GPU-OMITTED pair identity (2026-10-30, OG-57).
+ *
+ * `pairKey` cannot express "no GPU": it dereferences `gpu.product_id`. The
+ * iGPU path (Decision 43) emits builds with no GPU component at all, and the
+ * quota used to skip those builds entirely (`pair === null`), so a GPU-less
+ * pass counted no pair and spent the whole `max_builds_per_query` halt on the
+ * first CPU - the exact outcome Decision 40 exists to prevent, measured as 25
+ * builds on 1 pair for golden S19.
+ *
+ * The marker literals cannot collide with `pairKey`'s four UUID-shaped slots,
+ * and `OMITTED` is the same word the E4 selector uses for this case
+ * (select-archetypes.js), so the two stages describe one situation with one
+ * vocabulary. Do not name that module here by role: this file's source-boundary
+ * test forbids the stage vocabulary it belongs to.
+ *
+ * Deliberately a SEPARATE function rather than an optional argument to
+ * `pairKey`: the discrete key must keep dereferencing both sides, and a caller
+ * that forgot to branch should fail loudly, not silently count an omitted GPU
+ * as a distinct partner.
+ */
+function omittedPairKey(cpu) {
+  return JSON.stringify([cpu.product_id, cpu.product_variant_id, 'OMITTED', 'OMITTED']);
+}
+
+function omittedPairIsFull(pairCounts, cpu, maxPerPair) {
+  return (pairCounts.get(omittedPairKey(cpu)) || 0) >= maxPerPair;
 }
 
 function fail(code, field, message) {
@@ -957,9 +995,15 @@ function assembleBuilds(engine3Input) {
   function finishPath(picked, runningTotal) {
     // Decision 40 (E3): a path whose pair is already full is not emitted; only
     // emitted builds count toward the pair quota and the max_builds_per_query halt.
-    const pair = traversal.maxPerPair !== null && picked[GPU_ROLE] !== undefined
-      ? pairKey(picked[EXPANSION_ORDER[0]], picked[GPU_ROLE])
-      : null;
+    // OG-57 (2026-10-30): the GPU-OMITTED path carries a pair too, so a GPU-less
+    // pass spreads its builds across CPUs instead of spending the halt on one.
+    let pair = null;
+    if (traversal.maxPerPair !== null) {
+      const cpuChoice = picked[EXPANSION_ORDER[0]];
+      pair = picked[GPU_ROLE] === undefined
+        ? omittedPairKey(cpuChoice)
+        : pairKey(cpuChoice, picked[GPU_ROLE]);
+    }
     if (pair !== null && (pairCounts.get(pair) || 0) >= traversal.maxPerPair) {
       return;
     }
@@ -1073,7 +1117,13 @@ function assembleBuilds(engine3Input) {
         }
       }
       if (decision !== 'REQUIRED') {
-        descend(depth + 1, picked, runningTotal);
+        // OG-57: the omit branch is quota-gated like any other, or a GPU-less
+        // pass fills the whole cap with one CPU's builds and never reaches the
+        // next CPU - which is what made deeper retention REGRESS OFFICE.
+        if (traversal.maxPerPair === null
+            || !omittedPairIsFull(pairCounts, cpuChoice, traversal.maxPerPair)) {
+          descend(depth + 1, picked, runningTotal);
+        }
       }
       return;
     }
