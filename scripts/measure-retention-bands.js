@@ -21,6 +21,11 @@
  * `roleTargets = null`, so running this script against v1 prints the PRE-E2
  * retention and is how the byte-identical claim is spot-checked.
  *
+ * Decision 59: the pinned model's OPTIONAL `candidate_caps.top_k_by_role` is
+ * passed through as well. This script reports ONE model's retention, so it has
+ * to read that model's depth or it prints a figure the engine never uses - at
+ * `launch-v2@2.4.0` the CPU bucket is capped at 10, not at the uniform 5.
+ *
  * Usage:
  *   node scripts/measure-retention-bands.js [--use-case GAMING]
  *     [--budgets=8000,12000,20000,30000] [--resolution=1080p] [--model=<name@version>]
@@ -110,9 +115,13 @@ async function main() {
     const model = await modelPin.resolvePinnedModel(db, MODEL_PIN);
     const configuration = model.configuration;
     const topK = configuration.candidate_caps.top_k_per_role;
+    // Decision 59: a per-role depth is part of the model, so the report and the
+    // call below both carry it.
+    const topKByRole = configuration.candidate_caps.top_k_by_role ?? null;
     console.log('model: ' + MODEL_PIN + ' (' + model.id + ') | use_case ' + USE_CASE
       + ' | resolution ' + (RESOLUTION === null ? '(null)' : RESOLUTION)
-      + ' | top_k_per_role ' + topK);
+      + ' | top_k_per_role ' + topK
+      + ' | top_k_by_role ' + (topKByRole === null ? '(absent)' : JSON.stringify(topKByRole)));
 
     const fingerprints = [];
     for (const budget of BUDGETS) {
@@ -142,6 +151,7 @@ async function main() {
         topKPerRole: topK,
         prices: offerResult.prices,
         roleTargets,
+        topKByRole,
       });
 
       const byRole = new Map();

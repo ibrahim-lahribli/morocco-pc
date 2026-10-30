@@ -49,6 +49,10 @@
 'use strict';
 
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+// Decision 59: `top_k_by_role` is keyed by the ONE canonical component-role
+// vocabulary (candidates/roles), never by a local copy - the same import the
+// scoring module's own score builders already use for role validation.
+const { isValidComponentRole } = require('../candidates/roles');
 const { validateUseCaseProfiles, USE_CASE_PROFILES_KEY } = require('./use-cases');
 
 /** The frozen Decision 3(a) top-level vocabulary, in documented order. */
@@ -97,8 +101,18 @@ const CANDIDATE_CAPS_FIELDS = Object.freeze([
   'max_builds_per_query',
 ]);
 
-/** OPTIONAL `candidate_caps` key (Decision 40, E3): absent = no per-pair quota. */
-const CANDIDATE_CAPS_OPTIONAL_FIELDS = Object.freeze(['max_builds_per_pair']);
+/**
+ * Decision 40 (E3): optional per-pair build quota; absent = no quota.
+ * Decision 59: optional per-role depth override; absent = the uniform
+ * `top_k_per_role` for every role, byte-identically.
+ */
+const CANDIDATE_CAPS_OPTIONAL_FIELDS = Object.freeze([
+  'max_builds_per_pair',
+  'top_k_by_role',
+]);
+
+/** Decision 59: the OPTIONAL role-keyed depth map inside `candidate_caps`. */
+const TOP_K_BY_ROLE_KEY = 'top_k_by_role';
 
 /** `staleness` is a strict closed two-key contract (Decision 3(a)). */
 const STALENESS_FIELDS = Object.freeze([
@@ -272,8 +286,9 @@ function validateStaleness(staleness) {
 
 /**
  * `candidate_caps`: strict closed { top_k_per_role, max_builds_per_query } plus
- * the OPTIONAL max_builds_per_pair (Decision 40), which is absent by default.
- * Validated and preserved only -- never applied here (Decision 11 Rule 7).
+ * the OPTIONAL max_builds_per_pair (Decision 40) and top_k_by_role
+ * (Decision 59), both absent by default. Validated and preserved only -- never
+ * applied here (Decision 11 Rule 7); retention is the only reader.
  */
 function validateCandidateCaps(candidate_caps) {
   if (!isJsonObject(candidate_caps)) {
@@ -299,6 +314,9 @@ function validateCandidateCaps(candidate_caps) {
       }
       continue;
     }
+    // Decision 59: `top_k_by_role` is an OBJECT, so its own closed contract is
+    // validated below instead of by the scalar positive-integer gate here.
+    if (key === TOP_K_BY_ROLE_KEY) continue;
     const value = candidate_caps[key];
     if (
       typeof value !== 'number' ||
@@ -319,6 +337,47 @@ function validateCandidateCaps(candidate_caps) {
   };
   if (Object.prototype.hasOwnProperty.call(candidate_caps, 'max_builds_per_pair')) {
     caps.max_builds_per_pair = candidate_caps.max_builds_per_pair;
+  }
+  // Decision 59: OPTIONAL `top_k_by_role` is a CLOSED map of canonical
+  // component role -> positive integer. An unknown role key is refused rather
+  // than ignored, because a typo (`Memory`, `CPU_COOLER `) would otherwise cap
+  // nothing while its author believed that role was deeper - the same footgun
+  // Decision 54 refuses for `roleExclusions`. Values are preserved verbatim;
+  // a role absent from the map inherits `top_k_per_role` at retention time.
+  if (Object.prototype.hasOwnProperty.call(candidate_caps, TOP_K_BY_ROLE_KEY)) {
+    const byRole = candidate_caps[TOP_K_BY_ROLE_KEY];
+    if (!isJsonObject(byRole)) {
+      fail(
+        ERROR_CODES.INVALID_FIELD_VALUE,
+        `candidate_caps.${TOP_K_BY_ROLE_KEY}`,
+        `"candidate_caps.${TOP_K_BY_ROLE_KEY}" must be an object keyed by component role`
+      );
+    }
+    const validatedByRole = {};
+    for (const role of Object.keys(byRole)) {
+      if (!isValidComponentRole(role)) {
+        fail(
+          ERROR_CODES.INVALID_FIELD_VALUE,
+          `candidate_caps.${TOP_K_BY_ROLE_KEY}.${role}`,
+          `"candidate_caps.${TOP_K_BY_ROLE_KEY}.${role}" is not a component role`
+        );
+      }
+      const value = byRole[role];
+      if (
+        typeof value !== 'number' ||
+        !Number.isFinite(value) ||
+        !Number.isInteger(value) ||
+        value <= 0
+      ) {
+        fail(
+          ERROR_CODES.INVALID_FIELD_VALUE,
+          `candidate_caps.${TOP_K_BY_ROLE_KEY}.${role}`,
+          `"candidate_caps.${TOP_K_BY_ROLE_KEY}.${role}" must be a positive integer`
+        );
+      }
+      validatedByRole[role] = value;
+    }
+    caps[TOP_K_BY_ROLE_KEY] = validatedByRole;
   }
   return caps;
 }
@@ -541,5 +600,6 @@ module.exports = {
   OPTIONAL_CONFIGURATION_KEYS,
   RESOLUTION_PROFILES_KEY,
   APPLY_ARCHETYPE_OBJECTIVES_KEY,
+  TOP_K_BY_ROLE_KEY,
   validateResolutionProfiles,
 };

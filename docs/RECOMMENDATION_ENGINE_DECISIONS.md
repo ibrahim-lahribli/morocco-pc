@@ -2071,6 +2071,19 @@ The resulting per-role top-K candidate sets are passed to Engine 3 after scoring
 
 `candidate_caps.top_k_per_role` remains the sole source of the K value. No separate `roleCaps` configuration, no per-role override structure, and no additional configuration key is introduced. Its existing validation contract (positive integer, strict two-key `candidate_caps` object) is unchanged.
 
+### UPDATE 2026-10-30 — Rule 8's "no per-role override structure" is superseded by Decision 59
+
+Decision 59 amends this Rule. `candidate_caps.top_k_by_role` is now an OPTIONAL, closed,
+canonical-role-keyed override of `top_k_per_role`, so a model may deepen ONE role (it ships as
+`launch-v2@2.4.0` with `{"CPU": 10}`). What still holds: the uniform K remains REQUIRED, remains
+the source for every role without an entry, and every model that declares no override is
+byte-identical. What no longer holds is this Rule's last sentence - "No separate `roleCaps`
+configuration, no per-role override structure, and no additional configuration key is
+introduced" - because exactly that key now exists. The edit is recorded here, in place, so this
+entry and Decision 59 cannot disagree; Rules 1-7 and the K semantics they define are untouched.
+
+---
+
 ---
 
 ## Decision 15 — UNKNOWN pairwise-count producer (Decision 13's B1)
@@ -5787,3 +5800,179 @@ A validated configuration key with no consumer is worse than an absent one: it a
 - **Measured delta, before and after the pin-scoped approval (TEST branch, `--no-baseline --no-volatile`, 2026-10-29):** before item 8, `launch-v2@2.0.0` measured 66 PASS / 19 EXPECTED-RED / 1 UNKNOWN (exit 0) and `launch-v2@2.1.0` 64 / 19 / **2 HARD FAIL** / 1, exit 1, because exactly two A10 rows moved: **S03 (GAMING, priority 3)** `["BALANCED","PERFORMANCE"]` -> `["PERFORMANCE","BALANCED"]`, matching GAMING's 0.50 PERFORMANCE weight, and **S19 (OFFICE, priority 3)** `["BALANCED","PERFORMANCE"]` -> `["BALANCED","VALUE"]`, because OFFICE's VALUE 0.40 now outranks its PERFORMANCE 0.20. With the pin-scoped expectation in place, BOTH pins re-measure **66 PASS / 19 EXPECTED-RED / 1 UNKNOWN, exit 0**, each against its own order, residue 0; 2.1.0's A10 rows PASS with `[PERFORMANCE,BALANCED]` and `[BALANCED,VALUE]`, 2.0.0's with the unscoped `[BALANCED,PERFORMANCE]`. A1 (pair diversity), A3 (price shares), A4 (VRAM floors) and A8 (determinism) are unchanged, so the delta is strategy ORDER only — the assembled builds themselves did not move. WORKSTATION is the divergence witness: BALANCED 0.40 = PERFORMANCE 0.40 ties, and the base order keeps BALANCED first, so GAMING now leads PERFORMANCE where WORKSTATION still leads BALANCED.
 - **Item 8: PASS.** The evaluator's new cases (`scripts/lib/scenario-eval.test.js`: pin-scoped replacement with exactly one row per run, the unpinned fallback, a malformed `model_pin`, and a pin-scoped entry still requiring its own approval) bring `test:scripts` from 429 to **432**, green. Both golden pins were re-run on the branch with the pinned manifest and are green as recorded above, so the A10 half of the promotion gate is CLOSED; promoting 2.1.0 itself remains a separate release act (Decision 57), not a red gate. `test:api:db` against the branch passes **13/13** with 2.1.0 active, so nothing else in the served path depends on the old order.
 - **Bookkeeping:** `verify-docs` decision counts moved 55 headings / 61 `Status:` lines -> 56 / 62, `docs/DECISION_INDEX.md` regenerated, `AGENTS.md` cites "Decisions 1–58". The pin-scoped approval also adds a `test/golden/CHANGELOG.md` row and updates `docs/TEST_MAP.md`; `test:scripts` 429 -> 432.
+
+## Decision 59 — One role's candidate depth may be overridden, and `launch-v2@2.4.0` uses it on CPU only
+
+Status: RESOLVED 2026-10-30; IMPLEMENTED 2026-10-30 — `candidate_caps.top_k_by_role` is an OPTIONAL, closed, canonical-role-keyed override of `top_k_per_role` (validated in BOTH the scoring-configuration and Engine 3 input contracts, applied in retention), and seed 022 pins `launch-v2@2.4.0` = 2.2.0 with `{"CPU": 10}`, which measures A1 15 of 15 AND A5 2 of 2 where a UNIFORM depth of 10 broke A5; its pin-scoped A10 order was APPROVED 2026-10-31 (Verdict, item 7), while adopting 2.4.0 as a release line is NOT claimed - Decision 57's release gate still decides what ships.
+
+Date: 2026-10-30. Closes the implementation half of **OG-56** (A1's last red row, S06) and retires
+the "untested per-role alternative" that row recorded. Amends **Decision 14 Rule 8** (edited in
+place, see its UPDATE block). No schema change, no migration, and NOT a production model change:
+the shared database stays on `seed-minimal-v1` (Decision 57).
+
+### Current situation
+
+`candidate_caps` is a strict closed contract in TWO places that must agree: `scoring/configuration.js`
+(`CANDIDATE_CAPS_FIELDS` + `CANDIDATE_CAPS_OPTIONAL_FIELDS`, `validateCandidateCaps`) and Engine 3's
+`assembly/input.js`, which validates and freezes the same object and imports nothing from `../scoring`
+(boundary pin). Required keys are `top_k_per_role` and `max_builds_per_query`; `max_builds_per_pair`
+has been optional since Decision 40, and before this entry no per-role structure existed — Decision 14
+Rule 8 said so explicitly.
+
+`retention/retain.js` takes `topKPerRole` as a SCALAR and uses it in three places inside
+`retainBucket`: the `n <= K` whole-bucket return, the E2 band-slot cap (`K - 1`) and the Decision 27
+top-up. `retainBucket` reads only its own bucket — no cross-role state — which is why a per-role depth
+is expressible without touching the walk.
+
+Measured 2026-10-30 on the TEST branch, engine at `fc71061`, through a replica of orchestrator stages
+1-13 calibrated against the real engine at both depths (recorded in OG-56): `launch-v2@2.2.0` (uniform
+5, quota 2) is A1 14 of 15 with S06 at one pair; `launch-v2@2.3.0` (uniform 10) is A1 15 of 15 but A5
+1 of 2, because at that depth S10 and S11 become the SAME 11986 MAD build; CPU-only 10 is A1 15 of 15
+and A5 2 of 2 (11246 vs 11845 and 13946 vs 19246, signatures differ in both).
+
+### Problem
+
+At 1440p the E5 floor leaves exactly one GPU a 12000 MAD GAMING pass can afford, so A1's three pairs
+have to come from the CPU axis, and uniform 5 retains too few affordable CPUs (OG-56). The only lever
+that adds them without widening the seven roles that buy no pair is a per-role depth — and Decision 14
+Rule 8 forbids one. A uniform depth closes A1 by opening every role at once, which measurably
+converges the priority-1/priority-5 picks (A5) and pays assembly on roles that cannot contribute a
+pair.
+
+### Decision
+
+1. **`candidate_caps.top_k_by_role` is OPTIONAL and CLOSED**: a map from a canonical
+   `COMPONENT_ROLES` value to a positive integer. A role WITH an entry is capped at that depth; every
+   role without one keeps `top_k_per_role`. Absent and `{}` both mean "uniform", so every model that
+   does not declare it is byte-identical. A non-object value is `INVALID_INPUT`; an unknown role or a
+   non-positive/non-integer value is `INVALID_FIELD_VALUE` at its own nested path.
+2. **An unknown role key is REFUSED, never ignored** (the Decision 54 `roleExclusions` precedent).
+   The map's job is to change a cap, so a silently dropped key is a cap that reports success while
+   capping nothing.
+3. **Both validators mirror the contract.** `scoring/configuration.js` adds the optional key and
+   validates/preserves it, importing `../candidates/roles` for the ONE canonical role vocabulary (the
+   same pure constant module the scoring score builders already import). `assembly/input.js` keeps a
+   local key literal because it imports nothing from `../scoring`, validates the same shape, and
+   freezes its own copy; the name parity is pinned by its tests.
+4. **Retention owns the arithmetic.** `retainTopKPerRole({ ..., topKByRole })` validates the map
+   EAGERLY — so a malformed map fails even when no bucket exceeds its cap — then `kFor(role)` feeds the
+   `n <= K` gate, the E2 band-slot cap and the Decision 27 top-up, so the reservation and the price
+   bands read the role's own K rather than the uniform one.
+5. **The orchestrator passes the map and nothing else reads it**:
+   `configuration.candidate_caps.top_k_by_role ?? null` (`?? null`, not `?? undefined`, so the absence
+   is explicit and a validated map can never BE null).
+6. **The behaviour ships as a NEW version**: `database/seeds/022_scoring_model_launch_v2_cpu_depth_10.sql`
+   adds `launch-v2@2.4.0` = 2.2.0's configuration with exactly ONE nested value set, `{"CPU": 10}`.
+   2.2.0 is the base, not 2.3.0, so the uniform depth of 10 is not silently carried along and a pinned
+   A/B isolates the axis. 2.2.0 and 2.3.0 stay active: a pin is a selector, not an activation.
+7. **The pin is MEASURED, not approved.** `test/golden/scenarios.json` gains a pin-scoped `A10` for
+   `launch-v2@2.4.0` with `status: "hypothesis"` carrying the measured order. Approving an order is a
+   reviewer act (Decision 58 item 8's mechanism and its changelog rule); this decision
+   recorded the measurement, and the 2026-10-31 approval is recorded in the Verdict below.
+8. **Uniform depth stays a measurement version** (2.3.0), never the adoption path: its A5 cost is
+   measured, not hypothetical.
+
+### Rejected alternatives
+
+- **Ship uniform depth 10 (2.3.0) as the answer.** Rejected on measurement: A5 1 of 2, with S10/S11
+  returning the identical 11986 MAD rank-1 build, and the assembly cost paid on roles that cannot add
+  a pair.
+- **Structural-only role keys (the `role_weights` policy, no enum check).** Rejected: a mistyped role
+  would cap nothing while its author believed that role was deeper — the exact defect Decision 54
+  refused for `roleExclusions`.
+- **A resolution-scoped depth (`resolution_profiles.<res>.top_k_by_role`).** Rejected for now: it adds
+  a second policy surface and makes one role's depth resolution-dependent, while no other cap behaves
+  that way; the global key measured A5's rank-1 prices UNCHANGED at 1080p (11246 and 13946), so the
+  extra surface buys nothing demonstrated. Recorded as the refinement to revisit if the build-count
+  cost is later judged too high.
+- **Default absent roles to the largest declared depth.** Rejected: it widens roles nobody asked for
+  and reintroduces the A5 convergence this key exists to avoid.
+- **Mutate 2.2.0 or 2.3.0 in place.** Rejected: `name@version` identifies evidence (Decision 57); the
+  same identity would then produce two different assemblies.
+
+### Verdict for this pass
+
+- **Items 1-5: PASS.** `npm run test:unit` is 1261 pass / 0 fail / 0 cancelled on Node 24, and the same
+  1261 / 0 / 0 on Node 22 (the CI pin; `# cancelled` 0). New coverage: `scoring/configuration.test.js`
+  (accept + preserve, absent shape unchanged, closed-map refusals at
+  `candidate_caps.top_k_by_role.<role>`), `assembly/input.test.js` (the same three plus the frozen
+  copy), `retention/retain.test.js` (an override applies to its own bucket only, absent/null/`{}`
+  identical, the per-role K drives the Decision 27 reservation, eager closed-map refusals) and
+  `orchestrator/run.test.js` (a declared map is passed beside the uniform K; an undeclared one passes
+  `null`). The configuration boundary test's pinned import list now includes `../candidates/roles`.
+- **Item 6: PASS on the TEST branch.** Apply 1 row; a second apply 0 rows (idempotent); the flattened
+  configuration diff against 2.2.0 is exactly `candidate_caps.top_k_by_role.CPU: absent -> 10`. The
+  SHARED database was not a target.
+- **Item 7: PASS as a MEASUREMENT.** `node scripts/eval-scenarios.js --model=launch-v2@2.4.0
+  --no-baseline --no-volatile`: 86 rows, **81 PASS / 4 EXPECTED-RED / 0 HARD FAIL / 1 UNKNOWN, exit
+  0**, cleanup residue 0. Before the pin-scoped hypothesis the same run read 76 PASS / 4 EXPECTED-RED /
+  5 HARD FAIL, all five A10 and order-only — which is why the scope exists. A1 is 15 of 15 at 3
+  distinct pairs each (S06 included); A5 is 2 of 2 (11246 < 11845 and 13946 < 19246, signatures
+  differ); S18's `NO_PERFORMANCE_CANDIDATE` is inside A10's allowed shortfall vocabulary. The 4
+  EXPECTED-RED rows (A3 x3, A4 x1) are pre-existing unreviewed hypotheses and did not move.
+- **Item 7 review: APPROVED 2026-10-31, on evidence** (this supersedes the `hypothesis` status of the bullet above for `launch-v2@2.4.0` only). The pin-scoped A10 moved from `hypothesis` to
+  `approved` (reviewer recorded) with its five measured orders UNCHANGED. Before signing I checked
+  derivation, not just pass/fail: GAMING's objectives (PERFORMANCE 0.50 / BALANCED 0.30 / VALUE 0.20)
+  produce `[PERFORMANCE,BALANCED,VALUE]` at neutral priority (S03, S11), S10's priority-1 lean keeps
+  `[VALUE,PERFORMANCE,BALANCED]`, and OFFICE's BALANCED 0.40 = VALUE 0.40 tie falls to base order,
+  giving `[BALANCED,VALUE]` at S18 and `[BALANCED,VALUE,PERFORMANCE]` at S19. A `--filter=S03,S10,S11,S18,S19`
+  run then showed the added archetypes are real recommendations: A6 PASS at S18/S19 with
+  `selected_builds_with_gpu: 0` (GPU-less iGPU builds, price inside the approved ratio) and A9 PASS
+  (zero REJECT among the selected builds); S18's `NO_PERFORMANCE_CANDIDATE` is A10's allowed
+  shortfall vocabulary. The 2.2.0 approval is untouched, and this is an ORDER approval — release
+  adoption is still Decision 57's gate.
+- **Operational note.** The 2.4.0 row was found `is_active = false` on the shared TEST branch roughly
+  nine minutes after the seed apply, and no code in the tree writes that column; it was restored with
+  a guarded `UPDATE ... WHERE is_active = false` (1 row) before the approval run. A shared branch is
+  not exclusively ours, so re-read the row's `is_active` before relying on this pin. The same
+  sweep found 21 `recommendation_query` rows written by another actor (none carrying this probe's
+  `engine_version` marker); they block the golden harness preflight until swept with
+  `eval-scenarios.js --cleanup-orphans`, never a manual DELETE.
+### Measured assembly cost (2026-10-31, TEST branch, both pins over the same 20 golden inputs)
+
+Method: the API's own pass path (`repository.createRecommendationQuery` -> `engine.runFullRun`)
+once per golden scenario per pin, two full sweeps; each run's rows are deleted in FK order and the
+probe's own residue is asserted 0. "CPU" is `process.cpuUsage()` around the run, which excludes
+network wait; "wall" includes it.
+
+| Pass | retained (2.2.0 -> 2.4.0) | assembled builds | persisted `build_candidate` / `build_component` |
+|---|---|---|---|
+| S03 1080p GAMING 12000 | 40 (CPU 5) -> 45 (CPU 10) | 10 -> 24 | 3 / 24 -> 3 / 24 |
+| S06 1440p GAMING 12000 | 40 (CPU 5) -> 45 (CPU 10) | 2 -> 6 | 1 / 8 -> 3 / 24 |
+| S07 1440p GAMING 20000 | 40 (CPU 5) -> 45 (CPU 10) | 24 -> 25 | 3 / 24 -> 3 / 24 |
+| S10 1080p GAMING 12000 p1 | 40 (CPU 5) -> 45 (CPU 10) | 10 -> 24 | 3 / 24 -> 3 / 24 |
+| S11 1080p GAMING 12000 p5 | 40 (CPU 5) -> 45 (CPU 10) | 10 -> 24 | 3 / 24 -> 3 / 24 |
+| S14 WORKSTATION 12000 | 40 (CPU 5) -> 45 (CPU 10) | 8 -> 20 | 3 / 24 -> 3 / 24 |
+| S18 OFFICE 8000 | 40 (CPU 5) -> 41 (CPU 6) | 2 -> 4 | 1 / 7 -> 2 / 14 |
+| S19 OFFICE 10000 | 40 (CPU 5) -> 41 (CPU 6) | 10 -> 12 | 3 / 21 -> 3 / 21 |
+| the other 12 passes | 40 (CPU 5) -> 45 (CPU 10), OFFICE S17 41 (CPU 6) | unchanged (most already at the 25 cap) | unchanged |
+
+- **Retention:** 40 -> 45 candidates on 17 of 20 passes, all of it the CPU bucket (5 -> 10). The three
+  OFFICE passes gain ONE CPU (41 in total) because the model's `IGPU_ALLOWED` policy excludes CPUs
+  with no verified integrated GPU: on OFFICE the policy, not the depth, is the binding constraint.
+- **Assembly:** 281 -> 344 builds across one 20-pass sweep (+22%), with 8 passes moving
+  (S03/S10/S11 +14, S14 +12, S06 +4, S18 +2, S19 +2, S07 +1) and 12 unchanged. The real ceiling is
+  `max_builds_per_query` 25, which most GAMING passes already reach at 2.2.0.
+- **Persistence:** 47/371 -> 50/394 `build_candidate`/`build_component` rows (+3/+23, +6%), because
+  persistence writes only the SELECTED top-3 set (Decision 41) - so assembled-build count is NOT a
+  proxy for write amplification, and the extra assembly is in memory.
+- **Time:** median engine CPU 32 ms (2.2.0) vs 16 ms (2.4.0) over 40 passes each, ranges 0-79 and
+  0-94, i.e. overlapping and under the noise floor at this catalog size: NO speedup is claimed in
+  either direction. Wall medians are 5.90 s vs 5.77 s (ranges 5.2-8.3 and 4.9-9.0 s) and CPU is
+  under 1% of wall, so the sweep says nothing about deployed latency - V1's input stays
+  `measure-db-roundtrip.js` x statement count, which this change does not move.
+- **NOT claimed:** adoption of 2.4.0 as a release line, or any latency figure. What the 2026-10-31
+  review approved is the pin's own archetype ORDER; which model SHIPS remains Decision 57's gate.
+  Assembly breadth rises on 1440p GAMING passes (measured above: 281 -> 344 builds per 20-pass
+  sweep, +23 persisted component rows, no measurable engine-CPU change); what stays unmeasured is
+  latency at a DEPLOYED origin.
+- **Bookkeeping:** `verify-docs` decision counts move 56 headings / 62 `Status:` lines -> 57 / 63,
+  `docs/DECISION_INDEX.md` is regenerated, and `AGENTS.md` cites "Decisions 1–59".
+
+### Supersedes / superseded by
+
+Amends **Decision 14 Rule 8**, whose sentence "No separate `roleCaps` configuration, no per-role
+override structure, and no additional configuration key is introduced" no longer holds: the override
+exists as `candidate_caps.top_k_by_role`. Decision 14 was ALSO edited in place (its `### UPDATE
+2026-10-30` block), so the two entries cannot disagree; Rules 1-7 and the uniform-K default are
+unchanged.

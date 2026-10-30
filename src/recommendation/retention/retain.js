@@ -46,6 +46,19 @@
  *   Absent/null is byte-identical to today for every other model and role, so
  *   a model that declares no profile keeps its pinned output exactly.
  *
+ * Decision 59 (2026-10-30) - OPTIONAL per-role depth:
+ *   `retainTopKPerRole` takes an OPTIONAL `topKByRole` map (canonical
+ *   component role -> positive integer). A role WITH an entry is capped at that
+ *   depth; every other role keeps `topKPerRole`, so an absent map is
+ *   byte-identical to the Decision 14 uniform contract and `{}` is too. The
+ *   override exists because pair diversity is axis-specific: at 1440p a
+ *   12000 MAD GAMING pass can afford exactly one GPU, so every distinct pair
+ *   has to come from the CPU axis, and widening the OTHER seven roles buys no
+ *   pair while it does cost assembly (OG-56's measurement: uniform 10 turned
+ *   A1 green but collapsed A5's S10/S11 onto one build, CPU-only 10 kept A5).
+ *   The map is CLOSED and role-keyed on purpose - an unknown role key is
+ *   refused rather than ignored, exactly like Decision 54's `roleExclusions`.
+ *
  * E2 (2026-10-09) - target-aware price-band retention:
  *   `retainTopKPerRole` takes an OPTIONAL `roleTargets` argument (the
  *   computeRoleTargets map from ./targets). When a role HAS a target its bucket
@@ -333,6 +346,10 @@ function deepFreeze(value) {
  *          product-id strings). An excluded candidate is dropped before Rule
  *          2 ordering, the Decision 27 reservation and the K cap. null/absent
  *          changes nothing.
+ *        - topKByRole: the OPTIONAL Decision 59 depth map (canonical
+ *          component role -> positive integer). A role with an entry is capped
+ *          at that K; every other role keeps `topKPerRole`. null/absent (and
+ *          an empty map) changes nothing.
  * @returns {object} frozen { results: [retained verdict, ...] } - the exact
  *        Engine 3 candidate-pool input shape: verdicts are the producer's
  *        records handed over by reference, buckets in canonical
@@ -365,6 +382,7 @@ function retainTopKPerRole(sources) {
     prices,
     roleTargets = null,
     roleExclusions = null,
+    topKByRole = null,
   } = sources;
 
   // --- light gates (fail fast, before any work; existing vocabulary) -------
@@ -413,6 +431,47 @@ function retainTopKPerRole(sources) {
       '"prices" must be the Engine 2 Stage 1 price carrier (a null-prototype object keyed by priceKey)'
     );
   }
+
+  // Decision 59: the OPTIONAL per-role depth map. Validated eagerly (not
+  // lazily per bucket) so a malformed map fails even when no role it names
+  // holds more than K candidates - a silent ignore is how a depth experiment
+  // reports success while capping nothing. A role absent from the map keeps
+  // the uniform `topKPerRole`; `{}` is therefore a no-op.
+  const kByRole = new Map();
+  if (topKByRole !== null) {
+    if (!isPlainObject(topKByRole)) {
+      fail(
+        ERROR_CODES.INVALID_INPUT,
+        'topKByRole',
+        '"topKByRole" must be null or an object keyed by component role'
+      );
+    }
+    for (const role of Object.keys(topKByRole)) {
+      if (!COMPONENT_ROLES.includes(role)) {
+        fail(
+          ERROR_CODES.INVALID_FIELD_VALUE,
+          `topKByRole.${role}`,
+          `"topKByRole.${role}" is not a component role`
+        );
+      }
+      const value = topKByRole[role];
+      if (
+        typeof value !== 'number' ||
+        !Number.isFinite(value) ||
+        !Number.isInteger(value) ||
+        value <= 0
+      ) {
+        fail(
+          ERROR_CODES.INVALID_FIELD_VALUE,
+          `topKByRole.${role}`,
+          `"topKByRole.${role}" must be a positive integer`
+        );
+      }
+      kByRole.set(role, value);
+    }
+  }
+  /** The Decision 59 depth for one role: its override, else the uniform K. */
+  const kFor = (role) => (kByRole.has(role) ? kByRole.get(role) : topKPerRole);
 
   // E2: `roleTargets` is the OPTIONAL computeRoleTargets map. null/absent is
   // the pre-E2 rule (every bucket keeps top-K by score); a provided map must be
@@ -541,9 +600,10 @@ function retainTopKPerRole(sources) {
 
   const retainBucket = (role, bucket) => {
     bucket.sort(byScoreDescThenCanonical);
+    const k = kFor(role);
     // n <= K: nothing is being cut, so the bucket is returned whole and no
     // price is consulted at all.
-    if (bucket.length <= topKPerRole) {
+    if (bucket.length <= k) {
       for (const entry of bucket) {
         retained.push(entry.verdict);
       }
@@ -555,8 +615,8 @@ function retainTopKPerRole(sources) {
     // shared by both modes, so the K cap cannot drift between them.
     const target = roleTargets === null ? undefined : roleTargets[role];
     const selected = target === undefined || target === null
-      ? new Set(bucket.slice(0, topKPerRole - 1))
-      : bandPicks(bucket, target, topKPerRole - 1);
+      ? new Set(bucket.slice(0, k - 1))
+      : bandPicks(bucket, target, k - 1);
     // Decision 27: reserve one slot for the cheapest eligible candidate. A
     // STRICTLY lower price moves the reservation, so equal prices fall to the
     // earliest Rule 3/5 position - and that entry is already inside the
@@ -578,7 +638,7 @@ function retainTopKPerRole(sources) {
     // not part of this change. Because bucket.length > K on this path, the
     // top-up always has an entry to draw on.
     for (const entry of bucket) {
-      if (selected.size >= topKPerRole) break;
+      if (selected.size >= k) break;
       selected.add(entry);
     }
     // Re-emitted in Rule 3/5 order: the reservation changes membership, never

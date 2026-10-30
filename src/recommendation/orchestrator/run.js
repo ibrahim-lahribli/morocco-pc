@@ -45,7 +45,7 @@
  *   candidateScores { scores }
  *     |  retainTopKPerRole({ filterResult, candidateScores, topKPerRole,
  *     |                        prices: offerResult.prices,
- *     |                        roleTargets, roleExclusions })
+ *     |                        roleTargets, roleExclusions, topKByRole })
  *     |                     Decision 27 + E2 + E6 (Decision 54)
  *     v
  *   retentionResult { results }                  Decision 12/14 retention
@@ -352,6 +352,11 @@ async function runRecommendation(args) {
     prices: offerResult.prices,
     roleTargets: resolveRoleTargets(configuration, queryInput),
     roleExclusions: excludedCpuIds === null ? null : { CPU: excludedCpuIds },
+    // Decision 59: the OPTIONAL per-role depth override. Absent on every model
+    // that does not declare it, so the uniform-K behaviour is byte-identical;
+    // `?? null` (never `?? undefined`) because retention's default names an
+    // explicit null and a validated map can never BE null.
+    topKByRole: configuration.candidate_caps.top_k_by_role ?? null,
   });
 
   // 11b. Decision 27: the zero-build diagnostic. Pure, and computed

@@ -31,7 +31,10 @@
  *     - the Decision 12 retention stage (see ./retain). `prices` is the Engine 2
  *     Stage 1 carrier and is required since Decision 27. E2 adds the optional
  *     `roleTargets`; E6 (Decision 54) adds the optional `roleExclusions`, which
- *     drops policy-ineligible candidates before ordering and the K cap.
+ *     drops policy-ineligible candidates before ordering and the K cap;
+ *     Decision 59 adds the optional `topKByRole`, a role-keyed depth override
+ *     whose absent roles keep `topKPerRole` (an absent map is byte-identical
+ *     to the uniform contract).
  *
  *   excludedCpuProductIds({ gpuPolicy, filteringContext })   (E6)
  *     - the CPU eligibility set implied by a DECLARED `IGPU_ALLOWED` policy:
@@ -65,7 +68,9 @@
  *   candidate_score   Engine 4 computeCandidateScores (Decision 13 STEP 2);
  *                     orders the retention only, never written onto a verdict
  *   topKPerRole       candidate_caps.top_k_per_role (Decision 11 Rule 8),
- *                     the same K for every role
+ *                     the same K for every role that has no override
+ *   topKByRole        candidate_caps.top_k_by_role (Decision 59, OPTIONAL), a
+ *                     role-keyed positive-integer override of topKPerRole
  *   prices            the Engine 2 Stage 1 price carrier; owned by Engine 2,
  *                     required since Decision 27 because the reservation
  *                     cannot select without it. Never validated, copied or

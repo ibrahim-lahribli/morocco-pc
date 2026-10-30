@@ -680,6 +680,106 @@ test('fail-fast: topKPerRole must be a positive integer (Decision 11 Rule 8)', (
 });
 
 // ---------------------------------------------------------------------------
+// Decision 59 - OPTIONAL per-role depth (topKByRole)
+// ---------------------------------------------------------------------------
+
+/** Two roles, both larger than K: CPU 4 eligible, GPU 3 eligible. */
+function perRoleSources() {
+  return {
+    filterResult: {
+      results: [
+        verdict('CPU', 'cpu-1'),
+        verdict('CPU', 'cpu-2'),
+        verdict('CPU', 'cpu-3'),
+        verdict('CPU', 'cpu-4'),
+        verdict('GPU', 'gpu-1', { variantId: 'v1' }),
+        verdict('GPU', 'gpu-2', { variantId: 'v1' }),
+        verdict('GPU', 'gpu-3', { variantId: 'v1' }),
+      ],
+    },
+    candidateScores: scores(
+      scoreEntry('CPU', 'cpu-1', 90),
+      scoreEntry('CPU', 'cpu-2', 80),
+      scoreEntry('CPU', 'cpu-3', 70),
+      scoreEntry('CPU', 'cpu-4', 60),
+      scoreEntry('GPU', 'gpu-1', 90, 'v1'),
+      scoreEntry('GPU', 'gpu-2', 80, 'v1'),
+      scoreEntry('GPU', 'gpu-3', 70, 'v1')
+    ),
+    topKPerRole: 2,
+  };
+}
+
+test('Decision 59: a per-role depth overrides only its own bucket', () => {
+  const out = retain({ ...perRoleSources(), topKByRole: { CPU: 4 } });
+  // CPU is capped at its override (all four fit); GPU keeps the uniform K=2.
+  assert.deepEqual(ids(out.results), ['cpu-1', 'cpu-2', 'cpu-3', 'cpu-4', 'gpu-1#v1', 'gpu-2#v1']);
+});
+
+test('Decision 59: absent, null and empty topKByRole are byte-identical to the uniform K', () => {
+  const base = ids(retain(perRoleSources()).results);
+  assert.deepEqual(base, ['cpu-1', 'cpu-2', 'gpu-1#v1', 'gpu-2#v1']);
+  assert.deepEqual(ids(retain({ ...perRoleSources(), topKByRole: null }).results), base);
+  assert.deepEqual(ids(retain({ ...perRoleSources(), topKByRole: {} }).results), base);
+});
+
+test('Decision 59: the per-role K drives the Decision 27 reservation too', () => {
+  const out = retainTopKPerRole({
+    filterResult: {
+      results: [verdict('CPU', 'cpu-a'), verdict('CPU', 'cpu-b'), verdict('CPU', 'cpu-cheap')],
+    },
+    candidateScores: scores(
+      scoreEntry('CPU', 'cpu-a', 95),
+      scoreEntry('CPU', 'cpu-b', 90),
+      scoreEntry('CPU', 'cpu-cheap', 10)
+    ),
+    // The uniform K would retain all three; the override of 1 makes it a
+    // one-slot decision, and that slot is price-reserved (K-1 is empty).
+    topKPerRole: 5,
+    topKByRole: { CPU: 1 },
+    prices: priced([
+      ['CPU', 'cpu-a', 5000],
+      ['CPU', 'cpu-b', 4000],
+      ['CPU', 'cpu-cheap', 700],
+    ]),
+  });
+  assert.deepEqual(ids(out.results), ['cpu-cheap']);
+});
+
+test('Decision 59: topKByRole is a closed role-keyed positive-integer map', () => {
+  const sources = {
+    filterResult: { results: [verdict('CPU', 'cpu-1')] },
+    candidateScores: scores(scoreEntry('CPU', 'cpu-1', 50)),
+    topKPerRole: 5,
+  };
+  // Eager validation: the bucket here is SMALLER than any cap, so a lazy gate
+  // would accept every one of these and cap nothing.
+  for (const bad of [undefined, 5, 'CPU', []]) {
+    if (bad === undefined) continue;
+    assertError(
+      rejectionOf(() => retain({ ...sources, topKByRole: bad })),
+      ERROR_CODES.INVALID_INPUT,
+      'topKByRole',
+      `topKByRole=${String(bad)}`
+    );
+  }
+  assertError(
+    rejectionOf(() => retain({ ...sources, topKByRole: { Memory: 3 } })),
+    ERROR_CODES.INVALID_FIELD_VALUE,
+    'topKByRole.Memory',
+    'a mistyped role key is refused, never ignored'
+  );
+  for (const bad of [0, -1, 1.5, '3', NaN, Infinity, null]) {
+    assertError(
+      rejectionOf(() => retain({ ...sources, topKByRole: { CPU: bad } })),
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'topKByRole.CPU',
+      `topKByRole.CPU=${String(bad)}`
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Decision 27 - the cheapest-per-role reservation inside the Rule 4 cap
 // ---------------------------------------------------------------------------
 

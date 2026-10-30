@@ -44,7 +44,11 @@
  *   integrated_gpu_present    { [cpu_product_id]: true | false | null }.
  *                             Absent CPU keys are valid.
  *   candidate_caps            { top_k_per_role, max_builds_per_query } - both
- *                             positive integers. Validated ONLY, never applied.
+ *                             positive integers - plus the OPTIONAL
+ *                             `max_builds_per_pair` and, since Decision 59,
+ *                             `top_k_by_role` (a closed map of canonical
+ *                             component role -> positive integer). Validated
+ *                             ONLY, never applied: retention owns the depth.
  *   prices                    object. Top-level shape only: the price-carrier
  *                             contract is owned by prices.js. The reference is
  *                             preserved and entries are NOT frozen here.
@@ -104,8 +108,15 @@ const CANDIDATE_CAPS_FIELDS = Object.freeze([
   'max_builds_per_query',
 ]);
 
-/** Decision 40 (E3): optional quota key; absent = no per-pair quota. */
-const CANDIDATE_CAPS_OPTIONAL_FIELDS = Object.freeze(['max_builds_per_pair']);
+/**
+ * Decision 40 (E3): optional quota key; absent = no per-pair quota.
+ * Decision 59: optional role-keyed depth override; absent = `top_k_per_role`
+ * for every role. The key name is a local literal on purpose - this stage
+ * imports NOTHING from ../scoring (boundary pin), so the parity of the name
+ * with `TOP_K_BY_ROLE_KEY` is pinned by input tests instead.
+ */
+const TOP_K_BY_ROLE_KEY = 'top_k_by_role';
+const CANDIDATE_CAPS_OPTIONAL_FIELDS = Object.freeze(['max_builds_per_pair', TOP_K_BY_ROLE_KEY]);
 
 function fail(code, field, message) {
   throw new CandidateSelectionError(code, message, field);
@@ -311,6 +322,9 @@ function validateEngine3Input(raw) {
       }
       continue;
     }
+    // Decision 59: `top_k_by_role` is an OBJECT, so its own closed contract is
+    // validated below instead of by the scalar positive-integer gate here.
+    if (key === TOP_K_BY_ROLE_KEY) continue;
     const value = candidate_caps[key];
     if (
       typeof value !== 'number' ||
@@ -323,6 +337,50 @@ function validateEngine3Input(raw) {
         `candidate_caps.${key}`,
         `"candidate_caps.${key}" must be a positive integer`
       );
+    }
+  }
+
+  // Decision 59: OPTIONAL `top_k_by_role` - a CLOSED map of canonical
+  // component role -> positive integer. Validated only (Engine 3 never applies
+  // a depth), and an unknown role key is refused rather than ignored so a typo
+  // cannot silently cap nothing.
+  let topKByRole = null;
+  if (Object.prototype.hasOwnProperty.call(candidate_caps, TOP_K_BY_ROLE_KEY)) {
+    const byRole = candidate_caps[TOP_K_BY_ROLE_KEY];
+    if (
+      byRole === null ||
+      typeof byRole !== 'object' ||
+      Array.isArray(byRole)
+    ) {
+      fail(
+        ERROR_CODES.INVALID_FIELD_VALUE,
+        `candidate_caps.${TOP_K_BY_ROLE_KEY}`,
+        `"candidate_caps.${TOP_K_BY_ROLE_KEY}" must be an object keyed by component role`
+      );
+    }
+    topKByRole = {};
+    for (const role of Object.keys(byRole)) {
+      if (!isValidComponentRole(role)) {
+        fail(
+          ERROR_CODES.INVALID_FIELD_VALUE,
+          `candidate_caps.${TOP_K_BY_ROLE_KEY}.${role}`,
+          `"candidate_caps.${TOP_K_BY_ROLE_KEY}.${role}" is not a component role`
+        );
+      }
+      const value = byRole[role];
+      if (
+        typeof value !== 'number' ||
+        !Number.isFinite(value) ||
+        !Number.isInteger(value) ||
+        value <= 0
+      ) {
+        fail(
+          ERROR_CODES.INVALID_FIELD_VALUE,
+          `candidate_caps.${TOP_K_BY_ROLE_KEY}.${role}`,
+          `"candidate_caps.${TOP_K_BY_ROLE_KEY}.${role}" must be a positive integer`
+        );
+      }
+      topKByRole[role] = value;
     }
   }
 
@@ -390,18 +448,14 @@ function validateEngine3Input(raw) {
     use_case,
     gpu_required_use_cases: Object.freeze([...gpu_required_use_cases]),
     integrated_gpu_present: Object.freeze({ ...integrated_gpu_present }),
-    candidate_caps: Object.freeze(
-      Object.prototype.hasOwnProperty.call(candidate_caps, 'max_builds_per_pair')
-        ? {
-          top_k_per_role: candidate_caps.top_k_per_role,
-          max_builds_per_query: candidate_caps.max_builds_per_query,
-          max_builds_per_pair: candidate_caps.max_builds_per_pair,
-        }
-        : {
-          top_k_per_role: candidate_caps.top_k_per_role,
-          max_builds_per_query: candidate_caps.max_builds_per_query,
-        }
-    ),
+    candidate_caps: Object.freeze({
+      top_k_per_role: candidate_caps.top_k_per_role,
+      max_builds_per_query: candidate_caps.max_builds_per_query,
+      ...(Object.prototype.hasOwnProperty.call(candidate_caps, 'max_builds_per_pair')
+        ? { max_builds_per_pair: candidate_caps.max_builds_per_pair }
+        : {}),
+      ...(topKByRole === null ? {} : { [TOP_K_BY_ROLE_KEY]: Object.freeze(topKByRole) }),
+    }),
     prices,
     filtering_context,
     // E5 (Decision 42) / E6 (Decision 43): the two OPTIONAL fields are attached

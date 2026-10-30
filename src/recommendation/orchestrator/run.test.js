@@ -784,6 +784,42 @@ test('topKPerRole comes from candidate_caps: K=1 keeps one of two eligible coole
   });
 });
 // ---------------------------------------------------------------------------
+// 6a. Decision 59: the per-role depth reaches retention (topKByRole).
+// ---------------------------------------------------------------------------
+
+test('Decision 59: a declared top_k_by_role is passed to retention beside the uniform K', async () => {
+  const db = createDb({
+    routes: {
+      configuration: {
+        candidate_caps: {
+          top_k_per_role: 5,
+          max_builds_per_query: 25,
+          top_k_by_role: { CPU: 10 },
+        },
+      },
+    },
+  });
+  await withSpies([
+    { key: 'retention', namespace: retentionModule, name: 'retainTopKPerRole' },
+  ], async (spies) => {
+    await runRecommendation({ db, queryId: QUERY_ID });
+    const args = spies.retention.calls[0].args[0];
+    assert.equal(args.topKPerRole, 5);
+    assert.deepEqual(args.topKByRole, { CPU: 10 });
+  });
+});
+
+test('Decision 59: an undeclared top_k_by_role passes topKByRole null (uniform rule)', async () => {
+  const db = createDb();
+  await withSpies([
+    { key: 'retention', namespace: retentionModule, name: 'retainTopKPerRole' },
+  ], async (spies) => {
+    await runRecommendation({ db, queryId: QUERY_ID });
+    assert.equal(spies.retention.calls[0].args[0].topKByRole, null);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 6b. E2: per-role price targets reach retention (roleTargets).
 // ---------------------------------------------------------------------------
 

@@ -6,7 +6,10 @@ Scoring policy lives in a **versioned `scoring_model` row**, never in code const
 2. The active model is `seed-minimal-v1` `1.0.0` — do not mutate it; INSERT a new version row
    (new `version`, same or evolved `configuration` JSON: caps, weights, penalties).
 3. Configuration keys in use: `top_k_per_role`, `max_builds_per_query`,
-   `unknown_compat_penalty`, `neutral_baseline`, `no_evidence_penalty`, role weights.
+   `unknown_compat_penalty`, `neutral_baseline`, `no_evidence_penalty`, role weights,
+   and (Decision 59) the OPTIONAL `candidate_caps.top_k_by_role`, a closed map of
+   canonical component role -> positive integer that overrides `top_k_per_role`
+   for the roles it names; every other role keeps the uniform K.
 4. Record the why in the decision log FIRST (a config change that changes outcomes is a
    decision, not a tweak) — see Decision 24 for the format of a re-evaluation entry.
 5. Beware the interacting caps: Decision 25 shows `max_builds_per_query` starves the O4

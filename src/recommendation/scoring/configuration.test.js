@@ -446,7 +446,10 @@ test('the caller-owned configuration is never mutated or frozen', () => {
 test('configuration.js is a pure validator with no database dependency', () => {
   const source = fs.readFileSync(path.join(__dirname, 'configuration.js'), 'utf8');
   const required = [...source.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
-  assert.deepEqual(required, ['../candidates/errors', './use-cases']);
+  // Decision 59 adds ../candidates/roles: the same PURE vocabulary constant
+  // module the scoring score builders already import, so `top_k_by_role` is
+  // keyed by the one canonical component-role list rather than a local copy.
+  assert.deepEqual(required, ['../candidates/errors', '../candidates/roles', './use-cases']);
 
   const banned = ["require('pg')", '.query(', 'SELECT ', 'INSERT ', 'new Pool'];
   for (const token of banned) {
@@ -475,6 +478,72 @@ test('E3: a declared max_builds_per_pair must be a positive integer; absence sta
     { top_k_per_role: 5, max_builds_per_query: 25 }
   );
 });
+// ---------------------------------------------------------------------------
+// Decision 59: OPTIONAL `candidate_caps.top_k_by_role` (per-role depth)
+// ---------------------------------------------------------------------------
+
+test('Decision 59: top_k_by_role is accepted, validated and preserved', () => {
+  const validated = validateScoringModelConfiguration(
+    makeConfiguration({
+      candidate_caps: {
+        top_k_per_role: 5,
+        max_builds_per_query: 25,
+        max_builds_per_pair: 2,
+        top_k_by_role: { CPU: 10 },
+      },
+    })
+  );
+  assert.deepEqual(validated.candidate_caps, {
+    top_k_per_role: 5,
+    max_builds_per_query: 25,
+    max_builds_per_pair: 2,
+    top_k_by_role: { CPU: 10 },
+  });
+  assert.equal(Object.isFrozen(validated.candidate_caps.top_k_by_role), true);
+});
+
+test('Decision 59: an absent top_k_by_role keeps candidate_caps byte-identical', () => {
+  const validated = validateScoringModelConfiguration(makeConfiguration({}));
+  assert.deepEqual(Object.keys(validated.candidate_caps), [
+    'top_k_per_role',
+    'max_builds_per_query',
+  ]);
+});
+
+test('Decision 59: top_k_by_role is a closed role-keyed positive-integer map', () => {
+  for (const bad of [null, [], 'CPU', 10]) {
+    assertFailure(
+      makeConfiguration({
+        candidate_caps: { top_k_per_role: 5, max_builds_per_query: 10, top_k_by_role: bad },
+      }),
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'candidate_caps.top_k_by_role'
+    );
+  }
+  // A mistyped role must fail at its OWN path, never be silently ignored: an
+  // ignored key caps nothing while its author believes that role is deeper.
+  assertFailure(
+    makeConfiguration({
+      candidate_caps: {
+        top_k_per_role: 5,
+        max_builds_per_query: 10,
+        top_k_by_role: { Memory: 10 },
+      },
+    }),
+    ERROR_CODES.INVALID_FIELD_VALUE,
+    'candidate_caps.top_k_by_role.Memory'
+  );
+  for (const bad of [0, -1, 1.5, '10', Number.NaN, null]) {
+    assertFailure(
+      makeConfiguration({
+        candidate_caps: { top_k_per_role: 5, max_builds_per_query: 10, top_k_by_role: { CPU: bad } },
+      }),
+      ERROR_CODES.INVALID_FIELD_VALUE,
+      'candidate_caps.top_k_by_role.CPU'
+    );
+  }
+});
+
 // ---------------------------------------------------------------------------
 // E5 (Decision 42): OPTIONAL `resolution_profiles` (per-resolution VRAM floor).
 // ---------------------------------------------------------------------------

@@ -523,6 +523,49 @@ test('validates candidate_caps but never applies them', () => {
 });
 
 // ---------------------------------------------------------------------------
+// I-bis. Decision 59: OPTIONAL candidate_caps.top_k_by_role
+// ---------------------------------------------------------------------------
+
+test('Decision 59: accepts and preserves a role-keyed top_k_by_role', () => {
+  const input = validateEngine3Input(
+    makeInput({ candidate_caps: makeCaps({ top_k_by_role: { CPU: 10 } }) })
+  );
+  assert.deepEqual(input.candidate_caps.top_k_by_role, { CPU: 10 });
+  assert.equal(Object.isFrozen(input.candidate_caps.top_k_by_role), true);
+});
+
+test('Decision 59: an absent top_k_by_role leaves candidate_caps shape unchanged', () => {
+  const input = validateEngine3Input(makeInput({ candidate_caps: makeCaps() }));
+  assert.deepEqual(Object.keys(input.candidate_caps), ['top_k_per_role', 'max_builds_per_query']);
+});
+
+test('Decision 59: top_k_by_role is closed and role-keyed', () => {
+  for (const bad of [null, [], 10, 'CPU']) {
+    assert.throws(
+      () => validateEngine3Input(makeInput({ candidate_caps: makeCaps({ top_k_by_role: bad }) })),
+      expectError(ERROR_CODES.INVALID_FIELD_VALUE, 'candidate_caps.top_k_by_role'),
+      `expected INVALID_FIELD_VALUE for top_k_by_role=${String(bad)}`
+    );
+  }
+  assert.throws(
+    () =>
+      validateEngine3Input(
+        makeInput({ candidate_caps: makeCaps({ top_k_by_role: { Memory: 10 } }) })
+      ),
+    expectError(ERROR_CODES.INVALID_FIELD_VALUE, 'candidate_caps.top_k_by_role.Memory')
+  );
+  for (const bad of [0, -1, 2.5, '10', null]) {
+    assert.throws(
+      () =>
+        validateEngine3Input(
+          makeInput({ candidate_caps: makeCaps({ top_k_by_role: { CPU: bad } }) })
+        ),
+      expectError(ERROR_CODES.INVALID_FIELD_VALUE, 'candidate_caps.top_k_by_role.CPU')
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
 // J. prices
 // ---------------------------------------------------------------------------
 
