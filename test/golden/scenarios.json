@@ -222,6 +222,21 @@
         { "id": "S18", "expected_strategies": ["BALANCED"] },
         { "id": "S19", "expected_strategies": ["BALANCED", "VALUE"] }
       ]
+    },
+    {
+      "id": "A10",
+      "type": "archetype_strategies",
+      "model_pin": "launch-v2@2.2.0",
+      "status": "approved",
+      "reviewer": "Ibrahim Lahribli",
+      "reviewed_on": "2026-10-30",
+      "scenarios": [
+        { "id": "S03", "expected_strategies": ["PERFORMANCE", "BALANCED", "VALUE"] },
+        { "id": "S10", "expected_strategies": ["VALUE", "PERFORMANCE", "BALANCED"] },
+        { "id": "S11", "expected_strategies": ["PERFORMANCE", "BALANCED", "VALUE"] },
+        { "id": "S18", "expected_strategies": ["BALANCED"] },
+        { "id": "S19", "expected_strategies": ["BALANCED", "VALUE"] }
+      ]
     }
   ]
 }
