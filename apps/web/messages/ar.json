@@ -8,6 +8,11 @@
       "fr": "Français",
       "ar": "العربية"
     },
+    "navItems": {
+      "components": "المكوّنات",
+      "guides": "الأدلة",
+      "saved": "التكوينات المحفوظة"
+    },
     "footer": "morocco-pc — مُكوِّن أجهزة الحاسوب للسوق المغربي. الأسعار بالدرهم.",
     "formats": "النماذج (تجريبي)",
     "legalNav": "معلومات قانونية",
@@ -101,6 +106,7 @@
   "result": {
     "title": "تجميعاتك",
     "intro": "الميزانية المستهدفة: {budget}.",
+    "loadingStatus": "جارٍ تحميل التجميعات…",
     "rank": "رقم {position}",
     "strategies": {
       "PERFORMANCE": "الأداء",

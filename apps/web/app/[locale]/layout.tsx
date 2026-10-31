@@ -141,6 +141,11 @@ export default async function LocaleLayout({
   const t = await getTranslations({ locale, namespace: "shell" });
   // The shelf's OWN words, not a second copy of them: the footer link and the
   // page's h1 must not be able to disagree about what the page is called.
+
+  // The header's short nav labels (shell.navItems) are shell-owned: a header
+  // link is a label, not the page's h1, and the shell already names sets of
+  // links this way (`legalNav`, `savedNav`). The three destinations keep their
+  // long names on their own pages.
   const tSaved = await getTranslations({ locale, namespace: "saved" });
   const dir = locale === "ar" ? "rtl" : "ltr";
   const fonts = [inter.variable, geistMono.variable].join(" ");
@@ -172,11 +177,58 @@ export default async function LocaleLayout({
         <header className="border-b border-border">
           <nav
             aria-label={t("navLabel")}
-            className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-3"
+            className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2"
           >
-            <Link href={localePath(locale, "/")} className="font-semibold text-ink">
+            <Link
+              href={localePath(locale, "/")}
+              className="flex h-tap items-center rounded-control px-1 font-semibold text-ink"
+            >
               {t("brand")}
             </Link>
+            {/*
+             * The inline page links, as a list (they are navigation, not
+             * prose). `max-sm:basis-full` is what makes them wrap: below 640 px
+             * the row forces a second line under the brand. Two measured
+             * details fixed the first 360 px pass: (1) `px-2`, not `px-3` —
+             * the three links are 307 px against the ~313 px a 360 px viewport
+             * offers after the scrollbar, so px-3 overflowed by ~3 px, the
+             * horizontal overflow S1 forbids; (2) `max-sm:order-last`, because
+             * flex line-packing follows layout order and a middle basis-full
+             * item left the switcher alone on a THIRD row — ordered last, it
+             * packs as [brand + switcher] / [links]. DOM order stays
+             * brand → links → switcher (and desktop keeps one row, the links
+             * inline between the brand and the switcher). Each link is
+             * `h-tap` (44 px, the accessibility floor) with the same hover
+             * and rounded focus treatment as the locale switcher beside it,
+             * and no direction-specific class anywhere: `dir` on <html>
+             * flips the whole flex row, so the RTL mirror is free.
+             */}
+            <ul className="flex max-sm:basis-full max-sm:order-last items-center gap-x-1">
+              <li>
+                <Link
+                  href={localePath(locale, "/composants")}
+                  className="inline-flex h-tap items-center rounded-control px-2 text-compact text-muted hover:text-ink"
+                >
+                  {t("navItems.components")}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href={localePath(locale, "/guides")}
+                  className="inline-flex h-tap items-center rounded-control px-2 text-compact text-muted hover:text-ink"
+                >
+                  {t("navItems.guides")}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href={localePath(locale, "/enregistrements")}
+                  className="inline-flex h-tap items-center rounded-control px-2 text-compact text-muted hover:text-ink"
+                >
+                  {t("navItems.saved")}
+                </Link>
+              </li>
+            </ul>
             <LocaleSwitcher
               label={t("language")}
               names={{ fr: t("switcher.fr"), ar: t("switcher.ar") }}
@@ -198,11 +250,11 @@ export default async function LocaleLayout({
          *
          * S25: the shelf gets its OWN nav above that one, because it is not a
          * legal document and putting it in the "Informations légales" set would
-         * make that landmark misdescribe itself. The footer rather than the
-         * header is a measured choice: at 360 px the header already fills its
-         * row (brand 95 px + switcher 151 px of 360), and a third item scrolls
-         * the page to 376 px — the horizontal overflow S1 forbids. The footer
-         * wraps, and it is the one place every page carries, the 404 included.
+         * make that landmark misdescribe itself. It now also has a header link
+         * (the second row the header nav wraps onto at small widths); the
+         * footer copy STAYS, deliberately duplicated, because the footer is
+         * the one place every page carries — the 404 included — and a user who
+         * scrolled past the header still reaches the shelf from here.
          */}
         <footer className="border-t border-border">
           <div className="mx-auto w-full max-w-5xl px-4 py-6 text-compact text-muted">

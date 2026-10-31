@@ -8,6 +8,11 @@
       "fr": "Français",
       "ar": "العربية"
     },
+    "navItems": {
+      "components": "Composants",
+      "guides": "Guides",
+      "saved": "Mes enregistrements"
+    },
     "footer": "morocco-pc — configurateur de PC pour le marché marocain. Prix en dirhams (DH).",
     "formats": "Formats (démo)",
     "legalNav": "Informations légales",
@@ -101,6 +106,7 @@
   "result": {
     "title": "Vos configurations",
     "intro": "Budget visé : {budget}.",
+    "loadingStatus": "Chargement des configurations…",
     "rank": "N° {position}",
     "strategies": {
       "PERFORMANCE": "Performance",
