@@ -5949,7 +5949,7 @@ network wait; "wall" includes it.
 
 - **Retention:** 40 -> 45 candidates on 17 of 20 passes, all of it the CPU bucket (5 -> 10). The three
   OFFICE passes gain ONE CPU (41 in total) because the model's `IGPU_ALLOWED` policy excludes CPUs
-  with no verified integrated GPU: on OFFICE the policy, not the depth, is the binding constraint.
+  with no verified integrated GPU: on OFFICE the policy, not the depth, is the binding constraint. Audited 2026-10-31: all 18 CPUs carrying a `cpu_spec` row have a NON-NULL flag (6 true / 12 false / 0 unknown), every `false` matches its SKU (AMD `F` parts 8700F/7500F, Intel `F`/`KF` parts 12400F/12700KF, and the APU-less 3500X/5500/5600/5600X/5700X/5800X/5900X/5950X), every `true` names its iGPU, and no CPU-named product lacks a spec row - so the six-CPU ceiling is catalog COMPOSITION, not a data gap, and widening OFFICE needs more iGPU parts in the catalog rather than a flag fix.
 - **Assembly:** 281 -> 344 builds across one 20-pass sweep (+22%), with 8 passes moving
   (S03/S10/S11 +14, S14 +12, S06 +4, S18 +2, S19 +2, S07 +1) and 12 unchanged. The real ceiling is
   `max_builds_per_query` 25, which most GAMING passes already reach at 2.2.0.
@@ -5961,6 +5961,22 @@ network wait; "wall" includes it.
   either direction. Wall medians are 5.90 s vs 5.77 s (ranges 5.2-8.3 and 4.9-9.0 s) and CPU is
   under 1% of wall, so the sweep says nothing about deployed latency - V1's input stays
   `measure-db-roundtrip.js` x statement count, which this change does not move.
+
+**Post-seed catalogue check (2026-10-31, seed 023, TEST branch only).** The OFFICE
+ceiling this section attributes to catalogue composition was TESTED rather than assumed:
+seed 023 adds four integrated-GPU CPUs (Ryzen 5 5600G, Ryzen 5 8500G, Ryzen 7 8700G,
+Core i5-14400), taking the iGPU population from 6 to 10. OFFICE retention then reaches the
+full depth of 10 and buys pairs - S17 1 -> 2, S18 2 -> 3, S19 3 -> 3 - with A6 PASS on all
+three. The same change moves two things the other way, and both are recorded rather than
+smoothed: `A10 | S18` becomes a HARD FAIL, because three pair-distinct OFFICE builds let the
+selector nominate `[BALANCED, VALUE, PERFORMANCE]` where the approved order for this pin
+allows two (re-approval is a reviewer act and the suite stays RED until it happens), and
+`A1 | S06` falls from 3 pairs back to 1, because the new high-scoring parts take score-ranked
+retention slots from the cheap AM4 CPUs while their AM5/LGA1700 platforms exceed a 12000 MAD
+1440p budget - retention is score-driven and blind to PLATFORM COST, the same blind spot
+OG-26 recorded for budget one layer down. The six-CPU ceiling was real and liftable, but
+depth alone does not buy OFFICE pairs at every budget, and this entry does not claim the
+wider catalogue as an improvement.
 - **NOT claimed:** adoption of 2.4.0 as a release line, or any latency figure. What the 2026-10-31
   review approved is the pin's own archetype ORDER; which model SHIPS remains Decision 57's gate.
   Assembly breadth rises on 1440p GAMING passes (measured above: 281 -> 344 builds per 20-pass
