@@ -5740,7 +5740,7 @@ Two hazards follow. First, TEST deliberately holds TWO active `launch-v2` versio
 
 1. **Production keeps the model it serves today.** The shared database stays on `seed-minimal-v1@1.0.0`, and the first deployed environment inherits that pin rather than TEST's state. This decision writes nothing: the pin is already true where it applies.
 2. **`launch-v2@1.0.0` is not activated.** It is not the release model and must not be turned on in production. Its row stays on TEST as the pinned A/B reference the pre-E5 figures resolve against — deactivating it there would destroy evidence — so it stays ACTIVE on TEST only.
-3. **`launch-v2@2.0.0` is the version evaluated for release.** "Evaluated" is a gate, not a status: the release evaluation is complete only when `A1`, `A3` and `A4` leave `hypothesis` in `test/golden/scenarios.json`, and when OG-38's remaining half (the missing budget term in `build_score` and GAMING/WORKSTATION non-divergence at high budgets) plus OG-43 and OG-44 (unvalidated band multipliers and pair-quota values) are resolved or explicitly accepted. **UPDATED 2026-10-29:** the pair-quota half is now discharged by RETIREMENT rather than validation - OG-44 CLOSED → C-47, because seeds 014/015/016 are deleted by seed 017 and no live model declares `candidate_caps.max_builds_per_pair`; the A1 diversity debt that retirement leaves on the canonical line is registered as **OG-55**. OG-38's remaining half and OG-43 stay open. Until then a 2.0.0 deploy is an evaluation and must be described as one.
+3. **`launch-v2@2.0.0` is the version evaluated for release.** "Evaluated" is a gate, not a status: the release evaluation is complete only when `A1`, `A3` and `A4` leave `hypothesis` in `test/golden/scenarios.json`, and when OG-38's remaining half (the missing budget term in `build_score` and GAMING/WORKSTATION non-divergence at high budgets) plus OG-43 and OG-44 (unvalidated band multipliers and pair-quota values) are resolved or explicitly accepted. **UPDATED 2026-10-29:** the pair-quota half is now discharged by RETIREMENT rather than validation - OG-44 CLOSED → C-47, because seeds 014/015/016 are deleted by seed 017 and no live model declares `candidate_caps.max_builds_per_pair`; the A1 diversity debt that retirement leaves on the canonical line is registered as **OG-55**. OG-38's remaining half and OG-43 stay open. **UPDATED 2026-10-31:** OG-38's remaining half is now DISCHARGED by **Decision 60** as an explicit ACCEPTANCE (no budget term in `build_score`, measured cost recorded, the term scheduled as its own epic with a binding re-check trigger); OG-43 stays OPEN. Until then a 2.0.0 deploy is an evaluation and must be described as one.
 4. **The EU database's pre-existing `launch-v2@1.0.0` row is reconciled at deploy time, by the owner.** `check-target-parity` names the difference until then. This decision does not flip it: activation is a data act (a seed apply, or a `scoring_model` write) with its own restore point, and deciding a model is not writing one.
 5. **A pin is still a selector.** Every comparison harness keeps selecting by `name@version` through `scripts/lib/model-pin.js`, so a two-active branch stays measurable and this decision changes no harness default. The default pin is `seed-minimal-v1@1.0.0`, which is INACTIVE on TEST, which is why a run there must pass `--model=launch-v2@2.0.0`.
 
@@ -5992,3 +5992,46 @@ override structure, and no additional configuration key is introduced" no longer
 exists as `candidate_caps.top_k_by_role`. Decision 14 was ALSO edited in place (its `### UPDATE
 2026-10-30` block), so the two entries cannot disagree; Rules 1-7 and the uniform-K default are
 unchanged.
+
+## Decision 60 — OG-38's remaining half is ACCEPTED for the current release evaluation, and the budget term gets its own epic
+
+Status: PROVISIONAL 2026-10-31 — `build_score` keeps NO budget term and GAMING/WORKSTATION may share price shares at the top rung for the `launch-v2@2.4.0` evaluation, discharged by explicit ACCEPTANCE with a measured cost instead of a score change; the budget-utilisation term is scheduled as its own epic and re-opens this the moment it lands.
+
+Date: 2026-10-31. Closes the last open clause of **Decision 57 item 3** — "OG-38's remaining half (the missing budget term in `build_score` and GAMING/WORKSTATION non-divergence at high budgets) ... resolved or explicitly accepted" — as an ACCEPTANCE. Documentation only: no migration, no seed, no engine source, no threshold value, no deploy.
+
+### Current situation
+
+`src/recommendation/scoring/build-score.js` computes a build's score from its candidate scores and a compatibility penalty; no budget amount reaches it, so "the highest-scoring build" is not "the best use of the budget". That is the fact OG-38 has recorded since 2026-10-24 and it has not changed: the 2026-10-31 A2 restatement (C-49) moved the ASSERTION's denominator to what the catalogue can assemble, which makes the number honest without giving scoring an opinion about spending.
+
+Measured at `launch-v2@2.4.0` on the TEST branch, committed in `test/golden/_scratch-v14-og59-clear-launch-v2-2.4.0.md` (86 rows, 82 PASS / 3 EXPECTED-RED / 0 FAIL / 1 UNKNOWN, exit 0, residue 0):
+
+- **Spend against the assemble-able ceiling (A2):** rank-1 totals 11 995 / 19 546 / 23 794 MAD against ceilings 11 997 / 19 994 / 28 784 — ratios 0.99983 / 0.97759 / 0.82664 on the S03/S04/S05 series and 1.0 / 0.97759 / 0.82664 on S06/S07/S08. Nothing enforces utilisation of the REQUEST; the gate only asks that the top build be close to the dearest one the catalogue can build.
+- **The two shapes the row names, still true:** OFFICE at 10 000 MAD returns a **9 446 MAD** build (S19), and GAMING at 30 000 MAD returns **23 794** (S05/S08/S09) where the catalogue assembles 28 784.
+- **Use-case divergence has NARROWED to one rung.** A3 (still `hypothesis`, so EXPECTED-RED either way) measures S04/S15 CPU+RAM shares 0.19943 vs 0.22119 (overlap 0.28) and S03/S14 0.32497 vs 0.32770 (overlap 0.48) — they differ. Only the top rung still converges: S05/S16 share CPU+RAM **0.14495 exactly**, signature overlap 0.64. The 2026-10-24 note in OG-38 recorded three converging rungs (`overlap 1.0`, equal shares at S04/S15 too), so E2/E4 and the 023-025 catalogue moved that half; it is not gone.
+
+### Problem
+
+Decision 57's release gate needs a disposition for this clause, and without one two things stay unowned. First, a deploy could be called a release while the engine silently prefers a cheaper build — and the A2 restatement makes that invisible to every approved assertion by construction, because a build at 82.66 percent of the ceiling passes it. Second, someone will eventually "fix" the budget behaviour inside a gate-clearing session: a term in `build_score` moves every score, every rank and every approved row, so doing it beside other changes makes both unattributable — the same failure mode Decision 56 avoided for swaps and Decision 59 avoided for depth.
+
+### Decision
+
+1. **No budget term is added in this pass, and that is a recorded acceptance for `launch-v2@2.4.0`'s release evaluation.** The measured cost is the three numbers above: rank-1 spends 99.98 / 97.76 / 82.66 percent of what the catalogue can assemble, and an OFFICE query at 10 000 MAD may return 9 446.
+2. **GAMING/WORKSTATION convergence at 30 000 MAD is accepted, not resolved.** The other two rungs now differ, which is measured progress; the top rung does not, and A3 remains `hypothesis` until a reviewer rules on it (Decision 57 item 3's review clause, unchanged by this entry).
+3. **A2 is not the budget gate and must never be cited as one.** It now divides by the priciest RANKED build (C-49), so it cannot fail for under-spending the request. Any future claim that budget utilisation is "gated" must name a term in `build_score`, not an assertion.
+4. **The term is scheduled as its own epic, with its own Decision.** It must specify the term's shape (share of budget, diminishing returns, or a target band), which scoring-model version carries it, and its own re-measurement. Landing it requires a full rebaseline of the 20-scenario suite, a `verify:pi1` re-run, and re-measurement of every `approved` row, and it must NOT ride on a gate-clearing or catalogue session.
+5. **Re-check trigger (binding).** This acceptance re-opens on any of: the budget-term epic landing; a deploy of `launch-v2@2.x` being described as a release (Decision 57); any change to `build_score` weights, to A2 or A3, or to a scoring-model version that a release would serve; or a reviewer ruling on A3.
+6. **Nothing here adopts `launch-v2@2.4.0`.** Decision 57 still decides what ships, the shared database stays on `seed-minimal-v1@1.0.0`, and A1/A3/A4 keep their review status.
+
+### Rejected alternatives
+
+- **Add the term now.** Rejected on attribution, not on difficulty: every `build_score` moves, so the engine change, the rebaseline and the A-row re-measurements would all land in one session whose diff cannot separate "budget term" from "whatever else was open". Decision 57's gate is a record, not a deadline.
+- **Let A2 stand as the budget gate.** Rejected as measuring the wrong quantity: a ceiling-relative ratio passes a build that spends 82.66 percent of what the catalogue allows, which is exactly the behaviour the row complains about. It also invites a threshold edit the next time a catalogue change moves the ratio.
+- **Declare the divergence half closed because two of three rungs now differ.** Rejected: the top rung still reports identical CPU+RAM shares, and A3 is an unreviewed hypothesis — closing it on a partial improvement would be the same "measurement drifted, claim did not" failure this register exists to catch.
+- **Fold the acceptance into Decision 57's own entry.** Rejected: Decision 57 decides WHICH model is evaluated; this decides that a known scoring limitation is accepted for that evaluation and owns its re-check trigger. One entry per contract, so the gate can cite a sentence instead of a paragraph.
+
+### Verdict for this pass
+
+- **Measured, then accepted:** the figures above are from the committed `_scratch-v14` artifact, not re-derived here; no engine source, threshold, seed or schema changed in this pass.
+- **Items 1-3: PASS** as a recorded acceptance — nothing was fixed, and nothing is claimed to be.
+- **Item 4: OPEN by design** — the epic is scheduled, with the constraints that make it attributable.
+- **Bookkeeping:** `verify-docs` decision counts move 57 headings / 63 `Status:` lines -> 58 / 64, `docs/DECISION_INDEX.md` is regenerated, and `AGENTS.md` cites "Decisions 1-60". OG-38's register row moves from `OPEN` to `DEFERRED 2026-10-31 → Decision 60` (no C- row: a deferred row is still visible in section 1 by policy).
