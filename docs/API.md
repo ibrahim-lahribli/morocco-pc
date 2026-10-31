@@ -194,12 +194,12 @@ govern it.
 
 **APPLIED 2026-10-19.** The role, its 20-grant block and its self-check ran on the shared
 database from restore point `br-ancient-cake-axh57vpj` (HEAD `3f0c166`, audit target
-`db:54ff6ea3f6e6`): 8 statements, self-check 20/20. `node scripts/smoke-api-role.js
+`db:54ff6ea3f6e6`): 8 statements, self-check 20/20. **UPDATED 2026-10-31:** the block below now carries 21 grants, not 20 - migration 023 added `recommendation_swap`, and `GRANT INSERT ON recommendation_swap` was applied from restore points `br-silent-cake-ax5q21at` (shared) and `br-bitter-sky-b96jh91p` (EU) on 2026-10-29, self-check 21/21 on each. A re-provisioned role that answers 20 is one grant short. `node scripts/smoke-api-role.js
 --confirm-shared` then ran the API itself as `morocco_pc_api` - health `db:"ok"`, POST
 `201` with 1 build in 52 statements, no `42501`, and all six Layer 4 tables back at 0.
 The EU production database got the same treatment on 2026-10-23 (restore point
 `br-late-rice-b906upai`, audit target `db:2d66f26d7ddc`, 20/20 self-check, then the same smoke
-test green as the role), but no DEPLOY has happened anywhere: there is still no hosted origin.
+test green as the role), and a CORRECTION (2026-10-31): a deploy HAS happened since - on Render, against the SHARED database, not EU. `https://morocco-pc.onrender.com` is a Free demo origin (`deploy-free-host.md` 5.1) that spins down after 15 idle minutes and must never be read as the launch path; it runs on the owner's credentials today, because `check-deployed-role.js --target=env:DATABASE_URL` measured **FAIL** against it on 2026-10-29 (1 of 1 session as `neondb_owner`), which is OG-54 item 1. The EU project remains undeployed.
 The EU app's `DATABASE_URL` secret, when it is created, must carry the ROLE's connection string
 rather than the owner's - that rotation is an owner step (OG-54), not something the apply did.
 
