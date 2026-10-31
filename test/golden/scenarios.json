@@ -23,7 +23,7 @@
       "status": "approved",
       "reviewer": "Ibrahim Lahribli",
       "reviewed_on": "2026-10-24",
-      "reason": "Performance-leaning top build must spend at least this share of budget."
+      "reason": "The rank-1 build must spend at least this share of the PRICIEST build the catalog assembles at the same budget - not of the requested budget, which build_score does not consume. Measured 2026-10-31: 11995/19546/23794 against ceilings 12000/20000/28784, i.e. 0.9996 / 0.9773 / 0.8266, a 2.66-point margin at the top rung, so re-measure before calling a later miss an engine regression. Value unchanged at 0.8 (OG-59)."
     },
     "A3_signature_overlap_max": {
       "value": 0.5,

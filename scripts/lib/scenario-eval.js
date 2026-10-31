@@ -340,6 +340,15 @@ function projectArtifact(id, snapshot, rankedResult, selection, maps) {
     scoresBySignature[entry.signature] = raw;
   }
 
+  // A2 (OG-59): the ceiling a budget can actually SPEND here - the largest
+  // total_price among the RANKED entries `best` is drawn from, so rankBuilds
+  // applies round2 once and the ratio cannot drift against its own numerator.
+  // Math.max() on an empty list is -Infinity, hence the explicit null.
+  const rankedPrices = ranked
+    .map((entry) => entry.total_price)
+    .filter((price) => Number.isFinite(price));
+  const maxTotalPrice = rankedPrices.length === 0 ? null : Math.max(...rankedPrices);
+
   return {
     scenario_id: id,
     build_count: snapshot.builds.length,
@@ -347,6 +356,7 @@ function projectArtifact(id, snapshot, rankedResult, selection, maps) {
     ranked_signatures: ranked.map((entry) => entry.signature),
     scores_by_signature: scoresBySignature,
     best: bestProjected,
+    max_total_price: maxTotalPrice,
     selected: selectedProjected,
     selected_pair_count: pairSet.size,
     // E4: the strategies the selection actually returned (output order) and
@@ -435,7 +445,7 @@ function a1(assertion, min, get) {
 function a2(assertion, spendMin, get) {
   const rows = [];
   for (const series of assertion.series) {
-    const expected = 'best-build total_price non-decreasing across budgets; spend ratio >= ' + spendMin;
+    const expected = 'best-build total_price non-decreasing across budgets; best/priciest-assembled ratio >= ' + spendMin;
     if (missing(get, series)) {
       rows.push(row('A2', STATUSES.UNKNOWN, series, null, expected, 'artifact missing', UNMEASURED));
       continue;
@@ -446,19 +456,46 @@ function a2(assertion, spendMin, get) {
       continue;
     }
     const prices = arts.map((a) => a.best.total_price);
-    const ratios = arts.map((a) => (a.budget_amount > 0 ? a.best.total_price / a.budget_amount : null));
+    // OG-59: the denominator is what the catalog can ASSEMBLE at this budget
+    // (the priciest ranked build), never the budget the caller asked for.
+    // `build_score` carries no budget term, so "the top-scoring build is not
+    // the most expensive one" is the engine working as designed; dividing by
+    // the request measured that design instead of the recommendation.
+    const ceilings = arts.map((a) => a.max_total_price);
+    const budgetRatios = arts.map((a) => (a.budget_amount > 0 ? a.best.total_price / a.budget_amount : null));
     let nonDecreasing = true;
     for (let i = 1; i < prices.length; i += 1) {
       if (!(prices[i] >= prices[i - 1])) nonDecreasing = false;
     }
-    const spendOk = ratios.every((ratio) => ratio !== null && ratio >= spendMin);
+    // A price REGRESSION keeps its own verdict: checking it first stops a
+    // healthy ratio from masking a build that got cheaper at a higher budget.
+    if (!nonDecreasing) {
+      rows.push(row(
+        'A2',
+        STATUSES.FAIL,
+        series,
+        { best_total_prices: prices, priciest_total_prices: ceilings, budget_ratios: budgetRatios },
+        expected,
+        'best-build price DECREASED across budgets'
+      ));
+      continue;
+    }
+    // No ceiling means there is nothing to measure against - UNKNOWN, never a
+    // divide by zero and never a PASS.
+    if (!ceilings.every((ceiling) => Number.isFinite(ceiling) && ceiling > 0)) {
+      rows.push(row('A2', STATUSES.UNKNOWN, series, null, expected, 'a budget in the series has no builds'));
+      continue;
+    }
+    const ratios = arts.map((a, i) => a.best.total_price / ceilings[i]);
+    const spendOk = ratios.every((ratio) => Number.isFinite(ratio) && ratio >= spendMin);
     rows.push(row(
       'A2',
-      nonDecreasing && spendOk ? STATUSES.PASS : STATUSES.FAIL,
+      spendOk ? STATUSES.PASS : STATUSES.FAIL,
       series,
-      { best_total_prices: prices, spend_ratios: ratios },
+      { best_total_prices: prices, priciest_total_prices: ceilings, ceiling_ratios: ratios, budget_ratios: budgetRatios },
       expected,
       'budgets: ' + arts.map((a) => a.budget_amount).join(' -> ')
+      + '; ceilings: ' + ceilings.join(' -> ')
     ));
   }
   return rows;

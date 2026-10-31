@@ -828,6 +828,73 @@ test('a row whose ARTIFACT IS MISSING is unmeasured, so --filter cannot make a n
   assert.equal(measured.summary.hard_fail, 1);
 });
 
+// ---------------------------------------------------------------------------
+// A2
+// ---------------------------------------------------------------------------
+
+const A2_ASSERTION = { id: 'A2', type: 'budget_response', series: [['S1', 'S2', 'S3']] };
+const A2_THRESHOLDS = { A2_spend_ratio_min: { value: 0.8 } };
+const A2_SCENARIOS = [{ id: 'S1' }, { id: 'S2' }, { id: 'S3' }];
+const a2Artifact = (best, ceiling, budget) => art({ best: { total_price: best }, max_total_price: ceiling, budget_amount: budget });
+
+test('A2 measures rank-1 spend against the priciest ASSEMBLED build, not the requested budget', () => {
+  const results = run(A2_ASSERTION, A2_THRESHOLDS, A2_SCENARIOS, new Map([
+    ['S1', a2Artifact(11995, 12000, 12000)],
+    ['S2', a2Artifact(19546, 20000, 20000)],
+    ['S3', a2Artifact(23794, 28784, 30000)],
+  ]));
+  assert.equal(results[0].status, STATUSES.PASS);
+  assert.deepEqual(results[0].measured.best_total_prices, [11995, 19546, 23794]);
+  assert.deepEqual(results[0].measured.priciest_total_prices, [12000, 20000, 28784]);
+  // The measurement the restatement exists for: 23794/30000 = 0.7931 FAILed the
+  // old budget denominator while 23794/28784 = 0.8266 passes the SAME 0.8.
+  assert.ok(Math.abs(results[0].measured.ceiling_ratios[2] - 0.8266) < 1e-4);
+  assert.ok(results[0].measured.budget_ratios[2] < 0.8);
+});
+
+test('A2 FAILs when rank-1 spends less than the minimum share of the assemble-able ceiling', () => {
+  const results = run(A2_ASSERTION, A2_THRESHOLDS, A2_SCENARIOS, new Map([
+    ['S1', a2Artifact(12000, 12000, 12000)],
+    ['S2', a2Artifact(20000, 20000, 20000)],
+    ['S3', a2Artifact(22000, 32000, 30000)],
+  ]));
+  assert.equal(results[0].status, STATUSES.FAIL);
+  assert.equal(results[0].measured.ceiling_ratios[2], 0.6875);
+});
+
+test('A2 keeps its non-decreasing clause: a cheaper rank-1 at a higher budget FAILs on its own reason', () => {
+  const results = run(A2_ASSERTION, A2_THRESHOLDS, A2_SCENARIOS, new Map([
+    ['S1', a2Artifact(12000, 12000, 12000)],
+    ['S2', a2Artifact(11000, 12000, 20000)],
+    ['S3', a2Artifact(14000, 16000, 30000)],
+  ]));
+  assert.equal(results[0].status, STATUSES.FAIL);
+  assert.match(results[0].detail, /DECREASED/);
+  // Every ceiling ratio is healthy (0.875 or better), so only the regression
+  // clause can be what FAILed this row.
+  const ceilingRatios = results[0].measured.best_total_prices
+    .map((price, i) => price / results[0].measured.priciest_total_prices[i]);
+  assert.ok(ceilingRatios.every((ratio) => ratio >= 0.8));
+});
+
+test('A2 is UNKNOWN and unmeasured when a scenario in the series has no artifact', () => {
+  const results = run(A2_ASSERTION, A2_THRESHOLDS, A2_SCENARIOS, new Map([
+    ['S1', a2Artifact(12000, 12000, 12000)],
+    ['S2', a2Artifact(20000, 20000, 20000)],
+  ]));
+  assert.equal(results[0].status, STATUSES.UNKNOWN);
+  assert.equal(results[0].unmeasured, true);
+});
+
+test('A2 is UNKNOWN, never a division or a PASS, when a budget assembles no builds', () => {
+  const results = run(A2_ASSERTION, A2_THRESHOLDS, A2_SCENARIOS, new Map([
+    ['S1', a2Artifact(12000, 12000, 12000)],
+    ['S2', art({ best: null, max_total_price: 20000, budget_amount: 20000 })],
+    ['S3', a2Artifact(14000, 16000, 30000)],
+  ]));
+  assert.equal(results[0].status, STATUSES.UNKNOWN);
+  assert.equal(results[0].unmeasured, undefined);
+});
 test('A2b: rank-1 GPU price must grow by the factor across budgets; flat FAILs, missing GPU is UNKNOWN', () => {
   const assertion = { id: 'A2b', type: 'gpu_price_growth', pairs: [{ low: 'S03', high: 'S05' }] };
   const thresholds = { A2b_gpu_price_growth_min: { value: 1.3 } };
