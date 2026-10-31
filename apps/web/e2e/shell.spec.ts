@@ -36,7 +36,9 @@ test("the shelf is one click from every page, even with nothing saved", async ({
   // Nothing saved here: the empty state, which is a true statement, not an error.
   await expect(page.getByRole("heading", { name: "Aucun enregistrement" })).toBeVisible();
 
-  // The footer rather than the header is why this still fits at 360 px.
+  // The header's three links wrap onto their own row below the brand and the
+  // switcher at 360 px, and the shelf is duplicated in the footer, so both ways
+  // in fit without a horizontal scroll.
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );

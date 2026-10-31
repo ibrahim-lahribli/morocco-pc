@@ -279,15 +279,20 @@ export function Wizard({ copy, locale }: { copy: WizardCopy; locale: AppLocale }
       // result page owns the difference, and a zero-build body is a RESULT, not
       // an error (V2), so it navigates exactly like any other.
       router.push(localePath(locale, `/config/${encodeURIComponent(body.id)}`));
-      return; // `submitting` stays true: the form must not flash back
+      return; // `submitting` stays true: only the catch below clears it
     } catch (error) {
+      // Only a failure clears the submitting state: a success leaves it true so
+      // the loading panel survives the router transition, and the results page
+      // unmounts this form instead (the header's decision 3). Clearing it here
+      // is what made the panel vanish and the button re-enable for the last
+      // frames before the navigation completed.
       const mapped = mapSubmitFailure(error);
+      setSubmitting(false);
       setFailure(mapped);
       if (mapped.kind === "rate-limited") setRemaining(mapped.retryAfterSeconds);
       if (mapped.kind === "fields") moveToField(mapped.fields[0]);
     } finally {
       inFlight.current = false;
-      setSubmitting(false);
     }
   }
 
