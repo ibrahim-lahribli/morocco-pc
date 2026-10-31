@@ -106,7 +106,6 @@
   "result": {
     "title": "Vos configurations",
     "intro": "Budget visé : {budget}.",
-    "loadingStatus": "Chargement des configurations…",
     "rank": "N° {position}",
     "strategies": {
       "PERFORMANCE": "Performance",

@@ -106,7 +106,6 @@
   "result": {
     "title": "تجميعاتك",
     "intro": "الميزانية المستهدفة: {budget}.",
-    "loadingStatus": "جارٍ تحميل التجميعات…",
     "rank": "رقم {position}",
     "strategies": {
       "PERFORMANCE": "الأداء",
