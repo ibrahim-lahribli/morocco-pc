@@ -121,6 +121,8 @@ function readRepo(rel) {
 // UPDATE block with NO Status: line, so the count moves by exactly one.
 // Decision 60 (OG-38 acceptance, 2026-10-31) adds one heading/status
 // => 58 headings, 64 Status lines.
+// Decision 61 (two catalog deferrals, 2026-10-31) adds one heading/status
+// => 59 headings, 65 Status lines.
 const decisions = (function checkDecisions() {
   const raw = readRepo('docs/RECOMMENDATION_ENGINE_DECISIONS.md');
   // Line-ending tolerant: the log is stored CRLF, but a Linux checkout
@@ -137,9 +139,9 @@ const decisions = (function checkDecisions() {
     if (inEngine3 && /^### Decision \d+/.test(line)) nested += 1;
     if (/^Status:/.test(line)) status += 1;
   }
-  const ok = global === 58 && nested === 5 && status === 64;
+  const ok = global === 59 && nested === 5 && status === 65;
   if (!ok) {
-    fail('decisions-parse', 'global=' + global + ' (want 58), nested=' + nested + ' (want 5), Status:=' + status + ' (want 64)');
+    fail('decisions-parse', 'global=' + global + ' (want 59), nested=' + nested + ' (want 5), Status:=' + status + ' (want 65)');
     return null;
   }
   pass('decisions-parse', global + ' headings + ' + nested + ' nested = ' + (global + 2) + ' global, ' + status + ' Status: lines');

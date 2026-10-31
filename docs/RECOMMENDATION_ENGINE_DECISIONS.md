@@ -6035,3 +6035,37 @@ Decision 57's release gate needs a disposition for this clause, and without one 
 - **Items 1-3: PASS** as a recorded acceptance — nothing was fixed, and nothing is claimed to be.
 - **Item 4: OPEN by design** — the epic is scheduled, with the constraints that make it attributable.
 - **Bookkeeping:** `verify-docs` decision counts move 57 headings / 63 `Status:` lines -> 58 / 64, `docs/DECISION_INDEX.md` is regenerated, and `AGENTS.md` cites "Decisions 1-60". OG-38's register row moves from `OPEN` to `DEFERRED 2026-10-31 → Decision 60` (no C- row: a deferred row is still visible in section 1 by policy).
+
+## Decision 61 — Two catalog defects stay deliberately unverified instead of being filled in
+
+Status: DEFERRED 2026-10-31 — `Seed Connect PSU 850` and `Seed HYBROK PSU 650` keep NULL connector counts and `Seed Corsair Nautilus 240 RS ARGB Black AIO` keeps a NULL `max_tdp_watts`, because no citable vendor or retailer publishes those figures; both defects resolve conservatively (PSU: FAIL at high TGP; cooler: UNKNOWN) and both re-open on any published source.
+
+Date: 2026-10-31. Closes **OG-08** and **OG-50** as recorded DEFERRALS rather than fixes. Documentation only: no seed, no migration, no engine source, no data change — the NULLs already exist and this decides that they STAY.
+
+### Current situation
+
+Measured on the TEST branch 2026-10-31 (read-only probe, no writes): `cooler_spec` holds 9 rows and exactly ONE has NULL `max_tdp_watts` — the Nautilus 240; the four AIR coolers and the four other AIOs each carry a figure, so the shared database's extra NULL is the `TestCompatCooler` fixture OG-51 removed. The two PSUs are unchanged since seed 005: five or more retailers were checked per row across four connector fields (EPS, PCIe 8-pin, 12VHPWR, SATA) and none publishes any of them, so the catalog keeps NULL — never a zero.
+
+### Problem
+
+Both defects are load-bearing in one direction only, and both invite the same wrong fix. Inventing a connector count or a TDP would make a compatibility rule answer a question no source can answer — the failure seed 003 D4 and seed 005 D2 were written to prevent, and one this repository has already paid for: OG-08 records a pass that wrote 6 PCIe connectors from a 404 vendor page and an EPS count that three sources contradicted, caught only by an independent re-check. Leaving them as ad-hoc prose instead means the next agent re-researches both from scratch, which OG-08 records happening twice already.
+
+### Decision
+
+1. **The NULLs stay.** No value is authored for either PSU's connector counts or for the Nautilus TDP. A NULL is the honest state of an absent source; a zero would be a false deficit.
+2. **The conservative direction is the contract.** A NULL required connector on a pair at or above 200 W board TGP FAILs (`GPU_PSU_CONNECTOR_NULL_HIGH_TGP`, Decision 26), so the catalog can under-recommend but cannot over-recommend. The cooler's NULL yields UNKNOWN `COOLER_TDP_UNKNOWN` (E8 SOFT), which never passes and never rejects.
+3. **The cooler's measured cost stays bounded.** One UNKNOWN is one build-local pair, costing `unknown_compat_penalty` = 5 points on any build containing this cooler (all five active models carry 5). The cooler appears in no committed golden artifact, so no approved row moves.
+4. **Re-check trigger (binding).** Any single published source re-opens the corresponding row — a vendor or retailer page listing all four connector counts for either PSU, or a Corsair-published TDP/cooling capacity for the Nautilus 240 RS — plus any cooler seed, any PSU seed, or a change to Decision 26 or E8.
+5. **Not claimed:** that either PSU is inadequate, nor that the Nautilus cannot cool a given load. What is recorded is that the catalog may not say, which is different from saying it does not.
+
+### Rejected alternatives
+
+- **Invent a plausible figure** (a common 850 W layout is 2x EPS, 4x PCIe): rejected — it converts an UNKNOWN into an unsourced PASS, and OG-08 records exactly this being done and being wrong on both rows.
+- **Drop the two PSUs from the catalog:** rejected — both are real, priced parts that assemble builds; absence would hide them rather than mark them.
+- **Borrow a sibling SKU's spec** (another Nautilus variant, another 850 W unit): rejected — a different product's figure is not evidence about this one, and the G850 pass failed precisely by matching the HCG GOLD 850W's 6-connector layout.
+- **Treat the cooler's NULL as PASS:** rejected by the status vocabulary — UNKNOWN is never PASS, and a build's UNKNOWN pair is priced by design.
+
+### Verdict for this pass
+
+- **PASS as RECORDED DEFERRALS:** nothing was authored, no data changed, and both rows now carry the reason they stay instead of a stale "open" label.
+- **Bookkeeping:** `verify-docs` decision counts move 58 headings / 64 `Status:` lines -> 59 / 65, `docs/DECISION_INDEX.md` is regenerated, and `AGENTS.md` cites "Decisions 1-61". OG-08 and OG-50 move `OPEN` -> `DEFERRED 2026-10-31 -> Decision 61`.

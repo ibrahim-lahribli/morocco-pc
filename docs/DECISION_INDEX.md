@@ -3,7 +3,7 @@
 **GENERATED FILE — do not edit by hand.** Regenerate with `node scripts/gen-decision-index.js`
 (or `npm run gen:decisions`) after any change to `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 `node scripts/gen-decision-index.js --check` exits non-zero when this file is stale.
-Generated 2026-10-31 from RECOMMENDATION_ENGINE_DECISIONS.md (6038 lines).
+Generated 2026-10-31 from RECOMMENDATION_ENGINE_DECISIONS.md (6072 lines).
 
 Generated for audit finding **D5** (decision-log navigability): one row per decision with number,
 title, status, date and line anchor. Every status comes from the normalized `Status:` line at the
@@ -17,9 +17,9 @@ section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` a
 
 ## Open decisions
 
-Open / not-RESOLVED: #57 (production keeps the model it serves, and `launch-v2@2.0.0` is the version evaluated for release); #60 (OG-38's remaining half is ACCEPTED for the current release evaluation, and the budget term gets its own epic).
+Open / not-RESOLVED: #57 (production keeps the model it serves, and `launch-v2@2.0.0` is the version evaluated for release); #60 (OG-38's remaining half is ACCEPTED for the current release evaluation, and the budget term gets its own epic); #61 (Two catalog defects stay deliberately unverified instead of being filled in).
 
-## Global decisions (58 `## Decision` headings + 2 nested 4/5 aliases = 60)
+## Global decisions (59 `## Decision` headings + 2 nested 4/5 aliases = 61)
 
 | # | Title | Status | Date | DECISIONS.md line |
 |---|---|---|---|---|
@@ -81,6 +81,7 @@ Open / not-RESOLVED: #57 (production keeps the model it serves, and `launch-v2@2
 | 58 | A model may order the archetype strategies by its use-case `archetype_objectives`, at neutral priority only | RESOLVED 2026-10-29; IMPLEMENTED 2026-10-29 — `launch-v2@2.1.0` (seed 019, TEST branch) opts a model INTO ordering the Engine 4 strategies by the use-case `archetype_objectives` weights, and ONLY where the query's `priority` is neutral (null or 3); 2.0.0 and every older model keep the priority-only order byte-identically, and the golden A10 expectation is now approved PER MODEL PIN (2.0.0's order unchanged, 2.1.0's added 2026-10-29), so each pin passes its own reviewed order. | 2026-10-29 | 5762 |
 | 59 | One role's candidate depth may be overridden, and `launch-v2@2.4.0` uses it on CPU only | RESOLVED 2026-10-30; IMPLEMENTED 2026-10-30 — `candidate_caps.top_k_by_role` is an OPTIONAL, closed, canonical-role-keyed override of `top_k_per_role` (validated in BOTH the scoring-configuration and Engine 3 input contracts, applied in retention), and seed 022 pins `launch-v2@2.4.0` = 2.2.0 with `{"CPU": 10}`, which measures A1 15 of 15 AND A5 2 of 2 where a UNIFORM depth of 10 broke A5; its pin-scoped A10 order was APPROVED 2026-10-31 (Verdict, item 7), while adopting 2.4.0 as a release line is NOT claimed - Decision 57's release gate still decides what ships. | 2026-10-30 | 5804 |
 | 60 | OG-38's remaining half is ACCEPTED for the current release evaluation, and the budget term gets its own epic | PROVISIONAL 2026-10-31 — `build_score` keeps NO budget term and GAMING/WORKSTATION may share price shares at the top rung for the `launch-v2@2.4.0` evaluation, discharged by explicit ACCEPTANCE with a measured cost instead of a score change; the budget-utilisation term is scheduled as its own epic and re-opens this the moment it lands. | 2026-10-31 | 5996 |
+| 61 | Two catalog defects stay deliberately unverified instead of being filled in | DEFERRED 2026-10-31 — `Seed Connect PSU 850` and `Seed HYBROK PSU 650` keep NULL connector counts and `Seed Corsair Nautilus 240 RS ARGB Black AIO` keeps a NULL `max_tdp_watts`, because no citable vendor or retailer publishes those figures; both defects resolve conservatively (PSU: FAIL at high TGP; cooler: UNKNOWN) and both re-open on any published source. | 2026-10-31 | 6039 |
 
 ## Engine 3 contract decisions (Engine-3-local numbering; local 4–5 ARE global Decisions 4–5)
 
@@ -94,12 +95,12 @@ Open / not-RESOLVED: #57 (production keeps the model it serves, and `launch-v2@2
 
 ## Reconciliation
 
-- Global decisions: 60 = 58 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
+- Global decisions: 61 = 59 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
 - Engine-3-local contracts: 5 (`### Decision 1–5` under "Engine 3 contract decisions"; local 1–3 are NOT global 1–3, local 4/5 ARE global 4/5 — AGENTS.md §2).
-- Parsed headings: 58 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
+- Parsed headings: 59 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
 - Status source: each entry’s normalized `Status:` line (first content line). The generator exits
   non-zero if a decision is added without one, so this table cannot go stale silently.
-- Open decisions: #57, #60.
+- Open decisions: #57, #60, #61.
 
 Precedence when sources conflict: `AGENTS.md` §9. This file is a **lookup aid**, never a source of truth.
 
