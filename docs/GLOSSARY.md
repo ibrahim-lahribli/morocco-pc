@@ -13,7 +13,7 @@ source of truth. When a term here and a decision entry disagree, the decision wi
 | `NULL = UNKNOWN` | A missing spec value means UNKNOWN — never "unlimited", never PASS, never 0. Frozen by a test (`filter.test.js`, "null is never 0"). |
 | `0 = verified deficit` | An explicit count of 0 (e.g. PSU has zero 12VHPWR connectors) is a verifiable FAIL, the opposite of NULL. |
 | verdict | The final `PASS/FAIL/UNKNOWN/CONDITIONAL` of one pairwise evaluation. |
-| pair / relationship | One of the 8 implemented pairwise relationships: `cpu_motherboard`, `cooler_socket`, `motherboard_memory`, `platform_memory`, `case_form_factor`, `case_radiator`, `gpu_case`, `gpu_psu`. |
+| pair / relationship | One of the 11 implemented pairwise relationships. The original eight: `cpu_motherboard`, `cooler_socket`, `motherboard_memory`, `platform_memory`, `case_form_factor`, `case_radiator`, `gpu_case`, `gpu_psu`. E8 (Decision 45) appended three: `cooler_tdp`, `mb_memory_slots`, `mb_memory_capacity` — appended, so every pre-E8 relationship keeps its precedence for reason and decisive-partner selection. |
 | pair evaluator | The pure function in `src/recommendation/compatibility/` that resolves one relationship to a verdict. |
 | pairwise branch gating | Engine 3 prunes a DFS branch as soon as any pair involving the just-picked role FAILs (Decision 16). Only FAIL prunes; UNKNOWN continues. |
 | topology | Which roles pair with which, and in which orientation. Declared twice today — `filtering/filter.js` `PAIR_EVALUATORS` and `assembly/assemble.js` `PAIRWISE_CHECKS` (status review W3/K6). |
@@ -24,15 +24,15 @@ source of truth. When a term here and a decision entry disagree, the decision wi
 |---|---|
 | Engine 1–6 | Compatibility resolver; offer pre-selection; build assembly (DFS); scoring; ranking (5a) + persistence (5b); explanation generation. |
 | build candidate | One complete, hard-compatible role assignment surviving assembly, with its own `build_score`. |
-| `top_k_per_role` | Retention cap: how many candidates per role survive `retention/retain.js` (configured, currently 5). |
+| `top_k_per_role` | Retention cap: how many candidates per role survive `retention/retain.js` (a configured UNIFORM default, 5 on the launch-v2 pins). Since Decision 59 a model may override it per role with `candidate_caps.top_k_by_role`; `launch-v2@2.4.0` declares CPU 10, so there the CPU bucket is 10 and the other seven roles stay at 5. |
 | `max_builds_per_query` | Assembly cap: the DFS halts once this many builds exist (configured, currently 25). Starves the O4 objective — Decision 25. |
 | pair value | The (CPU, GPU) pair identity that O4 diversity selection (`ranking/select-diverse.js`) spreads results over. |
-| `MAX_PER_PAIR` | Max persisted builds sharing one (CPU, GPU) pair (Decision 20; currently 3). |
-| retention reach | Which tied products survive `top_k_per_role`. Currently UUID-random on ties (AGENTS.md §5, K2). |
+| `MAX_PER_PAIR` | Max persisted builds sharing one (CPU, GPU) pair (Decision 20; 3). **No longer the pre-persistence showcase:** Decision 41 replaced `selectDiverseTop` with `selectArchetypes` (three pair-distinct builds, one per strategy), so the cap now governs only the retained `select-diverse.js` walk that reproducibility and `measure-api-pass-phases.js` still use. |
+| retention reach | Which tied products survive `top_k_per_role`. NOT random: `compareCandidates` breaks ties on `product_id` ASC (then `product_variant_id`, NULL-first then ASC), so a given database state is reproducible — but the ids are `gen_random_uuid()`, so WHICH tied rows exist is an instance-specific draw and a reach figure is never a property of the catalog (AGENTS.md §5; `docs/DATA_STATE.md`). |
 | `unknown_pairwise_count` | Count of UNKNOWN pairs in a build; penalizes `build_score` (Decision 23 O2). The live definition is build-local, one count per pair. A candidate-level variant in `filter.js` is inert (W4/K7). |
 | `priceKey` | Offer pre-selection's equal-price tie-break identity (Decision 8; product-level vs variant-level offer applicability, STRICT exact matching). |
 | O1 / O2 | Decision 23's two objectives: O1 = GPU/PSU connector + dimension data (seed 003), O2 = build-local `unknown_pairwise_count`. |
-| PI-1 | Decision 23 criterion 3: pool-independence regression — builds must not depend on unrelated catalog rows. Not yet built (F5). |
+| PI-1 | Decision 23 criterion 3: pool-independence regression — builds must not depend on unrelated catalog rows. **BUILT and PASS since 2026-10-05:** `npm run verify:pi1` inserts an inert probe PSU in its own family, re-runs GAMING and OFFICE, asserts no pre-existing `build_score` moved, and removes the probe; TEST branch only, own cleanup asserted. |
 | no-evidence branch | The §9 scoring policy: an unevidenced product scores `neutral_baseline − no_evidence_penalty` (40.000 on current config). Unevidenced products tie each other; see Decision 23's degeneracy root cause. |
 | `budget_floor` | Decision 27's per-pass diagnostic: the cheapest retained `selected_price` per `BUDGET_FLOOR_ROLES` (EXPANSION_ORDER minus GPU), plus `cheapest_total` / `within_budget` / `missing_roles`. Persisted on `recommendation_query.budget_floor` (jsonb) since Decision 46 / migration 019. `cheapest_total` and `within_budget` are `null` — never `0` — when a required role is missing. |
 | `strategy_key` | The E4 archetype (Decision 41) that nominated a rank: `PERFORMANCE` / `BALANCED` / `VALUE`. Persisted per result row on `recommendation_result.strategy_key` since Decision 46 / migration 019. An identifier for provenance, not user-facing prose. |
