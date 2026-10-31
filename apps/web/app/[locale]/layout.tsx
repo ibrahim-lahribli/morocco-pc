@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { preload } from "react-dom";
 
 import { Analytics } from "@/components/analytics";
+import { HeaderNav } from "@/components/header-nav";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { routing } from "@/i18n/routing";
 import { localePath } from "@/lib/i18n/paths";
@@ -200,35 +201,20 @@ export default async function LocaleLayout({
              * inline between the brand and the switcher). Each link is
              * `h-tap` (44 px, the accessibility floor) with the same hover
              * and rounded focus treatment as the locale switcher beside it,
-             * and no direction-specific class anywhere: `dir` on <html>
-             * flips the whole flex row, so the RTL mirror is free.
+             * and no direction-specific class anywhere: `dir` on <html> flips
+             * the whole flex row, so the RTL mirror is free. The list is a
+             * client component (`header-nav.tsx`) because "which page is
+             * current" is request-path knowledge a server layout lacks — the
+             * component owns the wrap, tap and aria-current logic; the LABELS
+             * stay here, shell-owned, passed in as props.
              */}
-            <ul className="flex max-sm:basis-full max-sm:order-last items-center gap-x-1">
-              <li>
-                <Link
-                  href={localePath(locale, "/composants")}
-                  className="inline-flex h-tap items-center rounded-control px-2 text-compact text-muted hover:text-ink"
-                >
-                  {t("navItems.components")}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href={localePath(locale, "/guides")}
-                  className="inline-flex h-tap items-center rounded-control px-2 text-compact text-muted hover:text-ink"
-                >
-                  {t("navItems.guides")}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href={localePath(locale, "/enregistrements")}
-                  className="inline-flex h-tap items-center rounded-control px-2 text-compact text-muted hover:text-ink"
-                >
-                  {t("navItems.saved")}
-                </Link>
-              </li>
-            </ul>
+            <HeaderNav
+              items={[
+                { href: localePath(locale, "/composants"), label: t("navItems.components") },
+                { href: localePath(locale, "/guides"), label: t("navItems.guides") },
+                { href: localePath(locale, "/enregistrements"), label: t("navItems.saved") },
+              ]}
+            />
             <LocaleSwitcher
               label={t("language")}
               names={{ fr: t("switcher.fr"), ar: t("switcher.ar") }}
