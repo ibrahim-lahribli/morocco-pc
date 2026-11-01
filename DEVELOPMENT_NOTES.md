@@ -2113,3 +2113,33 @@ and P1 Sprint 3, still NOT STARTED: `filtering/context-loader.js` issues 4 `db.q
 `candidates/loader.js` 3, neither carries a statement-count assertion, and no commit has touched either
 since Decision 45 - so the plan's "14" and "9" are premise figures, not current counts, and Step 1's
 baseline must be re-measured before any loader merge.
+
+## 2026-11-01 - one seed file, six active models: what a full `npm run seed` does to a database that never saw the tail
+
+`database/seeds/027_ag400_lga1700_support.sql` is a correct, additive, idempotent ONE-ROW seed (the
+AG400 LGA1700 mounting claim, vendor-sourced, with a type-constrained guard). Applying it to the SHARED
+database did far more than that row, because `run-seeds.js` has no per-file mode: it replays EVERY
+file in `database/seeds/`, and shared had never carried 023-026. Measured after the apply:
+
+- catalog: products 100 -> 113, `store_offer` 101 -> 114, `component_assessment` 280 -> 319,
+  `cooler_socket_support` 21 -> 22. `docs/DATA_STATE.md` was regenerated and
+  `node scripts/gen-schema-reference.js --check` reports BOTH generated docs up to date - the
+  `SCHEMA_REFERENCE.md` digest did not move, so this was DATA, not schema drift.
+- models: `scoring_model` 1 -> 7. Seeds 013 and 018-022 activate `launch-v2`, so shared now holds
+  SIX ACTIVE versions and `seed-minimal-v1@1.0.0` is INACTIVE.
+
+Two consequences come straight out of that count, and both are silent:
+
+1. **The deployed origin changed what it serves.** `apps/api/src/repository.js`
+   (`SELECT_ACTIVE_SCORING_MODEL_SQL`) takes the NEWEST active row - `ORDER BY created_at DESC,
+   id ASC`, a tie-break that was always deterministic - which is now `launch-v2@2.4.0`, the
+   CPU-depth experiment, not the `seed-minimal-v1@1.0.0` that Decision 57 keeps production on.
+   Nothing errored; the served model simply moved.
+2. **The harness default pin now fails closed on shared.** `scripts/lib/model-pin.js` defaults to
+   `seed-minimal-v1@1.0.0`, which is INACTIVE there, so a bare `eval:scenarios` against shared
+   refuses before writing anything and needs `--model=launch-v2@2.4.0`.
+
+The lesson is not "never apply seeds". It is that seed 013's own header rule - applying it is a
+COORDINATED STEP, not a routine seed run - binds EVERY seed run aimed at a database that has never
+seen the tail, because the runner offers no way to apply one file. Check `scoring_model` before and
+after, and read which model the API will SELECT rather than assuming the pin is what gets served.

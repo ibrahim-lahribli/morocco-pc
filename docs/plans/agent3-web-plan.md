@@ -15,8 +15,9 @@ profile-gated step flow and the POST hand-off); W2 is COMPLETE (S11–S15); W3 i
 (S16, S17, S18 and S19's gating are DONE); W4 is COMPLETE — S20 (the Arabic/RTL pass), S21 (the
 WCAG AA audit) and S22 (legal pages, analytics, states) are DONE 2026-10-22 — and S27, the
 post-M3 slider curve, S23, the compare view, and S25, saved builds plus the price history, are
-DONE (2026-10-22 and 2026-10-23), so 25 of the 27 sprints are done. What remains is S24 (swap
-inside a build - its disabled control shipped 2026-10-25, the endpoint is still unbuilt) and S26, the
+DONE (2026-10-22 and 2026-10-23), and S24, the swap-inside-a-build control, LANDED 2026-10-25/26
+(Decisions 55 + 56, contract v1.8.0 preview and v1.10.0 commit, `e2e/swap.spec.ts`), so 26 of the 27
+sprints are done. What remains is S26, the
 M3 verification run, which is BLOCKED on
 deployment. **The web host is now DECIDED (2026-10-23): Cloudflare Workers**, built through the
 `@opennextjs/cloudflare` adapter - `apps/web/wrangler.jsonc` and `apps/web/open-next.config.ts` are

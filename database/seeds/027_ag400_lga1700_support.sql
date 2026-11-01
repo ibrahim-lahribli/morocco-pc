@@ -147,3 +147,14 @@ WHERE p.name = 'Seed DeepCool AG400'
 --                               so this seed moved DATA_STATE, not the schema
 --   npm run test:unit           exit 0
 --
+--
+-- SCOPE NOTE 2 - the consequence that outlives this seed (2026-11-01):
+--   Because the runner replays EVERY file, this apply added far more than one
+--   row: shared now holds SIX ACTIVE `launch-v2` versions and
+--   `seed-minimal-v1@1.0.0` is INACTIVE there, and
+--   `apps/api/src/repository.js` picks the NEWEST active row - so the deployed
+--   demo origin now serves `launch-v2@2.4.0`, not the v1 model Decision 57
+--   keeps production on. Recorded in OG-54 and DEVELOPMENT_NOTES; resolving it
+--   (restore the shared model set, or amend Decision 57) is an owner decision,
+--   not a seed edit. The schema did not move - `gen-schema-reference --check`
+--   re-verified both generated docs on 2026-11-01.
