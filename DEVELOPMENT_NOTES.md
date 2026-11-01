@@ -2057,3 +2057,89 @@ What this does NOT change: the deployed Render origin still runs as `neondb_owne
 (`check-deployed-role.js --target=env:DATABASE_URL` -> FAIL, exit 1, unchanged), so its swap verb
 works because of WIDER credentials, not because of this grant. The secret rotation
 (`docs/RECIPES/deploy-eu-colocation.md` §8.5) is still the open owner step.
+
+## 2026-10-31 — platform open-points validation: the two origin defects, and the parity answer that changed shape
+
+Read-only pass over the remaining platform open points (OG-52's owner-gated backlog, OG-53, OG-54),
+leaving the engine seat to the other agent. Doc gates are green first, so nothing below is doc drift:
+`node scripts/verify-docs.js --offline` OK, `node scripts/verify-docs.js --live` OK including the
+schema digest (`4110c1517a14a0ef`), `node scripts/gen-decision-index.js --check` clean.
+
+Commands and answers (all read-only):
+
+- `node scripts/check-deployed-role.js --target=env:DATABASE_URL`, after warming `/v1/health` (HTTP 200,
+  `{"status":"ok","db":"ok","engine_version":"dev"}`): **RESULT: FAIL, exit 1** - 1 of 1
+  `morocco-pc-api` session authenticated as `neondb_owner`. OG-54 item 1 reproduces on a second date,
+  so it is a standing defect rather than a 2026-10-29 fluke.
+- `node scripts/check-target-parity.js --a=env:DATABASE_URL --b=env:TARGET_DATABASE_URL` (with `.env.eu`
+  loaded through `DOTENV_CONFIG_PATH`): **DIFF**, and the reason has changed. `ledger-files` / `tables` /
+  `schema-shape` MATCH (23 / 44 / 470) and every catalog count MATCHes (products 100, variants 22,
+  offers 101, assessments 280, stores 2), while `scoring-model-pins` DIFFs 1 vs 2 - the documented
+  OG-54 residue - and **five Layer 4 row checks now DIFF too: `recommendation_query` 9 vs 0,
+  `recommendation_result` 8 vs 0, `build_candidate` 8 vs 0, `build_component` 64 vs 0,
+  `build_rejection` 18 vs 0.** That is not schema drift: SHARED has accumulated 9 `api-*` passes, 8 of
+  them created 2026-10-30T23:19Z-2026-10-31T00:07Z against ONE `catalog_version`, and the deployed
+  Render origin is the only API serving that database. The 2026-10-29 "re-asserted at its baseline
+  (1 pre-existing profile, 0 elsewhere)" no longer holds.
+- `node scripts/check-target-parity.js --a=env:TEST_DATABASE_URL --b=env:TARGET_DATABASE_URL`: **DIFF**
+  on pins (7 vs 2), products (113 vs 100), variants (24 vs 22), offers (116 vs 101), assessments
+  (319 vs 280), stores (5 vs 2) and the branch's own Layer 4 query rows (5 vs 0) - every one of those
+  is the engine seat's seed work on the branch, not a platform defect; ledger, tables and shape MATCH.
+- `node scripts/check-offer-provenance.js`: INCONCLUSIVE, exit 0 - 101 offers, 2 seed stores, 0 verified,
+  no retailer observation ever. `node scripts/check-offer-freshness.js --fail-days=14`: INCONCLUSIVE,
+  exit 0, with `first SEED expiry 2026-11-03` (2.2 days at run time), so the nightly starts warning in
+  two days unless seed 006 is re-applied or real offers land.
+
+Two things this pass found that no register carried:
+
+1. **The only deployed origin cannot name its build.** `/v1/health` answers `engine_version: "dev"` -
+   `apps/api/.env.example`'s default, not a short SHA. P1 Sprint 1 test 1.5 ("an `engine_version` equal
+   to the deployed short SHA") and P3 Sprint 3's "a deploy records the `ENGINE_VERSION` that is then
+   served" are both red on the Render demo origin, and since `ENGINE_VERSION` is also the Sentry
+   `release` fallback, an error from that origin could not be tied to a commit either.
+2. **A public origin writes to the shared dev database.** Every POST leaves an unmarked
+   `recommendation_query`; the counts above are the proof. `eval:scenarios` refuses to run while ANY
+   unmarked query exists on the database it targets (AGENTS section 7 item 18), so shared is unusable
+   for the golden harness until those rows are deleted in FK order (swap -> components -> result ->
+   rejections -> candidate -> query -> profile), and the Render origin recreates them on the next
+   visitor. Repointing that service at the TEST branch, or gating its writes, is an owner action -
+   there is no Render credential in this checkout.
+
+Open points unchanged where they could not be moved: OG-53 (no Workers environment, no deploy step in
+`.github/workflows/web.yml`, `.open-next` / `.wrangler` are build directories), P3 Sprint 3 (no
+`.github/workflows/deploy.yml`), P3 Sprint 4 Steps 3-6 (no `SENTRY_DSN` in `.env`), P1 Sprint 1 Steps
+7-9 (no Fly app; EU `check-deployed-role.js` answers INCONCLUSIVE - 0 tagged sessions - re-confirmed),
+and P1 Sprint 3, still NOT STARTED: `filtering/context-loader.js` issues 4 `db.query` calls and
+`candidates/loader.js` 3, neither carries a statement-count assertion, and no commit has touched either
+since Decision 45 - so the plan's "14" and "9" are premise figures, not current counts, and Step 1's
+baseline must be re-measured before any loader merge.
+
+## 2026-11-01 - one seed file, six active models: what a full `npm run seed` does to a database that never saw the tail
+
+`database/seeds/027_ag400_lga1700_support.sql` is a correct, additive, idempotent ONE-ROW seed (the
+AG400 LGA1700 mounting claim, vendor-sourced, with a type-constrained guard). Applying it to the SHARED
+database did far more than that row, because `run-seeds.js` has no per-file mode: it replays EVERY
+file in `database/seeds/`, and shared had never carried 023-026. Measured after the apply:
+
+- catalog: products 100 -> 113, `store_offer` 101 -> 114, `component_assessment` 280 -> 319,
+  `cooler_socket_support` 21 -> 22. `docs/DATA_STATE.md` was regenerated and
+  `node scripts/gen-schema-reference.js --check` reports BOTH generated docs up to date - the
+  `SCHEMA_REFERENCE.md` digest did not move, so this was DATA, not schema drift.
+- models: `scoring_model` 1 -> 7. Seeds 013 and 018-022 activate `launch-v2`, so shared now holds
+  SIX ACTIVE versions and `seed-minimal-v1@1.0.0` is INACTIVE.
+
+Two consequences come straight out of that count, and both are silent:
+
+1. **The deployed origin changed what it serves.** `apps/api/src/repository.js`
+   (`SELECT_ACTIVE_SCORING_MODEL_SQL`) takes the NEWEST active row - `ORDER BY created_at DESC,
+   id ASC`, a tie-break that was always deterministic - which is now `launch-v2@2.4.0`, the
+   CPU-depth experiment, not the `seed-minimal-v1@1.0.0` that Decision 57 keeps production on.
+   Nothing errored; the served model simply moved.
+2. **The harness default pin now fails closed on shared.** `scripts/lib/model-pin.js` defaults to
+   `seed-minimal-v1@1.0.0`, which is INACTIVE there, so a bare `eval:scenarios` against shared
+   refuses before writing anything and needs `--model=launch-v2@2.4.0`.
+
+The lesson is not "never apply seeds". It is that seed 013's own header rule - applying it is a
+COORDINATED STEP, not a routine seed run - binds EVERY seed run aimed at a database that has never
+seen the tail, because the runner offers no way to apply one file. Check `scoring_model` before and
+after, and read which model the API will SELECT rather than assuming the pin is what gets served.

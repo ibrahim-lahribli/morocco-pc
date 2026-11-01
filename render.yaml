@@ -1,0 +1,82 @@
+# morocco-pc API on Render - the EU service, as a Blueprint.
+#
+# The dashboard steps this replaces are docs/RECIPES/deploy-eu-colocation.md section 12, and the
+# reasons each field is what it is live in section 12.1. Field-level truth is Render's own
+# Blueprint YAML reference (https://render.com/docs/blueprint-spec); this file is only the subset
+# this API needs.
+#
+# Scope: this defines ONE new service, `morocco-pc-api-eu`. It does not touch the existing
+# `morocco-pc` demo origin (`https://morocco-pc.onrender.com`), which serves the SHARED database
+# and is not described here on purpose - Render applies a Blueprint only to the resources it names.
+services:
+  - type: web
+    name: morocco-pc-api-eu
+    runtime: docker
+
+    # Build context MUST be the repository root: apps/api/Dockerfile copies src/ (the engine) and
+    # scripts/lib/db-url.js relative to it, so a context of ./apps/api builds an image with no
+    # engine inside. dockerfilePath is relative to the repo root, dockerContext too.
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+
+    # frankfurt, to sit in the same region as the Neon project `morocco-pc-eu`
+    # (aws-eu-central-1) - co-location is the entire point of P1 Sprint 1, so this is not a default.
+    region: frankfurt
+
+    # `free` = 0.1 CPU / 512 MB and SLEEPS after 15 idle minutes, which is fine for wiring the
+    # credential, ENGINE_VERSION, CORS and role checks, and NOT fine for the V1 latency
+    # measurement. Switch this one line to `0.5c-512mb` (0.5 CPU / 512 MB, always on) when V1 is
+    # measured; nothing else in the file changes. Plan ids are Render's, not marketing names.
+    plan: free
+
+    # /v1/health answers 200 with `db: "ok"` only when the pool really reaches the database, which
+    # is why it is the health path rather than a liveness stub.
+    healthCheckPath: /v1/health
+
+    # Deploys are deliberate: a commit should not redeploy a service that holds a database
+    # credential on its own. `autoDeployTrigger: off` is the current field (autoDeploy is deprecated).
+    autoDeployTrigger: off
+
+    # One instance, manual scaling. The API's dedupe (POST contract v1.3) makes a repeat request a
+    # 200 reuse, so more instances buy nothing yet.
+    numInstances: 1
+
+    envVars:
+      # The DEPLOYED shape from apps/api/.env.example: DATABASE_URL is the pool, TEST_DATABASE_URL
+      # is unset, and the guard bypass is not a claim that the target is the shared dev database.
+      - key: API_ALLOW_SHARED
+        value: "1"
+
+      # The EU POOLED url, connecting as `morocco_pc_api` - never the owner's credential. Built
+      # from the password scripts/apply-api-role.js wrote to ~/.morocco-pc/api-role-eu.password
+      # (the EU file section 8.5 of deploy-eu-colocation.md names; a plain api-role.password exists too
+      #  for the shared database, and using it here would present the wrong credential).
+      # `sync: false` keeps the value out of this file: Render asks for it at Blueprint creation.
+      - key: DATABASE_URL
+        sync: false
+
+      # No default on purpose. Set the git short SHA at deploy time; leaving it unset is why the
+      # demo origin answers engine_version "dev", and SENTRY_RELEASE falls back to this value.
+      - key: ENGINE_VERSION
+        sync: false
+
+      # Empty is the safe default (CORS DISABLED, never open). Fill it with the real web origin(s)
+      # once apps/web has a deployed host.
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+      # Empty is correct until it is pinned from the deployed origin's OWN evidence
+      # (docs/RECIPES/deploy-eu-colocation.md section 8.4). It is NOT a hop count: fastify refuses
+      # numeric trust, and a guess lets a caller choose its own rate-limit bucket.
+      - key: TRUST_PROXY
+        sync: false
+
+      # Empty means capture is OFF and @sentry/node is not imported at all.
+      - key: SENTRY_DSN
+        sync: false
+
+      - key: LOG_LEVEL
+        value: info
+
+      # PORT is deliberately absent: Render injects it and the server reads it. Pinning 3000 is the
+      # one setting that breaks the health check. The Dockerfile's EXPOSE 3000 is documentation.

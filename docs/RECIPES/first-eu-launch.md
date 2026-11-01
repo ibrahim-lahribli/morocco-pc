@@ -132,8 +132,8 @@ cannot be compared to anything.
 
 ## 4. Decide, then act on OG-54 item (2)
 
-The shared dev database still serves `seed-minimal-v1@1.0.0`, while TEST and EU serve
-`launch-v2@1.0.0` (seed 013 is unapplied on shared). Two consequences have to be accepted BEFORE
+**UPDATED 2026-11-01: a seed apply has already done this, so read the step as history plus one live consequence. The seed 027 apply replayed every seed onto shared, which now serves `launch-v2@2.4.0` (the newest ACTIVE row), and both consequences below have HAPPENED there (OG-54).** The pre-apply state was: shared served `seed-minimal-v1@1.0.0`, while TEST and EU served
+`launch-v2@1.0.0` (seed 013 was unapplied on shared at the time of writing). Two consequences had to be accepted BEFORE
 the apply, because both are behaviour changes, not cosmetics:
 
 - **The default scoring-model pin stops resolving.** Eight scripts resolve a `name@version` pin
