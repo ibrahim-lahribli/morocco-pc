@@ -32,6 +32,7 @@ const { buildApp } = require('./app');
 const repository = require('./repository');
 const engine = require('./engine');
 const { createCapture } = require('./monitoring');
+const { describeSelection } = require('./scoring-model-pin');
 
 /** pino options for the current environment. Never logs a body or a URL. */
 function buildLoggerOptions(env) {
@@ -87,7 +88,16 @@ async function start(env) {
   const host = source.HOST || '0.0.0.0';
   await app.listen({ port, host });
   app.log.info(
-    { port, host, monitoring: captureError === null ? 'disabled' : 'sentry' },
+    {
+      port,
+      host,
+      monitoring: captureError === null ? 'disabled' : 'sentry',
+      // Which model this process SERVES, stated at startup. Null means the
+      // implicit newest-active-row rule (the pre-existing behaviour); a value is
+      // the deploy-time act a pinned environment relies on. Without this line a
+      // deploy that serves an unintended model is visible only in a body.
+      scoring_model: describeSelection(app.scoringModelPin),
+    },
     'morocco-pc API listening'
   );
   return app;

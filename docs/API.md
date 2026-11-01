@@ -139,6 +139,7 @@ Environment variables (see `apps/api/.env.example` for the full list):
 | `DATABASE_URL` | The pool target when `API_ALLOW_SHARED=1` — the deployed shape, and the only variable the pool reads in it. |
 | `TEST_DATABASE_URL` | The pool target when `API_ALLOW_SHARED` is not `1` — the local/TEST shape. The guard then compares its hostname with `DATABASE_URL`'s and refuses equal hosts. UNUSED in the deployed shape, where it must be unset. |
 | `API_ALLOW_SHARED` | Must be exactly `1` to target `DATABASE_URL`. |
+| `SCORING_MODEL_PIN` | The ONE scoring model this deployment serves, as `name@version`. **Unset (the default) keeps the pre-existing rule: the newest ACTIVE row** — which is how a seed apply changed what the demo origin served with no deploy (OG-54). Set, it is a SELECTOR among ACTIVE rows only, the same grammar as `scripts/lib/model-pin.js` (Decision 39): a malformed value fails at STARTUP, and a pin matching no active row — or more than one — answers `503 SCORING_MODEL_UNAVAILABLE` instead of serving a different model. |
 
 ### Database target (write safety)
 

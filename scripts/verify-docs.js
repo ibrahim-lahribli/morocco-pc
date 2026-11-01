@@ -121,6 +121,8 @@ function readRepo(rel) {
 // UPDATE block with NO Status: line, so the count moves by exactly one.
 // Decision 60 (OG-38 acceptance, 2026-10-31) adds one heading/status
 // => 58 headings, 64 Status lines.
+// Decision 62 (API served-model pin, 2026-11-01) adds one heading/status
+// => 60 headings, 66 Status lines.
 // Decision 61 (two catalog deferrals, 2026-10-31) adds one heading/status
 // => 59 headings, 65 Status lines.
 const decisions = (function checkDecisions() {
@@ -139,9 +141,9 @@ const decisions = (function checkDecisions() {
     if (inEngine3 && /^### Decision \d+/.test(line)) nested += 1;
     if (/^Status:/.test(line)) status += 1;
   }
-  const ok = global === 59 && nested === 5 && status === 65;
+  const ok = global === 60 && nested === 5 && status === 66;
   if (!ok) {
-    fail('decisions-parse', 'global=' + global + ' (want 59), nested=' + nested + ' (want 5), Status:=' + status + ' (want 65)');
+    fail('decisions-parse', 'global=' + global + ' (want 60), nested=' + nested + ' (want 5), Status:=' + status + ' (want 66)');
     return null;
   }
   pass('decisions-parse', global + ' headings + ' + nested + ' nested = ' + (global + 2) + ' global, ' + status + ' Status: lines');
