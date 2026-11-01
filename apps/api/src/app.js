@@ -47,6 +47,7 @@ const { registerMetaRoutes } = require('./routes/meta');
 const { registerPresetRoutes } = require('./routes/presets');
 const { registerRecommendationRoutes } = require('./routes/recommendations');
 const { registerDocsRoutes } = require('./routes/docs');
+const { normalizeModelPin, readModelPin } = require('./scoring-model-pin');
 
 /** The whole request body is five scalars; see the header. */
 const BODY_LIMIT_BYTES = 10 * 1024;
@@ -236,6 +237,18 @@ function buildApp(options) {
   app.decorate('engine', opts.engine);
   app.decorate('pool', opts.pool === undefined ? null : opts.pool);
   app.decorate('engineVersion', opts.engineVersion || env.ENGINE_VERSION || 'dev');
+
+  // The model this deployment SERVES, or null for the implicit rule.
+  //
+  // A malformed `SCORING_MODEL_PIN` throws HERE, while the app is being built, so
+  // a typo fails the deploy instead of running with an unparseable setting. A
+  // well-formed pin is only a SELECTOR: the row's existence and eligibility are
+  // checked per request by `repository.selectActiveScoringModel`, which answers
+  // `SCORING_MODEL_UNAVAILABLE` rather than falling back to the newest active row
+  // (Decision 11: a pin never executes an inactive model).
+  app.decorate('scoringModelPin', opts.scoringModelPin === undefined
+    ? readModelPin(env)
+    : normalizeModelPin(opts.scoringModelPin));
 
   const origins = parseOrigins(env.ALLOWED_ORIGINS);
   app.register(cors, {

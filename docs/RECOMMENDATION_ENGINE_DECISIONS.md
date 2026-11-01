@@ -6127,3 +6127,47 @@ Both defects are load-bearing in one direction only, and both invite the same wr
 
 - **PASS as RECORDED DEFERRALS:** nothing was authored, no data changed, and both rows now carry the reason they stay instead of a stale "open" label.
 - **Bookkeeping:** `verify-docs` decision counts move 58 headings / 64 `Status:` lines -> 59 / 65, `docs/DECISION_INDEX.md` is regenerated, and `AGENTS.md` cites "Decisions 1-61". OG-08 and OG-50 move `OPEN` -> `DEFERRED 2026-10-31 -> Decision 61`.
+
+## Decision 62 — the API serves the scoring model a deployment NAMES, and unset keeps the newest-ACTIVE-row rule
+
+Status: RESOLVED 2026-11-01; IMPLEMENTED 2026-11-01 (apps/api) — the served scoring model is the explicit `name@version` deploy setting `SCORING_MODEL_PIN`, selecting among ACTIVE rows only, failing the deploy on a malformed value and answering 503 on an unmatched or ambiguous one, while an unset variable preserves the pre-existing newest-ACTIVE-row rule.
+
+Date: 2026-11-01. Prompted by OG-54's 2026-11-01 re-measurement. Applying seed 027 replayed every seed file onto the shared database and moved the only deployed origin (`https://morocco-pc.onrender.com`) from `seed-minimal-v1@1.0.0` to `launch-v2@2.4.0` with no code change, no deploy and no error — the failure mode Decision 57's own amendment predicted, fired. Scope: which scoring model the API executes, and the setting that decides it. It is NOT an activation of any model, NOT a `scoring_model` row, NOT a seed and NOT a migration.
+
+### Current situation
+
+`apps/api/src/repository.js` `SELECT_ACTIVE_SCORING_MODEL_SQL` answered the question with one implicit rule: the ACTIVE rows newest-first, `LIMIT 1`. That rule is what every route used until this decision, so what an environment SERVES was a property of its seed-set rather than of anything a deploy declared. Measured 2026-11-01 on the shared database: 7 `scoring_model` rows, SIX `launch-v2` versions ACTIVE, `seed-minimal-v1@1.0.0` INACTIVE (OG-54).
+
+The comparison harnesses have had the other half of this vocabulary since Decision 39: `scripts/lib/model-pin.js` resolves a model by `name@version` among ACTIVE rows and refuses a malformed, ambiguous, inactive or unmatched pin. Nothing in `apps/api/` did.
+
+### Problem
+
+"A seed apply changed what production serves" is not an acceptable contract for a served recommendation: two identical POSTs before and after an apply return different builds with no deploy, no version bump and no error. Decision 57 had already named the mechanism and the release gate; what it did not have was a lever an operator could pull at deploy time.
+
+### Decision
+
+1. **One setting decides it.** `SCORING_MODEL_PIN=name@version` is read ONCE, where the app is BUILT (`apps/api/src/app.js`), and exposed as `app.scoringModelPin`; every route passes it to the ONE selection point, `repository.selectActiveScoringModel(db, pin)`. No route re-derives the model, and the environment is read through a single function (`readModelPin`).
+2. **The grammar is Decision 39's**, deliberately: exactly one `@`, both halves non-empty, no whitespace anywhere, and a second `@` refused rather than interpreted. Implemented in `apps/api/src/scoring-model-pin.js` (`parseModelPin` / `normalizeModelPin`) and pinned by `apps/api/test/unit/scoring-model-pin.test.js`.
+3. **A malformed value fails the DEPLOY**, not a request: parsing throws while the app is constructed, so a typo never answers plausible 200s.
+4. **A pin selects among ACTIVE rows only.** `is_active = true` is part of the pinned identity, not a filter of convenience, so an inactive pin is a refusal rather than a silent activation (Decision 11).
+5. **A pin matching NO row, or MORE THAN ONE, is `SCORING_MODEL_UNAVAILABLE` (503)** — never a fallback to the newest active row. The pinned statement carries `ORDER BY id ASC` with no `LIMIT` specifically so an ambiguous identity is DETECTED; a miss issues exactly one statement and is not repaired by a second query.
+6. **Unset means the pre-existing rule** (absent and blank both normalise to `null`), so no existing test, local run or deployment changes without opting in.
+7. **The pin is an operator detail.** It never appears in a response body; the code a client already understands for "no usable model" carries the refusal. Startup logs which model the process serves — including the implicit case — so a deploy cannot serve an unintended model invisibly.
+
+### Rejected alternatives
+
+- **Deactivate the extra rows and rely on `is_active`:** rejected as the CONTRACT — it makes the served model a property of the seed-set, and an apply restores it. It remains a legitimate operational action, not a guarantee.
+- **Answer a generic `500`:** rejected — `503` already means "no usable model" to a client, and the distinction is what lets an operator find a bad pin in the log without leaking it in the body.
+- **Let the request choose the model (`?model=` or a body field):** rejected — any caller could then pick the scoring line, and Decision 36 keeps options on the server.
+- **Require `scripts/lib/model-pin.js` from the API:** rejected — `scripts/` is not a runtime dependency of the served process, and importing harness tooling into a deploy would drag the harness surface with it. The grammar is duplicated on purpose and both copies are pinned by their own suite.
+- **A `served` flag on `scoring_model` instead:** rejected for now — it needs a migration and still asks an operator to declare the choice; it can supersede item 1 later without changing the refusal semantics.
+
+### Verdict for this pass
+
+- **PASS — implemented and pinned:** `test:api` 191/191, 9 of them new in `scoring-model-pin.test.js` (the grammar and its refusals, blank/absent normalising to null, an app that refuses to BUILD on a typo, the pin reaching the one selection point, unset staying the newest-active row, a 503 that keeps the pin out of the body, one statement and the parsed halves on a hit, and no second query on a miss).
+- **PASS — docs:** `docs/API.md`'s environment table and `apps/api/.env.example` carry the setting, `docs/TEST_MAP.md` registers the contract, and `verify:docs --offline` is green.
+- **NOT done, and not claimed:** no environment SETS the variable yet, so the deployed origin still serves whichever row is newest. Pinning it is an owner act at deploy time, recorded as OG-54 item 2 — this decision supplies the lever, not the setting.
+
+### Supersedes / superseded by
+
+Does not supersede Decision 57: that decision's 2026-11-01 amendment records the mechanism, and this entry supplies the lever. `scripts/lib/model-pin.js` (Decision 39) is unchanged and remains the harness's selector.

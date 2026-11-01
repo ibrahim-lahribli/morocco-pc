@@ -60,6 +60,34 @@ const SELECT_ACTIVE_SCORING_MODEL_SQL = [
 ].join(' ');
 
 /**
+ * The ONE model a pinned deployment serves (Decision 57's amendment; the
+ * `SCORING_MODEL_PIN` setting).
+ *
+ * `is_active = true` is part of the identity, not a filter of convenience: a pin
+ * selects among ACTIVE rows and never executes an inactive one (Decision 11),
+ * which is why an inactive pin is a refusal rather than a silent activation.
+ * `ORDER BY id ASC` exists so an ambiguous identity can be DETECTED (more than
+ * one row) instead of resolved by physical order.
+ */
+const SELECT_PINNED_SCORING_MODEL_SQL = [
+  'SELECT id, name, version, configuration',
+  'FROM scoring_model',
+  'WHERE name = $1 AND version = $2 AND is_active = true',
+  'ORDER BY id ASC',
+].join(' ');
+
+/**
+ * A pin that cannot be served. Carries the error code `app.js` maps to the
+ * shared 503 body, so a wrong pin looks like "no usable model" to a client and
+ * names the pin in the log - it never degrades into "serve something else".
+ */
+function scoringModelPinUnavailable(message) {
+  const error = new Error(message);
+  error.code = 'SCORING_MODEL_UNAVAILABLE';
+  return error;
+}
+
+/**
  * One profile per API request. `name` is the generated uuid: the unique index
  * `idx_recommendation_profile_name` (migration 011 5.3) makes a human name a
  * collision risk, and the name is not part of the API contract.
@@ -779,12 +807,46 @@ async function readPriceHistory(db, key) {
 }
 
 /**
- * The active scoring model, or null when none is active.
+ * The scoring model this request must use.
+ *
+ * Two modes, one function, because every caller already goes through here and
+ * the choice must not be duplicated:
+ *
+ *   * `pin` is null (unset) -> the newest ACTIVE row, the pre-existing rule, or
+ *     null when none is active so the caller answers 503.
+ *   * `pin` is `name@version` -> THAT row. A pin matching no row, or only an
+ *     inactive one, THROWS `SCORING_MODEL_UNAVAILABLE` instead of falling back:
+ *     silently serving a different model is the failure this pin exists to
+ *     prevent (a seed apply can add rows, and the newest-row rule would then
+ *     change what a production origin serves with no deploy).
  *
  * @param {object} db pool or client exposing query(sql, params)
+ * @param {string|null} [pin] `name@version`, already normalised by
+ *        `scoring-model-pin.js` (absent and blank both arrive as null)
  * @returns {Promise<{id: string, configuration: object}|null>}
  */
-async function selectActiveScoringModel(db) {
+async function selectActiveScoringModel(db, pin) {
+  if (pin !== null && pin !== undefined) {
+    const at = pin.indexOf('@');
+    const name = pin.slice(0, at);
+    const version = pin.slice(at + 1);
+    const pinned = await db.query(SELECT_PINNED_SCORING_MODEL_SQL, [name, version]);
+    const pinnedRows = pinned && Array.isArray(pinned.rows) ? pinned.rows : [];
+    if (pinnedRows.length === 1) {
+      const row = pinnedRows[0];
+      return { id: row.id, configuration: row.configuration };
+    }
+    if (pinnedRows.length > 1) {
+      throw scoringModelPinUnavailable(
+        'scoring model pin ' + pin + ' matched ' + pinnedRows.length
+          + ' active rows - the identity is ambiguous and the API refuses to guess'
+      );
+    }
+    throw scoringModelPinUnavailable(
+      'scoring model pin ' + pin + ' matched no ACTIVE row; the API serves the pinned model'
+        + ' or nothing, never the newest active row instead'
+    );
+  }
   const result = await db.query(SELECT_ACTIVE_SCORING_MODEL_SQL);
   const rows = result && Array.isArray(result.rows) ? result.rows : [];
   if (rows.length === 0) {
@@ -1058,6 +1120,7 @@ async function deleteSupersededPresets(client, key) {
 
 module.exports = {
   SELECT_ACTIVE_SCORING_MODEL_SQL,
+  SELECT_PINNED_SCORING_MODEL_SQL,
   INSERT_PROFILE_SQL,
   INSERT_QUERY_SQL,
   SELECT_QUERY_SQL,

@@ -516,7 +516,7 @@ function registerRecommendationRoutes(app) {
   }, async (request, reply) => {
     const body = request.body;
 
-    const model = await app.repo.selectActiveScoringModel(app.pool);
+    const model = await app.repo.selectActiveScoringModel(app.pool, app.scoringModelPin);
     if (model === null) {
       return reply.code(503).send(scoringUnavailable());
     }
