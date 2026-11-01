@@ -2057,3 +2057,59 @@ What this does NOT change: the deployed Render origin still runs as `neondb_owne
 (`check-deployed-role.js --target=env:DATABASE_URL` -> FAIL, exit 1, unchanged), so its swap verb
 works because of WIDER credentials, not because of this grant. The secret rotation
 (`docs/RECIPES/deploy-eu-colocation.md` §8.5) is still the open owner step.
+
+## 2026-10-31 — platform open-points validation: the two origin defects, and the parity answer that changed shape
+
+Read-only pass over the remaining platform open points (OG-52's owner-gated backlog, OG-53, OG-54),
+leaving the engine seat to the other agent. Doc gates are green first, so nothing below is doc drift:
+`node scripts/verify-docs.js --offline` OK, `node scripts/verify-docs.js --live` OK including the
+schema digest (`4110c1517a14a0ef`), `node scripts/gen-decision-index.js --check` clean.
+
+Commands and answers (all read-only):
+
+- `node scripts/check-deployed-role.js --target=env:DATABASE_URL`, after warming `/v1/health` (HTTP 200,
+  `{"status":"ok","db":"ok","engine_version":"dev"}`): **RESULT: FAIL, exit 1** - 1 of 1
+  `morocco-pc-api` session authenticated as `neondb_owner`. OG-54 item 1 reproduces on a second date,
+  so it is a standing defect rather than a 2026-10-29 fluke.
+- `node scripts/check-target-parity.js --a=env:DATABASE_URL --b=env:TARGET_DATABASE_URL` (with `.env.eu`
+  loaded through `DOTENV_CONFIG_PATH`): **DIFF**, and the reason has changed. `ledger-files` / `tables` /
+  `schema-shape` MATCH (23 / 44 / 470) and every catalog count MATCHes (products 100, variants 22,
+  offers 101, assessments 280, stores 2), while `scoring-model-pins` DIFFs 1 vs 2 - the documented
+  OG-54 residue - and **five Layer 4 row checks now DIFF too: `recommendation_query` 9 vs 0,
+  `recommendation_result` 8 vs 0, `build_candidate` 8 vs 0, `build_component` 64 vs 0,
+  `build_rejection` 18 vs 0.** That is not schema drift: SHARED has accumulated 9 `api-*` passes, 8 of
+  them created 2026-10-30T23:19Z-2026-10-31T00:07Z against ONE `catalog_version`, and the deployed
+  Render origin is the only API serving that database. The 2026-10-29 "re-asserted at its baseline
+  (1 pre-existing profile, 0 elsewhere)" no longer holds.
+- `node scripts/check-target-parity.js --a=env:TEST_DATABASE_URL --b=env:TARGET_DATABASE_URL`: **DIFF**
+  on pins (7 vs 2), products (113 vs 100), variants (24 vs 22), offers (116 vs 101), assessments
+  (319 vs 280), stores (5 vs 2) and the branch's own Layer 4 query rows (5 vs 0) - every one of those
+  is the engine seat's seed work on the branch, not a platform defect; ledger, tables and shape MATCH.
+- `node scripts/check-offer-provenance.js`: INCONCLUSIVE, exit 0 - 101 offers, 2 seed stores, 0 verified,
+  no retailer observation ever. `node scripts/check-offer-freshness.js --fail-days=14`: INCONCLUSIVE,
+  exit 0, with `first SEED expiry 2026-11-03` (2.2 days at run time), so the nightly starts warning in
+  two days unless seed 006 is re-applied or real offers land.
+
+Two things this pass found that no register carried:
+
+1. **The only deployed origin cannot name its build.** `/v1/health` answers `engine_version: "dev"` -
+   `apps/api/.env.example`'s default, not a short SHA. P1 Sprint 1 test 1.5 ("an `engine_version` equal
+   to the deployed short SHA") and P3 Sprint 3's "a deploy records the `ENGINE_VERSION` that is then
+   served" are both red on the Render demo origin, and since `ENGINE_VERSION` is also the Sentry
+   `release` fallback, an error from that origin could not be tied to a commit either.
+2. **A public origin writes to the shared dev database.** Every POST leaves an unmarked
+   `recommendation_query`; the counts above are the proof. `eval:scenarios` refuses to run while ANY
+   unmarked query exists on the database it targets (AGENTS section 7 item 18), so shared is unusable
+   for the golden harness until those rows are deleted in FK order (swap -> components -> result ->
+   rejections -> candidate -> query -> profile), and the Render origin recreates them on the next
+   visitor. Repointing that service at the TEST branch, or gating its writes, is an owner action -
+   there is no Render credential in this checkout.
+
+Open points unchanged where they could not be moved: OG-53 (no Workers environment, no deploy step in
+`.github/workflows/web.yml`, `.open-next` / `.wrangler` are build directories), P3 Sprint 3 (no
+`.github/workflows/deploy.yml`), P3 Sprint 4 Steps 3-6 (no `SENTRY_DSN` in `.env`), P1 Sprint 1 Steps
+7-9 (no Fly app; EU `check-deployed-role.js` answers INCONCLUSIVE - 0 tagged sessions - re-confirmed),
+and P1 Sprint 3, still NOT STARTED: `filtering/context-loader.js` issues 4 `db.query` calls and
+`candidates/loader.js` 3, neither carries a statement-count assertion, and no commit has touched either
+since Decision 45 - so the plan's "14" and "9" are premise figures, not current counts, and Step 1's
+baseline must be re-measured before any loader merge.

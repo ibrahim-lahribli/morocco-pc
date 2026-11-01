@@ -792,6 +792,39 @@ replay, not for the project's life; export anything you need to keep before dele
 5. Health check path `/v1/health`.
 6. Deploy by pushing the commit; the first build takes a few minutes. Then repeat §8.3, §9 and
    §10 with `APP=https://<service>.onrender.com`.
+### 12.1 The EU service as a Blueprint (`render.yaml`)
+
+The EU Render service is committed as a Blueprint at the repository root, so the fields in section 12
+are reviewable and reproducible instead of re-typed in a dashboard. The file defines ONE new service
+(`morocco-pc-api-eu`); it does not touch the existing `morocco-pc` demo origin, because a Blueprint only
+applies to the resources it names.
+
+- **`dockerContext: .` is load-bearing, not a default worth omitting.** `apps/api/Dockerfile` copies
+  `src/` (the engine) and `scripts/lib/db-url.js` relative to the repository root, so a context of
+  `apps/api` builds an image with no engine in it.
+- **`plan: free` is the committed default**, because it costs nothing and is enough for the part that
+  matters first: rotating the credential, setting a real `ENGINE_VERSION`, and wiring CORS and the
+  origin. Render Free sleeps after 15 idle minutes, so the section 9 latency measurement cannot come
+  from it - change that one line to the always-on plan id (`0.5c-512mb`, 0.5 CPU / 512 MB, per the
+  Render plan table; the dashboard label Starter is not a Blueprint plan id) when V1 is measured.
+- **`ENGINE_VERSION` has no default on purpose.** Set it to `git rev-parse --short HEAD` at deploy time;
+  leaving it unset is exactly why the 2026-10-28 demo origin answers `engine_version: "dev"`
+  (`deploy-free-host.md` section 5.1), and `SENTRY_RELEASE` falls back to this same value.
+- **`DATABASE_URL` must be the EU POOLED url connecting as `morocco_pc_api`**, built from the password
+  `scripts/apply-api-role.js` wrote to `$HOME/.morocco-pc/api-role-eu.password` (the EU file section 8.5 names - a plain `api-role.password` exists for the shared database and is the WRONG credential here). Deploying on the owner
+  credential instead makes `check-deployed-role.js` FAIL by construction - that is OG-54 item 1, and it
+  would then be true on two hosts rather than one.
+- **Do not set `PORT`, `TEST_DATABASE_URL`, or a guessed `TRUST_PROXY`.** Render injects `PORT`; the
+  deployed shape is `API_ALLOW_SHARED=1` with `DATABASE_URL` as the pool (section 1); and `TRUST_PROXY`
+  is pinned from the section 8.4 evidence, never from a hop count.
+- **Creating the service is a dashboard or API action**, because this checkout holds no Render API key
+  (`.env` carries `GITHUB_TOKEN` and `NORTHFLANK_API_TOKEN`). Everything after creation is agent-run and
+  read-only: `check-origin-readiness.js --platform=render --origin=<url>`, `check-deployed-role.js`,
+  and the parity comparison.
+
+Preconditions measured 2026-10-31 before the file was written: `run-migrations.js --check` against the
+EU project prints `No pending migrations; database is up to date.` (audit target `db:2d66f26d7ddc`),
+and the role password file exists.
 
 ---
 
