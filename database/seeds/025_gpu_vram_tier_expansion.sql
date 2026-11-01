@@ -227,12 +227,28 @@ JOIN manufacturer m ON m.name = v.mfr
 WHERE NOT EXISTS (SELECT 1 FROM gpu_chipset gc WHERE gc.name = v.name);
 
 -- 3/6 Products (2).
-INSERT INTO product (product_family_id, manufacturer_id, name, lifecycle_status)
-SELECT pf.id, m.id, v.name, 'ACTIVE'
+INSERT INTO product (product_family_id, manufacturer_id, name, display_name, slug, lifecycle_status)
+SELECT pf.id, m.id, v.name, ident.display_name, ident.slug, 'ACTIVE'
 FROM (VALUES
     ('Seed Intel Arc B580 12 GB',                    'Seed Intel Arc B580',          'Intel'),
     ('Seed GIGABYTE Radeon RX 9070 16 GB GAMING OC', 'Seed GIGABYTE Radeon RX 9070', 'Gigabyte')
 ) AS v(name, family, mfr)
+-- Migration 020 (product identity) owns this derivation, and these seeds used to
+-- skip it: they inserted products with display_name and slug NULL, which is why
+-- 13 catalogue rows served `slug: null` and `test:api:db` failed. Both columns
+-- come from the ONE source of truth (the name), using 020's own expressions -
+-- display_name without the "Seed " prefix, slug lowercased and hyphenated - so a
+-- replay cannot write a slug that disagrees with its product. Measured before
+-- writing: every derived slug satisfies chk_product_slug_format, with ZERO
+-- collisions against the slugs already in the catalogue (uq_product_slug enforces
+-- it at insert time, so a future clash fails loudly instead of writing NULL).
+CROSS JOIN LATERAL (
+    SELECT dn.display_name,
+           trim(both '-' FROM regexp_replace(
+               lower(regexp_replace(dn.display_name, '[^a-zA-Z0-9]+', '-', 'g')),
+               '-+', '-', 'g')) AS slug
+      FROM (SELECT regexp_replace(v.name, '^Seed ', '') AS display_name) AS dn
+) AS ident
 JOIN product_family pf ON pf.name = v.family
 JOIN manufacturer m ON m.name = v.mfr
 WHERE NOT EXISTS (SELECT 1 FROM product p WHERE p.name = v.name);
