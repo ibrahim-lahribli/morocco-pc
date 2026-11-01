@@ -114,3 +114,36 @@ WHERE p.name = 'Seed DeepCool AG400'
 -- The residual blocker therefore sits inside the assembly/reach path, not in the
 -- catalog. Tracing it is engine-seat work and is deliberately NOT claimed here: this
 -- file asserts vendor support, which is settled, and leaves the lane question open.
+
+-- ============================================================================
+-- APPLIED TO SHARED (2026-11-01, owner-authorised)
+-- ============================================================================
+--
+-- Restore point: br-restless-art-ax6fineh ("pre-027-seed"), parent
+-- br-proud-salad-axs4rxib, parent LSN 0/616AA50, created 2026-11-01T00:51:43Z with
+-- no compute. Audit target of the applied database: db:54ff6ea3f6e6.
+--
+-- Applied through `npm run seed` (the documented path in docs/RECIPES/add-a-seed.md),
+-- exit 0 on every run. A digest of every catalog table (all *_spec, product,
+-- product_family, store, store_offer, cooler_socket_support, scoring_model) taken
+-- after run 2 and after run 3 is IDENTICAL, which is the idempotency proof - the
+-- earlier "changed" reading was dotenv's per-run banner line, not data.
+--
+-- SCOPE NOTE, recorded because it is bigger than this file: the seed runner replays
+-- EVERY seed file, and shared had never carried 023, 024, 025 or 026. Applying this
+-- seed therefore also brought them over - products 100 -> 113, offers 101 -> 114,
+-- assessments 112 -> 319, cooler_socket_support rows 21 -> 22, coolers with an
+-- LGA1700 row 7/9 -> 8/9. `check-target-parity` shared vs TEST now MATCHes on product
+-- (113), component_assessment (319) and scoring_model (7). The remaining DIFFs are
+-- store_offer (114 vs 116), store (2 vs 5) and the Layer 4 rows that the shared
+-- database carries from API passes.
+--
+-- GATES AFTER THE APPLY (all on the shared database):
+--   check-deferred-rules        PASS - 0 violations in every scope, all four rules
+--                               ENFORCED. OG-09 reachable pairs 108 -> 135 (the
+--                               AG400 LGA1700 row plus the coolers 023-026 added)
+--   check-og01-coverage         PASS - OG-01 coverage complete, pin launch-v2@2.4.0
+--   verify-docs --live          OK - schema digest unchanged (4110c1517a14a0ef),
+--                               so this seed moved DATA_STATE, not the schema
+--   npm run test:unit           exit 0
+--
