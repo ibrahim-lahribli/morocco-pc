@@ -5714,19 +5714,19 @@ Design and implementation in the same change, measured 2026-10-26:
 
 ## Decision 57 — production keeps the model it serves, and `launch-v2@2.0.0` is the version evaluated for release
 
-Status: PROVISIONAL 2026-10-26 — production keeps `seed-minimal-v1@1.0.0`, `launch-v2@1.0.0` is not the release model and is never activated, and `launch-v2@2.0.0` is the version evaluated for release, where that evaluation is a GATE (A1/A3/A4 are still unreviewed) rather than an activation.
+Status: PROVISIONAL 2026-10-26 — production keeps `seed-minimal-v1@1.0.0`, `launch-v2@1.0.0` is not the release model and is never activated, and `launch-v2@2.0.0` is the version evaluated for release, where that evaluation is a GATE (A1/A3/A4 are still unreviewed) rather than an activation. **AMENDED 2026-11-01:** the served model is the NEWEST `is_active` row (`apps/api/src/repository.js` `SELECT_ACTIVE_SCORING_MODEL_SQL`), so what an environment serves is a property of its SEED-SET rather than of any config, and the measured fact is that `seed-minimal-v1@1.0.0` is INACTIVE on ALL THREE databases while shared and TEST both serve `launch-v2@2.4.0`. Item 1 is therefore superseded rather than satisfied: keeping a release on a named model is now an explicit deploy-time ACT (or a pin), never a statement about the rows. `launch-v2@2.4.0` is NOT thereby adopted for release (item 3 still gates that), and the release target is EU, not the shared dev database.
 
 Date: 2026-10-26. Scope: which scoring model a release may serve, and what the words "release candidate" are allowed to mean here. The H3 review (`docs/ENGINE_HYPOTHESIS_REVIEW_2026-10-24.md`) made this necessary without stating it: three assertions the engine still misses are `hypothesis`, two `launch-v2` versions are ACTIVE on the TEST branch, and nothing is deployed — so the next deploy had no recorded answer to "which model ships". Documentation only: **no migration, no seed, no row, no grant, no deploy**, and no change to any environment's data.
 
 ### Current situation
 
-Measured read-only 2026-10-26: `scoring_model` rows and `schema_migrations` on each database, not a copy of an earlier report.
+Measured read-only 2026-10-26: `scoring_model` rows and `schema_migrations` on each database, not a copy of an earlier report. **RE-MEASURED 2026-11-01:** the table below carries the 2026-11-01 reading, taken the same way (read-only, per database), because the 2026-10-26 one describes no environment any more; the amendment at the end of this entry records what moved, why, and which remedies were rejected.
 
 | Database | Active scoring model(s) | Ledger |
 |---|---|---|
-| SHARED (`DATABASE_URL`, the production stand-in) | `seed-minimal-v1@1.0.0` alone | 22 |
-| TEST branch (`TEST_DATABASE_URL`) | `launch-v2@1.0.0` AND `launch-v2@2.0.0`; `seed-minimal-v1@1.0.0` inactive | 23 |
-| EU (`morocco-pc-eu`) | `launch-v2@1.0.0` (documented by the 2026-10-23 parity run; not re-measured here) | 22 |
+| SHARED (`DATABASE_URL`) - dev/demo, NOT a production stand-in | `launch-v2` `1.0.0`, `2.0.0`, `2.1.0`, `2.2.0`, `2.3.0`, `2.4.0` - six ACTIVE; `seed-minimal-v1@1.0.0` INACTIVE | 23 |
+| TEST branch (`TEST_DATABASE_URL`) | the same six `launch-v2` versions ACTIVE; `seed-minimal-v1@1.0.0` INACTIVE | 23 |
+| EU (`morocco-pc-eu`) - the release target | `launch-v2@1.0.0` alone ACTIVE; `seed-minimal-v1@1.0.0` INACTIVE | 23 |
 
 `test/golden/scenarios.json` records the review's verdict as data: `A1`, `A3` and `A4` are `hypothesis`; `A2`, `A2b` and `A5`-`A10` are `approved`, so a failure in one of those eight is a HARD FAIL (exit 1). At `launch-v2@2.0.0` the suite is 86 rows — 66 PASS / 19 EXPECTED-RED / 1 UNKNOWN — and the 19 EXPECTED-RED rows are exactly A1 (15) + A3 (3) + A4's strict pair (1). `current_epic` is `E8`.
 
@@ -5758,6 +5758,64 @@ Two hazards follow. First, TEST deliberately holds TWO active `launch-v2` versio
 - Gate bookkeeping: `verify-docs` decision counts moved 54 headings / 60 `Status:` lines -> 55 / 61, `docs/DECISION_INDEX.md` regenerated, `AGENTS.md` cites "Decisions 1–57".
 - Release evaluation of `launch-v2@2.0.0`: **OPEN**, and item 3 above is where its gate lives. A1/A3/A4 remain `hypothesis`; OG-38 and OG-43 remain OPEN, and OG-44 left this gate on 2026-10-29 (CLOSED → C-47 by retirement, its behavioural residue now OG-55).
 - Migration 023 and its re-grant: **out of scope here**. The shared database was measured at ledger 22 on 2026-10-26, with `recommendation_swap` absent, so the 21-answer self-check in `docs/RECIPES/provision-the-api-role.md` described the rehearsal contract rather than shared's state until an owner-gated apply landed. **UPDATED 2026-10-29 — the apply landed:** 023 is on shared (restore point `br-royal-block-axu8i4a9`, audit target `db:54ff6ea3f6e6`) and on EU (`br-cool-star-b9whdnt1`, `db:2d66f26d7ddc`), all three ledgers read 23, and `verify:replay` reports 0 drift over 23 files. **UPDATED AGAIN 2026-10-29 — the re-grant landed too:** `GRANT INSERT ON recommendation_swap` was applied to shared (`br-silent-cake-ax5q21at`) and to EU (`br-bitter-sky-b96jh91p`), each self-check **21/21**, and `smoke-api-role.js` ran the API as the role on both (POST 201 with 1 build, 52 statements, residue 0), so a least-privilege deploy can now commit a swap. What remains is the SECRET rotation (`docs/RECIPES/deploy-eu-colocation.md` §8.5, OG-54 item 1), not a privilege.
+
+**AMENDMENT 2026-11-01 - the failure mode this entry predicted arrived.**
+
+This entry's Problem paragraph named the hazard exactly: "whichever `scoring_model` row is `is_active` is
+what an environment serves ... wrong for a release, because it makes 'what ships' a function of the last
+seed somebody applied." That is what happened. `npm run seed` has no per-file mode, so applying seed
+`027_ag400_lga1700_support.sql` - a one-row cooler mounting claim - replayed EVERY seed file onto shared,
+and seeds 013 and 018-022 activate `launch-v2`. Shared went from "v1 alone" to six ACTIVE `launch-v2`
+versions, matching TEST; EU is now the outlier on `launch-v2@1.0.0`.
+
+Re-measured read-only 2026-11-01 (`scoring_model` rows and `is_active`, not a copy of the table above):
+
+| Database | Rows | Active | Row the API selects (newest `created_at`) |
+|---|---|---|---|
+| SHARED | 7 | 6 | `launch-v2@2.4.0` (created `2026-11-01T00:52:13Z`) |
+| TEST | 7 | 6 | `launch-v2@2.4.0` |
+| EU | 2 | 1 | `launch-v2@1.0.0` |
+
+What this settles, item by item:
+
+- **Item 1 is superseded, not satisfied.** The shared database does not keep v1; it serves
+  `launch-v2@2.4.0` because that is the newest ACTIVE row. Nothing errored: the demo origin at
+  `https://morocco-pc.onrender.com` silently began serving a different model. Keeping a release on a
+  named model is therefore an ACT with its own restore point (as item 4 already says of activation),
+  or a deploy-time setting - never a description of the rows.
+- **The mechanism is recorded as contract, not folklore.** The served model is
+  `SELECT_ACTIVE_SCORING_MODEL_SQL`: `WHERE is_active = true ORDER BY created_at DESC, id ASC LIMIT 1`.
+  The tie-break is deterministic and the CHOICE is implicit, which is exactly what makes an
+  environment's served model follow its seed-set rather than its intent.
+- **The release TARGET is EU, and the "production stand-in" framing is withdrawn.** A public origin
+  writes `api-*` passes into shared (9 `recommendation_query` rows measured 2026-11-01, 8 with
+  results), so shared is a dev/demo database that a public host mutates and cannot represent
+  production. Item 4's EU reconciliation is unchanged and still gates the EU deploy.
+- **Nothing is adopted by this amendment.** `launch-v2@2.4.0` is what the demo now serves; it is NOT
+  the release model. Decision 59 states that adopting 2.4.0 as a release line is not claimed, and
+  OG-56 records the cost (assembly breadth 10 -> 24 of the 25-build cap, the A10 re-approvals). Item
+  3's gate still decides what ships.
+
+Remedies considered and REJECTED, recorded so they are not re-litigated:
+
+- **Restore shared from the pre-apply restore point** (`br-restless-art-ax6fineh`, created
+  `2026-11-01T00:51:43Z`). Rejected twice over: AGENTS section 8 forbids restoring the shared database
+  at all, and it is a whole-database rollback that would also undo seed 027's own row, seeds 023-026
+  (products 113 -> 100, assessments 319 -> 280) and the shared<->TEST parity that the same apply
+  closed.
+- **Re-stamp `is_active` by hand** (deactivate the five `launch-v2` rows, reactivate v1). Rejected as
+  the OG-30 pattern this project has already paid for: `run-seeds.js` rewrites `is_active` on every
+  run, so the cure lasts until the next seed apply - a re-stamp, not a cure - and it re-opens the
+  shared<->TEST divergence for a labelling problem.
+- **Promote `launch-v2@2.4.0` to release model because it is what is deployed.** Rejected: adopting a
+  version because a seed replay landed it is the same class of error as raising a budget to make a
+  harness pass. Adoption is item 3's gate and needs its own reviewed act.
+
+Still OPEN after this amendment, so the register keeps answering the question: EU serves
+`launch-v2@1.0.0`, which item 2 forbids in production, so the EU service must be pinned or activated
+deliberately before it takes traffic (OG-54 item 2). The durable fix - an explicit deploy-time model
+pin, so a seed apply can never change what a production origin serves - is registered as its own
+follow-up and is NOT claimed here.
 
 ## Decision 58 — A model may order the archetype strategies by its use-case `archetype_objectives`, at neutral priority only
 
