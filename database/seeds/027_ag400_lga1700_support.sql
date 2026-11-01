@@ -82,3 +82,35 @@ WHERE p.name = 'Seed DeepCool AG400'
       SELECT 1 FROM cooler_socket_support c
       WHERE c.cooler_product_id = p.id AND c.socket_id = s.id
   );
+
+-- ============================================================================
+-- MEASURED AFTER APPLY (TEST branch, 2026-11-01, branch head 66a4609, pin
+-- launch-v2@2.4.0)
+-- ============================================================================
+--
+-- Applied branch-first through `getWriteTestDbUrl()` + `SET search_path = public`:
+-- rowCount 1, and a second run rowCount 0 (idempotent). The full golden suite was then
+-- run twice - once with this row un-applied, once applied, nothing else differing - and
+-- the two reports are IDENTICAL: 86 assertion rows, 82 PASS / 3 EXPECTED-RED / 1
+-- UNKNOWN, `RESULT: EXPECTED-RED`, exit 0, residue {q:0,bc:0,comp:0,res:0,rej:0} in
+-- both. The only textual difference between the runs was the node PID.
+--
+-- So this row is CORRECT and reach-positive, and it is NOT sufficient on its own. The
+-- resolver flips `Seed DeepCool AG400` x LGA1700 from UNKNOWN
+-- (COOLER_SOCKET_SUPPORT_UNKNOWN) to PASS, and the 5-point unknown penalty on that pair
+-- is gone - but the LGA1700 lane still assembles nothing: S06 (GAMING 1440p, 12000 MAD),
+-- the pass seed 024 used to price the gap, selects the same builds and the same rank-1
+-- prices (11995 / 19546 / 23794) before and after.
+--
+-- WHAT IS MEASURABLY NOT THE BLOCKER (all read from the same TEST catalog the run used):
+--   * supply - 3 LGA1700 CPUs (`i5-12400F` 1549, `i5-14400` 1899 with an iGPU,
+--     `i7-12700KF` 2699) and 3 LGA1700 boards from 899,
+--   * cooler price - with this row the AG400 is 350 MAD against the 699 MAD
+--     MSI COREFROZR, i.e. the 349 MAD seed 024 priced,
+--   * case clearance - every one of the 10 catalog cases clears the AG400 150 mm
+--     (the cheapest, 849 MAD, clears 160 mm), and the AG400 is rated 220 W so the
+--     65 W `i5-14400` is not a thermal problem either.
+--
+-- The residual blocker therefore sits inside the assembly/reach path, not in the
+-- catalog. Tracing it is engine-seat work and is deliberately NOT claimed here: this
+-- file asserts vendor support, which is settled, and leaves the lane question open.
