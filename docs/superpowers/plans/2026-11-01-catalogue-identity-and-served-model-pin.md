@@ -1,6 +1,6 @@
 # Catalogue Identity and Served-Model Pin — Remaining Work Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Close the two gaps the 2026-11-01 handoff leaves open — un-applied catalogue identity on shared and EU, an un-booked register row, three stale doc claims, and two untested halves of Decision 62 — without touching engine behaviour.
 
@@ -34,6 +34,12 @@ The five input classes this work meets that no unit test of the changed function
 
 ---
 
+**Status 2026-11-02: Tasks 1-6 are DONE** (commits `a207d82`, `ea2e28f`, `00006db`, `c6ee910`,
+`e38e0f9`, `d33f128`; this document is `8ef05a7`, and `0510089` corrected Decision 62's test count).
+Measured at HEAD: `test:unit` 1261, `test:scripts` 443, `test:api` 193, `test:api:db` 17,
+`verify:docs` OK. **Tasks 7-10 are OPERATOR-gated**: a shared restore point, an EU restore point and
+a deploy, none of which this checkout can provide.
+
 ## Task 1: The pure identity evaluator
 
 **Files:**
@@ -50,7 +56,7 @@ The five input classes this work meets that no unit test of the changed function
   - `verdictExitCode(verdict: string) -> 0 | 1`
   - `formatReport(result, maxExamples = 20) -> string[]`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```js
 // scripts/lib/catalog-identity.test.js
@@ -118,12 +124,12 @@ test('the report counts every offender but prints at most maxExamples', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `node --test scripts/lib/catalog-identity.test.js`
 Expected: FAIL — `Cannot find module './catalog-identity'`.
 
-- [ ] **Step 3: Implement `scripts/lib/catalog-identity.js`**
+- [x] **Step 3: Implement `scripts/lib/catalog-identity.js`**
 
 Header comment must state, in the house style: why the gate exists (a served `slug: null`), why the scope is EVERY ACTIVE product and not "ACTIVE products with an eligible offer" (`repository.js` filters `p.slug IS NOT NULL` and addresses the catalog by `slug`, so a NULL slug removes the product from the catalog entirely while its recommendation component still ships `slug: null`), why the column stays nullable (migration 020 says so in its own header, so a constraint would reverse that decision), and the three-valued verdict vocabulary.
 
@@ -134,17 +140,17 @@ Header comment must state, in the house style: why the gate exists (a served `sl
 - `['RESULT: INCONCLUSIVE - no ACTIVE product exists; nothing could be checked']`
 - `['RESULT: FAIL - X of N ACTIVE product(s) missing identity (showing M):', '  id=… name="…" missing=slug,display_name', …]`
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `node --test scripts/lib/catalog-identity.test.js`
 Expected: PASS, 6/6.
 
-- [ ] **Step 5: Confirm the suite picks it up on Node 22**
+- [x] **Step 5: Confirm the suite picks it up on Node 22**
 
 Run: `npx -y node@22 --test "scripts/lib/catalog-identity.test.js"`
 Expected: PASS, `# cancelled 0`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/lib/catalog-identity.js scripts/lib/catalog-identity.test.js
@@ -165,7 +171,7 @@ git commit -m "Add the pure half of the catalogue-identity gate"
 - Consumes: `evaluateCatalogIdentity`, `formatReport`, `verdictExitCode`, `VERDICTS` from Task 1.
 - Produces: a CLI with exit codes `0` (PASS or INCONCLUSIVE), `1` (FAIL or the catalogue could not be read), `2` (usage).
 
-- [ ] **Step 1: Implement the CLI**
+- [x] **Step 1: Implement the CLI**
 
 `scripts/check-catalog-identity.js`, mirroring `scripts/check-offer-provenance.js` structure (`require('dotenv').config()`, `USAGE` array, argv parse that rejects any non-`=` form with exit 2, `Client` connect, print, exit).
 
@@ -180,7 +186,7 @@ ORDER BY p.id ASC
 
 Then `evaluateCatalogIdentity({ scopeSize: rows.length, rows })`, print `formatReport(result, maxExamples)`, `process.exit(verdictExitCode(result.verdict))`. A connection or query error prints `FAIL - the catalogue could not be read: <message>`, never the connection string, and exits 1. `--help` prints `USAGE` and exits 2.
 
-- [ ] **Step 2: Verify usage handling contacts nothing**
+- [x] **Step 2: Verify usage handling contacts nothing**
 
 ```bash
 node scripts/check-catalog-identity.js --help; echo "exit=$?"
@@ -188,7 +194,7 @@ node scripts/check-catalog-identity.js --target env:DATABASE_URL; echo "exit=$?"
 ```
 Expected: usage text, `exit=2`; then a usage error, `exit=2`.
 
-- [ ] **Step 3: Verify the verdict against both real catalogues**
+- [x] **Step 3: Verify the verdict against both real catalogues**
 
 ```bash
 node scripts/check-catalog-identity.js; echo "exit=$?"
@@ -196,7 +202,7 @@ node scripts/check-catalog-identity.js --target=env:TEST_DATABASE_URL; echo "exi
 ```
 Expected **before Task 7 lands**: shared ⇒ `RESULT: FAIL - 13 of 113 ACTIVE product(s) missing identity`, `exit=1`; TEST branch ⇒ `RESULT: PASS - 113 ACTIVE product(s) …`, `exit=0`. The shared FAIL is the gate proving it detects the live defect; it is expected to stay red until Task 7.
 
-- [ ] **Step 4: Wire it into the nightly job**
+- [x] **Step 4: Wire it into the nightly job**
 
 In `.github/workflows/ci.yml`, inside `recurring-gates`, immediately after the `check-offer-provenance.js` step, add a commented step in the same style:
 
@@ -210,14 +216,14 @@ In `.github/workflows/ci.yml`, inside `recurring-gates`, immediately after the `
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 ```
 
-- [ ] **Step 5: Document the command and the contract**
+- [x] **Step 5: Document the command and the contract**
 
 - `AGENTS.md` §6: add one row in the table's style — `node scripts/check-catalog-identity.js [--target=env:NAME] [--max-examples=N]` … read-only; `PASS` only when every ACTIVE product carries both columns, `FAIL` (exit 1) naming each offender, `INCONCLUSIVE` when the catalogue is empty; nightly in `recurring-gates`.
 - `docs/TEST_MAP.md`: add one row in the same table as the served-model row — the contract (identity is a served field, not an optional extra) and its pin (`scripts/lib/catalog-identity.test.js`, part of `npm run test:scripts`), plus the failure mode (`slug: null` reaching a client; a NULL-slug product vanishing from the keyset page walk).
 
 Both files are CRLF: edit with a node `split(from).join(to)` anchored inside one physical line.
 
-- [ ] **Step 6: Run the gates**
+- [x] **Step 6: Run the gates**
 
 ```bash
 npm run test:scripts 2>&1 | grep -E "^ℹ (tests|pass|fail)"
@@ -226,7 +232,7 @@ node scripts/gen-decision-index.js --check
 ```
 Expected: 443 tests (437 + 6), 0 fail; `verify-docs: OK`; `gen-decision-index: OK`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add scripts/check-catalog-identity.js .github/workflows/ci.yml AGENTS.md docs/TEST_MAP.md
@@ -244,7 +250,7 @@ git commit -m "Gate the catalogue identity the API serves"
 - Consumes: `repository.selectActiveScoringModel(db, pin)` (already exported), `resolveTestDbUrl(env)` from `scripts/lib/db-url.js`.
 - Produces: nothing importable; a read-only DB suite the `test:api:db` launcher picks up by glob.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Read-only by construction: the file issues SELECTs only, so it needs no cleanup and asserts no residue. Header must say why a real database is required (the pin's contract is a `WHERE … is_active = true` over rows, and stub rows cannot prove the statement selects the row the operator named).
 
@@ -306,21 +312,21 @@ test('a pin naming an INACTIVE row is refused, never activated', async (t) => {
 });
 ```
 
-- [ ] **Step 2: Run it and see it fail for the right reason**
+- [x] **Step 2: Run it and see it fail for the right reason**
 
 Run: `npm run test:api:db`
 Expected: the new file fails only on a VM-level reason first — if it reports `a pin matching no row` as *passing* but `a pin resolves THAT active row` failing, read the message: it must be a genuine assertion, not a missing table. (If `TEST_DATABASE_URL` is unset the launcher fails fast — that is the guard working, not a test result.)
 
-- [ ] **Step 3: Make it pass**
+- [x] **Step 3: Make it pass**
 
 No production change is expected: `repository.selectActiveScoringModel` already implements all four behaviours. If a test fails, the DEFECT is in `apps/api/src/repository.js` and the fix belongs there with a matching unit pin in `apps/api/test/unit/scoring-model-pin.test.js` — do not weaken the DB assertion.
 
-- [ ] **Step 4: Run the suite and confirm the count moved**
+- [x] **Step 4: Run the suite and confirm the count moved**
 
 Run: `npm run test:api:db`
 Expected: `test:api:db: 17 passed, 0 failed` (13 existing + 4 new), residue 0, no `42501`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/test/db/scoring-model-pin.db.test.js
@@ -340,7 +346,7 @@ git commit -m "Pin the served-model setting against a real scoring_model table"
 
 Requiring `scripts/lib/model-pin.js` from a **test** is allowed; Decision 62 rejects importing `scripts/` into the SERVED process (`apps/api/src/**`), which this does not do. State that in the file header so nobody "fixes" the import.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```js
 const test = require('node:test');
@@ -372,26 +378,26 @@ test('both parsers accept and refuse the same strings, and agree on the halves',
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `node --test apps/api/test/unit/scoring-model-pin-parity.test.js`
 Expected: FAIL — `Cannot find module '../../../../scripts/lib/model-pin'` if the relative path is wrong (four levels up from `apps/api/test/unit/` is the repo root), otherwise PASS. Fix the path, not the assertion.
 
-- [ ] **Step 3: If a row disagrees, fix the API copy**
+- [x] **Step 3: If a row disagrees, fix the API copy**
 
 A disagreement is a real drift risk: the harness is the older, reviewed parser (Decision 39), so `apps/api/src/scoring-model-pin.js` moves to match it and the API's own unit test gains the offending input.
 
-- [ ] **Step 4: Run the API suite**
+- [x] **Step 4: Run the API suite**
 
 Run: `npm run test:api 2>&1 | grep -E "^ℹ (tests|pass|fail)"`
 Expected: 193 tests, 0 fail.
 
-- [ ] **Step 5: Confirm on Node 22**
+- [x] **Step 5: Confirm on Node 22**
 
 Run: `npx -y node@22 --test "apps/api/test/unit/*.test.js" 2>&1 | grep -E "^# (tests|pass|fail|cancelled)"`
 Expected: same counts, `# cancelled 0`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/api/test/unit/scoring-model-pin-parity.test.js
@@ -409,7 +415,7 @@ git commit -m "Pin agreement between the API and harness model-pin parsers"
 - Consumes: nothing.
 - Produces: `OG-60`, referenced by Task 9's close.
 
-- [ ] **Step 1: Insert the row**
+- [x] **Step 1: Insert the row**
 
 Insert as the LAST section-1 gap row — i.e. after the last line matching `/^\| OG-\d{2} \|/` in the file. All six cells, exactly six columns (`| ID | Gap | Class | Status | Owner | Source(s) |`), one physical line, CRLF:
 
@@ -419,7 +425,7 @@ Insert as the LAST section-1 gap row — i.e. after the last line matching `/^\|
 
 Owner is `data-research` because that is the defect's class (catalogue DATA written without its identity) and the register's Owner vocabulary is `data-research / engine-code / schema-migration / tooling / docs / —`; the handoff's "engine/data" is not a value the register accepts.
 
-- [ ] **Step 2: Run the shape gate and the doc gate**
+- [x] **Step 2: Run the shape gate and the doc gate**
 
 ```bash
 node --test scripts/lib/gap-register.test.js
@@ -427,7 +433,7 @@ npm run verify:docs 2>&1 | grep -E "gap-register-shape|verify-docs"
 ```
 Expected: the shape tests pass; `PASS gap-register-shape`; `verify-docs: OK`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/OPEN_GAPS.md
@@ -447,7 +453,7 @@ git commit -m "Register the catalogue-identity gap and what closes it"
 - Consumes: OG-60 (Task 5) — the correction cites the row, so the register stays the answer to "what is open".
 - Produces: nothing importable.
 
-- [ ] **Step 1: Correct `CONTEXT.md`**
+- [x] **Step 1: Correct `CONTEXT.md`**
 
 Replace, inside one physical line:
 
@@ -457,15 +463,15 @@ with
 
 `while the shared dev database serves `seed-minimal-v1@1.0.0` alone (seed 013 unapplied) and reports DIFF `scoring-model-pins: count 1 vs 2` — **CORRECTED 2026-11-01: this clause is now FALSE.** The seed 027 replay replayed every seed file onto shared, which holds SIX ACTIVE `launch-v2` rows (`1.0.0`-`2.4.0`) with `seed-minimal-v1@1.0.0` INACTIVE, so shared and TEST both serve `launch-v2@2.4.0` under the newest-active-row rule and EU is the release target (OG-54, OG-60; Decision 62 supplies the deploy-time pin)`
 
-- [ ] **Step 2: Correct `docs/TEST_MAP.md:93`**
+- [x] **Step 2: Correct `docs/TEST_MAP.md:93`**
 
 `the full 100-row page walk with no duplicate or skipped slug` → `the full 113-row page walk with no duplicate or skipped slug` (both databases hold 113 products, measured 2026-11-01 — this cell describes the TEST branch run).
 
-- [ ] **Step 3: Correct `AGENTS.md:371`**
+- [x] **Step 3: Correct `AGENTS.md:371`**
 
 `(41 tables, 15-row ledger, 100 products)` → `(41 tables, 15-row ledger, 113 products)` — change the product count only. The `41 tables` figure was NOT re-measured in this pass; record that in the commit message rather than certifying it.
 
-- [ ] **Step 4: Apply, then verify line endings and the doc gate**
+- [x] **Step 4: Apply, then verify line endings and the doc gate**
 
 ```bash
 grep -cU $'\r' CONTEXT.md AGENTS.md docs/TEST_MAP.md   # unchanged from before the edit
@@ -474,7 +480,7 @@ git --no-pager diff --stat
 ```
 Expected: the CR counts match the pre-edit counts exactly (no `\r\r\n`), `verify-docs: OK`, and each file shows `1 insertion(+), 1 deletion(-)`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add CONTEXT.md AGENTS.md docs/TEST_MAP.md

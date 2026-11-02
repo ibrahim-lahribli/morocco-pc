@@ -95,7 +95,26 @@ and `test:api:db` 13/13.
 - **No register row** for the identity defect, and three stale doc claims remain (4.5).
 - **No real-database test for the pin**; its refusals are proven only against stubs.
 
+**STATUS 2026-11-02 - three of the five bullets above are closed.** This section records what was
+true at handoff, so the bullets stand as written; each resolution names its commit:
+
+- **The invariant gate SHIPPED** in `ea2e28f` - `scripts/check-catalog-identity.js`, a pure half at
+  `scripts/lib/catalog-identity.js` (6 tests) and a step in `recurring-gates`
+  (`.github/workflows/ci.yml:77`). Measured 2026-11-02: shared `FAIL - 13 of 113 ACTIVE product(s)`,
+  TEST `PASS - 113`. Note what it does NOT do, because 4.4 below overstated this: it is NIGHTLY, like
+  the suite it stands in for, so it detects a recurrence within a day instead of blocking a merge.
+- **The register row and the three doc claims SHIPPED** in `e38e0f9` and `d33f128` - `OG-60`
+  (IMPORTANT, OPEN, owner `data-research`: the register's six Owner values have no `engine/data`),
+  plus `CONTEXT.md`, `docs/TEST_MAP.md` (100 -> 113) and `AGENTS.md` corrected.
+- **The real-database pin test SHIPPED** in `00006db` - 4 read-only cases in
+  `apps/api/test/db/scoring-model-pin.db.test.js`, `test:api:db` 17/17 - together with the parser
+  parity table in `c6ee910` (`test:api` 193/193).
+- **STILL OPEN, deliberately:** seed 028 on shared (13 rows) and EU (100 rows), and
+  `SCORING_MODEL_PIN` on the origin. Those are 4.1, 4.2 and 4.6 below; 4.3 waits on both applies.
+
 ## 4. Remaining work, in order
+
+**Read with the STATUS block above: 4.4, 4.5 and 4.7 are DONE; 4.1, 4.2, 4.3 and 4.6 are not.**
 
 ### 4.1 Apply seed 028 to shared (13 rows)
 

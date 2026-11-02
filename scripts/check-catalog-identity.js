@@ -18,8 +18,9 @@
  *
  * The suite that caught it, `test:api:db`, is the only one that could have, and it
  * runs in `recurring-gates` (nightly/dispatch), never on push or pull_request. So
- * a NULL slug could ship through a green PR. This is the standing read that closes
- * that hole.
+ * a NULL slug could ship through a green PR. This is the standing read that shortens
+ * that blind spot to at most a day. It is nightly, like the suite it stands in for, so it
+ * detects a recurrence after the fact rather than blocking the merge that caused it.
  *
  * WHAT MAKES IT PRODUCTION-RELEVANT is not cosmetic: `GET /v1/catalog/products`
  * filters `p.lifecycle_status = 'ACTIVE' AND p.slug IS NOT NULL` and keyset-
