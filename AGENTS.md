@@ -368,8 +368,8 @@ of repository inactivity** — an idle repo silently stops getting the nightly g
    result is either a phantom 12-vs-14 enum drift (with `public` on `search_path`) or
    `42704: type "assessment_type" does not exist` (without it). Both are harness artifacts. Measured
    on this box: two of three first attempts produced confidently wrong answers this way.
-8. **No empty database exists by default.** `TEST_DATABASE_URL` is a full snapshot (41 tables, 15-row
-   ledger, 100 products). The `neondb_owner` role on that Neon instance holds `rolcreatedb`, so
+8. **No empty database exists by default.** `TEST_DATABASE_URL` is a full snapshot (44 tables, 23-row
+   ledger, 113 products). The `neondb_owner` role on that Neon instance holds `rolcreatedb`, so
    `CREATE DATABASE` on it is permitted — that is how the replay gets a genuinely empty target.
    Neon propagates `CREATE DATABASE` asynchronously, so connecting immediately races it and fails
    with a cached `database ... does not exist (server_login_retry)`; retry, do not report it as a
