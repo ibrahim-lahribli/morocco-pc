@@ -10,7 +10,7 @@
  *      nested `### Decision N ...` entries inside "Engine 3 contract decisions".
  *      Engine-3-local numbering: local 4/5 ARE global Decisions 4/5 (the file has
  *      no `## Decision 4` / `## Decision 5` headings - see AGENTS.md section 2 and
- *      RECOMMENDATION_ENGINE_ARCHITECTURE.md section 11, which cites that section's
+ *      docs/ARCHITECTURE.md section 11, which cites that section's
  *      Decision 5 for the budget rule). Engine-3-local 1-3 are NOT global 1-3.
  *      `### Decision 18 addendum` is an implementation record, not an entry.
  *   3. REQUIRES a normalized status line as the first content line of every entry:
@@ -170,7 +170,7 @@ out.push('`grep -n "^Status:" docs/RECOMMENDATION_ENGINE_DECISIONS.md` and this 
 out.push('');
 out.push('Numbering: there are no `## Decision 4` / `## Decision 5` headings. Global Decisions 4 and 5 exist');
 out.push('only as the nested `### Decision 4` / `### Decision 5` under "Engine 3 contract decisions"');
-out.push("(Engine-3-local 4/5 double as global 4/5; `RECOMMENDATION_ENGINE_ARCHITECTURE.md` §11 cites that");
+out.push("(Engine-3-local 4/5 double as global 4/5; `docs/ARCHITECTURE.md` §11 cites that");
 out.push("section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` are NOT global 1–3.");
 out.push('');
 out.push('## Open decisions');

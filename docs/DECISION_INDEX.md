@@ -12,7 +12,7 @@ top of its entry — nothing here is inferred — so
 
 Numbering: there are no `## Decision 4` / `## Decision 5` headings. Global Decisions 4 and 5 exist
 only as the nested `### Decision 4` / `### Decision 5` under "Engine 3 contract decisions"
-(Engine-3-local 4/5 double as global 4/5; `RECOMMENDATION_ENGINE_ARCHITECTURE.md` §11 cites that
+(Engine-3-local 4/5 double as global 4/5; `docs/ARCHITECTURE.md` §11 cites that
 section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` are NOT global 1–3.
 
 ## Open decisions

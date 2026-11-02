@@ -21,6 +21,8 @@ the engine's public barrels (`src/recommendation/*/index.js`), the `scripts/` CL
 
 ## 2. Read in this order
 
+0. `README.md` — one page: what the project is, how to run the three suites, the four layers and
+   the guard rails. Read it first if you are new to the tree.
 1. `git status` — do this FIRST. This is a shared checkout; other agents may have changed files.
 2. `CONTEXT.md` — canonical project context: status, the four layers, schema, migration rules,
    design decisions. Authoritative for "what exists today."
@@ -40,9 +42,12 @@ the engine's public barrels (`src/recommendation/*/index.js`), the `scripts/` CL
    decisions" (the index reconciles this explicitly).
 6. `database/migrations/*.sql` — THE authoritative schema. Column-level truth is in the SQL, not prose.
 
-For a current map of what is stale and why: `docs/archive/DOCUMENTATION_AUDIT_2026-09-28.md` (per-finding doc drift) and
-`docs/archive/PROJECT_STATUS_REVIEW_2026-09-28.md` (whole-project weaknesses W1–W12, options A–I, known/unverified registers K/U).For what is still open — gaps, deferrals, unverified items, closed-findings residue — `docs/OPEN_GAPS.md` is the
-consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + audit D1–D12, each with class/status/owner).
+**What is still open** — gaps, deferrals, unverified items, known defects — is
+`docs/OPEN_POINTS.md` (R-01 to R-23, each with area, severity, the state that is true today, what
+would close it and the owner), and it is the ONLY answer: never reconstruct a backlog from a dated
+report. The platform programme and its sprint ledger are `docs/ROADMAP.md`. `docs/OPEN_GAPS.md` keeps
+the detailed evidence behind those rows (a gate parses its shape, so keep the row format). The
+2026-09-28 audit and status review are history and live in `docs/archive/`.
 
 
 ## 3. Technology stack
@@ -66,9 +71,16 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 |---|---|
 | `CONTEXT.md` | Canonical project context and current status |
 | `DEVELOPMENT_NOTES.md` | Operational lessons and verified commands |
-| `docs/` | Engine architecture, decision log, and dated audit/status reports |
+| `README.md` | One-page orientation: what this is, quick start, the four layers, the guard rails |
+| `CONTEXT.md` | Current state: what exists, which environment is which, which model is served |
+| `docs/ARCHITECTURE.md` | The engine contract: pipeline, HARD/SOFT policy, scoring, gap limits |
+| `docs/API.md` | The HTTP contract (v1.10.0) and its operation notes |
+| `docs/OPEN_POINTS.md` | The open-points register (R-01 to R-23) — the only "what is still open" |
+| `docs/ROADMAP.md` | The platform programme: rules, 21-sprint ledger, owner-gated backlog, web track |
+| `docs/archive/` | Superseded documents, each with a `Superseded by:` header; indexed in `docs/archive/README.md` |
+| `docs/` | Contract, register, roadmap, generated lookups, recipes — see the rows above and below |
 | `docs/DECISION_INDEX.md` | GENERATED decision lookup table (number/title/status/date/line) — never edit by hand |
-| `docs/OPEN_GAPS.md` | Consolidated open-gap register (architecture §16 + seed 002 D1–D8 + §18 futures + audit D1–D12) with class/status/owner — hand-maintained |
+| `docs/OPEN_GAPS.md` | Detailed evidence trail behind `docs/OPEN_POINTS.md` (OG ids, dated measurements, the closed ledger); its table shape is gate-parsed |
 | `docs/SCHEMA_REFERENCE.md` | GENERATED column-level schema lookup (information_schema) — never edit by hand; `npm run gen:schema` |
 | `docs/DATA_STATE.md` | GENERATED live row-count/coverage snapshot — instance-specific, never cite as a permanent claim |
 | `docs/GLOSSARY.md` | Load-bearing vocabulary (status vocabulary, decision ids, the `D2` vs `Decision 2` collision) |
