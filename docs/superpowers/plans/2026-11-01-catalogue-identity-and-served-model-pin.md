@@ -384,7 +384,7 @@ A disagreement is a real drift risk: the harness is the older, reviewed parser (
 - [ ] **Step 4: Run the API suite**
 
 Run: `npm run test:api 2>&1 | grep -E "^ℹ (tests|pass|fail)"`
-Expected: 192 tests, 0 fail.
+Expected: 193 tests, 0 fail.
 
 - [ ] **Step 5: Confirm on Node 22**
 
