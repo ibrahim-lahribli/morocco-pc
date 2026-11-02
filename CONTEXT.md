@@ -16,7 +16,7 @@ Open work is [`docs/OPEN_POINTS.md`](docs/OPEN_POINTS.md). Programmes and sprint
 | 1 — Catalog / Hardware | `product`, `product_family`, `product_variant`, `<role>_spec`, explicit compatibility tables | 113 products, 24 variants, 84 families |
 | 2 — Performance / Assessment | `benchmark_source`, `benchmark`, `benchmark_result`, `component_assessment`, `scoring_model` | 319 assessment rows over 112 of 113 products |
 | 3 — Market | `store`, `store_offer`, `price_history` | 114 offers, 2 stores, 0 with retailer provenance |
-| 4 — Recommendation | `recommendation_profile`, `recommendation_query`, `recommendation_result`, `build_candidate`, `build_component`, `build_rejection`, `recommendation_swap` | 12 queries / 16 results / 16 candidates on shared — probe residue, not user data |
+| 4 — Recommendation | `recommendation_profile`, `recommendation_query`, `recommendation_result`, `build_candidate`, `build_component`, `build_rejection`, `recommendation_swap` | 12 queries / 16 results / 16 candidates on shared — API passes from the live demo, which writes to shared (not user data; expected until the demo moves, R-14) |
 
 `database/migrations/001`–`023` are THE schema; `docs/SCHEMA_REFERENCE.md` is its generated mirror.
 Every database stands at ledger **23** (`node scripts/run-migrations.js --check` → no pending file).
