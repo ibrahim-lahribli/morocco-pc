@@ -1,5 +1,13 @@
 # OPEN_GAPS — consolidated open-gap register
 
+> **Open work is [`docs/OPEN_POINTS.md`](OPEN_POINTS.md) (R-01 to R-23, with class, status and
+> owner).** This file is the detailed evidence trail behind those rows - the OG ids, the dated
+> measurements and the closed-table ledger that the summary cites. It is kept because a gate parses
+> its shape and because it records WHY a row closed, but it is no longer the answer to "what is
+> still open": read OPEN_POINTS first, and treat an OPEN clause here without a matching R-row as a
+> defect in the summary rather than a second backlog.
+
+
 **Date:** 2026-09-29 (last revised 2026-10-31) · **Audit ref:** A3 / fix-order item 9 · **Owner:** docs
 
 **Purpose:** one place that answers "what is still open?" — today that question

@@ -1,3 +1,5 @@
+Superseded by: docs/OPEN_POINTS.md on 2026-11-02
+
 # Engine & Platform Status Review — 2026-11-02
 
 **Scope:** engine + platform (schema, catalogue, compatibility, selection, assembly, scoring, ranking,

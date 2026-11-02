@@ -1,3 +1,5 @@
+Superseded by: docs/OPEN_POINTS.md on 2026-11-02
+
 # Handoff: catalogue identity and the served-model pin (2026-11-01)
 
 **Type:** explanation (handoff), carrying how-to steps for the two applies that remain.
