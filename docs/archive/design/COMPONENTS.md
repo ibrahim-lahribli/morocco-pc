@@ -1,3 +1,5 @@
+Superseded by: docs/ROADMAP.md on 2026-11-02
+
 # Component kit (S3)
 
 **What this file is.** The reference for the kit in `apps/web/components/ui/`:

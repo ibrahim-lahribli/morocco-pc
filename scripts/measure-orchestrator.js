@@ -141,7 +141,7 @@ const CLAIM_BAND = { exact: 0, close: 2 };
 
 /** Exact seed expectations (seeds 001 + 002 + 003 + 004a + 004b: 004a adds 87
  * GPU/PSU rows for OG-01 batch 1 and 004b adds 63 CPU/MOTHERBOARD rows for
- * batch 2, 25 + 87 + 63 = 175; see docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md).
+ * batch 2, 25 + 87 + 63 = 175; see docs/archive/OG-01_ASSESSMENT_RESEARCH_PLAN.md).
  * Update in the same session as any seed that changes the canonical catalog
  * (AGENTS.md section 8). */
 // `models` counts the rows matching the PIN (Step-2 item 1 / OG-39), not the

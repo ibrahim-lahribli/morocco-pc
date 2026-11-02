@@ -1,3 +1,5 @@
+Superseded by: docs/ROADMAP.md on 2026-11-02
+
 # apps/web — the web plan
 
 **What this file is.** The PLAN for the frontend: product shape, stack, the contract dependencies

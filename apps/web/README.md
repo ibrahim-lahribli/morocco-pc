@@ -9,13 +9,13 @@ contract rather than two.
 
 **Where the truth lives**
 
-- plan and phases: [docs/plans/agent3-web-plan.md](../../docs/plans/agent3-web-plan.md)
+- plan and phases: [docs/archive/plans/agent3-web-plan.md](../../docs/archive/plans/agent3-web-plan.md)
 - sprint board (S1–S26, each with a definition of done):
-  [docs/plans/agent3-web-sprints.md](../../docs/plans/agent3-web-sprints.md)
+  [docs/archive/plans/agent3-web-sprints.md](../../docs/archive/plans/agent3-web-sprints.md)
 - design tokens and their measured contrast:
-  [docs/design/TOKEN_MAP.md](../../docs/design/TOKEN_MAP.md)
-- the component kit: [docs/design/COMPONENTS.md](../../docs/design/COMPONENTS.md)
-- i18n, formatting and the font strategy: [docs/design/I18N.md](../../docs/design/I18N.md)
+  [docs/archive/design/TOKEN_MAP.md](../../docs/archive/design/TOKEN_MAP.md)
+- the component kit: [docs/archive/design/COMPONENTS.md](../../docs/archive/design/COMPONENTS.md)
+- i18n, formatting and the font strategy: [docs/archive/design/I18N.md](../../docs/archive/design/I18N.md)
 
 The design source is the Stitch board recorded in the plan §3; nothing under this
 package imports an export.

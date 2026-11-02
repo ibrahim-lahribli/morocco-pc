@@ -6,7 +6,7 @@
  * colour name. The `warning` token is the dark amber, NOT the board's saffron:
  * saffron measures 1.71:1 against the rail and a graphical object needs 3:1, so
  * the board's own value would have shipped an almost-invisible bar. The reason
- * and the tested alternatives are in `docs/design/TOKEN_MAP.md` §6.
+ * and the tested alternatives are in `docs/archive/design/TOKEN_MAP.md` §6.
  *
  * Out-of-range values are a two-part problem, and the review that added this
  * comment found the first part measured rather than assumed: ARIA requires

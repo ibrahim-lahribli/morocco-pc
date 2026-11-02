@@ -1,3 +1,5 @@
+Superseded by: docs/OPEN_POINTS.md on 2026-11-02
+
 # OG-01 Research Plan — real `component_assessment` data for the 85 unassessed products
 
 **Date:** 2026-09-30 · **Owner:** data-research · **Status:** IN PROGRESS — batch 1 (seed 004a, 87 rows) AUTHORED 2026-09-30 and **APPLIED to shared DB 2026-10-01 + MEASURED** (reach now score-driven; TEST_DATABASE_URL branch unreachable, measured via read-only pipeline replication against shared DB — see DEVELOPMENT_NOTES 2026-10-01); **COMPLETE — OG-01 CLOSED 2026-10-02.** All 255 rows across 4 seeds are applied and measured: batch 1 `004a` (87 rows) plus batch 2's three independently appliable files `004b_cpu_motherboard.sql` (63), `004b_ssd_ram.sql` (60) and `004b_case_cooler.sql` (45 + 52 radiator rows); `component_assessment` 25 -> 280 and the coverage gate is `PASS` in `--strict`

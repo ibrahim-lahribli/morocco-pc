@@ -10,7 +10,7 @@
  *
  * This gate answers "does any active catalog product still lack assessment
  * research for every type the scoring model weights?" - the deliverable
- * boundary of docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md (section 6).
+ * boundary of docs/archive/OG-01_ASSESSMENT_RESEARCH_PLAN.md (section 6).
  *
  * The derivation policy (category from spec-table presence, required types
  * from the active scoring model, deliberate fixtures) lives in

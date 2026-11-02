@@ -150,7 +150,7 @@ If any step here fails and you need to back out before Phase 2 is committed:
 
 1. Restore the two uncommitted phases to the committed state:
    `git restore --source=HEAD -- AGENTS.md CONTEXT.md docs/briefs/step2-launch-v2-runbook.md
-   docs/OG-39_ACTIVATION_PLAN.md docs/OPEN_GAPS.md docs/RECOMMENDATION_ENGINE_DECISIONS.md
+   docs/archive/OG-39_ACTIVATION_PLAN.md docs/OPEN_GAPS.md docs/RECOMMENDATION_ENGINE_DECISIONS.md
    docs/TEST_MAP.md docs/briefs/engine.md scripts/verify-docs.js
    test/golden/baseline-launch-v2-2026-10.md` — but do NOT touch
    `test/golden/baseline-2026-10.md` (that is the locked v1 baseline; never overwrite it).

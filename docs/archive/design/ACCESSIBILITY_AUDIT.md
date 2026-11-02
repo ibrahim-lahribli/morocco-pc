@@ -1,3 +1,5 @@
+Superseded by: docs/ROADMAP.md on 2026-11-02
+
 # Accessibility audit — S21 (2026-10-22)
 
 The record of what was checked, how, and what remains unchecked. The gate is

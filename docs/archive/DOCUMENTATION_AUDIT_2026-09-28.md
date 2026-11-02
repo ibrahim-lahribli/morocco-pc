@@ -1,3 +1,5 @@
+Superseded by: docs/OPEN_POINTS.md on 2026-11-02
+
 # Documentation Audit — docs vs. code vs. live database
 
 **Date:** 2026-09-28

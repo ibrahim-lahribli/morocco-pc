@@ -1,3 +1,5 @@
+Superseded by: docs/ROADMAP.md on 2026-11-02
+
 # Design token map (S2)
 
 **What this file is.** The in-repo record of every design token in

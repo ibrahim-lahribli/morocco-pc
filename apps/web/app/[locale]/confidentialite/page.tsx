@@ -19,7 +19,7 @@ import { fill } from "@/lib/wizard/copy";
  * — when a deployment turns analytics on — three named events and a page view
  * whose query string is stripped before it leaves the browser. The copy follows
  * the code in `lib/analytics.ts`; if the events map changes, this page is part
- * of the same edit (`docs/design/STATES.md` records the pair).
+ * of the same edit (`docs/archive/design/STATES.md` records the pair).
  *
  * It also says the one thing a reader of a shared result link needs to know: the
  * id in the address is unguessable, the page is not indexed, and anyone holding

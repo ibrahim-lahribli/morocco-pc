@@ -1,3 +1,5 @@
+Superseded by: docs/OPEN_POINTS.md on 2026-11-02
+
 # Catalogue Identity and Served-Model Pin — Remaining Work Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.

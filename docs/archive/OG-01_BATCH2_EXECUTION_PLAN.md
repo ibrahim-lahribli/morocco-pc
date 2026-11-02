@@ -1,3 +1,5 @@
+Superseded by: docs/OPEN_POINTS.md on 2026-11-02
+
 # OG-01 Batch-2 Execution Plan — seed `004b` (56 products / 168 rows)
 
 **Date:** 2026-10-02 · **Owner:** data-research · **Status:** **COMPLETE — all three

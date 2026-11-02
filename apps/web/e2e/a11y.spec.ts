@@ -8,7 +8,7 @@
  * and a 404 is a page too. A derived list would silently stop covering the day a
  * route gained a required parameter.
  *
- * What axe proves and what it does not is recorded in `docs/design/ACCESSIBILITY_AUDIT.md`:
+ * What axe proves and what it does not is recorded in `docs/archive/design/ACCESSIBILITY_AUDIT.md`:
  * it is a machine checking what machines can check (contrast computed from the
  * rendered pixels, names, roles, landmarks, heading order, form labels, zoom).
  * Focus ORDER, what a screen reader actually says, and whether the copy makes

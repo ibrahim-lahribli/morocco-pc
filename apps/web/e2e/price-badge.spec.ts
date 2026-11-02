@@ -13,7 +13,7 @@
  *
  * Two copy decisions are asserted rather than left to review:
  *
- *   1. the tone mapping is the KIT's (`docs/design/TOKEN_MAP.md` §9): démo is
+ *   1. the tone mapping is the KIT's (`docs/archive/design/TOKEN_MAP.md` §9): démo is
  *      the dashed muted pill, indicatif the warning pair, vérifié the success
  *      pair — so the sprint's "(warn token)" for démo is a recorded deviation,
  *      because warning already means "a price exists but is stale".

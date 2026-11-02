@@ -1,3 +1,5 @@
+Superseded by: docs/OPEN_POINTS.md on 2026-11-02
+
 Recommendations barely vary on currunt-test: GAMING and WORKSTATION are byte-identical at every budget, and
 12 000 / 20 000 / 30 000 MAD all produce the same 25 assembled, 3 persisted, cheapest-per-role floor 4477
 MAD, with one distinct (CPU,GPU) pair at 12 000 and above. Only 8000 MAD drops below the 3-build floor the

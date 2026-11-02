@@ -17,7 +17,7 @@ Passing-test counts are deliberately not restated here — see the dated entries
 
 **Web frontend (outside the 21 sprints, recorded here because it shares the deployment gate).**
 `apps/web` has 26 of its 27 sprints done and its host is now DECIDED - **Cloudflare Workers** through
-the OpenNext adapter, recorded 2026-10-23 in `docs/plans/agent3-web-plan.md` §1/§5/§7 and as
+the OpenNext adapter, recorded 2026-10-23 in `docs/archive/plans/agent3-web-plan.md` §1/§5/§7 and as
 **OG-53**: `apps/web/wrangler.jsonc` (worker `morocco-pc-web`, `main: .open-next/worker.js`, assets
 binding `ASSETS`, `NEXT_INC_CACHE_KV`), `apps/web/open-next.config.ts` (KV incremental cache - the
 config's own note records R2 as unavailable on this account without a payment method), and `@opennextjs/cloudflare` +
@@ -108,7 +108,7 @@ but the choice stays the owner's, so no host is written into this page as decide
 
 ## The frontend track (merged on this branch since 2026-10-21)
 
-`apps/web/` is part of this tree — sprint S1-S27 of `docs/plans/agent3-web-sprints.md`, 26 done and S26
+`apps/web/` is part of this tree — sprint S1-S27 of `docs/archive/plans/agent3-web-sprints.md`, 26 done and S26
 blocked on a deployment — in its own package with its own lockfile and `.github/workflows/web.yml`. It
 consumes this API through types generated from `apps/api/test/unit/openapi-v1.10.json`, with
 `check:api-types` as the drift gate; measured 2026-10-26 the Playwright suite is 378 specs (376 passed /

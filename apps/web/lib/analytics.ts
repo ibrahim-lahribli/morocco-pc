@@ -48,7 +48,7 @@
  * (see that function's comment for the numbers and the cause). Nothing here may
  * be on the critical path, and the Lighthouse budgets in CI (LCP and total
  * script bytes) are the gate that notices when it is; the on/off measurement is
- * recorded in `docs/design/STATES.md`.
+ * recorded in `docs/archive/design/STATES.md`.
  *
  * ## Events that happen before the script arrives
  *
@@ -249,7 +249,7 @@ function afterLoad(run: () => void): void {
  *   2. an idle callback (with a timeout, because a busy page must not defer
  *      analytics forever).
  *
- * Both numbers are in `docs/design/STATES.md`, measured with the harness that
+ * Both numbers are in `docs/archive/design/STATES.md`, measured with the harness that
  * enforces the budget rather than a stopwatch.
  */
 function afterQuiet(run: () => void): void {

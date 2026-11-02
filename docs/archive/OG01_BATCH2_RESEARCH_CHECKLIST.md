@@ -1,3 +1,5 @@
+Superseded by: docs/OPEN_POINTS.md on 2026-11-02
+
 # OG-01 batch-2 research checklist (generated 2026-10-02)
 
 Source: live DB (scoring model seed-minimal-v1 1.0.0).

@@ -1,3 +1,5 @@
+Superseded by: docs/OPEN_POINTS.md on 2026-11-02
+
 # OG-39 — scoring-model activation plan
 
 **Status: ACTIVATED ON THE TEST BRANCH 2026-10-09 (Step-2 items 1-2 done).** The HARNESS

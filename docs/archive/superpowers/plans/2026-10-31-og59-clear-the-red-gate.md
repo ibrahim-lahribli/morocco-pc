@@ -1,3 +1,5 @@
+Superseded by: docs/OPEN_POINTS.md on 2026-11-02
+
 # OG-59 — Clear the red golden gate
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:executing-plans to implement

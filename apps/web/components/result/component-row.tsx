@@ -1,7 +1,7 @@
 /**
  * The results page's component row — board §11, one line per part.
  *
- * Composition, not a kit primitive (`docs/design/COMPONENTS.md` says so): it is
+ * Composition, not a kit primitive (`docs/archive/design/COMPONENTS.md` says so): it is
  * a `<li>` inside the card's list, and it owns exactly the three facts the
  * contract gives a component — its ROLE (translated, never the enum), its
  * display NAME plus its variant, and the price actually used for the build.

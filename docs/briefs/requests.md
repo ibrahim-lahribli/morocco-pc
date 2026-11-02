@@ -93,7 +93,7 @@ falls back to `gpu_required_use_cases` for a legacy model that declares none (th
 - A unit/DB test pins both cases.
 
 **Note:** the decoupling is only OBSERVABLE end-to-end once seed 013 is active on the database the API
-serves; see `docs/OG-39_ACTIVATION_PLAN.md`. Engine does not edit `apps/api/`; this request is the
+serves; see `docs/archive/OG-39_ACTIVATION_PLAN.md`. Engine does not edit `apps/api/`; this request is the
 interface.
 
 ## 2026-10-08 — Seed number 013 is taken by Engine; reserve 014+ for Platform

@@ -1,3 +1,5 @@
+Superseded by: docs/ROADMAP.md on 2026-11-02
+
 # apps/web-v2: new home page from the Stitch design
 
 Status: draft, awaiting approval. No scaffolding or installs until approved.

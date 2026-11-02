@@ -76,7 +76,7 @@ function markdown(catalog, targets) {
   lines.push('');
   lines.push('Source: live DB (scoring model ' + catalog.model.name + ' ' + catalog.model.version + ').');
   lines.push('Derived by scripts/og01-research-checklist.js from scripts/lib/og01-catalog.js - regenerate, never hand-edit.');
-  lines.push('Rules: docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md sections 2 (hard rules), 3 (sourcing), 4 (rubric).');
+  lines.push('Rules: docs/archive/OG-01_ASSESSMENT_RESEARCH_PLAN.md sections 2 (hard rules), 3 (sourcing), 4 (rubric).');
   lines.push('No URL, no row (plan section 2.6). Honest NULL beats a guessed number (section 2.7).');
   lines.push('');
   lines.push('Targets: ' + targets.length + ' products, ' + targets.reduce((s, t) => s + t.missing.length, 0) + ' rows implied.');

@@ -302,8 +302,8 @@ The engine scores from `component_assessment`. New real products arrive with
 **no** assessment rows and will score at the flat no-evidence value. The
 pipeline ships **data**, not scores. Per new product:
 
-- Reuse `docs/OG-01_ASSESSMENT_RESEARCH_PLAN.md`,
-  `docs/OG01_BATCH2_RESEARCH_CHECKLIST.md`,
+- Reuse `docs/archive/OG-01_ASSESSMENT_RESEARCH_PLAN.md`,
+  `docs/archive/OG01_BATCH2_RESEARCH_CHECKLIST.md`,
   `scripts/og01-research-checklist.js`.
 - `node scripts/check-og01-coverage.js` stays red while any active product
   lacks assessments.

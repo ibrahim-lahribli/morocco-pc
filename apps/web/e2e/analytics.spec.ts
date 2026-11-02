@@ -15,7 +15,7 @@
  *      `performance.now()` when it executes and an init script records the same
  *      clock at `load`. The Lighthouse budgets (`npm run test:lighthouse`) are
  *      the LCP side of the same claim; their delta with analytics on and off is
- *      recorded in `docs/design/STATES.md`, because a number inside a spec that
+ *      recorded in `docs/archive/design/STATES.md`, because a number inside a spec that
  *      cannot fail is not a gate.
  *   2. **No query string reaches the provider.** Two facts, because the claim
  *      has two owners: the injected tag carries `data-exclude-search` and
@@ -28,7 +28,7 @@
  * The stub is a stub and the spec says so: `@axe-core/playwright` proves the DOM
  * contract rather than a screen reader, and this proves the ATTRIBUTE contract
  * rather than Plausible's server. What it cannot prove is written down in
- * `docs/design/STATES.md` instead of implied by a green run.
+ * `docs/archive/design/STATES.md` instead of implied by a green run.
  */
 import { expect, test, type Page } from "@playwright/test";
 

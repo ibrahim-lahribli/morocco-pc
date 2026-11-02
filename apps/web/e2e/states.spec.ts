@@ -16,7 +16,7 @@
  *     click may be wrong.
  *
  * The copy review itself — every sentence checked for active voice and for
- * naming the fix — is `docs/design/STATES.md`, which lists each state with the
+ * naming the fix — is `docs/archive/design/STATES.md`, which lists each state with the
  * spec that pins it. This file is the half that fails when someone adds a state
  * in its own markup.
  */

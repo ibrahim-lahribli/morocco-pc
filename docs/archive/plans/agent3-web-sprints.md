@@ -1,3 +1,5 @@
+Superseded by: docs/ROADMAP.md on 2026-11-02
+
 # Agent 3 — Web sprint board (1–2 h per sprint)
 
 Companion to [agent3-web-plan.md](agent3-web-plan.md) (the validated whole plan). Each sprint

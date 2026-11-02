@@ -5,7 +5,7 @@
  * 16 px/500, 16 px inline padding. The secondary and disabled fills each carry
  * a 1 px border, as drawn — the disabled state is not simply 60 % opacity,
  * because a disabled control must still be legible (measured 4.5:1 in
- * `docs/design/TOKEN_MAP.md` §5: `muted` on `track`).
+ * `docs/archive/design/TOKEN_MAP.md` §5: `muted` on `track`).
  *
  * `ghost` is the board's "Bouton Lien / Texte": 48 px tall so it keeps a real
  * touch target, but no fill and no border, with an underline on hover.

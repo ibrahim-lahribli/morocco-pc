@@ -1,3 +1,5 @@
+Superseded by: docs/ROADMAP.md on 2026-11-02
+
 # States, copy and analytics (S22)
 
 **What this file is.** The written half of S22: every error, empty and waiting state the web app

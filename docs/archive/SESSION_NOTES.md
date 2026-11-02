@@ -1,3 +1,5 @@
+Superseded by: docs/CONTEXT.md on 2026-11-02
+
 # Session notes — this worktree
 
 A handoff, not documentation: dated, worktree-scoped, safe to delete once nothing

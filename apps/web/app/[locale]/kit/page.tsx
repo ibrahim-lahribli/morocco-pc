@@ -11,7 +11,7 @@ import { KitInteractive } from "./kit-interactive";
  * It is a proof sheet, not a screen — `noindex`, unlinked from navigation, and
  * each state labelled with the frame that defines it. S3's definition of done
  * asks for a per-state record; that record is this page plus
- * `docs/design/COMPONENTS.md`, which lists the geometry each state was measured
+ * `docs/archive/design/COMPONENTS.md`, which lists the geometry each state was measured
  * against, and `e2e/kit.spec.ts`, which asserts the parts a screenshot cannot
  * (roles, keyboard behaviour, target sizes, contrast).
  *

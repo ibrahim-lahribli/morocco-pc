@@ -1,3 +1,5 @@
+Superseded by: docs/ROADMAP.md on 2026-11-02
+
 # UI/UX and Web Interface Guidelines audit — 2026-10-25
 
 A scenario-driven audit of `apps/web` at the S1 breakpoint (360 px), plus a
