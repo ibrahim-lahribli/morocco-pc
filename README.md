@@ -6,8 +6,10 @@ them, explains the choice, and stores the pass. Node.js, CommonJS, no build step
 raw parameterized SQL; the Fastify API and the Next.js app are thin layers over a pure engine.
 
 **Status:** the engine and the API are implemented and tested; the catalogue is seed data, so no price
-is verified and no offer carries retailer provenance. There is one demo origin
-(`https://morocco-pc.onrender.com`, fronting the shared dev database) and no production deployment.
+is verified and no offer carries retailer provenance. Two Render origins exist: the demo
+(`https://morocco-pc.onrender.com`, shared dev database, answering `engine_version: "dev"`) and the
+private-beta host (`https://morocco-pc-api-eu.onrender.com`, EU database as `morocco_pc_api`, pinned to
+`launch-v2@2.4.0`). Neither is a production deployment.
 What is open, with severity and owner, is [`docs/OPEN_POINTS.md`](docs/OPEN_POINTS.md).
 
 ## Quick start

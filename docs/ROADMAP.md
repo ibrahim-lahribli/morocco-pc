@@ -67,9 +67,9 @@ Each item's current state, evidence and severity live in `OPEN_POINTS.md`; this 
 
 | Action | Unblocks | R-id |
 |---|---|---|
-| Rotate the deployed host's DB credential onto `morocco_pc_api` | P3 S2's whole point; the measured FAIL in `check-deployed-role.js` | R-05 |
-| Pin (or deliberately activate) the release scoring model at deploy | the served-model drift between environments | R-06 |
-| Choose and pay for an always-on host (Fly is paid; Render Free sleeps) | P1 S1 Steps 7–9, P1 S3's latency table, P2 S2 Step 4, P3 S3, Sentry Step 3, web S26 | R-08 |
+| Rotate the **demo origin's** DB credential onto `morocco_pc_api` (the EU host already uses it and measures PASS) | P3 S2's remaining half; the last FAIL in `check-deployed-role.js` | R-05 |
+| Pin the release scoring model at deploy — **done 2026-11-02** (Decision 63, `render.yaml`, boot line measured on the EU host) | the served-model drift between the pinned EU host and the unpinned demo origin | R-06 (closed; the demo origin still selects by insertion order) |
+| Raise the EU service off `plan: free` so it stops sleeping, then measure the V1 latency table | P1 S1 Steps 7–9, P1 S3's latency table, P2 S2 Step 4, P3 S3, Sentry Step 3, web S26 | R-08 |
 | A retailer with readable terms | every P4 real-data item: real offers, provenance PASS, freshness PASS | R-01 |
 | A monitoring account + DSN | P3 S4 Steps 3–6 | R-08 |
 

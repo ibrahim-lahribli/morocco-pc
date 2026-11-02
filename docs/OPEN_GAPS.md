@@ -38,8 +38,9 @@ OG-43, OG-54 and OG-55 were authored while the SHARED database still served
 `launch-v2` versions, `seed-minimal-v1` is INACTIVE there, and `apps/api/src/repository.js`
 selects the newest ACTIVE row - so every origin pointed at shared, including the deployed demo,
 serves `launch-v2@2.4.0`. Read the October clauses in those rows as history, not as current
-state. What remains open about it is R-06 in `docs/OPEN_POINTS.md` (nothing pins a model at
-deploy). The entry point for open work is `docs/OPEN_POINTS.md`, not this file.
+state. The EU service now pins it AT DEPLOY (R-06, closed 2026-11-02 on the boot line and a persisted
+`scoring_model_id`); the demo origin on shared still selects by insertion order. The entry point for
+open work is `docs/OPEN_POINTS.md`, not this file.
 
 | ID | Gap | Class | Status | Owner | Source(s) |
 |---|---|---|---|---|---|

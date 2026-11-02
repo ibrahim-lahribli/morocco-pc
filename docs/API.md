@@ -1256,7 +1256,7 @@ profile id is captured before the query is deleted).
 - **`test:api:db` is VERIFIED in CI since 2026-10-19**, on both a dispatched run and a push:
   run 39120485573 answered `9 passed / 0 failed` on a GitHub runner, and dispatch run 39207745723
   on `master` completed with every `recurring-gates` step PASS. What remains OPEN is the opposite
-  direction: no CI run exercises a DEPLOYED origin: one demo origin exists (`https://morocco-pc.onrender.com`, Render Free on the shared database, `engine_version: "dev"`) and no EU host has ever been deployed.
+  direction: no CI run exercises a DEPLOYED origin — but both hosts have been exercised BY HAND on 2026-11-02: the demo origin on shared (`https://morocco-pc.onrender.com`, `engine_version: "dev"`) and the EU host (`https://morocco-pc-api-eu.onrender.com`, `engine_version: "d2de4fb"`, pinned to `launch-v2@2.4.0`, one committed pass). CI still proves neither: it holds no host credential.
 - **CI pins Node 22 with no matrix.** The API suites were verified locally on
   Node 22 and on the default Node 24; only 22 runs in CI.
 - **No pagination on `builds`.** The engine persists at most

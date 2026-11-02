@@ -52,26 +52,31 @@ UNKNOWN is never treated as PASS or FAIL. Determinism is enforced: ties break on
 |---|---|---|---|
 | `DATABASE_URL` (shared) | the only dev database | `launch-v2@2.4.0` (newest ACTIVE row) | read-only inspection, the demo origin |
 | `TEST_DATABASE_URL` | a Neon branch, full snapshot | `launch-v2` 1.0.0–2.4.0 ACTIVE | every write-capable test and harness |
-| `TARGET_DATABASE_URL` (EU) | `morocco-pc-eu`, `aws-eu-central-1` — 113 products, 84 families, 24 variants, 114 offers, 319 assessments, 7 `scoring_model` rows (6 ACTIVE) | `launch-v2@2.4.0`, pinned by `SCORING_MODEL_PIN` in `render.yaml` (Decision 63, PROVISIONAL) and measured ACTIVE on the branch | the release target; no host is deployed yet |
+| `TARGET_DATABASE_URL` (EU) | `morocco-pc-eu`, `aws-eu-central-1` — 113 products, 84 families, 24 variants, 114 offers, 319 assessments, 7 `scoring_model` rows (6 ACTIVE) | `launch-v2@2.4.0`, pinned by `SCORING_MODEL_PIN` in `render.yaml` (Decision 63, PROVISIONAL) and measured ACTIVE on the branch | the release target; served by the live beta host `morocco-pc-api-eu` (free plan, sleeps when idle) |
 
 The shared database is never reset, dropped or truncated. Write-capable scripts route through
 `scripts/lib/db-url.js`; the API refuses to start against anything but the TEST branch unless
 `API_ALLOW_SHARED=1`. Real-database writes need a recorded restore point and leave an audit line in
 `database/migration-applies.jsonl`.
 
-**Deployed origins:** exactly one — `https://morocco-pc.onrender.com` (Render Free, fronting the
-shared database, answering `engine_version: "dev"`, spins down after 15 idle minutes). It is a demo
-origin, not a launch host.
+**Deployed origins:** two. `https://morocco-pc.onrender.com` (Render Free, fronting the shared
+database, answering `engine_version: "dev"`, spins down after 15 idle minutes) is the demo origin, not
+a launch host. `https://morocco-pc-api-eu.onrender.com` (Render Free, Frankfurt, created from
+`render.yaml` on 2026-11-02, fronting the EU database as `morocco_pc_api`, answering
+`engine_version: "d2de4fb"`) is the private-beta host: it serves the pinned release model and both
+gates measured it — `check-origin-readiness` PREFLIGHT OK, `check-deployed-role` PASS. It also sleeps
+after 15 idle minutes (its log hostname carries `hibernate`), which is what R-08 still tracks.
 
 ## 4. Scoring models and what is served
 
 `scoring_model` holds 7 rows: `seed-minimal-v1@1.0.0` (INACTIVE) and six ACTIVE `launch-v2` versions
 1.0.0 … 2.4.0 (2.0.0 resolution floors, 2.1.0 archetype objectives, 2.2.0 pair quota 2, 2.3.0 uniform
 CPU depth 10, 2.4.0 CPU-only depth 10). `apps/api/src/repository.js` selects the newest ACTIVE row, so
-**shared and the demo origin serve `launch-v2@2.4.0`** and neither sets a pin. The EU release target is
-the exception the repo DECLARES: `render.yaml` sets `SCORING_MODEL_PIN: launch-v2@2.4.0` (Decision 63),
-so that service will serve 2.4.0 by declaration rather than by insertion order once its Blueprint
-exists — no DEPLOYED origin sets the variable yet, which is why R-06 stays OPEN · BLOCKED-OWNER.
+**shared and the demo origin serve `launch-v2@2.4.0`** and neither sets a pin — that is insertion order,
+so a seed apply could move it. The EU service is the exception, and it is MEASURED rather than declared:
+`render.yaml` sets `SCORING_MODEL_PIN: launch-v2@2.4.0` (Decision 63), the deployed process boots with
+`scoring_model: "launch-v2@2.4.0"` instead of the newest-ACTIVE fallback, and one committed pass recorded
+`recommendation_query.scoring_model_id` = 2.4.0. R-06 is closed on that evidence.
 `launch-v2@2.4.0` is the version the gate measures green (82 PASS / 3 EXPECTED-RED / 1 UNKNOWN); it is
 adopted for the private beta as an explicit PROVISIONAL OVERRIDE of Decision 57 item 3, NOT as a
 satisfaction of it — A1/A3/A4 are still `hypothesis` and OG-43 is open.
@@ -99,8 +104,13 @@ satisfaction of it — A1/A3/A4 are still `hypothesis` and OG-43 is open.
 - Real passes through `orchestrator.runRecommendation`, `launch-v2@2.4.0`: GAMING 21 500 @1440p →
   25 builds over 13 distinct (CPU, GPU) pairs, rank-1 score 60.83 at 19 976; OFFICE at 12 000, 20 000
   and 30 000 all return the identical 9 076 build (score 59.60) — `build_score` carries no budget term.
-- `node scripts/check-deployed-role.js` **FAIL**: the deployed app authenticates as `neondb_owner`,
-  not `morocco_pc_api` (provisioned on shared and EU, self-check 21/21).
+- `node scripts/check-deployed-role.js` — **split 2026-11-02:** the EU host answers **PASS** (every
+  `morocco-pc-api` tagged session authenticated as `morocco_pc_api`), the demo origin still **FAIL**
+  (`neondb_owner`). R-05 is narrowed to that one origin.
+- One full pass on the EU origin: **201 in 3209 ms**, 3 builds, `catalog_version
+  e9997010de60e49634396970f6b23557`; swap-preview 200 (compatibility PASS, 999 → 1499, total 20 195,
+  `within_budget: false`); everything deleted back to **0/0/0/0/0/0**. The 3209 ms is on `plan: free`
+  (0.1 CPU), which `render.yaml` says is not the plan to measure V1 on.
 
 ## 6. The HTTP surface (`apps/api/`)
 
