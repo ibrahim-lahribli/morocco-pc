@@ -52,7 +52,7 @@ UNKNOWN is never treated as PASS or FAIL. Determinism is enforced: ties break on
 |---|---|---|---|
 | `DATABASE_URL` (shared) | the only dev database | `launch-v2@2.4.0` (newest ACTIVE row) | read-only inspection, the demo origin |
 | `TEST_DATABASE_URL` | a Neon branch, full snapshot | `launch-v2` 1.0.0–2.4.0 ACTIVE | every write-capable test and harness |
-| `TARGET_DATABASE_URL` (EU) | `morocco-pc-eu`, `aws-eu-central-1` | `launch-v2@1.0.0` | the release target; no host is deployed |
+| `TARGET_DATABASE_URL` (EU) | `morocco-pc-eu`, `aws-eu-central-1` | `launch-v2@1.0.0` (not re-measured 2026-11-02: unset in this shell) | the release target; no host is deployed |
 
 The shared database is never reset, dropped or truncated. Write-capable scripts route through
 `scripts/lib/db-url.js`; the API refuses to start against anything but the TEST branch unless
@@ -81,6 +81,8 @@ EXPECTED-RED / 1 UNKNOWN) and it is NOT adopted for release — that is a decisi
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **exits 1** on shared: 13 of 113 products carry neither `slug` nor
   `display_name` (EU: 100 of 100). Seed 028 backfills them and is applied on TEST only.
+  Re-measured 2026-11-02 after the documentation pass: shared unchanged (13 of 113, exit 1) and
+  TEST PASS (113 of 113); EU was NOT re-measured - this shell has no `TARGET_DATABASE_URL`.
 - `check-offer-provenance.js` **INCONCLUSIVE** everywhere: 114 seed offers, 0 verified, 2 stores on
   the reserved `example.ma` domain. `check-offer-freshness.js` reports the first SEED expiry at
   **2026-11-03**.
