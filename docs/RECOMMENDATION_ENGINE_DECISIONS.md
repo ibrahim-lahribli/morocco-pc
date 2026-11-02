@@ -6168,6 +6168,8 @@ The comparison harnesses have had the other half of this vocabulary since Decisi
 - **PASS — docs:** `docs/API.md`'s environment table and `apps/api/.env.example` carry the setting, `docs/TEST_MAP.md` registers the contract, and `verify:docs --offline` is green.
 - **NOT done, and not claimed:** no environment SETS the variable yet, so the deployed origin still serves whichever row is newest. Pinning it is an owner act at deploy time, recorded as OG-54 item 2 — this decision supplies the lever, not the setting.
 
+- **CORRECTED 2026-11-02:** the pinned-test count above is inaccurate in two ways, recorded here rather than edited in place: `scoring-model-pin.test.js` holds **12** top-level tests, not 9 (`node --test` on that file alone reports `tests 12`), and the parenthetical names 8 of them. `test:api` is **193/193** since the parser-parity test landed, so 191/191 describes the suite at the time of this entry, not today. No behaviour changes: every refusal that bullet lists is still pinned.
+
 ### Supersedes / superseded by
 
 Does not supersede Decision 57: that decision's 2026-11-01 amendment records the mechanism, and this entry supplies the lever. `scripts/lib/model-pin.js` (Decision 39) is unchanged and remains the harness's selector.
