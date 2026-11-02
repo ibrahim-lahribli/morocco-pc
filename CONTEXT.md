@@ -52,7 +52,7 @@ UNKNOWN is never treated as PASS or FAIL. Determinism is enforced: ties break on
 |---|---|---|---|
 | `DATABASE_URL` (shared) | the only dev database | `launch-v2@2.4.0` (newest ACTIVE row) | read-only inspection, the demo origin |
 | `TEST_DATABASE_URL` | a Neon branch, full snapshot | `launch-v2` 1.0.0–2.4.0 ACTIVE | every write-capable test and harness |
-| `TARGET_DATABASE_URL` (EU) | `morocco-pc-eu`, `aws-eu-central-1` | `launch-v2@1.0.0` (not re-measured 2026-11-02: unset in this shell) | the release target; no host is deployed |
+| `TARGET_DATABASE_URL` (EU) | `morocco-pc-eu`, `aws-eu-central-1` — 113 products, 84 families, 24 variants, 114 offers, 319 assessments, 7 `scoring_model` rows (6 ACTIVE) | `launch-v2@2.4.0`, pinned by `SCORING_MODEL_PIN` in `render.yaml` (Decision 63, PROVISIONAL) and measured ACTIVE on the branch | the release target; no host is deployed yet |
 
 The shared database is never reset, dropped or truncated. Write-capable scripts route through
 `scripts/lib/db-url.js`; the API refuses to start against anything but the TEST branch unless
@@ -68,9 +68,13 @@ origin, not a launch host.
 `scoring_model` holds 7 rows: `seed-minimal-v1@1.0.0` (INACTIVE) and six ACTIVE `launch-v2` versions
 1.0.0 … 2.4.0 (2.0.0 resolution floors, 2.1.0 archetype objectives, 2.2.0 pair quota 2, 2.3.0 uniform
 CPU depth 10, 2.4.0 CPU-only depth 10). `apps/api/src/repository.js` selects the newest ACTIVE row, so
-**shared and the demo origin serve `launch-v2@2.4.0`**; nothing sets `SCORING_MODEL_PIN`, so no origin
-pins a model deliberately. `launch-v2@2.4.0` is the version the gate measures green (82 PASS / 3
-EXPECTED-RED / 1 UNKNOWN) and it is NOT adopted for release — that is a decision, not a measurement.
+**shared and the demo origin serve `launch-v2@2.4.0`** and neither sets a pin. The EU release target is
+the exception the repo DECLARES: `render.yaml` sets `SCORING_MODEL_PIN: launch-v2@2.4.0` (Decision 63),
+so that service will serve 2.4.0 by declaration rather than by insertion order once its Blueprint
+exists — no DEPLOYED origin sets the variable yet, which is why R-06 stays OPEN · BLOCKED-OWNER.
+`launch-v2@2.4.0` is the version the gate measures green (82 PASS / 3 EXPECTED-RED / 1 UNKNOWN); it is
+adopted for the private beta as an explicit PROVISIONAL OVERRIDE of Decision 57 item 3, NOT as a
+satisfaction of it — A1/A3/A4 are still `hypothesis` and OG-43 is open.
 
 ## 5. Measured numbers (2026-11-02, this checkout)
 
@@ -79,10 +83,16 @@ EXPECTED-RED / 1 UNKNOWN) and it is NOT adopted for release — that is a decisi
   (nightly only — it writes to the TEST branch).
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
-- `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, EU 100 of 100 and TEST 113 of 113, after seed 028 was applied to the two that
-  lacked it (EU's whole 100-row catalogue, shared's 13). Re-measured 2026-11-02 after the applies.
-  Restore points: `shared-backup-pre-028-20261102-1300` and `eu-backup-pre-028-20261102-1312`;
-  the API walk on shared now serves 113 products (100 before) and all 13 new slugs resolve.
+- `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of
+  113 after the 2026-11-02 upgrade (EU was 100 of 100 before it). Restore points:
+  `shared-backup-pre-028-20261102-1300`, `eu-backup-pre-028-20261102-1312`, and for the whole EU
+  upgrade `eu-backup-pre-upgrade-20261102-1427` (`br-divine-king-b97uxsr5`).
+- EU after seeds 023–028: **113 products, 84 families, 24 variants, 114 offers, 319 assessments, 22
+  cooler socket rows, 7 `scoring_model` rows (6 ACTIVE), identity gaps 0**, ledger at 23. Parity with
+  shared is MATCH on ledger-files, `tables` 44, `schema-shape` 470 (digest `4110c1517a14a0ef` on both
+  sides), model pins, product, variant, offer, assessment, model, benchmark, store and preset counts;
+  the only differences are the five Layer-4 residue rows R-14 tracks (query 12/0, result 16/0,
+  candidate 16/0, component 126/0, rejection 24/0).
 - `check-offer-provenance.js` **INCONCLUSIVE** everywhere: 114 seed offers, 0 verified, 2 stores on
   the reserved `example.ma` domain. `check-offer-freshness.js` reports the first SEED expiry at
   **2026-11-03**.
