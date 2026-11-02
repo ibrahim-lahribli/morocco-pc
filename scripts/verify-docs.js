@@ -289,7 +289,7 @@ const decisions = (function checkDecisions() {
 // on purpose and DEVELOPMENT_NOTES records what was believed then. Pure half:
 // scripts/lib/enforcement-claims.js, tested by `npm run test:scripts`.
 (function checkEnforcementClaims() {
-  const rel = 'docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md';
+  const rel = 'docs/ARCHITECTURE.md';
   let found;
   try {
     const { findStaleEnforcementClaims } = require(

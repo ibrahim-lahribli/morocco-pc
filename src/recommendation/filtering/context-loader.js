@@ -3,7 +3,7 @@
  *
  * Boundary: turns the Engine 2C candidate-pool result into the deterministic,
  * frozen Engine 2D context consumed by the hard-compatibility filtering stage
- * (docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md, section 2, stage 2).
+ * (docs/ARCHITECTURE.md, section 2, stage 2).
  *
  *   Engine 2C candidate-pool result ({ input, pool })
  *         |  validate through the existing Engine 2 contracts

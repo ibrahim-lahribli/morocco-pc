@@ -1256,7 +1256,7 @@ profile id is captured before the query is deleted).
 - **`test:api:db` is VERIFIED in CI since 2026-10-19**, on both a dispatched run and a push:
   run 39120485573 answered `9 passed / 0 failed` on a GitHub runner, and dispatch run 39207745723
   on `master` completed with every `recurring-gates` step PASS. What remains OPEN is the opposite
-  direction: the API has never been deployed, so no CI run has exercised it against a DEPLOYED origin.
+  direction: no CI run exercises a DEPLOYED origin: one demo origin exists (`https://morocco-pc.onrender.com`, Render Free on the shared database, `engine_version: "dev"`) and no EU host has ever been deployed.
 - **CI pins Node 22 with no matrix.** The API suites were verified locally on
   Node 22 and on the default Node 24; only 22 runs in CI.
 - **No pagination on `builds`.** The engine persists at most
@@ -1264,8 +1264,19 @@ profile id is captured before the query is deleted).
 - **No 202/polling path.** A POST is synchronous; measure before adding
   asynchronous job handling.
 - **`resolution`/`priority` are read but change no score, and on today's catalog they rarely change the answer** (see *What each input changes*). `input_effects` reports the per-pass truth, so a client never has to guess; the measured emptiness is a property of the catalog (one or two distinct (CPU, GPU) pairs), not of an unread field.
-- **The identity surface needs migration 020 wherever the API points.** `components[].name` is `COALESCE(product.display_name, product.name)` and `components[].slug` is `product.slug`; against a database below 020 those columns do not exist, the component read fails `42703`, and the request answers the generic `500 INTERNAL_ERROR`. Both databases are at 020 since 2026-10-15 (the shared catalog's 104 products all carry distinct CHECKed slugs and no `Seed `-prefixed `display_name`), so on either target the prefix is gone from served names and every component carries a slug.
-- **`strategy_key` / `engine_version` are recorded but not yet consumed.** They are persisted and served; no client reads them back yet, and their golden-harness coverage (A10) is still owed (**OG-46** — OG-45 tracks the persistence itself, which is done wherever migration 019 is applied).
+- **The identity columns are NULLABLE by design, so a catalogue seed can still omit them.**
+  `components[].name` is `COALESCE(product.display_name, product.name)` and `components[].slug`
+  is `product.slug`. All three databases are at migration 023 since 2026-10-29, but an optional
+  column can still be omitted at INSERT: measured 2026-11-02, `scripts/check-catalog-identity.js`
+  exits 1 on shared, naming **13 of 113** ACTIVE products with neither column set, and EU carries
+  the same omission across its whole 100-row catalogue - so those components are served with
+  `slug: null`. Seed 028 backfills them and is applied on TEST only, and the gate runs nightly
+  rather than on push (R-07 in `docs/OPEN_POINTS.md`).
+- **`strategy_key` / `engine_version` are recorded and served; no client reads them back yet.**
+  Both items this bullet used to owe are CLOSED: OG-45 (persistence, C-39) and OG-46 (the A10
+  golden assertion, C-42 - declared and approved over S03/S10/S11/S18/S19 and judged per model
+  pin). What remains is only that nothing consumes the two fields (R-18 and R-22 in
+  `docs/OPEN_POINTS.md`).
 - **A zero-build pass is deploy-blind in the reuse key.** `engine_version` is recorded on `recommendation_result` rows (Decision 46), and a pass that assembled nothing has none, so the key can only require that *no* result row contradicts the answering deploy. A committed zero-build pass therefore survives a redeploy in the key. Its `budget_floor` is catalog-derived and the catalog IS in the key, so the exposure is narrow; the fix, when it matters, is to record the engine version on the query row too.
 - **Two identical POSTs in flight at once can both run a pass.** The lookup is a read, not a lock, so the second request may not see the first's row yet. The suites are sequential and the sprint's DoD is about repeated (not concurrent) requests; a unique index on the key plus a retry would close it.
 - **A failed catalog digest degrades to `catalog_version: null` and disables reuse.** The digest is one read over the catalog tables; if it cannot be computed the pass still runs (a cache key must not break the product), the row records NULL, and no later request can match it — the safe direction, never a stale hit. Reuse is off until the digest works again, and the failure is logged at `warn`.

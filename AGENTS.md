@@ -26,7 +26,7 @@ the engine's public barrels (`src/recommendation/*/index.js`), the `scripts/` CL
    design decisions. Authoritative for "what exists today."
 3. `DEVELOPMENT_NOTES.md` — operational lessons: verified commands, failure modes, DB / Git /
    testing lessons. Read before touching migrations or DB scripts.
-4. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
+4. `docs/ARCHITECTURE.md` — the engine contract (pipeline, HARD/SOFT rules,
    compatibility policy, scoring, budget, reproducibility, known gaps).
 5. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the decision log (Decisions 1–62). Check here
    before changing engine behavior. Every entry opens with a normalized `Status:` line, so
@@ -89,7 +89,7 @@ consolidated register (ARCHITECTURE §16 + seed 002 D1–D8 + §18 futures + aud
 the exception — it has no barrel and is imported directly via `persistence/persist-ranked`.
 
 For the detailed engine/module structure — which stage owns what, in pipeline order — read
-`docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` (§2 "Complete pipeline", §17 "Future implementation
+`docs/ARCHITECTURE.md` (§2 "Complete pipeline", §17 "Future implementation
 boundaries") and the `index.js` header comment of the module you are changing. That detail is
 deliberately not duplicated here.
 
@@ -472,7 +472,7 @@ of repository inactivity** — an idle repo silently stops getting the nightly g
 | Will this command/test run, how do I operate this? | `DEVELOPMENT_NOTES.md` |
 | What exists / current status | `CONTEXT.md` |
 | Exact table/column definitions | `database/migrations/*.sql` (generated lookup: `docs/SCHEMA_REFERENCE.md`) |
-| Engine pipeline, compatibility, scoring, budget | `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` |
+| Engine pipeline, compatibility, scoring, budget | `docs/ARCHITECTURE.md` |
 | Why engine behavior is the way it is (the contract) | `docs/RECOMMENDATION_ENGINE_DECISIONS.md` |
 | Which decisions exist, and their current status | each entry's `Status:` line + the generated `docs/DECISION_INDEX.md` (lookup aid, never a source of truth) |
 | What is still open (gaps, deferrals, unverified items) | `docs/OPEN_GAPS.md` (consolidated register; the underlying sources stay authoritative individually) |
@@ -484,7 +484,7 @@ When sources conflict, prefer the more authoritative one, in this order:
 
 1. `database/migrations/*.sql` and the executable code (with its tests) — what the system actually does.
 2. `docs/RECOMMENDATION_ENGINE_DECISIONS.md` — the intended engine contract.
-3. `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md` — the design the decisions refine.
+3. `docs/ARCHITECTURE.md` — the design the decisions refine.
 4. `CONTEXT.md` — status, which drifts behind the code.
 5. `DEVELOPMENT_NOTES.md` — dated operational notes (may describe past states).
 

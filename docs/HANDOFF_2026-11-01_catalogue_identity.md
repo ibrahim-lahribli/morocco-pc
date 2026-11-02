@@ -4,7 +4,7 @@
 **Audience:** the next agent or operator on this repository.
 **Goal:** know what changed on 2026-11-01, what is true right now, and exactly what is left.
 **Scope:** PRs #11 and #12, the catalogue-identity repair (seeds 023-025 and seed 028), and the
-residue those exposed. It does not re-explain the engine; `docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md`
+residue those exposed. It does not re-explain the engine; `docs/ARCHITECTURE.md`
 owns that.
 
 Every number below is either measured in this pass (marked **[measured]**) or quoted from the

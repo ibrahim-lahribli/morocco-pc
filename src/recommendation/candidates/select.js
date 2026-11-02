@@ -8,7 +8,7 @@
  * Returns the deterministic candidate pool eligible for the requested roles.
  *
  * The conceptual pipeline
- * (docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md, sections 2 and 11):
+ * (docs/ARCHITECTURE.md, sections 2 and 11):
  *
  *   query
  *     ↓

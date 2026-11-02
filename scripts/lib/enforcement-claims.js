@@ -5,7 +5,7 @@
  * have an implementer" (verify-docs check 9, `engine-enforcement-claims`).
  *
  * Why this exists: the 2026-10-29 engine audit found SIX passages in
- * docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md still saying the four Decision 26
+ * docs/ARCHITECTURE.md still saying the four Decision 26
  * item B rules were unimplemented — sixteen days after Decision 45 (E8)
  * shipped all four. The claim was true on 2026-09-28 and was never revisited
  * when the rules landed, because no gate read this file. A design baseline that

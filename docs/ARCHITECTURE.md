@@ -684,27 +684,20 @@ and `.offer_class` (migration 018, Decision 35) do persist WHICH listing that
 price came from, so a component stays traceable without making its price
 mutable.
 
-## 16. Architecture gaps (classification)
+## 16. Architecture gaps
 
-| Gap | Class | Impact |
-|-----|-------|--------|
-| Single `motherboard_spec.memory_type_id` cannot represent boards supporting DDR4 AND DDR5 | **IMPORTANT** | Possible false rejections for dual-memory boards; documented in section 6; fix = future migration (motherboard memory support table or nullable secondary FK) |
-| Presence-only tables (`case_motherboard_form_factor`, `case_radiator_support`, `platform_memory_support`) cannot store FAIL/UNKNOWN/CONDITIONAL explicitly | **IMPORTANT** | Asymmetric UNKNOWN policy (section 3.2) mitigates; explicit status columns would be cleaner but are not required to proceed |
-| ~~No rejection-reason persistence (rejected combos invisible)~~ | **IMPORTANT** (resolved) | **CLOSED 2026-10-04 (OG-04, Decision 29):** `build_rejection` (migration 014) records each Engine 2D REJECT verdict - role, product/variant, optional partner, and the decisive `REASON_CODES` value - keyed to `recommendation_query_id` and written by the commit wrapper in the same transaction as the builds. A run that assembles nothing therefore still explains itself; `budget_floor` covers the budget axis, this covers the compatibility axis. A healthy pass writes zero rows. Pairwise rejections detected during assembly are NOT captured (they are combinations, not candidates) |
-| No integrated-graphics requirement expression beyond `integrated_gpu_present` BOOLEAN | ACCEPTABLE | The boolean + use_case mapping covers the engine's needs (section 12); iGPU performance tiering would need more data later |
-| CONDITIONAL semantics only exist in `cpu_motherboard_support` (via `min_bios_version`); not in other compatibility tables | ACCEPTABLE | Only CPU<->MB genuinely needs it today |
-| Multi-currency recommendations | **FUTURE** | No conversion infrastructure; single-currency-per-query policy (section 7) |
-| ~~`store_offer_id` provenance FK on build_component~~ CLOSED 2026-10-07 | **FUTURE** (resolved) | **CLOSED by Decision 35 / migration 018:** `build_component.store_offer_id` (FK to `store_offer`, indexed) and `offer_class` are written by the commit for every component, so a persisted price is traceable to its listing while the snapshot columns remain the price. See section 15 |
-| `recommendation_profile.priority` INTEGER | FUTURE | Documented redesign target in migration 011 notes |
-| Assessment coverage likely sparse at seed time | ACCEPTABLE | Handled by section 9 policy |
-| ~~No engine-version column on results~~ CLOSED 2026-10-15 | **ACCEPTABLE** (resolved) | **CLOSED by Decision 46 / migration 019 (C-40):** `recommendation_result.engine_version` and `.strategy_key`, plus `recommendation_query.budget_floor`, are persisted and served on BOTH verbs, so the pass facts no longer live only in the explanation text |
-| Fresh 001->011 migration on an empty DB | ACCEPTABLE (environmental) | ~~Standing test limitation~~ **VERIFIED 2026-09-30 (OG-13)**: replayed on a throwaway Neon DB emptied to 0/0 — 39/39 tables, 336/336 columns, 14/14 enums identical; the drift it surfaced is the live-only benchmark hardening row above (OG-25) |
-| ~~No applied-migration tracking (`run-migrations.js` replays all files; `002_enums.sql` bare `CREATE TYPE` makes the runner single-use)~~ CLOSED 2026-10-04 | ~~ACCEPTABLE (tool defect)~~ **CLOSED** | ~~Workaround: apply new migration files individually via a throwaway script (see `AGENTS.md` S8 / `DEVELOPMENT_NOTES.md`); fix = future `schema_migrations`-style tracking table and/or idempotent runner guard — audit D10 (2026-09-28). No such table exists live (verified via `information_schema`, 2026-09-28)~~ **Fixed 2026-10-04 (OG-14 / C-19):** `run-migrations.js` is ledger-driven over a runner-created `schema_migrations` table (pending tail only, one transaction per file, re-runnable; modes `--dry-run`/`--check`/`--offline`/`--baseline`/`--test-db`). The table exists live with a 12-row ledger through `012` on shared + TEST (verified 2026-10-04) |
-| Cooler TDP / AIR-cooler height / RAM slots / RAM capacity (sections 5.3 and 6) | **IMPORTANT** (closed) | **CLOSED 2026-10-14 by Decision 45 (E8), recorded as C-38:** all four ship as compatibility rules - three HARD, cooler TDP SOFT - and the standing gate `scripts/check-deferred-rules.js` measures each one. Residual data gap: one cooler carries a NULL `max_tdp_watts`, so its verdict is honestly UNKNOWN (`docs/OPEN_GAPS.md` OG-50). See "Current enforcement status of the once-deferred rules" at the top of this document. |
-| ~~Live-vs-migrations drift: 3 benchmark CHECKs stricter live (`sample_size`/`resolution_width`/`resolution_height` enforce `> 0` with no `IS NULL OR` escape), `chk_benchmark_result_metric_value_finite` live-only, 5 undocumented live-only performance indexes (`idx_benchmark_source_name` UNIQUE, `idx_benchmark_source_id`, `idx_component_assessment_product_id`, `idx_component_assessment_type`, `idx_scoring_model_active`)~~ RECONCILED 2026-10-04 | ~~**IMPORTANT** (latent)~~ **CLOSED (OG-25 / C-18)** | Found by the OG-13 empty-DB replay (2026-09-30); provenance unknown (pre-migration manual work or a lost migration). Engine-irrelevant today — no engine code reads `benchmark_*` or these index targets. ~~Decision needed: **migration 012** to reconcile the drift into the chain, or record live-only provenance in this table + `SCHEMA_REFERENCE.md`. Until then, do not treat a fresh-replay schema as fully equivalent to live.~~ **Resolved 2026-10-04:** migration `012_reconcile_benchmark_drift.sql` adopts the live stricter CHECKs, adds `chk_benchmark_result_metric_value_finite`, and creates the five indexes verbatim (every statement `IF EXISTS`/`IF NOT EXISTS` guarded); applied to shared + TEST, both ledgered at 012. A fresh `001→012` replay produces this hardening by construction, but the replay itself was not re-run this session (`docs/OPEN_GAPS.md` C-19). Track: `docs/OPEN_GAPS.md` OG-25 (CLOSED 2026-10-04) |
+The per-gap classification that used to live here is maintained in
+[`OPEN_POINTS.md`](OPEN_POINTS.md) (R-01 to R-23, each with class, status and owner). Two
+schema-shape items stay documented HERE, because they are limits of the migration chain rather
+than open work items:
 
-No BLOCKING gaps were found: the engine can be fully implemented on the
-current schema with the documented policies.
+| Limit | Consequence |
+|---|---|
+| A single `motherboard_spec.memory_type_id` cannot represent a board supporting DDR4 AND DDR5 | Possible false rejection for dual-memory boards; a fix needs a future migration (section 6) |
+| Presence-only tables (`case_motherboard_form_factor`, `case_radiator_support`, `platform_memory_support`) cannot store FAIL/UNKNOWN/CONDITIONAL explicitly | The asymmetric UNKNOWN policy (section 3.2) mitigates it; explicit status columns would be cleaner |
+
+No BLOCKING gaps were found: the engine can be fully implemented on the current schema with the
+documented policies.
 
 ## 17. Future implementation boundaries
 

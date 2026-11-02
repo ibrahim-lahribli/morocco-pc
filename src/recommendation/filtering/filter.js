@@ -4,7 +4,7 @@
  * Boundary: consumes the frozen Engine 2D filtering context produced by the
  * B2-B context loader ({ candidates, specs, platform_by_socket, compat }) and
  * decides, per candidate, whether it can take part in a build (stage 2 "hard
- * compatibility filtering" of docs/RECOMMENDATION_ENGINE_ARCHITECTURE.md).
+ * compatibility filtering" of docs/ARCHITECTURE.md).
  *
  *   Engine 2D filtering context (frozen, from ./context-loader)
  *         |  wire the exact B2-C normalized fields into the existing
