@@ -10,3 +10,8 @@ coverage
 .kilo/
 .freebuff/
 test/golden/*.volatile.json
+
+# Local agent tooling (skills, Claude config) - not project source
+.agents/
+.claude/
+skills-lock.json
