@@ -1,3 +1,5 @@
+Superseded by: docs/ROADMAP.md on 2026-11-02
+
 # Requests — Engine → Platform agent / integrator
 
 One file for cross-agent requests. **The Engine agent does NOT edit `apps/api/` or

@@ -2,7 +2,7 @@
 
 /**
  * apps/api/test/unit/openapi-snapshot.test.js - the served OpenAPI document,
- * pinned (Sprint 4 of PLAN_PLATFORM_P0.md: v1.1 pass facts, v1.2 product
+ * pinned (Sprint 4 of docs/ROADMAP.md: v1.1 pass facts, v1.2 product
  * identity; Platform P1 Sprint 5: v1.3 request dedupe; Platform P1 Sprint 6:
  * v1.4 the presets ribbon; Platform P2 Sprint 3: v1.5 the read-only catalog;
  * v1.6 the price history; v1.7 input effects; v1.8 the swap preview; v1.9

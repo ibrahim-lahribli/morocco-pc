@@ -825,7 +825,7 @@ The read-only catalogue page (Platform P2 Sprint 3, contract v1.5, Decision 50):
   such a product is still listed rather than silently dropped.
 - There is **no `use_case` parameter**, although the sprint sketch listed one: the active model
   exposes no per-use-case product filter, so it could only be inert, and this API refuses a
-  query parameter it would ignore. `PLAN_PLATFORM_P2.md` records the deviation.
+  query parameter it would ignore. `docs/ROADMAP.md` records the deviation.
 - **`id` and `variants` (contract v1.9) exist so the row can be ADDRESSED**, not to enrich the
   page. A GPU candidate is a `(product, variant)` pair (Engine 2B), so a surface that knows only
   the slug cannot name the thing a route prices or swaps: the swap preview takes a `product_id`

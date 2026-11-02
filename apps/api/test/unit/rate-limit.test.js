@@ -86,7 +86,7 @@ test('the 429 carries the error envelope, a request id and Retry-After', async (
   assert.equal(typeof body.request_id, 'string', 'a limit that fires is traceable to one request');
   assert.ok(body.request_id.length > 0);
 
-  // Measured, not assumed (PLAN_PLATFORM_P2.md Sprint 4 Step 2): the plugin sends
+  // Measured, not assumed (docs/ROADMAP.md Sprint 4 Step 2): the plugin sends
   // `Retry-After` in SECONDS, and the window is exactly one minute.
   assert.equal(limited.headers['retry-after'], '60', 'the caller is told how long to wait');
   assert.equal(limited.headers['x-ratelimit-limit'], String(POST_LIMIT));

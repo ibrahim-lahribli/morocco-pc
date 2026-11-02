@@ -1,6 +1,6 @@
 # Recipe: co-locate in the EU — Neon Frankfurt + a deployed API (P1 Sprint 1 Steps 4–9)
 
-Platform P1 Sprint 1, Steps 4–9 of `PLAN_PLATFORM_P1.md`. **Owner-gated**: this creates a new
+Platform P1 Sprint 1, Steps 4–9 of `docs/ROADMAP.md`. **Owner-gated**: this creates a new
 Neon project and a hosting account, so it spends money and adds cloud resources. The plan
 prepares it; the owner runs it.
 
@@ -63,7 +63,7 @@ So there are exactly two coherent configurations for the deployed host:
 `API_ALLOW_SHARED` is a guard bypass, not a statement that the target is shared. Nothing in the
 API writes to `DATABASE_URL` when it is the pool target; that is the point of the flag.
 
-**Both deployed environments use row A** (Platform P3 Sprint 3, `PLAN_PLATFORM_P3.md`): production
+**Both deployed environments use row A** (Platform P3 Sprint 3, `docs/ROADMAP.md`): production
 sets `DATABASE_URL` to the EU project, staging sets it to the TEST branch's pooled URL, and both
 set `API_ALLOW_SHARED=1` with `TEST_DATABASE_URL` unset. They differ in the URL, never in the
 shape. Staging must NOT be run with `API_ALLOW_SHARED=0`: the pool would come from
@@ -504,10 +504,10 @@ address(es), the pinned `TRUST_PROXY`, `$MY_IP` as seen in the log, step 4's fir
 status codes, and the two step-5 `x-ratelimit-remaining` values with their timestamps, reset
 values and the gap between them, and the preflight's printed addresses and `PREFLIGHT OK`. Then:
 
-- tick **P2 Sprint 2 Step 4** in `PLAN_PLATFORM_P2.md` and paste the evidence beside it;
+- tick **P2 Sprint 2 Step 4** in `docs/ROADMAP.md` and paste the evidence beside it;
 - replace `docs/API.md`'s "not yet recorded because no host is chosen" sentence with the pinned
   value and the date;
-- move P2 Sprint 2 from PARTIAL to DONE in `PLAN_PLATFORM_STATUS.md` (Step 4 is its only open step).
+- move P2 Sprint 2 from PARTIAL to DONE in `docs/ROADMAP.md` (Step 4 is its only open step).
 
 **If the pin breaks after a redeploy** an address changed. Remove `TRUST_PROXY` and deploy: the
 default-off state is safe (one shared bucket, limits still enforced), then re-run the preflight
@@ -748,8 +748,8 @@ model pin, statements per phase, ms per phase, ms per round trip, and the four H
 2. `docs/API.md`: replace the placeholder in the *Deployment* area with the real origin, the
    region pair, the env-var set from §1 and the health-check path. (The owner's host is a
    fact; do not write a host into the doc before it exists.)
-3. `PLAN_PLATFORM_P1.md` Steps 4–9: tick the boxes and record the measured outcome.
-4. `PLAN_PLATFORM_STATUS.md`: P1 Sprint 1 moves from PARTIAL to DONE, and the totals change.
+3. `docs/ROADMAP.md` Steps 4–9: tick the boxes and record the measured outcome.
+4. `docs/ROADMAP.md`: P1 Sprint 1 moves from PARTIAL to DONE, and the totals change.
 5. Commit — explicit pathspec, never `git add -A`:
 
    ```bash
@@ -759,7 +759,7 @@ model pin, statements per phase, ms per phase, ms per round trip, and the four H
         scripts/lib/origin-readiness.js scripts/lib/origin-readiness.test.js \
         scripts/lib/origin-readiness-cli.test.js database/migration-applies.jsonl \
         docs/API.md docs/RECIPES/deploy-eu-colocation.md \
-        DEVELOPMENT_NOTES.md PLAN_PLATFORM_P1.md PLAN_PLATFORM_P2.md PLAN_PLATFORM_STATUS.md
+        DEVELOPMENT_NOTES.md docs/ROADMAP.md docs/ROADMAP.md docs/ROADMAP.md
    ```
 
 ---

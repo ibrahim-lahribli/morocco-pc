@@ -1,3 +1,5 @@
+Superseded by: docs/ROADMAP.md on 2026-11-02
+
 # PLATFORM PLAN — shared constraints, safety protocol and self-review protocol (P0–P3)
 
 **Purpose of this file:** the SINGLE owner of the rules the four plan files of this program

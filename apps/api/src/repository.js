@@ -32,7 +32,7 @@
  * `findReusableQuery` is the read that makes a repeated POST cheap: the route
  * asks for an existing pass with the SAME request identity and the SAME catalog
  * and engine version BEFORE it creates anything. The key is deliberately the
- * eight components PLAN_PLATFORM_P1.md Sprint 5 names - budget, currency, use
+ * eight components docs/ROADMAP.md Sprint 5 names - budget, currency, use
  * case, resolution, priority, model, catalog version, engine version - and not
  * the profile's UUID name, which is per-request by construction and identifies
  * nothing.

@@ -1,7 +1,7 @@
 # Recipe: provision the production database role (`morocco_pc_api`)
 
 Platform P3 Sprint 2 Step 5. This is **DDL on the only dev database**, so it is owner-gated:
-prepare it, run it deliberately, record the outcome (`PLAN_PLATFORM_CONSTRAINTS.md`, "prepare
+prepare it, run it deliberately, record the outcome (`docs/ROADMAP.md`, "prepare
 owner-gated steps, then record them"). It is **not** a migration and never goes through
 `run-migrations.js` — the role is cluster-scoped, and nothing about it belongs in
 `schema_migrations`.
@@ -186,8 +186,8 @@ restore point (see `docs/RECIPES/add-a-migration.md`), then this recipe.
      applied"), state the apply date and the digest, and drop the claim that the
      `morocco_pc_api` role does not exist on the shared database. **Done 2026-10-19** for the
      shared apply; the same four files must be updated again for the EU project.
-   * `CONTEXT.md`, `docs/OPEN_GAPS.md` (OG-52's P3 clause), `PLAN_PLATFORM_P3.md` Step 5 and
-     `PLAN_PLATFORM_STATUS.md` — the same commit as the evidence.
+   * `CONTEXT.md`, `docs/OPEN_GAPS.md` (OG-52's P3 clause), `docs/ROADMAP.md` Step 5 and
+     `docs/ROADMAP.md` — the same commit as the evidence.
    * Grep the tree for the old claim in the same commit:
      `grep -rn "role does not exist on shared\|does not exist on the shared database" --include="*.md" .`
 

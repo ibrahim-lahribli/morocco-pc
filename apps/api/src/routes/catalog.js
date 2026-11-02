@@ -39,7 +39,7 @@
  *     labelled `indicative` is the honest reading of this catalog; nothing here
  *     special-cases it into `verified`.
  *
- * `use_case` is deliberately NOT a parameter, although PLAN_PLATFORM_P2.md's
+ * `use_case` is deliberately NOT a parameter, although docs/ROADMAP.md's
  * sketch lists one. The active model exposes no per-use-case PRODUCT filter:
  * `role_weights` are global and only `gpu_policy` varies per use case, so a
  * `use_case` parameter here could only be inert - and this API's standing

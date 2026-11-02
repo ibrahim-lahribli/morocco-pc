@@ -3,7 +3,7 @@
 // scripts/rehearse-api-role.js — rehearse the production database role on the
 // TEST branch and assert every privilege it is supposed to have.
 //
-// Platform P3 Sprint 2, Steps 1-4 (spec: PLAN_PLATFORM_P3.md; the role script
+// Platform P3 Sprint 2, Steps 1-4 (spec: docs/ROADMAP.md; the role script
 // itself is the operator-facing block in docs/API.md, section "Production
 // mode"). This file is the rehearsal of THAT block, on the disposable branch, so
 // the shared apply (Sprint 2 Step 5, owner-gated) is a measured step rather than

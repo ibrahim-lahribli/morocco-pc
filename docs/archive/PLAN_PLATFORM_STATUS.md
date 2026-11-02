@@ -1,3 +1,5 @@
+Superseded by: docs/ROADMAP.md on 2026-11-02
+
 # PLATFORM PROGRAM STATUS — P0–P3 roll-up
 
 **What this page is:** the single answer to "what is left". It rolls up the 21 sprints of

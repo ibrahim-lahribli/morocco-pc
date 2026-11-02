@@ -1059,7 +1059,7 @@ residue 0. What CANNOT be checked from a checkout: that the two repository secre
 and that the Neon instance accepts a GitHub runner connection - a failed run is expected to be one of those
 two, not a code defect.
 
-**The ref choice is the finding, and it corrects the plan.** The first draft of `PLAN_PLATFORM_P3.md` said the
+**The ref choice is the finding, and it corrects the plan.** The first draft of `docs/ROADMAP.md` said the
 default branch lacks the API and these CI steps. Measured against `origin/master` (`c8c16b9`): it HAS
 `apps/api`, `apps/api/test/db/recommendations.db.test.js`, the `test:api:db` step and the whole
 `recurring-gates` job. The real reason to dispatch on this branch is different: **master's migration tail
@@ -1420,7 +1420,7 @@ The owner decided two things this session: the catalogue is **public but unliste
 (served to the frontend, unlinked and `noindex` until prices are `VERIFIED` - a product/SEO posture,
 not an API gate, since the API has no auth and CORS is not access control), and indicative prices MAY
 be displayed behind the API disclaimer and a beta label. That closed **P2 Sprint 3 Step 7** (doc-only:
-`docs/API.md`, `PLAN_PLATFORM_P2.md`, `PLAN_PLATFORM_STATUS.md`, `docs/OPEN_GAPS.md` OG-52); the roll-up
+`docs/API.md`, `docs/ROADMAP.md`, `docs/ROADMAP.md`, `docs/OPEN_GAPS.md` OG-52); the roll-up
 now reads 14 DONE / 4 PARTIAL / 3 NOT STARTED.
 
 The same sitting created the frontend write target, because every distinct POST from a frontend leaves an
@@ -1739,8 +1739,8 @@ project is a SEPARATE database this apply never touched; its role apply is still
 **Doc propagation in the same change.** `docs/API.md` (both degradation paragraphs, the role's
 status, the Production-mode heading + an APPLIED block), `AGENTS.md` (the CI paragraph and §7
 item 5's ledger paragraph), `CONTEXT.md` (the Environment line and Decisions 46/47/48's
-"still gated" clauses), `PLAN_PLATFORM_STATUS.md` (verdict, matrix, totals 16/3/2, owner
-backlog, blocked list), `PLAN_PLATFORM_P3.md` Step 5, `PLAN_PLATFORM_P1.md`'s replay-source
+"still gated" clauses), `docs/ROADMAP.md` (verdict, matrix, totals 16/3/2, owner
+backlog, blocked list), `docs/ROADMAP.md` Step 5, `docs/ROADMAP.md`'s replay-source
 note, `docs/OPEN_GAPS.md` OG-52, and both recipes (deploy §0's replay-source row, the role
 recipe's new APPLIED banner + its post-apply checklist). Gates after the edits:
 `gen-decision-index --check` clean, `verify-docs` (offline and `--live`) OK.

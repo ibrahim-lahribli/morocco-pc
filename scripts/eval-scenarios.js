@@ -315,7 +315,7 @@ async function assertNoUnmarkedQueries(client) {
   if (unmarked.length > 0) {
     fail('preflight: ' + unmarked.length + ' recommendation_query row(s) carry no harness marker ("'
       + orphans.HARNESS_PROFILE_PREFIX + '" profile prefix); unmarked rows are never deleted by the harness.'
-      + ' Remove them by hand first - see docs/briefs/step2-launch-v2-runbook.md.');
+      + ' Remove them by hand first - see docs/ROADMAP.md.');
   }
 }
 

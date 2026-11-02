@@ -11,7 +11,7 @@
  * allow-list into a wildcard, would pass every other suite because a browser is
  * the only client that enforces CORS.
  *
- * What is pinned, per PLAN_PLATFORM_P2.md Sprint 4:
+ * What is pinned, per docs/ROADMAP.md Sprint 4:
  *   * an allowed origin gets `Access-Control-Allow-Origin` ECHOING that exact
  *     origin (not `*`, which would make the allow-list meaningless) and a
  *     successful preflight;

@@ -1,3 +1,5 @@
+Superseded by: docs/ROADMAP.md on 2026-11-02
+
 # Step 2 — activate launch-v2 on the TEST branch and prove model byte-identity
 
 > This is the **operator-run** section of the plan. The engine changes are Tasks 3–6 (Phase 2),

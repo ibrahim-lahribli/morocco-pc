@@ -1,3 +1,5 @@
+Superseded by: docs/ROADMAP.md on 2026-11-02
+
 # PLATFORM PLAN — P0: persist pass facts + product identity (v1.0 → v1.1)
 
 **Date:** 2026-10-14  

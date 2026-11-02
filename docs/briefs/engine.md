@@ -1,6 +1,6 @@
 # Engine brief (authoritative for E0–E8)
 
-You own the recommendation engine only. Read AGENTS.md §§1–9 first, then docs/archive/ENGINE_BEHAVIOR_FINDINGS_2026-10.md. Branch: agent/engine. Neon branch: test-engine (never the shared DB). Decisions 37–44, gaps OG-39–OG-49. Do NOT edit apps/api/, database/migrations/, orchestrator/commit.js, persistence/, filtering/context-loader.js, candidates/loader.js. Need a schema change? Ask the Platform agent via a note in docs/briefs/requests.md.
+You own the recommendation engine only. Read AGENTS.md §§1–9 first, then docs/archive/ENGINE_BEHAVIOR_FINDINGS_2026-10.md. Branch: agent/engine. Neon branch: test-engine (never the shared DB). Decisions 37–44, gaps OG-39–OG-49. Do NOT edit apps/api/, database/migrations/, orchestrator/commit.js, persistence/, filtering/context-loader.js, candidates/loader.js. Need a schema change? Ask the Platform agent via a note in docs/ROADMAP.md.
 
 ## Problem (measured, see findings doc)
 
@@ -141,7 +141,7 @@ identities/totals stable. 22 EXPECTED-RED hypotheses and 3 UNKNOWNs remain (S17/
 unrun PI-1); no threshold tuned. Four full-run cases succeed and both cleanup vectors are
 q/bc/comp/res/rej = 0. OG-41's changing-time harness artifact is resolved for pinned runs;
 legacy unpinned runs remain intentionally clock-sensitive. OG-42 is implemented; persisting
-as_of is only a Platform request in `docs/briefs/requests.md`. E2 is now IMPLEMENTED 2026-10-09 (Decision 39, below); seed activation landed on the TEST branch 2026-10-09 (E1, below); E3 landed 2026-10-10 (Decision 40 — see the epic section below).
+as_of is only a Platform request in `docs/ROADMAP.md`. E2 is now IMPLEMENTED 2026-10-09 (Decision 39, below); seed activation landed on the TEST branch 2026-10-09 (E1, below); E3 landed 2026-10-10 (Decision 40 — see the epic section below).
 
 ### Historical E0d proposal — query-pinned `as_of` (superseded by Decision 38)
 
@@ -188,7 +188,7 @@ rows, **PASS 56 / EXPECTED-RED 22 / UNKNOWN 3**, exit 0, cleanup residue `{q:0,b
 scratch path and diffing it against the committed `test/golden/baseline-2026-10.md` is **byte-identical**,
 so the committed baseline is a faithful pre-change snapshot. **Since this verification:** Step-2 item 1 landed (the
 pin, below), E1 activation was EXECUTED on the TEST branch 2026-10-09, and E2 landed the same day
-(Decision 39) — see the E1/E2 section below. **Updated 2026-10-14:** E3 (Decision 40), E4 (Decision 41), E5 (Decision 42, inert), E6 (Decision 43, acceptance unmet — OG-49) and E7 (Decision 44) are IMPLEMENTED. **E8 (Decision 45, 2026-10-14) is now IMPLEMENTED too, so E0—E8 are COMPLETE** — the last three Decision 26 item B rules are enforced and OG-09 / OG-11 / OG-12 are closed (C-38). `docs/briefs/step2-launch-v2-runbook.md` §1–§2 record the verified preconditions.
+(Decision 39) — see the E1/E2 section below. **Updated 2026-10-14:** E3 (Decision 40), E4 (Decision 41), E5 (Decision 42, inert), E6 (Decision 43, acceptance unmet — OG-49) and E7 (Decision 44) are IMPLEMENTED. **E8 (Decision 45, 2026-10-14) is now IMPLEMENTED too, so E0—E8 are COMPLETE** — the last three Decision 26 item B rules are enforced and OG-09 / OG-11 / OG-12 are closed (C-38). `docs/ROADMAP.md` §1–§2 record the verified preconditions.
 
 ### Step-2 item 1 — the scoring-model pin (IMPLEMENTED 2026-10-09)
 
@@ -215,7 +215,7 @@ rows / 56 PASS / 22 EXPECTED-RED / 3 UNKNOWN, exit 0, residue 0, and the two wri
 exactly ONE line — the model-identity header. The v1 baseline was neither regenerated nor edited
 (byte-identical to the committed `test/golden/baseline-2026-10.md`);
 `test/golden/baseline-launch-v2-2026-10.md` is the second committed baseline. Runbook §3–§5 of
-`docs/briefs/step2-launch-v2-runbook.md`.
+`docs/ROADMAP.md`.
 
 **E2 — IMPLEMENTED (Decision 39).** `retainTopKPerRole` takes an optional `roleTargets` map (per-role
 `{target, ceiling}` from a profile’s `spend_targets` + budget + resolution, see `retention/targets.js`) and a

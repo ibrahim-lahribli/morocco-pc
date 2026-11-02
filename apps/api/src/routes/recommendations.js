@@ -559,7 +559,7 @@ function registerRecommendationRoutes(app) {
       // 2. Has this request already been answered? The key is the request
       //    identity plus the catalog and engine versions - never the profile's
       //    UUID name, which is per-request by construction and identifies
-      //    nothing (PLAN_PLATFORM_P1.md Sprint 5).
+      //    nothing (docs/ROADMAP.md Sprint 5).
       const reusable = await app.repo.findReusableQuery(client, {
         scoringModelId: model.id,
         budgetAmount: body.budget_amount,
