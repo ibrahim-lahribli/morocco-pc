@@ -218,7 +218,7 @@ function formatReport(view, context) {
   } else if (view.verdict === 'INCONCLUSIVE') {
     lines.push('RESULT: INCONCLUSIVE - no non-seed offer exists, so NOTHING in this catalog has been');
     lines.push('        verified against a retailer source. The ' + view.seedTotal + ' seed/unverified offer(s) must not be presented as recently verified.');
-    lines.push('        Refresh from a real source (docs/IMPORT_OFFERS.md, "Refresh the catalog") and re-run this gate.');
+    lines.push('        Refresh from a real source (docs/RECIPES/import-offers.md, "Refresh the catalog") and re-run this gate.');
   } else {
     lines.push('RESULT: FAIL - ' + view.problems.length + ' non-seed offer(s) and '
       + view.observations.untraceable.length + ' price observation(s) lack retailer provenance');

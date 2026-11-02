@@ -172,7 +172,7 @@ not comparable to a branch figure), and close item (2) as a decision. Do not clo
 ## 5. OG-54 item (3): retailer provenance
 
 - [ ] Obtain a real retailer export (the hard part, and the reason this item is last), then follow
-      `docs/IMPORT_OFFERS.md` "Refresh the catalog".
+      `docs/RECIPES/import-offers.md` "Refresh the catalog".
 - [ ] `node scripts/check-offer-provenance.js` → `RESULT: PASS`. The path was exercised end to end
       on 2026-10-23 on a temporary fixture: `SKU_EXACT` match, `PASS` with 1 verified offer, then
       the fixture deleted in FK order with residue asserted 0.

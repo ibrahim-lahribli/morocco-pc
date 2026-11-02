@@ -1,3 +1,5 @@
+Superseded by: docs/RECIPES/import-offers.md on 2026-11-02
+
 # Recipe: import offers manually
 
 Ingest operator-collected prices from a CSV/JSON file. No scraper contacts any

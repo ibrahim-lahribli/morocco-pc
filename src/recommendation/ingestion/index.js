@@ -10,7 +10,7 @@
  * Adapter interface: an adapter exposes
  *   parse(text, { format }) -> { rows, errors }
  * and the runner (`runIngestion`) validates rows, matches them, plans changes
- * and (on commit) writes them. See docs/IMPORT_OFFERS.md.
+ * and (on commit) writes them. See docs/RECIPES/import-offers.md.
  */
 
 'use strict';

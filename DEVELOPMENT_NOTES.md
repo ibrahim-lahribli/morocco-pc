@@ -1895,7 +1895,7 @@ shared, TEST and EU: 101 offers, **0** with an ingestion record, listing identif
 URL or seller name, and 101 `price_history` rows that belong to seed offers and carry no
 retailer evidence. The freshness gate was changed to say `RESULT: INCONCLUSIVE` (exit 0)
 instead of `PASS` when no VERIFIED offer exists, so a green line can no longer be read as a
-verified catalog. The repeatable path is documented in `docs/IMPORT_OFFERS.md` ("Refresh the
+verified catalog. The repeatable path is documented in `docs/RECIPES/import-offers.md` ("Refresh the
 catalog") and was exercised end to end on the TEST branch with a temporary CSV: dry-run
 `[NEW] ... SKU_EXACT`, commit `inserted 1`, then the row carried `listing_identifier`,
 `product_url`, `seller_name`, `ingestion_record_id` and `fetched_at` = the row's `observed_at`

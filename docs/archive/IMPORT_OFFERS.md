@@ -1,3 +1,5 @@
+Superseded by: docs/RECIPES/import-offers.md on 2026-11-02
+
 # Importing offers (manual adapter)
 
 The beta runs on the data already in the database. When real prices are needed,

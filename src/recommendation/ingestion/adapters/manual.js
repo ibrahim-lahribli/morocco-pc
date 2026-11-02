@@ -5,7 +5,7 @@
  * rows for `validateListings`. PURE: no DB, no network, no clock. It NEVER
  * fetches anything — the operator supplies the file.
  *
- * Adapter interface (docs/IMPORT_OFFERS.md): an adapter exposes
+ * Adapter interface (docs/RECIPES/import-offers.md): an adapter exposes
  *   parse(text, { format }) -> { rows, errors }
  * and the ingestion runner turns `rows` into normalized listings. This is the
  * `fetchListings() -> normalized listings` seam with the network replaced by a

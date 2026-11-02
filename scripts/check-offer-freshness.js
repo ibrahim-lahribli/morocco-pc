@@ -191,7 +191,7 @@ async function main() {
           ' SEED/UNVERIFIED offer(s) must not be presented as recently verified.'
       );
       console.log(
-        '        Refresh from a real retailer source (docs/IMPORT_OFFERS.md, "Refresh the catalog"),' +
+        '        Refresh from a real retailer source (docs/RECIPES/import-offers.md, "Refresh the catalog"),' +
           ' then re-run this gate and node scripts/check-offer-provenance.js.'
       );
     } else {

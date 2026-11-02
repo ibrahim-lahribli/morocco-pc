@@ -1,3 +1,5 @@
+Superseded by: docs/RECIPES/import-offers.md on 2026-11-02
+
 # Recipe: refresh offer freshness (OG-30)
 
 Stage 1 hard-filters `store_offer.last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'`
