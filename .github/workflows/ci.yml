@@ -69,6 +69,14 @@ jobs:
       - run: node scripts/check-offer-provenance.js
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Does every ACTIVE product still carry the identity the API serves and
+      # addresses? Seeds 023-025 once inserted 13 rows with NULL slug/display_name
+      # and shipped a `slug: null` component to the deployed origin
+      # (HANDOFF_2026-11-01). RED here means catalogue DATA: the repair is a seed,
+      # not a code change.
+      - run: node scripts/check-catalog-identity.js
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - run: node scripts/verify-migrations-replay.js --test-db
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

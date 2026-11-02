@@ -21,12 +21,13 @@
  * identity the API serves and ORDERS BY?
  *
  * SCOPE - every ACTIVE product, not "ACTIVE products carrying an eligible offer"
- * The narrower scope is tempting and wrong. `GET /v1/catalog/products` LEFT-joins
- * offers on purpose, so a product with NO eligible offer is still served
- * (`has_offer: false`, null price), and the list is ordered by `slug` with keyset
- * pagination (`slug > cursor`). A NULL slug therefore does not hide a priced
- * product - it hides the UNPRICED ones, which is the harder defect to notice.
- * Nothing here joins `store_offer`.
+ * The narrower scope is tempting and wrong. `GET /v1/catalog/products` filters
+ * `p.lifecycle_status = 'ACTIVE' AND p.slug IS NOT NULL` and keyset-paginates on
+ * `slug`, while `GET /v1/catalog/products/:slug` addresses a product BY that
+ * column - so a NULL slug does not deprioritise a product, it removes it from the
+ * catalog and from every URL that could reach it. The same product still ships
+ * inside a recommendation component, which is exactly how `slug: null` reached a
+ * client. Nothing here joins `store_offer`.
  *
  * WHY NOT A `NOT NULL` CONSTRAINT
  * Migration 020 keeps `slug` nullable on purpose, and a constraint would reverse

@@ -125,7 +125,7 @@ Expected: FAIL — `Cannot find module './catalog-identity'`.
 
 - [ ] **Step 3: Implement `scripts/lib/catalog-identity.js`**
 
-Header comment must state, in the house style: why the gate exists (a served `slug: null`), why the scope is EVERY ACTIVE product and not "ACTIVE products with an eligible offer" (the catalog's LEFT JOIN keeps an offer-less product in the page and the keyset walk orders by `slug`, so a NULL slug silently drops it), why the column stays nullable (migration 020 says so in its own header, so a constraint would reverse that decision), and the three-valued verdict vocabulary.
+Header comment must state, in the house style: why the gate exists (a served `slug: null`), why the scope is EVERY ACTIVE product and not "ACTIVE products with an eligible offer" (`repository.js` filters `p.slug IS NOT NULL` and addresses the catalog by `slug`, so a NULL slug removes the product from the catalog entirely while its recommendation component still ships `slug: null`), why the column stays nullable (migration 020 says so in its own header, so a constraint would reverse that decision), and the three-valued verdict vocabulary.
 
 `evaluateCatalogIdentity` builds `offenders` by mapping each row through `missingIdentityColumns`, keeping only non-empty results, then sorting with an explicit comparator (`a.id < b.id ? -1 : a.id > b.id ? 1 : 0`). Verdict order: `scopeSize === 0` → `INCONCLUSIVE`; else `offenderCount > 0` → `FAIL`; else `PASS`.
 
@@ -654,6 +654,6 @@ Expected: `200` from the probe (a spun-down instance must be warmed first or the
 ## Self-review notes
 
 - **Spec coverage:** 4.1 → Task 7; 4.2 → Task 8; 4.3 → Task 9; 4.4 → Tasks 1-2; 4.5 → Tasks 5-6; 4.6 → Task 10; 4.7 → Tasks 3-4. 4.8 (OG-58) is excluded on purpose: it is engine retention with its own Decision and a full 20-scenario rebaseline, and folding it in would make this plan two plans.
-- **Scope correction carried into the code:** the handoff proposes scoping the gate to "ACTIVE products carrying an eligible offer". Task 1 scopes to every ACTIVE product instead, because `GET /v1/catalog/products` LEFT-joins offers (an offer-less product is still served, `has_offer: false`) and orders by `slug`, so a NULL slug drops exactly those rows out of the keyset walk. Narrowing the scope would have made the gate blind to the more damaging case.
+- **Scope correction carried into the code:** the handoff proposes scoping the gate to "ACTIVE products carrying an eligible offer". Task 1 scopes to every ACTIVE product instead, because `GET /v1/catalog/products` filters `p.slug IS NOT NULL` and addresses the catalog by `slug`, so a NULL slug removes the product from the catalog entirely while its recommendation component still ships `slug: null`. Narrowing the scope would have made the gate blind to the more damaging case.
 - **Ordering constraint stated twice on purpose:** the gate is expected RED on shared until Task 7 lands. That is the gate describing a registered live defect, not a flaky gate.
 - **Not claimed:** no task re-measures the engine, and none changes a score, a rank, a build or a scoring model row.
