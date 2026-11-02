@@ -60,6 +60,14 @@ services:
       - key: ENGINE_VERSION
         sync: false
 
+      # Decision 63: the private beta serves launch-v2@2.4.0, and this pin is what makes that
+      # true - repository.js otherwise serves the NEWEST ACTIVE row, which a seed apply can
+      # change without a deploy (OG-54). The named row must be ACTIVE on the target database:
+      # a pin matching no active row, or more than one, answers 503 SCORING_MODEL_UNAVAILABLE.
+      # A malformed value fails at app construction instead. Bump this line, never a dashboard.
+      - key: SCORING_MODEL_PIN
+        value: "launch-v2@2.4.0"
+
       # Empty is the safe default (CORS DISABLED, never open). Fill it with the real web origin(s)
       # once apps/web has a deployed host.
       - key: ALLOWED_ORIGINS
