@@ -7,10 +7,14 @@ is instance-specific** — it describes this database at this moment and must ne
 be cited as a permanent claim in hand-written docs (cite `CONTEXT.md` status
 sections instead, which the audit workflow keeps reconciled).
 
-Retention warning (AGENTS.md section 5): retention ties fall through to random
-`product.id` UUIDs, so *which* tied products reach a build is not stable across a
-database reset — reach figures below are one instance's draw, not a property of
-the catalog.
+Retention warning (AGENTS.md section 5): retention ties are DETERMINISTIC -
+`compareCandidates()` breaks them on `product_id` ASC (then `product_variant_id`
+NULL-first, then ASC), and the Decision 27 cheapest-per-role reservation breaks its
+own `selected_price` ties by that same Rule 3/5 position. There is no random
+tie-break anywhere in the engine, so *which* tied products reach a build is
+reproducible for a given catalog state. The figures below are still one instance
+row-count snapshot, never a permanent claim.
+row counts, never a permanent claim.
 
 ## Row counts (44 tables)
 
@@ -19,9 +23,9 @@ the catalog.
 | `benchmark` | 1 |
 | `benchmark_result` | 2 |
 | `benchmark_source` | 1 |
-| `build_candidate` | 8 |
-| `build_component` | 64 |
-| `build_rejection` | 18 |
+| `build_candidate` | 16 |
+| `build_component` | 126 |
+| `build_rejection` | 24 |
 | `case_motherboard_form_factor` | 27 |
 | `case_radiator_support` | 59 |
 | `case_spec` | 10 |
@@ -48,9 +52,9 @@ the catalog.
 | `psu_spec` | 11 |
 | `ram_spec` | 10 |
 | `recommendation_preset` | 0 |
-| `recommendation_profile` | 10 |
-| `recommendation_query` | 9 |
-| `recommendation_result` | 8 |
+| `recommendation_profile` | 13 |
+| `recommendation_query` | 12 |
+| `recommendation_result` | 16 |
 | `recommendation_swap` | 0 |
 | `retailer_listing_alias` | 0 |
 | `schema_migrations` | 23 |
@@ -68,7 +72,7 @@ the catalog.
 | 1 — Catalog/Hardware | 7 | 260 |
 | 2 — Performance/Assessment | 5 | 330 |
 | 3 — Market | 3 | 230 |
-| 4 — Recommendation | 5 | 99 |
+| 4 — Recommendation | 5 | 183 |
 
 ## Coverage
 
@@ -77,7 +81,7 @@ the catalog.
 - Offers: 114 (checked 2026-11-01 00:52:11.013254+00 … 2026-11-01 00:52:13.649048+00)
 - GPU variants with NULL width_slots/height_mm: 7 (OG-07)
 - PSUs with NULL connector_12vhpwr: 2 (OG-08)
-- Layer 4 emptiness: 99 rows present
+- Layer 4 emptiness: 183 rows present
 
 ---
 

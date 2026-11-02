@@ -20,7 +20,7 @@
  * Both output files are GENERATED — never edit by hand. Structure facts
  * (columns, constraints, enums) are authoritative as of generation; DATA_STATE
  * figures are instance-specific snapshots and must never be cited as permanent
- * claims (see AGENTS.md section 5 on determinism and the retention UUID gap).
+ * claims (see AGENTS.md section 5: retention ties are deterministic, never random).
  */
 
 const fs = require('fs');
@@ -295,10 +295,20 @@ async function buildDataState(client) {
   out.push('be cited as a permanent claim in hand-written docs (cite `CONTEXT.md` status');
   out.push('sections instead, which the audit workflow keeps reconciled).');
   out.push('');
-  out.push('Retention warning (AGENTS.md section 5): retention ties fall through to random');
-  out.push('`product.id` UUIDs, so *which* tied products reach a build is not stable across a');
-  out.push('database reset — reach figures below are one instance\'s draw, not a property of');
-  out.push('the catalog.');
+  // CORRECTED 2026-11-02: this paragraph used to claim retention ties fall through to
+  // random `product.id` UUIDs. That was false: compareCandidates() breaks ties on
+  // product_id ASC (then product_variant_id NULL-first, then ASC) and the Decision 27
+  // reservation breaks its own selected_price ties by the same Rule 3/5 position, so
+  // retention order is deterministic (AGENTS.md section 5). Only the ROW COUNTS below
+  // are instance-specific.
+  out.push('Retention warning (AGENTS.md section 5): retention ties are DETERMINISTIC -');
+  out.push('`compareCandidates()` breaks them on `product_id` ASC (then `product_variant_id`');
+  out.push('NULL-first, then ASC), and the Decision 27 cheapest-per-role reservation breaks its');
+  out.push('own `selected_price` ties by that same Rule 3/5 position. There is no random');
+  out.push('tie-break anywhere in the engine, so *which* tied products reach a build is');
+  out.push('reproducible for a given catalog state. The figures below are still one instance');
+  out.push('row-count snapshot, never a permanent claim.');
+  out.push('row counts, never a permanent claim.');
   out.push('');
 
   const counts = await client.query(
