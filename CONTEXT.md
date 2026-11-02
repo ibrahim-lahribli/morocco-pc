@@ -79,10 +79,10 @@ EXPECTED-RED / 1 UNKNOWN) and it is NOT adopted for release — that is a decisi
   (nightly only — it writes to the TEST branch).
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
-- `check-catalog-identity.js` **exits 1** on shared: 13 of 113 products carry neither `slug` nor
-  `display_name` (EU: 100 of 100). Seed 028 backfills them and is applied on TEST only.
-  Re-measured 2026-11-02 after the documentation pass: shared unchanged (13 of 113, exit 1) and
-  TEST PASS (113 of 113); EU was NOT re-measured - this shell has no `TARGET_DATABASE_URL`.
+- `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, EU 100 of 100 and TEST 113 of 113, after seed 028 was applied to the two that
+  lacked it (EU's whole 100-row catalogue, shared's 13). Re-measured 2026-11-02 after the applies.
+  Restore points: `shared-backup-pre-028-20261102-1300` and `eu-backup-pre-028-20261102-1312`;
+  the API walk on shared now serves 113 products (100 before) and all 13 new slugs resolve.
 - `check-offer-provenance.js` **INCONCLUSIVE** everywhere: 114 seed offers, 0 verified, 2 stores on
   the reserved `example.ma` domain. `check-offer-freshness.js` reports the first SEED expiry at
   **2026-11-03**.

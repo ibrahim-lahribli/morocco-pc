@@ -1268,10 +1268,10 @@ profile id is captured before the query is deleted).
   `components[].name` is `COALESCE(product.display_name, product.name)` and `components[].slug`
   is `product.slug`. All three databases are at migration 023 since 2026-10-29, but an optional
   column can still be omitted at INSERT: measured 2026-11-02, `scripts/check-catalog-identity.js`
-  exits 1 on shared, naming **13 of 113** ACTIVE products with neither column set, and EU carries
-  the same omission across its whole 100-row catalogue - so those components are served with
-  `slug: null`. Seed 028 backfills them and is applied on TEST only, and the gate runs nightly
-  rather than on push (R-07 in `docs/OPEN_POINTS.md`).
+  answered PASS on shared (113 of 113) and EU (100 of 100) on 2026-11-02 after seed 028, so every
+  ACTIVE product carries both columns and no component is served with
+  `slug: null`; the gate still runs nightly rather than on push, which is R-21 in
+  `docs/OPEN_POINTS.md`. The column stays nullable by design (migration 020's own decision).
 - **`strategy_key` / `engine_version` are recorded and served; no client reads them back yet.**
   Both items this bullet used to owe are CLOSED: OG-45 (persistence, C-39) and OG-46 (the A10
   golden assertion, C-42 - declared and approved over S03/S10/S11/S18/S19 and judged per model
