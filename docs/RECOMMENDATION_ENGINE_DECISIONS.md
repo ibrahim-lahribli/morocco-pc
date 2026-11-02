@@ -6173,3 +6173,67 @@ The comparison harnesses have had the other half of this vocabulary since Decisi
 ### Supersedes / superseded by
 
 Does not supersede Decision 57: that decision's 2026-11-01 amendment records the mechanism, and this entry supplies the lever. `scripts/lib/model-pin.js` (Decision 39) is unchanged and remains the harness's selector.
+
+## Decision 63 — the private beta serves `launch-v2@2.4.0`, pinned at deploy
+
+Status: PROVISIONAL 2026-11-02 — the EU release target serves `launch-v2@2.4.0`, named by the deploy setting `SCORING_MODEL_PIN` in `render.yaml` instead of by whichever `scoring_model` row happens to be newest and ACTIVE; this is an explicit PROVISIONAL OVERRIDE of Decision 57 item 3 and is NOT a satisfaction of it, and it re-opens on any reviewer ruling on A1, A3 or A4, on OG-43 closing or being amended, on the budget-utilisation epic landing (Decision 60 item 5), or on any change to `build_score`, to a served model version, or to catalogue parity between EU and shared.
+
+Date: 2026-11-02. Scope: which scoring line the release target EXECUTES, and the row that makes it executable. It is NOT an activation (no `is_active` flag was flipped, and `seed-minimal-v1@1.0.0` stays INACTIVE), NOT a migration (the `schema_migrations` ledger stands at 23 on all three databases), NOT a new seed (every model this decision names was authored by seeds 018–022) and NOT an engine or scoring change: no weight, threshold, resolution floor, quota or depth profile is added or edited here. The release target is EU, not the shared dev database.
+
+### Current situation
+
+`TARGET_DATABASE_URL` addresses `morocco-pc-eu` (`aws-eu-central-1`, PG 18), the environment the private beta is meant to run against. Before 2026-11-02 it held 100 ACTIVE products, 101 offers, 280 assessment rows, 76 product families, 22 variants, 21 cooler socket rows and 2 `scoring_model` rows — one of them `launch-v2@1.0.0`. Decision 57's 2026-11-01 amendment left that reconciliation to the owner at deploy time (item 4) and stated that `launch-v2@2.4.0` was "NOT thereby adopted for release (item 3 still gates that)".
+
+Decision 62 built the lever: `SCORING_MODEL_PIN` is read once at app construction (`apps/api/src/app.js`), selects among ACTIVE rows only, fails the deploy on a malformed value, answers `503 SCORING_MODEL_UNAVAILABLE` on an unmatched or ambiguous one, and leaves the newest-ACTIVE-row rule in place when unset. Nothing set it — R-06, measured that same day on the shared database, where the deployed demo origin was moved from `seed-minimal-v1@1.0.0` to `launch-v2@2.4.0` by a seed apply with no code change and no error (OG-54).
+
+On 2026-11-02 EU was brought to the shared catalogue by seeds 023–028: 113 ACTIVE products, 84 families, 24 variants, 114 offers, 319 assessment rows, 22 cooler socket rows, 0 products missing `display_name` or `slug`; seeds 018–022 added `launch-v2` 2.0.0–2.4.0, leaving 7 `scoring_model` rows and 6 ACTIVE. So EU now holds the row 2.4.0 needs — and would serve it only by accident of insertion order, because 2.4.0 is the newest ACTIVE row there as well.
+
+The gate that Decision 57 item 3 refers to is unchanged and still unmet: A1, A3 and A4 remain `hypothesis` rows in `test/golden/scenarios.json`, and OG-43 (R-11 band multipliers) is OPEN. The only clause discharged since is OG-38's remaining half, by Decision 60's explicit acceptance.
+
+### Problem
+
+Two failures, and only one of them is about model choice.
+
+The first is that "what the release target serves" is a property of its seed-set rather than of a deploy. A future apply that inserts a newer ACTIVE row changes what the beta executes with no deploy, no version bump and no error — the failure mode OG-54 measured, not hypothesised. Relying on newest-ACTIVE is not a decision, it is an ordering.
+
+The second is honesty about the gate. 2.4.0 is the version the golden harness measures green, and it is the version the beta should exercise, but A1/A3/A4 are unreviewed and OG-43 is open. Adopting it silently, or writing a decision that claims the gate is satisfied, would convert an explicit, reversible release choice into an unmarked override — the precise documentation failure audit D4 recorded, and the reason Decision 57 got a dated amendment instead of an edit.
+
+So a decision is needed that names 2.4.0, pins it where a reviewer can see it, and states in the same breath that it overrides rather than satisfies item 3.
+
+### Decision
+
+1. **`launch-v2@2.4.0` is the private-beta release model**, and it is pinned by `SCORING_MODEL_PIN: "launch-v2@2.4.0"` in `render.yaml`, as a fixed `value:` rather than `sync: false`. A pin is not a secret; a Blueprint that asks a human to retype it is a pin that can silently differ per environment and cannot be reviewed in the diff. This line is the single place the release model is declared.
+2. **The pin is a deploy setting, not an activation.** The `launch-v2@2.4.0` row is ACTIVE because seeds 018–022 inserted it, not because of this decision; nothing is deactivated, deleted or flipped, and `seed-minimal-v1@1.0.0` remains INACTIVE on every database. If the pin and the rows ever disagree, the API answers `503 SCORING_MODEL_UNAVAILABLE` (Decision 62 item 5) — it never falls back to a different model.
+3. **The evidence is the committed 2.4.0 record, and its independence is limited.** `test/golden/_scratch-v14-og59-clear-launch-v2-2.4.0.md`: 86 rows, **82 PASS / 3 EXPECTED-RED / 1 UNKNOWN / 0 HARD FAIL**, exit 0, residue 0. **R-12 note, recorded as a limitation and not as a claim:** the A1/A3/A4 rows carry `hypothesis` status in `test/golden/scenarios.json`, and the A10 re-approvals were made by the author of the change, so this record does not supply the independent review the gate asks for.
+4. **This is an explicit PROVISIONAL OVERRIDE of Decision 57 item 3, not a satisfaction of it.** The unmet clauses are named so they cannot be read as met: A1, A3 and A4 are still `hypothesis`; OG-43 (R-11 band multipliers) is OPEN; only OG-38's remaining half was discharged, by Decision 60's acceptance. "The gate measures green" and "the gate is satisfied" are different statements and this entry makes only the first.
+5. **Re-open triggers, binding.** This decision re-opens on: a reviewer ruling on A1, A3 or A4; OG-43 closing or being amended; the budget-utilisation epic landing (Decision 60 item 5); any change to `build_score`; any change to a served model version; and any divergence in catalogue parity between EU and shared.
+6. **The superseded wording is superseded HERE, not edited in place.** See the section below: Decision 57 and its amendment continue to read exactly as written, which is why the supersession is dated and recorded in this entry.
+
+### Rejected alternatives
+
+- **Leave the pin unset and rely on newest-ACTIVE.** Rejected: that is the ordering OG-54 caught moving production, and it would make 2.4.0 the release model by insertion accident rather than by a reviewable line.
+- **Keep EU on `launch-v2@1.0.0` until A1/A3/A4 are reviewed.** This is the safe option and it stays available — reverting the pin is one line. Rejected as the starting point because the beta's job is to exercise the release candidate, and every measurement since Decision 60 was taken at 2.4.0; a beta on 1.0.0 (uniform depth 5) would exercise a model nothing currently measures.
+- **`sync: false` for the pin.** Rejected: it moves the value out of the reviewed manifest into a dashboard field, per environment, invisibly. Item 1.
+- **Deactivate the other `launch-v2` versions on EU and let `is_active` do the work.** Rejected as the CONTRACT, for Decision 62's reason: an apply restores them, so it is an operational convenience, never a guarantee. It also destroys the rows the gate comparison walks.
+- **Present the golden record as gate satisfaction.** Rejected outright: A1/A3/A4 are `hypothesis` and OG-43 is open, so the record cannot discharge item 3. Item 3 records the limitation instead.
+
+### Verdict for this pass
+
+- **PASS — item 1:** `render.yaml` carries `- key: SCORING_MODEL_PIN` / `value: "launch-v2@2.4.0"` after the `ENGINE_VERSION` block, with a comment citing this decision and the 503 semantics. Verified by a regex assertion (`pin present`); **`test:scripts` does not cover `render.yaml`** — no script parses it — so that line rests on the regex and the diff alone.
+- **PASS — item 2:** EU measured 2026-11-02 after the apply: 7 `scoring_model` rows, 6 ACTIVE, `seed-minimal-v1@1.0.0` INACTIVE. Nothing deleted, nothing flipped, no POST issued.
+- **PASS — item 3:** the record named above, 82 / 3 / 1 / 0, exit 0, residue 0. Its limitation is recorded in the item itself.
+- **PASS — items 4, 5, 6:** recorded as written; the register row R-06 stays `OPEN · BLOCKED-OWNER` precisely because no environment has the pin live yet.
+- **PASS — catalogue, the other half of the same apply:** identity gate on EU `RESULT: PASS — 113 ACTIVE product(s)`, exit 0; parity with shared MATCH on ledger 23, tables 44, schema-shape 470 (digest `4110c1517a14a0ef` both sides), model pins 7, product 113, variant 24, offer 114, assessment 319, models 7, benchmark 2, store 2, presets 0, with the only five differences being the Layer-4 residue rows R-14 already tracks (query 12/0, result 16/0, candidate 16/0, component 126/0, rejection 24/0). EU's ledger tail is `023_recommendation_swap.sql`; no migration ran.
+- **BLOCKED (environment), not claimed as a pass:** `check-deployed-role.js` was NOT run — no EU host is deployed, so there is no tagged session to classify. `check-deferred-rules.js` was NOT run against EU either: it is bound to `DATABASE_URL` (shared, which already carries the same seeds), so it cannot speak about the release target. Both are coverage gaps, not results.
+- **Rollback, never executed without approval:** reset the EU branch to `br-divine-king-b97uxsr5` (`eu-backup-pre-upgrade-20261102-1427`, parent `br-sweet-voice-b9fv6xx1`, `parent_lsn 0/234A9F0`). There is no safe SQL rollback: seeds 024 and 025 commit their own transactions.
+
+### Supersedes / superseded by
+
+Supersedes the **live wording** of two clauses, and only these:
+
+1. Decision 57's 2026-11-01 amendment, in its sentence "`launch-v2@2.4.0` is NOT thereby adopted for release (item 3 still gates that)" — 2.4.0 IS now adopted for the private beta, as an override of item 3 rather than as its discharge.
+2. Decision 57 item 4, "EU's pre-existing `launch-v2@1.0.0` row is reconciled at deploy time by the owner" — the reconciliation is now measured done: EU holds `launch-v2@2.4.0` ACTIVE at catalogue parity with shared, and what remains owner-gated is creating the host and its variables, not choosing the row.
+
+It does **not** supersede Decision 57 item 1: that was already superseded by the 2026-11-01 amendment itself, and this entry records that fact rather than re-deriving it.
+
+The superseded documents were **NOT edited in place**: Decision 57 and its amendment read exactly as written, and this entry is the only record of the supersession. Decision 62 is unchanged and remains the owner of the setting; this decision is what SETS it.
