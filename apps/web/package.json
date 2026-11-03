@@ -17,7 +17,8 @@
     "check:api-types": "node scripts/check-api-types.mjs",
     "check:tokens": "node scripts/check-tokens.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
-    "mock:api": "node mock/server.mjs"
+    "mock:api": "node mock/server.mjs",
+    "capture:reference": "node scripts/capture-reference.mjs"
   },
   "dependencies": {
     "@mdx-js/loader": "^3.1.1",
