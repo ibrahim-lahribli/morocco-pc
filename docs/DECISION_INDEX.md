@@ -3,7 +3,7 @@
 **GENERATED FILE — do not edit by hand.** Regenerate with `node scripts/gen-decision-index.js`
 (or `npm run gen:decisions`) after any change to `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 `node scripts/gen-decision-index.js --check` exits non-zero when this file is stale.
-Generated 2026-11-02 from RECOMMENDATION_ENGINE_DECISIONS.md (6240 lines).
+Generated 2026-11-03 from RECOMMENDATION_ENGINE_DECISIONS.md (6285 lines).
 
 Generated for audit finding **D5** (decision-log navigability): one row per decision with number,
 title, status, date and line anchor. Every status comes from the normalized `Status:` line at the
@@ -19,7 +19,7 @@ section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` a
 
 Open / not-RESOLVED: #57 (production keeps the model it serves, and `launch-v2@2.0.0` is the version evaluated for release); #60 (OG-38's remaining half is ACCEPTED for the current release evaluation, and the budget term gets its own epic); #61 (Two catalog defects stay deliberately unverified instead of being filled in); #63 (the private beta serves `launch-v2@2.4.0`, pinned at deploy).
 
-## Global decisions (61 `## Decision` headings + 2 nested 4/5 aliases = 63)
+## Global decisions (62 `## Decision` headings + 2 nested 4/5 aliases = 64)
 
 | # | Title | Status | Date | DECISIONS.md line |
 |---|---|---|---|---|
@@ -84,6 +84,7 @@ Open / not-RESOLVED: #57 (production keeps the model it serves, and `launch-v2@2
 | 61 | Two catalog defects stay deliberately unverified instead of being filled in | DEFERRED 2026-10-31 — `Seed Connect PSU 850` and `Seed HYBROK PSU 650` keep NULL connector counts and `Seed Corsair Nautilus 240 RS ARGB Black AIO` keeps a NULL `max_tdp_watts`, because no citable vendor or retailer publishes those figures; both defects resolve conservatively (PSU: FAIL at high TGP; cooler: UNKNOWN) and both re-open on any published source. | 2026-10-31 | 6097 |
 | 62 | the API serves the scoring model a deployment NAMES, and unset keeps the newest-ACTIVE-row rule | RESOLVED 2026-11-01; IMPLEMENTED 2026-11-01 (apps/api) — the served scoring model is the explicit `name@version` deploy setting `SCORING_MODEL_PIN`, selecting among ACTIVE rows only, failing the deploy on a malformed value and answering 503 on an unmatched or ambiguous one, while an unset variable preserves the pre-existing newest-ACTIVE-row rule. | 2026-11-01 | 6131 |
 | 63 | the private beta serves `launch-v2@2.4.0`, pinned at deploy | PROVISIONAL 2026-11-02 — the EU release target serves `launch-v2@2.4.0`, named by the deploy setting `SCORING_MODEL_PIN` in `render.yaml` instead of by whichever `scoring_model` row happens to be newest and ACTIVE; this is an explicit PROVISIONAL OVERRIDE of Decision 57 item 3 and is NOT a satisfaction of it, and it re-opens on any reviewer ruling on A1, A3 or A4, on OG-43 closing or being amended, on the budget-utilisation epic landing (Decision 60 item 5), or on any change to `build_score`, to a served model version, or to catalogue parity between EU and shared. | 2026-11-02 | 6177 |
+| 64 | Render's inbound proxy cannot be pinned, so the beta accepts one shared rate-limit bucket | RESOLVED 2026-11-03 — `TRUST_PROXY` stays EMPTY on the Render-hosted EU service, because Render publishes no inbound proxy or load-balancer range to pin and its edge APPENDS to a client-supplied `X-Forwarded-For`; the accepted cost is one rate-limit bucket for the whole internet (30/min POST, 30/min swap commit and preview, 120/min GET), and this re-opens on a published inbound range, a move to a host with a pinnable proxy, or a Render plan that makes inbound IP rules available. | 2026-11-03 | 6241 |
 
 ## Engine 3 contract decisions (Engine-3-local numbering; local 4–5 ARE global Decisions 4–5)
 
@@ -97,9 +98,9 @@ Open / not-RESOLVED: #57 (production keeps the model it serves, and `launch-v2@2
 
 ## Reconciliation
 
-- Global decisions: 63 = 61 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
+- Global decisions: 64 = 62 `## Decision` headings + the 2 Engine-3-local contracts that fill global 4/5.
 - Engine-3-local contracts: 5 (`### Decision 1–5` under "Engine 3 contract decisions"; local 1–3 are NOT global 1–3, local 4/5 ARE global 4/5 — AGENTS.md §2).
-- Parsed headings: 61 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
+- Parsed headings: 62 `## Decision` + 5 `### Decision` (Engine 3 section only; `### Decision 18 addendum` is an implementation record, not an entry).
 - Status source: each entry’s normalized `Status:` line (first content line). The generator exits
   non-zero if a decision is added without one, so this table cannot go stale silently.
 - Open decisions: #57, #60, #61, #63.
