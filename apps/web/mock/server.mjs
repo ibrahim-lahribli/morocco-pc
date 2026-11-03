@@ -88,7 +88,6 @@ import {
   RECOMMENDATION_ZERO_BUILD_NO_FLOOR,
   SWAP_PAIRS_BY_ROLE,
   SWAP_SCENARIO_BY_SLUG,
-  VARIANTS_BY_SLUG,
 } from "./fixtures.mjs";
 
 const PORT = Number(process.env.MOCK_API_PORT || 3211);
