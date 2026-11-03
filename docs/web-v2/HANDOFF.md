@@ -94,12 +94,17 @@ Wired: `components/shell/tab-nav.tsx` (the one client island: `usePathname` → 
 current, longest path match, so `/fr/composants/comparer` lights "Pièces" and a result page lights
 nothing), five SHORT labels (`shell.tabItems.*`, fr + ar — "Enregistrements" cannot fit a fifth of
 360 px, so the bar says "Gardés"), `md:hidden` because the header nav takes over at 768 px, and
-`<main>` reserving the bar's height with the offset released at `md`.
+`<body>` reserving the bar's height, released at `md`.
 
 **The guard earned its keep on its first run**: the bar is `h-20` + a 1 px border = 81 px while the
 reserved padding was exactly 80 px, so the last pixel of content could hide behind the border. Both
 `TAB_BAR_OFFSET` and `STICKY_BAR_OFFSET` now include that border, and the spec compares the reserved
 padding to the bar's measured box instead of to a number.
+
+**A second, larger defect the browser found.** The reservation was on `<main>` at first, which
+protects the last card but not the footer that comes AFTER it — measured at the bottom of `/fr`:
+footer bottom 800 px against bar top 719 px, so the legal links sat behind the bar on every page.
+It is on `<body>` now, and the spec scrolls to the bottom and asserts the footer clears the bar.
 
 **Still open in Phase 3:** error boundaries are NOT started. `error.tsx` must be a client component
 and this app has no client-side message path (`next-intl`'s provider is not mounted — which is why
