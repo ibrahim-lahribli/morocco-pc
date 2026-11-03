@@ -96,7 +96,7 @@ export default async function KitPage({
       </p>
       <h1 className="mt-1 text-heading text-ink">Kit de composants</h1>
       <p className="mt-3 max-w-prose text-body text-muted">
-        Les onze sections du kit, dans chaque état dessiné sur le tableau
+        Toutes les sections du kit, dans chaque état dessiné sur le tableau
         Stitch. Les mesures de contraste et les tailles sont vérifiées par les
         tests, pas à l’œil.
       </p>
