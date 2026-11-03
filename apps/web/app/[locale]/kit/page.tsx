@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { Alert, Badge, Button, ChoiceCard, ProgressBar, Skeleton, SkeletonCard, TextField, StatusBadge } from "@/components/ui";
+import { Alert, Badge, Button, ChoiceCard, ProgressBar, Skeleton, SkeletonCard, TextField, StatusBadge, StepHeader } from "@/components/ui";
 import { formatDate, formatMoney, formatNumber, formatPercent } from "@/lib/i18n/format";
 import { KitInteractive } from "./kit-interactive";
 import { KitSheet } from "./kit-sheet";
+import { KitQuickSelect } from "./kit-quick-select";
 
 /**
  * The S3 story route: every component, every state the board draws.
@@ -284,6 +285,24 @@ export default async function KitPage({
             <StatusBadge state="UNKNOWN">À vérifier</StatusBadge>
           </li>
         </ul>
+      </Section>
+
+      <Section id="step-header" title="En-tête d’étape" source="Configurateur — progression, liste, question, cible de focus">
+        <StepHeader
+          current={2}
+          steps={[
+            { key: "usage", label: "Usage" },
+            { key: "budget", label: "Budget" },
+            { key: "resolution", label: "Résolution" },
+            { key: "priority", label: "Priorité" },
+          ]}
+          title="Quel budget avez-vous en tête ?"
+          progressLabel="Étape 2 sur 4"
+        />
+      </Section>
+
+      <Section id="quick-select" title="Sélecteurs compacts" source="Accueil — présets de budget et usage, en pilules radio">
+        <KitQuickSelect />
       </Section>
 
     </article>

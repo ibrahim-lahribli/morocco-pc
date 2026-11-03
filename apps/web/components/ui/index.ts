@@ -21,6 +21,9 @@
 export { Alert, type AlertProps, type AlertTone } from "./alert";
 export { Badge, type BadgeProps, type BadgeTone } from "./badge";
 export { StatusBadge, type StatusBadgeProps, type BuildState } from "./status-badge";
+export { StepHeader, type StepHeaderProps, type StepHeaderStep } from "./step-header";
+export { ChoicePills, type ChoicePillsProps, type ChoicePillOption } from "./choice-pills";
+export { BudgetPicker, type BudgetPickerProps } from "./budget-picker";
 export {
   buttonClasses,
   Button,
