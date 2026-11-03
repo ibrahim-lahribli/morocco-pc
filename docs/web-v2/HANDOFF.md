@@ -4,7 +4,10 @@ Read this first, then `CONTEXT.md`. This file is the state of the branch, not th
 
 ## Where the branch stands
 
-- Branch `web-redesign`, **28 commits** since `master` (`e3fe882`), **nothing pushed**, no upstream.
+- Branch `web-redesign`, branched from `master` (`e3fe882`), **nothing pushed**, no upstream. The commit
+  count is deliberately not written down here: it changes with every commit, and a numeral in this file
+  went 25 -> 28 -> 29 while it was being written. Measure it with
+  `git rev-list --count master..web-redesign`.
 - Phases 0 and 1 are closed. **Phase 2 (kit) is CLOSED at gate G2** — T1–T7 landed, T8 is the
   evidence below. Phase 3 (shell) is next.
 - `docs/web-v2/PROGRESS.md` is the ledger. `docs/superpowers/plans/2026-11-03-web-redesign-phase-2.md`
