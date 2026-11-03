@@ -112,14 +112,14 @@
   --color-accent-soft: oklch(96.19% 0.0580 95.62); /* #FEF3C7 */
   --color-whatsapp: oklch(43.35% 0.0754 182.23); /* #075E54 */
 
-  /* brand neutrals: the board's ramp IS Tailwind's stone scale */
-  --color-page: oklch(98.48% 0.0013 106.42); /* #FAFAF9, stone-50 */
+  /* brand neutrals: DESIGN.md's ramp IS Tailwind's slate scale */
+  --color-page: oklch(98.42% 0.0035 248.23); /* #F8FAFC, slate-50 */
   --color-surface: oklch(100.00% 0.0000 89.88); /* #FFFFFF */
-  --color-subtle: oklch(96.99% 0.0013 106.42); /* #F5F5F4, stone-100 */
-  --color-track: oklch(92.32% 0.0026 48.72); /* #E7E5E4, stone-200 */
-  --color-muted: oklch(44.44% 0.0096 73.64); /* #57534E, stone-600 */
-  --color-ink: oklch(21.61% 0.0061 56.04); /* #1C1917, stone-900 */
-  --color-placeholder: oklch(71.61% 0.0091 56.26); /* #A8A29E, stone-400 */
+  --color-subtle: oklch(96.83% 0.0069 248.08); /* #F1F5F9, slate-100 */
+  --color-track: oklch(92.88% 0.0127 255.56); /* #E2E8F0, slate-200 */
+  --color-muted: oklch(44.55% 0.0375 257.29); /* #475569, slate-600 */
+  --color-ink: oklch(22.35% 0.0455 253.78); /* #0B1C30, on-surface */
+  --color-placeholder: oklch(55.44% 0.0408 257.43); /* #64748B, slate-500 */
 
   /* semantic states */
   --color-success: oklch(52.73% 0.1371 150.07); /* #15803D */

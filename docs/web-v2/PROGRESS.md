@@ -95,6 +95,33 @@ warnings; the unused Turbopack plugin removed with build + dev + suite proof; 78
 The source directory is now duplicated by `apps/web/design/stitch/`. It stays untracked; deleting
 it is the owner's call (it is the only irreversible act in this phase) and is deliberately not done.
 
+## Phase 1 — tokens (2026-11-03)
+
+Status: **implemented, awaiting gate G1** (human approval of `TOKENS.md` + `DEVIATIONS.md`).
+
+| Gate | Result |
+|---|---|
+| `npm run typecheck` | PASS |
+| `npm run lint` | PASS — 0 warnings |
+| `npm run check:tokens` | PASS — 84 files, no hex / palette / physical side |
+| `npm run check:i18n` | PASS — 82 files |
+| `npm run check:api-types` | PASS — 1.10.0 |
+| `npm run build` | PASS |
+| `npm test` | **PASS — 379 passed / 2 skipped** (381 specs, 34.8 s) |
+
+What changed: the neutral ramp moved from stone to DESIGN.md's slate (`page`, `subtle`, `track`,
+`muted`, `ink`, `placeholder`), written as `oklch(...)` so the token gate still parses exactly
+**21** raw colours. No token was renamed and none was added: the three price-badge states map onto the
+existing `success`/`warning`/`muted` triples (`TOKENS.md` §4).
+
+Contrast, measured by `e2e/tokens.spec.ts` on the new values (all 15 text pairs ≥ 4.5:1, all 3
+graphical pairs ≥ 3:1): ink on page 16.41, muted on page 7.24, surface on primary 9.93, success on
+soft 4.57, warning on soft 4.51, **ink on accent 8.00**, primary fill on track 8.06, warning fill on
+track 4.07.
+
+Not re-run: Lighthouse. A colour-only change cannot move LCP or CLS, and Phase 6 owns that gate; the
+suite's CLS assertion on the token sheet still passes (< 0.01).
+
 ## Phase 1 inherits
 
 - Token gate baseline: **84 files** scanned; tokens live in `app/globals.css` `@theme` (the one file
