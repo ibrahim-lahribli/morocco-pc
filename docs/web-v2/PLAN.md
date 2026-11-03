@@ -119,7 +119,7 @@ manifest. Phase 6 writes that as `docs/RECIPES/deploy-web.md` so Phase 7 has a d
 | Gate | Result |
 |---|---|
 | `npm run typecheck` | PASS (exit 0) |
-| `npm run lint` | PASS, 2 warnings (`mock/server.mjs:91` unused `VARIANTS_BY_SLUG`, `postcss.config.mjs:2` anonymous default export) |
+| `npm run lint` | PASS at branch start with 2 warnings (`mock/server.mjs:91`, `postcss.config.mjs:2`) — **both fixed in Phase 0**; now exits 0 with 0 warnings |
 | `npm run check:tokens` | PASS — 84 files |
 | `npm run check:i18n` | PASS — 82 files, 2 catalogues, key + placeholder parity |
 | `npm run check:api-types` | PASS — contract 1.10.0, 10 paths, byte-identical |

@@ -54,15 +54,55 @@ Two consequences, and they are not negotiable:
 | 1 Stitch source + `SCREENS.md` | **done** | b4b38a9 |
 | 2 Baseline record | **done** | 7da1c0c |
 | 3 `FEASIBILITY.md` + `API_REQUESTS.md` | **done** | see `git log` |
-| 4 `@types/node` ^22 | not started | — |
-| 5 Two lint warnings | not started | — |
-| 6 `@tailwindcss/turbopack` decision | not started | — |
-| 7 v1 reference captures | not started | — |
-| 8 Phase 0 exit record | not started | — |
+| 4 `@types/node` ^22 | **done** | see `git log` |
+| 5 Two lint warnings | **done** | see `git log` |
+| 6 `@tailwindcss/turbopack` decision | **done** — removed | see `git log` |
+| 7 v1 reference captures | **done** — 78/78 | see `git log` |
+| 8 Phase 0 exit record | **done** | this commit |
 
-## Next
+## Phase 0 exit record (2026-11-03)
 
-Task 3 is the one that unblocks Phase 2's gate: five of its twelve answers are already verified NO or
-PARTIAL (per-part compatibility, images, retailer rows, price verification date, single-build GET),
-and per the gap rule each one becomes a named reduction in `DEVIATIONS.md` at G2 rather than a
-blocker.
+Final gate set on the closing tree — every row RUN, none skipped:
+
+| Gate | Result |
+|---|---|
+| `npm run typecheck` | **PASS** |
+| `npm run lint` | **PASS — 0 warnings** (the two baseline warnings are fixed) |
+| `npm run check:tokens` | **PASS** — 84 files |
+| `npm run check:i18n` | **PASS** — 82 files, 2 catalogues |
+| `npm run check:api-types` | **PASS** — contract 1.10.0 |
+| `npm run build` | **PASS** — CSS chunk 73 169 B, referenced by every built page |
+| `npm test` | **PASS** — 379 passed / 2 skipped (381 specs, 34.3 s) |
+
+Delivered by this phase: the 22-screen design source plus `SCREENS.md`; the measured baseline;
+`FEASIBILITY.md` (12 answers) and `API_REQUESTS.md` (5 gaps); `@types/node` 22.20.5; zero lint
+warnings; the unused Turbopack plugin removed with build + dev + suite proof; 78 reference PNGs
+(6.6 MB, 13 routes x 2 locales x 3 widths).
+
+### Two lessons worth carrying forward
+
+1. **A green build does not prove the styles ship.** Next 16 emits CSS to
+   `.next/static/chunks/<hash>.css` (73 169 B here) and the build LOG prints no CSS line at all —
+   grepping the log returns 0 on a healthy build. Assert the artifact and the `href` reference.
+   The Phase 0 plan's Task 5 signal was wrong on this and has been corrected.
+2. **A stale server makes the suite lie.** One run aborted at 115 passed because a dev server this
+   session had started was reused by Playwright (`reuseExistingServer`) and then killed by its own
+   `timeout`. The fresh run on clean ports was green (379 passed). Confirm 3210/3211/3000 are free
+   before `npm test`, and stop servers by PID only.
+
+### `apps/web-v2/` — decision recorded, not acted on
+
+The source directory is now duplicated by `apps/web/design/stitch/`. It stays untracked; deleting
+it is the owner's call (it is the only irreversible act in this phase) and is deliberately not done.
+
+## Phase 1 inherits
+
+- Token gate baseline: **84 files** scanned; tokens live in `app/globals.css` `@theme` (the one file
+  allowed a hex literal, and not scanned).
+- Token source: `apps/web/design/stitch/moroccan_hardware_studio/DESIGN.md`.
+- Budgets (all `error`, median of 3, two fixture URLs): LCP ≤ 2 500 ms (measured 2 482 / 2 486),
+  CLS ≤ 0.1 (measured 0), script ≤ 174 080 B (measured 158 831 / 167 107), performance ≥ 0.90 (98).
+  Headroom is thin — 18 ms of LCP and 6 973 B of script on the preset page.
+- Four FEASIBILITY NOs to answer in `DEVIATIONS.md` at gate G2: per-part compatibility, images,
+  retailer rows, price verification date — plus the single-build GET that D4 works around.
+- Suite baseline: **381 specs, 379 passed, 2 skipped**. `AGENTS.md`'s 378 is stale.

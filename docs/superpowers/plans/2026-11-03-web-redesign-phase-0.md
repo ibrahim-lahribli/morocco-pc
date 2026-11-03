@@ -324,7 +324,7 @@ npm run lint; echo "lint exit=$?"
 npm run build > /tmp/lintfix-build.log 2>&1; echo "build exit=$?"
 grep -c "\.css" /tmp/lintfix-build.log
 ```
-Expected: lint exit 0 with **no** warning lines; build exit 0 and still emitting the CSS chunk (a PostCSS config that stopped being read would build without styles, so the grep must be non-zero).
+Expected: lint exit 0 with **no** warning lines; build exit 0. Then assert the stylesheet directly, because the build LOG prints no CSS line (measured 2026-11-03 — grep the log and you get 0 even on a healthy build): `find .next/static -name "*.css"` must return exactly one file (73 169 B at the 2026-11-03 baseline, `.next/static/chunks/<hash>.css`) and `grep -rho 'href="[^"]*.css"' .next/server/app | head -1` must show that same chunk referenced. A PostCSS config that stopped being read builds green and ships unstyled.
 
 - [ ] **Step 5: Commit**
 
