@@ -1,0 +1,70 @@
+[
+  {
+    "key": "guide-gpu",
+    "query": "graphics card",
+    "kind": "guide",
+    "title": "MSI GeForce GT 1030 2G LP OC Graphics Card 20200604-001",
+    "creator": "Gary Houston",
+    "license": "cc0 1.0",
+    "source": "https://commons.wikimedia.org/w/index.php?curid=90934013",
+    "original": "3461x2512",
+    "files": [
+      "public/media/guide-gpu-360.avif",
+      "public/media/guide-gpu-360.webp",
+      "public/media/guide-gpu-720.avif",
+      "public/media/guide-gpu-720.webp"
+    ],
+    "bytes": 55828
+  },
+  {
+    "key": "guide-motherboard",
+    "query": "motherboard",
+    "kind": "guide",
+    "title": "Motherboard Circuits",
+    "creator": "JESHOOTS.com",
+    "license": "cc0 1.0",
+    "source": "https://stocksnap.io/photo/motherboard-circuits-66EE6E64A5",
+    "original": "3600x2400",
+    "files": [
+      "public/media/guide-motherboard-360.avif",
+      "public/media/guide-motherboard-360.webp",
+      "public/media/guide-motherboard-720.avif",
+      "public/media/guide-motherboard-720.webp"
+    ],
+    "bytes": 127639
+  },
+  {
+    "key": "preset-desk",
+    "query": "computer desk",
+    "kind": "preset",
+    "title": "Computer Desk",
+    "creator": "Anita Peeples",
+    "license": "cc0 1.0",
+    "source": "https://stocksnap.io/photo/computer-desk-GVYM0DWG9D",
+    "original": "5616x3744",
+    "files": [
+      "public/media/preset-desk-360.avif",
+      "public/media/preset-desk-360.webp",
+      "public/media/preset-desk-720.avif",
+      "public/media/preset-desk-720.webp"
+    ],
+    "bytes": 41618
+  },
+  {
+    "key": "preset-monitor",
+    "query": "computer monitor",
+    "kind": "preset",
+    "title": "Computer Monitors",
+    "creator": "Tran Mau Tri Tam",
+    "license": "cc0 1.0",
+    "source": "https://stocksnap.io/photo/computer-monitors-SLZRDLFT96",
+    "original": "5184x3456",
+    "files": [
+      "public/media/preset-monitor-360.avif",
+      "public/media/preset-monitor-360.webp",
+      "public/media/preset-monitor-720.avif",
+      "public/media/preset-monitor-720.webp"
+    ],
+    "bytes": 36239
+  }
+]

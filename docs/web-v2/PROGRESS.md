@@ -166,3 +166,7 @@ An unimported dependency costs 0 B. Had either figure moved, the bundler would b
 
 
 **Decision recorded (2026-11-03):** the design's header bell and avatar are NOT shipped - no auth (D2), no notification source. Logged as D-14 so the Phase 3 shell does not re-introduce them as disabled icons.
+
+| M1 CC0 media pipeline (`scripts/fetch-media.mjs`) | **done** | `sharp` 0.35.5 as a devDependency (build-time only). Queries Openverse with `license=cc0` ONLY, downloads, and emits AVIF+WebP at 360/720 plus `media/credits.json` + `CREDITS.md`; provenance is recorded even though CC0 needs no attribution. Assets are NOT wired into a screen yet - that is Phase 4 (home, guides), where LCP is measured. |
+
+**Fourth trap:** anonymous Openverse is slow and dishonestly so - a probe answered **HTTP 500 after 45 s**, and the first queries of a session succeed while later ones stall, which looks exactly like a broken script. Retry with a widening pause and fail soft per slot; a cover image is never worth a red gate.

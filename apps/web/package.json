@@ -18,7 +18,8 @@
     "check:tokens": "node scripts/check-tokens.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "mock:api": "node mock/server.mjs",
-    "capture:reference": "node scripts/capture-reference.mjs"
+    "capture:reference": "node scripts/capture-reference.mjs",
+    "media:fetch": "node scripts/fetch-media.mjs"
   },
   "dependencies": {
     "@mdx-js/loader": "^3.1.1",
@@ -43,6 +44,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "openapi-typescript": "^7.13.0",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4",
     "typescript": "^5",
     "wrangler": "^4.152.0"
