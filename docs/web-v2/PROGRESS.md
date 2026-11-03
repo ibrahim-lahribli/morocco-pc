@@ -182,7 +182,7 @@ primitives, rebuilt the gallery, and measured the gate.
 |---|---|---|
 | T6 eight primitives | **done** | `BottomTabBar`, `StickyBar`, `PartRow`, `RetailerRow` (D-10 reduced), `SnapRow` + `SnapRowItem`, `TrustItem`, `BuildSummaryCard` (drawn fallback, D-01), `ExplainerSheet`. All eight are imported from their own module, never the barrel (D-15). Five tab-bar glyphs were added to `icons.tsx`. `e2e/kit-phase2.spec.ts` proves the one defect each could have: current-item announcement, link-vs-button, keyboard-scrollable scroller, a status badge OUTSIDE the `aria-hidden` drawn slot, a null price printing no number, a retailer row that is not a link, decorative glyphs, and the explainer's focus return. |
 | T7 gallery + viewport | **done** | `/fr/kit` gained eight sections (tab bar, sticky bar, part rows, retailer rows, snap row, trust items, build card, explainer) rendered in real states; `app/[locale]/layout.tsx` now exports `viewport` with `viewportFit: "cover"`, which is what makes `env(safe-area-inset-bottom)` non-zero — the `Sheet`'s footer no longer sits under the home indicator (review finding P2 closed). |
-| T8 G2 evidence | **done** | Bundle table and Lighthouse medians below; axe unchanged (`e2e/a11y.spec.ts` already walks `/kit`, so the new sections are inside the 51 checks); `DEVIATIONS.md` carries D-15…D-18 and the five FEASIBILITY NOs are answered. |
+| T8 G2 evidence | **done** | Bundle table and Lighthouse medians below; axe unchanged (`e2e/a11y.spec.ts` already walks `/kit`, so the new sections are inside the 51 checks); `DEVIATIONS.md` carries D-15…D-19 and the five FEASIBILITY NOs are answered. |
 
 ### Gate G2 — the bundle, measured on both fixtures
 

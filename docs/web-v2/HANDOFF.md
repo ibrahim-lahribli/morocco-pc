@@ -79,7 +79,7 @@ imported from their own module, never through the barrel.*
   build card's CTA was a raw `<a>` bypassing `next/link` (now `LinkButton`); and the gallery intro still
   said "les onze sections" on a page that renders twenty (the count is gone rather than corrected, so it
   cannot drift again).
-- **D-15 … D-18** and the five FEASIBILITY NOs answered in `DEVIATIONS.md`.
+- **D-15 … D-19** and the five FEASIBILITY NOs answered in `DEVIATIONS.md`.
 
 ## First job of Phase 3
 
