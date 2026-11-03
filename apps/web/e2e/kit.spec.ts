@@ -298,4 +298,34 @@ test.describe("the kit at 360 px", () => {
     const icons = section.locator('svg[aria-hidden="true"]');
     await expect(icons).toHaveCount(4);
   });
+
+  test("the sheet names itself, traps focus, closes on Escape and returns focus", async ({ page }) => {
+    await page.goto("/fr/kit");
+
+    const trigger = page.getByRole("button", { name: "Ouvrir la feuille" });
+    await trigger.click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    // Radix requires a title; the accessible name proves the wiring, not the text.
+    await expect(dialog).toHaveAccessibleName("Changer le processeur");
+    await expect(dialog).toHaveAccessibleDescription("Le reste de la configuration ne change pas.");
+
+    // The close control must be a real target, not a 12 px glyph.
+    const close = dialog.getByRole("button", { name: "Fermer" });
+    const box = await close.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+    // Focus is inside the dialog: that is the trap, and the reason for Radix.
+    const inside = await page.evaluate(() => {
+      const node = document.querySelector("[role=dialog]");
+      return node !== null && node.contains(document.activeElement);
+    });
+    expect(inside).toBe(true);
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  });
 });
