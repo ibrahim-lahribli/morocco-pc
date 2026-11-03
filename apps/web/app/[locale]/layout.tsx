@@ -7,6 +7,8 @@ import { preload } from "react-dom";
 
 import { Analytics } from "@/components/analytics";
 import { HeaderNav } from "@/components/header-nav";
+import { TabNav, type TabNavItem } from "@/components/shell/tab-nav";
+import { TAB_BAR_OFFSET } from "@/components/ui/bottom-tab-bar";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { routing } from "@/i18n/routing";
 import { localePath } from "@/lib/i18n/paths";
@@ -97,6 +99,25 @@ const ARABIC_PRELOAD = ["400", "500", "600"] as const;
  * formats sheet. Declared as data so the list and its labels cannot drift apart,
  * and so a test can walk the same list the page renders.
  */
+type TabItemRow = Omit<TabNavItem, "label"> & { labelKey: string };
+
+/**
+ * The mobile tab bar's five cells (Phase 3). SHORT labels only: five of them
+ * share 360 px, so the design's own rule is that "Enregistrements" cannot be
+ * one of them — it is "Gardés" on the bar and keeps its long name in the
+ * header, the footer and its own page's h1.
+ *
+ * `path` is locale-less on purpose: `TabNav` matches it against the URL and
+ * builds the href with `localePath`, so this table has no idea which locale is
+ * being rendered and cannot fork the rule.
+ */
+const TAB_ITEMS: readonly TabItemRow[] = [
+  { key: "home", path: "/", labelKey: "tabItems.home", icon: "home", raised: false },
+  { key: "components", path: "/composants", labelKey: "tabItems.components", icon: "components", raised: false },
+  { key: "configure", path: "/configurer", labelKey: "tabItems.configure", icon: "configure", raised: true },
+  { key: "guides", path: "/guides", labelKey: "tabItems.guides", icon: "guides", raised: false },
+  { key: "saved", path: "/enregistrements", labelKey: "tabItems.saved", icon: "saved", raised: false },
+] as const satisfies readonly (Omit<TabNavItem, "label"> & { labelKey: string })[];
 const FOOTER_LINKS = [
   { key: "legal.mentions", path: "/mentions-legales" },
   { key: "legal.privacy", path: "/confidentialite" },
@@ -238,9 +259,25 @@ export default async function LocaleLayout({
             />
           </nav>
         </header>
-        <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
+        <main id="main" className={`mx-auto w-full max-w-5xl flex-1 px-4 pt-8 md:pb-8 ${TAB_BAR_OFFSET}`}>
           {children}
         </main>
+        {/* Phase 3: the phone's navigation. Hidden from 768 px, where the
+            header's own nav is on screen — two navigations with the same
+            destinations is one too many. Its reserved space is released at the
+            same breakpoint by the <main> padding above, so the last card is
+            never behind the bar and no page is padded twice. */}
+        <TabNav
+          locale={locale}
+          label={t("tabNav")}
+          items={TAB_ITEMS.map((item) => ({
+            key: item.key,
+            path: item.path,
+            icon: item.icon,
+            raised: item.raised,
+            label: t(item.labelKey),
+          }))}
+        />
         {/**
          * S22: the footer is the ONE place every page — the 404 included, since
          * that renders inside this layout — carries the legal links. A `nav`

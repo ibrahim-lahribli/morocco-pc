@@ -323,7 +323,7 @@ export default async function KitPage({
             instead of pinning itself to the browser. */}
         <div className="relative h-40 transform-gpu overflow-hidden rounded-card border border-border bg-page">
           <BottomTabBar
-            label="Navigation principale"
+            label="Exemple de barre d’onglets"
             current="home"
             items={[
               { key: "home", href: "/fr", label: "Accueil", icon: "home" },

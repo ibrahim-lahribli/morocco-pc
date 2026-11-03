@@ -3,6 +3,14 @@
     "brand": "morocco-pc",
     "skip": "انتقل إلى المحتوى الرئيسي",
     "navLabel": "التنقل الرئيسي",
+    "tabNav": "التنقل في التطبيق",
+    "tabItems": {
+      "home": "الرئيسية",
+      "components": "القطع",
+      "configure": "أنشئ",
+      "guides": "الأدلة",
+      "saved": "المحفوظة"
+    },
     "language": "اللغة",
     "switcher": {
       "fr": "Français",

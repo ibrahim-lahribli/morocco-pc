@@ -41,7 +41,7 @@ export interface StickyBarProps {
 }
 
 /** The room a screen must leave under its content: 76 px of bar plus the inset. */
-export const STICKY_BAR_OFFSET = "pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))]";
+export const STICKY_BAR_OFFSET = "pb-[calc(4.75rem+1px+env(safe-area-inset-bottom,0px))]";
 
 export function StickyBar({ label, value, status, action, className }: StickyBarProps) {
   return (

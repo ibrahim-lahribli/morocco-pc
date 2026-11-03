@@ -68,3 +68,47 @@ test("skip link moves keyboard users to the main content", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(page.locator("#main")).toBeVisible();
 });
+
+test("the two navigation landmarks have different names", async ({ page }) => {
+  await page.goto("/fr");
+  // Two landmarks with one accessible name cannot be told apart in a screen
+  // reader's landmark list, and axe will not catch it: `landmark-unique` is
+  // best-practice, and the a11y suite runs WCAG tags only. So this asserts it.
+  const names = await page.locator("nav").evaluateAll((els) =>
+    els.map((el) => el.getAttribute("aria-label") ?? "(none)"),
+  );
+  expect(names).toContain("Navigation principale");
+  expect(names).toContain("Navigation de l’application");
+  expect(new Set(names).size).toBe(names.length);
+});
+
+test("the tab bar marks the current section and never covers the last content", async ({ page }) => {
+  await page.goto("/fr/guides");
+  const bar = page.getByRole("navigation", { name: "Navigation de l’application" });
+  await expect(bar).toBeVisible();
+  await expect(bar.getByRole("link", { name: "Guides" })).toHaveAttribute("aria-current", "page");
+  await expect(bar.getByRole("link", { name: "Accueil" })).not.toHaveAttribute("aria-current", "page");
+  await expect(bar.getByRole("link")).toHaveCount(5);
+
+  // The bar is fixed, so the page must reserve at least its height or the last
+  // card sits behind it. Measured, not assumed: padding >= the bar's own box.
+  const reserved = await page.evaluate(() => {
+    const main = document.querySelector("main");
+    return main === null ? -1 : parseFloat(getComputedStyle(main).paddingBottom);
+  });
+  const barHeight = (await bar.boundingBox())?.height ?? 0;
+  expect(reserved).toBeGreaterThanOrEqual(barHeight);
+});
+
+test("from 768 px the tab bar is gone and the header nav is not", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto("/fr");
+  await expect(page.getByRole("navigation", { name: "Navigation de l’application" })).toBeHidden();
+  await expect(page.getByRole("navigation", { name: "Navigation principale" })).toBeVisible();
+  // And the space it reserved is released: no dead 80 px at the bottom.
+  const reserved = await page.evaluate(() => {
+    const main = document.querySelector("main");
+    return main === null ? -1 : parseFloat(getComputedStyle(main).paddingBottom);
+  });
+  expect(reserved).toBeLessThanOrEqual(40);
+});

@@ -68,7 +68,7 @@ const ICONS: Record<TabBarIcon, (props: { className?: string }) => React.JSX.Ele
  * The room the shell must leave for the bar: 80 px of bar plus the device's
  * bottom inset. Exported as a class so the shell and this file cannot drift.
  */
-export const TAB_BAR_OFFSET = "pb-[calc(5rem+env(safe-area-inset-bottom,0px))]";
+export const TAB_BAR_OFFSET = "pb-[calc(5rem+1px+env(safe-area-inset-bottom,0px))]";
 
 export function BottomTabBar({ label, items, current, className }: BottomTabBarProps) {
   return (

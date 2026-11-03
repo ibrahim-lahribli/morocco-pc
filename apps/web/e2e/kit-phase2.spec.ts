@@ -44,7 +44,7 @@ test.describe("the Phase 2 primitives at 360 px", () => {
     // landmarks sharing one name is a real Phase 3 finding, not a spec problem,
     // and it is recorded in HANDOFF.md rather than papered over here.
     const bar = section(page, "tab-bar").getByRole("navigation");
-    await expect(bar).toHaveAccessibleName("Navigation principale");
+    await expect(bar).toHaveAccessibleName("Exemple de barre d’onglets");
     const links = bar.getByRole("link");
     await expect(links).toHaveCount(5);
 
