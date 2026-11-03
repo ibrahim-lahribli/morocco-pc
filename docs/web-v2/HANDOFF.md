@@ -19,11 +19,11 @@ Read this first, then `CONTEXT.md`. This file is the state of the branch, not th
 |---|---|
 | `npm run typecheck` | PASS (exit 0) |
 | `npm run lint` | PASS, **0 warnings** |
-| `npm run check:tokens` | PASS — 100 files |
-| `npm run check:i18n` | PASS — 98 files, 2 catalogues, key + placeholder parity |
+| `npm run check:tokens` | PASS — 102 files |
+| `npm run check:i18n` | PASS — 100 files, 2 catalogues, key + placeholder parity |
 | `npm run check:api-types` | PASS — contract 1.10.0, `schema.d.ts` byte-identical |
 | `npm run build` | PASS |
-| `CI=1 npm test` | **PASS — 388 passed / 2 skipped** (390 specs, 34.9 s) |
+| `CI=1 npm test` | **PASS — 392 passed / 2 skipped** (394 specs; one re-run reported 1 flaky) |
 | `npm run test:lighthouse` | **PASS** — four `error` assertions, median of 3, both fixtures |
 
 The two skips are `e2e/wizard-browser-api.spec.ts` (needs `E2E_BROWSER_API=1`) and

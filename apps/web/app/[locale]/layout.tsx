@@ -95,13 +95,6 @@ const geistMono = Geist_Mono({
 const ARABIC_PRELOAD = ["400", "500", "600"] as const;
 
 /**
- * The footer's link set (S22), in reading order: the three legal pages, then the
- * formats sheet. Declared as data so the list and its labels cannot drift apart,
- * and so a test can walk the same list the page renders.
- */
-type TabItemRow = Omit<TabNavItem, "label"> & { labelKey: string };
-
-/**
  * The mobile tab bar's five cells (Phase 3). SHORT labels only: five of them
  * share 360 px, so the design's own rule is that "Enregistrements" cannot be
  * one of them — it is "Gardés" on the bar and keeps its long name in the
@@ -111,6 +104,8 @@ type TabItemRow = Omit<TabNavItem, "label"> & { labelKey: string };
  * builds the href with `localePath`, so this table has no idea which locale is
  * being rendered and cannot fork the rule.
  */
+type TabItemRow = Omit<TabNavItem, "label"> & { labelKey: string };
+
 const TAB_ITEMS: readonly TabItemRow[] = [
   { key: "home", path: "/", labelKey: "tabItems.home", icon: "home", raised: false },
   { key: "components", path: "/composants", labelKey: "tabItems.components", icon: "components", raised: false },
@@ -118,6 +113,12 @@ const TAB_ITEMS: readonly TabItemRow[] = [
   { key: "guides", path: "/guides", labelKey: "tabItems.guides", icon: "guides", raised: false },
   { key: "saved", path: "/enregistrements", labelKey: "tabItems.saved", icon: "saved", raised: false },
 ] as const satisfies readonly (Omit<TabNavItem, "label"> & { labelKey: string })[];
+
+/**
+ * The footer's link set (S22), in reading order: the three legal pages, then the
+ * formats sheet. Declared as data so the list and its labels cannot drift apart,
+ * and so a test can walk the same list the page renders.
+ */
 const FOOTER_LINKS = [
   { key: "legal.mentions", path: "/mentions-legales" },
   { key: "legal.privacy", path: "/confidentialite" },

@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+import { isTabPath } from "../components/shell/tab-match";
+
 test("/fr renders the app shell at 360 px with no horizontal scroll", async ({
   page,
 }) => {
@@ -122,4 +124,16 @@ test("from 768 px the tab bar is gone and the header nav is not", async ({ page 
     parseFloat(getComputedStyle(document.body).paddingBottom),
   );
   expect(reserved).toBeLessThanOrEqual(0);
+});
+
+test("a sibling path never lights a tab (the section boundary guard)", () => {
+  // Pure and browser-free on purpose: `/fr/composants-x` has no route, and an
+  // unknown slug renders Next's bare 404, which carries no `nav` at all
+  // (measured 2026-11-03) — so a navigation-based assertion would pass for the
+  // wrong reason. The rule that decides the lit cell is pinned here instead.
+  expect(isTabPath("/composants-x", "/composants")).toBe(false);
+  expect(isTabPath("/composants", "/composants")).toBe(true);
+  expect(isTabPath("/composants/comparer", "/composants")).toBe(true);
+  expect(isTabPath("/composants-x", "/")).toBe(false);
+  expect(isTabPath("", "/")).toBe(true);
 });

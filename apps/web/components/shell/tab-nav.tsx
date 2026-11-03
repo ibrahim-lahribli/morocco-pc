@@ -16,6 +16,7 @@
  *     and `/fr/composants/comparer` both light "Pièces". A URL that matches none
  *     (a result page, a guide) lights nothing rather than defaulting to home — a
  *     bar that always claims a tab is lying about where you are.
+ *     The rule itself is `tab-match.ts`, guard included, so a spec can pin it.
  *   - **`md:hidden`.** The tab bar is the phone's navigation. From 768 px the
  *     header's own nav is on screen, and two navigations with the same
  *     destinations is one too many. Its reserved space is released at the same
@@ -38,6 +39,7 @@ import { usePathname } from "next/navigation";
 
 import { BottomTabBar, type TabBarIcon } from "@/components/ui/bottom-tab-bar";
 import { localePath } from "@/lib/i18n/paths";
+import { currentTabKey } from "./tab-match";
 
 export interface TabNavItem {
   /** Stable key; the same value `BottomTabBar` compares against `current`. */
@@ -64,10 +66,9 @@ export function TabNav({ locale, label, items }: TabNavProps) {
   const root = `/${locale}`;
   const rest = pathname.startsWith(root) ? pathname.slice(root.length) : pathname;
 
-  // Longest match wins, so a nested route lights its section rather than home.
-  const current = items
-    .filter((item) => (item.path === "/" ? rest === "" || rest === "/" : rest.startsWith(item.path)))
-    .sort((a, b) => b.path.length - a.path.length)[0]?.key;
+  // The rule lives in `tab-match.ts` next door: it is a pure question about
+  // (pathname, items), and its section BOUNDARY is worth pinning on its own.
+  const current = currentTabKey(rest, items);
 
   return (
     <BottomTabBar

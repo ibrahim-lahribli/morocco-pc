@@ -244,3 +244,32 @@ Lighthouse re-measured after the shell (`npm run test:lighthouse`, exit 0, media
 The tab bar ships to every route, so it reaches both fixtures: ~9.8 KB on the result page and ~0.1 KB
 on the preset (which already shared the chunk). **The binding route flipped to the result page**, and
 LCP is 5 ms / 10 ms from its budget — the wall Phase 4 has to build against.
+
+## Phase 3 — review fixes (2026-11-03)
+
+Four findings from a two-axis review of `8e90286..2281a42`. Every one is mechanical: no change a
+user can see, and no assertion weakened.
+
+| Fix | Where | What was wrong |
+|---|---|---|
+| Footer docblock | `app/[locale]/layout.tsx` | f668862 inserted `type TabItemRow` between the S22 comment and `FOOTER_LINKS`, so the comment documented the new type and `FOOTER_LINKS` had none. Each block now leads its own declaration. |
+| Offset comment | `components/ui/bottom-tab-bar.tsx` | The file still said `TAB_BAR_OFFSET` is the class the shell puts on `<main>`; d761355 moved it to `<body>`. The constant's own doc now also counts the 1 px border it reserves. |
+| Section boundary | `components/shell/tab-match.ts` (new), `tab-nav.tsx` | The bar matched `rest.startsWith(path)`, so a future `/composants-x` sibling would have lit "Pièces". `header-nav.tsx` documents the guard (equal path, or the path plus a trailing slash); both navigations now share one rule, in one module. |
+| Boundary spec | `e2e/shell.spec.ts` | New pure case pins `/composants-x` to no lit tab. Deliberately unit-shaped: `/fr/composants-x` renders Next's bare 404, which carries NO `nav` element (measured 2026-11-03), so a navigation-based assertion would have passed for the wrong reason. |
+
+| Gate | Result |
+|---|---|
+| `npm run typecheck` | PASS |
+| `npm run lint` | PASS — 0 warnings |
+| `npm run check:tokens` | PASS — **102 files** (the handoff recorded 100) |
+| `npm run check:i18n` | PASS — **100 files** (the handoff recorded 98) |
+| `npm run check:api-types` | PASS — contract 1.10.0 |
+| `npm run build` | PASS |
+| `npx playwright test e2e/shell.spec.ts` | PASS — **9/9** |
+| `CI=1 npm test` | PASS — **392 passed / 2 skipped** (394 specs); one earlier run of the same tree reported **1 flaky on retry** (`e2e/wizard-budget.spec.ts` "a field below the minimum clamps to it on blur" — a pre-existing timing flake, unrelated to the shell and green on retry) |
+
+**Not fixed here, recorded so the gate is not misread.** The same review re-ran
+`npm run test:lighthouse` on this tree and it **exited 1**: the result route's LCP median is
+**2 503 ms** against the 2 500 ms budget (runs 2 503 / 2 493 / 2 559). The Phase 3 row above records
+2 495 ms — the same measurement at the margin, not a contradiction — and the tab bar's ~9.8 KB on
+that route is what moved it there. That is the next action, not a documentation edit.

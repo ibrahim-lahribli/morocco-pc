@@ -26,7 +26,8 @@
  *
  * The page underneath MUST reserve room for this bar: it is `fixed`, so it
  * covers content rather than pushing it. `TAB_BAR_OFFSET` is the class the shell
- * puts on `<main>` so the last card is never hidden behind the bar.
+ * puts on `<body>` so nothing that follows the main content can end up behind
+ * the bar — the footer included, which is the case that found this.
  */
 import Link from "next/link";
 
@@ -65,8 +66,9 @@ const ICONS: Record<TabBarIcon, (props: { className?: string }) => React.JSX.Ele
 };
 
 /**
- * The room the shell must leave for the bar: 80 px of bar plus the device's
- * bottom inset. Exported as a class so the shell and this file cannot drift.
+ * The room the shell must leave for the bar: its 80 px row, the 1 px top border
+ * above it, and the device's bottom inset. Exported as a class so the shell and
+ * this file cannot drift.
  */
 export const TAB_BAR_OFFSET = "pb-[calc(5rem+1px+env(safe-area-inset-bottom,0px))]";
 
