@@ -12,6 +12,13 @@
  * ribbon as landing pages, which is why the id it hands a client is a real
  * recommendation id that GET /v1/recommendations/{id} answers.
  *
+ * A PASS THAT ASSEMBLED NOTHING IS NOT A PRESET (R-26). Two keys at 6 000 MAD
+ * committed a pass whose every build was rejected, so the preset pointed at a
+ * recommendation that answers `builds: []` - a landing page with nothing on it.
+ * A pass is recorded only when it carries at least one `build_candidate` row;
+ * otherwise it is deleted in FK order and the key is reported as `empty-pool`,
+ * exactly like a pass that never assembled at all.
+ *
  * WHY IT REUSES THE API'S WRITER INSTEAD OF ITS OWN SQL. One writer for
  * `recommendation_query` is what keeps a generated pass indistinguishable from a
  * POSTed one - same profile/query pair, same commit path, same pass facts. The
@@ -410,17 +417,30 @@ async function ensureKey(client, key) {
 /**
  * Run one pass for a key and record the preset.
  *
- * `EMPTY_CANDIDATE_POOL` is handled as the pass's own outcome rather than as a
- * failure: such a pass throws inside the read stage, BEFORE its write
- * transaction, so its query row has no pass facts and is not an answer. The row
- * this function created is removed again (leaving no residue and no preset) and
- * the key is reported as `empty-pool`, which is what it is - the catalog cannot
- * build anything at that budget, so there is no landing page to serve.
+ * TWO ways a pass can produce no landing page, and they are the SAME answer:
+ * `EMPTY_CANDIDATE_POOL` (the read stage found nothing to assemble, thrown
+ * BEFORE the pass writes its own facts) and a COMMITTED pass that ended with
+ * zero `build_candidate` rows, because every assembled build was rejected - the
+ * shape R-26 measured at 6 000 MAD. The second used to be recorded, which is how
+ * the ribbon advertised pages that answer `builds: []`. Both are reported as
+ * `empty-pool` and leave no residue and no preset, so the endpoint only ever
+ * names a pass a visitor can actually look at.
  *
+ * `collaborators` exists so the DB-free suite can drive THIS branch with fakes -
+ * the same reason `ensureKey` and `inspectKey` are separate functions: a test
+ * that re-implemented the rule could agree with itself while the script
+ * disagreed.
+ *
+ * @param {object} client a single dedicated connection
+ * @param {object} key { scoringModelId, useCase, currency, catalogVersion, budgetAmount }
+ * @param {object} [collaborators] {repository, engine, deletePasses} overrides for tests
  * @returns {Promise<{status: 'created'|'empty-pool', queryId: string|null}>}
  */
-async function generateOne(client, key) {
-  const created = await repository.createRecommendationQuery(client, {
+async function generateOne(client, key, collaborators = {}) {
+  const repo = collaborators.repository || repository;
+  const run = collaborators.engine || engine;
+  const removePasses = collaborators.deletePasses || deletePasses;
+  const created = await repo.createRecommendationQuery(client, {
     scoringModelId: key.scoringModelId,
     budgetAmount: key.budgetAmount,
     currency: key.currency,
@@ -428,15 +448,21 @@ async function generateOne(client, key) {
     catalogVersion: key.catalogVersion,
   });
   try {
-    await engine.runFullRun(client, created.queryId, ENGINE_VERSION);
+    await run.runFullRun(client, created.queryId, ENGINE_VERSION);
   } catch (error) {
     if (error && error.code === 'EMPTY_CANDIDATE_POOL') {
-      await deletePasses(client, [created.queryId]);
+      await removePasses(client, [created.queryId]);
       return { status: 'empty-pool', queryId: null };
     }
     throw error;
   }
-  await repository.upsertPreset(client, {
+  // A committed pass with no builds is not a landing page (R-26): the endpoint
+  // would serve a recommendation whose `builds` is the empty array.
+  if (await repo.countBuildCandidates(client, created.queryId) === 0) {
+    await removePasses(client, [created.queryId]);
+    return { status: 'empty-pool', queryId: null };
+  }
+  await repo.upsertPreset(client, {
     useCase: key.useCase,
     currency: key.currency,
     catalogVersion: key.catalogVersion,

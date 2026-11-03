@@ -29,7 +29,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const {
-  parseArgs, budgetRibbon, USAGE, resolveTarget, targetLine,
+  parseArgs, budgetRibbon, USAGE, resolveTarget, targetLine, generateOne,
 } = require('../../scripts/generate-presets');
 const modelPin = require('./model-pin');
 
@@ -270,4 +270,94 @@ test('the CLI refuses the shared database BEFORE it connects, and never echoes a
   assert.equal(child.status, 1, 'a refusal is a run failure, not a usage typo');
   assert.match(child.stderr, /SHARED database/);
   assert.doesNotMatch(child.stdout + child.stderr, /ep-shared-2/, 'the refusal quotes no host');
+});
+
+// --- R-26: a pass that assembled nothing is not a landing page ----------------
+//
+// At 6 000 MAD the catalogue has a budget floor but no build inside it (R-09), so
+// a pass COMMITS with zero `build_candidate` rows. The generator used to record
+// such a key, and `/v1/presets` then advertised a page whose recommendation
+// answers `builds: []`. These tests drive the real branch through injected
+// collaborators and assert the EFFECTS - a preset written or not, a pass deleted -
+// rather than a return value, so the test cannot agree with itself while the
+// script disagrees.
+
+const KEY = {
+  scoringModelId: 'm-1',
+  useCase: 'GAMING',
+  currency: 'MAD',
+  catalogVersion: 'cv-1',
+  budgetAmount: 6000,
+};
+
+function fakeCollaborators(options = {}) {
+  const buildCount = options.buildCount === undefined ? 3 : options.buildCount;
+  const calls = { upserted: [], deleted: [], ran: 0, counted: 0, countedFor: null };
+  return {
+    calls,
+    collaborators: {
+      repository: {
+        createRecommendationQuery: async () => ({ queryId: 'q-1' }),
+        countBuildCandidates: async (_client, queryId) => {
+          calls.counted += 1;
+          calls.countedFor = queryId;
+          return buildCount;
+        },
+        upsertPreset: async (_client, row) => {
+          calls.upserted.push(row);
+          return { queryId: row.queryId };
+        },
+      },
+      engine: {
+        runFullRun: async () => {
+          calls.ran += 1;
+          if (options.runError) throw options.runError;
+        },
+      },
+      deletePasses: async (_client, ids) => {
+        calls.deleted.push(ids);
+        return { queries: ids.length };
+      },
+    },
+  };
+}
+
+test('R-26: a committed pass with ZERO builds records no preset and deletes the pass', async () => {
+  const { calls, collaborators } = fakeCollaborators({ buildCount: 0 });
+  const outcome = await generateOne({}, KEY, collaborators);
+  assert.equal(outcome.status, 'empty-pool');
+  assert.equal(outcome.queryId, null, 'a key with no builds must not name a landing page');
+  assert.equal(calls.countedFor, 'q-1', 'the count is asked of the pass just written');
+  assert.deepEqual(calls.deleted, [['q-1']], 'the pass is removed, so nothing is left behind');
+  assert.equal(calls.upserted.length, 0, 'no recommendation_preset row for an empty page');
+});
+
+test('a pass WITH builds still records the preset (the fix must not empty the shelf)', async () => {
+  const { calls, collaborators } = fakeCollaborators({ buildCount: 3 });
+  const outcome = await generateOne({}, KEY, collaborators);
+  assert.equal(outcome.status, 'created');
+  assert.equal(outcome.queryId, 'q-1');
+  assert.equal(calls.upserted.length, 1);
+  assert.equal(calls.upserted[0].queryId, 'q-1');
+  assert.deepEqual(calls.deleted, [], 'a usable pass is never deleted');
+});
+
+test('EMPTY_CANDIDATE_POOL keeps its own path: delete, no count, no preset', async () => {
+  const { calls, collaborators } = fakeCollaborators({
+    runError: Object.assign(new Error('no candidates'), { code: 'EMPTY_CANDIDATE_POOL' }),
+  });
+  const outcome = await generateOne({}, KEY, collaborators);
+  assert.equal(outcome.status, 'empty-pool');
+  assert.deepEqual(calls.deleted, [['q-1']]);
+  assert.equal(calls.counted, 0, 'a pass that threw before writing is not counted');
+  assert.equal(calls.upserted.length, 0);
+});
+
+test('a REAL failure is rethrown, not reported as a budget outcome', async () => {
+  const { calls, collaborators } = fakeCollaborators({
+    runError: Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }),
+  });
+  await assert.rejects(() => generateOne({}, KEY, collaborators), /connection reset/);
+  assert.deepEqual(calls.deleted, [], 'nothing is deleted on an unknown failure');
+  assert.equal(calls.upserted.length, 0);
 });

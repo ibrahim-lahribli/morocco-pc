@@ -429,6 +429,19 @@ const FIND_PRESET_QUERY_ID_SQL = [
  * new pass instead of raising 23505. `generated_at` is the row's creation time
  * (migration 022's column comment) and is deliberately not touched.
  */
+/**
+ * How many builds a committed pass actually carries.
+ *
+ * R-26: a pass can COMMIT and still hold no `build_candidate` rows - every
+ * assembled build was rejected - and the preset generator used to record that
+ * key, so `/v1/presets` advertised a page answering `builds: []`. The count
+ * lives here because every statement against these tables lives here.
+ */
+const COUNT_BUILD_CANDIDATES_SQL = [
+  'SELECT count(*)::int AS build_count',
+  'FROM build_candidate',
+  'WHERE recommendation_query_id = $1',
+].join(' ');
 const UPSERT_PRESET_SQL = [
   'INSERT INTO recommendation_preset (use_case, currency, catalog_version, budget_amount, query_id)',
   'VALUES ($1, $2, $3, $4, $5)',
@@ -1118,6 +1131,23 @@ async function deleteSupersededPresets(client, key) {
   return result.rows.map((row) => row.query_id);
 }
 
+/**
+ * How many builds a committed pass carries (R-26).
+ *
+ * A pass that assembled nothing still commits its query row and pass facts; the
+ * count is what separates "the catalogue cannot build at this budget" from
+ * "there is a page to serve". Returns 0 rather than null, so a caller cannot
+ * read an unexpected shape as unknown.
+ *
+ * @param {object} db pool or client exposing query(sql, params)
+ * @param {string} queryId the pass
+ * @returns {Promise<number>} the number of build_candidate rows
+ */
+async function countBuildCandidates(db, queryId) {
+  const result = await db.query(COUNT_BUILD_CANDIDATES_SQL, [queryId]);
+  const row = result && Array.isArray(result.rows) ? result.rows[0] : null;
+  return row && typeof row.build_count === 'number' ? row.build_count : 0;
+}
 module.exports = {
   SELECT_ACTIVE_SCORING_MODEL_SQL,
   SELECT_PINNED_SCORING_MODEL_SQL,
@@ -1148,6 +1178,7 @@ module.exports = {
   readBuildForSwap,
   selectPresets,
   findPresetQueryId,
+  countBuildCandidates,
   upsertPreset,
   deletePresets,
   deleteSupersededPresets,
