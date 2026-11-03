@@ -18,6 +18,7 @@ measured budget overrides the design file. Gate G2 answers the four FEASIBILITY 
 | D-11 | Compatibility | per-part verdicts | one build-level badge (`PASS`/`UNKNOWN`) | Per-part compatibility is not persisted or served; `CONDITIONAL` exists only as an assembly-time note (`API_REQUESTS.md` §1). |
 | D-12 | Naming | ramp `surface` = `#F8F9FF` | app `surface` = card white (`#FFFFFF`); the ramp value is `background` | 96 existing `bg-surface` usages mean "card". Renaming them for a token whose value equals `background` buys nothing, and both design values stay addressable. |
 | D-13 | Colour | prose amber/emerald used as text backgrounds | amber carries `on-surface` (8.00:1); emerald is fill/icon only; text uses the ramp's `on-*-container` pairs (4.54/4.60:1) | The design supplies its own accessible pairings; using them is adopting the design, not departing from it. |
+| D-14 | Shell | header carries a notification bell and an account avatar | neither is rendered | There is no authentication (D2) and no notification source in contract 1.10, so both would be controls that can never do anything. Owner decision 2026-11-03: a bell that never rings is worse than no bell. Revisit only with auth, not with a disabled icon. |
 
 ## Pending at gate G2 (Phase 2)
 
