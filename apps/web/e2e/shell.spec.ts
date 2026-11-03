@@ -90,14 +90,26 @@ test("the tab bar marks the current section and never covers the last content", 
   await expect(bar.getByRole("link", { name: "Accueil" })).not.toHaveAttribute("aria-current", "page");
   await expect(bar.getByRole("link")).toHaveCount(5);
 
-  // The bar is fixed, so the page must reserve at least its height or the last
-  // card sits behind it. Measured, not assumed: padding >= the bar's own box.
-  const reserved = await page.evaluate(() => {
-    const main = document.querySelector("main");
-    return main === null ? -1 : parseFloat(getComputedStyle(main).paddingBottom);
-  });
+  // The reservation lives on <body>, NOT on <main>: the footer sits after <main>,
+  // so main's padding protects the last card and leaves the footer behind the bar
+  // (measured 2026-11-03: footer bottom 800 px vs bar top 719 px).
+  const reserved = await page.evaluate(() =>
+    parseFloat(getComputedStyle(document.body).paddingBottom),
+  );
   const barHeight = (await bar.boundingBox())?.height ?? 0;
   expect(reserved).toBeGreaterThanOrEqual(barHeight);
+
+  // And the thing the padding exists for: at the bottom of the page the footer
+  // must clear the bar. This is the assertion that fails when the reservation is
+  // put on the wrong element.
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const overlaps = await page.evaluate(() => {
+    const footer = document.querySelector("footer");
+    const nav = document.querySelector('nav[aria-label="Navigation de l’application"]');
+    if (footer === null || nav === null) return null;
+    return footer.getBoundingClientRect().bottom > nav.getBoundingClientRect().top;
+  });
+  expect(overlaps).toBe(false);
 });
 
 test("from 768 px the tab bar is gone and the header nav is not", async ({ page }) => {
@@ -106,9 +118,8 @@ test("from 768 px the tab bar is gone and the header nav is not", async ({ page 
   await expect(page.getByRole("navigation", { name: "Navigation de l’application" })).toBeHidden();
   await expect(page.getByRole("navigation", { name: "Navigation principale" })).toBeVisible();
   // And the space it reserved is released: no dead 80 px at the bottom.
-  const reserved = await page.evaluate(() => {
-    const main = document.querySelector("main");
-    return main === null ? -1 : parseFloat(getComputedStyle(main).paddingBottom);
-  });
-  expect(reserved).toBeLessThanOrEqual(40);
+  const reserved = await page.evaluate(() =>
+    parseFloat(getComputedStyle(document.body).paddingBottom),
+  );
+  expect(reserved).toBeLessThanOrEqual(0);
 });

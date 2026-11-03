@@ -205,7 +205,7 @@ export default async function LocaleLayout({
 
   return (
     <html lang={locale} dir={dir} className={`${fonts} h-full antialiased`}>
-      <body className="flex min-h-full flex-col">
+      <body className={`flex min-h-full flex-col md:pb-0 ${TAB_BAR_OFFSET}`}>
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:start-2 focus:z-50 focus:rounded-control focus:bg-surface focus:px-3 focus:py-2 focus:text-ink"
@@ -259,13 +259,13 @@ export default async function LocaleLayout({
             />
           </nav>
         </header>
-        <main id="main" className={`mx-auto w-full max-w-5xl flex-1 px-4 pt-8 md:pb-8 ${TAB_BAR_OFFSET}`}>
+        <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
           {children}
         </main>
         {/* Phase 3: the phone's navigation. Hidden from 768 px, where the
             header's own nav is on screen — two navigations with the same
             destinations is one too many. Its reserved space is released at the
-            same breakpoint by the <main> padding above, so the last card is
+            same breakpoint by the <body> padding above, so the last card is
             never behind the bar and no page is padded twice. */}
         <TabNav
           locale={locale}
