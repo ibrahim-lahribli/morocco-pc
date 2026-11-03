@@ -29,7 +29,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const {
-  parseArgs, budgetRibbon, USAGE, resolveTarget, targetLine, generateOne,
+  parseArgs, budgetRibbon, USAGE, resolveTarget, targetLine, auditTargetLine, generateOne,
 } = require('../../scripts/generate-presets');
 const modelPin = require('./model-pin');
 
@@ -360,4 +360,28 @@ test('a REAL failure is rethrown, not reported as a budget outcome', async () =>
   await assert.rejects(() => generateOne({}, KEY, collaborators), /connection reset/);
   assert.deepEqual(calls.deleted, [], 'nothing is deleted on an unknown failure');
   assert.equal(calls.upserted.length, 0);
+});
+
+// --- the audit line: a release write names its rollback point -----------------
+//
+// The digest proves WHICH database a run changed without quoting a host; the
+// restore point is the other half of a traceable write, and it used to be
+// validated and then dropped, so the only trace of it was a document.
+
+test('the audit line carries the restore point and still names no host', () => {
+  const env = {
+    DATABASE_URL: 'postgresql://u:p@ep-shared-2.us-east-1.aws.neon.tech/neondb?sslmode=require',
+    TARGET_DATABASE_URL: 'postgresql://u:p@ep-eu-3.eu-central-1.aws.neon.tech/neondb?sslmode=require',
+  };
+  const named = resolveTarget(parseArgs(ARGV.concat(['--target-env=TARGET_DATABASE_URL']), NO_ENV), env);
+  assert.equal(
+    auditTargetLine(named, 'br-plain-dream-b9v579cy'),
+    'AUDIT TARGET: ' + named.digest + ' restore-point=br-plain-dream-b9v579cy'
+  );
+  assert.equal(
+    auditTargetLine(named, null),
+    'AUDIT TARGET: ' + named.digest,
+    'a dry run has no restore point, so it adds no empty field'
+  );
+  assert.doesNotMatch(auditTargetLine(named, 'br-x'), /neon.tech|ep-eu|u:p/, 'no host or credential');
 });

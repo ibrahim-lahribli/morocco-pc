@@ -75,6 +75,8 @@
  * comparison, not a name check - a second variable name pointing at the shared
  * database is refused - and a `--commit`/`--cleanup` against a named target needs
  * `--restore-point=<id>`, the same rule `apply-api-role.js` applies.
+ * The audit line prints that restore point beside the digest, so a release write
+ * is traceable from the run's own output rather than from a document.
  * The scoring model is a PIN (`--model=` /
  * `SCORING_MODEL_PIN`), never "whichever is active": a pin selects among active
  * models and can never activate one, and a comparison harness that silently
@@ -571,6 +573,22 @@ function targetLine(target) {
   return 'target: ' + target.label + (target.digest === null ? '' : ' (' + target.digest + ')');
 }
 
+/**
+ * The line a release write prints before it connects.
+ *
+ * The digest proves WHICH database a run changed without quoting a host; the
+ * restore point is the other half, and it used to be validated and then dropped,
+ * leaving the only trace of it in whatever document described the run. A dry run
+ * has no restore point, so it prints no empty field.
+ *
+ * @param {{digest: string}} target the resolved target
+ * @param {string|null} restorePoint the id the write relies on, or null
+ * @returns {string} `AUDIT TARGET: db:<12 hex>[ restore-point=<id>]`
+ */
+function auditTargetLine(target, restorePoint) {
+  return 'AUDIT TARGET: ' + target.digest + (restorePoint ? ' restore-point=' + restorePoint : '');
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   const target = resolveTarget(args);
@@ -578,7 +596,7 @@ async function main() {
   // say which database it is about to change, and a pooled host is not quotable.
   console.log(targetLine(target));
   if (target.nonTest) {
-    console.log('AUDIT TARGET: ' + target.digest);
+    console.log(auditTargetLine(target, args.restorePoint));
   }
   const client = new Client({
     connectionString: target.connectionString,
@@ -684,6 +702,7 @@ module.exports = {
   resolveRun,
   resolveTarget,
   targetLine,
+  auditTargetLine,
   UsageError,
   ENGINE_VERSION,
   USAGE,
