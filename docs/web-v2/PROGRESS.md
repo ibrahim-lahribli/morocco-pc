@@ -151,3 +151,5 @@ Measured after T1 (median of three runs per route):
 | /fr/config-pc-gamer-9000-dh | 2487 ms | 0 | 167107 B | +0 B |
 
 An unimported dependency costs 0 B. Had either figure moved, the bundler would be charging an unused dependency to a route and every later G2 number would be untrustworthy.
+
+| T2 `Sheet` on Radix Dialog, imported by `/kit` only, measured before any screen uses it | **done** | Radix 1.3.1 kept: `build` PASS, suite green, Lighthouse PASS with both script figures at the G1 baseline (+0 B on the preset route). Decision recorded: the primitive stays OUT of the `@/components/ui` barrel, whose header promises hookless, non-client modules, so a client-only primitive cannot live there without breaking that contract. |

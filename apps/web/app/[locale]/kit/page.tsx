@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Alert, Badge, Button, ChoiceCard, ProgressBar, Skeleton, SkeletonCard, TextField } from "@/components/ui";
 import { formatDate, formatMoney, formatNumber, formatPercent } from "@/lib/i18n/format";
 import { KitInteractive } from "./kit-interactive";
+import { KitSheet } from "./kit-sheet";
 
 /**
  * The S3 story route: every component, every state the board draws.
@@ -268,6 +269,10 @@ export default async function KitPage({
           </Alert>
         </div>
       </Section>
+      <Section id="sheet" title="Feuille (bottom sheet)" source="Tableau §12 — Radix Dialog · piège de focus">
+        <KitSheet />
+      </Section>
+
     </article>
   );
 }
