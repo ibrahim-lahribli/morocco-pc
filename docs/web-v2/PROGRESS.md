@@ -233,3 +233,14 @@ keeps; it is listed in `HANDOFF.md`.
 | Error boundaries | **NOT STARTED** | `error.tsx` must be a client component and this app has no client-side message path (`next-intl`'s provider is not mounted — which is why `HeaderNav` and `TabNav` take labels as props). Mounting the provider (ships the catalogues to the browser) versus importing a static catalogue inside the boundary is a decision for the owner; the 404 (`not-found.tsx`) already exists. **G3 is not claimed.** |
 
 Suite after the shell wiring: **394 specs, 391 passed, 2 skipped** (35.9 s).
+
+Lighthouse re-measured after the shell (`npm run test:lighthouse`, exit 0, median of 3):
+
+| Route | LCP | CLS | Script | vs 174 080 B | at G2 |
+|---|---|---|---|---|---|
+| `/fr/config/{id}` | 2 495 ms | 0 | **168 700 B** | **5 380 B** | 158 876 B |
+| `/fr/config-pc-gamer-9000-dh` | 2 490 ms | 0 | 167 428 B | 6 652 B | 167 321 B |
+
+The tab bar ships to every route, so it reaches both fixtures: ~9.8 KB on the result page and ~0.1 KB
+on the preset (which already shared the chunk). **The binding route flipped to the result page**, and
+LCP is 5 ms / 10 ms from its budget — the wall Phase 4 has to build against.

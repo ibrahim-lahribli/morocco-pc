@@ -41,6 +41,19 @@ Performance score 98 on both. **LCP is still the binding metric** — 10 ms and 
 preset run sampled 2 874 ms before the median absorbed it. Any Phase 3 addition above the fold
 re-measures before it lands; the preset route is the one to watch.
 
+### Measured again after the shell, and the binding route changed
+
+| Route | LCP (median of 3) | CLS | Script | vs 174 080 B | change at G2 |
+|---|---|---|---|---|---|
+| `/fr/config/{id}` | 2 495 ms | 0 | **168 700 B** | **5 380 B spare** | **+9 824 B** |
+| `/fr/config-pc-gamer-9000-dh` | 2 490 ms | 0 | 167 428 B | 6 652 B spare | +107 B |
+
+The mobile tab bar ships to every route, so it lands on both measured fixtures. It costs the RESULT
+route ~9.8 KB and the preset route ~0.1 KB (that page already shared the chunk), which flips the
+binding route: **the result page is now the one to watch, not the preset.** LCP is 2 495 / 2 490 ms
+against a 2 500 ms budget — 5 ms and 10 ms of slack — so Phase 4 must treat this as the wall.
+
+
 ## The headline: the 3 KB was the barrel, and that is now measured
 
 The previous session left this open — Phase 2 had grown the fixture bundles ~3 KB and the suspect was
@@ -124,8 +137,9 @@ browser) versus importing a static catalogue inside the boundary is a decision, 
 - **Media assets are committed but unused.** `guide-motherboard` is 127 KB, 4× the others — re-encode
   before it lands above the fold (Phase 4, where LCP is measured).
 - **`apps/web-v2/` is untracked** — a duplicate of `design/stitch/`. Deleting it is the owner's call.
-- **Script margin is now 6 759 B on the preset route.** That is the number every Phase 3 shell
-  addition to a shared chunk is judged against.
+- **Script margin is 5 380 B on the RESULT route**, which the tab bar made the binding one (it was
+  6 759 B on the preset route at G2). Every Phase 3/4 addition to a shared chunk is judged against
+  5 380 B now, and LCP has 5 ms of slack.
 
 ## Traps (each has already cost a red run or a wrong number)
 
