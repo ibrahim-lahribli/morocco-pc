@@ -172,3 +172,52 @@ An unimported dependency costs 0 B. Had either figure moved, the bundler would b
 **Fourth trap:** anonymous Openverse is slow and dishonestly so - a probe answered **HTTP 500 after 45 s**, and the first queries of a session succeed while later ones stall, which looks exactly like a broken script. Retry with a widening pause and fail soft per slot; a cover image is never worth a red gate.
 
 | T5 `StepHeader` + `ChoicePills` + `BudgetPicker` | **done** | `StepHeader` is the wizard's inline progress line, list and focus-target heading as one primitive; the wizard ADOPTS it in Phase 4 rather than being refactored now (a second owner of the flow's length is the bug it exists to prevent). `BudgetPicker` offers presets only, every one snapped through `snapToStep`, so the exact rail stays the single owner of arbitrary amounts; its labels come from an injected `format`, because a primitive that formats its own numbers is how a locale bug gets in. |
+
+## Phase 2 — T6-T8 and gate G2 (2026-11-03)
+
+**Phase 2 is closed.** T1-T5 landed in the previous session; this one added the remaining eight
+primitives, rebuilt the gallery, and measured the gate.
+
+| Task | Status | Evidence |
+|---|---|---|
+| T6 eight primitives | **done** | `BottomTabBar`, `StickyBar`, `PartRow`, `RetailerRow` (D-10 reduced), `SnapRow` + `SnapRowItem`, `TrustItem`, `BuildSummaryCard` (drawn fallback, D-01), `ExplainerSheet`. All eight are imported from their own module, never the barrel (D-15). Five tab-bar glyphs were added to `icons.tsx`. `e2e/kit-phase2.spec.ts` proves the one defect each could have: current-item announcement, link-vs-button, keyboard-scrollable scroller, a status badge OUTSIDE the `aria-hidden` drawn slot, a null price printing no number, a retailer row that is not a link, decorative glyphs, and the explainer's focus return. |
+| T7 gallery + viewport | **done** | `/fr/kit` gained eight sections (tab bar, sticky bar, part rows, retailer rows, snap row, trust items, build card, explainer) rendered in real states; `app/[locale]/layout.tsx` now exports `viewport` with `viewportFit: "cover"`, which is what makes `env(safe-area-inset-bottom)` non-zero — the `Sheet`'s footer no longer sits under the home indicator (review finding P2 closed). |
+| T8 G2 evidence | **done** | Bundle table and Lighthouse medians below; axe unchanged (`e2e/a11y.spec.ts` already walks `/kit`, so the new sections are inside the 51 checks); `DEVIATIONS.md` carries D-15…D-18 and the five FEASIBILITY NOs are answered. |
+
+### Gate G2 — the bundle, measured on both fixtures
+
+| Route | LCP (median of 3) | CLS | Script | vs 174 080 B | vs G1 baseline |
+|---|---|---|---|---|---|
+| `/fr/config/{id}` | 2 490 ms | 0 | **158 876 B** | 15 204 B spare | +45 B |
+| `/fr/config-pc-gamer-9000-dh` | 2 485 ms | 0 | **167 321 B** | 6 759 B spare | +214 B |
+
+Performance score 98 on both. LCP is still the tight one: 10 ms and 15 ms of slack, and one preset
+run sampled 2 874 ms before the median of three absorbed it — the same tail the G1 record saw.
+
+### The barrel was the 3 KB, and it was measured not guessed
+
+The previous handoff left an open question: Phase 2 had grown the fixture bundles ~3 KB and the
+suspect was the `@/components/ui` barrel re-exporting four primitives neither fixture renders.
+An A/B rebuild settled it (2026-11-03):
+
+| Build | `/fr/config/{id}` | preset route |
+|---|---|---|
+| four exports IN the barrel | 190 434 B | 189 557 B |
+| four exports REMOVED | 189 024 B | 188 147 B |
+
+**Exactly 1 410 B on both**, in one shared chunk (9 733 → 8 323 B gzip) — a re-export barrel is not
+tree-shaken reliably by Turbopack. Removing them from the barrel and importing each primitive
+directly recovered **2 882 / 3 191 B** as Lighthouse measures it, which is why the kit now costs
++45 B and +214 B instead of +3 KB. Recorded as **D-15**; the route is now a rule, not a one-off.
+
+### Suite
+
+**390 specs, 388 passed, 2 skipped** (34.9 s) — the two skips are the opt-in harnesses, unchanged.
+The eight new specs are `e2e/kit-phase2.spec.ts`.
+
+### One finding the new spec produced
+
+The tab bar and the shell's header nav are BOTH named "Navigation principale" (`shell.navLabel`),
+so a landmark lookup unions them — 11 links instead of 5. The spec scopes to the section instead,
+because the defect is real: two landmarks sharing one accessible name. Phase 3 owns which name each
+keeps; it is listed in `HANDOFF.md`.

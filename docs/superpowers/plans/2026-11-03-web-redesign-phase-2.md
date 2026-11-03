@@ -3,6 +3,9 @@
 **Goal:** the shared vocabulary every screen will consume exists, is restyled to DESIGN.md, and has been
 measured before a single screen is touched. **Gate: G2.**
 
+**State: closed at G2 (2026-11-03).** T1-T7 landed; T8 is the evidence in `PROGRESS.md` and
+`HANDOFF.md`. The ladder is kept as the record of what was planned, not as a to-do list.
+
 **Entry state:** G1 closed — 67 raw colours + 13 aliases, full type scale, Arabic +10 % leading.
 Baseline: 381 specs / 379 passed / 2 skipped; CSS 89 663 B; Lighthouse LCP medians 2 485 / 2 488 ms,
 CLS 0, script 158 831 / 167 107 B, performance 98.

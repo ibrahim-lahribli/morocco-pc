@@ -19,14 +19,25 @@ measured budget overrides the design file. Gate G2 answers the four FEASIBILITY 
 | D-12 | Naming | ramp `surface` = `#F8F9FF` | app `surface` = card white (`#FFFFFF`); the ramp value is `background` | 96 existing `bg-surface` usages mean "card". Renaming them for a token whose value equals `background` buys nothing, and both design values stay addressable. |
 | D-13 | Colour | prose amber/emerald used as text backgrounds | amber carries `on-surface` (8.00:1); emerald is fill/icon only; text uses the ramp's `on-*-container` pairs (4.54/4.60:1) | The design supplies its own accessible pairings; using them is adopting the design, not departing from it. |
 | D-14 | Shell | header carries a notification bell and an account avatar | neither is rendered | There is no authentication (D2) and no notification source in contract 1.10, so both would be controls that can never do anything. Owner decision 2026-11-03: a bell that never rings is worse than no bell. Revisit only with auth, not with a disabled icon. |
+| D-15 | Kit | one barrel (`@/components/ui`) is the import path for every primitive | the eight Phase 2 primitives are imported from their own module (`@/components/ui/bottom-tab-bar`, `…/sticky-bar`, `…/part-row`, `…/retailer-row`, `…/snap-row`, `…/trust-item`, `…/build-summary-card`, `…/explainer-sheet`) | **Measured, not assumed.** Adding four exports (`StatusBadge`, `StepHeader`, `ChoicePills`, `BudgetPicker`) to the barrel cost **1 410 B of compressed script on BOTH Lighthouse fixtures** — routes that never render any of them: 190 434 → 189 024 B and 189 557 → 188 147 B, with one shared chunk 9 733 → 8 323 B (A/B rebuild, 2026-11-03). Turbopack does not tree-shake a re-export barrel reliably, and the preset route's whole margin was 3 568 B. `Sheet` was already outside the barrel for a contract reason; it is now the rule for everything the redesign adds. |
+| D-16 | Results card | the whole card is one link | the card is an `<article>`; the CTA inside it is the link | A save control inside a card-wide link is invalid HTML and gives assistive tech a button nested in a link. The card's clickable area shrinks; the target that remains is the one with words on it. |
+| D-17 | Price date | "prix constatés le 12/10" — a per-offer observation date | the pass's `generated_at`, labelled "calculé le", and ONLY beside `verified` | The contract carries no per-offer observed date (CD-6): `components[]` has a price and a `store_offer_id`, nothing about when anyone looked. A date beside an indicative or demo price would claim a survey that never happened. |
+| D-18 | Wizard | a drawn reference for each of the four steps | step 2 (`configurateur_tape_2`) was never drawn; it inherits the kit of steps 1/3/4 | The Stitch set has 22 screens and no step-2 art (`SCREENS.md` records it). Inventing one would be design work disguised as implementation; the step is judged against `/kit`, like every route Stitch never drew. |
 
-## Pending at gate G2 (Phase 2)
+## Answered at gate G2 (Phase 2)
 
-- D-08, D-09, D-10, D-11 above become screen-level reductions where they apply.
-- The kit's added client JS must be measured against **174 080 B**; the preset route currently has
-  **6 973 B** of slack.
-- `configurateur_tape_2` has no Stitch reference (never drawn) — it inherits steps 1/3/4.
+The five FEASIBILITY NOs are rows now, not open questions: images **D-08** (a drawn fallback,
+never a stock photo of different hardware), the single-build GET **D-09**, retailer rows **D-10**
+(reduced to price provenance, because no merchant is served), per-part compatibility **D-11**
+(one build-level badge), and the price observation date **D-17**. The undrawn wizard step is
+**D-18**.
 
+Two further kit decisions came out of building the primitives, one measured and one forced by
+HTML: **D-15** keeps the new primitives out of the barrel (1 410 B on routes that never render
+them), and **D-16** makes the results card's CTA the link instead of the card.
+
+The kit's script cost is measured on both fixtures rather than inferred — see the G2 table in
+`PROGRESS.md`. The preset route is still the binding one.
 
 ## Resolved by the owner decision of 2026-11-03 (DESIGN.md in full)
 
