@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { Alert, Badge, Button, ChoiceCard, ProgressBar, Skeleton, SkeletonCard, TextField } from "@/components/ui";
+import { Alert, Badge, Button, ChoiceCard, ProgressBar, Skeleton, SkeletonCard, TextField, StatusBadge } from "@/components/ui";
 import { formatDate, formatMoney, formatNumber, formatPercent } from "@/lib/i18n/format";
 import { KitInteractive } from "./kit-interactive";
 import { KitSheet } from "./kit-sheet";
@@ -271,6 +271,19 @@ export default async function KitPage({
       </Section>
       <Section id="sheet" title="Feuille (bottom sheet)" source="Tableau §12 — Radix Dialog · piège de focus">
         <KitSheet />
+      </Section>
+
+      <Section id="build-status" title="Statut de la configuration" source="Moteur - PASS / UNKNOWN seulement, jamais CONDITIONAL">
+        <ul className="space-y-3 rounded-card border border-border bg-surface p-3.5">
+          <li className="flex items-center justify-between gap-3">
+            <span className="text-caption text-muted">Assemblage validé</span>
+            <StatusBadge state="PASS">Compatible</StatusBadge>
+          </li>
+          <li className="flex items-center justify-between gap-3">
+            <span className="text-caption text-muted">Compatibilité non établie</span>
+            <StatusBadge state="UNKNOWN">À vérifier</StatusBadge>
+          </li>
+        </ul>
       </Section>
 
     </article>

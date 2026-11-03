@@ -20,6 +20,7 @@
  */
 export { Alert, type AlertProps, type AlertTone } from "./alert";
 export { Badge, type BadgeProps, type BadgeTone } from "./badge";
+export { StatusBadge, type StatusBadgeProps, type BuildState } from "./status-badge";
 export {
   buttonClasses,
   Button,
