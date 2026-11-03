@@ -133,3 +133,21 @@ design's own on-X / X guarantees, a stricter set than the ones they replaced.
 - Four FEASIBILITY NOs to answer in `DEVIATIONS.md` at gate G2: per-part compatibility, images,
   retailer rows, price verification date — plus the single-build GET that D4 works around.
 - Suite baseline: **381 specs, 379 passed, 2 skipped**. `AGENTS.md`'s 378 is stale.
+
+
+## Phase 2 - kit (started 2026-11-03)
+
+Task ladder: `docs/superpowers/plans/2026-11-03-web-redesign-phase-2.md`.
+
+| Task | Status | Evidence |
+|---|---|---|
+| T1 deps: `@radix-ui/react-dialog` + `class-variance-authority`, imported by nothing yet | **done** | install exit 0 (radix 1.3.1, cva 0.7.1); `build` PASS; suite **379 passed / 2 skipped**; `test:lighthouse` PASS. Script bytes are identical to the G1 baseline on both fixtures (table below), because nothing imports them yet. |
+
+Measured after T1 (median of three runs per route):
+
+| Route | LCP (median) | CLS | Script (median) | vs G1 baseline |
+|---|---|---|---|---|
+| /fr/config/3f5a1c7e-8b2d-4e6f-9a01-5c3d7e9f1a2b | 2486 ms | 0 | 158831 B | +0 B |
+| /fr/config-pc-gamer-9000-dh | 2487 ms | 0 | 167107 B | +0 B |
+
+An unimported dependency costs 0 B. Had either figure moved, the bundler would be charging an unused dependency to a route and every later G2 number would be untrustworthy.
