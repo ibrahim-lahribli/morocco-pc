@@ -33,7 +33,7 @@ Unchanged from `PLAN_PLATFORM_CONSTRAINTS.md`, and the same rules `AGENTS.md` §
 | DB roles | `morocco_pc_api` provisioned on shared and EU, self-check 21/21, smoke green as the role — and **not used by the deployed app** (`check-deployed-role.js`: FAIL, `neondb_owner`) |
 | Served scoring model | the newest ACTIVE row; on shared that is `launch-v2@2.4.0` (six ACTIVE `launch-v2` versions, `seed-minimal-v1` INACTIVE). Nothing pins a model at deploy. |
 | CI | `unit-and-docs` on push/PR; `recurring-gates` nightly + dispatch |
-| Tests | engine **1261**, scripts **443**, API **193** (0 failed, measured 2026-11-02); `test:api:db` **17**, nightly only |
+| Tests | engine **1261**, scripts **447**, API **193** (0 failed, measured 2026-11-03); `test:api:db` **17**, nightly only |
 
 ## 3. Sprint ledger (21 sprints: 16 DONE, 3 PARTIAL, 2 NOT STARTED)
 
@@ -44,14 +44,14 @@ Unchanged from `PLAN_PLATFORM_CONSTRAINTS.md`, and the same rules `AGENTS.md` §
 | P0 | 3 — author 019 + 020, branch-apply, replay | DONE | — |
 | P0 | 4 — API read/wire + presenter + v1.1/v1.2 | DONE | — |
 | P0 | 5 — shared-apply gate + doc refresh | DONE | 019+020 applied to shared from `br-damp-grass-axyri6yl` |
-| P1 | 1 — co-locate (EU Neon + deploy + re-measure) | **PARTIAL** | EU project `morocco-pc-eu` (`lingering-heart-20497074`, `aws-eu-central-1`) replayed and at parity. Steps 7–9 remain: hosting account, deploy, re-measure |
+| P1 | 1 — co-locate (EU Neon + deploy + re-measure) | **PARTIAL** | EU project `morocco-pc-eu` (`lingering-heart-20497074`, `aws-eu-central-1`) replayed and at parity. Step 9 (re-measure) remains: hosted as `morocco-pc-api-eu` (Render Frankfurt, free plan) and pinned to `launch-v2@2.4.0`; the V1 number still needs the 0.5 CPU plan (R-08) |
 | P1 | 2 — batch the commit | DONE | commit phase 19 → 11 statements; the ms table needs P1 S1 |
 | P1 | 3 — reduce loader statements | **NOT STARTED** | 5 steps; its baseline needs P1 S1 |
 | P1 | 4 — `catalog_version` + canonical key | DONE | Decision 47, implemented by S5 (migration 021) |
 | P1 | 5 — dedupe repeated POSTs | DONE | 200 + `reused: true`; contract v1.3 |
 | P1 | 6 — presets job + `GET /v1/presets` | DONE | migration 022; contract v1.4; repaired 2026-10-16 (`36620ec`) |
 | P2 | 1 — use-case vocabulary from the model | DONE | `listUseCases` swap; GAMING/OFFICE/WORKSTATION served |
-| P2 | 2 — truthful per-IP limits (`trustProxy`) | **PARTIAL** | Steps 1–3 + 5 done; Step 4 needs the deployed host |
+| P2 | 2 — truthful per-IP limits (`trustProxy`) | **PARTIAL** | Steps 1–3 + 5 done; Step 4 needs an always-on host and a pinnable proxy range (R-08) |
 | P2 | 3 — catalog endpoints | DONE | contract v1.5 → v1.6; public but unlisted, noindex until prices are VERIFIED |
 | P2 | 4 — CORS allow-list + 429 contract | DONE | pinned by tests and documented |
 | P2 | 5 — contract-completeness gate | DONE | `openapi-coverage.test.js` |
