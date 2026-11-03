@@ -34,7 +34,7 @@
  */
 import type { ReactNode } from "react";
 
-import { buttonClasses } from "./button";
+import { LinkButton } from "./button";
 import { cn } from "./cn";
 
 /** The drawn media slot's vocabulary: a role, or the category when the role is unknown. */
@@ -145,9 +145,9 @@ export function BuildSummaryCard({
         )}
 
         <div className="mt-4 flex items-center gap-2">
-          <a href={href} className={cn(buttonClasses("primary"), "flex-1")}>
+          <LinkButton href={href} variant="primary" className="flex-1">
             {ctaLabel}
-          </a>
+          </LinkButton>
           {action}
         </div>
       </div>
