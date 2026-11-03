@@ -104,80 +104,162 @@
  */
 
 @theme {
-  /* brand: the palette exactly as the board defines it */
-  --color-primary: oklch(39.84% 0.1773 277.37); /* #3730A3 */
-  --color-primary-soft: oklch(96.19% 0.0179 272.31); /* #EEF2FF */
-  --color-primary-hover: oklch(35.88% 0.1354 278.70); /* #312E81 */
-  --color-accent: oklch(76.86% 0.1647 70.08); /* #F59E0B, saffron */
-  --color-accent-soft: oklch(96.19% 0.0580 95.62); /* #FEF3C7 */
-  --color-whatsapp: oklch(43.35% 0.0754 182.23); /* #075E54 */
+  /* ---- DESIGN.md, adopted in full ------------------------------------------------------------
+   * The tonal ramp from the design file, verbatim. Measured 2026-11-03: every on-X / X pairing in
+   * this ramp passes AA (4.54-16.34:1), which is why the ramp is the system rather than a
+   * hand-picked subset of the brand prose.
+   */
+  --color-surface-dim: oklch(88.75% 0.0399 260.15); /* #cbdbf5 */
+  --color-surface-bright: oklch(98.31% 0.0081 278.48); /* #f8f9ff */
+  --color-surface-container-lowest: oklch(100.00% 0.0001 263.28); /* #ffffff */
+  --color-surface-container-low: oklch(96.66% 0.0158 266.27); /* #eff4ff */
+  --color-surface-container: oklch(94.74% 0.0250 263.33); /* #e5eeff */
+  --color-surface-container-high: oklch(93.10% 0.0331 261.04); /* #dce9ff */
+  --color-surface-container-highest: oklch(91.43% 0.0401 258.82); /* #d3e4fe */
+  --color-on-surface: oklch(22.35% 0.0455 253.78); /* #0b1c30 */
+  --color-on-surface-variant: oklch(39.68% 0.0235 288.53); /* #464553 */
+  --color-inverse-surface: oklch(30.87% 0.0421 254.46); /* #213145 */
+  --color-inverse-on-surface: oklch(95.70% 0.0203 264.47); /* #eaf1ff */
+  --color-outline: oklch(56.93% 0.0230 291.72); /* #777584 */
+  --color-outline-variant: oklch(82.87% 0.0239 296.56); /* #c8c4d5 */
+  --color-surface-tint: oklch(49.72% 0.1717 280.12); /* #544fc0 */
+  --color-primary: oklch(31.78% 0.1865 273.14); /* #1f108e */
+  --color-on-primary: oklch(100.00% 0.0001 263.28); /* #ffffff */
+  --color-primary-container: oklch(39.84% 0.1774 277.37); /* #3730a3 */
+  --color-on-primary-container: oklch(76.43% 0.1250 284.07); /* #a9a7ff */
+  --color-inverse-primary: oklch(83.21% 0.0878 286.49); /* #c3c0ff */
+  --color-secondary: oklch(48.73% 0.1056 69.90); /* #855300 */
+  --color-on-secondary: oklch(100.00% 0.0001 263.28); /* #ffffff */
+  --color-secondary-container: oklch(79.38% 0.1666 70.48); /* #fea619 */
+  --color-on-secondary-container: oklch(40.90% 0.0885 70.06); /* #684000 */
+  --color-tertiary: oklch(28.73% 0.0628 162.31); /* #003421 */
+  --color-on-tertiary: oklch(100.00% 0.0001 263.28); /* #ffffff */
+  --color-tertiary-container: oklch(37.16% 0.0809 162.48); /* #004d33 */
+  --color-on-tertiary-container: oklch(73.59% 0.1492 162.47); /* #2dc68d */
+  --color-error: oklch(50.60% 0.1926 27.69); /* #ba1a1a */
+  --color-on-error: oklch(100.00% 0.0001 263.28); /* #ffffff */
+  --color-error-container: oklch(91.83% 0.0417 25.14); /* #ffdad6 */
+  --color-on-error-container: oklch(41.71% 0.1701 27.37); /* #93000a */
+  --color-primary-fixed: oklch(91.58% 0.0435 289.77); /* #e2dfff */
+  --color-primary-fixed-dim: oklch(83.21% 0.0878 286.49); /* #c3c0ff */
+  --color-on-primary-fixed: oklch(24.31% 0.1582 270.81); /* #0f0069 */
+  --color-on-primary-fixed-variant: oklch(41.31% 0.1759 277.73); /* #3b35a7 */
+  --color-secondary-fixed: oklch(91.68% 0.0614 69.30); /* #ffddb8 */
+  --color-secondary-fixed-dim: oklch(83.42% 0.1334 70.99); /* #ffb95f */
+  --color-on-secondary-fixed: oklch(22.53% 0.0488 70.03); /* #2a1700 */
+  --color-on-secondary-fixed-variant: oklch(40.06% 0.0867 70.04); /* #653e00 */
+  --color-tertiary-fixed: oklch(89.46% 0.1502 162.25); /* #6ffbbe */
+  --color-tertiary-fixed-dim: oklch(80.85% 0.1498 162.33); /* #4edea3 */
+  --color-on-tertiary-fixed: oklch(21.89% 0.0484 161.53); /* #002113 */
+  --color-on-tertiary-fixed-variant: oklch(38.76% 0.0850 162.01); /* #005236 */
+  --color-background: oklch(98.31% 0.0081 278.48); /* #f8f9ff */
+  --color-on-background: oklch(22.35% 0.0455 253.78); /* #0b1c30 */
+  --color-surface-variant: oklch(91.43% 0.0401 258.82); /* #d3e4fe */
 
-  /* brand neutrals: DESIGN.md's ramp IS Tailwind's slate scale */
-  --color-page: oklch(98.42% 0.0035 248.23); /* #F8FAFC, slate-50 */
-  --color-surface: oklch(100.00% 0.0000 89.88); /* #FFFFFF */
-  --color-subtle: oklch(96.83% 0.0069 248.08); /* #F1F5F9, slate-100 */
-  --color-track: oklch(92.88% 0.0127 255.56); /* #E2E8F0, slate-200 */
-  --color-muted: oklch(44.55% 0.0375 257.29); /* #475569, slate-600 */
-  --color-ink: oklch(22.35% 0.0455 253.78); /* #0B1C30, on-surface */
-  --color-placeholder: oklch(55.44% 0.0408 257.43); /* #64748B, slate-500 */
+  /* ---- brand prose + the three price states --------------------------------------------------
+   * The prose palette supplies the brand accents. Each money state gets its own trio so a badge
+   * never borrows an unrelated semantic role. Pairings measured; see TOKENS.md.
+   */
+  --color-surface: oklch(100.00% 0.0001 263.28); /* #ffffff */
+  --color-accent: oklch(76.86% 0.1646 70.08); /* #f59e0b */
+  --color-emerald: oklch(69.59% 0.1491 162.51); /* #10b981 */
+  --color-whatsapp: oklch(43.35% 0.0754 182.26); /* #075e54 */
+  --color-muted: oklch(44.55% 0.0375 257.29); /* #475569 */
+  --color-placeholder: oklch(55.44% 0.0408 257.43); /* #64748b */
+  --color-success: oklch(50.81% 0.1049 165.64); /* #047857 */
+  --color-success-soft: oklch(97.93% 0.0207 166.35); /* #ecfdf5 */
+  --color-warning: oklch(55.53% 0.1455 48.99); /* #b45309 */
+  --color-warning-soft: oklch(98.69% 0.0213 95.33); /* #fffbeb */
+  --color-info: oklch(48.82% 0.2172 264.38); /* #1d4ed8 */
+  --color-info-soft: oklch(93.19% 0.0317 255.61); /* #dbeafe */
+  --color-price-verified-text: oklch(50.81% 0.1049 165.64); /* #047857 */
+  --color-price-verified-bg: oklch(97.93% 0.0207 166.35); /* #ecfdf5 */
+  --color-price-verified-border: oklch(90.49% 0.0895 164.20); /* #a7f3d0 */
+  --color-price-indicative-text: oklch(55.53% 0.1455 48.99); /* #b45309 */
+  --color-price-indicative-bg: oklch(98.69% 0.0213 95.33); /* #fffbeb */
+  --color-price-indicative-border: oklch(92.43% 0.1151 95.76); /* #fde68a */
+  --color-price-estimated-text: oklch(44.55% 0.0375 257.29); /* #475569 */
+  --color-price-estimated-bg: oklch(96.83% 0.0069 248.08); /* #f1f5f9 */
+  --color-price-estimated-border: oklch(86.90% 0.0199 252.94); /* #cbd5e1 */
 
-  /* semantic states */
-  --color-success: oklch(52.73% 0.1371 150.07); /* #15803D */
-  --color-success-soft: oklch(96.24% 0.0434 156.74); /* #DCFCE7 */
-  --color-warning: oklch(55.53% 0.1455 49.00); /* #B45309 */
-  --color-warning-soft: oklch(96.19% 0.0580 95.62); /* #FEF3C7 */
-  --color-error: oklch(50.54% 0.1905 27.52); /* #B91C1C */
-  --color-error-soft: oklch(93.56% 0.0309 17.72); /* #FEE2E2 */
-  --color-info: oklch(48.82% 0.2172 264.38); /* #1D4ED8 */
-  --color-info-soft: oklch(93.19% 0.0316 255.59); /* #DBEAFE */
-
-  /* semantic aliases: the names a component is allowed to use */
-  --color-background: var(--color-page);
-  --color-foreground: var(--color-ink);
-  --color-border: var(--color-track);
+  /* ---- aliases: the names components already use (var(), so not counted as raw) -------------- */
+  --color-page: var(--color-background);
+  --color-ink: var(--color-on-surface);
+  --color-subtle: var(--color-surface-container-low);
+  --color-track: var(--color-outline-variant);
+  --color-primary-soft: var(--color-primary-fixed);
+  --color-primary-hover: var(--color-on-primary-fixed-variant);
+  --color-accent-soft: var(--color-secondary-fixed);
+  --color-foreground: var(--color-on-surface);
+  --color-border: var(--color-outline-variant);
   --color-ring: var(--color-primary);
   --color-verified: var(--color-success);
   --color-warn: var(--color-warning);
   --color-danger: var(--color-error);
 
-  /* type: the board's 7-step scale, as drawn */
+  /* ---- type: DESIGN.md's scale, in full ------------------------------------------------------
+   * Mobile-first: each base token carries the design's MOBILE size, and the `lg` variant is used at
+   * `md:` and up. The legacy names (display/heading/title/subtitle/body/compact/caption/micro)
+   * keep the steps they always meant, so no component needs an edit.
+   */
   --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-arabic: "IBM Plex Sans Arabic", "Inter", ui-sans-serif, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-  --text-display: 1.875rem; /* 30px */
-  --text-display--line-height: 1.25;
+  --text-display-lg: 2.5rem;          /* 40 / 48 */
+  --text-display-lg--line-height: 3rem;
+  --text-display-lg--font-weight: 700;
+  --text-display-lg--letter-spacing: -0.02em;
+  --text-display: 1.875rem;           /* 30 / 38, the design's mobile display */
+  --text-display--line-height: 2.375rem;
   --text-display--font-weight: 700;
-  --text-heading: 1.5rem; /* 24px */
-  --text-heading--line-height: 1.25;
-  --text-heading--font-weight: 700;
-  --text-title: 1.25rem; /* 20px */
-  --text-title--line-height: 1.25;
-  --text-title--font-weight: 700;
-  --text-subtitle: 1.125rem; /* 18px */
-  --text-subtitle--line-height: 1.375;
+  --text-display--letter-spacing: -0.01em;
+  --text-heading: 1.75rem;            /* 28 / 36 */
+  --text-heading--line-height: 2.25rem;
+  --text-heading--font-weight: 600;
+  --text-heading--letter-spacing: -0.01em;
+  --text-subtitle: 1.375rem;          /* 22 / 28 */
+  --text-subtitle--line-height: 1.75rem;
   --text-subtitle--font-weight: 600;
-  --text-body: 1rem; /* 16px */
-  --text-body--line-height: 1.5;
-  --text-compact: 0.875rem; /* 14px */
-  --text-compact--line-height: 1.43;
-  --text-caption: 0.75rem; /* 12px */
-  --text-caption--line-height: 1.33;
-  --text-micro: 0.6875rem; /* 11px */
-  --text-micro--line-height: 1.45;
+  --text-title: 1.125rem;             /* 18 / 24 */
+  --text-title--line-height: 1.5rem;
+  --text-title--font-weight: 600;
+  --text-body: 1rem;                  /* 16 / 24 */
+  --text-body--line-height: 1.5rem;
+  --text-body--font-weight: 400;
+  --text-compact: 0.875rem;           /* 14 / 20 */
+  --text-compact--line-height: 1.25rem;
+  --text-compact--font-weight: 400;
+  --text-caption: 0.75rem;            /* 12 / 16 */
+  --text-caption--line-height: 1rem;
+  --text-caption--font-weight: 400;
+  --text-micro: 0.625rem;             /* 10 / 12, label-sm */
+  --text-micro--line-height: 0.75rem;
+  --text-micro--font-weight: 600;
+  --text-micro--letter-spacing: 0.04em;
+  --text-price: 1.5rem;               /* 24 / 28, price-display */
+  --text-price--line-height: 1.75rem;
+  --text-price--font-weight: 700;
+  --text-price--letter-spacing: -0.01em;
 
-  /* radii: 8px control, 12px card, pill */
-  --radius-control: 0.5rem;
-  --radius-card: 0.75rem;
+  /* ---- radii, elevation, spacing: DESIGN.md -------------------------------------------------- */
+  --radius-sm: 0.25rem;
+  --radius-control: 0.625rem;         /* 10 px, the design's button/input radius */
+  --radius-md: 0.75rem;
+  --radius-card: 1rem;                /* 16 px, the design's card radius */
+  --radius-xl: 1.5rem;                /* sheets and modals */
   --radius-pill: 9999px;
 
-  /* elevation: borders carry the structure; shadows are ambient only */
-  --shadow-card-1: 0 1px 2px 0 rgb(28 25 23 / 0.05);
-  --shadow-card-2: 0 4px 6px -1px rgb(28 25 23 / 0.08);
+  --shadow-card-1: 0 1px 3px 0 rgb(15 23 42 / 0.04), 0 2px 8px -1px rgb(15 23 42 / 0.03);
+  --shadow-card-2: 0 8px 24px -4px rgb(55 48 163 / 0.08), 0 2px 6px -1px rgb(15 23 42 / 0.04);
+  --shadow-bar: 0 -4px 20px -2px rgb(15 23 42 / 0.08);
 
-  /* component decisions the board fixed once */
-  --spacing-control: 3rem; /* 48px minimum touch target */
-  --spacing-tap: 2.75rem; /* 44px floor, the accessibility minimum */
+  --spacing-gutter: 1.25rem;
+  --spacing-gutter-mobile: 0.75rem;
+  --spacing-margin: 2rem;
+  --spacing-margin-mobile: 1rem;
+  --spacing-control: 3rem;            /* 48 px minimum touch target */
+  --spacing-tap: 2.75rem;             /* 44 px floor */
 }
 
 /*
@@ -208,7 +290,27 @@
    * applies (or downloads) the Arabic file. The token keeps its own fallback
    * chain for the case where the variable is absent.
    */
-  html[lang="ar"] body {
+
+/*
+ * Arabic leading, the design's +10 %. Tailwind's text-* utilities read
+ * --text-<step>--line-height, so overriding those variables on the Arabic root raises every step at
+ * once instead of patching components one by one. Line-heights only: the Arabic face's optical size
+ * already matches Inter at the same font-size.
+ */
+html[lang="ar"] {
+  --text-display-lg--line-height: 3.3rem;
+  --text-display--line-height: 2.6rem;
+  --text-heading--line-height: 2.475rem;
+  --text-subtitle--line-height: 1.925rem;
+  --text-title--line-height: 1.65rem;
+  --text-body--line-height: 1.65rem;
+  --text-compact--line-height: 1.375rem;
+  --text-caption--line-height: 1.1rem;
+  --text-micro--line-height: 0.825rem;
+  --text-price--line-height: 1.925rem;
+}
+
+html[lang="ar"] body {
     font-family: var(--font-arabic);
   }
 

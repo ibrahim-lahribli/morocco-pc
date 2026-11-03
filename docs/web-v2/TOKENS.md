@@ -1,119 +1,129 @@
-# TOKENS.md — the token map, with measured contrast
+# TOKENS.md — DESIGN.md, adopted in full
 
-Source: `apps/web/design/stitch/moroccan_hardware_studio/DESIGN.md` (the Stitch design system) and
-the 22 screen exports. Implementation: the `@theme` block in `apps/web/app/globals.css`, which is the
-only file allowed a raw colour (`scripts/check-tokens.mjs` scans `app/`, `components/`, `lib/` and
-never that file).
+Source: `apps/web/design/stitch/moroccan_hardware_studio/DESIGN.md`. Implementation: the `@theme`
+block in `apps/web/app/globals.css` — the only file allowed a raw colour (`scripts/check-tokens.mjs`
+scans `app/`, `components/`, `lib/` and never that file).
 
-Every ratio below was **measured** with the WCAG 2.x relative-luminance formula on 2026-11-03, and the
-same pairs are asserted at build time by `apps/web/e2e/tokens.spec.ts` (15 text pairs at ≥ 4.5:1, 3
-graphical pairs at ≥ 3:1). Nothing here is quoted from the design file; where DESIGN.md and AA
-disagree, AA wins and the deviation is in `DEVIATIONS.md`.
+**Counts: 67 raw colours + 13 `var()` aliases.** `e2e/tokens.spec.ts` pins that count and asserts
+29 text pairs at ≥ 4.5:1 and 5 graphical pairs at ≥ 3:1. Every ratio below was measured on
+2026-11-03; the suite prints the live figures on every run.
 
-## 1. Colour roles
+## 1. Why the ramp, not the prose palette
 
-Names are unchanged from the existing token set (v5 rule A6: values change, names do not), so no
-component needs an edit for a Phase 1 value change.
+DESIGN.md contains **two** palettes: a Material-style tonal ramp (the front-matter YAML, 47 colours)
+and a prose brand section (19 colours). Measured before choosing:
 
-| Token | Value | Role |
+- **The ramp's `on-X` / `X` pairs all pass AA**, 4.54–16.34:1. It is a tonal system designed to be
+  legible, and `on-secondary-container` on `secondary-container` (4.60:1) is the design's own
+  accessible answer where the prose's white-on-amber is 2.15:1.
+- The prose section supplies brand *identity* (indigo, saffron, emerald) but three of its pairings
+  fail: white on amber 2.15:1, emerald as text 2.54:1, emerald on its own tint 2.41:1.
+
+So: **the ramp is the system**, the prose supplies the accents and the three price states, and any
+text that the prose would put at < 4.5:1 uses the ramp's container pair instead. That is adopting
+everything the design defines — including its accessible alternatives — without shipping illegible
+text.
+
+## 2. The ramp (47 raw)
+
+| Group | Tokens |
+|---|---|
+| Surface | `surface-dim` `surface-bright` `surface-container-lowest` `-low` `-container` `-high` `-highest` `surface-variant` `inverse-surface` |
+| On-surface | `on-surface` `on-surface-variant` `on-background` `inverse-on-surface` |
+| Primary | `primary` `on-primary` `primary-container` `on-primary-container` `inverse-primary` `primary-fixed` `primary-fixed-dim` `on-primary-fixed` `on-primary-fixed-variant` `surface-tint` |
+| Secondary | `secondary` `on-secondary` `secondary-container` `on-secondary-container` `secondary-fixed` `secondary-fixed-dim` `on-secondary-fixed` `on-secondary-fixed-variant` |
+| Tertiary | `tertiary` `on-tertiary` `tertiary-container` `on-tertiary-container` `tertiary-fixed` `tertiary-fixed-dim` `on-tertiary-fixed` `on-tertiary-fixed-variant` |
+| Error | `error` `on-error` `error-container` `on-error-container` |
+| Structure | `outline` `outline-variant` `background` |
+
+## 3. Brand + money states (20 raw)
+
+`accent` `#F59E0B` · `emerald` `#10B981` · `whatsapp` `#075E54` · `muted` `#475569` ·
+`placeholder` `#64748B` · `success`/`success-soft` · `warning`/`warning-soft` · `info`/`info-soft`,
+plus nine `price-*` tokens — one trio per money state:
+
+| State | Text on surface | Ratio |
 |---|---|---|
-| `--color-primary` | `#3730A3` | high-emphasis actions, links, focus ring |
-| `--color-primary-hover` | `#312E81` | pressed/hover of primary |
-| `--color-primary-soft` | `#EEF2FF` | tinted surface behind primary content |
-| `--color-accent` | `#F59E0B` | saffron highlight, savings/labels — **never a text background for white** |
-| `--color-accent-soft` | `#FEF3C7` | the accent's tinted surface |
-| `--color-whatsapp` | `#075E54` | the WhatsApp share affordance |
-| `--color-page` | `#F8FAFC` | canvas (DESIGN.md `surface` / `background`) |
-| `--color-surface` | `#FFFFFF` | cards, sheets, bars |
-| `--color-subtle` | `#F1F5F9` | inset rows, hover fills on surface |
-| `--color-track` | `#E2E8F0` | dividers, slider track, card border |
-| `--color-muted` | `#475569` | secondary body text |
-| `--color-ink` | `#0B1C30` | primary text |
-| `--color-placeholder` | `#64748B` | input placeholder text |
-| `--color-success` / `-soft` | `#15803D` / `#DCFCE7` | verified status, success text |
-| `--color-warning` / `-soft` | `#B45309` / `#FEF3C7` | indicative price, caution |
-| `--color-error` / `-soft` | `#B91C1C` / `#FEE2E2` | validation, failure |
-| `--color-info` / `-soft` | `#1D4ED8` / `#DBEAFE` | neutral notice |
+| Vérifié / مؤكد | `#047857` on `#ECFDF5` | 5.21:1 |
+| Indicatif / تقريبي | `#B45309` on `#FFFBEB` | 4.84:1 |
+| Estimé / تقديري | `#475569` on `#F1F5F9` | 6.92:1 |
 
-Aliases (`--color-background`, `-foreground`, `-border`, `-ring`, `-verified`, `-warn`, `-danger`)
-are `var()` references and are not counted by the token gate.
+## 4. Aliases (13, not counted)
 
-**The neutral ramp changed from stone to slate** (`#FAFAF9/#F5F5F4/#E7E5E4/#57534E/#1C1917` →
-`#F8FAFC/#F1F5F9/#E2E8F0/#475569/#0B1C30`). The previous ramp came from the earlier board; DESIGN.md's
-canvas is `#F8FAFC` (slate-50) with `#0B1C30` on-surface, and a redesigned card on a stone canvas
-would sit on the wrong grey. Contrast improved or held on every pair.
+The names every component already uses keep working, so a value change needs no component edit:
+`page`→`background`, `ink`→`on-surface`, `subtle`→`surface-container-low`,
+`track`→`outline-variant`, `primary-soft`→`primary-fixed`,
+`primary-hover`→`on-primary-fixed-variant`, `accent-soft`→`secondary-fixed`,
+`foreground`→`on-surface`, `border`→`outline-variant`, `ring`→`primary`,
+`verified`→`success`, `warn`→`warning`, `danger`→`error`.
 
-## 2. Measured contrast (the pairs the suite asserts)
+**One naming reconciliation** (D-12): the app's `surface` means *card* (`#FFFFFF`, the ramp's
+`surface-container-lowest`), while the ramp's `surface` is `#F8F9FF` — identical to `background`.
+Keeping `surface` as the card name is what lets 96 existing usages stand; the ramp's value is
+available as `background`.
 
-| Pair | Ratio | Verdict |
-|---|---|---|
-| ink on page | 16.41:1 | AAA |
-| ink on surface | 17.17:1 | AAA |
-| muted on page | 7.24:1 | AAA |
-| muted on surface | 7.58:1 | AAA |
-| muted on subtle | 6.92:1 | AAA |
-| surface on primary (button label) | 9.93:1 | AAA |
-| primary on page | 9.49:1 | AAA |
-| surface on primary-hover | 11.42:1 | AAA |
-| surface on whatsapp | 7.67:1 | AAA |
-| success on success-soft | 4.57:1 | AA |
-| warning on warning-soft | 4.51:1 | AA (thinnest pair in the set) |
-| error on error-soft | 5.30:1 | AA |
-| info on info-soft | 5.49:1 | AA |
-| **ink on accent** | **8.00:1** | AAA |
-| primary fill on track (UI) | 8.06:1 | passes 1.4.11 |
-| warning fill on track (UI) | 4.07:1 | passes 1.4.11 |
-| primary ring on page (UI) | 9.49:1 | passes 1.4.11 |
+## 5. Measured contrast (the suite's pairs)
 
-## 3. The three decisions the design file gets wrong for the web
+| Pair | Ratio |
+|---|---|
+| on-surface on surface | 16.34:1 |
+| on-surface on surface-container-lowest | 17.06:1 |
+| on-surface on background | 16.34:1 |
+| on-surface-variant on surface | 7.58:1 |
+| on-surface-variant on surface-variant | 7.29:1 |
+| on-primary on primary | 13.79:1 |
+| on-primary-container on primary-container | 4.57:1 |
+| on-secondary on secondary | 6.49:1 |
+| **on-secondary-container on secondary-container** | **4.60:1** (the accessible amber pairing) |
+| on-tertiary on tertiary | 13.88:1 |
+| on-tertiary-container on tertiary-container | 4.54:1 |
+| on-error on error | 6.46:1 |
+| on-error-container on error-container | 7.24:1 |
+| on-background on background | 16.34:1 |
+| on-primary-fixed / on-secondary-fixed / on-tertiary-fixed | 13.26 / 13.34 / 13.22:1 |
+| inverse-on-surface on inverse-surface | 13.14:1 |
+| **on-surface on accent** | **8.00:1** |
+| price-verified / indicative / estimated | 5.21 / 4.84 / 6.92:1 |
+| success / warning / info on their soft tints | 4.57 / 4.51 / 5.49:1 |
+| muted on surface · muted on container-lowest | 7.58 / 7.87:1 |
 
-1. **An amber CTA cannot carry white text.** `#FFFFFF` on `#F59E0B` measures **2.15:1** — a fail at
-   any size. Amber is a surface for **ink**: `#0B1C30` on amber measures **8.00:1**. So the CTA
-   treatment is amber fill + ink label, and white-on-amber is forbidden in the kit.
-2. **`#10B981` (DESIGN.md "tertiary / success") cannot be text.** On white it measures **2.54:1**, on
-   its own `#ECFDF5` tint **2.41:1**. It stays a **fill/icon** colour only; success *text* uses
-   `#15803D` (4.57:1 on `#DCFCE7`).
-3. **`#64748B` as body text is a bare pass.** DESIGN.md's "Neutral" is 4.55:1 on the canvas — one
-   rounding away from failing, across 105 `text-muted` usages. `text-muted` is `#475569` (7.24:1);
-   `#64748B` is used only for placeholder text (4.55:1).
+Graphical (≥ 3:1): primary on surface 13.79 · primary-container on surface 9.93 · error on surface
+6.46 · surface-tint on surface 5.66 · primary on container-low 12.36.
 
-## 4. Price-badge states — mapped, not added
+**Forbidden, measured:** white on `accent` (2.15:1) and `emerald` as text (2.54:1). Amber is a
+surface for `on-surface`; emerald is fill/icon only.
 
-DESIGN.md defines three price badges. They map onto existing triples, so **no new colour token is
-needed** and the gate's pinned count stays 21:
+## 6. Type scale — the design's, in full
 
-| State | Text on surface | Ratio | Tokens |
+Mobile-first: the base token is the design's **mobile** size; `display-lg` is the desktop step, used
+from `md:` up.
+
+| Token | Mobile | Line height (fr) | Line height (ar, +10 %) |
 |---|---|---|---|
-| Vérifié / مؤكد | `#15803D` on `#DCFCE7` | 4.57:1 | `success` / `success-soft` |
-| Indicatif / تقريبي | `#B45309` on `#FEF3C7` | 4.51:1 | `warning` / `warning-soft` |
-| Estimé / تقديري | `#475569` on `#F1F5F9` | 6.92:1 | `muted` / `subtle` |
+| `text-display-lg` | 40 px | 48 px | 52.8 px |
+| `text-display` | 30 px | 38 px | 41.6 px |
+| `text-heading` | 28 px | 36 px | 39.6 px |
+| `text-subtitle` | 22 px | 28 px | 30.8 px |
+| `text-title` | 18 px | 24 px | 26.4 px |
+| `text-body` | 16 px | 24 px | 26.4 px |
+| `text-compact` | 14 px | 20 px | 22 px |
+| `text-caption` | 12 px | 16 px | 17.6 px |
+| `text-micro` | 10 px | 12 px | 13.2 px |
+| `text-price` | 24 px | 28 px | 30.8 px |
 
-This third state is the existing `demo` provenance (`lib/result/model.ts`), which the redesign keeps.
+Weights and tracking follow DESIGN.md: display/price 700 with −0.01/−0.02 em, heading 600, subtitle 600,
+title 600, micro 600 at +0.04 em. Arabic leading is applied by overriding the `--text-*--line-height`
+variables on `html[lang="ar"]`, so every step moves at once rather than component by component.
 
-## 5. Type scale, radii, spacing, elevation
+## 7. Radii, elevation, spacing
 
-The scale is **unchanged** in Phase 1 — see `DEVIATIONS.md` D-04 for the delta against DESIGN.md and
-why it moves per screen in Phase 4 instead of globally now.
+Radii: `sm` 4 px, `control` 10 px (buttons/inputs), `md` 12 px, `card` **16 px**, `xl` 24 px (sheets),
+`pill`. Elevation: three levels from DESIGN.md — card 1 (ambient 0 1 3 + 0 2 8), card 2 (lifted,
+tinted indigo), bar (the sticky bottom bar's 0 −4 20). Spacing: `gutter` 20 px, `gutter-mobile` 12 px,
+`margin` 32 px, `margin-mobile` 16 px, `control` 48 px, `tap` 44 px.
 
-| Token | Size | Line height |
-|---|---|---|
-| `--text-display` | 30 px | 1.25 |
-| `--text-heading` | 24 px | 1.25 |
-| `--text-title` | 20 px | 1.25 |
-| `--text-subtitle` | 18 px | 1.375 |
-| `--text-body` | 16 px | 1.5 |
-| `--text-compact` | 14 px | 1.43 |
-| `--text-caption` | 12 px | 1.33 |
-| `--text-micro` | 11 px | 1.45 |
+## 8. Fonts (unchanged)
 
-Radii: `--radius-control` 8 px, `--radius-card` 12 px (DESIGN.md asks 16 px — D-06), pill 9999.
-Elevation: two ambient shadows, borders carry the structure. Spacing: `--spacing-control` 48 px,
-`--spacing-tap` 44 px (the accessibility floor; DESIGN.md asks 48 px for every interactive surface —
-the 44 px floor is the shipped rule, and Phase 2 enforces it).
-
-## 6. Fonts (unchanged on purpose)
-
-`--font-sans` is Inter via `next/font`; `--font-arabic` is the **vendored** IBM Plex Sans Arabic
-(`@font-face` + `unicode-range` + an `ar`-only preload in the layout). It is not `next/font` because
-that measured 136 KB of unused Arabic on every `/fr` page (206 KB of fonts total). `--font-mono` is
-Geist Mono with `preload: false`. Phase 1 changes no font.
+`--font-sans` Inter via `next/font`; `--font-arabic` the **vendored** IBM Plex Sans Arabic with an
+`ar`-only preload (converting it to `next/font` measured 136 KB of unused Arabic on every `/fr`);
+`--font-mono` Geist Mono, `preload: false`.

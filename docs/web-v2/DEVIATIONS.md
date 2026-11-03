@@ -16,6 +16,8 @@ measured budget overrides the design file. Gate G2 answers the four FEASIBILITY 
 | D-09 | Detail route | one screen per build | `/{locale}/config/{id}/{rank}` built from `builds[]` | No single-build GET exists in contract 1.10; the page loads the pass and selects by rank, `notFound()` otherwise. See `API_REQUESTS.md` §5. |
 | D-10 | Retailers | "Où acheter" with merchant rows | price status + disclaimer only | `components[]` carries `store_offer_id` and no merchant name, URL or per-offer price (`API_REQUESTS.md` §3). |
 | D-11 | Compatibility | per-part verdicts | one build-level badge (`PASS`/`UNKNOWN`) | Per-part compatibility is not persisted or served; `CONDITIONAL` exists only as an assembly-time note (`API_REQUESTS.md` §1). |
+| D-12 | Naming | ramp `surface` = `#F8F9FF` | app `surface` = card white (`#FFFFFF`); the ramp value is `background` | 96 existing `bg-surface` usages mean "card". Renaming them for a token whose value equals `background` buys nothing, and both design values stay addressable. |
+| D-13 | Colour | prose amber/emerald used as text backgrounds | amber carries `on-surface` (8.00:1); emerald is fill/icon only; text uses the ramp's `on-*-container` pairs (4.54/4.60:1) | The design supplies its own accessible pairings; using them is adopting the design, not departing from it. |
 
 ## Pending at gate G2 (Phase 2)
 
@@ -23,3 +25,15 @@ measured budget overrides the design file. Gate G2 answers the four FEASIBILITY 
 - The kit's added client JS must be measured against **174 080 B**; the preset route currently has
   **6 973 B** of slack.
 - `configurateur_tape_2` has no Stitch reference (never drawn) — it inherits steps 1/3/4.
+
+
+## Resolved by the owner decision of 2026-11-03 (DESIGN.md in full)
+
+D-03, D-04, D-05 and D-06 are **closed**: the full palette, the full type scale and the Arabic +10 %
+leading now ship, so those rows describe a state that no longer exists and are kept as history. What
+remains: the two accessibility overrides (D-01, D-02), the naming reconciliation (D-12, D-13), and the
+API-driven reductions (D-08 to D-11).
+
+Measured cost of the full adoption: the stylesheet grows 73 169 -> **89 663 B**, and the two Lighthouse
+fixtures moved from LCP medians 2 482/2 486 to **2 485/2 488 ms** (budget 2 500). The margin is now
+~12 ms, so anything later that adds above-the-fold weight must re-measure before it lands.

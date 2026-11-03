@@ -79,35 +79,51 @@ function readTokens(): Record<string, Rgb> {
 const tokens = readTokens();
 
 const TEXT_PAIRS: Array<[string, string, string]> = [
-  ["ink on page", "ink", "page"],
-  ["ink on surface", "ink", "surface"],
-  ["muted on page", "muted", "page"],
-  ["muted on surface", "muted", "surface"],
-  ["muted on subtle", "muted", "subtle"],
-  ["surface on primary", "surface", "primary"],
-  ["primary on page", "primary", "page"],
-  ["primary on primary-soft", "primary", "primary-soft"],
-  ["surface on primary-hover", "surface", "primary-hover"],
-  ["surface on whatsapp", "surface", "whatsapp"],
+  ["on-surface on surface", "on-surface", "surface"],
+  ["on-surface on surface-container-lowest", "on-surface", "surface-container-lowest"],
+  ["on-surface on background", "on-surface", "background"],
+  ["on-surface-variant on surface", "on-surface-variant", "surface"],
+  ["on-surface-variant on surface-variant", "on-surface-variant", "surface-variant"],
+  ["on-primary on primary", "on-primary", "primary"],
+  ["on-primary-container on primary-container", "on-primary-container", "primary-container"],
+  ["on-secondary on secondary", "on-secondary", "secondary"],
+  ["on-secondary-container on secondary-container", "on-secondary-container", "secondary-container"],
+  ["on-tertiary on tertiary", "on-tertiary", "tertiary"],
+  ["on-tertiary-container on tertiary-container", "on-tertiary-container", "tertiary-container"],
+  ["on-error on error", "on-error", "error"],
+  ["on-error-container on error-container", "on-error-container", "error-container"],
+  ["on-background on background", "on-background", "background"],
+  ["on-primary-fixed on primary-fixed", "on-primary-fixed", "primary-fixed"],
+  ["on-secondary-fixed on secondary-fixed", "on-secondary-fixed", "secondary-fixed"],
+  ["on-tertiary-fixed on tertiary-fixed", "on-tertiary-fixed", "tertiary-fixed"],
+  ["inverse-on-surface on inverse-surface", "inverse-on-surface", "inverse-surface"],
+  // The brand prose: amber is a surface for ink, never for white (D-01).
+  ["on-surface on accent", "on-surface", "accent"],
+  // The three money states.
+  ["price-verified-text on price-verified-bg", "price-verified-text", "price-verified-bg"],
+  ["price-indicative-text on price-indicative-bg", "price-indicative-text", "price-indicative-bg"],
+  ["price-estimated-text on price-estimated-bg", "price-estimated-text", "price-estimated-bg"],
   ["success on success-soft", "success", "success-soft"],
   ["warning on warning-soft", "warning", "warning-soft"],
-  ["error on error-soft", "error", "error-soft"],
   ["info on info-soft", "info", "info-soft"],
-  ["ink on accent", "ink", "accent"],
+  ["muted on surface", "muted", "surface"],
+  ["muted on surface-container-lowest", "muted", "surface-container-lowest"],
 ];
 
 const UI_PAIRS: Array<[string, string, string]> = [
-  ["primary fill on track", "primary", "track"],
-  ["warning fill on track", "warning", "track"],
-  ["focus ring on page", "primary", "page"],
+  ["primary fill on surface", "primary", "surface"],
+  ["primary-container fill on surface", "primary-container", "surface"],
+  ["error fill on surface", "error", "surface"],
+  ["surface-tint on surface", "surface-tint", "surface"],
+  ["primary on surface-container-low", "primary", "surface-container-low"],
 ];
 
 test.describe("the token map", () => {
   test("defines the palette the board defines", () => {
-    // A truncation or a renamed token would silently drop a utility, so the
-    // count is pinned. 21 raw colours + 7 aliases; aliases are var() and are
-    // therefore not parsed here.
-    expect(Object.keys(tokens).length).toBe(21);
+    // A truncation or a renamed token would silently drop a utility, so the count is pinned.
+    // The number is DESIGN.md's tonal ramp (adopted in full) plus the brand accents and the three
+    // price trios; var() aliases are not parsed here, so they are not counted.
+    expect(Object.keys(tokens).length).toBe(67);
   });
 
   test("every text pair meets WCAG AA (4.5:1), measured", () => {

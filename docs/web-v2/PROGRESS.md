@@ -97,30 +97,30 @@ it is the owner's call (it is the only irreversible act in this phase) and is de
 
 ## Phase 1 — tokens (2026-11-03)
 
-Status: **implemented, awaiting gate G1** (human approval of `TOKENS.md` + `DEVIATIONS.md`).
+Status: **done**. Owner decision: DESIGN.md is adopted in full, superseding the earlier partial
+adoption (D-03/D-04/D-05/D-06).
 
 | Gate | Result |
 |---|---|
 | `npm run typecheck` | PASS |
 | `npm run lint` | PASS — 0 warnings |
-| `npm run check:tokens` | PASS — 84 files, no hex / palette / physical side |
+| `npm run check:tokens` | PASS — 84 files |
 | `npm run check:i18n` | PASS — 82 files |
 | `npm run check:api-types` | PASS — 1.10.0 |
 | `npm run build` | PASS |
-| `npm test` | **PASS — 379 passed / 2 skipped** (381 specs, 34.8 s) |
+| `npm test` | **PASS — 379 passed / 2 skipped** (381 specs, 34.4 s) |
+| `npm run test:lighthouse` | **PASS** — LCP medians 2 485 / 2 488 ms, CLS 0, script 158 831 / 167 107 B, performance 98 |
 
-What changed: the neutral ramp moved from stone to DESIGN.md's slate (`page`, `subtle`, `track`,
-`muted`, `ink`, `placeholder`), written as `oklch(...)` so the token gate still parses exactly
-**21** raw colours. No token was renamed and none was added: the three price-badge states map onto the
-existing `success`/`warning`/`muted` triples (`TOKENS.md` §4).
+What shipped: **67 raw colours + 13 aliases** (the 47-colour tonal ramp, the brand accents, the three
+price trios), DESIGN.md's **full type scale** (including `display-lg` and `price`), the **Arabic +10 %
+leading** via token overrides, 16 px cards, 10 px controls and the design's three elevation levels. The
+token spec now pins 67 colours and 29 text + 5 graphical pairs.
 
-Contrast, measured by `e2e/tokens.spec.ts` on the new values (all 15 text pairs ≥ 4.5:1, all 3
-graphical pairs ≥ 3:1): ink on page 16.41, muted on page 7.24, surface on primary 9.93, success on
-soft 4.57, warning on soft 4.51, **ink on accent 8.00**, primary fill on track 8.06, warning fill on
-track 4.07.
+Cost, measured: stylesheet 73 169 -> **89 663 B**; LCP 2 482/2 486 -> **2 485/2 488 ms** (budget
+2 500). Headroom is now ~12 ms, which is why every later screen task re-measures instead of assuming.
 
-Not re-run: Lighthouse. A colour-only change cannot move LCP or CLS, and Phase 6 owns that gate; the
-suite's CLS assertion on the token sheet still passes (< 0.01).
+`e2e/tokens.spec.ts` was changed deliberately (count + pair list), not weakened: the pairs are now the
+design's own on-X / X guarantees, a stricter set than the ones they replaced.
 
 ## Phase 1 inherits
 
