@@ -367,7 +367,7 @@ curl -s -o /dev/null -w "dev /fr %{http_code}\n" http://localhost:3210/fr
 ```
 Expected: build exit 0; `dev /fr 200`. Then stop that dev server by its PID and run the suite:
 `npm test > /tmp/turbo-test.log 2>&1; echo "test exit=$?"` — expected exit 0 with the same
-`376 passed / 2 skipped`.
+`379 passed / 2 skipped` (381 specs).
 
 - [ ] **Step 4: Keep or revert, and record it**
 
