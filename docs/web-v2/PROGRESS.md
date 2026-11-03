@@ -221,3 +221,14 @@ The tab bar and the shell's header nav are BOTH named "Navigation principale" (`
 so a landmark lookup unions them — 11 links instead of 5. The spec scopes to the section instead,
 because the defect is real: two landmarks sharing one accessible name. Phase 3 owns which name each
 keeps; it is listed in `HANDOFF.md`.
+
+## Phase 3 — shell (started 2026-11-03)
+
+| Task | Status | Evidence |
+|---|---|---|
+| Landmark naming | **done** | Two landmarks shared "Navigation principale". Owner decision: the header keeps it (`shell.navLabel`), the mobile tab bar is "Navigation de l’application" / "التنقل في التطبيق" (`shell.tabNav`). Two landmarks with one accessible name cannot be told apart in a landmark list, and axe cannot catch it (`landmark-unique` is best-practice; the suite runs WCAG tags only) — so `e2e/shell.spec.ts` asserts the names differ. |
+| Mobile tab bar | **done** | `components/shell/tab-nav.tsx` is the one client island (`usePathname` → which cell is current; longest path match, and a URL that matches no tab lights none rather than defaulting to home). Wired in the locale layout with five SHORT labels (`shell.tabItems.*`, fr + ar) — "Enregistrements" cannot fit a fifth of 360 px, so the bar says "Gardés" and the long name stays in the header, the footer and the page's h1. `md:hidden`, and `<main>` reserves the bar's height. |
+| Covered-content guard | **done** | The new spec failed on its FIRST run and the failure was real: the bar is `h-20` + a 1 px top border = 81 px, while the reserved padding was exactly 80 px, so the last pixel of content could sit behind the border. `TAB_BAR_OFFSET` and `STICKY_BAR_OFFSET` now add the border, and the spec measures the reserved padding against the bar's measured box. |
+| Error boundaries | **NOT STARTED** | `error.tsx` must be a client component and this app has no client-side message path (`next-intl`'s provider is not mounted — which is why `HeaderNav` and `TabNav` take labels as props). Mounting the provider (ships the catalogues to the browser) versus importing a static catalogue inside the boundary is a decision for the owner; the 404 (`not-found.tsx`) already exists. **G3 is not claimed.** |
+
+Suite after the shell wiring: **394 specs, 391 passed, 2 skipped** (35.9 s).

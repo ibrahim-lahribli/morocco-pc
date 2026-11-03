@@ -9,7 +9,7 @@ Read this first, then `CONTEXT.md`. This file is the state of the branch, not th
   went 25 -> 28 -> 29 while it was being written. Measure it with
   `git rev-list --count master..web-redesign`.
 - Phases 0 and 1 are closed. **Phase 2 (kit) is CLOSED at gate G2** — T1–T7 landed, T8 is the
-  evidence below. Phase 3 (shell) is next.
+  evidence below. **Phase 3 (shell) is in progress**: the landmark naming is decided and the mobile tab bar is wired; **G3 is not claimed**.
 - `docs/web-v2/PROGRESS.md` is the ledger. `docs/superpowers/plans/2026-11-03-web-redesign-phase-2.md`
   is marked closed and is now history, not a to-do list.
 
@@ -81,13 +81,30 @@ imported from their own module, never through the barrel.*
   cannot drift again).
 - **D-15 … D-19** and the five FEASIBILITY NOs answered in `DEVIATIONS.md`.
 
-## First job of Phase 3
+## Phase 3 — shell (in progress)
 
-**Two landmarks share one accessible name.** The tab bar and the shell's header nav are both
-"Navigation principale" (`shell.navLabel`); the new spec measured 11 links where 5 were expected. The
-spec now scopes to its section — but the collision is real, and axe will not catch it (`landmark-unique`
-is best-practice, and `e2e/a11y.spec.ts` runs WCAG tags only). Decide which nav keeps the name before
-the shell lands.
+**The landmark naming is decided (owner, 2026-11-03).** The header's page links keep "Navigation
+principale" (`shell.navLabel`); the mobile tab bar is "Navigation de l’application"
+(`shell.tabNav`, Arabic "التنقل في التطبيق"). Two landmarks with one accessible name cannot be told
+apart in a screen reader's landmark list, and axe will not catch it (`landmark-unique` is
+best-practice; the a11y suite runs WCAG tags only) — so `e2e/shell.spec.ts` asserts the names
+differ instead.
+
+Wired: `components/shell/tab-nav.tsx` (the one client island: `usePathname` → which cell is
+current, longest path match, so `/fr/composants/comparer` lights "Pièces" and a result page lights
+nothing), five SHORT labels (`shell.tabItems.*`, fr + ar — "Enregistrements" cannot fit a fifth of
+360 px, so the bar says "Gardés"), `md:hidden` because the header nav takes over at 768 px, and
+`<main>` reserving the bar's height with the offset released at `md`.
+
+**The guard earned its keep on its first run**: the bar is `h-20` + a 1 px border = 81 px while the
+reserved padding was exactly 80 px, so the last pixel of content could hide behind the border. Both
+`TAB_BAR_OFFSET` and `STICKY_BAR_OFFSET` now include that border, and the spec compares the reserved
+padding to the bar's measured box instead of to a number.
+
+**Still open in Phase 3:** error boundaries are NOT started. `error.tsx` must be a client component
+and this app has no client-side message path (`next-intl`'s provider is not mounted — which is why
+`HeaderNav` and `TabNav` take labels as props). Mounting the provider (ships the catalogues to the
+browser) versus importing a static catalogue inside the boundary is a decision, not a tidy-up.
 
 ## Open, unfinished, or unverified
 
