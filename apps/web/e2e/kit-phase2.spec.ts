@@ -62,8 +62,10 @@ test.describe("the Phase 2 primitives at 360 px", () => {
     // Five labels across 360 px: each cell must still clear the 44 px floor.
     for (const link of await links.all()) {
       const box = await link.boundingBox();
-      expect(box?.height ?? 0).toBeGreaterThanOrEqual(24);
-      // The CELL is 56 px; the link is what a finger hits.
+      // The CELL is 56 px (`h-14`) and the link fills it, so the floor is the
+      // 44 px accessibility minimum. An earlier draft asserted 24 here, which
+      // would have passed a cell less than half its designed height.
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
       expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
     }
 
