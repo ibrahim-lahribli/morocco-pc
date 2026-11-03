@@ -4,7 +4,7 @@
  * Sheet — the mobile bottom sheet, on Radix Dialog.
  *
  * Chosen at T2 (Phase 2) because Radix buys the parts a hand-rolled sheet gets
- * wrong: a focus trap, Escape handling, an `aria-modal` dialog that hides the
+ * wrong: a focus trap, Escape handling, an modal dialog that hides the
  * background from assistive tech, and body scroll locking. The primitive carries
  * **no copy of its own** — `title`, `description` and `closeLabel` are props, so
  * every string still comes from the caller's `messages/` lookups.

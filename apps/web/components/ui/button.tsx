@@ -1,7 +1,7 @@
 /**
  * Button — board §4, five states across four variants.
  *
- * Geometry is the board's, verbatim: 48 px tall (`h-control`), 8 px radius,
+ * Geometry is the board's, verbatim: 48 px tall (`h-control`), 10 px radius (`rounded-control`),
  * 16 px/500, 16 px inline padding. The secondary and disabled fills each carry
  * a 1 px border, as drawn — the disabled state is not simply 60 % opacity,
  * because a disabled control must still be legible (measured 4.5:1 in

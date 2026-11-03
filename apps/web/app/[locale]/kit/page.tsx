@@ -84,12 +84,12 @@ export default async function KitPage({
       </p>
       <h1 className="mt-1 text-heading text-ink">Kit de composants</h1>
       <p className="mt-3 max-w-prose text-body text-muted">
-        Les huit composants de base, dans chaque état dessiné sur le tableau
+        Les onze sections du kit, dans chaque état dessiné sur le tableau
         Stitch. Les mesures de contraste et les tailles sont vérifiées par les
         tests, pas à l’œil.
       </p>
 
-      <Section id="buttons" title="Boutons" source="Tableau §4 — 48 px · rayon 8 px">
+      <Section id="buttons" title="Boutons" source="Tableau §4 — 48 px · rayon 10 px">
         <div className="space-y-3 rounded-card border border-border bg-surface p-3.5">
           <div>
             <StateLabel>primaire · actif</StateLabel>

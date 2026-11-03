@@ -84,7 +84,7 @@ available as `background`.
 | inverse-on-surface on inverse-surface | 13.14:1 |
 | **on-surface on accent** | **8.00:1** |
 | price-verified / indicative / estimated | 5.21 / 4.84 / 6.92:1 |
-| success / warning / info on their soft tints | 4.57 / 4.51 / 5.49:1 |
+| success / warning / info on their soft tints | 5.21 / 4.84 / 5.49:1 |
 | muted on surface · muted on container-lowest | 7.58 / 7.87:1 |
 
 Graphical (≥ 3:1): primary on surface 13.79 · primary-container on surface 9.93 · error on surface

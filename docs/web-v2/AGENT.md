@@ -25,7 +25,7 @@ experience. Mobile (360 px) is the product; tablet and desktop are adaptations.
    detail. Every deviation goes in `DEVIATIONS.md` with a reason; silent drift is the failure mode.
 7. **Never weaken a test to make it pass.** Rewrite selectors to `getByRole`/`getByLabel`; if a
    behaviour genuinely changed, change the assertion deliberately and say so in the commit.
-8. **Measure before claiming headroom.** The LCP budget has 18 ms of slack and the preset route has
+8. **Measure before claiming headroom.** The LCP budget has ~12 ms of slack and the preset route has
    6 973 B of script. Any kit addition that ships to those routes is measured, not assumed.
 9. **Stop at gates.** G1 tokens · G2 kit · G3 shell · G4.n per screen · G5 desktop/RTL. Do not start
    the next phase to "keep moving"; present the evidence and wait.
