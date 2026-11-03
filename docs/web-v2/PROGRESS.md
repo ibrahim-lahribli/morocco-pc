@@ -51,9 +51,9 @@ Two consequences, and they are not negotiable:
 
 | Task | Status | Commit |
 |---|---|---|
-| 1 Stitch source + `SCREENS.md` | in progress | — |
-| 2 Baseline record | **done** | — |
-| 3 `FEASIBILITY.md` + `API_REQUESTS.md` | not started | — |
+| 1 Stitch source + `SCREENS.md` | **done** | b4b38a9 |
+| 2 Baseline record | **done** | 7da1c0c |
+| 3 `FEASIBILITY.md` + `API_REQUESTS.md` | **done** | see `git log` |
 | 4 `@types/node` ^22 | not started | — |
 | 5 Two lint warnings | not started | — |
 | 6 `@tailwindcss/turbopack` decision | not started | — |

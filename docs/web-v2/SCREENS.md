@@ -1,7 +1,7 @@
 # SCREENS.md — every Stitch screen, mapped
 
 Source: `apps/web/design/stitch/` — 22 screen directories (`code.html` + `screen.png`) plus
-`DESIGN.md`. The exports are reference material: no code path imports them, `code.html` markup is
+`DESIGN.md` (which lives in `moroccan_hardware_studio/` — that directory holds the token source, not a screen). The exports are reference material: no code path imports them, `code.html` markup is
 not copied (the kit and tokens own the implementation), and `DESIGN.md` is the token source for
 Phase 1.
 
