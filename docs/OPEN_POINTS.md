@@ -43,7 +43,7 @@ takes the cost (name it when you touch the area). `BLOCKED-OWNER` = an agent can
 
 ## Checked while compiling this list (2026-11-02)
 
-- Engine, script and API suites: 1261 / 451 / 193 tests, 0 failed, no cancelled (`test:api:db` 17 was
+- Engine, script and API suites: 1261 / 452 / 193 tests, 0 failed, no cancelled (`test:api:db` 17 was
   not re-run: it writes to the TEST branch).
 - `run-migrations --check`: no pending file, ledger 23. `gen-decision-index --check`, `verify-docs
   --offline`, `gen-schema-reference --check`: exit 0.
@@ -52,8 +52,8 @@ takes the cost (name it when you touch the area). `BLOCKED-OWNER` = an agent can
 - Re-confirmed 2026-11-02 after the seed 028 applies (read-only): `check-catalog-identity.js`
   PASS on shared, EU and TEST, ledger 23 (`023_recommendation_swap.sql`), 7 `scoring_model`
   rows (6 ACTIVE, `seed-minimal-v1@1.0.0` INACTIVE), 113 products / 114 offers / 319 assessments /
-  12 queries / 16 results / 16 candidates, 0 `ingestion_record` rows, and `test:scripts` 443 pass / 0 fail (451 since the `--target-env` and R-26 tests landed 2026-11-03).
-- **Re-verified 2026-11-03** (DB-free suites + read-only checks): `test:unit` 1261 / `test:scripts` 451 / `test:api` 193 on Node 24.21.0 and again on the CI's Node 22, 0 failed, 0 cancelled; `verify:docs --live` exit 0 (schema digest `4110c1517a14a0ef`); `check-catalog-identity` PASS 113/113 on shared and EU; EU `check-deployed-role` PASS as `morocco_pc_api`; the demo origin FAIL as `neondb_owner`; EU `/v1/presets` `200` (empty before the fill; 52 rows after - R-24); two distinct `X-Forwarded-For` values share one rate-limit bucket (R-08).
+  12 queries / 16 results / 16 candidates, 0 `ingestion_record` rows, and `test:scripts` 443 pass / 0 fail (452 since the `--target-env`, R-26 and audit-line tests landed 2026-11-03).
+- **Re-verified 2026-11-03** (DB-free suites + read-only checks): `test:unit` 1261 / `test:scripts` 452 / `test:api` 193 on Node 24.21.0 and again on the CI's Node 22, 0 failed, 0 cancelled; `verify:docs --live` exit 0 (schema digest `4110c1517a14a0ef`); `check-catalog-identity` PASS 113/113 on shared and EU; EU `check-deployed-role` PASS as `morocco_pc_api`; the demo origin FAIL as `neondb_owner`; EU `/v1/presets` `200` (empty before the fill; 52 rows after - R-24); two distinct `X-Forwarded-For` values share one rate-limit bucket (R-08).
 
 ## Not re-measured here (and why)
 

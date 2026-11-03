@@ -33,7 +33,7 @@ Unchanged from `PLAN_PLATFORM_CONSTRAINTS.md`, and the same rules `AGENTS.md` §
 | DB roles | `morocco_pc_api` provisioned on shared and EU, self-check 21/21, smoke green as the role — and **not used by the deployed app** (`check-deployed-role.js`: FAIL, `neondb_owner`) |
 | Served scoring model | the newest ACTIVE row; on shared that is `launch-v2@2.4.0` (six ACTIVE `launch-v2` versions, `seed-minimal-v1` INACTIVE). Nothing pins a model at deploy. |
 | CI | `unit-and-docs` on push/PR; `recurring-gates` nightly + dispatch |
-| Tests | engine **1261**, scripts **451**, API **193** (0 failed, measured 2026-11-03); `test:api:db` **17**, nightly only |
+| Tests | engine **1261**, scripts **452**, API **193** (0 failed, measured 2026-11-03); `test:api:db` **17**, nightly only |
 
 ## 3. Sprint ledger (21 sprints: 16 DONE, 3 PARTIAL, 2 NOT STARTED)
 
