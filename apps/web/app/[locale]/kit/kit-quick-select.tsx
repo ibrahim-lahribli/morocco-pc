@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-import { BudgetPicker, ChoicePills } from "@/components/ui";
+import { BudgetPicker } from "@/components/ui/budget-picker";
+import { ChoicePills } from "@/components/ui/choice-pills";
 import { formatMoney, formatNumber } from "@/lib/i18n/format";
 
 /**

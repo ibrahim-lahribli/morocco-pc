@@ -83,3 +83,52 @@ export function QuestionCircleIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** The tab bar's five cells. Strokes on the same 24 px grid as the rest. */
+export function HomeIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V21h14V9.5" />
+    </svg>
+  );
+}
+
+/** A chip: components / catalogue. */
+export function ChipIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+      <path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" />
+    </svg>
+  );
+}
+
+/** The wizard: a sparkle, as the board draws the raised centre cell. */
+export function SparklesIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" />
+      <path d="M18 16.5 19 19l2.5 1-2.5 1-1 2.5-1-2.5L14.5 20l2.5-1 1-2.5Z" />
+    </svg>
+  );
+}
+
+/** Guides. */
+export function BookIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 0 4 22V4.5Z" />
+      <path d="M8 7h8M8 11h6" />
+    </svg>
+  );
+}
+
+/** The shelf: a bookmark, not a heart — it names a saved pointer, not a favourite. */
+export function BookmarkIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6 3h12v18l-6-4.5L6 21V3Z" />
+    </svg>
+  );
+}

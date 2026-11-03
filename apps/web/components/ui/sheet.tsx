@@ -81,7 +81,7 @@ export function Sheet({
           }}
           className={cn(
             "fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto",
-            "rounded-t-xl border-t border-border bg-surface px-4 pt-4 pb-6 shadow-card-2",
+            "rounded-t-xl border-t border-border bg-surface px-4 pt-4 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-card-2",
             className,
           )}
         >

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
 import { hasLocale } from "next-intl";
 import { getTranslations } from "next-intl/server";
@@ -103,6 +103,22 @@ const FOOTER_LINKS = [
   { key: "legal.contact", path: "/contact" },
   { key: "formats", path: "/format" },
 ] as const;
+
+/**
+ * T7: `viewport-fit=cover` is what makes `env(safe-area-inset-*)` non-zero on a
+ * notched phone — without it the bottom tab bar and the sticky action bar sit
+ * under the home indicator (review finding P2), and the `Sheet`'s footer row
+ * with them. The bars own a `pb-[env(safe-area-inset-bottom,0px)]` class; this
+ * export is what makes that class mean anything.
+ *
+ * Deliberately minimal: no `themeColor` (that would decide dark mode, D6,
+ * by accident) and no `maximumScale` (locking zoom is an accessibility failure).
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));

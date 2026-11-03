@@ -1,8 +1,19 @@
+import { StatusBadge } from "@/components/ui/status-badge";
+import { StepHeader } from "@/components/ui/step-header";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { Alert, Badge, Button, ChoiceCard, ProgressBar, Skeleton, SkeletonCard, TextField, StatusBadge, StepHeader } from "@/components/ui";
+import { Alert, Badge, Button, ChoiceCard, ProgressBar, Skeleton, SkeletonCard, TextField } from "@/components/ui";
 import { formatDate, formatMoney, formatNumber, formatPercent } from "@/lib/i18n/format";
+import { BottomTabBar } from "@/components/ui/bottom-tab-bar";
+import { BuildSummaryCard } from "@/components/ui/build-summary-card";
+import { CheckIcon, InfoCircleIcon, QuestionCircleIcon } from "@/components/ui/icons";
+import { PartRow } from "@/components/ui/part-row";
+import { RetailerRow } from "@/components/ui/retailer-row";
+import { SnapRow, SnapRowItem } from "@/components/ui/snap-row";
+import { StickyBar } from "@/components/ui/sticky-bar";
+import { TrustItem } from "@/components/ui/trust-item";
+import { KitExplainer } from "./kit-explainer";
 import { KitInteractive } from "./kit-interactive";
 import { KitSheet } from "./kit-sheet";
 import { KitQuickSelect } from "./kit-quick-select";
@@ -305,6 +316,146 @@ export default async function KitPage({
         <KitQuickSelect />
       </Section>
 
+      <Section id="tab-bar" title="Barre d’onglets" source="Accueil — 5 items · 80 px · cellule centrale surélevée">
+        {/* The bar is `fixed`, so the gallery gives it a transform-bearing
+            wrapper: a transform makes this box the containing block for fixed
+            descendants, which is how a pinned bar is demonstrated in a page
+            instead of pinning itself to the browser. */}
+        <div className="relative h-40 transform-gpu overflow-hidden rounded-card border border-border bg-page">
+          <BottomTabBar
+            label="Navigation principale"
+            current="home"
+            items={[
+              { key: "home", href: "/fr", label: "Accueil", icon: "home" },
+              { key: "components", href: "/fr/composants", label: "Pièces", icon: "components" },
+              { key: "configure", href: "/fr/configurer", label: "Configurer", icon: "configure", raised: true },
+              { key: "guides", href: "/fr/guides", label: "Guides", icon: "guides" },
+              { key: "saved", href: "/fr/enregistrements", label: "Gardés", icon: "saved" },
+            ]}
+          />
+        </div>
+      </Section>
+
+      <Section id="sticky-bar" title="Barre d’action fixe" source="Détail — total, statut et une action · 76 px">
+        <div className="relative h-36 transform-gpu overflow-hidden rounded-card border border-border bg-page">
+          <StickyBar
+            label="Total"
+            value={mad(7450)}
+            status={<Badge tone="verified">Vérifié</Badge>}
+            action={<Button>Enregistrer</Button>}
+          />
+        </div>
+      </Section>
+
+      <Section id="part-rows" title="Lignes de composants" source="Détail — rôle, nom, prix ; pas de verdict par pièce (D-11)">
+        <ul className="divide-y divide-border rounded-card border border-border bg-surface px-3.5">
+          <PartRow role="Processeur" name="AMD Ryzen 5 5600" detail="AM4 · 6 cœurs · 12 threads" priceLabel={mad(1499)} />
+          <PartRow role="Carte graphique" name="NVIDIA GeForce RTX 4060" detail="8 Go GDDR6" priceLabel={mad(3200)} />
+          <PartRow role="Boîtier" name="Pièce sans prix retenu" priceLabel={null} />
+        </ul>
+        <p className="mt-2 text-caption text-muted">
+          Le verdict de compatibilité est porté par la configuration entière :
+          une ligne ne peut donc pas afficher PASS/FAIL pour une seule pièce.
+        </p>
+      </Section>
+
+      <Section id="retailer-rows" title="Où acheter — forme réduite" source="D-10 : aucun marchand servi, la provenance du prix seulement">
+        <ul className="space-y-2 rounded-card border border-border bg-surface p-3.5">
+          <RetailerRow
+            label="Prix constaté"
+            priceLabel={mad(7450)}
+            status={<Badge tone="verified">Vérifié</Badge>}
+            note="Relevé chez un marchand."
+          />
+          <RetailerRow
+            label="Prix indicatif"
+            priceLabel={mad(7520)}
+            status={<Badge tone="indicative">Indicatif</Badge>}
+            note="Le prix peut avoir changé depuis le relevé."
+          />
+          <RetailerRow
+            label="Sans relevé"
+            priceLabel={null}
+            status={<Badge tone="demo">Démo</Badge>}
+            note="Aucun marchand interrogé pour cette pièce."
+          />
+        </ul>
+      </Section>
+
+      <Section id="snap-row" title="Bande défilante" source="Détail et catalogue — accroche, clavier, débord de gouttière">
+        <SnapRow label="Configurations liées">
+          <SnapRowItem>
+            <div className="rounded-card border border-border bg-surface p-3">
+              <p className="text-caption text-muted">Budget</p>
+              <p className="num-tabular text-title text-ink">{mad(9000)}</p>
+            </div>
+          </SnapRowItem>
+          <SnapRowItem>
+            <div className="rounded-card border border-border bg-surface p-3">
+              <p className="text-caption text-muted">Budget</p>
+              <p className="num-tabular text-title text-ink">{mad(12000)}</p>
+            </div>
+          </SnapRowItem>
+          <SnapRowItem>
+            <div className="rounded-card border border-border bg-surface p-3">
+              <p className="text-caption text-muted">Budget</p>
+              <p className="num-tabular text-title text-ink">{mad(15000)}</p>
+            </div>
+          </SnapRowItem>
+          <SnapRowItem>
+            <div className="rounded-card border border-border bg-surface p-3">
+              <p className="text-caption text-muted">Budget</p>
+              <p className="num-tabular text-title text-ink">{mad(18000)}</p>
+            </div>
+          </SnapRowItem>
+        </SnapRow>
+      </Section>
+
+      <Section id="trust-items" title="Points de confiance" source="Accueil — icône, titre, phrase · trois tons">
+        <ul className="space-y-3 rounded-card border border-border bg-surface p-3.5">
+          <TrustItem title="Compatibilité vérifiée" icon={<CheckIcon className="h-4 w-4" />} tone="verified">
+            Chaque configuration a passé les règles de compatibilité du moteur.
+          </TrustItem>
+          <TrustItem title="Prix honnêtes" icon={<InfoCircleIcon className="h-4 w-4" />} tone="indicative">
+            Un prix dit toujours d’où il vient et à quel point il est fiable.
+          </TrustItem>
+          <TrustItem title="Sans compte" icon={<QuestionCircleIcon className="h-4 w-4" />}>
+            Aucune inscription n’est nécessaire pour obtenir une configuration.
+          </TrustItem>
+        </ul>
+      </Section>
+
+      <Section id="build-summary" title="Carte de configuration" source="Résultats — média dessiné (D-01), badge flottant, total, action">
+        <div className="space-y-3">
+          <BuildSummaryCard
+            eyebrow="Meilleur rapport qualité/prix"
+            title="Équilibré"
+            partLine="Ryzen 5 5600 · RTX 4060 · 16 Go · 1 To"
+            priceLabel={mad(7450)}
+            remainingLabel={"Reste " + mad(550)}
+            status={<Badge tone="verified">Vérifié</Badge>}
+            href="/fr/config/demo/1"
+            ctaLabel="Voir le détail"
+            primary
+            fallback="GPU"
+          />
+          <BuildSummaryCard
+            eyebrow="Le plus sobre"
+            title="Essentiel"
+            partLine="Ryzen 5 5600 · 16 Go · 512 Go"
+            priceLabel={null}
+            remainingLabel={null}
+            status={<StatusBadge state="UNKNOWN">À vérifier</StatusBadge>}
+            href="/fr/config/demo/2"
+            ctaLabel="Voir le détail"
+            fallback="CPU"
+          />
+        </div>
+      </Section>
+
+      <Section id="explainer-sheet" title="Feuille explicative" source="Détail et catalogue — explication d’un fait, pas d’une action">
+        <KitExplainer />
+      </Section>
     </article>
   );
 }
