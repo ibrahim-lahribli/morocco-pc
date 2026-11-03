@@ -4,7 +4,7 @@ Read this first, then `CONTEXT.md`. This file is the state of the branch, not th
 
 ## Where the branch stands
 
-- Branch `web-redesign`, **25 commits** since `master` (`e3fe882`), **nothing pushed**, no upstream.
+- Branch `web-redesign`, **28 commits** since `master` (`e3fe882`), **nothing pushed**, no upstream.
 - Phases 0 and 1 are closed. **Phase 2 (kit) is CLOSED at gate G2** — T1–T7 landed, T8 is the
   evidence below. Phase 3 (shell) is next.
 - `docs/web-v2/PROGRESS.md` is the ledger. `docs/superpowers/plans/2026-11-03-web-redesign-phase-2.md`
@@ -71,6 +71,11 @@ imported from their own module, never through the barrel.*
   home indicator.
 - **`e2e/kit-phase2.spec.ts`** (8 specs): one assertion per primitive, each aimed at the defect it
   could plausibly have, not at its rendering.
+- **Three defects the review pass then found in the above**, all fixed: the tab-cell spec asserted a
+  24 px floor while its own comment claimed the 56 px cell (now 44 px, the accessibility minimum); the
+  build card's CTA was a raw `<a>` bypassing `next/link` (now `LinkButton`); and the gallery intro still
+  said "les onze sections" on a page that renders twenty (the count is gone rather than corrected, so it
+  cannot drift again).
 - **D-15 … D-18** and the five FEASIBILITY NOs answered in `DEVIATIONS.md`.
 
 ## First job of Phase 3
