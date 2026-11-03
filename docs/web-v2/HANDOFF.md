@@ -1,183 +1,165 @@
-# HANDOFF — web-redesign, end of session 2026-11-03 (second sitting)
+# HANDOFF — web-redesign, end of session 2026-11-03 (third sitting)
 
 Read this first, then `CONTEXT.md`. This file is the state of the branch, not the plan.
 
 ## Where the branch stands
 
-- Branch `web-redesign`, branched from `master` (`e3fe882`), **nothing pushed**, no upstream. The commit
-  count is deliberately not written down here: it changes with every commit, and a numeral in this file
-  went 25 -> 28 -> 29 while it was being written. Measure it with
+- Branch `web-redesign`, branched from `master` (`e3fe882`), **pushed and in sync with `origin/web-redesign`**.
+  The commit count is deliberately not written down: it changes with every commit. Measure it with
   `git rev-list --count master..web-redesign`.
-- Phases 0 and 1 are closed. **Phase 2 (kit) is CLOSED at gate G2** — T1–T7 landed, T8 is the
-  evidence below. **Phase 3 (shell) is in progress**: the landmark naming is decided and the mobile tab bar is wired; **G3 is not claimed**.
-- `docs/web-v2/PROGRESS.md` is the ledger. `docs/superpowers/plans/2026-11-03-web-redesign-phase-2.md`
-  is marked closed and is now history, not a to-do list.
+- Phases 0 and 1 are closed. **Phase 2 (kit) is CLOSED at gate G2.** **Phase 3 (shell) is in progress:
+  G3 is NOT claimed** — the tab bar, the landmark naming and this session's review fixes are in, but
+  error boundaries are not started and the Lighthouse gate is red (see below).
+- `docs/web-v2/PROGRESS.md` is the ledger. `docs/superpowers/plans/` holds plan files for phases **0
+  and 2 only** — there is no phase-3 plan, which is why the header/footer restyle and the `md+` half
+  of PLAN.md's Phase 3 line drifted out of view until the review found them. Writing that plan is
+  open work, not a formality.
 
-### Gates on the final tree (every row RUN this session)
+## What this session did
+
+### 1. Reviewed the shell (two axes) — `8e90286..2281a42`
+
+Findings, all recorded in `PROGRESS.md`:
+
+| Axis | Finding |
+|---|---|
+| Standards | the footer's S22 docblock had been left above the new `type TabItemRow`, so it documented the wrong declaration |
+| Standards | `bottom-tab-bar.tsx` still said `TAB_BAR_OFFSET` is put on `<main>` after d761355 moved it to `<body>` |
+| Standards | the bar matched sections with a bare `startsWith` while `header-nav.tsx` guards the trailing slash |
+| Standards | HANDOFF's gate row cited 100 / 98 files (measured 101 / 99) and a stale suite line (388 / 390) |
+| Spec | PLAN.md says "`md+` top nav", but the header's page links are visible **at 360 px beside the bar** (measured: header nav 118 px tall), duplicating three destinations |
+| Spec | Phase 3 also names the header, footer and error boundaries; only the bar and the naming landed |
+
+### 2. Landed the four mechanical fixes — commit `3329074`
+
+`web(shell): fix the review's doc drift and pin the tab boundary` (7 files, +103/−17):
+
+- the footer docblock leads `FOOTER_LINKS` again, and `type TabItemRow` sits under its own comment;
+- the offset comment names `<body>`, and the constant's doc counts the 1 px border it reserves;
+- the URL→tab rule moved to **`components/shell/tab-match.ts`** (`isTabPath`, `currentTabKey`), so the
+  bar and the header nav share one boundary guard instead of two different ones;
+- `e2e/shell.spec.ts` pins `/composants-x` → no lit tab. **It is a pure case on purpose:** an unknown
+  slug renders Next's **bare 404, which carries no `nav` element at all** (measured this session), so a
+  navigation-based assertion would have passed for the wrong reason;
+- HANDOFF's stale counts and the suite line were corrected to the measured values.
+
+### 3. Diagnosed the red gate (the important result)
+
+`npm run test:lighthouse` **fails** on the result route. The full evidence:
+
+| Metric | Value | Budget |
+|---|---|---|
+| LCP median of 3 (result route) | **2 503 ms** (2 503 / 2 493 / 2 559) | 2 500 → **FAIL** |
+| LCP median (preset route) | 2 482 ms | 2 500 → pass |
+| Script transfer (result / preset) | 168 700 B / 167 428 B | 174 080 → **5 380 B spare** |
+| FCP · Speed Index · TBT · CLS | 916 ms · 916 ms · 18.5 ms · 0 | — |
+| Document response | 23 ms, 14 151 B | — |
+| Last script finishes | 231 ms | — |
+
+**LCP phases for the failing element: TTFB 458 ms, load delay 0 ms, load time 0 ms, render delay
+2 045 ms.** The element is `section > section.mt-6 > dl.mt-3 > div.text-body`, i.e. the inputs-applied
+block from `components/result/inputs-applied.tsx` — a **server component**, in the first byte of HTML,
+with no `use client` and no CSS on its `data-effect` attribute (that attribute is a test hook only).
+
+What this rules out, with numbers rather than opinion:
+
+- **Not the tab bar's bytes.** Its ~9.8 KB is client JS, and every script is done at 231 ms.
+- **Not API latency.** TTFB is 20 ms observed, 458 ms only under Lighthouse's simulated throttling.
+- **Not network for the element.** Load delay and load time are both zero.
+
+What is left is the paint path: 2 045 ms of render delay under 4× CPU throttling, against a **89 663 B
+built stylesheet** (source `app/globals.css` is 19 164 B / 403 lines, so the weight is generated
+utilities) and a `display: swap` font. The next session's first job is to attribute that delay — the
+protocol and its decision rule are in the next section, so it does not get re-derived.
+
+## Next session — start here
+
+1. **Name the render cost before changing anything.** Mine the reports already on disk first (free, no
+   rebuild): the `.css` and `.woff2` entries in `network-requests` (start/end times), plus
+   `render-blocking-resources`, `unused-css-rules` and `dom-size`. That alone distinguishes "the CSS
+   arrived late and everything waited" from "the CSS arrived early and styling a large tree took two
+   seconds" — opposite fixes.
+   Then two scratch ablations, **one change per build**, each measured median-of-3 on the same two
+   fixtures, and each reverted before the next:
+   - fonts: point `--font-sans` at a system stack and drop `inter.variable` (the Arabic `@font-face`
+     blocks are `/ar`-only and irrelevant to both fixtures — do not spend a build on them);
+   - CSS: remove `@layer components` (`globals.css:342+`) and the Arabic overrides (`:301`, `:314`)
+     coarsely first; splitting only helps if the coarse run moves the number.
+   **Decision rule:** > 200 ms movement names the lever; 100–200 ms is real but insufficient alone;
+   < 100 ms rules it out. Noise is ±60 ms on this box, so a single run cannot resolve a small change.
+   **Guardrail:** `next start` serves `.next`, so revert the source **and rebuild** or you measure the
+   old code — the trap that has cost this branch red runs twice. Never edit `lighthouserc.cjs`
+   thresholds to make the gate pass.
+2. **Owner decision: hide the header's page links below 768 px**, or keep them and log a `DEVIATIONS`
+   row. PLAN.md already says "`md+` top nav", so hiding needs no deviation. Do this before any Phase 4
+   screen, or the shell moves under the screens.
+3. **`error.tsx` is still absent**, and it needs a client message path: mount the next-intl provider
+   (ships both catalogues into a shared chunk — measure against the 5 380 B margin *first*) or import a
+   static catalogue inside the boundary. This is a decision, not a tidy-up.
+4. **Write `docs/superpowers/plans/2026-11-03-web-redesign-phase-3.md`**, then claim G3 only on a green
+   median-of-3 Lighthouse with the fix from step 1 — not before.
+5. **Phase 4, in the planned order:** `configurer → results → build detail → home → presets →
+   composants → guides → enregistrements → legal`, one screen per task with its own gate. **Home is
+   fourth, not first.** Its brief is `SCREENS.md`'s `accueil_morocco_pc` row — hero, presets, trust
+   strip **and guides**, with the two state variants merged — built on the existing loaders
+   (`presetsForBuild`, `loadPresetCached`, `orderBuilds`, `priceProvenance`, `pageAlternates`), not a
+   new data path. "From scratch" applies to the markup; the loaders encode one API read per budget, the
+   skip-a-broken-preset rule and the canonical surface.
+6. **Flake to chase when convenient:** `e2e/wizard-budget.spec.ts:76` ("a field below the minimum
+   clamps to it on blur") flaked once in two identical runs and passed on retry. Reproduce with
+   `--repeat-each=20`, fix the race, do not add a retry.
+
+## Gates measured on the handed-off tree (`3329074` + this doc)
 
 | Gate | Result |
 |---|---|
 | `npm run typecheck` | PASS (exit 0) |
-| `npm run lint` | PASS, **0 warnings** |
-| `npm run check:tokens` | PASS — 102 files |
-| `npm run check:i18n` | PASS — 100 files, 2 catalogues, key + placeholder parity |
+| `npm run lint` | PASS — 0 warnings |
+| `npm run check:tokens` | PASS — **102 files** |
+| `npm run check:i18n` | PASS — **100 files**, 2 catalogues, key + placeholder parity |
 | `npm run check:api-types` | PASS — contract 1.10.0, `schema.d.ts` byte-identical |
 | `npm run build` | PASS |
-| `CI=1 npm test` | **PASS — 392 passed / 2 skipped** (394 specs; one re-run reported 1 flaky) |
-| `npm run test:lighthouse` | **PASS** — four `error` assertions, median of 3, both fixtures |
+| `npx playwright test e2e/shell.spec.ts` | PASS — **9/9** |
+| `CI=1 npm test` | PASS — **392 passed / 2 skipped** (394 specs, 35.7 s) |
+| `npm run test:lighthouse` | **FAIL — LCP 2 503 ms on the result route; see above** |
 
 The two skips are `e2e/wizard-browser-api.spec.ts` (needs `E2E_BROWSER_API=1`) and
-`e2e/wizard-engine.spec.ts` (opt-in real-engine harness). Both by design. axe runs inside the suite
-(`e2e/a11y.spec.ts` already walks `/kit`, so the eight new sections are covered by its 51 checks).
+`e2e/wizard-engine.spec.ts` (the opt-in real-engine harness). Both by design.
 
-### Gate G2 numbers
+## Traps (new this session — the older ones still hold)
 
-| Route | LCP (median of 3) | CLS | Script | vs 174 080 B | vs G1 baseline |
-|---|---|---|---|---|---|
-| `/fr/config/{id}` | 2 490 ms | 0 | **158 876 B** | 15 204 B spare | +45 B |
-| `/fr/config-pc-gamer-9000-dh` | 2 485 ms | 0 | **167 321 B** | **6 759 B spare** | +214 B |
-
-Performance score 98 on both. **LCP is still the binding metric** — 10 ms and 15 ms of slack — and one
-preset run sampled 2 874 ms before the median absorbed it. Any Phase 3 addition above the fold
-re-measures before it lands; the preset route is the one to watch.
-
-### Measured again after the shell, and the binding route changed
-
-| Route | LCP (median of 3) | CLS | Script | vs 174 080 B | change at G2 |
-|---|---|---|---|---|---|
-| `/fr/config/{id}` | 2 495 ms | 0 | **168 700 B** | **5 380 B spare** | **+9 824 B** |
-| `/fr/config-pc-gamer-9000-dh` | 2 490 ms | 0 | 167 428 B | 6 652 B spare | +107 B |
-
-The mobile tab bar ships to every route, so it lands on both measured fixtures. It costs the RESULT
-route ~9.8 KB and the preset route ~0.1 KB (that page already shared the chunk), which flips the
-binding route: **the result page is now the one to watch, not the preset.** LCP is 2 495 / 2 490 ms
-against a 2 500 ms budget — 5 ms and 10 ms of slack — so Phase 4 must treat this as the wall.
-
-
-## The headline: the 3 KB was the barrel, and that is now measured
-
-The previous session left this open — Phase 2 had grown the fixture bundles ~3 KB and the suspect was
-the `@/components/ui` barrel re-exporting four primitives neither fixture renders. An A/B rebuild
-settled it:
-
-| Build | `/fr/config/{id}` | preset route |
-|---|---|---|
-| four exports IN the barrel | 190 434 B | 189 557 B |
-| four exports REMOVED | 189 024 B | 188 147 B |
-
-**Exactly 1 410 B on both routes**, in ONE shared chunk (9 733 → 8 323 B gzip). A re-export barrel is
-not reliably tree-shaken by Turbopack. Removing those four exports and importing each primitive
-directly recovered **2 882 / 3 191 B** as Lighthouse measures it, so the whole kit now costs **+45 B
-and +214 B** instead of +3 KB. This is **D-15**, and it is a rule from here on: *new primitives are
-imported from their own module, never through the barrel.*
-
-## What shipped this session
-
-- **Eight primitives** (T6), each imported directly: `BottomTabBar` (pure, `current` is a prop so the
-  gallery can draw every state), `StickyBar`, `PartRow`, `RetailerRow` (D-10 reduced — **it has no
-  `href` prop at all**, because no merchant is served and a clickable row would be a promise with no
-  answer), `SnapRow` + `SnapRowItem` (focusable scroller, RTL-safe bleed), `TrustItem`,
-  `BuildSummaryCard` (drawn fallback per D-01, CTA is the link per D-16), `ExplainerSheet`.
-- **Five tab-bar glyphs** in `icons.tsx`; the bespoke set stays bespoke.
-- **The gallery** (T7): `/fr/kit` gained eight sections in real states, plus `KitExplainer` as its one
-  client island. It renders `fixed` bars inside a transform-bearing wrapper — a transform makes that
-  box the containing block, which is how a pinned bar is demonstrated *in* a page.
-- **`viewport` export** with `viewportFit: "cover"`, and the `Sheet`'s footer padded with
-  `env(safe-area-inset-bottom)`. Review finding **P2 is closed** — the sheet no longer sits under the
-  home indicator.
-- **`e2e/kit-phase2.spec.ts`** (8 specs): one assertion per primitive, each aimed at the defect it
-  could plausibly have, not at its rendering.
-- **Three defects the review pass then found in the above**, all fixed: the tab-cell spec asserted a
-  24 px floor while its own comment claimed the 56 px cell (now 44 px, the accessibility minimum); the
-  build card's CTA was a raw `<a>` bypassing `next/link` (now `LinkButton`); and the gallery intro still
-  said "les onze sections" on a page that renders twenty (the count is gone rather than corrected, so it
-  cannot drift again).
-- **D-15 … D-19** and the five FEASIBILITY NOs answered in `DEVIATIONS.md`.
-
-## Phase 3 — shell (in progress)
-
-**The landmark naming is decided (owner, 2026-11-03).** The header's page links keep "Navigation
-principale" (`shell.navLabel`); the mobile tab bar is "Navigation de l’application"
-(`shell.tabNav`, Arabic "التنقل في التطبيق"). Two landmarks with one accessible name cannot be told
-apart in a screen reader's landmark list, and axe will not catch it (`landmark-unique` is
-best-practice; the a11y suite runs WCAG tags only) — so `e2e/shell.spec.ts` asserts the names
-differ instead.
-
-Wired: `components/shell/tab-nav.tsx` (the one client island: `usePathname` → which cell is
-current, longest path match, so `/fr/composants/comparer` lights "Pièces" and a result page lights
-nothing), five SHORT labels (`shell.tabItems.*`, fr + ar — "Enregistrements" cannot fit a fifth of
-360 px, so the bar says "Gardés"), `md:hidden` because the header nav takes over at 768 px, and
-`<body>` reserving the bar's height, released at `md`.
-
-**The guard earned its keep on its first run**: the bar is `h-20` + a 1 px border = 81 px while the
-reserved padding was exactly 80 px, so the last pixel of content could hide behind the border. Both
-`TAB_BAR_OFFSET` and `STICKY_BAR_OFFSET` now include that border, and the spec compares the reserved
-padding to the bar's measured box instead of to a number.
-
-**A second, larger defect the browser found.** The reservation was on `<main>` at first, which
-protects the last card but not the footer that comes AFTER it — measured at the bottom of `/fr`:
-footer bottom 800 px against bar top 719 px, so the legal links sat behind the bar on every page.
-It is on `<body>` now, and the spec scrolls to the bottom and asserts the footer clears the bar.
-
-**Still open in Phase 3:** error boundaries are NOT started. `error.tsx` must be a client component
-and this app has no client-side message path (`next-intl`'s provider is not mounted — which is why
-`HeaderNav` and `TabNav` take labels as props). Mounting the provider (ships the catalogues to the
-browser) versus importing a static catalogue inside the boundary is a decision, not a tidy-up.
-
-## Open, unfinished, or unverified
-
-- **Per-commit gate replay was NOT run.** Two commits this session (code, then docs); only HEAD was
-  verified, so an intermediate commit is green only by construction. `f339d37` remains the one commit
-  known red in history.
-- **`/ar`'s h1 renders 24 px** — a Tailwind `text-2xl`, not a token step. The type scale is still not
-  exclusive and `check:tokens` cannot see size utilities.
-- **The gallery is French-only** (`generateStaticParams` returns `fr`), `noindex`, and uses French
-  literals rather than `messages/`. Pre-existing precedent that contradicts AGENT rule 5; still not a
-  deviation row.
-- **Media assets are committed but unused.** `guide-motherboard` is 127 KB, 4× the others — re-encode
-  before it lands above the fold (Phase 4, where LCP is measured).
-- **`apps/web-v2/` is untracked** — a duplicate of `design/stitch/`. Deleting it is the owner's call.
-- **Script margin is 5 380 B on the RESULT route**, which the tab bar made the binding one (it was
-  6 759 B on the preset route at G2). Every Phase 3/4 addition to a shared chunk is judged against
-  5 380 B now, and LCP has 5 ms of slack.
-
-## Traps (each has already cost a red run or a wrong number)
-
-- **`grep -cU $'\r'` lies about line endings here.** It reported 40 CR lines in a file Node reads as
-  **0 CR / 41 LF**. Read endings with `node`: `s.split('\n').filter(l => l.endsWith('\r')).length`.
-  `DEVIATIONS.md`, `PROGRESS.md` and `HANDOFF.md` are **LF-only**; `globals.css`, `layout.tsx` and the
-  kit page are CRLF. Never normalise either.
-- **`code_search` returns 0 matches for `from "@/components/ui"`** in this repo even with `cwd` set —
-  the file plainly contains it. Use `grep -rln` for this tree.
-- **Turbopack emits no `app-build-manifest.json`.** To attribute bytes, probe the built HTML:
-  `next start`, fetch the route, read every `<script src>`, gzip it. That is how the barrel was proved,
-  and it is reproducible (`tmp/bundle-probe.mjs` was the scratch version; it is gitignored).
-- **`resource-summary:script:size` is an LHCI *synthetic* assertion, not an audit.** It has no
-  `audits[...]` entry; take `audits["resource-summary"].details.items` (where `resourceType ===
-  "script"`) or read `assertion-results.json`.
-- **Playwright reuses whatever answers 3210.** A `next start` started WITHOUT `API_BASE_URL` gets
-  tested, and exactly the four server-side-data specs fail while the rest pass. Under `CI=1`
-  Playwright instead **refuses to start** — which reads as a red suite and is really no suite.
-- **The suite runs the PRODUCTION build.** A component change is invisible until `npm run build` runs
-  again — rebuild before believing a spec failure *or* a pass.
-- **`netstat -ano` lies here** (localised state column, listening row often absent). Find processes
-  through `Get-CimInstance Win32_Process`, filter on `next` / `mock.server.mjs`, and confirm each port
-  answers `000` with `curl --max-time 2`.
-- **A name-based landmark lookup unions landmarks.** `getByRole("navigation", { name })` matched both
-  the shell nav and the gallery's tab bar. Scope with a section locator, then assert the name.
-- **`str_replace` mis-resolves paths in this repo**, and `bash` mangles `node -e` with backticks
-  inside double quotes. Use `write_file` for scripts, or exact `split/join` with assertions.
+- **`Get-NetTCPConnection -State Listen` misses this box's IPv6 wildcard row**, so a kill loop built on
+  it silently finds nothing and the port stays busy (Playwright then refuses under `CI=1`, which reads
+  as a red suite and is really no suite). Read `OwningProcess` **without** the state filter and kill
+  those PIDs.
+- **`git checkout web-redesign` fails while another worktree holds it** (`C:/projects/morocco-pc`).
+  Work detached at the branch tip, commit, then `git push origin HEAD:web-redesign`. Fast-forwarding
+  the branch from another worktree is safe only when that worktree has no *tracked* change colliding
+  with the commit — untracked paths (like its `apps/web-v2/`) do not block it.
+- **`--no-baseline` is an `eval-scenarios.js` flag, not a Lighthouse one.** `scripts/lighthouse-ci.mjs`
+  takes no arguments: it owns both servers, refuses busy ports, requires a production build, and reads
+  its URLs from `lighthouserc.cjs`.
+- **An unknown path renders Next's bare 404 with no shell at all.** Never write a URL-based assertion
+  about the tab bar (or the footer) on a path that might 404 — it passes because there is nothing to
+  fail. Pin the rule as a pure case instead (that is why `tab-match.ts` exists).
+- **The working tree is CRLF while the blobs are LF** (`core.autocrlf=true`). Detect endings per file
+  (`s.includes("\r\n")`) instead of assuming either, and never "normalise" a file you did not mean to
+  rewrite — the diff instantly becomes whole-file.
+- **A pure Playwright test can import app source** (`e2e/shell.spec.ts` imports
+  `../components/shell/tab-match`). That works because the module is dependency-free; the day it
+  imports `next/*` the spec breaks at import time.
 
 ## Commands that matter
 
 ```
 cd apps/web
 npm run typecheck && npm run lint && npm run check:tokens && npm run check:i18n && npm run check:api-types
-npm run build && CI=1 npm test          # CI=1 so Playwright starts its own servers
-npx playwright test e2e/kit-phase2.spec.ts   # the eight new primitives only
-npm run test:lighthouse                 # 4 assertions, median of 3, 2 fixtures
-npm run media:fetch -- --only=<key>      # CC0 covers, --force to refetch
+npm run build                            # required before BOTH the suite and Lighthouse
+CI=1 npm test                            # Playwright starts its own servers; needs free ports
+npx playwright test e2e/shell.spec.ts    # the shell, alone
+npm run test:lighthouse                  # 4 error assertions, median of 3, 2 fixtures
 ```
 
-Verify the ports are free (`curl` → `000`) before any suite run; kill strays by PID from
-`Get-CimInstance`, never by pattern.
+Lighthouse and Playwright both refuse to start when 3210/3211 are occupied: check the ports
+(`curl -s -o /dev/null -w "%{http_code}"` → `000`) and kill strays **by the PID that owns the port**,
+never by name pattern.
