@@ -153,3 +153,7 @@ Measured after T1 (median of three runs per route):
 An unimported dependency costs 0 B. Had either figure moved, the bundler would be charging an unused dependency to a route and every later G2 number would be untrustworthy.
 
 | T2 `Sheet` on Radix Dialog, imported by `/kit` only, measured before any screen uses it | **done** | Radix 1.3.1 kept: `build` PASS, suite green, Lighthouse PASS with both script figures at the G1 baseline (+0 B on the preset route). Decision recorded: the primitive stays OUT of the `@/components/ui` barrel, whose header promises hookless, non-client modules, so a client-only primitive cannot live there without breaking that contract. |
+
+| T2b focus return (defect found by the new spec) | **done** | `trigger` and `returnFocusTo` are both explicit - Radix only restores focus to a `Dialog.Trigger`, so a controlled sheet opened by a plain button dropped focus to `<body>`. Kit spec asserts the accessible name, the trap, Escape and the return; suite **380 passed / 2 skipped** (the sheet spec is the +1). |
+
+**Trap, cost two red runs:** the Playwright suite runs the PRODUCTION build, so a component source change is invisible to it until `npm run build` runs again. Rebuild before believing a spec failure - and before believing a pass.
