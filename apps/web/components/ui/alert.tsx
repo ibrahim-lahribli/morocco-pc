@@ -1,7 +1,7 @@
 /**
  * Alert — board §16, three banners.
  *
- * 12 px copy on a soft fill with a 20 % border, 20 px icon, 12 px padding, 8 px
+ * 12 px copy on a soft fill with a 20 % border, 20 px icon, 12 px padding, 10 px
  * radius. The tones map to the semantic pairs (`info-soft`/`info`,
  * `warning-soft`/`warning`, `error-soft`/`error`); the icon is `aria-hidden`
  * because the sentence already says what happened.

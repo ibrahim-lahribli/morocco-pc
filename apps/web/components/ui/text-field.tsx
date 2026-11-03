@@ -1,7 +1,7 @@
 /**
  * TextField — board §8's budget field, generalised.
  *
- * The board's field is 48 px tall, 8 px radius, `page` fill, 16 px bold tabular
+ * The board's field is 48 px tall, 10 px radius (`rounded-control`), `page` fill, 16 px bold tabular
  * figures, with the unit inside the field at 14 px/600 (`MAD`). The VISIBLE
  * suffix is `aria-hidden` and `pointer-events-none` so the unit is not painted
  * twice, but the label carries an `sr-only` copy of it: the accessible name is

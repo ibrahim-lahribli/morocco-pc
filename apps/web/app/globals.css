@@ -196,6 +196,7 @@
   --color-verified: var(--color-success);
   --color-warn: var(--color-warning);
   --color-danger: var(--color-error);
+  --color-error-soft: var(--color-error-container);
 
   /* ---- type: DESIGN.md's scale, in full ------------------------------------------------------
    * Mobile-first: each base token carries the design's MOBILE size, and the `lg` variant is used at

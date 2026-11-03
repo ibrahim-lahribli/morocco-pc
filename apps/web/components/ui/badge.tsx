@@ -26,16 +26,16 @@ export interface BadgeProps {
 
 const TONES: Record<BadgeTone, { pill: string; icon: string }> = {
   demo: {
-    pill: "border-dashed border-muted/60 bg-subtle text-muted",
-    icon: "text-muted",
+    pill: "border-dashed border-price-estimated-border bg-price-estimated-bg text-price-estimated-text",
+    icon: "text-price-estimated-text",
   },
   indicative: {
-    pill: "border-warning/30 bg-warning-soft text-warning",
-    icon: "text-warning",
+    pill: "border-price-indicative-border bg-price-indicative-bg text-price-indicative-text",
+    icon: "text-price-indicative-text",
   },
   verified: {
-    pill: "border-success/30 bg-success-soft text-success",
-    icon: "text-success",
+    pill: "border-price-verified-border bg-price-verified-bg text-price-verified-text",
+    icon: "text-price-verified-text",
   },
 };
 
