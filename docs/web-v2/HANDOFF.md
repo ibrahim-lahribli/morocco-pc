@@ -155,9 +155,15 @@ first probe answered 404 and looked exactly like a broken boundary.
    (`presetsForBuild`, `loadPresetCached`, `orderBuilds`, `priceProvenance`, `pageAlternates`), not a
    new data path. "From scratch" applies to the markup; the loaders encode one API read per budget, the
    skip-a-broken-preset rule and the canonical surface.
-4. **The wizard's budget field is a flake FAMILY, not one test:** `wizard-budget.spec.ts` 76, 94 and 220
-   plus `wizard.spec.ts` 108 all reported flaky in one run on 2026-11-03 (each passed on retry).
-   Reproduce with `--repeat-each=20`, fix the race in the component, do not add retries.
+4. **The wizard's budget FLAKE FAMILY is FIXED (2026-11-04)** — it was a design bug, not a slow test.
+   `onChange` committed on every keystroke, so each digit issued its own `router.replace`; under load an
+   older transition could land last, reverting the URL and remounting the step with `saved` still
+   undefined, which is how a typed "50" came back EMPTY after blur. `budget-step.tsx` now debounces the
+   URL write by 200 ms and flushes it on blur, Enter and every rail move, so one settled answer means one
+   write. Measured with `--repeat-each=20` over the three clamping tests: **8 failed + 13 flaky of 60
+   before, 60/60 after**; the full suite went 391 passed / 1 failed / 1 flaky to **392 passed / 1 flaky
+   (exit 0)**. The residual `:159` rail-key flake did not reproduce in 20/20 repeats — load noise, not
+   the same bug, unless it returns.
 5. **The tab-bar copy is a recorded deviation** (D-20): the design says "Composants" and "Enregistrements",
    the bar ships "Pièces" and "Gardés" for 360 px. Re-check it on a real phone.
 6. **`global-error.tsx` still does not exist.** The segment boundary catches page errors; an error in the

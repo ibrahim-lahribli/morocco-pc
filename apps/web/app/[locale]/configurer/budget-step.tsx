@@ -43,7 +43,7 @@
  * the amount with its currency rather than a bare number, in either language
  * (V11/V12).
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Alert, Slider, TextField, cn } from "@/components/ui";
 import { formatMoney, formatNumber, type AppLocale } from "@/lib/i18n/format";
@@ -61,6 +61,21 @@ import {
   snapToStep,
   type BudgetClamp,
 } from "@/lib/wizard/model";
+
+/**
+ * How long typing waits before it writes its answer into the URL.
+ *
+ * The URL is the wizard's state (S7), but a keystroke is not an answer: committing
+ * every character issued one `router.replace` per digit, each its own transition,
+ * and under load an OLDER one could land last — reverting the URL and remounting the
+ * step with `saved` still undefined, which is how a typed "50" came back as an empty
+ * field after blur. One settled answer, one write.
+ *
+ * The delay is invisible to anyone leaving the field by any route: blur, Enter and a
+ * rail move all flush it immediately (`settle` and `choose`), and the field itself is
+ * local state, so what the user reads never lags their typing.
+ */
+const URL_COMMIT_DELAY_MS = 200;
 
 export interface BudgetStepProps {
   /** The committed answer, or undefined while the step is unanswered. */
@@ -99,6 +114,22 @@ export function BudgetStep({
   );
   const [touched, setTouched] = useState(false);
   const [clamped, setClamped] = useState<BudgetClamp>(null);
+  // The pending URL write, while the user is mid-word. Anything that settles the
+  // field flushes it, and unmounting clears it, so a timer can never outlive the step.
+  const pendingCommit = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (pendingCommit.current !== null) clearTimeout(pendingCommit.current);
+    },
+    [],
+  );
+
+  function flushPending() {
+    if (pendingCommit.current === null) return;
+    clearTimeout(pendingCommit.current);
+    pendingCommit.current = null;
+  }
 
   const parsed = parseAmount(draft);
   const inRange = parsed !== null && parsed >= BUDGET_MIN && parsed <= BUDGET_MAX;
@@ -133,6 +164,7 @@ export function BudgetStep({
 
   /** A rail move and a key press are the same event: an amount, already chosen. */
   function choose(amount: number) {
+    flushPending();
     setDraft(formatNumber(amount, locale));
     setTouched(false);
     setClamped(null);
@@ -145,6 +177,7 @@ export function BudgetStep({
    * be true afterwards, and the form's own submit decides whether to advance.
    */
   function settle() {
+    flushPending();
     setTouched(true);
     const value = parseAmount(draft);
     if (value === null) {
@@ -184,7 +217,11 @@ export function BudgetStep({
             const raw = event.target.value;
             setDraft(raw);
             setClamped(null);
-            commitIfValid(raw);
+            flushPending();
+            pendingCommit.current = setTimeout(() => {
+              pendingCommit.current = null;
+              commitIfValid(raw);
+            }, URL_COMMIT_DELAY_MS);
           }}
           onBlur={settle}
           onKeyDown={(event) => {
