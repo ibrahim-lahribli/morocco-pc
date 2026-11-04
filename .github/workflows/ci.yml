@@ -47,6 +47,23 @@ jobs:
           fi
           node scripts/check-catalog-identity.js
 
+      # Decision 26 item B calls check-deferred-rules.js the binding pre-merge
+      # re-check for any CPU/cooler/case/RAM/motherboard seed, but it was in NO
+      # workflow at all - the rule held only for whoever read the recipe. It is
+      # READ-ONLY and measured PASS on shared on 2026-11-04 (0 violations in every
+      # scope, all four rules ENFORCED), which is what makes it a gate rather than
+      # a warning. Unlike the identity gate it has no nightly fallback for a fork
+      # PR without the secret, so the NOTICE says so instead of promising cover.
+      - name: Deferred rules (push/PR)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::notice title=deferred-rules::DATABASE_URL is not set, so this gate is skipped; run node scripts/check-deferred-rules.js locally (read-only)"
+            exit 0
+          fi
+          node scripts/check-deferred-rules.js
+
   recurring-gates:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -92,6 +109,10 @@ jobs:
       # (HANDOFF_2026-11-01). RED here means catalogue DATA: the repair is a seed,
       # not a code change.
       - run: node scripts/check-catalog-identity.js
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Read-only, and the only place this rule would otherwise run.
+      - run: node scripts/check-deferred-rules.js
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - run: node scripts/verify-migrations-replay.js --test-db
