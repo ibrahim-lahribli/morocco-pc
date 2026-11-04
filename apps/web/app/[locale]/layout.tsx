@@ -330,10 +330,13 @@ export default async function LocaleLayout({
          * brand wordmark, then the link rows, then the price line — with NO
          * hairline (`border-t` is gone; the export draws none) and centred
          * inside the shell's measure rather than edge-aligned to it. The export
-         * puts a `·` between the legal links; the separator is a `before:`
-         * pseudo-element, so it is decorative by construction and never enters
-         * the accessibility tree — each list item is still exactly one link,
-         * which is what `legal.spec.ts` reads and `saved.spec.ts` scopes around.
+         * puts a `·` between the legal links. It is a decorative, `aria-hidden`
+         * span that TRAILS its item rather than a `before:` pseudo-element: drawn
+         * as a pseudo-element the separator belonged to the item that STARTED the
+         * line, so a wrapped row began with a dangling `·` at 360 px in both
+         * locales. Trailing it keeps one link per item — what `legal.spec.ts`
+         * reads and `saved.spec.ts` scopes around — and a wrapped line starts
+         * with a link.
          * The price line keeps the descriptive sentence rather than the export's
          * bare `© 2026` line (D-26: no clock read in the shell, and the sentence
          * already states the unit that line exists to state), and the two NAMED
@@ -355,8 +358,8 @@ export default async function LocaleLayout({
               </ul>
             </nav>
             <nav aria-label={t("legalNav")}>
-              <ul className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-compact [&>li:not(:first-child)]:before:me-3 [&>li:not(:first-child)]:before:text-outline-variant [&>li:not(:first-child)]:before:content-['·']">
-                {FOOTER_LINKS.map((link) => (
+              <ul className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-compact">
+                {FOOTER_LINKS.map((link, index) => (
                   <li key={link.key}>
                     <Link
                       href={localePath(locale, link.path)}
@@ -364,6 +367,9 @@ export default async function LocaleLayout({
                     >
                       {t(link.key)}
                     </Link>
+                    {index < FOOTER_LINKS.length - 1 ? (
+                      <span aria-hidden="true" className="ms-3 text-outline-variant">·</span>
+                    ) : null}
                   </li>
                 ))}
               </ul>

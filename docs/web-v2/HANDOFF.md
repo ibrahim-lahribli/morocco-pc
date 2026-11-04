@@ -235,5 +235,5 @@ never by name pattern.
 | `CI=1 npm test` | **FAIL** — 391 / 2 skipped / 1 failed + 1 flaky, all `wizard-budget`; `--repeat-each=3` on that file exits 0 (27 passed / 3 flaky), so it is the known flake family, not the footer |
 | `npm run test:lighthouse` | **FAIL (exit 1)** — result LCP median **2 640 ms**; preset medians 2 495 / 2 491 pass |
 
-Do not claim G3 on this tree. A separate visible defect: at 360 px the legal row wraps and its `before:`
-separator starts the new line with a dangling `·`. Both are recorded in `PROGRESS.md` under T7.
+Do not claim G3 on this tree. The footer separator defect is FIXED (2026-11-04): it now trails its item as
+an `aria-hidden` span, so a wrapped row starts with a link in both locales. `PROGRESS.md` T7 has the rest.

@@ -478,10 +478,10 @@ edited to fit). **G3 is not claimed.**
 
 Visual check at 360 and 768 in both locales on the built app: footer centred, RTL mirrored, four `nav`
 landmarks with distinct names, `scrollWidth - clientWidth = 0`, every `li` holding exactly one link.
-One defect is visible at 360 px in **both** locales — the legal row wraps and, because the separator is
-drawn on the `li`, the wrapped line **starts with a dangling `·`** ("· Formats (démo)"). The export
-interleaves `<span>·</span>` between links and has no such artefact. Not fixed in this task; recorded so
-it is not rediscovered.
+One defect WAS visible at 360 px in **both** locales: the legal row wraps and, because the separator was
+drawn on the `li`, the wrapped line started with a dangling `·` ("· Formats (démo)"). **FIXED 2026-11-04**
+— the separator is now a trailing `aria-hidden` span, so a wrapped line starts with the link, and
+`legal.spec.ts` still finds exactly one link per item.
 
 Departure: **D-26** (no `© 2026` clock line in the shell; the catalogue sentence states the same unit).
 Two corrections this task produced: the footer count is **2** of 22, not 4 (`comparer_morocco_pc` and
