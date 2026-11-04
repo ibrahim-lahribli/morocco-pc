@@ -10,8 +10,9 @@ Read this first, then `CONTEXT.md`. This file is the state of the branch, not th
   `git rev-list --count master..web-redesign`.
 - Phases 0 and 1 are closed. **Phase 2 (kit) is CLOSED at gate G2.** **Phase 3 (shell) is nearly
   closed: G3 is NOT claimed yet** — the tab bar, the landmark naming, the review fixes, the `md+` header
-  nav and the error boundary are all in and green, but the header and footer are still un-restyled (see
-  below). The Lighthouse gate now PASSES with room: **1 585 B** of script and **20 ms** of LCP.
+  nav, the error boundary and the HEADER restyle (T6, +6 B of script for the whole restyle) are all in and
+  green. **The footer restyle (T7) is the last task.** Lighthouse PASSES with ~10 ms of LCP and ~1 585 B
+  of script left.
 - `docs/web-v2/PROGRESS.md` is the ledger. `docs/superpowers/plans/` holds plan files for phases **0,
   2 and 3**. Phase 3's was written LATE — 2026-11-03, after T1-T5b had already landed — which is exactly
   why the header/footer restyle and the `md+` half of PLAN.md's Phase 3 line drifted out of view until a
@@ -134,10 +135,11 @@ first probe answered 404 and looked exactly like a broken boundary.
 
 ## Next session — start here
 
-1. **The header and footer are still un-restyled, and that is now the ONLY thing G3 waits on.** Their
-   *structure* matches the design (no duplicate page links at 360 px); the visual treatment does not: the
-   design's header has a logo tile with a page subtitle, and DESIGN.md's container and type scale are
-   applied to neither. Do this before Phase 4's screens, or both move under them.
+1. **The FOOTER is the only thing G3 still waits on** (T7 in the phase-3 plan). The header is done:
+   64 px row, drawn mark, pill switcher, top safe-area padding, **+6 B** of script, Lighthouse exit 0,
+   with four recorded departures (D-22 mark, D-23 subtitle, D-24 not `fixed`, D-25 bookmark). The footer
+   still carries the v1 treatment; its reference is `<footer>` in 4 of the 22 Stitch screens
+   (`accueil_morocco_pc`, `morocco_pc_1`, `configurateur_2`, `comparer_morocco_pc`).
 2. **Work the phase-3 ladder** — `docs/superpowers/plans/2026-11-03-web-redesign-phase-3.md`, T6-T8:
    header restyle, footer restyle, G3 evidence. Then claim G3 on the green median-of-3 Lighthouse this
    tree already produces (exit 0, 1 585 B and 20 ms of margin). Its *Decisions fixed before starting*

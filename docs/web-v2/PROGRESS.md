@@ -400,3 +400,41 @@ mid-build:
 It also corrects one assumption: the footer **has** a reference — `<footer>` appears in 4 of the 22
 Stitch screens (`accueil_morocco_pc`, `morocco_pc_1`, `configurateur_2`, `comparer_morocco_pc`), so T7
 reads those rather than inventing a rule-based footer.
+
+## T6 — the header restyle (2026-11-03)
+
+The design's header, drawn with tokens that already existed: no new dependency, no new token, and **no new
+JavaScript** — the mark is rendered in the server layout, so it arrives as HTML.
+
+| Measured | Before T6 | After T6 |
+|---|---|---|
+| header height (360 px, fr and ar) | 71 px (118 px before T5) | **64 px** (`h-16`, the export's `h-16`) |
+| brand block · switcher | — | 131 px · 132 px (fr) / 134 px (ar) |
+| header page links at 360 / 768 | 0 / 3 | 0 / 3 (unchanged) |
+| horizontal overflow at 360 | 0 | **0** |
+| script, result route | 172 495 B | **172 501 B (+6)** |
+| script, preset route | 171 223 B | **171 229 B (+6)** |
+| CSS transfer | 16 475 B | 16 528 B (+53) |
+| LCP medians (result / preset) | 2 480 / 2 484 ms | **2 490 / 2 489 ms** |
+| `npm run test:lighthouse` | exit 0 | **exit 0** |
+
+**+6 B of script for a whole header restyle** is the number to remember: the mark, the pill and the row
+geometry are all CSS/HTML, so the client island's payload did not move. The LCP medians shifted +10/+5 ms,
+which is inside this box's ±60 ms noise; the margin is now ~10 ms.
+
+| Gate | Result |
+|---|---|
+| `npm run typecheck` · `lint` · `check:tokens` · `check:i18n` | PASS (i18n 101 files, 2 catalogues) |
+| `npm run build` | PASS |
+| `CI=1 npm test` | PASS — **392 passed / 2 skipped**, 1 flaky (395 specs) |
+| `npm run test:lighthouse` | **PASS** (exit 0) |
+
+**A fifth sighting of the budget-flake family, on a tree with none of the other agent's edits:** the flaky
+was `e2e/wizard-budget.spec.ts:260` ("/ar/configurer speaks Arabic about the same clamp"), which passed on
+retry. Recorded because it is independent evidence for the fix in flight.
+
+Four departures are recorded rather than absorbed: **D-22** (the mark is drawn, not the export's remote
+`<img>`), **D-23** (no page subtitle — a second owner of the page's name), **D-24** (the header is not
+`fixed`; that lands as its own measured change) and **D-25** (no saved-shelf badge — it would duplicate a
+tab cell and needs a client island). What IS adopted: the 64 px row, the soft shadow instead of a
+`border-b`, the top safe-area padding (matching the tab bar's bottom one) and the pill switcher.

@@ -18,7 +18,7 @@ this work.
 | 0 — baseline, feasibility, reference captures | **done** (8 tasks, 78 reference PNGs) |
 | 1 — tokens | **done**: DESIGN.md adopted in full — 67 raw colours + 13 aliases, full type scale, Arabic +10 % leading |
 | 2 — kit and mobile primitives | **done** — closed at gate G2 (T1-T8; D-15 to D-19) |
-| 3 — shell | in progress — tab bar, landmark naming, review fixes, the `md+` header nav and `error.tsx` are in and green; the header/footer RESTYLE is not, so **G3 is not claimed** |
+| 3 — shell | in progress — tab bar, landmark naming, review fixes, the `md+` header nav, `error.tsx` and the HEADER restyle (T6) are in and green; the FOOTER restyle (T7) is not, so **G3 is not claimed** |
 | 4 — screens, one task each | not started (G4.n) |
 | 5 — desktop + RTL pass | not started (G5) |
 | 6 — hardening, Lighthouse, OG cards | not started |

@@ -7,6 +7,7 @@ import { preload } from "react-dom";
 
 import { Analytics } from "@/components/analytics";
 import { HeaderNav } from "@/components/header-nav";
+import { ChipIcon } from "@/components/ui/icons";
 import { TabNav, type TabNavItem } from "@/components/shell/tab-nav";
 import { TAB_BAR_OFFSET } from "@/components/ui/bottom-tab-bar";
 import { LocaleSwitcher } from "@/components/locale-switcher";
@@ -213,16 +214,25 @@ export default async function LocaleLayout({
         >
           {t("skip")}
         </a>
-        <header className="border-b border-border">
+        <header className="bg-surface pt-[env(safe-area-inset-top,0px)] shadow-card-1">
           <nav
             aria-label={t("navLabel")}
-            className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2"
+            className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-2 px-4"
           >
             <Link
               href={localePath(locale, "/")}
-              className="flex h-tap items-center rounded-control px-1 font-semibold text-ink"
+              className="flex h-tap items-center gap-2 rounded-control font-semibold text-primary"
             >
-              {t("brand")}
+              {/* The mark is DRAWN, in the server tree: it renders in the first
+                  byte of HTML and costs no script. The export's mark is a remote
+                  placeholder <img> on lh3.googleusercontent.com (D-22). */}
+              <span
+                aria-hidden="true"
+                className="flex h-8 w-8 items-center justify-center rounded-control bg-primary text-on-primary"
+              >
+                <ChipIcon className="h-5 w-5" />
+              </span>
+              <span className="tracking-tight">{t("brand")}</span>
             </Link>
             {/*
              * The inline page links, as a list (they are navigation, not
@@ -246,6 +256,17 @@ export default async function LocaleLayout({
              * current" is request-path knowledge a server layout lacks — the
              * component owns the breakpoint, tap and aria-current logic; the
              * LABELS stay here, shell-owned, passed in as props.
+             *
+             * T6 RESTYLE (2026-11-03): the row is the design's 64 px (`h-16`), the
+             * bar carries `shadow-card-1` instead of a `border-b` (the export draws a
+             * soft shadow and no hairline), and it pads for the top safe area the
+             * same way the tab bar pads for the bottom one — `env()` is physical on
+             * purpose in both places. The brand tile is DRAWN (D-22), not the
+             * export's remote placeholder image, and it sits in this server
+             * component so it costs HTML rather than bundle bytes. The design's page
+             * subtitle is deliberately absent (D-23): it would be a second owner of
+             * the page's name. The header stays in normal flow rather than
+             * `fixed` (D-24).
              */}
             <HeaderNav
               items={[

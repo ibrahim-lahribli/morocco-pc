@@ -24,6 +24,12 @@ import { cn } from "@/components/ui/cn";
  * Language names stay endonyms ("Français", "العربية"): a translator never
  * translates them, and a user who cannot read the current language must still
  * recognise their own.
+ *
+ * T6 (2026-11-03): the container is the design's pill — `rounded-pill` on
+ * `surface-container-lowest` with `shadow-card-1` — and the CURRENT locale is
+ * marked by weight and colour, not by the `primary-soft` fill the rest of the
+ * shell uses for "current", because the export draws no fill there. It is never
+ * colour-alone (semibold vs medium) and `aria-current` says it outright.
  */
 export function LocaleSwitcher({
   label,
@@ -44,7 +50,7 @@ export function LocaleSwitcher({
     <div
       role="group"
       aria-label={label}
-      className="inline-flex items-center gap-1 rounded-control border border-border bg-surface p-1"
+      className="inline-flex items-center gap-0.5 rounded-pill bg-surface-container-lowest px-1 shadow-card-1"
     >
       {routing.locales.map((code) => {
         const current = code === active;
@@ -56,8 +62,8 @@ export function LocaleSwitcher({
             lang={code}
             aria-current={current ? "true" : undefined}
             className={cn(
-              "inline-flex h-tap items-center justify-center rounded-control px-3 text-compact font-medium",
-              current ? "bg-primary-soft text-primary" : "text-muted hover:text-ink",
+              "inline-flex h-tap items-center justify-center rounded-pill px-2 text-compact",
+              current ? "font-semibold text-primary" : "font-medium text-muted hover:text-ink",
             )}
           >
             {names[code] ?? code}
