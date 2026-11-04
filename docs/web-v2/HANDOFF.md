@@ -137,13 +137,14 @@ first probe answered 404 and looked exactly like a broken boundary.
 
 ## Next session — start here
 
-1. **T7 landed but is not closed.** The next job is the Lighthouse red it
-   carries: result-route LCP median 2 640 ms over two runs (2 662 / 2 634 / 2 624 and 2 655 / 2 640 /
-   2 635) against 2 500, with the script unchanged and +110 B of CSS, so the regression tracks the T7
-   stylesheet while its mechanism is still unexplained (`PROGRESS.md` T7 has the sample table). Its
-   reference is **2** real page footers, `accueil_morocco_pc` and `morocco_pc_1`; the other two
-   `<footer>` hits are `fixed bottom-0` action bars, and the 4-of-22 count this bullet used to carry was
-   wrong. The departure (no `© 2026` line in the shell) is `D-26`.
+1. **T7 landed; its budget gate is RED and now ATTRIBUTED (2026-11-04).** A third A/B in one session
+   flips it: pre-T7 rebuilt exits 0 (2 490 / 2 486 / 2 480), T7 rebuilt exits 1 (2 641 / 2 640 / 2 632).
+   The two traces are ~20 ms apart though — observed LCP 169-191 ms either way, FCP 906-919, TBT 18-43,
+   and TTFB 454 / load delay 0 / load time 0 / render delay 2 022-2 423 in BOTH — so Lighthouse is
+   amplifying a negligible difference (the candidate is a text block with ~2 s of render delay under 4x
+   CPU throttling), not showing a 140 ms user-visible slowdown. Next is a decision: hero `h1` as the
+   candidate, less above-the-fold work, or an owner-approved re-baseline. The footer reference is the
+   **2** real page footers (`accueil_morocco_pc`, `morocco_pc_1`); `D-26` records the price line.
 2. **The ladder is down to `T8`** — the G3 evidence pack, plus clearing the T7 LCP red.
    The four forks T6-T8 had to answer are answered and recorded (D-22 mark, D-23 subtitle, D-24 not
    `fixed`, D-25 bookmark, D-26 footer price line) — do not re-open them. The restyle's open question is

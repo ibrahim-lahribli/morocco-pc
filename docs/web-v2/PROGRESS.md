@@ -455,12 +455,19 @@ its `·` as a `before:` pseudo-element so each list item stays exactly one link.
 | preset-route median | 2 481 · 2 486 | 2 495 (2 475 / 2 495 / 2 873) · 2 491 (2 491 / 2 877 / 2 475) |
 
 **The T7 tree is RED on the binding gate.** `npm run test:lighthouse` exits 1: result-route LCP median
-**2 640 ms** against the 2 500 ms budget. It is not one noisy sample — two independent runs on the T7
-stylesheet land at 2 662 / 2 634 / 2 624 and 2 655 / 2 640 / 2 635, while both runs on the pre-T7
-stylesheet land at 2 487-2 493. Script bytes are identical and the LCP element is unchanged
-(`section > section.mt-6 > dl.mt-3 > div.text-body`), so the regression tracks the footer while
-+110 B of CSS is not a credible mechanism for 140 ms: the cause is **unattributed**. The preset route
-still passes on both T7 runs. **G3 is not claimed.**
+**2 640 ms** against the 2 500 ms budget, and a third A/B in one session ties it to the footer — the
+pre-T7 layout rebuilt and measured exits 0 (2 490 / 2 486 / 2 480), the T7 layout rebuilt and measured
+exits 1 (2 641 / 2 640 / 2 632). What the footer does NOT do is cost the browser 150 ms. The LCP phase
+tables are identical in both builds — TTFB 454 ms, load delay 0, load time 0, **render delay
+2 022-2 423 ms** — and the OBSERVED LCP stays inside a 20 ms band (169-191 ms T7, 171-186 ms pre-T7)
+while the SIMULATED figure moves 2 480 -> 2 640. FCP (906-919), Speed Index and TBT (18-43) do not move
+either, so the gate is amplifying a trace difference the browser does not show: the candidate is a text
+block carrying ~2 s of render delay under 4x CPU throttling. The preset fixture shows the same knife
+edge — 2 490 / 2 711 / 2 877 in ONE run set on ONE build.
+
+The remaining work is a DECISION, not a shave: make the hero `h1` the LCP candidate so it paints before
+that block, cut above-the-fold work, or re-baseline the budget with owner approval (thresholds are never
+edited to fit). **G3 is not claimed.**
 
 | Gate | Result |
 |---|---|

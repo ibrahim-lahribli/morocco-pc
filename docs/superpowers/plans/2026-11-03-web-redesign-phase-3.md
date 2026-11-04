@@ -39,7 +39,7 @@ report PASS / FAIL / BLOCKED with the command; `next start` serves `.next`, so r
 | T5 | `md+` header page links (`hidden md:flex`): the design's 360 px header is the brand and the language control only | spec pins hidden at 360 / visible at 768 | `2c93396` — the wrapped second row cost a 118 px header on every phone page, duplicating three tab cells |
 | T5b | `error.tsx` + `lib/i18n/error-copy.generated.ts` + `check:i18n` rule 7 | probe route both locales, then Lighthouse | `3f7319a` — the provider path measured +15 845 B and was rejected (D-21) |
 | **T6** | **Header restyle to `accueil_morocco_pc`** | screenshots fr + ar at 360/768 against `apps/web/design/stitch/accueil_morocco_pc/screen.png` (tracked, `b4b38a9`); typecheck/tokens/build/suite; **Lighthouse on both fixtures, median of 3** | **DONE 2026-11-03** — 64 px row, drawn mark, pill switcher; **+6 B** of script; Lighthouse exit 0; departures **D-22…D-25** |
-| **T7** | **Footer restyle** | the same gate set, against the reference blocks listed below | **LANDED 2026-11-04 — Lighthouse RED**: result LCP median **2 640 ms** over 2 runs / 6 samples, script unchanged, CSS +110 B. Departure **D-26**; evidence in `PROGRESS.md` |
+| **T7** | **Footer restyle** | the same gate set, against the reference blocks listed below | **LANDED 2026-11-04 — Lighthouse RED**: result LCP median **2 640 ms** over 2 runs / 6 samples, script unchanged, CSS +110 B. Departure **D-26**; attributed to the simulator amplifying a ~20 ms trace difference (`PROGRESS.md` T7) |
 | **T8** | **G3 evidence pack** | the table below, plus `PROGRESS.md` + `HANDOFF.md` | **open** — G3 is presented, never inferred from a green suite |
 
 ## Decisions fixed before starting T6-T8
