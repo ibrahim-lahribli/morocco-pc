@@ -547,8 +547,7 @@ as a separate finding — no assertion was relaxed for it.
 ## Task 3 — S2 direct primitive imports in the error boundary (2026-11-04)
 
 `app/[locale]/error.tsx` imported `Alert`, `Button` and `LinkButton` from the
-`@/components/ui` barrel. It now names each file (`alert`, `button`), so the tree's only
-client island holds no barrel reference. Measured with `npm run test:lighthouse` — script
+`@/components/ui` barrel. It now names each file (`alert`, `button`). Measured with `npm run test:lighthouse` — script
 transfer bytes, median of 3 — on both fixture URLs, before and after, each from a fresh
 `next build`:
 
@@ -557,8 +556,46 @@ transfer bytes, median of 3 — on both fixture URLs, before and after, each fro
 | `/fr/config/3f5a…` | 172 652 B | 170 913 B | **−1 739 B** |
 | `/fr/config-pc-gamer-9000-dh` | 171 380 B | 169 641 B | **−1 739 B** |
 
-KEPT: script falls on both routes by the same 1 739 B, so the barrel was pulling the
-kit's other primitives into the boundary's chunk rather than being tree-shaken away. The
+KEPT: script falls on both routes by the same 1 739 B, so the boundary's chunk was
+carrying kit primitives it never renders. The
+
+Correction (2026-11-04, review of `5c48d57`): the first version of this record — and the
+commit message — called `error.tsx` "the tree's only client island" importing the barrel.
+That is false: ten other client components import it (the wizard steps, the kit
+islands, the share bar, the swap panel, the saved-builds view). The measured 1 739 B is
+real and the change stands; only the uniqueness claim was wrong, and it is corrected here
+rather than rewritten in history.
 after-run also passes all four enforced assertions (LCP medians 2 497 / 2 483 ms, CLS 0,
 performance 0.97 / 0.98); the before-run missed only LCP (2 561 / 2 515 ms), the T7 sample
 band, and is recorded here as the reason the before pass is not claimed as green.
+
+## Task 4 — S4 error-boundary spec: BLOCKED (2026-11-04)
+
+The brief's preferred trigger — a fixture id whose result read answers 500 — cannot reach
+`app/[locale]/error.tsx`. `lib/result/load.ts` narrows only 404/400 into `missing`; every
+other failure (5xx, timeout, refused connection, non-JSON 2xx) becomes an `unavailable`
+OUTCOME, and the page renders that in-page. Measured 2026-11-04 against the existing 503
+fixture id (`00000000-0000-4000-8000-000000005030`): `/fr/config/…` and `/ar/config/…` both
+answer 200 carrying `data-tone="error" role="alert"`, the page's own `Réessayer` /
+`أعد المحاولة`, and never the boundary's title. A 500 takes the same branch, so that fixture
+would test the result page's error state, not the boundary.
+
+A second no-app-code trigger was tried and does not work either: aborting every `?_rsc=`
+navigation request and clicking a header link made Next fall back to a document navigation
+and render the target page (18 RSC requests aborted, boundary title count 0, final URL the
+destination).
+
+No spec was committed, no fixture was added and no app code was changed, per the
+brief's "do not add a probe route or test-only code". Options, for an owner decision:
+
+1. **Cover what users actually get** — spec the in-page 503/500 result state (alert role,
+   retry, back link) with a 500 fixture id. No boundary coverage, and it is the state the
+   product deliberately chose.
+2. **Crash a component with data** — a 200 fixture the loader accepts but a component
+   throws on (a build with no `components`), so the render throws and the boundary renders
+   in both locales. Data-only, but it pins an incidental crash path.
+3. **Let 5xx own the boundary** — rethrow 5xx in `loadRecommendation` so `error.tsx`
+   renders; the preferred fixture then works. A product change to the error model, and it
+   trades the page's id-preserving retry for the boundary's generic one.
+4. **Unit-test the boundary** — needs vitest, which PLAN.md A2 says must arrive with
+   `test:unit` and its `web.yml` step; it would not be Playwright.
