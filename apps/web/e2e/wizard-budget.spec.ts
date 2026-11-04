@@ -54,7 +54,7 @@ async function typeAmount(page: Page, digits: string) {
   return field;
 }
 
-test("typing 7 300 keeps 7 300 exact while the rail sits on the next 500 step", async ({
+test("typing 7 300 keeps 7 300 exact while the rail sits on the next 500 step", { tag: "@layout" }, async ({
   page,
 }) => {
   await openBudgetStep(page);
@@ -76,7 +76,7 @@ test("typing 7 300 keeps 7 300 exact while the rail sits on the next 500 step", 
   await expect(page.getByText(new RegExp(`${DH_7300} reste le montant retenu`))).toBeVisible();
 });
 
-test("a field below the minimum clamps to it on blur, and says which bound", async ({ page }) => {
+test("a field below the minimum clamps to it on blur, and says which bound", { tag: "@layout" }, async ({ page }) => {
   await openBudgetStep(page);
 
   const field = await typeAmount(page, "50");
@@ -94,7 +94,7 @@ test("a field below the minimum clamps to it on blur, and says which bound", asy
   await expect(page).toHaveURL(/budget_amount=500(&|$)/);
 });
 
-test("a field above the maximum clamps to it on blur, and says which bound", async ({ page }) => {
+test("a field above the maximum clamps to it on blur, and says which bound", { tag: "@layout" }, async ({ page }) => {
   await openBudgetStep(page);
 
   const field = await typeAmount(page, "2000000");
@@ -107,7 +107,7 @@ test("a field above the maximum clamps to it on blur, and says which bound", asy
   await expect(page).toHaveURL(/budget_amount=1000000(&|$)/);
 });
 
-test("the rail moves in 500s, reaches both ends, and writes into the field", async ({ page }) => {
+test("the rail moves in 500s, reaches both ends, and writes into the field", { tag: "@layout" }, async ({ page }) => {
   await openBudgetStep(page, "&budget_amount=7300");
 
   const field = page.getByLabel("Votre enveloppe cible");
@@ -133,7 +133,7 @@ test("the rail moves in 500s, reaches both ends, and writes into the field", asy
   await expect(field).toHaveValue("1\u202F000\u202F000");
 });
 
-test("the rail spends its first third on the budgets people actually have (S27)", async ({
+test("the rail spends its first third on the budgets people actually have (S27)", { tag: "@layout" }, async ({
   page,
 }) => {
   await openBudgetStep(page, "&budget_amount=7000");
@@ -159,7 +159,7 @@ test("the rail spends its first third on the budgets people actually have (S27)"
   expect(travel).toBeGreaterThan(100);
 });
 
-test("keys move in amounts — 500 DH, 5 000 DH — and RTL mirrors only the sideways ones (S27)", async ({
+test("keys move in amounts — 500 DH, 5 000 DH — and RTL mirrors only the sideways ones (S27)", { tag: "@layout" }, async ({
   page,
 }) => {
   await openBudgetStep(page, "&budget_amount=7000");
@@ -181,7 +181,7 @@ test("keys move in amounts — 500 DH, 5 000 DH — and RTL mirrors only the sid
   await expect(slider).toHaveAttribute("aria-valuetext", DH_7500);
 });
 
-test("the Arabic rail runs the other way: the same left-edge click picks the top of the range (S27)", async ({
+test("the Arabic rail runs the other way: the same left-edge click picks the top of the range (S27)", { tag: "@layout" }, async ({
   page,
 }) => {
   await openBudgetStep(page, "&budget_amount=7000");
@@ -220,7 +220,7 @@ test("the Arabic rail runs the other way: the same left-edge click picks the top
   await expect(arrowRail).toHaveAttribute("aria-valuetext", AR_DH_7500);
 });
 
-test("Enter settles an out-of-range amount, then advances on the next press", async ({ page }) => {
+test("Enter settles an out-of-range amount, then advances on the next press", { tag: "@layout" }, async ({ page }) => {
   await openBudgetStep(page);
 
   const field = await typeAmount(page, "50");
@@ -242,7 +242,7 @@ test("Enter settles an out-of-range amount, then advances on the next press", as
   await expect(page).toHaveURL(/etape=resolution/);
 });
 
-test("360 px, a 44 px slider, and a group named by the step's legend", async ({ page }) => {
+test("360 px, a 44 px slider, and a group named by the step's legend", { tag: "@layout" }, async ({ page }) => {
   await openBudgetStep(page);
 
   await expect(page.getByRole("group", { name: "Quel budget visez-vous ?" })).toBeVisible();
@@ -260,7 +260,7 @@ test("360 px, a 44 px slider, and a group named by the step's legend", async ({ 
   expect(fieldBox?.height ?? 0).toBeGreaterThanOrEqual(48);
 });
 
-test("/ar/configurer speaks Arabic about the same clamp", async ({ page }) => {
+test("/ar/configurer speaks Arabic about the same clamp", { tag: "@layout" }, async ({ page }) => {
   await serveMeta(page);
   await page.goto("/ar/configurer?etape=budget&use_case=GAMING");
 

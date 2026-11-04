@@ -67,7 +67,7 @@ async function shoot(page: Page, testInfo: TestInfo, name: string): Promise<void
   await testInfo.attach(`${name}.png`, { path, contentType: "image/png" });
 }
 
-test.describe("the layout mirrors, it does not just translate", () => {
+test.describe("the layout mirrors, it does not just translate", { tag: "@layout" }, () => {
   test("the wizard's step list keeps its DOM order and reverses its geometry", async ({ page }) => {
     await page.goto("/fr/configurer?etape=usage&use_case=GAMING");
     const french = await itemXs(page);
@@ -157,7 +157,7 @@ test.describe("the layout mirrors, it does not just translate", () => {
   });
 });
 
-test.describe("Arabic numerals and the unit", () => {
+test.describe("Arabic numerals and the unit", { tag: "@layout" }, () => {
   test("prices keep Western digits and print the Arabic unit exactly", async ({ page }) => {
     // The rule, stated once: Moroccan Arabic uses the Latin numeral set. The
     // Eastern Arabic-Indic block would break the alignment of every price column
@@ -194,7 +194,7 @@ test.describe("Arabic numerals and the unit", () => {
   });
 });
 
-test.describe("Arabic routes at 360 px", () => {
+test.describe("Arabic routes at 360 px", { tag: "@layout" }, () => {
   const ARABIC_ROUTES = [
     "/ar",
     "/ar/configurer?etape=usage&use_case=GAMING",
@@ -217,7 +217,7 @@ test.describe("Arabic routes at 360 px", () => {
   }
 });
 
-test.describe("the Arabic guides are Arabic prose", () => {
+test.describe("the Arabic guides are Arabic prose", { tag: "@layout" }, () => {
   test("the guide body renders RTL, in Arabic, with its structure", async ({ page }) => {
     await page.goto("/ar/guides/budget-pc-gamer");
 
@@ -247,7 +247,7 @@ test.describe("the Arabic guides are Arabic prose", () => {
   });
 });
 
-test.describe("screenshots", () => {
+test.describe("screenshots", { tag: "@layout" }, () => {
   // One per surface a reviewer should look at. Attached to the run instead of
   // committed as `toHaveScreenshot()` baselines: a baseline nobody refreshes fails
   // a build for a font-rendering difference and teaches the team to skip it.

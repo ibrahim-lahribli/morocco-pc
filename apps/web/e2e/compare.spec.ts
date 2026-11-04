@@ -52,7 +52,7 @@ const DIFFERENT = SPEC_KEYS.filter(
 ).length;
 const SAME = SPEC_KEYS.length - DIFFERENT;
 
-test("the URL is the whole selection, and reloading it renders the same view", async ({ page }) => {
+test("the URL is the whole selection, and reloading it renders the same view", { tag: "@layout" }, async ({ page }) => {
   await page.goto(COMPARE);
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Comparer des composants");
@@ -73,7 +73,7 @@ test("the URL is the whole selection, and reloading it renders the same view", a
   await expect(page.getByRole("table")).toHaveCount(1);
 });
 
-test("the comparison is a real table: caption, column headers and a row header per fact", async ({
+test("the comparison is a real table: caption, column headers and a row header per fact", { tag: "@layout" }, async ({
   page,
 }) => {
   await page.goto(COMPARE);
@@ -89,7 +89,7 @@ test("the comparison is a real table: caption, column headers and a row header p
   await expect(page.getByRole("cell")).toHaveCount(SPEC_KEYS.length * 2);
 });
 
-test("a difference carries a word and a count, not just a colour", async ({ page }) => {
+test("a difference carries a word and a count, not just a colour", { tag: "@layout" }, async ({ page }) => {
   await page.goto(COMPARE);
   const table = page.getByRole("table");
 
@@ -106,7 +106,7 @@ test("a difference carries a word and a count, not just a colour", async ({ page
   await expect(shared.locator("..")).toContainText("2 emplacements");
 });
 
-test("360 px stacks the rows; 1280 px lays them out as columns", async ({ page }) => {
+test("360 px stacks the rows; 1280 px lays them out as columns", { tag: "@layout" }, async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto(COMPARE);
 
@@ -142,7 +142,7 @@ test("360 px stacks the rows; 1280 px lays them out as columns", async ({ page }
   await expect(cells.nth(0).getByText(A_PRODUCT.display_name)).toBeHidden();
 });
 
-test("removing a column is a link, operable with Enter", async ({ page }) => {
+test("removing a column is a link, operable with Enter", { tag: "@layout" }, async ({ page }) => {
   await page.goto(COMPARE);
 
   const remove = page.getByRole("link", { name: `Retirer ${B_PRODUCT.display_name}` });
@@ -156,7 +156,7 @@ test("removing a column is a link, operable with Enter", async ({ page }) => {
   await expect(page.getByRole("table")).toHaveCount(0);
 });
 
-test("the wrong selections are answered in words", async ({ page }) => {
+test("the wrong selections are answered in words", { tag: "@layout" }, async ({ page }) => {
   // Two categories cannot be compared: the page says why and draws no table.
   await page.goto(`/fr/composants/comparer?slugs=${A},${RAM}`);
   await expect(page.getByText(/pas de la même catégorie/)).toBeVisible();
@@ -182,7 +182,7 @@ test("the wrong selections are answered in words", async ({ page }) => {
   await expect(page.getByRole("table").locator('th[scope="col"]')).toHaveCount(4);
 });
 
-test("Arabic mirrors the columns without reversing the reading order", async ({ page }) => {
+test("Arabic mirrors the columns without reversing the reading order", { tag: "@layout" }, async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(AR_COMPARE);
 
@@ -201,7 +201,7 @@ test("Arabic mirrors the columns without reversing the reading order", async ({ 
   await expect(page.getByText(formatMoney(3200, "ar")).first()).toBeVisible();
 });
 
-test("Arabic stacks the selection panel from the inline start", async ({ page }) => {
+test("Arabic stacks the selection panel from the inline start", { tag: "@layout" }, async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto(AR_COMPARE);
 
@@ -220,7 +220,7 @@ test("Arabic stacks the selection panel from the inline start", async ({ page })
   );
 });
 
-test("the compare page stays out of the index and canonicals the route", async ({ request }) => {
+test("the compare page stays out of the index and canonicals the route", { tag: "@layout" }, async ({ request }) => {
   const response = await request.get(COMPARE);
   expect(response.status()).toBe(200);
   const html = await response.text();
@@ -232,7 +232,7 @@ test("the compare page stays out of the index and canonicals the route", async (
   expect(href).toBe(`${ORIGIN}/fr/composants/comparer`);
 });
 
-test("a component page offers comparisons with its own category, and they resolve", async ({
+test("a component page offers comparisons with its own category, and they resolve", { tag: "@layout" }, async ({
   page,
   request,
 }) => {
@@ -253,7 +253,7 @@ test("a component page offers comparisons with its own category, and they resolv
   await expect(open).toHaveAttribute("href", `/fr/composants/comparer?slugs=${A}`);
 });
 
-test("the page never prints an engine word, a raw spec key or a fake zero", async ({ page }) => {
+test("the page never prints an engine word, a raw spec key or a fake zero", { tag: "@layout" }, async ({ page }) => {
   await page.goto(COMPARE);
   const text = (await page.locator("main").innerText()).replace(/\s+/g, " ");
 

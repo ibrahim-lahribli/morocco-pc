@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 import { isTabPath } from "../components/shell/tab-match";
 
-test("/fr renders the app shell at 360 px with no horizontal scroll", async ({
+test("/fr renders the app shell at 360 px with no horizontal scroll", { tag: "@layout" }, async ({
   page,
 }) => {
   await page.goto("/fr");
@@ -22,7 +22,7 @@ test("/fr renders the app shell at 360 px with no horizontal scroll", async ({
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
-test("the shelf is one click from every page, even with nothing saved", async ({ page }) => {
+test("the shelf is one click from every page, even with nothing saved", { tag: "@layout" }, async ({ page }) => {
   // A reader who cleared storage has no saved card to click, and the card's own
   // "Voir mes enregistrements" link only exists once something is saved — so the
   // way in cannot be that link.
@@ -47,7 +47,7 @@ test("the shelf is one click from every page, even with nothing saved", async ({
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
-test("the Arabic footer points at the Arabic shelf", async ({ page }) => {
+test("the Arabic footer points at the Arabic shelf", { tag: "@layout" }, async ({ page }) => {
   await page.goto("/ar");
   await expect(
     page
@@ -56,12 +56,12 @@ test("the Arabic footer points at the Arabic shelf", async ({ page }) => {
   ).toHaveAttribute("href", "/ar/enregistrements");
 });
 
-test("/ redirects to /fr (fr is the default locale)", async ({ page }) => {
+test("/ redirects to /fr (fr is the default locale)", { tag: "@layout" }, async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/fr$/);
 });
 
-test("skip link moves keyboard users to the main content", async ({ page }) => {
+test("skip link moves keyboard users to the main content", { tag: "@layout" }, async ({ page }) => {
   await page.goto("/fr");
   await page.keyboard.press("Tab");
   await expect(
@@ -71,7 +71,7 @@ test("skip link moves keyboard users to the main content", async ({ page }) => {
   await expect(page.locator("#main")).toBeVisible();
 });
 
-test("the two navigation landmarks have different names", async ({ page }) => {
+test("the two navigation landmarks have different names", { tag: "@layout" }, async ({ page }) => {
   await page.goto("/fr");
   // Two landmarks with one accessible name cannot be told apart in a screen
   // reader's landmark list, and axe will not catch it: `landmark-unique` is
@@ -84,7 +84,10 @@ test("the two navigation landmarks have different names", async ({ page }) => {
   expect(new Set(names).size).toBe(names.length);
 });
 
-test("the tab bar marks the current section and never covers the last content", async ({ page }) => {
+test("the tab bar marks the current section and never covers the last content", { tag: "@layout" }, async ({ page }) => {
+  // About the PHONE bar: pin 360 rather than inherit the project width, or the
+  // 768/1280 @layout runs assert a bar that is hidden there by design.
+  await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/fr/guides");
   const bar = page.getByRole("navigation", { name: "Navigation de l’application" });
   await expect(bar).toBeVisible();
@@ -114,13 +117,15 @@ test("the tab bar marks the current section and never covers the last content", 
   expect(overlaps).toBe(false);
 });
 
-test("the header's page links are md+ only, as the design and PLAN.md specify", async ({
+test("the header's page links are md+ only, as the design and PLAN.md specify", { tag: "@layout" }, async ({
   page,
 }) => {
   // At 360 px the Stitch header is the brand and the language control; the
   // phone's navigation is the tab bar, which already carries these same three
   // destinations. Visible here they cost a wrapped second row — a 118 px
   // header measured at 360 px on 2026-11-03 — duplicating three tab cells.
+  // The hidden-at-360 half is width-specific, so pin 360 before the 768 half.
+  await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/fr");
   const headerNav = page.getByRole("navigation", { name: "Navigation principale" });
   await expect(headerNav.getByRole("link", { name: "Composants" })).toBeHidden();
@@ -132,7 +137,7 @@ test("the header's page links are md+ only, as the design and PLAN.md specify", 
   await expect(headerNav.getByRole("link", { name: "Guides" })).toBeVisible();
 });
 
-test("from 768 px the tab bar is gone and the header nav is not", async ({ page }) => {
+test("from 768 px the tab bar is gone and the header nav is not", { tag: "@layout" }, async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 900 });
   await page.goto("/fr");
   await expect(page.getByRole("navigation", { name: "Navigation de l’application" })).toBeHidden();
@@ -144,7 +149,7 @@ test("from 768 px the tab bar is gone and the header nav is not", async ({ page 
   expect(reserved).toBeLessThanOrEqual(0);
 });
 
-test("a sibling path never lights a tab (the section boundary guard)", () => {
+test("a sibling path never lights a tab (the section boundary guard)", { tag: "@layout" }, () => {
   // Pure and browser-free on purpose: `/fr/composants-x` has no route, and an
   // unknown slug renders Next's bare 404, which carries no `nav` at all
   // (measured 2026-11-03) — so a navigation-based assertion would pass for the

@@ -71,7 +71,7 @@ async function serveMeta(page: Page, body: unknown = META_OPTIONS): Promise<void
   );
 }
 
-test("gaming asks where the picture goes; office never does", async ({ page }) => {
+test("gaming asks where the picture goes; office never does", { tag: "@layout" }, async ({ page }) => {
   await serveMeta(page);
 
   await page.goto("/fr/configurer?etape=resolution&use_case=GAMING&budget_amount=7300");
@@ -90,7 +90,7 @@ test("gaming asks where the picture goes; office never does", async ({ page }) =
   await expect(page.getByRole("group", { name: "Qu'est-ce qui compte le plus ?" })).toBeVisible();
 });
 
-test("a URL naming the missing step lands forwards, not on a screen the profile lacks", async ({
+test("a URL naming the missing step lands forwards, not on a screen the profile lacks", { tag: "@layout" }, async ({
   page,
 }) => {
   await serveMeta(page);
@@ -104,7 +104,7 @@ test("a URL naming the missing step lands forwards, not on a screen the profile 
   await expect(page.getByRole("group", { name: "Quelle résolution visez-vous ?" })).toHaveCount(0);
 });
 
-test("priority offers three of the contract's five answers, never its own labels", async ({
+test("priority offers three of the contract's five answers, never its own labels", { tag: "@layout" }, async ({
   page,
 }) => {
   await serveMeta(page, META_FIVE_PRIORITIES);
@@ -128,7 +128,7 @@ test("priority offers three of the contract's five answers, never its own labels
   await expect(page).toHaveURL(/priority=3(&|$)/);
 });
 
-test("with inputs_applied absent, both questions say the answer is stored, not used", async ({
+test("with inputs_applied absent, both questions say the answer is stored, not used", { tag: "@layout" }, async ({
   page,
 }) => {
   await serveMeta(page, META_SILENT);
@@ -148,7 +148,7 @@ test("with inputs_applied absent, both questions say the answer is stored, not u
   ).toHaveAccessibleDescription(STORED_FR);
 });
 
-test("a contract that marks priority applied drops the caveat and the inert step", async ({
+test("a contract that marks priority applied drops the caveat and the inert step", { tag: "@layout" }, async ({
   page,
 }) => {
   await serveMeta(page, META_PRIORITY_APPLIED);
@@ -168,7 +168,7 @@ test("a contract that marks priority applied drops the caveat and the inert step
   await expect(page.getByText(STORED_FR)).toHaveCount(0);
 });
 
-test("the Arabic profile says the same thing about an inert answer", async ({ page }) => {
+test("the Arabic profile says the same thing about an inert answer", { tag: "@layout" }, async ({ page }) => {
   await serveMeta(page, META_SILENT);
   await page.goto(
     "/ar/configurer?etape=priority&use_case=GAMING&budget_amount=7300&resolution=1440p",
@@ -194,7 +194,7 @@ test("the Arabic profile says the same thing about an inert answer", async ({ pa
  * catalogue does not contain and require them verbatim. A French entry in the
  * overlay would fail those, which is exactly what should happen.
  */
-test("Arabic translates the contract's option labels by value and falls back for an unknown one", async ({
+test("Arabic translates the contract's option labels by value and falls back for an unknown one", { tag: "@layout" }, async ({
   page,
 }) => {
   await serveMeta(page);
@@ -235,7 +235,7 @@ test("Arabic translates the contract's option labels by value and falls back for
  * focus, a LOAD does not (focus stealing on first paint is the defect this could
  * have introduced), and the fieldset keeps the name the hidden legend gives it.
  */
-test("a pressed step change moves focus to the new step's heading, and a load does not", async ({
+test("a pressed step change moves focus to the new step's heading, and a load does not", { tag: "@layout" }, async ({
   page,
 }) => {
   await serveMeta(page);

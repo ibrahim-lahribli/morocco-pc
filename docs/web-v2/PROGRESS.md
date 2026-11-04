@@ -599,3 +599,29 @@ brief's "do not add a probe route or test-only code". Options, for an owner deci
    trades the page's id-preserving retry for the boundary's generic one.
 4. **Unit-test the boundary** — needs vitest, which PLAN.md A2 says must arrive with
    `test:unit` and its `web.yml` step; it would not be Playwright.
+
+## Task 6 — S6 viewport projects (2026-11-04)
+
+`playwright.config.ts` now runs four projects. `mobile-360` keeps NO `grep` and runs the whole
+suite; `mobile-390` (390x844), `tablet-768` (768x1024) and `desktop-1280` (1280x800) each run only
+the specs tagged `@layout` — shell, wizard, wizard-steps, wizard-budget, result, saved, compare and
+rtl (80 top-level tags, 95 test cases per project once describes expand). The policy — which specs
+run where, and when to tag — is `apps/web/AGENTS.md`.
+
+Measured with `CI=1 npm test` on 2026-11-04:
+
+| project | specs | passed | skipped | test time (sum) |
+|---|---|---|---|---|
+| mobile-360 | 395 | 393 | 2 | 149.2 s |
+| mobile-390 | 95 | 95 | 0 | 31.6 s |
+| tablet-768 | 95 | 95 | 0 | 34.6 s |
+| desktop-1280 | 95 | 95 | 0 | 37.7 s |
+
+Totals: 680 runs, **678 expected / 0 unexpected / 2 skipped**, wall clock **49 s** against **39 s**
+for `--project=mobile-360` alone — **+10 s**, inside the 60 s budget, so no tag set was trimmed.
+The two skipped are the opt-in harnesses (`wizard-browser-api`, `wizard-engine`), unchanged.
+
+Four failures appeared on the first multi-project run, all in `shell.spec.ts`: two tests inherited
+the project width while asserting the 360 px shell (bar visible, header links hidden). Both now pin
+360 with `setViewportSize` before their 360 half, exactly as the neighbouring 768 px tests already
+did — the assertions themselves are unchanged, and the shell file is 40/40 across the four projects.

@@ -57,7 +57,7 @@ async function clickUntilVisible(button: Locator, notice: Locator): Promise<void
   }).toPass();
 }
 
-test("a saved build survives a reload, and the shelf lists it", async ({ page }) => {
+test("a saved build survives a reload, and the shelf lists it", { tag: "@layout" }, async ({ page }) => {
   await page.goto(RESULT);
   const save = firstCard(page).getByRole("button", { name: fr.saved.save });
 
@@ -88,7 +88,7 @@ test("a saved build survives a reload, and the shelf lists it", async ({ page })
   await expect(row).toContainText("DH");
 });
 
-test("two builds of one result are two entries", async ({ page }) => {
+test("two builds of one result are two entries", { tag: "@layout" }, async ({ page }) => {
   await page.goto(RESULT);
   const cards = page.locator("article");
   await clickUntil(cards.nth(0).getByRole("button", { name: fr.saved.save }), "true");
@@ -99,7 +99,7 @@ test("two builds of one result are two entries", async ({ page }) => {
   await expect(rows(page)).toHaveCount(2);
 });
 
-test("removing the last entry leaves the empty state and its way forward", async ({ page }) => {
+test("removing the last entry leaves the empty state and its way forward", { tag: "@layout" }, async ({ page }) => {
   await page.goto(RESULT);
   await clickUntil(firstCard(page).getByRole("button", { name: fr.saved.save }), "true");
 
@@ -118,7 +118,7 @@ test("removing the last entry leaves the empty state and its way forward", async
   );
 });
 
-test("removing a row leaves focus on the shelf, not on the body", async ({ page }) => {
+test("removing a row leaves focus on the shelf, not on the body", { tag: "@layout" }, async ({ page }) => {
   // The removed row owned the focus, so a keyboard user must be given somewhere
   // to be: the shelf itself, never `<body>` and never the next row's Retirer
   // (a held Enter would otherwise delete the shelf one item per keypress).
@@ -140,7 +140,7 @@ test("removing a row leaves focus on the shelf, not on the body", async ({ page 
   expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe("BODY");
 });
 
-test("clearing this browser's storage is the empty state, not an error", async ({ page }) => {
+test("clearing this browser's storage is the empty state, not an error", { tag: "@layout" }, async ({ page }) => {
   await page.goto(RESULT);
   await clickUntil(firstCard(page).getByRole("button", { name: fr.saved.save }), "true");
 
@@ -166,7 +166,7 @@ test("clearing this browser's storage is the empty state, not an error", async (
   expect(errors).toEqual([]);
 });
 
-test("a browser that refuses storage says nothing was saved, and does not crash", async ({
+test("a browser that refuses storage says nothing was saved, and does not crash", { tag: "@layout" }, async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -191,7 +191,7 @@ test("a browser that refuses storage says nothing was saved, and does not crash"
   expect(errors).toEqual([]);
 });
 
-test("a full device asks for room instead of pretending", async ({ page }) => {
+test("a full device asks for room instead of pretending", { tag: "@layout" }, async ({ page }) => {
   await page.addInitScript(() => {
     const original = Storage.prototype.setItem;
     Storage.prototype.setItem = function setItem(key: string, value: string): void {
@@ -210,7 +210,7 @@ test("a full device asks for room instead of pretending", async ({ page }) => {
   await expect(save).toHaveAttribute("aria-pressed", "false");
 });
 
-test("a shelf that cannot read storage says so instead of claiming it is empty", async ({
+test("a shelf that cannot read storage says so instead of claiming it is empty", { tag: "@layout" }, async ({
   page,
 }) => {
   await page.goto(RESULT);
@@ -237,7 +237,7 @@ test("a shelf that cannot read storage says so instead of claiming it is empty",
   expect(errors).toEqual([]);
 });
 
-test("a corrupt stored entry is dropped instead of breaking the shelf", async ({ page }) => {
+test("a corrupt stored entry is dropped instead of breaking the shelf", { tag: "@layout" }, async ({ page }) => {
   // A hand-edited store, or one written by a future shape: the good record
   // survives, the unformattable date does not, and the page still renders.
   await page.addInitScript(() => {
@@ -266,7 +266,7 @@ test("a corrupt stored entry is dropped instead of breaking the shelf", async ({
   expect(errors).toEqual([]);
 });
 
-test("the Arabic shelf is Arabic, and the date is the locale's own", async ({ page }) => {
+test("the Arabic shelf is Arabic, and the date is the locale's own", { tag: "@layout" }, async ({ page }) => {
   await page.goto(`/ar/config/${IDS.threeBuilds}`);
   await clickUntil(firstCard(page).getByRole("button", { name: ar.saved.save }), "true");
 
@@ -284,7 +284,7 @@ test("the Arabic shelf is Arabic, and the date is the locale's own", async ({ pa
   expect((await time.textContent())?.trim()).toBe(formatDate(iso as string, "ar"));
 });
 
-test("the shelf stays out of the index", async ({ request }) => {
+test("the shelf stays out of the index", { tag: "@layout" }, async ({ request }) => {
   const response = await request.get(SHELF);
   expect(response.status()).toBe(200);
   expect(await response.text()).toMatch(/name="robots"[^>]*noindex/);

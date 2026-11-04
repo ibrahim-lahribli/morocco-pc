@@ -32,7 +32,7 @@ async function serveMeta(page: Page, body: unknown = META_OPTIONS): Promise<void
   );
 }
 
-test("step 1 renders the labels meta/options supplies, never the enum values", async ({ page }) => {
+test("step 1 renders the labels meta/options supplies, never the enum values", { tag: "@layout" }, async ({ page }) => {
   await serveMeta(page);
   await page.goto("/fr/configurer");
 
@@ -50,7 +50,7 @@ test("step 1 renders the labels meta/options supplies, never the enum values", a
   await expect(page.getByRole("button", { name: "Suivant" })).toBeDisabled();
 });
 
-test("step 1 is completable from the keyboard alone", async ({ page }) => {
+test("step 1 is completable from the keyboard alone", { tag: "@layout" }, async ({ page }) => {
   await serveMeta(page);
   await page.goto("/fr/configurer");
   await expect(page.getByRole("radio", { name: "Jeu" })).toBeVisible();
@@ -85,7 +85,7 @@ test("step 1 is completable from the keyboard alone", async ({ page }) => {
   await expect(page.getByText("Étape 2 sur 3")).toBeVisible();
 });
 
-test("a deep link with valid state lands on its step", async ({ page }) => {
+test("a deep link with valid state lands on its step", { tag: "@layout" }, async ({ page }) => {
   await serveMeta(page);
   await page.goto("/fr/configurer?etape=resolution&use_case=GAMING&budget_amount=7300");
 
@@ -96,7 +96,7 @@ test("a deep link with valid state lands on its step", async ({ page }) => {
   await expect(page).toHaveURL(/etape=resolution/);
 });
 
-test("a deep link that skips an unanswered step is repaired to the first gap", async ({ page }) => {
+test("a deep link that skips an unanswered step is repaired to the first gap", { tag: "@layout" }, async ({ page }) => {
   await serveMeta(page);
   await page.goto("/fr/configurer?etape=priority&use_case=GAMING");
 
@@ -105,7 +105,7 @@ test("a deep link that skips an unanswered step is repaired to the first gap", a
   await expect(page.getByRole("button", { name: "Suivant" })).toBeDisabled();
 });
 
-test("typing a budget keeps the field usable, and Back restores it", async ({ page }) => {
+test("typing a budget keeps the field usable, and Back restores it", { tag: "@layout" }, async ({ page }) => {
   await serveMeta(page);
   await page.goto("/fr/configurer?etape=budget&use_case=GAMING");
 
@@ -128,7 +128,7 @@ test("typing a budget keeps the field usable, and Back restores it", async ({ pa
   await expect(page.getByRole("button", { name: "Suivant" })).toBeEnabled();
 });
 
-test("an empty amount removes the answer and explains the bounds", async ({ page }) => {
+test("an empty amount removes the answer and explains the bounds", { tag: "@layout" }, async ({ page }) => {
   await serveMeta(page);
   await page.goto("/fr/configurer?etape=budget&use_case=GAMING");
 
@@ -144,7 +144,7 @@ test("an empty amount removes the answer and explains the bounds", async ({ page
   await expect(page).not.toHaveURL(/budget_amount=/);
 });
 
-test("Enter in the budget field advances, because the step is a form", async ({ page }) => {
+test("Enter in the budget field advances, because the step is a form", { tag: "@layout" }, async ({ page }) => {
   await serveMeta(page);
   await page.goto("/fr/configurer?etape=budget&use_case=GAMING");
 
@@ -159,7 +159,7 @@ test("Enter in the budget field advances, because the step is a form", async ({ 
   await expect(page).toHaveURL(/etape=resolution/);
 });
 
-test("the last step is real: the action submits, and the honest note is gone", async ({ page }) => {
+test("the last step is real: the action submits, and the honest note is gone", { tag: "@layout" }, async ({ page }) => {
   await serveMeta(page);
   await page.goto(
     "/fr/configurer?etape=priority&use_case=GAMING&budget_amount=7300&resolution=1440p&priority=3",
@@ -177,7 +177,7 @@ test("the last step is real: the action submits, and the honest note is gone", a
   await expect(page.getByText(/n'est pas encore disponible/)).toHaveCount(0);
 });
 
-test("a 503 from meta/options is a retryable message, never an empty form", async ({ page }) => {
+test("a 503 from meta/options is a retryable message, never an empty form", { tag: "@layout" }, async ({ page }) => {
   let calls = 0;
   await page.route(META_ROUTE, (route) => {
     calls += 1;
@@ -214,7 +214,7 @@ test("a 503 from meta/options is a retryable message, never an empty form", asyn
   expect(calls).toBe(2);
 });
 
-test("360 px, 48 px targets, and the radio group has a real legend", async ({ page }) => {
+test("360 px, 48 px targets, and the radio group has a real legend", { tag: "@layout" }, async ({ page }) => {
   await serveMeta(page);
   await page.goto("/fr/configurer");
   await expect(page.getByRole("radio", { name: "Jeu" })).toBeVisible();
@@ -236,7 +236,7 @@ test("360 px, 48 px targets, and the radio group has a real legend", async ({ pa
   expect(next?.height ?? 0).toBeGreaterThanOrEqual(48);
 });
 
-test("/ar/configurer is Arabic, RTL, and speaks Arabic progress copy", async ({ page }) => {
+test("/ar/configurer is Arabic, RTL, and speaks Arabic progress copy", { tag: "@layout" }, async ({ page }) => {
   await serveMeta(page);
   await page.goto("/ar/configurer");
 
@@ -245,7 +245,7 @@ test("/ar/configurer is Arabic, RTL, and speaks Arabic progress copy", async ({ 
   await expect(page.getByText("الخطوة 1 من 4")).toBeVisible();
 });
 
-test("the home page sends people to the wizard with a LINK", async ({ page }) => {
+test("the home page sends people to the wizard with a LINK", { tag: "@layout" }, async ({ page }) => {
   await page.goto("/fr");
   const cta = page.getByRole("link", { name: "Configurer mon PC" });
   await expect(cta).toHaveAttribute("href", "/fr/configurer");

@@ -42,7 +42,7 @@ async function visibleText(page: Page): Promise<string> {
   return (await page.locator("main").innerText()).replace(/\s+/g, " ");
 }
 
-test("three builds are three cards, and the first is primary", async ({ page }) => {
+test("three builds are three cards, and the first is primary", { tag: "@layout" }, async ({ page }) => {
   await page.goto(THREE);
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Vos configurations");
@@ -68,7 +68,7 @@ test("three builds are three cards, and the first is primary", async ({ page }) 
   await expect(cards.nth(0).getByText(money(8594))).toBeVisible();
 });
 
-test("a component row shows the role, the name, the variant and the price used", async ({
+test("a component row shows the role, the name, the variant and the price used", { tag: "@layout" }, async ({
   page,
 }) => {
   await page.goto(THREE);
@@ -97,7 +97,7 @@ test("a component row shows the role, the name, the variant and the price used",
   }
 });
 
-test("one build is one card: no empty slots, no invented builds (V13)", async ({ page }) => {
+test("one build is one card: no empty slots, no invented builds (V13)", { tag: "@layout" }, async ({ page }) => {
   await page.goto(ONE);
   const cards = page.locator("article");
   await expect(cards).toHaveCount(1);
@@ -110,7 +110,7 @@ test("one build is one card: no empty slots, no invented builds (V13)", async ({
   await expect(page.locator("main")).not.toContainText("Configuration 2");
 });
 
-test("the bar is proportional, and its accessible text is the real sentence", async ({ page }) => {
+test("the bar is proportional, and its accessible text is the real sentence", { tag: "@layout" }, async ({ page }) => {
   await page.goto(THREE);
   const bar = page.locator("article").first().getByRole("progressbar");
 
@@ -137,7 +137,7 @@ test("the bar is proportional, and its accessible text is the real sentence", as
   ).toBeVisible();
 });
 
-test("a total past the budget is drawn as over, and the sentence carries the excess", async ({
+test("a total past the budget is drawn as over, and the sentence carries the excess", { tag: "@layout" }, async ({
   page,
 }) => {
   await page.goto(OVER);
@@ -160,7 +160,7 @@ test("a total past the budget is drawn as over, and the sentence carries the exc
   await expect(card.getByText(`Dépassement de ${money(excess)}`)).toBeVisible();
 });
 
-test("an unknown id is a real 404 with a way back", async ({ page }) => {
+test("an unknown id is a real 404 with a way back", { tag: "@layout" }, async ({ page }) => {
   const response = await page.goto(MISSING);
   expect(response?.status()).toBe(404);
 
@@ -172,13 +172,13 @@ test("an unknown id is a real 404 with a way back", async ({ page }) => {
   await expect(page).toHaveURL(/\/fr\/configurer/);
 });
 
-test("an unknown path inside a locale is the same styled 404", async ({ page }) => {
+test("an unknown path inside a locale is the same styled 404", { tag: "@layout" }, async ({ page }) => {
   const response = await page.goto("/fr/une-adresse-qui-nexiste-pas");
   expect(response?.status()).toBe(404);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Page introuvable");
 });
 
-test("the page is rendered on the SERVER: the builds are in the HTML", async ({ request }) => {
+test("the page is rendered on the SERVER: the builds are in the HTML", { tag: "@layout" }, async ({ request }) => {
   // Read the response the server sends, with no browser to run anything.
   const response = await request.get(THREE);
   expect(response.status()).toBe(200);
@@ -190,7 +190,7 @@ test("the page is rendered on the SERVER: the builds are in the HTML", async ({ 
   expect(html).toContain(money(8594));
 });
 
-test("no browser fetch is made for the build list", async ({ page }) => {
+test("no browser fetch is made for the build list", { tag: "@layout" }, async ({ page }) => {
   const apiCalls: string[] = [];
   page.on("request", (request) => {
     if (request.url().includes("/v1/recommendations")) apiCalls.push(request.url());
@@ -203,7 +203,7 @@ test("no browser fetch is made for the build list", async ({ page }) => {
   expect(apiCalls).toEqual([]);
 });
 
-test("the seed vocabulary never reaches a user (V5)", async ({ page }) => {
+test("the seed vocabulary never reaches a user (V5)", { tag: "@layout" }, async ({ page }) => {
   for (const path of [THREE, ONE, OVER, ZERO]) {
     await page.goto(path);
     const text = await visibleText(page);
@@ -213,7 +213,7 @@ test("the seed vocabulary never reaches a user (V5)", async ({ page }) => {
   }
 });
 
-test("a zero-build pass is a state, not an empty page (V2)", async ({ page }) => {
+test("a zero-build pass is a state, not an empty page (V2)", { tag: "@layout" }, async ({ page }) => {
   await page.goto(ZERO);
 
   // Scoped by NAME: since contract v1.7 the page also carries the input-effects
@@ -241,7 +241,7 @@ test("a zero-build pass is a state, not an empty page (V2)", async ({ page }) =>
   await expect(page.getByText(/Estimation minimale, non garantie/)).toBeVisible();
 });
 
-test("the Arabic page is RTL and its labels are translated", async ({ page }) => {
+test("the Arabic page is RTL and its labels are translated", { tag: "@layout" }, async ({ page }) => {
   await page.goto(`/ar/config/${IDS.threeBuilds}`);
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("تجميعاتك");
@@ -252,7 +252,7 @@ test("the Arabic page is RTL and its labels are translated", async ({ page }) =>
   await expect(page.locator("article").first()).toContainText("المعالج");
 });
 
-test("an unreachable engine is 'unavailable' with a retry, not a 404", async ({ page }) => {
+test("an unreachable engine is 'unavailable' with a retry, not a 404", { tag: "@layout" }, async ({ page }) => {
   // An id the mock does not serve is a 404; a service that cannot be reached is a
   // DIFFERENT event. Telling a user their link is dead because the engine is down
   // would also remove their reason to retry.

@@ -21,9 +21,41 @@ export default defineConfig({
   projects: [
     {
       name: "mobile-360",
+      // The primary width, and the only project with NO grep: it runs the whole
+      // suite, so every spec is exercised at least once.
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 360, height: 800 },
+      },
+    },
+    {
+      name: "mobile-390",
+      // Layout-sensitive specs only: the tag is the set whose assertions can
+      // change with the viewport (see apps/web/AGENTS.md).
+      grep: /@layout/,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 390, height: 844 },
+      },
+    },
+    {
+      name: "tablet-768",
+      // Layout-sensitive specs only: the tag is the set whose assertions can
+      // change with the viewport (see apps/web/AGENTS.md).
+      grep: /@layout/,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 768, height: 1024 },
+      },
+    },
+    {
+      name: "desktop-1280",
+      // Layout-sensitive specs only: the tag is the set whose assertions can
+      // change with the viewport (see apps/web/AGENTS.md).
+      grep: /@layout/,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 800 },
       },
     },
   ],
