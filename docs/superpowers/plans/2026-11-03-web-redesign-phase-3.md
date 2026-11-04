@@ -4,8 +4,10 @@
 boundaries — matches the design, keeps two distinguishable navigation landmarks, and leaves both
 Lighthouse routes inside their budgets. **Gate: G3.**
 
-**State: IN PROGRESS (2026-11-03). G3 is NOT claimed.** T1-T5b landed and are recorded below; **T6-T8 are
-this plan's open work.** This file was written LATE — after T1-T5b had already shipped — and that gap is
+**State: IN PROGRESS (2026-11-04). G3 is NOT claimed.** T1-T5b landed and are recorded below, **T6 landed**
+(`95bfa33`) and **T7 landed**, with its Lighthouse gate **RED** (result LCP median 2 640 ms — see
+`PROGRESS.md`). **T8 is this plan's remaining open work**; T7 closes when that red is cleared.
+This file was written LATE — after T1-T5b had already shipped — and that gap is
 its own evidence: phases 0 and 2 each opened with a plan, phase 3 went straight into code, and the
 header/footer restyle plus the `md+` half of PLAN.md's Phase 3 line then went unnoticed until a review
 found them.
@@ -36,8 +38,8 @@ report PASS / FAIL / BLOCKED with the command; `next start` serves `.next`, so r
 | T4 | Review fixes: footer docblock back on `FOOTER_LINKS`; the offset comment names `<body>`; the URL→tab rule extracted to `components/shell/tab-match.ts` and shared with the header; the `/composants-x` boundary pinned as a PURE case | 9/9 then 10/10 on `e2e/shell.spec.ts` | `3329074` — a navigation-based boundary assertion would pass for the wrong reason (unknown slugs render Next's bare 404, which carries no `nav`) |
 | T5 | `md+` header page links (`hidden md:flex`): the design's 360 px header is the brand and the language control only | spec pins hidden at 360 / visible at 768 | `2c93396` — the wrapped second row cost a 118 px header on every phone page, duplicating three tab cells |
 | T5b | `error.tsx` + `lib/i18n/error-copy.generated.ts` + `check:i18n` rule 7 | probe route both locales, then Lighthouse | `3f7319a` — the provider path measured +15 845 B and was rejected (D-21) |
-| **T6** | **Header restyle to `accueil_morocco_pc`** | screenshots fr + ar at 360/768 against `design/stitch/accueil_morocco_pc/screen.png`; typecheck/tokens/build/suite; **Lighthouse on both fixtures, median of 3** | **DONE 2026-11-03** — 64 px row, drawn mark, pill switcher; **+6 B** of script; Lighthouse exit 0; departures **D-22…D-25** |
-| **T7** | **Footer restyle** | the same gate set, against the reference blocks listed below | **open** |
+| **T6** | **Header restyle to `accueil_morocco_pc`** | screenshots fr + ar at 360/768 against `apps/web/design/stitch/accueil_morocco_pc/screen.png` (tracked, `b4b38a9`); typecheck/tokens/build/suite; **Lighthouse on both fixtures, median of 3** | **DONE 2026-11-03** — 64 px row, drawn mark, pill switcher; **+6 B** of script; Lighthouse exit 0; departures **D-22…D-25** |
+| **T7** | **Footer restyle** | the same gate set, against the reference blocks listed below | **LANDED 2026-11-04 — Lighthouse RED**: result LCP median **2 640 ms** over 2 runs / 6 samples, script unchanged, CSS +110 B. Departure **D-26**; evidence in `PROGRESS.md` |
 | **T8** | **G3 evidence pack** | the table below, plus `PROGRESS.md` + `HANDOFF.md` | **open** — G3 is presented, never inferred from a green suite |
 
 ## Decisions fixed before starting T6-T8
@@ -66,10 +68,14 @@ rules. They are decided here so the restyle does not discover them mid-build.
    state must be hydration-safe. Decide explicitly; do not let the restyle silently drop it or silently
    add it.
 
-**The footer DOES have a reference**, contrary to an earlier reading of the set: `<footer>` appears in
-**4 of the 22** screens — `accueil_morocco_pc`, `morocco_pc_1`, `configurateur_2`, `comparer_morocco_pc`.
-T7 reads those blocks rather than inventing a rule-based footer (the "no reference" judgement applies to
-`/kit`, `/tokens`, `/format`, the legal pages and the 404).
+**The footer DOES have a reference — but only TWO of the four `<footer>` hits are page footers.**
+(Corrected 2026-11-03 on starting T7, by reading the blocks instead of counting tags.) `accueil_morocco_pc`
+and `morocco_pc_1` draw the centred column T7 targets: wordmark, dot-separated link row, price line.
+`comparer_morocco_pc` and `configurateur_2` use `<footer>` as a **sticky action bar** — "Ouvrir
+Équilibré" / "Ouvrir Performance" and "متابعة" — which is the compare and configurator screens' own control
+surface, not a footer landmark. A 4-of-22 count would have had T7 style two rows nobody calls a footer.
+T7 reads the two real blocks rather than inventing a rule-based footer (the "no reference" judgement
+applies to `/kit`, `/tokens`, `/format`, the legal pages and the 404).
 
 ## Exit criteria for G3
 

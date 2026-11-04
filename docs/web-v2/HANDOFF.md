@@ -11,8 +11,10 @@ Read this first, then `CONTEXT.md`. This file is the state of the branch, not th
 - Phases 0 and 1 are closed. **Phase 2 (kit) is CLOSED at gate G2.** **Phase 3 (shell) is nearly
   closed: G3 is NOT claimed yet** — the tab bar, the landmark naming, the review fixes, the `md+` header
   nav, the error boundary and the HEADER restyle (T6, +6 B of script for the whole restyle) are all in and
-  green. **The footer restyle (T7) is the last task.** Lighthouse PASSES with ~10 ms of LCP and ~1 585 B
-  of script left.
+  green. **The footer restyle (T7) landed 2026-11-04**, and it is **RED on the Lighthouse gate**:
+  result-route LCP median 2 640 ms over two runs
+  and six samples, script unchanged at 172 501 B and CSS 16 528 -> 16 638 B. G3 stays unclaimed; see
+  `PROGRESS.md`'s T7 section and `DEVIATIONS.md` D-26.
 - `docs/web-v2/PROGRESS.md` is the ledger. `docs/superpowers/plans/` holds plan files for phases **0,
   2 and 3**. Phase 3's was written LATE — 2026-11-03, after T1-T5b had already landed — which is exactly
   why the header/footer restyle and the `md+` half of PLAN.md's Phase 3 line drifted out of view until a
@@ -135,17 +137,17 @@ first probe answered 404 and looked exactly like a broken boundary.
 
 ## Next session — start here
 
-1. **The FOOTER is the only thing G3 still waits on** (T7 in the phase-3 plan). The header is done:
-   64 px row, drawn mark, pill switcher, top safe-area padding, **+6 B** of script, Lighthouse exit 0,
-   with four recorded departures (D-22 mark, D-23 subtitle, D-24 not `fixed`, D-25 bookmark). The footer
-   still carries the v1 treatment; its reference is `<footer>` in 4 of the 22 Stitch screens
-   (`accueil_morocco_pc`, `morocco_pc_1`, `configurateur_2`, `comparer_morocco_pc`).
-2. **Work the phase-3 ladder** — `docs/superpowers/plans/2026-11-03-web-redesign-phase-3.md`, T6-T8:
-   header restyle, footer restyle, G3 evidence. Then claim G3 on the green median-of-3 Lighthouse this
-   tree already produces (exit 0, 1 585 B and 20 ms of margin). Its *Decisions fixed before starting*
-   section names the four forks to answer BEFORE the restyle lands: the logo tile (a remote placeholder
-   `img`), the page subtitle (a second owner of the page's name), a FIXED header (ours is static), and
-   the saved-shelf badge that D-14 does not cover.
+1. **T7 landed but is not closed.** The next job is the Lighthouse red it
+   carries: result-route LCP median 2 640 ms over two runs (2 662 / 2 634 / 2 624 and 2 655 / 2 640 /
+   2 635) against 2 500, with the script unchanged and +110 B of CSS, so the regression tracks the T7
+   stylesheet while its mechanism is still unexplained (`PROGRESS.md` T7 has the sample table). Its
+   reference is **2** real page footers, `accueil_morocco_pc` and `morocco_pc_1`; the other two
+   `<footer>` hits are `fixed bottom-0` action bars, and the 4-of-22 count this bullet used to carry was
+   wrong. The departure (no `© 2026` line in the shell) is `D-26`.
+2. **The ladder is down to `T8`** — the G3 evidence pack, plus clearing the T7 LCP red.
+   The four forks T6-T8 had to answer are answered and recorded (D-22 mark, D-23 subtitle, D-24 not
+   `fixed`, D-25 bookmark, D-26 footer price line) — do not re-open them. The restyle's open question is
+   the LCP red in item 1, not a design choice.
 3. **Phase 4, in the planned order:** `configurer -> results -> build detail -> home -> presets ->
    composants -> guides -> enregistrements -> legal`, one screen per task with its own gate. **Home is
    fourth, not first.** Its brief is `SCREENS.md`'s `accueil_morocco_pc` row — hero, presets, trust
@@ -216,3 +218,15 @@ npm run test:lighthouse                  # 4 error assertions, median of 3, 2 fi
 Lighthouse and Playwright both refuse to start when 3210/3211 are occupied: check the ports
 (`curl -s -o /dev/null -w "%{http_code}"` → `000`) and kill strays **by the PID that owns the port**,
 never by name pattern.
+
+## T7 — measured 2026-11-04 on the committed tree
+
+| Gate | Result |
+|---|---|
+| `typecheck` · `check:tokens` (104) · `check:i18n` (101) · `check:api-types` · `build` | PASS |
+| `npm run lint` | PASS with 2 warnings, both in the gitignored `tmp/validate-shell.mjs` |
+| `CI=1 npm test` | **FAIL** — 391 / 2 skipped / 1 failed + 1 flaky, all `wizard-budget`; `--repeat-each=3` on that file exits 0 (27 passed / 3 flaky), so it is the known flake family, not the footer |
+| `npm run test:lighthouse` | **FAIL (exit 1)** — result LCP median **2 640 ms**; preset medians 2 495 / 2 491 pass |
+
+Do not claim G3 on this tree. A separate visible defect: at 360 px the legal row wraps and its `before:`
+separator starts the new line with a dangling `·`. Both are recorded in `PROGRESS.md` under T7.

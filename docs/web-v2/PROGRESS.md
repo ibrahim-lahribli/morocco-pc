@@ -397,9 +397,11 @@ mid-build:
 | a **fixed** header | the design's is `fixed top-0 pt-safe`; ours is static, and `fixed` changes the scroll/paint path on both measured routes |
 | the saved-shelf badge | **D-14 removed the bell and the avatar only** — the bookmark-with-count is a third control, and shipping it means a client island on every route, counted against 1 585 B |
 
-It also corrects one assumption: the footer **has** a reference — `<footer>` appears in 4 of the 22
-Stitch screens (`accueil_morocco_pc`, `morocco_pc_1`, `configurateur_2`, `comparer_morocco_pc`), so T7
-reads those rather than inventing a rule-based footer.
+It also corrects one assumption, and then corrects the correction: the footer **has** a reference, but
+only **2** of the 22 Stitch screens draw a page footer (`accueil_morocco_pc`, `morocco_pc_1`). The other
+two `<footer>` hits (`comparer_morocco_pc`, `configurateur_2`) are **sticky action bars** — the compare
+screen's "Ouvrir Équilibré / Performance" row and the configurator's "متابعة" button. A tag count is not a
+landmark count: corrected 2026-11-03 by reading the blocks, before writing any T7 markup.
 
 ## T6 — the header restyle (2026-11-03)
 
@@ -438,3 +440,44 @@ Four departures are recorded rather than absorbed: **D-22** (the mark is drawn, 
 `fixed`; that lands as its own measured change) and **D-25** (no saved-shelf badge — it would duplicate a
 tab cell and needs a client island). What IS adopted: the 64 px row, the soft shadow instead of a
 `border-b`, the top safe-area padding (matching the tab bar's bottom one) and the pill switcher.
+
+## T7 — the footer restyle (2026-11-04)
+
+The footer is now the export's centred column: wordmark, the two link rows, then the price line, with no
+hairline and no `border-t`, geometry `mt-10 pt-6 pb-4` taken from `morocco_pc_1`, and the legal row drawing
+its `·` as a `before:` pseudo-element so each list item stays exactly one link.
+
+| Measured (local `next start`, 3 Lighthouse runs per route) | pre-T7 (`16528` B CSS) | T7 (`16638` B CSS) |
+|---|---|---|
+| script transfer, result route | 172 501 B | **172 501 B** (unchanged) |
+| result-route LCP samples @ 00:31 / 00:45 | 2 493 / 2 490 / 2 487 · 2 492 / 2 488 / 2 488 | — |
+| result-route LCP samples @ 00:43 / 01:14 | — | **2 662 / 2 634 / 2 624 · 2 655 / 2 640 / 2 635** |
+| preset-route median | 2 481 · 2 486 | 2 495 (2 475 / 2 495 / 2 873) · 2 491 (2 491 / 2 877 / 2 475) |
+
+**The T7 tree is RED on the binding gate.** `npm run test:lighthouse` exits 1: result-route LCP median
+**2 640 ms** against the 2 500 ms budget. It is not one noisy sample — two independent runs on the T7
+stylesheet land at 2 662 / 2 634 / 2 624 and 2 655 / 2 640 / 2 635, while both runs on the pre-T7
+stylesheet land at 2 487-2 493. Script bytes are identical and the LCP element is unchanged
+(`section > section.mt-6 > dl.mt-3 > div.text-body`), so the regression tracks the footer while
++110 B of CSS is not a credible mechanism for 140 ms: the cause is **unattributed**. The preset route
+still passes on both T7 runs. **G3 is not claimed.**
+
+| Gate | Result |
+|---|---|
+| `typecheck` · `lint` · `check:tokens` (104) · `check:i18n` (101) · `check:api-types` | PASS — `lint` reports 2 warnings, both in the gitignored `tmp/validate-shell.mjs` |
+| `build` | PASS |
+| `CI=1 npm test` | **FAIL** — 391 passed / 2 skipped / 1 failed + 1 flaky, all `wizard-budget` (the known family: `--repeat-each=3` on that file gives 27 passed / 3 flaky / exit 0) |
+| `npm run test:lighthouse` | **FAIL (exit 1)** — 2 640 ms |
+
+Visual check at 360 and 768 in both locales on the built app: footer centred, RTL mirrored, four `nav`
+landmarks with distinct names, `scrollWidth - clientWidth = 0`, every `li` holding exactly one link.
+One defect is visible at 360 px in **both** locales — the legal row wraps and, because the separator is
+drawn on the `li`, the wrapped line **starts with a dangling `·`** ("· Formats (démo)"). The export
+interleaves `<span>·</span>` between links and has no such artefact. Not fixed in this task; recorded so
+it is not rediscovered.
+
+Departure: **D-26** (no `© 2026` clock line in the shell; the catalogue sentence states the same unit).
+Two corrections this task produced: the footer count is **2** of 22, not 4 (`comparer_morocco_pc` and
+`configurateur_2` are `fixed bottom-0` action bars), and the screenshot reference is the **tracked**
+`apps/web/design/stitch/accueil_morocco_pc/screen.png` (`b4b38a9`) — `apps/web-v2/` is only the staging
+duplicate Phase 0 deliberately left in place (see this file's `apps/web-v2/` note), never a missing asset.
