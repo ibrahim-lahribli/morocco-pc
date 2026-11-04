@@ -33,7 +33,15 @@
  * to run against the shared database and does not need the TEST_DATABASE_URL
  * guard (that guard exists for write-capable tests).
  *
- * Usage: node scripts/check-og01-coverage.js [--strict]
+ * MODEL SELECTION. The required assessment types come from the scoring model's
+ * `configuration.role_weights`, so the gate must know WHICH model. With exactly
+ * one ACTIVE row that is unambiguous; with several it is not, and this gate
+ * refuses rather than deriving coverage from whichever row sorted first. Name
+ * the model with `--model=<name@version>` (or `SCORING_MODEL_PIN`) - the same
+ * pin the comparison harnesses use, resolved by scripts/lib/model-pin.js, which
+ * selects among ACTIVE rows only. Unnamed stays LOUD, never guessed.
+ *
+ * Usage: node scripts/check-og01-coverage.js [--strict] [--model=<name@version>]
  * Exit codes: 0 = gate satisfied; 1 = gate failed or the live data could not
  * be read/derived; 2 = usage error.
  */
@@ -47,10 +55,21 @@ const { loadOg01Catalog, loadCoveredTypes } = require(path.join(
   'lib',
   'og01-catalog'
 ));
+const modelPin = require(path.join(__dirname, 'lib', 'model-pin'));
 
 const ARGS = process.argv.slice(2);
-if (ARGS.some((a) => a !== '--strict')) {
-  console.error('usage: node scripts/check-og01-coverage.js [--strict]');
+let MODEL_PIN_FLAG = null;
+try {
+  MODEL_PIN_FLAG = modelPin.readModelPinFlag(ARGS);
+} catch (err) {
+  console.error('ERROR: ' + err.message);
+  process.exit(2);
+}
+const POSITIONAL = ARGS.filter(
+  (arg) => arg !== '--strict' && !arg.startsWith(modelPin.MODEL_FLAG)
+);
+if (POSITIONAL.length > 0) {
+  console.error('usage: node scripts/check-og01-coverage.js [--strict] [--model=<name@version>]');
   process.exit(2);
 }
 const STRICT = ARGS.includes('--strict');
@@ -68,7 +87,10 @@ async function main() {
   try {
     await client.connect();
 
-    const catalog = await loadOg01Catalog(client);
+    const catalog = await loadOg01Catalog(
+      client,
+      MODEL_PIN_FLAG === null ? {} : { pin: MODEL_PIN_FLAG }
+    );
     const assessmentRows = await loadCoveredTypes(client, catalog.products);
 
     const noEvidence = [];
@@ -119,6 +141,9 @@ async function main() {
         ' ' +
         catalog.model.version
     );
+    if (MODEL_PIN_FLAG !== null) {
+      console.log('Model pin: ' + MODEL_PIN_FLAG + ' (coverage follows THIS model, not whichever row is active)');
+    }
     console.log(
       'Required types per role derived from configuration.role_weights + ROLE_CATEGORIES'
     );
