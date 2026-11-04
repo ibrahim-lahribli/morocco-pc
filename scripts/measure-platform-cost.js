@@ -41,6 +41,13 @@
  *     PSU, CASE and CPU_COOLER are assumed reachable at their retained cheapest,
  *     which is what makes this a FLOOR on a full build, not a build.
  *
+ * THE COMPATIBILITY HALF. A price floor cannot see pair rules that live inside
+ * the Engine 3 walk (GPU<->case, GPU<->PSU, cooler<->socket, the E5 VRAM floor),
+ * so the script also runs the REAL `assembly.assembleBuildsForRecommendation`
+ * over the SAME retention output the orchestrator would hand it, and counts
+ * builds per CPU. A CPU whose floor is under budget but whose build count is 0
+ * is blocked by COMPATIBILITY, not by cost - a distinction no sum can make.
+ *
  * Usage:
  *   node scripts/measure-platform-cost.js [--budget N] [--use-case U]
  *     [--resolution 1080p|1440p|2160p] [--model=<name@version>]
@@ -59,6 +66,7 @@ const offers = require(path.join(root, 'offers', 'index.js'));
 const filtering = require(path.join(root, 'filtering', 'index.js'));
 const scoring = require(path.join(root, 'scoring', 'index.js'));
 const retention = require(path.join(root, 'retention', 'index.js'));
+const assembly = require(path.join(root, 'assembly', 'index.js'));
 const { priceKey } = require(path.join(root, 'assembly', 'prices'));
 const {
   FINAL_STATUSES,
@@ -105,6 +113,16 @@ function gpuPolicyFor(configuration) {
   return profile.gpu_policy === 'REQUIRED' || profile.gpu_policy === 'IGPU_ALLOWED'
     ? profile.gpu_policy
     : null;
+}
+
+/** Mirrors orchestrator/run.js resolveVramFloorGb (not exported there). */
+function vramFloorFor(configuration) {
+  const profiles = configuration && configuration.resolution_profiles;
+  if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles)) return null;
+  const profile = profiles[RESOLUTION];
+  if (!profile || typeof profile !== 'object') return null;
+  const floor = profile.vram_floor_gb;
+  return typeof floor === 'number' && Number.isInteger(floor) && floor >= 1 ? floor : null;
 }
 
 /** Mirrors orchestrator/run.js resolveRoleTargets (not exported there). */
@@ -413,6 +431,72 @@ async function main() {
         'pool CPUs with an in-budget platform: ' + platforms.filter(withinBudget).length + ' of ' + platforms.length
       );
     }
+    // ----------------------------------------------------------------
+    // Engine 3: the COMPATIBILITY half. Everything above prices a platform
+    // and the cheapest reachable partners; it cannot see whether a real build
+    // assembles, because GPU<->case/PSU, cooler<->socket and the E5 VRAM floor
+    // are checked INSIDE the walk, not in a sum. So run the real assembly over
+    // the same retention output the orchestrator would pass it.
+    // ----------------------------------------------------------------
+    const vramFloorGb = vramFloorFor(configuration);
+    let assemblyBuilds = null;
+    let assemblyError = null;
+    try {
+      assemblyBuilds = assembly.assembleBuildsForRecommendation({
+        candidatePoolResult: offerResult,
+        filteringContext,
+        filterResult: retentionResult,
+        scoringModel: model,
+        prices: offerResult.prices,
+        vramFloorGb,
+        gpuPolicy,
+      }).builds;
+    } catch (err) {
+      assemblyError = err && err.message ? err.message : String(err);
+    }
+
+    console.log('');
+    console.log('=== Engine 3 assembly at ' + BUDGET + ' ' + INPUT.currency
+      + ' (vram floor ' + (vramFloorGb === null ? 'none' : vramFloorGb + ' GB')
+      + ', gpu policy ' + (gpuPolicy === null ? 'legacy rule' : gpuPolicy) + ') ===');
+    if (assemblyBuilds === null) {
+      console.log('ASSEMBLY ERROR: ' + assemblyError);
+    } else {
+      const cpuComponent = (build) => {
+        const components = build && build.components ? build.components : null;
+        if (!components) return null;
+        if (Array.isArray(components)) {
+          const found = components.filter((part) => (part.component_role || part.role) === 'CPU');
+          return found.length > 0 ? found[0] : null;
+        }
+        return components.CPU || null;
+      };
+      const buildsByCpu = new Map();
+      let unattributed = 0;
+      for (const build of assemblyBuilds) {
+        const cpu = cpuComponent(build);
+        if (!cpu || cpu.product_id === undefined || cpu.product_id === null) {
+          unattributed += 1;
+          continue;
+        }
+        const key = String(cpu.product_id);
+        buildsByCpu.set(key, (buildsByCpu.get(key) || 0) + 1);
+      }
+      console.log('builds assembled: ' + assemblyBuilds.length
+        + ' | distinct CPUs inside builds: ' + buildsByCpu.size
+        + (unattributed > 0 ? ' | builds with no resolvable CPU component: ' + unattributed : ''));
+      let noBuild = 0;
+      for (const entry of ordered) {
+        const count = buildsByCpu.get(String(entry.cpu.product_id)) || 0;
+        if (count === 0) noBuild += 1;
+        console.log('  ' + nameOf(entry.cpu).slice(0, 32).padEnd(32)
+          + ' builds=' + String(count).padStart(3) + (count === 0 ? '  NO BUILD' : ''));
+      }
+      console.log('RESULT: ' + noBuild + ' of ' + ordered.length
+        + ' retained CPU(s) assemble ZERO build(s) at ' + BUDGET + ' ' + INPUT.currency
+        + ' (R-04 claimed 8 of 10 cannot produce an in-budget build)');
+    }
+
     console.log('RESULT: measured (read-only; no rows written)');
   } finally {
     await db.end();
