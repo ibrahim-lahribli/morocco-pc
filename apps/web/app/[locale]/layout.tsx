@@ -277,10 +277,11 @@ export default async function LocaleLayout({
              * LABELS stay here, shell-owned, passed in as props.
              */}
             <HeaderNav
+              locale={locale}
               items={[
-                { href: localePath(locale, "/composants"), label: t("navItems.components") },
-                { href: localePath(locale, "/guides"), label: t("navItems.guides") },
-                { href: localePath(locale, "/enregistrements"), label: t("navItems.saved") },
+                { path: "/composants", label: t("navItems.components") },
+                { path: "/guides", label: t("navItems.guides") },
+                { path: "/enregistrements", label: t("navItems.saved") },
               ]}
             />
             <LocaleSwitcher

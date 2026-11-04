@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { isTabPath } from "@/components/shell/tab-match";
 import { cn } from "@/components/ui/cn";
+import { localePath } from "@/lib/i18n/paths";
 
 /**
  * The header's page links, as a client component — because which page is
@@ -19,8 +21,10 @@ import { cn } from "@/components/ui/cn";
  * (`bg-primary-soft text-primary`): one idiom for "current" on every shell
  * control. Matching is a section match, not an exact one: the compare page
  * (`/composants/comparer`) and a product page (`/composants/[slug]`) sit
- * UNDER Composants, so the section link says so. The trailing-slash guard
- * keeps a prefix from matching a sibling ("/composant" would).
+ * UNDER Composants, so the section link says so. The section-boundary rule is
+ * `isTabPath` in `components/shell/tab-match.ts` — the same function the bottom
+ * tab bar uses, so the two navigations cannot disagree about which page is
+ * current, and `/composants-x` lights nothing in either.
  *
  * `md+` ONLY (`hidden md:flex`), because that is what the design draws and
  * what PLAN.md specifies: at 360 px the Stitch header is the brand and the
@@ -31,17 +35,25 @@ import { cn } from "@/components/ui/cn";
  * than a conditional render: it cannot disagree with the tab bar's own
  * `md:hidden`, and the labels keep their home in one place either way.
  */
-export function HeaderNav({ items }: { items: Array<{ href: string; label: string }> }) {
+export function HeaderNav({
+  locale,
+  items,
+}: {
+  locale: string;
+  items: Array<{ path: string; label: string }>;
+}) {
   const pathname = usePathname() ?? "";
+  const root = `/${locale}`;
+  const rest = pathname.startsWith(root) ? pathname.slice(root.length) : pathname;
 
   return (
     <ul className="hidden items-center gap-x-1 md:flex">
       {items.map((item) => {
-        const current = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const current = isTabPath(rest, item.path);
         return (
-          <li key={item.href}>
+          <li key={item.path}>
             <Link
-              href={item.href}
+              href={localePath(locale, item.path)}
               aria-current={current ? "page" : undefined}
               className={cn(
                 "inline-flex h-tap items-center rounded-control px-2 text-compact",
