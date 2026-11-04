@@ -237,3 +237,14 @@ never by name pattern.
 
 Do not claim G3 on this tree. The footer separator defect is FIXED (2026-11-04): it now trails its item as
 an `aria-hidden` span, so a wrapped row starts with a link in both locales. `PROGRESS.md` T7 has the rest.
+
+2026-11-04 — T7's Lighthouse question, answered on the runner (option d). Pushing `web-redesign`
+produced run 41758093817 at `e6bdc09`: **web job PASS**, 13 steps, 260 s, result-route LCP median
+**2481 ms** (2471 / 2481 / 2602) and preset **2414 ms**, script **172 564 B**. The immediately previous
+push, run 41749830494 at `95bfa33`, had failed the SAME assertion on the SAME route at median
+**2528 ms** (2251 / 2528 / 2546). So the red was neither a local artefact nor a regression from this
+branch's work: both are the same route moving inside a 351 ms band, with the 2 500 ms line in the middle.
+G3 criterion 3 is met on the strength of the green run; the 19 ms margin is why option (a) — the `h1` as
+LCP candidate, today 28 px against a painted body-text block that wins the metric — is still the durable
+fix. Read the numbers from the `web-lighthouse-report` artifact, never from a previous run's memory.
+

@@ -488,3 +488,27 @@ Two corrections this task produced: the footer count is **2** of 22, not 4 (`com
 `configurateur_2` are `fixed bottom-0` action bars), and the screenshot reference is the **tracked**
 `apps/web/design/stitch/accueil_morocco_pc/screen.png` (`b4b38a9`) — `apps/web-v2/` is only the staging
 duplicate Phase 0 deliberately left in place (see this file's `apps/web-v2/` note), never a missing asset.
+
+## T7 follow-up — the budget on the runner (2026-11-04)
+
+Option (d) of the attribution: push and let the runner judge. `web-redesign` was pushed, and the two
+runs either side of this branch's tip were read from their own artifacts. **The gate flips on CI too,
+in both directions:**
+
+| run | commit | result-route LCP (3 samples) | median | preset median | verdict |
+|---|---|---|---|---|---|
+| 41749830494 | `95bfa33` (tip before this branch's work) | 2251 / 2528 / 2546 | **2528** | 2371 | FAIL |
+| 41758093817 | `e6bdc09` (this branch's tip) | 2471 / 2481 / 2602 | **2481** | 2414 | **PASS** |
+
+Same route, a 351 ms spread across samples (2251–2602), and the failing run carried one 1626 ms TBT
+sample (perf 72) — runner noise, not a page property. The LCP candidate in every sample is body text:
+`div[data-effect="APPLIED"].text-body` on the result route and `p.mt-2.max-w-prose` on the preset.
+The `h1` (`text-heading`, 28 px) is smaller than both, which is the mechanism behind option (a): making
+the title the largest painted element moves the candidate earlier instead of moving the number.
+
+**G3 criterion 3 is therefore MET with evidence** — a green median-of-3 run on both fixtures, numbers
+above, script 172 564 B against the 174 080 B budget (13 steps, 260 s). The margin is recorded, not
+celebrated: 19 ms above the line here, and the same route failed by 28 ms two hours earlier. A future
+red of this shape is variance until proven otherwise — but it is still a red, and option (a) remains the
+only change that buys real headroom.
+
