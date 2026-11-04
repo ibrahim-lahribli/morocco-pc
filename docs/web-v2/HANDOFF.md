@@ -12,10 +12,11 @@ Read this first, then `CONTEXT.md`. This file is the state of the branch, not th
   closed: G3 is NOT claimed yet** — the tab bar, the landmark naming, the review fixes, the `md+` header
   nav and the error boundary are all in and green, but the header and footer are still un-restyled (see
   below). The Lighthouse gate now PASSES with room: **1 585 B** of script and **20 ms** of LCP.
-- `docs/web-v2/PROGRESS.md` is the ledger. `docs/superpowers/plans/` holds plan files for phases **0
-  and 2 only** — there is no phase-3 plan, which is why the header/footer restyle and the `md+` half
-  of PLAN.md's Phase 3 line drifted out of view until the review found them. Writing that plan is
-  open work, not a formality.
+- `docs/web-v2/PROGRESS.md` is the ledger. `docs/superpowers/plans/` holds plan files for phases **0,
+  2 and 3**. Phase 3's was written LATE — 2026-11-03, after T1-T5b had already landed — which is exactly
+  why the header/footer restyle and the `md+` half of PLAN.md's Phase 3 line drifted out of view until a
+  review found them. Its ladder records T1-T5b and carries **T6-T8 as the open work**, with the four
+  decisions the restyle would otherwise discover mid-build written down first.
 
 ## What this session did
 
@@ -137,8 +138,12 @@ first probe answered 404 and looked exactly like a broken boundary.
    *structure* matches the design (no duplicate page links at 360 px); the visual treatment does not: the
    design's header has a logo tile with a page subtitle, and DESIGN.md's container and type scale are
    applied to neither. Do this before Phase 4's screens, or both move under them.
-2. **Write `docs/superpowers/plans/2026-11-03-web-redesign-phase-3.md`**, then claim G3 on the green
-   median-of-3 Lighthouse this tree already produces (exit 0, 1 585 B and 20 ms of margin).
+2. **Work the phase-3 ladder** — `docs/superpowers/plans/2026-11-03-web-redesign-phase-3.md`, T6-T8:
+   header restyle, footer restyle, G3 evidence. Then claim G3 on the green median-of-3 Lighthouse this
+   tree already produces (exit 0, 1 585 B and 20 ms of margin). Its *Decisions fixed before starting*
+   section names the four forks to answer BEFORE the restyle lands: the logo tile (a remote placeholder
+   `img`), the page subtitle (a second owner of the page's name), a FIXED header (ours is static), and
+   the saved-shelf badge that D-14 does not cover.
 3. **Phase 4, in the planned order:** `configurer -> results -> build detail -> home -> presets ->
    composants -> guides -> enregistrements -> legal`, one screen per task with its own gate. **Home is
    fourth, not first.** Its brief is `SCREENS.md`'s `accueil_morocco_pc` row — hero, presets, trust

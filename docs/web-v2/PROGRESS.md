@@ -380,3 +380,23 @@ broken boundary until the 404 status gave it away.
 **A flake that widened:** an earlier run on the same tree reported **4 flaky**, and all four were the
 wizard's budget field (`wizard-budget.spec.ts` 76, 94, 220 and `wizard.spec.ts` 108). HANDOFF knew about
 one of them; this is a family in one component, not a lone test.
+
+## The plan file Phase 3 was missing (2026-11-03)
+
+Phases 0 and 2 each opened with a written plan in `docs/superpowers/plans/`; phase 3 went straight into
+code. That gap is not cosmetic — it is why the header/footer restyle and the `md+` half of PLAN.md's
+Phase 3 line went unnoticed until a review found them. `2026-11-03-web-redesign-phase-3.md` now exists, in
+the same compact ladder register as phase 2: T1-T5b are recorded as landed **with their commits**, T6-T8
+are the open work, and four decisions are written down BEFORE the restyle so they are not discovered
+mid-build:
+
+| Fork | Why it is a decision, not a detail |
+|---|---|
+| the logo tile | the export's mark is a **remote placeholder** `<img>` on `lh3.googleusercontent.com` — not an asset, and a third-party request on every page |
+| the page subtitle ("Accueil") | it would be a **second owner of the page's name**, the thing this repo keeps single-owner (cf. `StepHeader`) |
+| a **fixed** header | the design's is `fixed top-0 pt-safe`; ours is static, and `fixed` changes the scroll/paint path on both measured routes |
+| the saved-shelf badge | **D-14 removed the bell and the avatar only** — the bookmark-with-count is a third control, and shipping it means a client island on every route, counted against 1 585 B |
+
+It also corrects one assumption: the footer **has** a reference — `<footer>` appears in 4 of the 22
+Stitch screens (`accueil_morocco_pc`, `morocco_pc_1`, `configurateur_2`, `comparer_morocco_pc`), so T7
+reads those rather than inventing a rule-based footer.
