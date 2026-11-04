@@ -28,7 +28,9 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { parseArgs, budgetRibbon, USAGE } = require('../../scripts/generate-presets');
+const {
+  parseArgs, budgetRibbon, USAGE, resolveTarget, targetLine, auditTargetLine, generateOne,
+} = require('../../scripts/generate-presets');
 const modelPin = require('./model-pin');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
@@ -169,4 +171,217 @@ test('requiring the script does not start a run (the require.main guard)', () =>
   );
   assert.equal(child.status, 0, 'require() must exit 0 (stderr: ' + child.stderr + ')');
   assert.match(child.stdout, /LOADED-GUARD-OK/);
+});
+
+// --- --target-env: the ONE way to write outside the TEST branch (R-24) --------
+//
+// A release environment's presets cannot be copied from the TEST branch: a preset
+// row is keyed by catalog version, and the two databases carry different ones. So
+// the generator gained a target flag, and the flag's contract is what these tests
+// pin - the guard that replaces `resolveTestDbUrl()` for a named target is a
+// DIGEST comparison, because a variable NAME proves nothing about what it points
+// at.
+
+test('--target-env names a VARIABLE, and refuses a URL or a reserved name', () => {
+  const args = parseArgs(ARGV.concat(['--target-env=TARGET_DATABASE_URL']), NO_ENV);
+  assert.equal(args.targetEnv, 'TARGET_DATABASE_URL');
+  assert.equal(args.restorePoint, null);
+  assert.equal(parseArgs(ARGV, NO_ENV).targetEnv, null, 'the default path is unchanged');
+  assert.throws(
+    () => parseArgs(ARGV.concat(['--target-env=postgres://u:p@h/db']), NO_ENV),
+    /environment variable NAME/,
+    'a URL on the command line would land in shell history and ps'
+  );
+  assert.throws(() => parseArgs(ARGV.concat(['--target-env=target_database_url']), NO_ENV), /environment variable NAME/);
+  assert.throws(() => parseArgs(ARGV.concat(['--target-env=DATABASE_URL']), NO_ENV), /reserved/);
+  assert.throws(() => parseArgs(ARGV.concat(['--target-env=TEST_DATABASE_URL']), NO_ENV), /reserved/);
+  assert.throws(() => parseArgs(ARGV.concat(['--target-env']), NO_ENV), /unknown argument: --target-env/);
+});
+
+test('a WRITE against a named target requires a real restore point; a dry run needs none', () => {
+  assert.equal(parseArgs(ARGV.concat(['--target-env=TARGET_DATABASE_URL', '--dry-run']), NO_ENV).mode, 'dry-run');
+  assert.throws(
+    () => parseArgs(ARGV.concat(['--target-env=TARGET_DATABASE_URL', '--commit']), NO_ENV),
+    /--restore-point=<id>/
+  );
+  assert.throws(
+    () => parseArgs(ARGV.concat(['--target-env=TARGET_DATABASE_URL', '--commit', '--restore-point=short']), NO_ENV),
+    /--restore-point=<id>/,
+    'a placeholder fails the shape on purpose'
+  );
+  const cleanup = parseArgs(ARGV.concat([
+    '--target-env=TARGET_DATABASE_URL', '--cleanup', '--restore-point=br-eu-backup-20261103',
+  ]), NO_ENV);
+  assert.equal(cleanup.mode, 'cleanup');
+  assert.equal(cleanup.restorePoint, 'br-eu-backup-20261103');
+  // The TEST path needs no restore point: it is the disposable branch.
+  assert.equal(parseArgs(ARGV.concat(['--commit']), NO_ENV).restorePoint, null);
+});
+
+test('resolveTarget: default is the TEST guard; a named target is digest-checked against shared', () => {
+  const TEST = 'postgresql://u:p@ep-test-1.eu-central-1.aws.neon.tech/neondb?sslmode=require';
+  const SHARED = 'postgresql://u:p@ep-shared-2.us-east-1.aws.neon.tech/neondb?sslmode=require';
+  const EU = 'postgresql://u:p@ep-eu-3.eu-central-1.aws.neon.tech/neondb?sslmode=require';
+  const env = { DATABASE_URL: SHARED, TEST_DATABASE_URL: TEST, TARGET_DATABASE_URL: EU };
+
+  const fallback = resolveTarget(parseArgs(ARGV, NO_ENV), env);
+  assert.equal(fallback.connectionString, TEST, 'no --target-env keeps the branch guard');
+  assert.equal(fallback.digest, null);
+  assert.equal(fallback.nonTest, false);
+
+  const named = resolveTarget(parseArgs(ARGV.concat(['--target-env=TARGET_DATABASE_URL']), NO_ENV), env);
+  assert.equal(named.connectionString, EU);
+  assert.equal(named.nonTest, true);
+  assert.match(named.digest, /^db:[0-9a-f]{12}$/, 'the audit line is a digest, never a host');
+  assert.match(targetLine(named), /^target: TARGET_DATABASE_URL \(db:[0-9a-f]{12}\)$/);
+
+  // The case a name check cannot catch: a second variable pointing AT shared.
+  const alias = { DATABASE_URL: SHARED, TARGET_DATABASE_URL: SHARED };
+  assert.throws(
+    () => resolveTarget(parseArgs(ARGV.concat(['--target-env=TARGET_DATABASE_URL']), NO_ENV), alias),
+    /SHARED database/
+  );
+  assert.throws(
+    () => resolveTarget(parseArgs(ARGV.concat(['--target-env=TARGET_DATABASE_URL']), NO_ENV), { DATABASE_URL: SHARED }),
+    /unset or empty/,
+    'an unset named variable fails before any connection'
+  );
+  assert.throws(
+    () => resolveTarget(parseArgs(ARGV.concat(['--target-env=TARGET_DATABASE_URL']), NO_ENV), { TARGET_DATABASE_URL: EU }),
+    /cannot be proven distinct/,
+    'without DATABASE_URL nothing proves the target is not shared'
+  );
+});
+
+test('the CLI refuses the shared database BEFORE it connects, and never echoes a host', () => {
+  const SHARED = 'postgresql://u:p@ep-shared-2.us-east-1.aws.neon.tech/neondb?sslmode=require';
+  const child = spawnSync(
+    process.execPath,
+    ['scripts/generate-presets.js', '--commit', '--restore-point=br-eu-backup-20261103',
+      '--target-env=TARGET_DATABASE_URL'],
+    {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      env: Object.assign({}, process.env, {
+        DATABASE_URL: SHARED, TARGET_DATABASE_URL: SHARED, TEST_DATABASE_URL: '',
+      }),
+    }
+  );
+  assert.equal(child.status, 1, 'a refusal is a run failure, not a usage typo');
+  assert.match(child.stderr, /SHARED database/);
+  assert.doesNotMatch(child.stdout + child.stderr, /ep-shared-2/, 'the refusal quotes no host');
+});
+
+// --- R-26: a pass that assembled nothing is not a landing page ----------------
+//
+// At 6 000 MAD the catalogue has a budget floor but no build inside it (R-09), so
+// a pass COMMITS with zero `build_candidate` rows. The generator used to record
+// such a key, and `/v1/presets` then advertised a page whose recommendation
+// answers `builds: []`. These tests drive the real branch through injected
+// collaborators and assert the EFFECTS - a preset written or not, a pass deleted -
+// rather than a return value, so the test cannot agree with itself while the
+// script disagrees.
+
+const KEY = {
+  scoringModelId: 'm-1',
+  useCase: 'GAMING',
+  currency: 'MAD',
+  catalogVersion: 'cv-1',
+  budgetAmount: 6000,
+};
+
+function fakeCollaborators(options = {}) {
+  const buildCount = options.buildCount === undefined ? 3 : options.buildCount;
+  const calls = { upserted: [], deleted: [], ran: 0, counted: 0, countedFor: null };
+  return {
+    calls,
+    collaborators: {
+      repository: {
+        createRecommendationQuery: async () => ({ queryId: 'q-1' }),
+        countBuildCandidates: async (_client, queryId) => {
+          calls.counted += 1;
+          calls.countedFor = queryId;
+          return buildCount;
+        },
+        upsertPreset: async (_client, row) => {
+          calls.upserted.push(row);
+          return { queryId: row.queryId };
+        },
+      },
+      engine: {
+        runFullRun: async () => {
+          calls.ran += 1;
+          if (options.runError) throw options.runError;
+        },
+      },
+      deletePasses: async (_client, ids) => {
+        calls.deleted.push(ids);
+        return { queries: ids.length };
+      },
+    },
+  };
+}
+
+test('R-26: a committed pass with ZERO builds records no preset and deletes the pass', async () => {
+  const { calls, collaborators } = fakeCollaborators({ buildCount: 0 });
+  const outcome = await generateOne({}, KEY, collaborators);
+  assert.equal(outcome.status, 'empty-pool');
+  assert.equal(outcome.queryId, null, 'a key with no builds must not name a landing page');
+  assert.equal(calls.countedFor, 'q-1', 'the count is asked of the pass just written');
+  assert.deepEqual(calls.deleted, [['q-1']], 'the pass is removed, so nothing is left behind');
+  assert.equal(calls.upserted.length, 0, 'no recommendation_preset row for an empty page');
+});
+
+test('a pass WITH builds still records the preset (the fix must not empty the shelf)', async () => {
+  const { calls, collaborators } = fakeCollaborators({ buildCount: 3 });
+  const outcome = await generateOne({}, KEY, collaborators);
+  assert.equal(outcome.status, 'created');
+  assert.equal(outcome.queryId, 'q-1');
+  assert.equal(calls.upserted.length, 1);
+  assert.equal(calls.upserted[0].queryId, 'q-1');
+  assert.deepEqual(calls.deleted, [], 'a usable pass is never deleted');
+});
+
+test('EMPTY_CANDIDATE_POOL keeps its own path: delete, no count, no preset', async () => {
+  const { calls, collaborators } = fakeCollaborators({
+    runError: Object.assign(new Error('no candidates'), { code: 'EMPTY_CANDIDATE_POOL' }),
+  });
+  const outcome = await generateOne({}, KEY, collaborators);
+  assert.equal(outcome.status, 'empty-pool');
+  assert.deepEqual(calls.deleted, [['q-1']]);
+  assert.equal(calls.counted, 0, 'a pass that threw before writing is not counted');
+  assert.equal(calls.upserted.length, 0);
+});
+
+test('a REAL failure is rethrown, not reported as a budget outcome', async () => {
+  const { calls, collaborators } = fakeCollaborators({
+    runError: Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }),
+  });
+  await assert.rejects(() => generateOne({}, KEY, collaborators), /connection reset/);
+  assert.deepEqual(calls.deleted, [], 'nothing is deleted on an unknown failure');
+  assert.equal(calls.upserted.length, 0);
+});
+
+// --- the audit line: a release write names its rollback point -----------------
+//
+// The digest proves WHICH database a run changed without quoting a host; the
+// restore point is the other half of a traceable write, and it used to be
+// validated and then dropped, so the only trace of it was a document.
+
+test('the audit line carries the restore point and still names no host', () => {
+  const env = {
+    DATABASE_URL: 'postgresql://u:p@ep-shared-2.us-east-1.aws.neon.tech/neondb?sslmode=require',
+    TARGET_DATABASE_URL: 'postgresql://u:p@ep-eu-3.eu-central-1.aws.neon.tech/neondb?sslmode=require',
+  };
+  const named = resolveTarget(parseArgs(ARGV.concat(['--target-env=TARGET_DATABASE_URL']), NO_ENV), env);
+  assert.equal(
+    auditTargetLine(named, 'br-plain-dream-b9v579cy'),
+    'AUDIT TARGET: ' + named.digest + ' restore-point=br-plain-dream-b9v579cy'
+  );
+  assert.equal(
+    auditTargetLine(named, null),
+    'AUDIT TARGET: ' + named.digest,
+    'a dry run has no restore point, so it adds no empty field'
+  );
+  assert.doesNotMatch(auditTargetLine(named, 'br-x'), /neon.tech|ep-eu|u:p/, 'no host or credential');
 });

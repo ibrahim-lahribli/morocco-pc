@@ -29,6 +29,40 @@ jobs:
       - run: npm run test:api
       - run: node scripts/gen-decision-index.js --check
       - run: node scripts/verify-docs.js --offline
+      # R-21 (2026-11-03): the catalogue-identity gate ran nightly only, which is
+      # precisely how R-07 - 13 ACTIVE products with no slug/display_name on shared,
+      # 100 on EU - reached a deployed origin and shipped `components[].slug: null`.
+      # The gate is READ-ONLY (SELECTs only), so it belongs on the change as well as
+      # on the clock. A pull_request from a fork receives no secrets; rather than
+      # fail every outside contribution, the step reports a NOTICE and exits 0, and
+      # the nightly recurring-gates copy still covers that branch. With the secret
+      # present this is a hard gate: a FAIL exits 1 and the job goes red.
+      - name: Catalogue identity (push/PR)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::notice title=catalogue-identity::DATABASE_URL is not set, so the gate is skipped here; recurring-gates still runs it nightly"
+            exit 0
+          fi
+          node scripts/check-catalog-identity.js
+
+      # Decision 26 item B calls check-deferred-rules.js the binding pre-merge
+      # re-check for any CPU/cooler/case/RAM/motherboard seed, but it was in NO
+      # workflow at all - the rule held only for whoever read the recipe. It is
+      # READ-ONLY and measured PASS on shared on 2026-11-04 (0 violations in every
+      # scope, all four rules ENFORCED), which is what makes it a gate rather than
+      # a warning. Unlike the identity gate it has no nightly fallback for a fork
+      # PR without the secret, so the NOTICE says so instead of promising cover.
+      - name: Deferred rules (push/PR)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::notice title=deferred-rules::DATABASE_URL is not set, so this gate is skipped; run node scripts/check-deferred-rules.js locally (read-only)"
+            exit 0
+          fi
+          node scripts/check-deferred-rules.js
 
   recurring-gates:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -75,6 +109,10 @@ jobs:
       # (HANDOFF_2026-11-01). RED here means catalogue DATA: the repair is a seed,
       # not a code change.
       - run: node scripts/check-catalog-identity.js
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Read-only, and the only place this rule would otherwise run.
+      - run: node scripts/check-deferred-rules.js
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - run: node scripts/verify-migrations-replay.js --test-db
