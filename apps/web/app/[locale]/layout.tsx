@@ -214,6 +214,25 @@ export default async function LocaleLayout({
         >
           {t("skip")}
         </a>
+        {/*
+         * T6 RESTYLE (2026-11-03) — this block owns the header row.
+         *
+         * The row is the design's 64 px (`h-16`); the bar carries `shadow-card-1`
+         * instead of a `border-b` (the export draws a soft shadow and no hairline),
+         * and it pads for the TOP safe area the way the tab bar pads for the bottom
+         * one — `env()` is physical on purpose in both places, and it only becomes
+         * non-zero because the layout exports `viewportFit: "cover"`.
+         *
+         * The brand tile is DRAWN (D-22), not the export's remote placeholder
+         * `<img>`, and it sits in this SERVER component so it costs HTML rather than
+         * bundle bytes — the same glyph inside the client island would have shipped
+         * in the chunk. The wordmark uses the design's `label-lg` step (14 px).
+         *
+         * The design's page subtitle is deliberately absent (D-23): it would be a
+         * second owner of the page's name. The header stays in normal flow rather
+         * than `fixed` (D-24), because `fixed` changes the scroll and paint path on
+         * both measured routes.
+         */}
         <header className="bg-surface pt-[env(safe-area-inset-top,0px)] shadow-card-1">
           <nav
             aria-label={t("navLabel")}
@@ -232,7 +251,7 @@ export default async function LocaleLayout({
               >
                 <ChipIcon className="h-5 w-5" />
               </span>
-              <span className="tracking-tight">{t("brand")}</span>
+              <span className="text-compact tracking-tight">{t("brand")}</span>
             </Link>
             {/*
              * The inline page links, as a list (they are navigation, not
@@ -256,17 +275,6 @@ export default async function LocaleLayout({
              * current" is request-path knowledge a server layout lacks — the
              * component owns the breakpoint, tap and aria-current logic; the
              * LABELS stay here, shell-owned, passed in as props.
-             *
-             * T6 RESTYLE (2026-11-03): the row is the design's 64 px (`h-16`), the
-             * bar carries `shadow-card-1` instead of a `border-b` (the export draws a
-             * soft shadow and no hairline), and it pads for the top safe area the
-             * same way the tab bar pads for the bottom one — `env()` is physical on
-             * purpose in both places. The brand tile is DRAWN (D-22), not the
-             * export's remote placeholder image, and it sits in this server
-             * component so it costs HTML rather than bundle bytes. The design's page
-             * subtitle is deliberately absent (D-23): it would be a second owner of
-             * the page's name. The header stays in normal flow rather than
-             * `fixed` (D-24).
              */}
             <HeaderNav
               items={[
@@ -317,29 +325,42 @@ export default async function LocaleLayout({
          * footer copy STAYS, deliberately duplicated, because the footer is
          * the one place every page carries — the 404 included — and a user who
          * scrolled past the header still reaches the shelf from here.
+         *
+         * T7 RESTYLE (2026-11-03): the block is the export's centred column —
+         * brand wordmark, then the link rows, then the price line — with NO
+         * hairline (`border-t` is gone; the export draws none) and centred
+         * inside the shell's measure rather than edge-aligned to it. The export
+         * puts a `·` between the legal links; the separator is a `before:`
+         * pseudo-element, so it is decorative by construction and never enters
+         * the accessibility tree — each list item is still exactly one link,
+         * which is what `legal.spec.ts` reads and `saved.spec.ts` scopes around.
+         * The price line keeps the descriptive sentence rather than the export's
+         * bare `© 2026` line (D-26: no clock read in the shell, and the sentence
+         * already states the unit that line exists to state), and the two NAMED
+         * landmarks stay so neither misdescribes its own set (the S25 rationale above).
          */}
-        <footer className="border-t border-border">
-          <div className="mx-auto w-full max-w-5xl px-4 py-6 text-compact text-muted">
-            <p>{t("footer")}</p>
-            <nav aria-label={t("savedNav")} className="mt-2">
-              <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <footer className="mt-10 flex flex-col items-center gap-3 pb-4 pt-6 text-center">
+          <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-3 px-4">
+            <span className="text-compact font-bold text-primary">{t("brand")}</span>
+            <nav aria-label={t("savedNav")}>
+              <ul className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-compact">
                 <li>
                   <Link
                     href={localePath(locale, "/enregistrements")}
-                    className="text-primary underline-offset-4 hover:underline"
+                    className="text-ink underline-offset-4 hover:text-primary hover:underline"
                   >
                     {tSaved("title")}
                   </Link>
                 </li>
               </ul>
             </nav>
-            <nav aria-label={t("legalNav")} className="mt-2">
-              <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <nav aria-label={t("legalNav")}>
+              <ul className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-compact [&>li:not(:first-child)]:before:me-3 [&>li:not(:first-child)]:before:text-outline-variant [&>li:not(:first-child)]:before:content-['·']">
                 {FOOTER_LINKS.map((link) => (
                   <li key={link.key}>
                     <Link
                       href={localePath(locale, link.path)}
-                      className="text-primary underline-offset-4 hover:underline"
+                      className="text-ink underline-offset-4 hover:text-primary hover:underline"
                     >
                       {t(link.key)}
                     </Link>
@@ -347,6 +368,7 @@ export default async function LocaleLayout({
                 ))}
               </ul>
             </nav>
+            <p className="text-caption text-muted">{t("footer")}</p>
           </div>
         </footer>
         <Analytics />
