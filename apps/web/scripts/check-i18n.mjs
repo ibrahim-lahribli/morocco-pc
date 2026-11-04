@@ -51,6 +51,17 @@
  *                       one; a computed key is skipped because it cannot be
  *                       resolved statically.
  *
+ * And one rule about the generated consumer of the catalogue (2026-11-03):
+ *
+ *   7. ERROR COPY     `lib/i18n/error-copy.generated.ts` must equal what
+ *                     `scripts/gen-error-copy.mjs` derives from the `errors`
+ *                     namespace. The error boundary is the one client component
+ *                     that cannot be passed its copy as props (Next renders it in
+ *                     place of the segment), and mounting `NextIntlClientProvider`
+ *                     for it was MEASURED at +15 845 B of script — over the whole
+ *                     margin. So the copy is mirrored, and a mirror without a
+ *                     gate is just a second source of truth.
+ *
  * Scope: app/, components/ and lib/, minus `lib/i18n/` (the one place allowed
  * to touch Intl). Comments count, as in `check-tokens.mjs`: a comment that
  * shows a literal teaches the next author to write one. That is why this file
@@ -64,6 +75,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { generate as generateErrorCopy } from "./gen-error-copy.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
@@ -226,6 +239,40 @@ if (reference === undefined) {
           wanted === ""
             ? `has placeholders (${got || "none"}) where the reference has none`
             : `placeholders {${got}} do not match the reference's {${wanted}}`,
+      });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Rule 7: the generated error-boundary copy is FRESH
+// ---------------------------------------------------------------------------
+
+const ERROR_COPY_FILE = path.join(ROOT, "lib", "i18n", "error-copy.generated.ts");
+{
+  let expected = null;
+  try {
+    expected = generateErrorCopy().replace(/\r\n/g, "\n");
+  } catch (error) {
+    violations.push({
+      file: "messages/",
+      line: 0,
+      rule: "error-copy-fresh",
+      found: "errors",
+      message: `cannot generate the boundary copy: ${error.message}`,
+    });
+  }
+  if (expected !== null) {
+    const actual = fs.existsSync(ERROR_COPY_FILE)
+      ? fs.readFileSync(ERROR_COPY_FILE, "utf8").replace(/\r\n/g, "\n")
+      : "";
+    if (actual !== expected) {
+      violations.push({
+        file: "lib/i18n/error-copy.generated.ts",
+        line: 0,
+        rule: "error-copy-fresh",
+        found: "(stale)",
+        message: "run `node scripts/gen-error-copy.mjs` — the errors namespace moved",
       });
     }
   }

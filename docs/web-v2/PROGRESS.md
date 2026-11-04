@@ -325,3 +325,58 @@ median-of-3 (~6 min) to answer a question the on-disk evidence already answers.
 `tmp/validate-shell.mjs`, a gitignored scratch probe from the previous session, is inside eslint's
 scope. On tracked files only it is 0 warnings, which is what HANDOFF recorded. The scratch probe was
 left in place rather than deleted — it is the previous session's working evidence.
+
+## Phase 3 — the error boundary, and the budget it had to fit (2026-11-03)
+
+`app/[locale]/error.tsx` is the app's ONLY client component that cannot be handed its copy as props:
+Next renders a boundary IN PLACE of the segment, so no server parent reads the catalogue for it. The
+obvious fix — mount `NextIntlClientProvider` with just the `errors` namespace — was built and MEASURED
+before it was kept, and it fails the gate outright:
+
+| Variant | Result script | Result LCP | Verdict |
+|---|---|---|---|
+| before any boundary | 168 710 B | 2 494 ms | within budget |
+| `NextIntlClientProvider` + `errors` only | **184 555 B** (+15 845) | **2 643 ms** (+149) | **fails both assertions** |
+| generated plain-object copy (SHIPPED) | **172 495 B** (+3 785) | **2 480 ms** | **PASS — 1 585 B of margin** |
+
+Preset route, same runs: 171 223 B (was 167 438, also +3 785) and LCP 2 484 ms — 2 857 B of margin.
+
+So the copy is mirrored at build time, the pattern this repo already uses for
+`docs/DECISION_INDEX.md` and `docs/SCHEMA_REFERENCE.md`:
+
+| Piece | What it does |
+|---|---|
+| `scripts/gen-error-copy.mjs` | derives `lib/i18n/error-copy.generated.ts` from the `errors` namespace; `--check` is a staleness gate |
+| `lib/i18n/error-copy.generated.ts` | the plain object the boundary reads — seven strings per locale, no ICU runtime |
+| `check:i18n` **rule 7** | FAILS while the generated file is stale, so the catalogues stay the single source of truth |
+| `app/[locale]/error.tsx` | the boundary: `Alert` at `error` tone, retry (`reset()`), home (`LinkButton`), the digest when Next supplies one |
+
+**Proof it renders** — a throwaway `app/[locale]/boundary-probe` route that threw, built, visited at
+360 px in BOTH locales, then deleted and rebuilt (the build log carries no `boundary-probe` line):
+
+| Locale | Result |
+|---|---|
+| `/fr` | 500 · h1 "Cette page n'a pas pu s'afficher" · error-tone `Alert` · 1 retry button · 1 home link · digest "Référence de l'erreur : 521710552" |
+| `/ar` | 500 · h1 "تعذّر عرض هذه الصفحة" · the same controls · digest "مرجع الخطأ: 521710552" |
+
+The shell survives around the boundary (4 `nav` landmarks), which is the point of a segment boundary
+rather than a global one.
+
+**Trap, cost one wrong conclusion:** a folder whose name starts with `_` is PRIVATE to Next's router, so
+the first probe answered **404** — and Next's built-in "This page couldn't load" page read exactly like a
+broken boundary until the 404 status gave it away.
+
+| Gate | Result |
+|---|---|
+| `npm run typecheck` | PASS |
+| `npm run lint` | PASS (exit 0) |
+| `npm run check:tokens` | PASS — **104 files** |
+| `npm run check:i18n` | PASS — **101 files**, 2 catalogues, and rule 7 fresh |
+| `npm run check:api-types` | PASS — contract 1.10.0 |
+| `npm run build` | PASS |
+| `CI=1 npm test` | PASS — **393 passed / 2 skipped** (395 specs, 37.6 s), no flakes this run |
+| `npm run test:lighthouse` | **PASS** (exit 0) — LCP 2 480 / 2 484 ms, CLS 0, performance 0.98, script 172 495 / 171 223 B |
+
+**A flake that widened:** an earlier run on the same tree reported **4 flaky**, and all four were the
+wizard's budget field (`wizard-budget.spec.ts` 76, 94, 220 and `wizard.spec.ts` 108). HANDOFF knew about
+one of them; this is a family in one component, not a lone test.

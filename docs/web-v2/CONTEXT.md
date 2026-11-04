@@ -18,7 +18,7 @@ this work.
 | 0 — baseline, feasibility, reference captures | **done** (8 tasks, 78 reference PNGs) |
 | 1 — tokens | **done**: DESIGN.md adopted in full — 67 raw colours + 13 aliases, full type scale, Arabic +10 % leading |
 | 2 — kit and mobile primitives | **done** — closed at gate G2 (T1-T8; D-15 to D-19) |
-| 3 — shell | in progress — tab bar, landmark naming, review fixes and the `md+` header nav are in; `error.tsx` is absent, so **G3 is not claimed** |
+| 3 — shell | in progress — tab bar, landmark naming, review fixes, the `md+` header nav and `error.tsx` are in and green; the header/footer RESTYLE is not, so **G3 is not claimed** |
 | 4 — screens, one task each | not started (G4.n) |
 | 5 — desktop + RTL pass | not started (G5) |
 | 6 — hardening, Lighthouse, OG cards | not started |
@@ -29,15 +29,15 @@ Branch `web-redesign`. One task = one commit. Master is touched only at release.
 ## The numbers that constrain every decision
 
 - **Suite: 395 specs, 393 passed, 2 skipped** (`wizard-browser-api`, `wizard-engine` — both opt-in).
-  One pre-existing flake is live: `e2e/wizard-budget.spec.ts` "a field below the minimum clamps to it on
-  blur" fails intermittently on this box and passes on retry (two sightings on 2026-11-03).
+  A flake FAMILY is live in the wizard's budget field: `wizard-budget.spec.ts` 76, 94, 220 and
+  `wizard.spec.ts` 108 all reported flaky in one run on 2026-11-03, each passing on retry.
 - **Lighthouse, `error` level, median of 3, on TWO URLs** (`/fr/config/<fixture>`, `/fr/config-pc-gamer-9000-dh`):
-  LCP ≤ 2 500 ms (measured **2 494 / 2 481**), CLS ≤ 0.1 (0), script ≤ 174 080 B (**168 710 / 167 438**),
-  performance ≥ 0.90 (98). **Headroom: 6 ms LCP and 5 370 B script on the result page, 6 642 B on the
-  preset page — the result route is the binding one since the tab bar landed.** A median that lands ON
-  2 500 ms is a coin flip, so no screen may add above-the-fold weight without re-measuring.
-- `check:tokens`: 102 files; no hex literal, no palette utility, no physical side, no `text-left/right`.
-- `check:i18n`: 100 files; fr/ar keys and ICU placeholders identical; numbers/dates only via
+  LCP ≤ 2 500 ms (measured **2 480 / 2 484**), CLS ≤ 0.1 (0), script ≤ 174 080 B (**172 495 / 171 223**),
+  performance ≥ 0.90 (0.98). **Headroom: 20 ms LCP and 1 585 B script on the result page, 2 857 B on the
+  preset page — the result route is the binding one, and the error boundary's copy spent 3 785 B of what
+  was there.** No screen may add above-the-fold weight without re-measuring.
+- `check:tokens`: 104 files; no hex literal, no palette utility, no physical side, no `text-left/right`.
+- `check:i18n`: 101 files; fr/ar keys and ICU placeholders identical; numbers/dates only via
   `lib/i18n/format.ts`; caller-filled templates read with `t.raw`.
 - `check:api-types`: contract **1.10.0**, `lib/api/schema.d.ts` must stay byte-identical to the generator.
 

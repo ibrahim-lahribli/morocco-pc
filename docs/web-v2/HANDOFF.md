@@ -8,10 +8,10 @@ Read this first, then `CONTEXT.md`. This file is the state of the branch, not th
   `origin/web-redesign`** after the validation pass below (push it before handing off again).
   The commit count is deliberately not written down: it changes with every commit. Measure it with
   `git rev-list --count master..web-redesign`.
-- Phases 0 and 1 are closed. **Phase 2 (kit) is CLOSED at gate G2.** **Phase 3 (shell) is in progress:
-  G3 is NOT claimed** — the tab bar, the landmark naming and this session's review fixes are in, but
-  error boundaries are not started and the Lighthouse gate sits **on** its line rather than behind it
-  (see the corrections below).
+- Phases 0 and 1 are closed. **Phase 2 (kit) is CLOSED at gate G2.** **Phase 3 (shell) is nearly
+  closed: G3 is NOT claimed yet** — the tab bar, the landmark naming, the review fixes, the `md+` header
+  nav and the error boundary are all in and green, but the header and footer are still un-restyled (see
+  below). The Lighthouse gate now PASSES with room: **1 585 B** of script and **20 ms** of LCP.
 - `docs/web-v2/PROGRESS.md` is the ledger. `docs/superpowers/plans/` holds plan files for phases **0
   and 2 only** — there is no phase-3 plan, which is why the header/footer restyle and the `md+` half
   of PLAN.md's Phase 3 line drifted out of view until the review found them. Writing that plan is
@@ -109,15 +109,36 @@ after LCP. The 2 045 ms "render delay" is the simulator's arithmetic, not a slow
 the paint could wait on arrives inside 30 ms. The two ablations this doc proposed are therefore **not**
 the lever and were **not** run.
 
+## The error boundary, and the budget it had to fit
+
+`app/[locale]/error.tsx` is in. It is the app's only client component that cannot be handed copy as
+props — Next renders a boundary IN PLACE of the segment — so the obvious fix was
+`NextIntlClientProvider`. It was built and measured, and it FAILS the gate:
+
+| Variant | Result script | Result LCP | Verdict |
+|---|---|---|---|
+| before any boundary | 168 710 B | 2 494 ms | within budget |
+| `NextIntlClientProvider` + `errors` only | **184 555 B** (+15 845) | **2 643 ms** | **fails both assertions** |
+| generated plain-object copy (shipped) | **172 495 B** (+3 785) | **2 480 ms** | **PASS, 1 585 B to spare** |
+
+So the copy is mirrored at build time: `scripts/gen-error-copy.mjs` derives
+`lib/i18n/error-copy.generated.ts` from the `errors` namespace, and `check:i18n` grew **rule 7**, which
+fails while that file is stale. The catalogues stay the single source of truth; the client pays for seven
+strings and no ICU runtime. **Do not re-try the provider** — the numbers above are the answer.
+
+**Proof it renders** (probe route, both locales, then deleted): HTTP 500, the French and Arabic h1, the
+error-tone `Alert`, one retry button, one home link, Next's real `digest`, and the shell still around it
+(4 `nav` landmarks). Trap worth keeping: **a folder starting with `_` is private to Next's router**, so the
+first probe answered 404 and looked exactly like a broken boundary.
+
 ## Next session — start here
 
-1. **`error.tsx` is now the ONLY thing G3 waits on**, and it needs a client message path: mount the
-   next-intl provider (ships both catalogues into a shared chunk — measure against the ~5.4 KB
-   result-route margin *first*) or import a static catalogue inside the boundary. This is a decision,
-   not a tidy-up.
-2. **Write `docs/superpowers/plans/2026-11-03-web-redesign-phase-3.md`**, then claim G3 only on a
-   green median-of-3 Lighthouse with the boundary in place. Nothing else in Phase 3 is outstanding:
-   the tab bar, landmark naming, review fixes and the `md+` header nav are all in and green.
+1. **The header and footer are still un-restyled, and that is now the ONLY thing G3 waits on.** Their
+   *structure* matches the design (no duplicate page links at 360 px); the visual treatment does not: the
+   design's header has a logo tile with a page subtitle, and DESIGN.md's container and type scale are
+   applied to neither. Do this before Phase 4's screens, or both move under them.
+2. **Write `docs/superpowers/plans/2026-11-03-web-redesign-phase-3.md`**, then claim G3 on the green
+   median-of-3 Lighthouse this tree already produces (exit 0, 1 585 B and 20 ms of margin).
 3. **Phase 4, in the planned order:** `configurer -> results -> build detail -> home -> presets ->
    composants -> guides -> enregistrements -> legal`, one screen per task with its own gate. **Home is
    fourth, not first.** Its brief is `SCREENS.md`'s `accueil_morocco_pc` row — hero, presets, trust
@@ -125,16 +146,14 @@ the lever and were **not** run.
    (`presetsForBuild`, `loadPresetCached`, `orderBuilds`, `priceProvenance`, `pageAlternates`), not a
    new data path. "From scratch" applies to the markup; the loaders encode one API read per budget, the
    skip-a-broken-preset rule and the canonical surface.
-4. **The header and footer are still un-restyled** (Phase 3's other half). Their *structure* now matches
-   the design — no duplicate page links at 360 px — but the visual treatment does not: the design's
-   header has a logo tile with a page subtitle, and DESIGN.md's container and type scale are not applied
-   to either. Do this before Phase 4's screens, or both move under them.
-5. **Flake to chase when convenient:** `e2e/wizard-budget.spec.ts:76` ("a field below the minimum
-   clamps to it on blur") failed on **two** separate identical runs (2026-11-03) and passed on retry
-   both times. Reproduce with `--repeat-each=20`, fix the race, do not add a retry.
-6. **The tab-bar copy is a recorded deviation now** (D-20): the design says "Composants" and
-   "Enregistrements", the bar ships "Pièces" and "Gardés" for 360 px. Re-check it when the bar is
-   re-viewed on a real phone.
+4. **The wizard's budget field is a flake FAMILY, not one test:** `wizard-budget.spec.ts` 76, 94 and 220
+   plus `wizard.spec.ts` 108 all reported flaky in one run on 2026-11-03 (each passed on retry).
+   Reproduce with `--repeat-each=20`, fix the race in the component, do not add retries.
+5. **The tab-bar copy is a recorded deviation** (D-20): the design says "Composants" and "Enregistrements",
+   the bar ships "Pièces" and "Gardés" for 360 px. Re-check it on a real phone.
+6. **`global-error.tsx` still does not exist.** The segment boundary catches page errors; an error in the
+   ROOT layout would fall through to Next's default. It cannot use the generated copy's provider-free path
+   (it replaces `<html>`), so it is its own small decision, not a copy of `error.tsx`.
 
 ## Gates measured on the handed-off tree (`3329074` + this doc)
 

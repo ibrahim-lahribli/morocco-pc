@@ -463,6 +463,14 @@
     "updated": "Mis à jour le {date}",
     "all": "Tous les guides"
   },
+  "errors": {
+    "eyebrow": "Erreur",
+    "title": "Cette page n'a pas pu s'afficher",
+    "body": "Une erreur inattendue a interrompu l'affichage. Vos réponses ne sont pas perdues : réessayez, ou relancez une configuration.",
+    "retry": "Réessayer",
+    "home": "Revenir à l'accueil",
+    "digest": "Référence de l'erreur : {id}"
+  },
   "notFound": {
     "eyebrow": "Erreur 404",
     "title": "Page introuvable",
