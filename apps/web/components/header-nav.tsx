@@ -21,12 +21,21 @@ import { cn } from "@/components/ui/cn";
  * (`/composants/comparer`) and a product page (`/composants/[slug]`) sit
  * UNDER Composants, so the section link says so. The trailing-slash guard
  * keeps a prefix from matching a sibling ("/composant" would).
+ *
+ * `md+` ONLY (`hidden md:flex`), because that is what the design draws and
+ * what PLAN.md specifies: at 360 px the Stitch header is the brand and the
+ * language control, and the phone's navigation is the bottom tab bar, which
+ * already carries these same three destinations. Visible, the links cost a
+ * second wrapped row — a 118 px header measured at 360 px on 2026-11-03 —
+ * on every phone page, duplicating three tab cells. A CSS breakpoint rather
+ * than a conditional render: it cannot disagree with the tab bar's own
+ * `md:hidden`, and the labels keep their home in one place either way.
  */
 export function HeaderNav({ items }: { items: Array<{ href: string; label: string }> }) {
   const pathname = usePathname() ?? "";
 
   return (
-    <ul className="flex max-sm:basis-full max-sm:order-last items-center gap-x-1">
+    <ul className="hidden items-center gap-x-1 md:flex">
       {items.map((item) => {
         const current = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (

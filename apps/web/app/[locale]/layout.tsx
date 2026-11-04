@@ -226,25 +226,26 @@ export default async function LocaleLayout({
             </Link>
             {/*
              * The inline page links, as a list (they are navigation, not
-             * prose). `max-sm:basis-full` is what makes them wrap: below 640 px
-             * the row forces a second line under the brand. Two measured
-             * details fixed the first 360 px pass: (1) `px-2`, not `px-3` —
-             * the three links are 307 px against the ~313 px a 360 px viewport
-             * offers after the scrollbar, so px-3 overflowed by ~3 px, the
-             * horizontal overflow S1 forbids; (2) `max-sm:order-last`, because
-             * flex line-packing follows layout order and a middle basis-full
-             * item left the switcher alone on a THIRD row — ordered last, it
-             * packs as [brand + switcher] / [links]. DOM order stays
-             * brand → links → switcher (and desktop keeps one row, the links
-             * inline between the brand and the switcher). Each link is
-             * `h-tap` (44 px, the accessibility floor) with the same hover
-             * and rounded focus treatment as the locale switcher beside it,
-             * and no direction-specific class anywhere: `dir` on <html> flips
-             * the whole flex row, so the RTL mirror is free. The list is a
+             * prose). They are `md+` ONLY, which is the design's own header
+             * and PLAN.md's "`md+` top nav": at 360 px the Stitch header
+             * is the brand and the language control, and the phone's
+             * navigation is the bottom tab bar — which already carries these
+             * same three destinations. Visible at 360 px they cost a wrapped
+             * second row (a 118 px header, measured 2026-11-03), duplicating
+             * three tab cells on every phone page; `header-nav.tsx` owns the
+             * breakpoint class. `px-2`, not `px-3`: the three links are
+             * 307 px against the ~313 px a 360 px viewport offers after the
+             * scrollbar, so px-3 overflowed by ~3 px, the horizontal
+             * overflow S1 forbids — the tighter padding stays for the md row
+             * they now occupy. Each link is `h-tap` (44 px, the
+             * accessibility floor) with the same hover and rounded focus
+             * treatment as the locale switcher beside it, and no
+             * direction-specific class anywhere: `dir` on <html> flips the
+             * whole flex row, so the RTL mirror is free. The list is a
              * client component (`header-nav.tsx`) because "which page is
              * current" is request-path knowledge a server layout lacks — the
-             * component owns the wrap, tap and aria-current logic; the LABELS
-             * stay here, shell-owned, passed in as props.
+             * component owns the breakpoint, tap and aria-current logic; the
+             * LABELS stay here, shell-owned, passed in as props.
              */}
             <HeaderNav
               items={[
@@ -291,7 +292,7 @@ export default async function LocaleLayout({
          * S25: the shelf gets its OWN nav above that one, because it is not a
          * legal document and putting it in the "Informations légales" set would
          * make that landmark misdescribe itself. It now also has a header link
-         * (the second row the header nav wraps onto at small widths); the
+         * (visible from 768 px, like the header's other page links); the
          * footer copy STAYS, deliberately duplicated, because the footer is
          * the one place every page carries — the 404 included — and a user who
          * scrolled past the header still reaches the shelf from here.

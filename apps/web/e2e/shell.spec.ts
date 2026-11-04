@@ -38,9 +38,9 @@ test("the shelf is one click from every page, even with nothing saved", async ({
   // Nothing saved here: the empty state, which is a true statement, not an error.
   await expect(page.getByRole("heading", { name: "Aucun enregistrement" })).toBeVisible();
 
-  // The header's three links wrap onto their own row below the brand and the
-  // switcher at 360 px, and the shelf is duplicated in the footer, so both ways
-  // in fit without a horizontal scroll.
+  // The shelf is duplicated in the footer, so the way in fits at 360 px even
+  // though the header's page links are `md+` only (they used to wrap onto a
+  // second row here).
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
@@ -112,6 +112,24 @@ test("the tab bar marks the current section and never covers the last content", 
     return footer.getBoundingClientRect().bottom > nav.getBoundingClientRect().top;
   });
   expect(overlaps).toBe(false);
+});
+
+test("the header's page links are md+ only, as the design and PLAN.md specify", async ({
+  page,
+}) => {
+  // At 360 px the Stitch header is the brand and the language control; the
+  // phone's navigation is the tab bar, which already carries these same three
+  // destinations. Visible here they cost a wrapped second row — a 118 px
+  // header measured at 360 px on 2026-11-03 — duplicating three tab cells.
+  await page.goto("/fr");
+  const headerNav = page.getByRole("navigation", { name: "Navigation principale" });
+  await expect(headerNav.getByRole("link", { name: "Composants" })).toBeHidden();
+  await expect(headerNav.getByRole("link", { name: "Guides" })).toBeHidden();
+
+  // And from 768 px — where the bar is gone — they are the navigation again.
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect(headerNav.getByRole("link", { name: "Composants" })).toBeVisible();
+  await expect(headerNav.getByRole("link", { name: "Guides" })).toBeVisible();
 });
 
 test("from 768 px the tab bar is gone and the header nav is not", async ({ page }) => {

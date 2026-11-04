@@ -4,12 +4,14 @@ Read this first, then `CONTEXT.md`. This file is the state of the branch, not th
 
 ## Where the branch stands
 
-- Branch `web-redesign`, branched from `master` (`e3fe882`), **pushed and in sync with `origin/web-redesign`**.
+- Branch `web-redesign`, branched from `master` (`e3fe882`), pushed; **one commit ahead of
+  `origin/web-redesign`** after the validation pass below (push it before handing off again).
   The commit count is deliberately not written down: it changes with every commit. Measure it with
   `git rev-list --count master..web-redesign`.
 - Phases 0 and 1 are closed. **Phase 2 (kit) is CLOSED at gate G2.** **Phase 3 (shell) is in progress:
   G3 is NOT claimed** — the tab bar, the landmark naming and this session's review fixes are in, but
-  error boundaries are not started and the Lighthouse gate is red (see below).
+  error boundaries are not started and the Lighthouse gate sits **on** its line rather than behind it
+  (see the corrections below).
 - `docs/web-v2/PROGRESS.md` is the ledger. `docs/superpowers/plans/` holds plan files for phases **0
   and 2 only** — there is no phase-3 plan, which is why the header/footer restyle and the `md+` half
   of PLAN.md's Phase 3 line drifted out of view until the review found them. Writing that plan is
@@ -72,42 +74,67 @@ built stylesheet** (source `app/globals.css` is 19 164 B / 403 lines, so the wei
 utilities) and a `display: swap` font. The next session's first job is to attribute that delay — the
 protocol and its decision rule are in the next section, so it does not get re-derived.
 
+## Corrections after the validation pass (2026-11-03, same day)
+
+Every gate was re-run on the handed-off tree (`d7e6f11`) **before anything was changed**. Most claims
+survived to the digit; three did not.
+
+| Claim in this doc | Measured | Verdict |
+|---|---|---|
+| typecheck / build / `check:api-types` PASS | PASS | holds |
+| `check:tokens` 102 files, `check:i18n` 100 files | 102 / 100 | holds |
+| `npx playwright test e2e/shell.spec.ts` 9/9 | 9/9 | holds |
+| `CI=1 npm test` 392 passed / 2 skipped | **391 passed / 2 skipped + 1 flaky** (394 specs) | same total; the `wizard-budget` flake fired again |
+| `npm run lint` PASS, 0 warnings | exit 0, **1 warning** | true of tracked files only — see below |
+| `npm run test:lighthouse` **FAIL, LCP 2 503 ms** | **PASS (exit 0)**, result median **2 500 ms** | **not reproducible — the median landed ON the budget, not over it** |
+| LCP element `section > section.mt-6 > dl.mt-3 > div.text-body` | identical selector | holds |
+| script 168 700 / 167 428 B | 168 718 / 167 446 B | holds (±20 B) |
+| header nav 118 px at 360 px | 118 px, 3 links | holds |
+| `error.tsx` absent, G3 not claimed | absent | holds |
+
+**So the gate is amber, not red.** Two independent median-of-3 runs exited 0: result medians 2 500 ms
+(runs 2 561 / 2 500 / 2 486) with the preset at 2 492 ms (one sample 2 875 ms). 2 503 ms was a real
+sample, but a median landing exactly on the threshold is neither a failure nor a pass with confidence.
+G3 is blocked on **headroom**, not on a red run — which changes what the next session has to fix.
+
+**The lint warning** is `tmp/validate-shell.mjs`, a gitignored scratch probe inside eslint's scope. The
+committed tree is clean; the working tree reports one warning while `apps/web/tmp/` exists.
+
+**The render cost is not in the CSS or the fonts, and the old step 1 is answered.** Mining the
+`.lighthouseci` reports already on disk (no rebuild): observed LCP = observed FCP = **159-175 ms**,
+TTFB 4-16 ms, one 48 732 B `woff2` at 11-26 ms, the 16 475 B stylesheet at 23-28 ms,
+`unused-css-rules: 0`, `font-display: 0`, `render-blocking-resources` 0 on the result route,
+main-thread ~95-102 ms with two tasks over 10 ms, and one 77 ms long task starting at 2 558 / 2 707 ms —
+after LCP. The 2 045 ms "render delay" is the simulator's arithmetic, not a slow paint: every resource
+the paint could wait on arrives inside 30 ms. The two ablations this doc proposed are therefore **not**
+the lever and were **not** run.
+
 ## Next session — start here
 
-1. **Name the render cost before changing anything.** Mine the reports already on disk first (free, no
-   rebuild): the `.css` and `.woff2` entries in `network-requests` (start/end times), plus
-   `render-blocking-resources`, `unused-css-rules` and `dom-size`. That alone distinguishes "the CSS
-   arrived late and everything waited" from "the CSS arrived early and styling a large tree took two
-   seconds" — opposite fixes.
-   Then two scratch ablations, **one change per build**, each measured median-of-3 on the same two
-   fixtures, and each reverted before the next:
-   - fonts: point `--font-sans` at a system stack and drop `inter.variable` (the Arabic `@font-face`
-     blocks are `/ar`-only and irrelevant to both fixtures — do not spend a build on them);
-   - CSS: remove `@layer components` (`globals.css:342+`) and the Arabic overrides (`:301`, `:314`)
-     coarsely first; splitting only helps if the coarse run moves the number.
-   **Decision rule:** > 200 ms movement names the lever; 100–200 ms is real but insufficient alone;
-   < 100 ms rules it out. Noise is ±60 ms on this box, so a single run cannot resolve a small change.
-   **Guardrail:** `next start` serves `.next`, so revert the source **and rebuild** or you measure the
-   old code — the trap that has cost this branch red runs twice. Never edit `lighthouserc.cjs`
-   thresholds to make the gate pass.
-2. **Owner decision: hide the header's page links below 768 px**, or keep them and log a `DEVIATIONS`
-   row. PLAN.md already says "`md+` top nav", so hiding needs no deviation. Do this before any Phase 4
-   screen, or the shell moves under the screens.
-3. **`error.tsx` is still absent**, and it needs a client message path: mount the next-intl provider
-   (ships both catalogues into a shared chunk — measure against the 5 380 B margin *first*) or import a
-   static catalogue inside the boundary. This is a decision, not a tidy-up.
-4. **Write `docs/superpowers/plans/2026-11-03-web-redesign-phase-3.md`**, then claim G3 only on a green
-   median-of-3 Lighthouse with the fix from step 1 — not before.
-5. **Phase 4, in the planned order:** `configurer → results → build detail → home → presets →
-   composants → guides → enregistrements → legal`, one screen per task with its own gate. **Home is
+1. **`error.tsx` is now the ONLY thing G3 waits on**, and it needs a client message path: mount the
+   next-intl provider (ships both catalogues into a shared chunk — measure against the ~5.4 KB
+   result-route margin *first*) or import a static catalogue inside the boundary. This is a decision,
+   not a tidy-up.
+2. **Write `docs/superpowers/plans/2026-11-03-web-redesign-phase-3.md`**, then claim G3 only on a
+   green median-of-3 Lighthouse with the boundary in place. Nothing else in Phase 3 is outstanding:
+   the tab bar, landmark naming, review fixes and the `md+` header nav are all in and green.
+3. **Phase 4, in the planned order:** `configurer -> results -> build detail -> home -> presets ->
+   composants -> guides -> enregistrements -> legal`, one screen per task with its own gate. **Home is
    fourth, not first.** Its brief is `SCREENS.md`'s `accueil_morocco_pc` row — hero, presets, trust
    strip **and guides**, with the two state variants merged — built on the existing loaders
    (`presetsForBuild`, `loadPresetCached`, `orderBuilds`, `priceProvenance`, `pageAlternates`), not a
    new data path. "From scratch" applies to the markup; the loaders encode one API read per budget, the
    skip-a-broken-preset rule and the canonical surface.
-6. **Flake to chase when convenient:** `e2e/wizard-budget.spec.ts:76` ("a field below the minimum
-   clamps to it on blur") flaked once in two identical runs and passed on retry. Reproduce with
-   `--repeat-each=20`, fix the race, do not add a retry.
+4. **The header and footer are still un-restyled** (Phase 3's other half). Their *structure* now matches
+   the design — no duplicate page links at 360 px — but the visual treatment does not: the design's
+   header has a logo tile with a page subtitle, and DESIGN.md's container and type scale are not applied
+   to either. Do this before Phase 4's screens, or both move under them.
+5. **Flake to chase when convenient:** `e2e/wizard-budget.spec.ts:76` ("a field below the minimum
+   clamps to it on blur") failed on **two** separate identical runs (2026-11-03) and passed on retry
+   both times. Reproduce with `--repeat-each=20`, fix the race, do not add a retry.
+6. **The tab-bar copy is a recorded deviation now** (D-20): the design says "Composants" and
+   "Enregistrements", the bar ships "Pièces" and "Gardés" for 360 px. Re-check it when the bar is
+   re-viewed on a real phone.
 
 ## Gates measured on the handed-off tree (`3329074` + this doc)
 
@@ -120,8 +147,8 @@ protocol and its decision rule are in the next section, so it does not get re-de
 | `npm run check:api-types` | PASS — contract 1.10.0, `schema.d.ts` byte-identical |
 | `npm run build` | PASS |
 | `npx playwright test e2e/shell.spec.ts` | PASS — **9/9** |
-| `CI=1 npm test` | PASS — **392 passed / 2 skipped** (394 specs, 35.7 s) |
-| `npm run test:lighthouse` | **FAIL — LCP 2 503 ms on the result route; see above** |
+| `CI=1 npm test` | PASS — but 391 passed / 2 skipped / **1 flaky** on re-measurement (394 specs); 393 passed / 2 skipped after the header fix (395 specs, 36.5 s) |
+| `npm run test:lighthouse` | **PASS (exit 0)** on re-measurement — result median 2 500 -> **2 494 ms**, preset 2 492 -> 2 481 ms. The line is *touched*, not cleared: see the corrections |
 
 The two skips are `e2e/wizard-browser-api.spec.ts` (needs `E2E_BROWSER_API=1`) and
 `e2e/wizard-engine.spec.ts` (the opt-in real-engine harness). Both by design.

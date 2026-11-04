@@ -17,8 +17,8 @@ this work.
 |---|---|
 | 0 — baseline, feasibility, reference captures | **done** (8 tasks, 78 reference PNGs) |
 | 1 — tokens | **done**: DESIGN.md adopted in full — 67 raw colours + 13 aliases, full type scale, Arabic +10 % leading |
-| 2 — kit and mobile primitives | not started (gate G2) |
-| 3 — shell | not started (G3) |
+| 2 — kit and mobile primitives | **done** — closed at gate G2 (T1-T8; D-15 to D-19) |
+| 3 — shell | in progress — tab bar, landmark naming, review fixes and the `md+` header nav are in; `error.tsx` is absent, so **G3 is not claimed** |
 | 4 — screens, one task each | not started (G4.n) |
 | 5 — desktop + RTL pass | not started (G5) |
 | 6 — hardening, Lighthouse, OG cards | not started |
@@ -28,12 +28,16 @@ Branch `web-redesign`. One task = one commit. Master is touched only at release.
 
 ## The numbers that constrain every decision
 
-- **Suite: 381 specs, 379 passed, 2 skipped** (`wizard-browser-api`, `wizard-engine` — both opt-in).
+- **Suite: 395 specs, 393 passed, 2 skipped** (`wizard-browser-api`, `wizard-engine` — both opt-in).
+  One pre-existing flake is live: `e2e/wizard-budget.spec.ts` "a field below the minimum clamps to it on
+  blur" fails intermittently on this box and passes on retry (two sightings on 2026-11-03).
 - **Lighthouse, `error` level, median of 3, on TWO URLs** (`/fr/config/<fixture>`, `/fr/config-pc-gamer-9000-dh`):
-  LCP ≤ 2 500 ms (measured 2 482 / 2 486), CLS ≤ 0.1 (0), script ≤ 174 080 B (158 831 / 167 107),
-  performance ≥ 0.90 (98). **Headroom: ~12 ms LCP, 6 973 B script on the preset page** (re-measured after the full token adoption: 2 485 / 2 488 ms).
-- `check:tokens`: 84 files; no hex literal, no palette utility, no physical side, no `text-left/right`.
-- `check:i18n`: 82 files; fr/ar keys and ICU placeholders identical; numbers/dates only via
+  LCP ≤ 2 500 ms (measured **2 494 / 2 481**), CLS ≤ 0.1 (0), script ≤ 174 080 B (**168 710 / 167 438**),
+  performance ≥ 0.90 (98). **Headroom: 6 ms LCP and 5 370 B script on the result page, 6 642 B on the
+  preset page — the result route is the binding one since the tab bar landed.** A median that lands ON
+  2 500 ms is a coin flip, so no screen may add above-the-fold weight without re-measuring.
+- `check:tokens`: 102 files; no hex literal, no palette utility, no physical side, no `text-left/right`.
+- `check:i18n`: 100 files; fr/ar keys and ICU placeholders identical; numbers/dates only via
   `lib/i18n/format.ts`; caller-filled templates read with `t.raw`.
 - `check:api-types`: contract **1.10.0**, `lib/api/schema.d.ts` must stay byte-identical to the generator.
 

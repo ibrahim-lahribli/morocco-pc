@@ -273,3 +273,55 @@ user can see, and no assertion weakened.
 **2 503 ms** against the 2 500 ms budget (runs 2 503 / 2 493 / 2 559). The Phase 3 row above records
 2 495 ms — the same measurement at the margin, not a contradiction — and the tab bar's ~9.8 KB on
 that route is what moved it there. That is the next action, not a documentation edit.
+
+## Phase 3 — the `md+` header nav, settled by the design (2026-11-03)
+
+HANDOFF left this as an owner decision: hide the header's page links below 768 px, or keep them and log
+a `DEVIATIONS` row. **The design settles it, so no owner input was needed.** The Stitch
+`accueil_morocco_pc` screen at 360 px carries the brand and the language control and — per D-14 —
+nothing else in the header, and PLAN.md's Phase 3 line already says "`md+` top nav". Keeping the links
+would have been the departure, and the visible one: measured in the browser at 360 px on the handed-off
+tree, the header nav is **118 px** tall (two rows: brand + switcher, then three links) on every phone
+page, duplicating three of the five tab cells.
+
+| Change | Where |
+|---|---|
+| the list is `hidden md:flex` (`display:none` below 768 px, so no layout cost) | `components/header-nav.tsx` |
+| a new spec pins hidden at 360 / visible at 768 | `e2e/shell.spec.ts` (the 10th spec) |
+| the two comments that described the old wrap now describe the breakpoint | `app/[locale]/layout.tsx` |
+
+| Gate | Result |
+|---|---|
+| `npm run typecheck` | PASS |
+| `npm run lint` | PASS — exit 0, **1 warning, from a gitignored scratch probe** (see the note) |
+| `npm run check:tokens` | PASS — 102 files |
+| `npm run check:i18n` | PASS — 100 files |
+| `npm run build` | PASS |
+| `npx playwright test e2e/shell.spec.ts` | PASS — **10/10** |
+| `CI=1 npm test` | PASS — **393 passed / 2 skipped** (395 specs, 36.5 s) |
+| `npm run test:lighthouse` | **PASS** (exit 0) — LCP medians **2 481 ms** (preset) / **2 494 ms** (result) |
+
+**The LCP gain is NOT claimed.** Removing a header row was the obvious candidate for the 6 ms of slack
+this branch has lived on, and the medians moved 2 492 -> 2 481 ms and 2 500 -> 2 494 ms: **inside the
+±60 ms noise** this box produces. Measured, reported, not credited. The gate now clears its line by
+6 ms, which is luck rather than headroom.
+
+### Mining the `.lighthouseci` reports (do not re-derive)
+
+`tmp/lh-probe.mjs` and `tmp/lh-deep.mjs` read the reports already on disk — no rebuild. On both
+fixtures, from the newest runs: **observed LCP = observed FCP = 159-175 ms**, TTFB 4-16 ms, the single
+48 732 B `woff2` arriving at 11-26 ms, the 16 475 B stylesheet at 23-28 ms, `unused-css-rules: 0`,
+`font-display: 0`, `render-blocking-resources` 0 on the result route (1 on the preset, 304 ms
+wasted), main-thread total ~95-102 ms with only **two tasks over 10 ms**, and exactly one long task
+(77 ms) starting at 2 558 / 2 707 ms — after LCP.
+
+So the 2 045 ms "render delay" is arithmetic of the simulator, not a slow paint path: every resource the
+paint could wait on has arrived inside the first 30 ms, and nothing blocks the main thread for 77 ms
+until after LCP. Per HANDOFF's own decision rule the two ablations it proposed (system font stack, drop
+`@layer components`) are therefore **not** the lever and were not run — each costs a build plus a
+median-of-3 (~6 min) to answer a question the on-disk evidence already answers.
+
+**Note on the lint warning.** `npm run lint` exits 0 with one warning while `apps/web/tmp/` exists:
+`tmp/validate-shell.mjs`, a gitignored scratch probe from the previous session, is inside eslint's
+scope. On tracked files only it is 0 warnings, which is what HANDOFF recorded. The scratch probe was
+left in place rather than deleted — it is the previous session's working evidence.
