@@ -543,3 +543,22 @@ PREVIOUS value (`7 000`), and the same test passes standalone 3/3 and in the fin
 The sequence races its URL writes when successive presses land faster than a commit (the
 `budget-step.tsx` `choose` path), which D7 does not touch. It is a pre-existing flake, carried
 as a separate finding — no assertion was relaxed for it.
+
+## Task 3 — S2 direct primitive imports in the error boundary (2026-11-04)
+
+`app/[locale]/error.tsx` imported `Alert`, `Button` and `LinkButton` from the
+`@/components/ui` barrel. It now names each file (`alert`, `button`), so the tree's only
+client island holds no barrel reference. Measured with `npm run test:lighthouse` — script
+transfer bytes, median of 3 — on both fixture URLs, before and after, each from a fresh
+`next build`:
+
+| fixture | before (`fc937c3`) | after | delta |
+|---|---|---|---|
+| `/fr/config/3f5a…` | 172 652 B | 170 913 B | **−1 739 B** |
+| `/fr/config-pc-gamer-9000-dh` | 171 380 B | 169 641 B | **−1 739 B** |
+
+KEPT: script falls on both routes by the same 1 739 B, so the barrel was pulling the
+kit's other primitives into the boundary's chunk rather than being tree-shaken away. The
+after-run also passes all four enforced assertions (LCP medians 2 497 / 2 483 ms, CLS 0,
+performance 0.97 / 0.98); the before-run missed only LCP (2 561 / 2 515 ms), the T7 sample
+band, and is recorded here as the reason the before pass is not claimed as green.

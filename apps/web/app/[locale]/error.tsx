@@ -42,7 +42,8 @@
 import { useParams } from "next/navigation";
 import { useEffect } from "react";
 
-import { Alert, Button, LinkButton } from "@/components/ui";
+import { Alert } from "@/components/ui/alert";
+import { Button, LinkButton } from "@/components/ui/button";
 import { ERROR_COPY } from "@/lib/i18n/error-copy.generated";
 import { localePath } from "@/lib/i18n/paths";
 
