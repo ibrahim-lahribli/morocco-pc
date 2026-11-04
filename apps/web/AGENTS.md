@@ -32,4 +32,5 @@ i18n, inputs-applied, swap and the opt-in engine harnesses.
 
 A spec joins the layout set by tagging its `test(` or `test.describe(`:
 `test("name", { tag: "@layout" }, async ({ page }) => …)`. Tag only assertions that can actually
-differ by width — a spec that navigates and reads text does not need three more runs.
+differ by width — a spec that navigates and reads text does not need three more runs. Never write a
+project or spec total into prose: `npx playwright test --list` prints the current truth.

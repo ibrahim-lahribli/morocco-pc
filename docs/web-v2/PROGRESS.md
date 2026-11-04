@@ -1,9 +1,29 @@
-# Phase 0 progress — web redesign
+# Progress — web redesign (phases 0-3)
 
 Branch `web-redesign` (created 2026-11-03 from `master` @ `e3fe882`). Plan: `PLAN.md`.
 Implementation plan: `docs/superpowers/plans/2026-11-03-web-redesign-phase-0.md`.
 
 Every row below was RUN on this machine unless it says BLOCKED. No `.env` value was read.
+
+## Status — phases and gates (single source of truth)
+
+Phase and gate status lives HERE. `CONTEXT.md`, `HANDOFF.md`, the phase-3 plan and `AGENTS.md` defer to
+this table; where one of them disagrees with it, this table is right.
+
+| Phase | Gate | Status |
+|---|---|---|
+| 0 — baseline, feasibility, reference captures | — | **done** (2026-11-03) |
+| 1 — tokens | — | **done** |
+| 2 — kit and mobile primitives | G2 | **CLOSED** |
+| 3 — shell | G3 | **CLAIMED 2026-11-04** — five-criterion evidence pack in `## T8` below |
+| 4 — screens | G4.n | not started |
+| 5 — desktop + RTL | G5 | not started |
+| 6 — hardening, Lighthouse, OG cards | — | not started |
+| 7 — release | — | not started (human) |
+
+The suite's size is deliberately not written into this file's prose: `cd apps/web && npx playwright test
+--list` prints it, and `npm test` now runs four viewport projects, so a run count and a spec count are
+different numbers. Dated measurements inside individual ledger entries stay as measured.
 
 ## Baseline 2026-11-03 (Task 2)
 
@@ -230,7 +250,7 @@ keeps; it is listed in `HANDOFF.md`.
 | Mobile tab bar | **done** | `components/shell/tab-nav.tsx` is the one client island (`usePathname` → which cell is current; longest path match, and a URL that matches no tab lights none rather than defaulting to home). Wired in the locale layout with five SHORT labels (`shell.tabItems.*`, fr + ar) — "Enregistrements" cannot fit a fifth of 360 px, so the bar says "Gardés" and the long name stays in the header, the footer and the page's h1. `md:hidden`, and `<body>` reserves the bar's height (released at `md`). |
 | Covered-content guard | **done** | The new spec failed on its FIRST run and the failure was real: the bar is `h-20` + a 1 px top border = 81 px, while the reserved padding was exactly 80 px, so the last pixel of content could sit behind the border. `TAB_BAR_OFFSET` and `STICKY_BAR_OFFSET` now add the border, and the spec measures the reserved padding against the bar's measured box. |
 | Footer clearance | **done** | The reservation was put on `<main>` first, which protects the last card but NOT the footer that follows it: measured in the browser at the bottom of `/fr` and `/fr/guides`, footer bottom **800 px** against bar top **719 px**, so the legal links sat behind the bar on every page. It lives on `<body>` now, and `e2e/shell.spec.ts` scrolls to the bottom and asserts the footer clears the bar — the assertion that fails if the reservation is ever moved back. |
-| Error boundaries | **NOT STARTED** | `error.tsx` must be a client component and this app has no client-side message path (`next-intl`'s provider is not mounted — which is why `HeaderNav` and `TabNav` take labels as props). Mounting the provider (ships the catalogues to the browser) versus importing a static catalogue inside the boundary is a decision for the owner; the 404 (`not-found.tsx`) already exists. **G3 is not claimed.** |
+| Error boundaries | **done** | `app/[locale]/error.tsx` ships the generated plain-object copy (`lib/i18n/error-copy.generated.ts`, derived by `scripts/gen-error-copy.mjs`, freshness gated by `check:i18n` rule 7) instead of `NextIntlClientProvider`, which measured +15 845 B and fails the gate (D-21). Renders in both locales: HTTP 500, localized h1, error-tone `Alert`, retry + home, Next's digest, shell intact. `not-found.tsx` was already there; `global-error.tsx` is still absent, so a root-layout failure falls through to Next's default. |
 
 Suite after the shell wiring: **394 specs, 391 passed, 2 skipped** (35.9 s).
 
@@ -467,7 +487,7 @@ edge — 2 490 / 2 711 / 2 877 in ONE run set on ONE build.
 
 The remaining work is a DECISION, not a shave: make the hero `h1` the LCP candidate so it paints before
 that block, cut above-the-fold work, or re-baseline the budget with owner approval (thresholds are never
-edited to fit). **G3 is not claimed.**
+edited to fit). **G3 was not claimed on this tree**; the closing run cleared it — see `## T8 — the G3 evidence pack`.
 
 | Gate | Result |
 |---|---|
@@ -625,3 +645,47 @@ Four failures appeared on the first multi-project run, all in `shell.spec.ts`: t
 the project width while asserting the 360 px shell (bar visible, header links hidden). Both now pin
 360 with `setViewportSize` before their 360 half, exactly as the neighbouring 768 px tests already
 did — the assertions themselves are unchanged, and the shell file is 40/40 across the four projects.
+
+## T8 — the G3 evidence pack (2026-11-04)
+
+**G3 is CLAIMED on the tree this section closes.** The pack is the five exit criteria from
+`docs/superpowers/plans/2026-11-03-web-redesign-phase-3.md` §"Exit criteria for G3", one row each,
+with the evidence that satisfies it. Nothing below is inferred from a green suite.
+
+| # | Criterion | Evidence | Verdict |
+|---|---|---|---|
+| 1 | header and footer match the reference at 360 and 768 in **both** locales, or every departure is a `DEVIATIONS.md` row | **T6 (header):** 64 px row, drawn mark, pill switcher; visual check at 360/768 in fr + ar — header height 64 px (was 71, 118 before T5), horizontal overflow 0, page links 0 at 360 / 3 at 768, **+6 B** of script for the whole restyle. **T7 (footer):** centred column, visual check at 360/768 in fr + ar on the built app — centred, RTL mirrored, four distinct `nav` landmarks, `scrollWidth - clientWidth = 0`, one link per `li`. Five departures recorded rather than absorbed: **D-22** (drawn mark, not the remote placeholder), **D-23** (no page subtitle), **D-24** (header not `fixed`), **D-25** (no bookmark badge), **D-26** (no copyright/year line). | **MET** |
+| 2 | `typecheck`, `lint`, `check:tokens`, `check:i18n`, `check:api-types`, `build` and the full suite green | `typecheck` **0** · `lint` **0** (no warnings on the tracked tree) · `check:tokens` PASS, **104 files** · `check:i18n` PASS, **101 files**, 2 catalogues, generated copy fresh (rule 7) · `check:api-types` PASS, contract **1.10.0**, `schema.d.ts` byte-identical · `build` **0** · `CI=1 npm test` **678 expected / 0 unexpected / 2 skipped**, four viewport projects, **50 s** wall. The two skips are the opt-in harnesses (`wizard-browser-api`, `wizard-engine`). | **MET** |
+| 3 | Lighthouse on both fixtures, median of 3, all four `error` assertions, exit 0, numbers written into this file | `npm run test:lighthouse` **exit 0**. Result route (`/fr/config/3f5a…`): LCP **2 486 ms** (2 496 / 2 486 / 2 486), CLS **0**, script **170 913 B**, performance **0.98**. Preset route (`/fr/config-pc-gamer-9000-dh`): LCP **2 491 ms** (2 491 / 2 485 / 2 561), CLS **0**, script **169 641 B**, performance **0.98**. Budgets untouched: 2 500 ms / 0.1 / 174 080 B / 0.90. Margins: **14 ms and 9 ms** of LCP, **3 167 B and 4 439 B** of script. | **MET** |
+| 4 | the two landmarks still have distinct names; the bar's reservation still clears the footer; the skip link still reaches `#main`, asserted | `e2e/shell.spec.ts`: the landmark-names test pins "Navigation principale" ≠ "Navigation de l’application"; the footer-clearance test scrolls to the bottom and measures the footer's bottom against the bar's top; `skip link moves keyboard users to the main content` asserts the `#main` target (and the reference test pins `href="#main"`). The file is **40/40** across the four projects. | **MET** |
+| 5 | `PROGRESS.md` and `HANDOFF.md` carry the result | this section, plus `HANDOFF.md`'s header, which now defers phase/gate status to this file. | **MET** |
+
+### What the claim does NOT cover
+
+- **The S4 error-boundary spec is BLOCKED, not done** (see `## Task 4`): no Playwright test reaches
+  `app/[locale]/error.tsx`, because `lib/result/load.ts` turns every 5xx into the page's own
+  `unavailable` state. G3's five criteria do not include it; the owner decision (four options) is open.
+- `global-error.tsx` does not exist, so a root-layout failure falls through to Next's default.
+- The LCP margin is **14 ms / 9 ms** — the thinnest this gate has run at. T7's local 2 640 ms red did
+  not reproduce here, so a future red in the 2.5-2.7 s band is variance until an A/B says otherwise.
+  Option (a) (hero `h1` as the LCP candidate) remains the only change that buys real headroom.
+- The wizard budget flake family is **fixed** in `77491d7`: `onChange` committed a URL write per
+  keystroke and an older transition could land last; the write is now debounced 200 ms and flushed on
+  blur, Enter and rail moves. 8 failed + 13 flaky of 60 before, 60/60 after.
+- The suite's size is not pinned in prose — `npx playwright test --list` prints it. `npm test` runs four
+  viewport projects (S6), so its run count is larger than its spec count.
+
+### Gates, this run (2026-11-04)
+
+| Command | From | Result |
+|---|---|---|
+| `npm run typecheck` | `apps/web` | PASS (exit 0) |
+| `npm run lint` | `apps/web` | PASS (exit 0, no warnings) |
+| `npm run check:tokens` | `apps/web` | PASS — 104 files |
+| `npm run check:i18n` | `apps/web` | PASS — 101 files, 2 catalogues |
+| `npm run check:api-types` | `apps/web` | PASS — contract 1.10.0 |
+| `npm run build` | `apps/web` | PASS (exit 0) |
+| `CI=1 npm test` | `apps/web` | PASS — 678 expected / 0 unexpected / 2 skipped, 50 s |
+| `npm run test:lighthouse` | `apps/web` | PASS (exit 0) — 4 `error` assertions, both URLs, median of 3 |
+| `node scripts/verify-docs.js --offline` | repo root | PASS |
+| `npm run gen:decisions -- --check` | repo root | PASS — `docs/DECISION_INDEX.md` fresh |

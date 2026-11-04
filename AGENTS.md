@@ -290,8 +290,9 @@ Arabic guide bodies, `ar` hreflang + sitemap entries, and a locale key/placehold
 states (`e2e/legal.spec.ts`, `e2e/analytics.spec.ts`, `e2e/states.spec.ts`), S23 the compare view
 (`e2e/compare.spec.ts`, 11 specs) and S25's saved builds at `/{locale}/enregistrements`
 (`e2e/saved.spec.ts` 11, `e2e/saved-model.spec.ts` 12, plus 2 footer-entry specs in
-`e2e/shell.spec.ts`) plus S26's input effects (`e2e/inputs-applied.spec.ts`, 5 specs, Decision 52) plus S24's live swap control (`e2e/swap.spec.ts`, 10 specs, Decisions 55 + 56): the suite is **378 specs**,
-measured 2026-10-26 on a fresh `next build` without `E2E_BROWSER_API` as **376 passed / 2 skipped**, the two
+`e2e/shell.spec.ts`) plus S26's input effects (`e2e/inputs-applied.spec.ts`, 5 specs, Decision 52) plus S24's live swap control (`e2e/swap.spec.ts`, 10 specs, Decisions 55 + 56). The suite's size is
+not pinned here — `cd apps/web && npx playwright test --list` prints it. Measured 2026-10-26 on a fresh
+`next build` without `E2E_BROWSER_API` it was **378 specs, 376 passed / 2 skipped**, the two
 skips being `e2e/wizard-browser-api.spec.ts` (needs `E2E_BROWSER_API=1`) and `e2e/wizard-engine.spec.ts` (the
 opt-in real-engine harness below). The figures before the swap commit added its three apply specs were 373
 passed / 2 skipped of 375 (2026-10-25), and 361 specs with `E2E_BROWSER_API=1` (2026-10-23) were 360 passed

@@ -18,7 +18,7 @@ this work.
 | 0 — baseline, feasibility, reference captures | **done** (8 tasks, 78 reference PNGs) |
 | 1 — tokens | **done**: DESIGN.md adopted in full — 67 raw colours + 13 aliases, full type scale, Arabic +10 % leading |
 | 2 — kit and mobile primitives | **done** — closed at gate G2 (T1-T8; D-15 to D-19) |
-| 3 — shell | in progress — tab bar, landmark naming, review fixes, the `md+` header nav, `error.tsx` and the HEADER restyle (T6) are in and green; the FOOTER restyle (T7) is not, so **G3 is not claimed** |
+| 3 — shell | **done — CLOSED at G3 (2026-11-04)**: tab bar, landmark naming, review fixes, `md+` header nav, `error.tsx`, header restyle (T6), footer restyle (T7); five-criterion evidence pack in `PROGRESS.md` `## T8`. Open inside the phase: the S4 error-boundary spec is BLOCKED (`PROGRESS.md` `## Task 4`) and `global-error.tsx` does not exist |
 | 4 — screens, one task each | not started (G4.n) |
 | 5 — desktop + RTL pass | not started (G5) |
 | 6 — hardening, Lighthouse, OG cards | not started |
@@ -28,14 +28,16 @@ Branch `web-redesign`. One task = one commit. Master is touched only at release.
 
 ## The numbers that constrain every decision
 
-- **Suite: 395 specs, 393 passed, 2 skipped** (`wizard-browser-api`, `wizard-engine` — both opt-in).
-  A flake FAMILY is live in the wizard's budget field: `wizard-budget.spec.ts` 76, 94, 220 and
-  `wizard.spec.ts` 108 all reported flaky in one run on 2026-11-03, each passing on retry.
+- **The suite's size is not pinned here**: `cd apps/web && npx playwright test --list` prints it, and
+  `npm test` runs four viewport projects (mobile-360 everything, mobile-390 / tablet-768 / desktop-1280
+  only the `@layout` specs), so a run count is not a spec count. The two opt-in harnesses
+  (`wizard-browser-api`, `wizard-engine`) are the only skips. The wizard budget FLAKE FAMILY is **fixed**
+  in `77491d7` — the URL write is debounced 200 ms and flushed on blur, Enter and rail moves, so one
+  settled answer is one write (60/60 repeated runs; was 8 failed + 13 flaky of 60).
 - **Lighthouse, `error` level, median of 3, on TWO URLs** (`/fr/config/<fixture>`, `/fr/config-pc-gamer-9000-dh`):
-  LCP ≤ 2 500 ms (measured **2 480 / 2 484**), CLS ≤ 0.1 (0), script ≤ 174 080 B (**172 495 / 171 223**),
-  performance ≥ 0.90 (0.98). **Headroom: 20 ms LCP and 1 585 B script on the result page, 2 857 B on the
-  preset page — the result route is the binding one, and the error boundary's copy spent 3 785 B of what
-  was there.** No screen may add above-the-fold weight without re-measuring.
+  LCP ≤ 2 500 ms (measured **2 486 / 2 491**), CLS ≤ 0.1 (0), script ≤ 174 080 B (**170 913 / 169 641**),
+  performance ≥ 0.90 (0.98). **Headroom: 14 ms + 9 ms of LCP, 3 167 B + 4 439 B of script — the result
+  route binds on script, the preset on LCP.** No screen may add above-the-fold weight without re-measuring.
 - `check:tokens`: 104 files; no hex literal, no palette utility, no physical side, no `text-left/right`.
 - `check:i18n`: 101 files; fr/ar keys and ICU placeholders identical; numbers/dates only via
   `lib/i18n/format.ts`; caller-filled templates read with `t.raw`.

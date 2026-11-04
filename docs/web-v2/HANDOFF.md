@@ -1,25 +1,18 @@
-# HANDOFF — web-redesign, end of session 2026-11-03 (third sitting)
+# HANDOFF — web-redesign session log (2026-11-03 → 2026-11-04)
 
-Read this first, then `CONTEXT.md`. This file is the state of the branch, not the plan.
+**Phase and gate status is `docs/web-v2/PROGRESS.md` — read it first.** This file is the session log and the trap list, not the status. `CONTEXT.md` holds the operational state and the budgets.
 
 ## Where the branch stands
 
-- Branch `web-redesign`, branched from `master` (`e3fe882`), pushed; **one commit ahead of
-  `origin/web-redesign`** after the validation pass below (push it before handing off again).
+- Branch `web-redesign`, branched from `master` (`e3fe882`). Whether it is ahead of
+  `origin/web-redesign` is deliberately not recorded here — measure it with `git status -sb`.
   The commit count is deliberately not written down: it changes with every commit. Measure it with
   `git rev-list --count master..web-redesign`.
-- Phases 0 and 1 are closed. **Phase 2 (kit) is CLOSED at gate G2.** **Phase 3 (shell) is nearly
-  closed: G3 is NOT claimed yet** — the tab bar, the landmark naming, the review fixes, the `md+` header
-  nav, the error boundary and the HEADER restyle (T6, +6 B of script for the whole restyle) are all in and
-  green. **The footer restyle (T7) landed 2026-11-04**, and it is **RED on the Lighthouse gate**:
-  result-route LCP median 2 640 ms over two runs
-  and six samples, script unchanged at 172 501 B and CSS 16 528 -> 16 638 B. G3 stays unclaimed; see
-  `PROGRESS.md`'s T7 section and `DEVIATIONS.md` D-26.
-- `docs/web-v2/PROGRESS.md` is the ledger. `docs/superpowers/plans/` holds plan files for phases **0,
-  2 and 3**. Phase 3's was written LATE — 2026-11-03, after T1-T5b had already landed — which is exactly
-  why the header/footer restyle and the `md+` half of PLAN.md's Phase 3 line drifted out of view until a
-  review found them. Its ladder records T1-T5b and carries **T6-T8 as the open work**, with the four
-  decisions the restyle would otherwise discover mid-build written down first.
+- **Status lives in `PROGRESS.md`.** Phases 0-2 are closed (G2); **phase 3 is CLOSED at G3
+  (2026-11-04)**, with the five-criterion evidence pack in `PROGRESS.md` `## T8`. `docs/web-v2/PROGRESS.md`
+  is the ledger and the status; `docs/superpowers/plans/` holds plans for phases 0, 2 and 3, and phase 3's
+  records T1-T8 as landed. This file keeps what a status table cannot: the diagnoses, the corrections and
+  the traps.
 
 ## What this session did
 
@@ -137,18 +130,14 @@ first probe answered 404 and looked exactly like a broken boundary.
 
 ## Next session — start here
 
-1. **T7 landed; its budget gate is RED and now ATTRIBUTED (2026-11-04).** A third A/B in one session
-   flips it: pre-T7 rebuilt exits 0 (2 490 / 2 486 / 2 480), T7 rebuilt exits 1 (2 641 / 2 640 / 2 632).
-   The two traces are ~20 ms apart though — observed LCP 169-191 ms either way, FCP 906-919, TBT 18-43,
-   and TTFB 454 / load delay 0 / load time 0 / render delay 2 022-2 423 in BOTH — so Lighthouse is
-   amplifying a negligible difference (the candidate is a text block with ~2 s of render delay under 4x
-   CPU throttling), not showing a 140 ms user-visible slowdown. Next is a decision: hero `h1` as the
-   candidate, less above-the-fold work, or an owner-approved re-baseline. The footer reference is the
-   **2** real page footers (`accueil_morocco_pc`, `morocco_pc_1`); `D-26` records the price line.
-2. **The ladder is down to `T8`** — the G3 evidence pack, plus clearing the T7 LCP red.
-   The four forks T6-T8 had to answer are answered and recorded (D-22 mark, D-23 subtitle, D-24 not
-   `fixed`, D-25 bookmark, D-26 footer price line) — do not re-open them. The restyle's open question is
-   the LCP red in item 1, not a design choice.
+1. **Phase 3 is closed at G3 (2026-11-04).** T7's local 2 640 ms red did not reproduce on the closing
+   run: `npm run test:lighthouse` exited 0 with result-route LCP median **2 486 ms** and preset
+   **2 491 ms**, script **170 913 / 169 641 B**, all four `error` assertions. `PROGRESS.md` `## T8` has the
+   evidence pack. The **14 ms / 9 ms** LCP margin is the remaining risk, and option (a) (the hero `h1` as
+   the LCP candidate) is still the only change that buys real headroom.
+2. **The ladder is finished — T8 landed with this session.** The wizard budget flake family is fixed in
+   `77491d7` (debounced URL write; 60/60 repeated runs). `npm test` now runs four viewport projects (S6):
+   mobile-360 runs everything, mobile-390 / tablet-768 / desktop-1280 run only the `@layout` specs.
 3. **Phase 4, in the planned order:** `configurer -> results -> build detail -> home -> presets ->
    composants -> guides -> enregistrements -> legal`, one screen per task with its own gate. **Home is
    fourth, not first.** Its brief is `SCREENS.md`'s `accueil_morocco_pc` row — hero, presets, trust
@@ -235,7 +224,7 @@ never by name pattern.
 | `CI=1 npm test` | **FAIL** — 391 / 2 skipped / 1 failed + 1 flaky, all `wizard-budget`; `--repeat-each=3` on that file exits 0 (27 passed / 3 flaky), so it is the known flake family, not the footer |
 | `npm run test:lighthouse` | **FAIL (exit 1)** — result LCP median **2 640 ms**; preset medians 2 495 / 2 491 pass |
 
-Do not claim G3 on this tree. The footer separator defect is FIXED (2026-11-04): it now trails its item as
+G3 was claimed on the FINAL tree (`PROGRESS.md` `## T8`); this T7 tree was red when measured — keep the distinction. The footer separator defect is FIXED (2026-11-04): it now trails its item as
 an `aria-hidden` span, so a wrapped row starts with a link in both locales. `PROGRESS.md` T7 has the rest.
 
 2026-11-04 — T7's Lighthouse question, answered on the runner (option d). Pushing `web-redesign`
