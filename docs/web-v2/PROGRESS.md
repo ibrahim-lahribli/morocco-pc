@@ -512,3 +512,34 @@ celebrated: 19 ms above the line here, and the same route failed by 28 ms two ho
 red of this shape is variance until proven otherwise — but it is still a red, and option (a) remains the
 only change that buys real headroom.
 
+
+## Task 1 — D7 Arabic currency label (2026-11-04)
+
+`CURRENCY_LABEL.ar` is `د.م.` (fr stays `DH`), one line in the allowlisted `lib/i18n/format.ts`
+(D-27). The Arabic catalogues follow: `wizard.budgetSuffix`, `share.ogDescription`, and every
+sentence-final stop that followed a money placeholder — `د.م.` already ends in a full stop, so the
+old trailing `.` printed `د.م..` on the result page and in the wizard hints.
+
+Specs: `i18n` and `rtl` assert the exact Arabic strings; the `wizard-budget` Arabic rail's three
+key assertions use `AR_DH_*` rather than the French constants. The preset OG card no longer
+hardcodes `formatMoney(…, "fr")`: it reads the route locale, so `/ar/…/opengraph-image` draws
+`د.م.` (the card's default face draws it — measured 2026-11-04, no OG font added). Supporting card copy stays
+French on both cards by D-28; Phase 6 owns the OG restyle.
+
+| command | result |
+|---|---|
+| `npm run typecheck` | PASS (exit 0) |
+| `npm run lint` | PASS (exit 0, 0 warnings) |
+| `npm run check:tokens` | PASS — 104 files |
+| `npm run check:i18n` | PASS — 101 files, 2 catalogues |
+| `npm run build` | PASS (exit 0) |
+| `npx playwright test e2e/{i18n,rtl,wizard-budget,structured-data,seo,saved,share}.spec.ts` | **PASS** — 82 passed |
+
+JSON-LD is untouched: `priceCurrency: "MAD"` in both locales, pinned by `structured-data` and `seo`.
+Evidence: `apps/web/design/checks/d7-arabic-price-360.png` and the two `d7-og-*-ar.png` cards.
+
+Observed while validating: one parallel run failed the Arabic rail's `ArrowUp` assertion with the
+PREVIOUS value (`7 000`), and the same test passes standalone 3/3 and in the final parallel run.
+The sequence races its URL writes when successive presses land faster than a commit (the
+`budget-step.tsx` `choose` path), which D7 does not touch. It is a pre-existing flake, carried
+as a separate finding — no assertion was relaxed for it.

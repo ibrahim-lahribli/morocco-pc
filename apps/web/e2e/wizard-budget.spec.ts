@@ -19,7 +19,10 @@ const META_ROUTE = "**/v1/meta/options*";
 const JSON_HEADERS = { "access-control-allow-origin": "*" };
 
 const DH_500 = "500\u00A0DH";
-const DH_6500 = "6\u202F500\u00A0DH";
+const AR_DH_500 = "500\u00A0د.م.";
+const AR_DH_6500 = "6\u202F500\u00A0د.م.";
+const AR_DH_7000 = "7\u202F000\u00A0د.م.";
+const AR_DH_7500 = "7\u202F500\u00A0د.م.";
 const DH_7000 = "7\u202F000\u00A0DH";
 const DH_7300 = "7\u202F300\u00A0DH";
 const DH_7500 = "7\u202F500\u00A0DH";
@@ -210,11 +213,11 @@ test("the Arabic rail runs the other way: the same left-edge click picks the top
   const arrowRail = page.getByRole("slider", { name: "ضبط سريع" });
   await arrowRail.focus();
   await arrowRail.press("ArrowRight");
-  await expect(arrowRail).toHaveAttribute("aria-valuetext", DH_6500);
+  await expect(arrowRail).toHaveAttribute("aria-valuetext", AR_DH_6500);
   await arrowRail.press("ArrowLeft");
-  await expect(arrowRail).toHaveAttribute("aria-valuetext", DH_7000);
+  await expect(arrowRail).toHaveAttribute("aria-valuetext", AR_DH_7000);
   await arrowRail.press("ArrowUp");
-  await expect(arrowRail).toHaveAttribute("aria-valuetext", DH_7500);
+  await expect(arrowRail).toHaveAttribute("aria-valuetext", AR_DH_7500);
 });
 
 test("Enter settles an out-of-range amount, then advances on the next press", async ({ page }) => {
@@ -263,7 +266,7 @@ test("/ar/configurer speaks Arabic about the same clamp", async ({ page }) => {
 
   const slider = page.getByRole("slider", { name: "ضبط سريع" });
   await expect(slider).toBeVisible();
-  await expect(slider).toHaveAttribute("aria-valuetext", DH_500);
+  await expect(slider).toHaveAttribute("aria-valuetext", AR_DH_500);
 
   const field = page.getByLabel("الميزانية المستهدفة");
   await field.fill("");

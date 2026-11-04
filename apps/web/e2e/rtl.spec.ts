@@ -20,10 +20,9 @@
  *      RIGHT edge in Arabic. A physical `left: 0` would look fine in French and
  *      grow leftwards here, so the fill's anchored edge is measured.
  *   3. **A number in the wrong numeral system, or a reordered price.** Moroccan
- *      Arabic writes Western digits ("7 300 DH", not the Eastern Arabic-Indic
- *      range), and the product's unit is "DH" in both locales (S20's decision,
- *      recorded in the sprint board). Both are asserted on the rendered text, not
- *      on the helper.
+ *      Arabic writes Western digits ("7 300 د.م.", not the Eastern Arabic-Indic
+ *      range), and the unit is the locale's own: "DH" in French, "د.م." in Arabic
+ *      (D7). Both are asserted on the rendered text, not on the helper.
  *   4. **Overflow at 360 px.** RTL is where a stray physical margin grows the page
  *      to the left, and `scrollWidth` notices even when nothing looks wrong. Every
  *      shipped Arabic route is measured, not just the home page.
@@ -159,7 +158,7 @@ test.describe("the layout mirrors, it does not just translate", () => {
 });
 
 test.describe("Arabic numerals and the unit", () => {
-  test("prices keep Western digits and print DH, in both locales", async ({ page }) => {
+  test("prices keep Western digits and print the Arabic unit exactly", async ({ page }) => {
     // The rule, stated once: Moroccan Arabic uses the Latin numeral set. The
     // Eastern Arabic-Indic block would break the alignment of every price column
     // and disagrees with the API's own values.
@@ -170,11 +169,13 @@ test.describe("Arabic numerals and the unit", () => {
     expect(prices.length).toBeGreaterThan(0);
     for (const price of prices) {
       expect(price).not.toMatch(EASTERN_ARABIC_INDIC);
+      expect(price).not.toContain("DH");
     }
-    // The amount text itself: digits grouped by the helper, unit "DH".
+    // The exact rank-1 total: U+202F between groups, U+00A0 before the unit.
+    // A bare contains("د.م.") would pass for any amount; this pins the string.
+    expect(prices).toContain("8\u202F594\u00A0د.م.");
     const body = await page.locator("main").innerText();
     expect(body).toMatch(/[0-9]/);
-    expect(body).toContain("DH");
 
     // And no Eastern digits anywhere on the page — a date, a rank or a bar label
     // would be just as wrong as a price.

@@ -24,14 +24,15 @@
  * file is therefore exempt from `check:tokens`' hex rule only — the palette and
  * physical-side rules still read it (see `scripts/check-tokens.mjs`).
  *
- * French-only text, like the result card: an Arabic title would need an Arabic
- * face loaded into Satori, and a glyph-box costume is worse than a card that says
- * the same sentence to both locales. The og:title beside it IS localized.
+ * The supporting sentences stay French in both locales; only the unit is
+ * locale-aware (D7), because it is part of the number the card exists to show.
+ * The Arabic unit renders in the card's default face (measured 2026-11-04); no
+ * OG font is added (D7 scope), and localising the sentences is Phase 6's restyle.
  */
 import { ImageResponse } from "next/og";
 
 import { routing } from "@/i18n/routing";
-import { formatMoney } from "@/lib/i18n/format";
+import { formatMoney, type AppLocale } from "@/lib/i18n/format";
 import { presetsForBuild } from "@/lib/presets/load";
 import { parsePresetSlug } from "@/lib/presets/model";
 
@@ -70,11 +71,12 @@ export default async function Image({
 }: {
   params: Promise<{ locale: string; presetSlug: string }>;
 }) {
-  const { presetSlug } = await params;
+  const { locale, presetSlug } = await params;
+  const appLocale: AppLocale = locale === "ar" ? "ar" : "fr";
   // A slug the grammar refuses gets the brand card: the page 404s, and an image
   // is not the place to invent a budget a URL did not name.
   const parsed = parsePresetSlug(presetSlug);
-  const headline = parsed === null ? "" : formatMoney(parsed.budget, "fr");
+  const headline = parsed === null ? "" : formatMoney(parsed.budget, appLocale);
 
   return new ImageResponse(
     (

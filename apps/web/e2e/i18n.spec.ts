@@ -10,7 +10,7 @@
  *   2. The switcher is a link that KEEPS THE PATH: `/fr/format` → `/ar/format`.
  *      A switcher that always lands on the home page is the classic i18n bug.
  *   3. Money and dates come from Intl with the ROUTE's locale, and money carries
- *      a narrow no-break space plus the unit the product uses ("DH").
+ *      a narrow no-break space plus the unit the locale uses ("DH" / "د.م.").
  *   4. The Arabic page actually loads IBM Plex Sans Arabic, and the French page
  *      does not apply it; the Arabic face is preloaded on `ar` only, and the mono
  *      face — an eyebrow label plus the token sheet — is preloaded nowhere.
@@ -103,17 +103,16 @@ test.describe("the locale switcher", () => {
 test.describe("formatting", () => {
   const NARROW_SPACE = "\u202F";
 
-  test("money carries a narrow no-break space and DH in both locales", async ({ page }) => {
-    for (const [path, label] of [
-      ["/fr/format", "Prix indicatif"],
-      ["/ar/format", "سعر إرشادي"],
+  test("money carries a narrow no-break space and the locale's own unit", async ({ page }) => {
+    for (const [path, label, unit] of [
+      ["/fr/format", "Prix indicatif", "7\u202F300\u00A0DH"],
+      ["/ar/format", "سعر إرشادي", "7\u202F300\u00A0د.م."],
     ] as const) {
       await page.goto(path);
       const value = page.locator("dd").first();
       const text = (await value.innerText()).trim();
-      expect(text).toContain("DH");
+      expect(text).toBe(unit);
       expect(text).toContain(NARROW_SPACE);
-      expect(text).toMatch(/^7\u202F300\u00A0DH$/);
       await expect(page.getByText(label, { exact: true })).toBeVisible();
     }
   });

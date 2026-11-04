@@ -17,8 +17,8 @@
  *    from ICU; only the thousands separator is typographic.
  * 2. **The currency label is a word, not `Intl` style `currency`.** `MAD`
  *    formats as "7 300,00 MAD" — cents nobody quotes, and the wrong label for
- *    Moroccan copy, which writes "DH". S20 may switch the Arabic label to
- *    "د.م."; that is a copy decision, not a formatting one, and it belongs in
+ *    Moroccan copy, which writes "DH" in French and "د.م." in Arabic (D7);
+ *    that is a copy decision, not a formatting one, and it belongs in
  *    this map rather than at 40 call sites.
  */
 
@@ -32,8 +32,8 @@ const INTL_LOCALE: Record<AppLocale, string> = {
 
 const CURRENCY_LABEL: Record<AppLocale, string> = {
   fr: "DH",
-  // S20 owns the Arabic copy pass; "DH" is what the product uses today.
-  ar: "DH",
+  // D7 (PLAN.md): Moroccan Arabic writes the dirham as د.م.
+  ar: "د.م.",
 };
 
 const GROUP_SEPARATOR = "\u202F";

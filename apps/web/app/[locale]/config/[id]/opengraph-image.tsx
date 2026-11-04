@@ -45,9 +45,9 @@ const INFO_SOFT = "#e6f2fa";
 /**
  * The card always shouts the FRENCH honesty word (the badge's vocabulary,
  * capitalised here): an Arabic og:title is text sent by generateMetadata,
- * but the card is drawn by a rasterizer whose default font has no Arabic
- * glyphs, and arabising it means loading a face into Satori - S20's job,
- * not a glyph-box costume for S15.
+ * while this word is part of the drawn card. The MONEY is locale-aware (D7),
+ * and Satori renders the Arabic unit with its fallback face - measured
+ * 2026-11-04. The supporting sentence stays French until Phase 6 (D-28).
  */
 const WORD: Record<PriceProvenance, string> = {
   demo: "Démo",
