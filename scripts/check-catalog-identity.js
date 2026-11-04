@@ -18,9 +18,10 @@
  *
  * The suite that caught it, `test:api:db`, is the only one that could have, and it
  * runs in `recurring-gates` (nightly/dispatch), never on push or pull_request. So
- * a NULL slug could ship through a green PR. This is the standing read that shortens
- * that blind spot to at most a day. It is nightly, like the suite it stands in for, so it
- * detects a recurrence after the fact rather than blocking the merge that caused it.
+  * a NULL slug could ship through a green PR. Since R-21 (2026-11-03) that blind spot is
+ * closed from both ends: the gate runs in `unit-and-docs` on every push and pull request,
+ * so it blocks the merge that would reintroduce the break, and nightly in
+ * `recurring-gates`, so a break arriving any other way is still caught within a day.
  *
  * WHAT MAKES IT PRODUCTION-RELEVANT is not cosmetic: `GET /v1/catalog/products`
  * filters `p.lifecycle_status = 'ACTIVE' AND p.slug IS NOT NULL` and keyset-
@@ -134,29 +135,42 @@ function parseArgs(argv) {
 /**
  * Run the gate. Returns the process exit code instead of calling `process.exit`,
  * so the pool is always closed first (the pattern the other read-only gates use).
+ *
+ * `deps` is injectable for the same reason `check-origin-readiness.js` takes one:
+ * `scripts/lib/catalog-identity-cli.test.js` pins the EXIT CODES and the report
+ * wording without a database. That matters because this gate runs on push/PR
+ * (R-21, 2026-11-03) - a regression that made it exit 0 on an offender would
+ * otherwise hide behind a green pull request. Omit `deps` and every collaborator
+ * is the real thing.
  */
-async function main(argv) {
+async function main(argv, deps) {
+  const injected = deps === null || deps === undefined ? {} : deps;
+  const env = injected.env || process.env;
+  const log = injected.log || ((line) => console.log(line));
+  const logError = injected.logError || ((line) => console.error(line));
+  const createClient = injected.createClient || ((config) => new Client(config));
+
   let options;
   try {
     options = parseArgs(argv);
   } catch (error) {
-    console.error('ERROR: ' + error.message);
-    console.error(USAGE);
+    logError('ERROR: ' + error.message);
+    logError(USAGE);
     return 2;
   }
   if (options.help) {
-    console.log(USAGE);
+    log(USAGE);
     return 2;
   }
 
-  const connectionString = process.env[options.targetEnv];
+  const connectionString = env[options.targetEnv];
   if (typeof connectionString !== 'string' || connectionString.trim() === '') {
-    console.error('ERROR: ' + options.targetEnv
+    logError('ERROR: ' + options.targetEnv
       + ' is not set (pass --target=env:NAME to name another variable)');
     return 1;
   }
 
-  const client = new Client({
+  const client = createClient({
     connectionString,
     connectionTimeoutMillis: 15000,
     statement_timeout: 15000,
@@ -168,14 +182,14 @@ async function main(argv) {
     const rows = (await client.query(ACTIVE_PRODUCTS_SQL)).rows;
     const result = evaluateCatalogIdentity({ scopeSize: rows.length, rows });
 
-    console.log('Catalogue identity gate (read-only; slug and display_name on every ACTIVE product)');
+    log('Catalogue identity gate (read-only; slug and display_name on every ACTIVE product)');
     // The variable NAME only, never the URL: this output is meant to be quoted.
-    console.log('Target: env:' + options.targetEnv);
-    for (const line of formatReport(result, options.maxExamples)) console.log(line);
+    log('Target: env:' + options.targetEnv);
+    for (const line of formatReport(result, options.maxExamples)) log(line);
 
     return verdictExitCode(result.verdict);
   } catch (error) {
-    console.error('RESULT: FAIL - the catalogue could not be read: '
+    logError('RESULT: FAIL - the catalogue could not be read: '
       + (error && error.message ? error.message : String(error)));
     return 1;
   } finally {
