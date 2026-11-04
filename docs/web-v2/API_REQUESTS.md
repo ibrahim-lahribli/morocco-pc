@@ -5,7 +5,18 @@ programme — it is the list of what a future API change would have to add for t
 Stitch draws. Every row is answered twice: the reduced behaviour that ships now, and the field/route
 that would close it.
 
-Status of every row: **OPEN** (no API change proposed yet).
+Status of every row: **OPEN** (no API change proposed yet). The table is the index, in priority
+order: **P1** = price observation date, `reasons[]` on a revisit; **P2** = per-part
+compatibility; **P3** = images, retailer rows, single-build GET.
+
+| # | Gap | Priority | Status |
+|---|---|---|---|
+| 4 | Price verification date | **P1** | OPEN |
+| 6 | `reasons[]` on a revisit | **P1** | OPEN |
+| 1 | Per-part compatibility | **P2** | OPEN |
+| 2 | Product / build images | **P3** | OPEN |
+| 3 | Retailer rows | **P3** | OPEN |
+| 5 | Single-build GET | **P3** | OPEN |
 
 ## 1. Per-part compatibility — `components[].compatibility_status`
 
@@ -55,6 +66,23 @@ Status of every row: **OPEN** (no API change proposed yet).
   whole pass is fetched for one build.
 - **Would close it:** `GET /v1/recommendations/{id}/builds/{rank}` returning the same build shape,
   which also lets the OG card for a build be generated without the full payload.
+
+## 6. Build reasons on a revisit — `builds[].reasons[]` (PARTIAL)
+
+- **Needed by:** the "pourquoi ce choix" disclosure on a result page (S13), and most of all on a
+  pass opened from a saved build or a share link, where the submit response is not in hand.
+- **Contract gap:** `reasons[]` is not in contract 1.10. Decision 44's `deriveReasons()` returns
+  frozen `{ code, value }` records in a fixed order in the engine, but no route serialises them and
+  the OpenAPI document names no such field. Item 5 of that decision adds that only
+  `BUDGET_USED_PCT`, `GPU_SHARE` and `INPUT_APPLIED` are derivable from persisted rows, so even a
+  route that served them would serve a SUBSET on a GET revisit — the other five need facts the
+  engine holds at the seam.
+- **Ships now:** PARTIAL by construction. No response carries reasons, so the page renders the
+  committed `explanation`; a pass read back from `GET /v1/recommendations/{id}` would render the
+  same or fewer lines, never more. `lib/result/reasons.ts` renders only what it is given and never
+  invents a fact, which is why the reduction is a missing line rather than a wrong one.
+- **Would close it:** serialise `reasons[]` on the POST response and on the GET read, and persist
+  the derivable subset with the build, so a revisit states at least those three facts.
 
 ## Deliberately NOT requested
 
