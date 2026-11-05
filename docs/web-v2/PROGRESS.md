@@ -743,7 +743,20 @@ with the evidence that satisfies it. Nothing below is inferred from a green suit
 - **The S4 error-boundary spec LANDED 2026-11-05** (see `## Task 4`): option 2 — a 200 body with no
   `components` — puts the throw inside the render, so `error.tsx` catches it in both locales. A 5xx
   still belongs to the page's own `unavailable` state, deliberately.
-- `global-error.tsx` does not exist, so a root-layout failure falls through to Next's default.
+- **`app/global-error.tsx` is NOT shipped — attempted 2026-11-05 and BLOCKED on the byte criterion.**
+  The boundary was built (its own `html`/`body`, tokens only, no kit component, static French + Arabic
+  copy generated from a `globalErrors` namespace through `gen-error-copy.mjs`, so `check:i18n` rule 7
+  covers it) and measured on both budgeted URLs: **+801 B of script on each** (result 170 942 → 171 743 B,
+  preset 169 670 → 170 471 B). Next ships the root boundary in every route's client graph, so no
+  implementation of this file can add 0 B; both routes still sit inside the 174 080 B budget.
+
+  The same three-run sets put the result page's LCP at 2638 ms (2651 / 2637 / 2638) where this gate
+  measures 2500 (2505 / 2500 / 2497) and 2491 on HEAD in two separate runs — consistent with the extra
+  chunk costing ~140 ms on the one route that sits ON the 2500 ms budget, though LCP at HEAD is itself
+  borderline: it has passed at 2491 and failed at 2500.31 on identical code.
+
+  Reverted; the attempt is the `git stash` entry "task5 global-error attempt (+801 B script, BLOCKED)".
+  The decision — accept the bytes and the LCP risk, or keep Next's default root page — is the owner's.
 - The LCP margin is **14 ms / 9 ms** — the thinnest this gate has run at. T7's local 2 640 ms red did
   not reproduce here, so a future red in the 2.5-2.7 s band is variance until an A/B says otherwise.
   Option (a) (hero `h1` as the LCP candidate) remains the only change that buys real headroom.
