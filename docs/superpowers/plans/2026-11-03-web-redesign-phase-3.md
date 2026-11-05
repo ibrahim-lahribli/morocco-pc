@@ -4,7 +4,7 @@
 boundaries — matches the design, keeps two distinguishable navigation landmarks, and leaves both
 Lighthouse routes inside their budgets. **Gate: G3.**
 
-**State: CLOSED at G3 (2026-11-04).** T1-T8 landed. The five-criterion evidence pack is
+**State: T1-T8 landed; G3 is EVIDENCE COMPLETE (2026-11-04), awaiting owner sign-off.** The five-criterion evidence pack is
 `docs/web-v2/PROGRESS.md` `## T8`; phase and gate status lives in that file, never here. T7's local
 2 640 ms Lighthouse red did not reproduce on the closing run (exit 0, result LCP 2 486 ms) and is
 recorded as variance; the S4 error-boundary spec remains BLOCKED and is outside G3's five criteria.
@@ -42,7 +42,7 @@ report PASS / FAIL / BLOCKED with the command; `next start` serves `.next`, so r
 | T5b | `error.tsx` + `lib/i18n/error-copy.generated.ts` + `check:i18n` rule 7 | probe route both locales, then Lighthouse | `3f7319a` — the provider path measured +15 845 B and was rejected (D-21) |
 | **T6** | **Header restyle to `accueil_morocco_pc`** | screenshots fr + ar at 360/768 against `apps/web/design/stitch/accueil_morocco_pc/screen.png` (tracked, `b4b38a9`); typecheck/tokens/build/suite; **Lighthouse on both fixtures, median of 3** | **DONE 2026-11-03** — 64 px row, drawn mark, pill switcher; **+6 B** of script; Lighthouse exit 0; departures **D-22…D-25** |
 | **T7** | **Footer restyle** | the same gate set, against the reference blocks listed below | **LANDED 2026-11-04** — the 2 640 ms local red did not reproduce on the closing run (exit 0, result LCP 2 486 ms); variance, not a page regression. CSS +110 B. Departure **D-26** |
-| **T8** | **G3 evidence pack** | the table below, plus `PROGRESS.md` + `HANDOFF.md` | **DONE 2026-11-04** — five-criterion evidence pack in `PROGRESS.md` `## T8`; **G3 CLAIMED** |
+| **T8** | **G3 evidence pack** | the table below, plus `PROGRESS.md` + `HANDOFF.md` | **DONE 2026-11-04** — five-criterion evidence pack in `PROGRESS.md` `## T8`; **G3 evidence complete, awaiting owner sign-off** |
 
 ## Decisions fixed before starting T6-T8
 
@@ -81,7 +81,7 @@ applies to `/kit`, `/tokens`, `/format`, the legal pages and the 404).
 
 ## Exit criteria for G3
 
-**Met 2026-11-04** — one evidence row per criterion in `PROGRESS.md` `## T8`.
+**Evidence complete 2026-11-04** — one row per criterion in `PROGRESS.md` `## T8`; the owner's sign-off is the remaining step.
 
 1. Header and footer match the reference at 360 and 768 in **both** locales, or every departure is a
    `DEVIATIONS.md` row.
@@ -90,7 +90,7 @@ applies to `/kit`, `/tokens`, `/format`, the legal pages and the 404).
    numbers written into `PROGRESS.md`. Thresholds are never edited to fit.
 4. The two navigation landmarks still have distinct names; the bar's reservation still clears the footer;
    the skip link still reaches `#main` (which a `fixed` header can cover — assert it).
-5. `PROGRESS.md` and `HANDOFF.md` carry the result. **G3 is claimed only then.**
+5. `PROGRESS.md` and `HANDOFF.md` carry the result. **G3 is evidence-complete only then; the OWNER closes it.**
 
 ## Traps inherited, and the ones this phase added
 

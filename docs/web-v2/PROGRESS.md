@@ -15,11 +15,28 @@ this table; where one of them disagrees with it, this table is right.
 | 0 — baseline, feasibility, reference captures | — | **done** (2026-11-03) |
 | 1 — tokens | — | **done** |
 | 2 — kit and mobile primitives | G2 | **CLOSED** |
-| 3 — shell | G3 | **CLAIMED 2026-11-04** — five-criterion evidence pack in `## T8` below |
+| 3 — shell | G3 | **evidence complete 2026-11-04, awaiting owner sign-off** — five-criterion pack in `## T8`; the four owner checks in `### G3` below are OPEN |
 | 4 — screens | G4.n | not started |
 | 5 — desktop + RTL | G5 | not started |
 | 6 — hardening, Lighthouse, OG cards | — | not started |
 | 7 — release | — | not started (human) |
+
+**Human gates are the owner's to close (binding from G3).** Only the OWNER may mark a human gate —
+**G1, G2, G3, G4.n, G5** — as passed. An agent records evidence and stops at **"evidence complete,
+awaiting owner sign-off"**; a green suite is evidence, never the verdict, and no agent writes a
+sign-off line.
+
+### G3 — evidence complete, awaiting owner sign-off (2026-11-04)
+
+The five-criterion pack is `## T8` below and every criterion has evidence. Four checks are HUMAN and
+remain OPEN, which is why the gate is not passed:
+
+| # | Owner check | Where to look |
+|---|---|---|
+| a | Arabic price: the `د.م.` dot and which side of the number the unit sits on, at 360 px | `apps/web/design/checks/d7-arabic-price-360.png` |
+| b | both Arabic OG cards draw real glyphs, not boxes | `apps/web/design/checks/d7-og-config-ar.png` and `d7-og-preset-ar.png` |
+| c | shell at 360 and 768 in `fr` and `ar` against Stitch | `apps/web/design/stitch/accueil_morocco_pc/screen.png` vs the built app |
+| d | tab bar copy on a real phone — D-20's "Pièces" / "Gardés" | `DEVIATIONS.md` D-20 |
 
 The suite's size is deliberately not written into this file's prose: `cd apps/web && npx playwright test
 --list` prints it, and `npm test` now runs four viewport projects, so a run count and a spec count are
@@ -487,7 +504,7 @@ edge — 2 490 / 2 711 / 2 877 in ONE run set on ONE build.
 
 The remaining work is a DECISION, not a shave: make the hero `h1` the LCP candidate so it paints before
 that block, cut above-the-fold work, or re-baseline the budget with owner approval (thresholds are never
-edited to fit). **G3 was not claimed on this tree**; the closing run cleared it — see `## T8 — the G3 evidence pack`.
+edited to fit). **G3 was not closed on this tree**; the closing run cleared its Lighthouse line — see `## T8 — the G3 evidence pack`.
 
 | Gate | Result |
 |---|---|
@@ -648,7 +665,7 @@ did — the assertions themselves are unchanged, and the shell file is 40/40 acr
 
 ## T8 — the G3 evidence pack (2026-11-04)
 
-**G3 is CLAIMED on the tree this section closes.** The pack is the five exit criteria from
+**G3 is EVIDENCE COMPLETE on the tree this section closes; the OWNER has not signed it off.** The pack is the five exit criteria from
 `docs/superpowers/plans/2026-11-03-web-redesign-phase-3.md` §"Exit criteria for G3", one row each,
 with the evidence that satisfies it. Nothing below is inferred from a green suite.
 
@@ -660,7 +677,7 @@ with the evidence that satisfies it. Nothing below is inferred from a green suit
 | 4 | the two landmarks still have distinct names; the bar's reservation still clears the footer; the skip link still reaches `#main`, asserted | `e2e/shell.spec.ts`: the landmark-names test pins "Navigation principale" ≠ "Navigation de l’application"; the footer-clearance test scrolls to the bottom and measures the footer's bottom against the bar's top; `skip link moves keyboard users to the main content` asserts the `#main` target (and the reference test pins `href="#main"`). The file is **40/40** across the four projects. | **MET** |
 | 5 | `PROGRESS.md` and `HANDOFF.md` carry the result | this section, plus `HANDOFF.md`'s header, which now defers phase/gate status to this file. | **MET** |
 
-### What the claim does NOT cover
+### What the evidence pack does NOT cover
 
 - **The S4 error-boundary spec is BLOCKED, not done** (see `## Task 4`): no Playwright test reaches
   `app/[locale]/error.tsx`, because `lib/result/load.ts` turns every 5xx into the page's own

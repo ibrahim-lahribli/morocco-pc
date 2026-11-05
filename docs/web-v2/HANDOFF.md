@@ -8,8 +8,8 @@
   `origin/web-redesign` is deliberately not recorded here — measure it with `git status -sb`.
   The commit count is deliberately not written down: it changes with every commit. Measure it with
   `git rev-list --count master..web-redesign`.
-- **Status lives in `PROGRESS.md`.** Phases 0-2 are closed (G2); **phase 3 is CLOSED at G3
-  (2026-11-04)**, with the five-criterion evidence pack in `PROGRESS.md` `## T8`. `docs/web-v2/PROGRESS.md`
+- **Status lives in `PROGRESS.md`.** Phases 0-2 are closed (G2); **phase 3's G3 is evidence complete, awaiting owner
+  sign-off (2026-11-04)**, with the five-criterion evidence pack in `PROGRESS.md` `## T8`. `docs/web-v2/PROGRESS.md`
   is the ledger and the status; `docs/superpowers/plans/` holds plans for phases 0, 2 and 3, and phase 3's
   records T1-T8 as landed. This file keeps what a status table cannot: the diagnoses, the corrections and
   the traps.
@@ -130,7 +130,7 @@ first probe answered 404 and looked exactly like a broken boundary.
 
 ## Next session — start here
 
-1. **Phase 3 is closed at G3 (2026-11-04).** T7's local 2 640 ms red did not reproduce on the closing
+1. **Phase 3's G3 is evidence complete, awaiting owner sign-off (2026-11-04).** T7's local 2 640 ms red did not reproduce on the closing
    run: `npm run test:lighthouse` exited 0 with result-route LCP median **2 486 ms** and preset
    **2 491 ms**, script **170 913 / 169 641 B**, all four `error` assertions. `PROGRESS.md` `## T8` has the
    evidence pack. The **14 ms / 9 ms** LCP margin is the remaining risk, and option (a) (the hero `h1` as
@@ -224,7 +224,7 @@ never by name pattern.
 | `CI=1 npm test` | **FAIL** — 391 / 2 skipped / 1 failed + 1 flaky, all `wizard-budget`; `--repeat-each=3` on that file exits 0 (27 passed / 3 flaky), so it is the known flake family, not the footer |
 | `npm run test:lighthouse` | **FAIL (exit 1)** — result LCP median **2 640 ms**; preset medians 2 495 / 2 491 pass |
 
-G3 was claimed on the FINAL tree (`PROGRESS.md` `## T8`); this T7 tree was red when measured — keep the distinction. The footer separator defect is FIXED (2026-11-04): it now trails its item as
+G3's evidence was completed on the FINAL tree (`PROGRESS.md` `## T8`); this T7 tree was red when measured — keep the distinction. The footer separator defect is FIXED (2026-11-04): it now trails its item as
 an `aria-hidden` span, so a wrapped row starts with a link in both locales. `PROGRESS.md` T7 has the rest.
 
 2026-11-04 — T7's Lighthouse question, answered on the runner (option d). Pushing `web-redesign`

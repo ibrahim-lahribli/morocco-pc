@@ -18,7 +18,7 @@ this work.
 | 0 — baseline, feasibility, reference captures | **done** (8 tasks, 78 reference PNGs) |
 | 1 — tokens | **done**: DESIGN.md adopted in full — 67 raw colours + 13 aliases, full type scale, Arabic +10 % leading |
 | 2 — kit and mobile primitives | **done** — closed at gate G2 (T1-T8; D-15 to D-19) |
-| 3 — shell | **done — CLOSED at G3 (2026-11-04)**: tab bar, landmark naming, review fixes, `md+` header nav, `error.tsx`, header restyle (T6), footer restyle (T7); five-criterion evidence pack in `PROGRESS.md` `## T8`. Open inside the phase: the S4 error-boundary spec is BLOCKED (`PROGRESS.md` `## Task 4`) and `global-error.tsx` does not exist |
+| 3 — shell | **code complete; G3 evidence complete 2026-11-04, awaiting owner sign-off**: tab bar, landmark naming, review fixes, `md+` header nav, `error.tsx`, header restyle (T6), footer restyle (T7); five-criterion evidence pack in `PROGRESS.md` `## T8`. Open inside the phase: the S4 error-boundary spec is BLOCKED (`PROGRESS.md` `## Task 4`) and `global-error.tsx` does not exist |
 | 4 — screens, one task each | not started (G4.n) |
 | 5 — desktop + RTL pass | not started (G5) |
 | 6 — hardening, Lighthouse, OG cards | not started |
