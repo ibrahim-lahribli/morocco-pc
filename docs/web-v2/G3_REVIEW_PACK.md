@@ -345,3 +345,54 @@ Then, if those are fine: `fr/focus.fr.360x800.png` (focus ring on an edge cell),
 checked out here as well. This worktree's branch is at **exactly** `web-redesign`'s commit
 (`3d9256c`), the evidence was produced from this tree's own `npm run build`, and the commit below
 carries the artefacts. Nothing was pushed and nothing was merged.
+
+---
+
+## 10. Arabic strings in the shell — for owner review
+
+Every Arabic string the shell renders, the French it stands in for, and the key it
+comes from. **No copy was changed in this round**: this is the list §6.3 asks a
+native reader to judge (`PLAN.md` Phase 6, `needs-review`), collected in one place
+so the review does not have to open `messages/`. Six of the rows are `aria-label`s
+— a screen reader says them, so they are copy too.
+
+### 10.1 Tab bar — five cells, 360 px (`components/ui/bottom-tab-bar.tsx`)
+
+| # | Arabic (shipped) | French equivalent | Key | Owner question |
+|---|---|---|---|---|
+| 1 | الرئيسية | Accueil | `shell.tabItems.home` | Home. Uncontroversial. |
+| 2 | القطع | Pièces | `shell.tabItems.components` | "Parts". The header calls the same destination المكوّنات ("components"); two words for one place. |
+| 3 | أنشئ | Configurer | `shell.tabItems.configure` | Imperative "create/build", not "configure". The raised centre cell. |
+| 4 | الأدلة | Guides | `shell.tabItems.guides` | Plural of دليل (guide/evidence). |
+| 5 | المحفوظة | Gardés | `shell.tabItems.saved` | An adjective with no noun — "the saved (ones)". The header and footer use the full noun (§10.2, §10.3). |
+| — | التنقل في التطبيق | Navigation de l’application | `shell.tabNav` | `aria-label` of the bar landmark. Must stay different from the header nav's (§10.2), or two landmarks share one accessible name. |
+
+### 10.2 Header — three page links + the locale switcher
+
+| # | Arabic (shipped) | French equivalent | Key | Owner question |
+|---|---|---|---|---|
+| 1 | morocco-pc | morocco-pc | `shell.brand` | The wordmark, identical in both catalogues: a brand name, not translated. |
+| 2 | المكوّنات | Composants | `shell.navItems.components` | "Components". See the tab bar's القطع. |
+| 3 | الأدلة | Guides | `shell.navItems.guides` | Same word as the tab cell. |
+| 4 | التكوينات المحفوظة | Mes enregistrements | `shell.navItems.saved` | The long form: "the saved configurations". `md+` only. |
+| 5 | العربية | العربية | `shell.switcher.ar` | The switcher's own labels are each in their own language, so this row is identical in both catalogues by design. |
+| 6 | Français | Français | `shell.switcher.fr` | Latin text in the Arabic header — the one Latin word on `/ar` besides the wordmark. |
+| 7 | اللغة | Langue | `shell.language` | `aria-label` of the switcher group. |
+| 8 | التنقل الرئيسي | Navigation principale | `shell.navLabel` | `aria-label` of the header nav landmark. |
+
+### 10.3 Footer — two named navs, four legal links, the price line
+
+| # | Arabic (shipped) | French equivalent | Key | Owner question |
+|---|---|---|---|---|
+| 1 | morocco-pc | morocco-pc | `shell.brand` | The wordmark again, above the link rows. |
+| 2 | تكويناتك | Vos configurations | `shell.savedNav` | `aria-label` of the shelf's nav: "your configurations". |
+| 3 | التكوينات المحفوظة | Mes enregistrements | `saved.title` | The shelf link itself — the same key the saved-builds page's `h1` reads, and the same words as `shell.navItems.saved`. |
+| 4 | معلومات قانونية | Informations légales | `shell.legalNav` | `aria-label` of the legal nav. **Indefinite** (معلومات), where the first link below is **definite** (المعلومات) — the same phrase in two forms, one row apart. |
+| 5 | المعلومات القانونية | Mentions légales | `shell.legal.mentions` | "Legal information". |
+| 6 | الخصوصية | Confidentialité | `shell.legal.privacy` | Privacy. |
+| 7 | اتصل بنا | Contact | `shell.legal.contact` | "Contact us" — a verb phrase where French has a noun. |
+| 8 | النماذج (تجريبي) | Formats (démo) | `shell.formats` | The proof sheet (§11). النماذج also means "models", which is not what the page is; the Latin parenthesis is transliterated rather than translated. |
+| 9 | morocco-pc — مُكوِّن أجهزة الحاسوب للسوق المغربي. الأسعار بالدرهم. | morocco-pc — configurateur de PC pour le marché marocain. Prix en dirhams (DH). | `shell.footer` | The price line. مُكوِّن carries diacritics no other string in the shell uses, and the Arabic drops the "(DH)" the French keeps. |
+
+The `·` between legal links is `aria-hidden` decoration, not a translated string,
+so it has no key.
