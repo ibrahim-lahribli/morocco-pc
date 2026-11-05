@@ -117,7 +117,9 @@ export function BottomTabBar({ label, items, current, className }: BottomTabBarP
                 </span>
                 <span
                   className={cn(
-                    "text-micro tracking-tight",
+                    // `text-tab`, not `text-micro`: PLAN.md's 12 px caption floor
+                    // for the five labels, and 13 px on Arabic (D-30).
+                    "text-tab tracking-tight",
                     active ? "font-semibold text-primary" : "font-medium text-muted",
                     item.raised && "mt-1",
                   )}

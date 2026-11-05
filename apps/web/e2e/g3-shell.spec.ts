@@ -7,11 +7,13 @@
  * number is printed rather than merely asserted: a failure here says the
  * measurement, not just "expected true".
  *
- * WHAT IS PINNED vs WHAT IS REPORTED. Half of this file asserts (a regression
- * fails the suite) and half only measures and prints (a value a human must
- * judge, e.g. whether 10 px is legible). The REPORT rows are marked `REPORT:`
- * in their test titles, and they assert only that the measurement was TAKEN —
- * never that its value is acceptable.
+ * WHAT IS PINNED vs WHAT IS PRINTED. Every row below ASSERTS (a regression
+ * fails the suite); each also prints its measurement as `REPORT ...`, so a red
+ * row says what it measured rather than only "expected true". The one row that
+ * used to print without a verdict — S15, the tab label size — became an
+ * assertion in the G3 fix round: `text-tab` puts the labels on PLAN.md's 12 px
+ * caption floor (13 px Arabic, D-30), so the size is now a contract, not a
+ * value a human has to accept or reject.
  *
  * Every test pins its own viewport. The four projects (360/390/768/1280) grep
  * `@layout`, so a test that inherited the project width would assert the phone
@@ -444,7 +446,7 @@ test.describe("G3 shell", () => {
     }
   });
 
-  test("REPORT: the tab label font-size against PLAN.md's 12 px caption floor", { tag: "@layout" }, async ({
+  test("the tab label meets PLAN.md's 12 px caption floor, one step higher on Arabic", { tag: "@layout" }, async ({
     page,
   }) => {
     await page.setViewportSize({ width: 360, height: 800 });
@@ -463,13 +465,20 @@ test.describe("G3 shell", () => {
             };
           }),
         );
+      // PLAN.md: a 12 px caption floor for the tab labels, and Arabic one step
+      // larger. The bar reads its own `text-tab` step (globals.css) so neither
+      // locale can drift below its floor without this failing, and D-30 records
+      // the departure from Stitch's 10 px.
+      const floor = locale === "ar" ? 13 : 12;
       for (const row of sizes) {
         const size = Number.parseFloat(row.fontSize ?? "0");
         console.log(
-          `REPORT label size /${locale} "${row.text}": font-size ${row.fontSize}, line-height ${row.lineHeight}, floor 12px — ${size < 12 ? "BELOW" : "meets"} the floor`,
+          `REPORT label size /${locale} "${row.text}": font-size ${row.fontSize}, line-height ${row.lineHeight}, floor ${floor}px — ${size < floor ? "BELOW" : "meets"} the floor`,
         );
-        // REPORT ITEM: no pass/fail on the value. Only that a size was read.
-        expect(size).toBeGreaterThan(0);
+        expect(
+          size,
+          `tab label "${row.text}" on /${locale} is ${row.fontSize}, below the ${floor}px floor`,
+        ).toBeGreaterThanOrEqual(floor);
       }
     }
   });

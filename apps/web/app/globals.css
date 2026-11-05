@@ -238,6 +238,17 @@
   --text-micro--line-height: 0.75rem;
   --text-micro--font-weight: 600;
   --text-micro--letter-spacing: 0.04em;
+  /*
+   * The tab bar's own label step, and the ONE place the design's 10 px
+   * `label-sm` is deliberately not followed: PLAN.md sets a 12 px caption floor
+   * for the five labels under the icons and asks for Arabic one step larger
+   * (D-30). A separate token rather than a change to `--text-micro`, because
+   * `text-micro` is a kit-wide step (eyebrows, token sheet, mono labels) and a
+   * phone navigation label is not the same role. No weight here: the bar sets
+   * medium/semibold itself, and that difference is the active state's cue.
+   */
+  --text-tab: 0.75rem;                /* 12 / 14, the caption floor */
+  --text-tab--line-height: 0.875rem;
   --text-price: 1.5rem;               /* 24 / 28, price-display */
   --text-price--line-height: 1.75rem;
   --text-price--font-weight: 700;
@@ -296,8 +307,10 @@
 /*
  * Arabic leading, the design's +10 %. Tailwind's text-* utilities read
  * --text-<step>--line-height, so overriding those variables on the Arabic root raises every step at
- * once instead of patching components one by one. Line-heights only: the Arabic face's optical size
- * already matches Inter at the same font-size.
+ * once instead of patching components one by one. Line-heights only, with ONE exception:
+ * `--text-tab` (the tab bar's label) also rises a step, 12 -> 13 px, because PLAN.md asks for
+ * Arabic one step larger on that control and its floor is where 12 px is only just comfortable
+ * (D-30). The Arabic face's optical size already matches Inter at every other step.
  */
 html[lang="ar"] {
   --text-display-lg--line-height: 3.3rem;
@@ -309,6 +322,8 @@ html[lang="ar"] {
   --text-compact--line-height: 1.375rem;
   --text-caption--line-height: 1.1rem;
   --text-micro--line-height: 0.825rem;
+  --text-tab: 0.8125rem;              /* 13 px: the tab label is the one step that grows */
+  --text-tab--line-height: 0.9375rem;
   --text-price--line-height: 1.925rem;
 }
 
