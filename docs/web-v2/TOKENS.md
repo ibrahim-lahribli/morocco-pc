@@ -4,8 +4,8 @@ Source: `apps/web/design/stitch/moroccan_hardware_studio/DESIGN.md`. Implementat
 block in `apps/web/app/globals.css` — the only file allowed a raw colour (`scripts/check-tokens.mjs`
 scans `app/`, `components/`, `lib/` and never that file).
 
-**Counts: 67 raw colours + 13 `var()` aliases.** `e2e/tokens.spec.ts` pins that count and asserts
-29 text pairs at ≥ 4.5:1 and 5 graphical pairs at ≥ 3:1. Every ratio below was measured on
+**Counts: 67 raw colours + 14 `var()` aliases.** `e2e/tokens.spec.ts` pins that count and asserts
+27 text pairs at ≥ 4.5:1 and 5 graphical pairs at ≥ 3:1. Every ratio below was measured on
 2026-11-03; the suite prints the live figures on every run.
 
 ## 1. Why the ramp, not the prose palette
@@ -48,14 +48,14 @@ plus nine `price-*` tokens — one trio per money state:
 | Indicatif / تقريبي | `#B45309` on `#FFFBEB` | 4.84:1 |
 | Estimé / تقديري | `#475569` on `#F1F5F9` | 6.92:1 |
 
-## 4. Aliases (13, not counted)
+## 4. Aliases (14, not counted)
 
 The names every component already uses keep working, so a value change needs no component edit:
 `page`→`background`, `ink`→`on-surface`, `subtle`→`surface-container-low`,
 `track`→`outline-variant`, `primary-soft`→`primary-fixed`,
 `primary-hover`→`on-primary-fixed-variant`, `accent-soft`→`secondary-fixed`,
 `foreground`→`on-surface`, `border`→`outline-variant`, `ring`→`primary`,
-`verified`→`success`, `warn`→`warning`, `danger`→`error`.
+`verified`→`success`, `warn`→`warning`, `danger`→`error`, `error-soft`→`error-container`.
 
 **One naming reconciliation** (D-12): the app's `surface` means *card* (`#FFFFFF`, the ramp's
 `surface-container-lowest`), while the ramp's `surface` is `#F8F9FF` — identical to `background`.
