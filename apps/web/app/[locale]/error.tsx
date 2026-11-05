@@ -30,16 +30,21 @@
  *     real text is either unavailable or internals; the digest is what a support
  *     request can actually be matched against, and it is shown only when it
  *     exists.
- *   - **`reset()` is a button, "back to home" is a link.** A retry re-renders the
- *     same route (an action); home is navigation — the distinction `button.tsx`
- *     and `LinkButton` exist to preserve.
+ *   - **The retry REFETCHES, "back to home" is a link.** For a failure thrown
+ *     during the SERVER render, `reset()` alone re-renders from the payload that
+ *     already failed and issues no request (measured 2026-11-05: zero network
+ *     requests, a minified React error (441) twice on the click). So the handler refreshes
+ *     the route — one RSC request for the same URL — and then resets, which is
+ *     what makes "Réessayer" an action rather than a repaint. Home is
+ *     navigation, not an action: the distinction `button.tsx` and `LinkButton`
+ *     exist to preserve.
  *
  * `console.error` is deliberate and not a stand-in for a reporter: Next already
  * logs the render failure, and this keeps the client stack in the console for a
  * bug report. Wiring a real error service is an operator decision (and an API
  * request), not something a boundary should invent.
  */
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { Alert } from "@/components/ui/alert";
@@ -55,6 +60,7 @@ export default function LocaleError({
   reset: () => void;
 }) {
   const params = useParams<{ locale?: string }>();
+  const router = useRouter();
   // The layout has already refused an unknown segment, so anything that is not
   // `ar` is the default locale — the same guard `not-found.tsx` applies.
   const locale = params?.locale === "ar" ? "ar" : "fr";
@@ -77,7 +83,17 @@ export default function LocaleError({
         <p className="mt-3 text-compact text-muted">{copy.digest.replace("{id}", error.digest)}</p>
       ) : null}
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        <Button onClick={reset}>{copy.retry}</Button>
+        <Button
+          onClick={() => {
+            // Refresh FIRST: a server-render failure is not re-attempted by
+            // `reset()` alone (see the header note), and the new payload is what
+            // the reset then renders.
+            router.refresh();
+            reset();
+          }}
+        >
+          {copy.retry}
+        </Button>
         <LinkButton href={localePath(locale, "/")} variant="secondary">
           {copy.home}
         </LinkButton>

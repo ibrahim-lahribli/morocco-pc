@@ -627,7 +627,7 @@ The after-run also passes all four enforced assertions (LCP medians 2 497 / 2 48
 performance 0.97 / 0.98); the before-run missed only LCP (2 561 / 2 515 ms), the T7 sample
 band, and is recorded here as the reason the before pass is not claimed as green.
 
-## Task 4 — S4 error-boundary spec: BLOCKED (2026-11-04)
+## Task 4 — S4 error-boundary spec (2026-11-04; UNBLOCKED and closed 2026-11-05)
 
 The brief's preferred trigger — a fixture id whose result read answers 500 — cannot reach
 `app/[locale]/error.tsx`. `lib/result/load.ts` narrows only 404/400 into `missing`; every
@@ -657,6 +657,30 @@ brief's "do not add a probe route or test-only code". Options, for an owner deci
    trades the page's id-preserving retry for the boundary's generic one.
 4. **Unit-test the boundary** — needs vitest, which PLAN.md A2 says must arrive with
    `test:unit` and its `web.yml` step; it would not be Playwright.
+
+### Resolved 2026-11-05 — option 2, a 200 that cannot render
+
+`IDS.brokenShape` (`b0b0b0b0-1111-4222-8333-444455556666`) carries a real build with the
+`components` key absent. `lib/result/load.ts` accepts the body — it is a 200 and it parses — and
+then `priceProvenance()` reads `components.length` and the render throws, so `error.tsx` catches it
+in both locales. `e2e/result-boundary.spec.ts` asserts its heading, its `role="alert"` sentence, the
+`/{locale}` home link, and that the retry produces a SECOND request for the same id. The fixture is
+the only new data and the spec lives in `e2e/`; nothing was added to `app/` or `components/` to
+force the throw.
+
+The retry assertion found a real defect the spec would otherwise have papered over: `error.tsx`
+called `reset()` alone, and for a SERVER-render failure Next re-renders from the payload that
+already failed — measured 2026-11-05 as ZERO network requests and a minified React error (441)
+twice on the click. The handler now refreshes the route (`router.refresh()`) and then resets, so
+"Réessayer" asks the server again, as the component's own docstring always claimed.
+
+| command | result (2026-11-05) |
+|---|---|
+| `npm run typecheck` | PASS (exit 0) |
+| `npm run lint` | PASS (exit 0, 0 warnings) |
+| `npm run check:tokens` | PASS — 104 files. The first attempt was RED: the comment's `React error #441` read as a hex literal, so it is now "a minified React error (441)" |
+| `npm run check:i18n` | PASS — 101 files, 2 catalogues |
+| `CI= npx playwright test e2e/result.spec.ts e2e/result-boundary.spec.ts` | **PASS — 60 passed** (the whole result suite plus the new fr/ar boundary spec, four viewports) |
 
 ## Task 5 — the sixth API request, with priorities (commit `c062a3e`)
 
@@ -716,9 +740,9 @@ with the evidence that satisfies it. Nothing below is inferred from a green suit
 
 ### What the evidence pack does NOT cover
 
-- **The S4 error-boundary spec is BLOCKED, not done** (see `## Task 4`): no Playwright test reaches
-  `app/[locale]/error.tsx`, because `lib/result/load.ts` turns every 5xx into the page's own
-  `unavailable` state. G3's five criteria do not include it; the owner decision (four options) is open.
+- **The S4 error-boundary spec LANDED 2026-11-05** (see `## Task 4`): option 2 — a 200 body with no
+  `components` — puts the throw inside the render, so `error.tsx` catches it in both locales. A 5xx
+  still belongs to the page's own `unavailable` state, deliberately.
 - `global-error.tsx` does not exist, so a root-layout failure falls through to Next's default.
 - The LCP margin is **14 ms / 9 ms** — the thinnest this gate has run at. T7's local 2 640 ms red did
   not reproduce here, so a future red in the 2.5-2.7 s band is variance until an A/B says otherwise.

@@ -103,6 +103,20 @@ export const IDS = {
    * two apart: the mock serves this one an error, not a body and not a 404.
    */
   unavailable: "00000000-0000-4000-8000-000000005030",
+  /**
+   * A 200 whose STATUS is fine and whose SHAPE is not: the only build has no
+   * `components` key at all. This is the S4 boundary seam, and it is deliberately
+   * not a 5xx — a 503 is caught by `lib/result/load.ts` and rendered as the
+   * page's own "indisponible" state, so it can never exercise `error.tsx`.
+   *
+   * The page dereferences the field twice (`priceProvenance()` reads
+   * `components.length`, and `build-card.tsx` maps it), so the render throws
+   * before any card exists. `JSON.stringify` drops an `undefined` value, which is
+   * why the body carries no key rather than `null`: a `null` would be a different
+   * (equally broken) shape, and this fixture states the one a truncated or
+   * version-skewed response produces.
+   */
+  brokenShape: "b0b0b0b0-1111-4222-8333-444455556666",
 };
 export const DISCLAIMER = "Prix indicatifs, non actualisés.";
 export const GENERATED_AT = "2026-10-16T09:00:00.000Z";
@@ -697,6 +711,17 @@ export const RECOMMENDATION_WITH_REASONS = baseResponse({
 });
 
 /**
+ * A structurally broken 200: the build exists, its `components` does not.
+ *
+ * Built by spreading a real build so every OTHER field stays contract-shaped —
+ * the failure is one missing key, not a body that is wrong everywhere.
+ */
+export const RECOMMENDATION_BROKEN_SHAPE = baseResponse({
+  id: IDS.brokenShape,
+  builds: [{ ...RECOMMENDATION_THREE_BUILDS.builds[0], components: undefined }],
+});
+
+/**
  * The map the mock answers `GET /v1/recommendations/:id` from.
  *
  * An id that is not here is a 404, as the real API's is: a result id is a
@@ -717,6 +742,7 @@ export const RECOMMENDATIONS_BY_ID = {
   [IDS.zeroBuild]: RECOMMENDATION_ZERO_BUILD,
   [IDS.zeroBuildNoFloor]: RECOMMENDATION_ZERO_BUILD_NO_FLOOR,
   [IDS.zeroBuildFloorAbsent]: RECOMMENDATION_ZERO_BUILD_FLOOR_ABSENT,
+  [IDS.brokenShape]: RECOMMENDATION_BROKEN_SHAPE,
 };
 
 /**
