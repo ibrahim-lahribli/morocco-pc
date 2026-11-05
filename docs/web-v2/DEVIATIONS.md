@@ -49,7 +49,7 @@ them), and **D-16** makes the results card's CTA the link instead of the card.
 The kit's script cost is measured on both fixtures rather than inferred — see the G2 table in
 `PROGRESS.md`. The preset route is still the binding one.
 
-## Resolved by the owner decision of 2026-11-03 (DESIGN.md; the three uncarried pieces are `TOKENS.md` §9)
+## Resolved by the owner decision of 2026-11-03 (DESIGN.md; the two uncarried pieces are `TOKENS.md` §9)
 
 D-03, D-04, D-05 and D-06 are **closed**: the full palette, the full type scale and the Arabic +10 %
 leading now ship, so those rows describe a state that no longer exists and are kept as history. What

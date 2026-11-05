@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { isTabPath } from "@/components/shell/tab-match";
+import { isTabPath, localeRest } from "@/components/shell/tab-match";
 import { cn } from "@/components/ui/cn";
 import { localePath } from "@/lib/i18n/paths";
 
@@ -43,8 +43,7 @@ export function HeaderNav({
   items: Array<{ path: string; label: string }>;
 }) {
   const pathname = usePathname() ?? "";
-  const root = `/${locale}`;
-  const rest = pathname.startsWith(root) ? pathname.slice(root.length) : pathname;
+  const rest = localeRest(pathname, locale);
 
   return (
     <ul className="hidden items-center gap-x-1 md:flex">

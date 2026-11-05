@@ -267,7 +267,7 @@ export default async function LocaleLayout({
              * scrollbar, so px-3 overflowed by ~3 px, the horizontal
              * overflow S1 forbids — the tighter padding stays for the md row
              * they now occupy. Each link is `h-tap` (44 px, the
-             * accessibility floor) with the same hover and rounded focus
+             * accessibility floor) with the same hover and focus treatment
              * treatment as the locale switcher beside it, and no
              * direction-specific class anywhere: `dir` on <html> flips the
              * whole flex row, so the RTL mirror is free. The list is a

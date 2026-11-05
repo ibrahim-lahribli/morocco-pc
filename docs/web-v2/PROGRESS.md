@@ -136,7 +136,7 @@ it is the owner's call (it is the only irreversible act in this phase) and is de
 ## Phase 1 — tokens (2026-11-03)
 
 Status: **done**. Owner decision: DESIGN.md's palette and its type scale are adopted — 47/47 ramp
-colours and all 10 type steps — with the three gaps in `TOKENS.md` §9, superseding the earlier partial
+colours and all 10 type steps — with two gaps left in `TOKENS.md` §9, superseding the earlier partial
 adoption (D-03/D-04/D-05/D-06).
 
 | Gate | Result |

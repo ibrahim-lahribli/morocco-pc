@@ -50,7 +50,7 @@ export async function generateMetadata({
 function Fallback() {
   return (
     <div className="mt-6 space-y-3">
-      <Skeleton className="h-4 w-28 rounded" />
+      <Skeleton className="h-4 w-28 rounded-base" />
       <Skeleton className="h-control w-full rounded-card" />
       <Skeleton className="h-control w-full rounded-card" />
       <Skeleton className="h-control w-full rounded-card" />

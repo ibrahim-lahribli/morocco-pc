@@ -1,4 +1,4 @@
-# TOKENS.md — DESIGN.md, adopted with three recorded gaps
+# TOKENS.md — DESIGN.md, adopted with two recorded gaps
 
 Source: `apps/web/design/stitch/moroccan_hardware_studio/DESIGN.md`. Implementation: the `@theme`
 block in `apps/web/app/globals.css` — the only file allowed a raw colour (`scripts/check-tokens.mjs`
@@ -117,7 +117,8 @@ variables on `html[lang="ar"]`, so every step moves at once rather than componen
 
 ## 7. Radii, elevation, spacing
 
-Radii: `sm` 4 px, `control` 10 px (buttons/inputs), `md` 12 px, `card` **16 px**, `xl` 24 px (sheets),
+Radii: `sm` 4 px, **`base` 8 px** (DESIGN.md's `rounded.DEFAULT`, added
+2026-11-05 — `rounded-base`), `control` 10 px (buttons/inputs), `md` 12 px, `card` **16 px**, `xl` 24 px (sheets),
 `pill`. Elevation: three levels from DESIGN.md — card 1 (ambient 0 1 3 + 0 2 8), card 2 (lifted,
 tinted indigo), bar (the sticky bottom bar's 0 −4 20). Spacing: `gutter` 20 px, `gutter-mobile` 12 px,
 `margin` 32 px, `margin-mobile` 16 px, `control` 48 px, `tap` 44 px.
@@ -128,18 +129,19 @@ tinted indigo), bar (the sticky bottom bar's 0 −4 20). Spacing: `gutter` 20 px
 `ar`-only preload (converting it to `next/font` measured 136 KB of unused Arabic on every `/fr`);
 `--font-mono` Geist Mono, `preload: false`.
 
-## 9. What was NOT carried (three gaps, measured 2026-11-05)
+## 9. What was NOT carried (two gaps; the third closed 2026-11-05)
 
 The colour and type halves ARE complete: **47/47 ramp colours present** (46 name-for-name, `surface`
 reconciled by D-12), **67 raw colours + the 13 aliases in §4**, and **all 10 type steps** with their
-weights and tracking. Three pieces of DESIGN.md have no token, recorded here so the pack does not claim
+weights and tracking. Two pieces of DESIGN.md still have no token, and they are recorded here so the pack does
+not claim
 more than it carries:
 
 | Gap | DESIGN.md | Today | Effect |
 |---|---|---|---|
-| `rounded.DEFAULT` | `0.5rem` (8 px) | no `--radius` default; the built CSS emits `.rounded{border-radius:.25rem}` (4 px) | 6 bare-`rounded` sites, all `Skeleton` placeholders, draw 4 px. Use `rounded-card` / `rounded-control` / `rounded-md` instead |
 | `space-xs…space-xl` | 4 / 8 / 16 / 24 / 40 px | not tokenised; the app uses Tailwind's spacing scale plus `--spacing-gutter`, `-gutter-mobile`, `-margin`, `-margin-mobile`, `-control`, `-tap` | nothing references the design's `space-*` names, so no surface renders differently |
 | `label-lg` / `label-md` | 14/20/600 and 12/16/500 | no separate steps; reached as `text-compact` (14/20/400) and `text-caption` (12/16/400) plus a weight utility | a call site must add `font-medium`/`font-semibold` itself; no existing call site does |
 
-Closing the first gap is a token addition plus a six-site sweep; the other two are naming decisions. All
-three belong to a Phase 4/5 token task, not to this close-out.
+The radius gap closed on 2026-11-05: `--radius-base` is the design's 8 px DEFAULT, the six bare
+`rounded` sites use it, and `check:tokens` now rejects a bare `rounded` outright (`bare-radius`). The two
+that remain are naming decisions for a Phase 4/5 token task, not part of this close-out.

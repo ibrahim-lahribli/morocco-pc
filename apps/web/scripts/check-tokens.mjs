@@ -2,7 +2,7 @@
 /**
  * apps/web/scripts/check-tokens.mjs — the S2 token gate.
  *
- * Three rules, all greppable and all about the same failure: a component that
+ * Five rules, all greppable and all about the same failure: a component that
  * quietly invents a colour or a physical side instead of using a token, so the
  * palette drifts and the Arabic pass (S20) becomes a rewrite.
  *
@@ -11,9 +11,13 @@
  *   2. PALETTE CLASS     - `bg-stone-200`, `text-white`, `border-neutral-200`.
  *                          A palette utility bypasses the semantic layer even
  *                          though it contains no hex.
- *   3. PHYSICAL SIDE     - `ml-`, `pr-`, `left-`, `text-right`, `border-l-`.
- *                          Logical properties (`ms/me/ps/pe/start/end/
- *                          text-start`) mirror under `dir="rtl"`; these do not.
+ *   3. PHYSICAL SIDE     - `ml-`, `pr-`, `left-`, `border-l-`. Logical
+ *                          properties (`ms/me/ps/pe/start/end`) mirror under
+ *                          `dir="rtl"`; these do not.
+ *   5. BARE RADIUS       - `rounded` with no suffix is Tailwind's 0.25rem, not
+ *                          DESIGN.md's 0.5rem DEFAULT. Use a radius token:
+ *                          `rounded-base` (8 px), `-card`, `-control`, `-md`,
+ *                          `-pill`.
  *
  * Scope: every .ts/.tsx under app/, components/ and lib/. `app/globals.css` is
  * the one place a literal is allowed, and it is not scanned. Test files are
@@ -55,6 +59,14 @@ const RULES = [
     id: "physical-align",
     pattern: /\btext-(?:left|right)\b/g,
     message: "physical text alignment; use text-start / text-end",
+  },
+  {
+    id: "bare-radius",
+    // `rounded` alone is Tailwind's 0.25rem; DESIGN.md's DEFAULT is 0.5rem and
+    // `rounded-base` is that token. Any suffixed class is the fix, so the
+    // negative lookahead is the whole rule.
+    pattern: /(?<![A-Za-z0-9_-])rounded(?![A-Za-z0-9_-])/g,
+    message: "bare `rounded` (4 px); use a radius token such as rounded-base (8 px)",
   },
 ];
 
@@ -117,5 +129,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `PASS tokens - ${files.length} file(s), no hex literals, no palette utilities, no physical sides`,
+  `PASS tokens - ${files.length} file(s), no hex literals, no palette utilities, no physical sides, no bare radius utility`,
 );

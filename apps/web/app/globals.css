@@ -245,6 +245,7 @@
 
   /* ---- radii, elevation, spacing: DESIGN.md -------------------------------------------------- */
   --radius-sm: 0.25rem;
+  --radius-base: 0.5rem;               /* 8 px, DESIGN.md `rounded.DEFAULT` */
   --radius-control: 0.625rem;         /* 10 px, the design's button/input radius */
   --radius-md: 0.75rem;
   --radius-card: 1rem;                /* 16 px, the design's card radius */

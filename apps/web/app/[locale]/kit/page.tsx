@@ -259,8 +259,8 @@ export default async function KitPage({
         <div className="space-y-3">
           <SkeletonCard />
           <div className="space-y-3 rounded-card border border-border bg-surface p-3.5">
-            <Skeleton className="h-4 w-1/3 rounded" />
-            <Skeleton className="h-3 w-3/4 rounded" />
+            <Skeleton className="h-4 w-1/3 rounded-base" />
+            <Skeleton className="h-3 w-3/4 rounded-base" />
           </div>
         </div>
       </Section>

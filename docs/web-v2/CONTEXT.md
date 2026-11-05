@@ -16,7 +16,7 @@ this work.
 | Phase | Status |
 |---|---|
 | 0 — baseline, feasibility, reference captures | **done** (8 tasks, 78 reference PNGs) |
-| 1 — tokens | **done — with three recorded gaps (`TOKENS.md` §9)**: the design's 47 ramp colours + 20 brand/money colours (67 raw) + aliases, its 10 type steps and the Arabic +10 % leading. NOT carried: bare `rounded`, `space-xs…xl`, `label-lg`/`label-md` |
+| 1 — tokens | **done — with two recorded gaps (`TOKENS.md` §9)**: the design's 47 ramp colours + 20 brand/money colours (67 raw) + aliases, its 10 type steps and the Arabic +10 % leading. NOT carried: `space-xs…xl`, `label-lg`/`label-md` |
 | 2 — kit and mobile primitives | **done** — closed at gate G2 (T1-T8; D-15 to D-19) |
 | 3 — shell | **code complete; G3 evidence complete 2026-11-04, awaiting owner sign-off**: tab bar, landmark naming, review fixes, `md+` header nav, `error.tsx`, header restyle (T6), footer restyle (T7); five-criterion evidence pack in `PROGRESS.md` `## T8`. Open inside the phase: the S4 error-boundary spec is BLOCKED (`PROGRESS.md` `## Task 4`) and `global-error.tsx` does not exist |
 | 4 — screens, one task each | not started (G4.n) |
@@ -51,7 +51,7 @@ Branch `web-redesign`. One task = one commit. Master is touched only at release.
   entry, no OG card; **D5** desktop built from Phase 5 rules at 1200 px; **D6** no dark mode;
   **D7** Arabic currency label `د.م.`; **D8** no PWA.
 - **Colours and type now come from DESIGN.md** (owner decision, supersedes D-03/D-04/D-05/D-06) — in
-  full for the 47-colour ramp and the 10 type steps; the three uncarried pieces are `TOKENS.md` §9.
+  full for the 47-colour ramp and the 10 type steps; the two uncarried pieces are `TOKENS.md` §9.
   The only remaining override is accessibility: never ship a pairing under 4.5:1 body / 3:1 UI.
   White-on-amber (2.15:1) and `#10B981` as text (2.54:1) stay forbidden — see `DEVIATIONS.md`.
 

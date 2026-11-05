@@ -22,11 +22,11 @@ export function Skeleton({ className }: { className?: string }) {
 export function SkeletonCard() {
   return (
     <div className="space-y-3 rounded-card border border-border bg-surface p-3.5">
-      <Skeleton className="h-4 w-1/3 rounded" />
-      <Skeleton className="h-3 w-3/4 rounded" />
+      <Skeleton className="h-4 w-1/3 rounded-base" />
+      <Skeleton className="h-3 w-3/4 rounded-base" />
       <Skeleton className="h-2 w-full rounded-pill" />
       <div className="flex items-center justify-between pt-2">
-        <Skeleton className="h-6 w-24 rounded" />
+        <Skeleton className="h-6 w-24 rounded-base" />
         <Skeleton className="h-6 w-20 rounded-pill" />
       </div>
     </div>

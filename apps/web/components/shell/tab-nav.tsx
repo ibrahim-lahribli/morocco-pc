@@ -39,7 +39,7 @@ import { usePathname } from "next/navigation";
 
 import { BottomTabBar, type TabBarIcon } from "@/components/ui/bottom-tab-bar";
 import { localePath } from "@/lib/i18n/paths";
-import { currentTabKey } from "./tab-match";
+import { currentTabKey, localeRest } from "./tab-match";
 
 export interface TabNavItem {
   /** Stable key; the same value `BottomTabBar` compares against `current`. */
@@ -63,8 +63,7 @@ export interface TabNavProps {
 
 export function TabNav({ locale, label, items }: TabNavProps) {
   const pathname = usePathname() ?? "";
-  const root = `/${locale}`;
-  const rest = pathname.startsWith(root) ? pathname.slice(root.length) : pathname;
+  const rest = localeRest(pathname, locale);
 
   // The rule lives in `tab-match.ts` next door: it is a pure question about
   // (pathname, items), and its section BOUNDARY is worth pinning on its own.
