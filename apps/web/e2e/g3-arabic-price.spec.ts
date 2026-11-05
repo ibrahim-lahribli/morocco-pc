@@ -23,6 +23,19 @@
  * adjacent, so an edge-to-edge comparison of two touching boxes decides the
  * verdict on subpixel rounding (measured: 0.01 px decided one of these).
  *
+ * WHY THE TERMINAL DOT SITS AT THE FAR LEFT, and why that is CORRECT. `د.م.` is
+ * four code points — د, U+002E, م, U+002E — and the whole unit is one RTL run.
+ * Bidi paints an RTL run's first logical character RIGHTMOST, so the visual
+ * left-to-right order is `.` `م` `.` `د`, and reading the unit right-to-left
+ * gives back `د.م.` exactly. The dot at the unit's far left is therefore the
+ * SECOND dot of the abbreviation — its terminal stop — not a stray period that
+ * wandered. An earlier version of this file asserted "no dot left of the unit's
+ * last letter", which forbids precisely that correct render: it compared each
+ * dot against م, the last letter in LOGICAL order, which is also the leftmost
+ * letter on screen. The rule the check is actually about is containment — the
+ * abbreviation's punctuation stays inside the abbreviation — so that is what is
+ * asserted below, and the number still has to be on the unit's right.
+ *
  * Two surfaces, per the gate:
  *   1. the result page's build-card total (a bare money node);
  *   2. the wizard's budget display (the hint line under the field, which carries
@@ -116,7 +129,16 @@ function analyse(shape: MoneyShape) {
   const firstDigit = digits[0];
   const lastDigit = digits[digits.length - 1];
   const firstLetter = letters[0];
-  const lastLetter = letters[letters.length - 1];
+
+  // The unit's own PAINTED span: its leftmost glyph edge to its rightmost, taken
+  // over all four characters of `د.م.` wherever bidi decided to put them. A dot
+  // that renders outside this span has escaped the abbreviation — which is the
+  // defect worth failing on — whereas a dot at the span's left end is just the
+  // terminal stop of an RTL run (see the header).
+  const unitSpan = {
+    left: Math.min(...unit.map((char) => char.left)),
+    right: Math.max(...unit.map((char) => char.right)),
+  };
 
   return {
     unit,
@@ -125,10 +147,14 @@ function analyse(shape: MoneyShape) {
     firstDigit,
     lastDigit,
     firstLetter,
-    lastLetter,
+    unitSpan,
     digitsRightOfLabel: firstDigit.left > firstLetter.left,
     dotsRightOfDigits: dots.filter((dot) => dot.centre > lastDigit.centre).map((dot) => dot.left),
-    dotsLeftOfLastLetter: dots.filter((dot) => dot.centre < lastLetter.centre).map((dot) => dot.left),
+    // 0.5 px of slack: `getClientRects()` rounds to hundredths, and the unit's
+    // outermost glyph edge IS its own dot's edge in this render.
+    dotsOutsideUnit: dots
+      .filter((dot) => dot.left < unitSpan.left - 0.5 || dot.right > unitSpan.right + 0.5)
+      .map((dot) => dot.left),
   };
 }
 
@@ -143,7 +169,7 @@ function report(label: string, shape: MoneyShape): void {
 function assertPriceDirection(label: string, shape: MoneyShape): void {
   const geometry = analyse(shape);
   console.log(
-    `REPORT   ${label}: digit ${JSON.stringify(geometry.firstDigit.char)} x=${geometry.firstDigit.left}..${geometry.firstDigit.right} centre ${geometry.firstDigit.centre.toFixed(2)}; unit letter ${JSON.stringify(geometry.firstLetter.char)} x=${geometry.firstLetter.left}, last letter ${JSON.stringify(geometry.lastLetter.char)} centre ${geometry.lastLetter.centre.toFixed(2)}; dots at ${geometry.dots.map((dot) => dot.left).join(", ")}`,
+    `REPORT   ${label}: digit ${JSON.stringify(geometry.firstDigit.char)} x=${geometry.firstDigit.left}..${geometry.firstDigit.right} centre ${geometry.firstDigit.centre.toFixed(2)}; unit letter ${JSON.stringify(geometry.firstLetter.char)} x=${geometry.firstLetter.left}; unit span x=${geometry.unitSpan.left}..${geometry.unitSpan.right}; dots at ${geometry.dots.map((dot) => dot.left).join(", ")}`,
   );
 
   // (1) The number sits to the RIGHT of the unit.
@@ -158,10 +184,15 @@ function assertPriceDirection(label: string, shape: MoneyShape): void {
     `a "." sits right of the digits (dot left edges ${geometry.dotsRightOfDigits.join(", ")}; last digit centre ${geometry.lastDigit.centre.toFixed(2)})`,
   ).toHaveLength(0);
 
-  // (3) No period to the left of the unit's last letter.
+  // (3) Every dot of the unit stays INSIDE the unit's own painted span. This is
+  //     the rule the old "no dot left of the last letter" was reaching for: the
+  //     abbreviation's punctuation belongs to the abbreviation, and a dot that
+  //     escaped it (to the far right, or into the digits' run) is the defect.
+  //     A dot at the span's left edge is the terminal stop and is correct —
+  //     `د.م.` is RTL, so its last logical character paints leftmost.
   expect(
-    geometry.dotsLeftOfLastLetter,
-    `a "." sits left of "${geometry.lastLetter.char}" (dot left edges ${geometry.dotsLeftOfLastLetter.join(", ")}; "${geometry.lastLetter.char}" centre ${geometry.lastLetter.centre.toFixed(2)})`,
+    geometry.dotsOutsideUnit,
+    `a "." of the unit escaped its span (dot left edges ${geometry.dotsOutsideUnit.join(", ")}; unit span ${geometry.unitSpan.left}..${geometry.unitSpan.right})`,
   ).toHaveLength(0);
 }
 
