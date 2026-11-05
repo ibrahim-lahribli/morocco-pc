@@ -11,6 +11,16 @@ read as a measurement, and so the images the review is about are one click away.
 - No app code was changed: `apps/web/app`, `apps/web/components` and `apps/web/lib` are untouched.
   The deliverables are two specs, one script, this document and `design/g3-review/`.
 
+> **Re-verification 2026-11-05, after D-31** (`web-redesign` @ `2b842f7`). The tables below are this
+> pack's own run and stay as history; three verdicts have since changed: S7 is now **PASS** (`/ar`
+> @768 `الأدلة` 46.4 x 44.0 px), S15 is now **PASS** (12 px fr / 13 px ar), and check A is **PASS**
+> because `812f726` replaced the dot wording with containment. Today's commands: those two specs
+> **48/48, exit 0**; `npm run test:lighthouse` **exit 0** (LCP 2 488 / 2 476 ms, CLS 0.000, script
+> 171 022 / 169 750 B, performance 0.98). **The OG images in §5 and §7 are PRE-FIX:** measured unit
+> ink `[37,10,40,10]` and `[40,11,43,11]` where the fixed cards render `[10,40,10,37]` and
+> `[11,44,11,39]`. Regenerate with `node scripts/g3-capture.mjs` before judging check B. Full record:
+> the G3 re-verification section of `PROGRESS.md`.
+
 ---
 
 ## 1. What was run

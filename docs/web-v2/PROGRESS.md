@@ -39,6 +39,9 @@ remain OPEN, which is why the gate is not passed:
 | c | shell at 360 and 768 in `fr` and `ar` against Stitch | `apps/web/design/stitch/accueil_morocco_pc/screen.png` vs the built app |
 | d | tab bar copy on a real phone — D-20's "Pièces" / "Gardés" | `DEVIATIONS.md` D-20 |
 
+**Re-verified 2026-11-05 after D-31 - see the G3 re-verification section at the end of this file.**
+Check (b)'s four committed images are still PRE-FIX (ink measured), so regenerate them before judging it.
+
 The suite's size is deliberately not written into this file's prose: `cd apps/web && npx playwright test
 --list` prints it, and `npm test` now runs four viewport projects, so a run count and a spec count are
 different numbers. Dated measurements inside individual ledger entries stay as measured.
@@ -888,3 +891,60 @@ Staged, so nothing enforced today is removed before its replacement has a distri
 CLS (0.1), script size (174 080 B) and `categories:performance` (0.90) are unchanged and still
 `error`, median of three, on both fixture URLs. `npm run test:lighthouse` must still exit 0 with
 the LCP warning allowed; `npm run test:lighthouse:devtools` is the new measurement.
+
+## G3 re-verification (2026-11-05, after D-31)
+
+Re-run on `web-redesign` @ `2b842f7` (the D-31 commit), on a clean tree. Where these differ from
+`G3_REVIEW_PACK.md`, this section is the later measurement; that pack's tables stay as its own run.
+
+| Command | From | Result |
+|---|---|---|
+| `npx playwright test e2e/g3-shell.spec.ts e2e/g3-arabic-price.spec.ts --reporter=list` | `apps/web` | **exit 0 - 48 passed / 0 failed** |
+| `npm run test:lighthouse` | `apps/web` | **exit 0** - 4 `error` assertions, both fixtures, median of 3 |
+| `npm run check:api-types` | `apps/web` | PASS - contract 1.10.0, `schema.d.ts` byte-identical |
+| `CI=1 npm test` | `apps/web` | **exit 0 - 738 passed / 2 skipped** |
+| `npm run typecheck` / `lint` / `check:tokens` / `check:i18n` / `build` | `apps/web` | 0 / 0 / PASS / PASS / 0 |
+| `node scripts/gen-decision-index.js --check` | repo root | PASS - index fresh |
+| `node scripts/verify-docs.js --offline` | repo root | PASS |
+
+### Verdicts that changed since the pack measured
+
+| Pack row | Pack (2026-11-05) | Re-measured |
+|---|---|---|
+| S7 - `/ar` @768 header `الأدلة` | FAIL, 43.4 x 44.0 px | **PASS - 46.4 x 44.0 px**; every measured control clears 44 in both axes (43.4 no longer appears) |
+| S15 - tab label size | REPORT, 10 px below the floor | **PASS - 12 px fr / 13 px ar**, none below floor |
+| A3 / A6 - check A wording | FAIL as worded | **PASS** - `812f726` asserts containment instead; `g3-arabic-price` green in all four projects |
+
+### Lighthouse, medians of 3
+
+| Route | LCP (runs) | CLS | Script | Perf |
+|---|---|---|---|---|
+| `/fr/config/3f5a...` | **2 488 ms** (2488 / 2485 / 2489) | 0.000 | 171 022 B | 0.98 |
+| `/fr/config-pc-gamer-9000-dh` | **2 476 ms** (2561 / 2474 / 2476) | 0.000 | 169 750 B | 0.98 |
+
+Budgets unchanged (LCP 2 500 ms `warn` since D-29; CLS 0.1, script 174 080 B, performance 0.90 still
+`error`): script margins 3 058 B / 4 330 B. The preset's first run reached 2 561 ms; the median did not
+follow it.
+
+### Finding - all four committed Arabic review images are PRE-FIX (D-31)
+
+Every committed card predates the D-31 render fix, so it still draws the unit in LOGICAL order.
+Measured with an ink probe (`sharp`, luma < 48, the headline's four rightmost runs):
+
+| File | Unit ink, left to right | Reading |
+|---|---|---|
+| `apps/web/design/g3-review/og/og-result.ar.1200x630.png` | `[37, 10, 40, 10]` | د, dot, م, dot - **old** |
+| `apps/web/design/g3-review/og/og-preset.ar.1200x630.png` | `[40, 11, 43, 11]` | letter, dot, letter, dot - **old** |
+| `apps/web/design/checks/d7-og-config-ar.png` | `[37, 10, 40, 10]` | **old** |
+| `apps/web/design/checks/d7-og-preset-ar.png` | `[40, 11, 43, 11]` | **old** |
+| freshly rendered (this tree, `e2e/og-unit-ink.spec.ts`) | `[10, 40, 10, 37]` / `[11, 44, 11, 39]` | dot, م, dot, د - **correct** |
+
+So owner check (b) must not be judged against those files yet. Refresh with `node scripts/g3-capture.mjs`
+(all 65 `design/g3-review/` captures) plus a re-capture of the two `design/checks/d7-og-*.png`. Not done
+here: it rewrites 67 tracked images from its own servers, a separate reviewable change.
+
+### Still not verified
+
+`node scripts/g3-capture.mjs` (and WebKit's presence), a clean `npm ci`, visual legibility of the cards,
+and the four owner checks. G3 stays **evidence complete, awaiting owner sign-off** - only the owner
+closes it.
