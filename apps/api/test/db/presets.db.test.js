@@ -65,8 +65,16 @@ const generator = require('../../../../scripts/generate-presets');
 
 const ENGINE_VERSION = 'db-test-sha';
 const CURRENCY = 'MAD';
-/** The ribbon's cheapest budget: one pass is enough to prove the key. */
-const TEST_BUDGET = 6000;
+/**
+ * A budget the catalog can actually build at. Deliberately NOT the ribbon's
+ * cheapest (6 000): since R-26 a key whose pass assembles nothing is recorded
+ * nowhere, and 6 000 sits in the measured zero-build band - the cheapest real
+ * build was ~7 877 MAD on 2026-10-02 (AGENTS.md section 6) - so that value could
+ * only ever assert the PRE-R-26 behaviour, a preset pointing at `builds: []`.
+ * 12 000 clears the band with headroom for either declared use case, and one
+ * pass is still all this test needs to prove the key.
+ */
+const TEST_BUDGET = 12000;
 
 // Module scope on purpose: an unusable environment fails the file, not a test.
 const POOL_CONFIG = resolveTestDbUrl(process.env);

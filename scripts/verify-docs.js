@@ -127,6 +127,8 @@ function readRepo(rel) {
 // => 59 headings, 65 Status lines.
 // Decision 63 (EU release model pinned at deploy, 2026-11-02) adds one
 // heading/status => 61 headings, 67 Status lines.
+// Decision 64 (Render inbound proxy cannot be pinned, 2026-11-03) adds one
+// heading/status => 62 headings, 68 Status lines.
 const decisions = (function checkDecisions() {
   const raw = readRepo('docs/RECOMMENDATION_ENGINE_DECISIONS.md');
   // Line-ending tolerant: the log is stored CRLF, but a Linux checkout
@@ -143,7 +145,7 @@ const decisions = (function checkDecisions() {
     if (inEngine3 && /^### Decision \d+/.test(line)) nested += 1;
     if (/^Status:/.test(line)) status += 1;
   }
-  const ok = global === 61 && nested === 5 && status === 67;
+  const ok = global === 62 && nested === 5 && status === 68;
   if (!ok) {
     fail('decisions-parse', 'global=' + global + ' (want 61), nested=' + nested + ' (want 5), Status:=' + status + ' (want 67)');
     return null;

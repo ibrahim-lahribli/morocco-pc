@@ -6237,3 +6237,48 @@ Supersedes the **live wording** of two clauses, and only these:
 It does **not** supersede Decision 57 item 1: that was already superseded by the 2026-11-01 amendment itself, and this entry records that fact rather than re-deriving it.
 
 The superseded documents were **NOT edited in place**: Decision 57 and its amendment read exactly as written, and this entry is the only record of the supersession. Decision 62 is unchanged and remains the owner of the setting; this decision is what SETS it.
+
+## Decision 64 — Render's inbound proxy cannot be pinned, so the beta accepts one shared rate-limit bucket
+
+Status: RESOLVED 2026-11-03 — `TRUST_PROXY` stays EMPTY on the Render-hosted EU service, because Render publishes no inbound proxy or load-balancer range to pin and its edge APPENDS to a client-supplied `X-Forwarded-For`; the accepted cost is one rate-limit bucket for the whole internet (30/min POST, 30/min swap commit and preview, 120/min GET), and this re-opens on a published inbound range, a move to a host with a pinnable proxy, or a Render plan that makes inbound IP rules available.
+
+Date: 2026-11-03. Scope: the `TRUST_PROXY` setting of `morocco-pc-api-eu` and the evidence behind it. It is NOT a code change (no route, schema, migration or seed is touched), NOT a claim that the limit is per-client, and NOT a replacement for §8.4 of the deploy recipe — that section stays correct for a Fly host, where the socket peer IS the evidence.
+
+### Current situation
+
+`render.yaml` carries `TRUST_PROXY` with `sync: false` and no value, so the deployed service runs with Fastify's default: `X-Forwarded-For` is IGNORED and `request.ip` is the proxy's address. Measured on the live host 2026-11-03: two requests carrying DIFFERENT forged `X-Forwarded-For` values (`203.0.113.7`, `198.51.100.9`) returned `x-ratelimit-remaining: 119` and then `118` on the same 120/min GET budget — one bucket, and a caller cannot mint its own.
+
+That is the SAFE half of P2 Sprint 2 Step 4, not the truthful half: every caller on the internet shares one budget. §8.4 of `docs/RECIPES/deploy-eu-colocation.md` describes how to fix that on Fly by reading the trusted addresses off the running app and pinning them. Render offers no equivalent evidence.
+
+### Problem
+
+The recipe's instrument cannot be used on this host. §8.4 pins `TRUST_PROXY` from `fly ips list` plus the request log's `remoteAddress`; Render publishes no inbound address list to put in that field, so the step has no input at all. Leaving the setting empty is correct but unfinished, and an agent reading §8.4 alone would either invent a value — which this repo forbids — or conclude the work is merely unstarted.
+
+The tempting substitutes are worse than the empty value. Fastify's `trustProxy: true` takes the LEFTMOST `X-Forwarded-For` entry, and Render documents that it only APPENDS to a client-supplied header; a caller could therefore present any address it liked and choose its own bucket — precisely the failure §8.4 names ("a wrong value lets a caller pick its own bucket"). A numeric hop count is no better: how many entries Render's edge appends is undocumented, so the count would be a guess that breaks silently on the next platform change.
+
+### Decision
+
+1. **`TRUST_PROXY` stays empty on `morocco-pc-api-eu`.** The empty value is the decision, not an omission: `render.yaml` keeps `- key: TRUST_PROXY` / `sync: false`, and no value is supplied at deploy time.
+2. **No Render-hosted instance may set `trustProxy: true` or a numeric hop count.** Render appends to a client-supplied `X-Forwarded-For`, so either form lets a caller choose its own bucket. This is the same refusal §8.4 already states for Fly.
+3. **The accepted cost is recorded, not implied.** Every caller shares one bucket: 30/min for `POST /v1/recommendations`, 30/min for the swap commit and preview, 120/min for reads. The limit is still enforced; this is the price of not being spoofable.
+4. **The evidence that exists is the bucket proof.** Two distinct forged `X-Forwarded-For` values on one budget (`119` → `118`) show the safe half holds today, and that measurement is the regression check if anyone later changes the setting.
+5. **§8.4 stays Fly-only and now says so.** The recipe gains a leading note that its evidence channel does not exist on Render and names this decision, so the section cannot be followed into a guess.
+
+### Rejected alternatives
+
+- **`trustProxy: true`.** Rejected: Render appends to a client-supplied `X-Forwarded-For`, so the leftmost entry is caller-controlled; it would let one client mint unlimited buckets, the opposite of the sprint's purpose.
+- **A numeric hop count (`1` or `2`).** Rejected: Render does not document how many entries its edge appends (Cloudflare and Render's load balancer are both in the path), so the count is a guess that fails silently; §8.4 states the same refusal for Fly.
+- **Copy Cloudflare's published ranges.** Rejected: those are Cloudflare's anycast ranges, not Render's, and trusting them changes which entry Fastify stops on without establishing who the caller is. Render does not document `CF-Connecting-IP` as supported.
+- **Render inbound IP rules as the substitute.** Rejected for THIS decision: they allowlist clients at the edge (a different lever) and web services require a Scale or Enterprise plan. Recorded as a future option, never as a substitute for a truthful `request.ip`.
+- **Pin nothing and say nothing.** Rejected: that is the state a reader already misreads as unstarted work rather than as measured and accepted.
+
+### Verdict for this pass
+
+- **PASS — the research answer, with sources.** Render publishes outbound ranges only (`https://render.com/docs/outbound-ip-addresses`), states that dedicated IPs affect outbound traffic only (`https://render.com/docs/dedicated-ips`: "Do dedicated IP sets affect inbound traffic? No."), and its own guidance is to read the client IP from `x-forwarded-for` (`https://render.com/articles/how-render-handles-ddos-attacks`). No page publishing an inbound proxy CIDR list was found: the accurate statement is that such a list is NOT PUBLISHED, not that Render disclaims one.
+- **PASS — the measurement.** One bucket on the live host on 2026-11-03, two forged values, `119` → `118`; no host or credential appears in the evidence.
+- **PASS — the record.** This entry, the §8.4 note and R-08's restatement; `verify:docs` and the decision index are regenerated in the same session.
+- **NOT claimed:** that per-client limits are truthful today (they are not), that Render's edge behaves identically for every service, or that inbound IP rules would close the gap.
+
+### Amends
+
+Decision 63's environment (the Render-hosted EU service) is the subject; no earlier decision is superseded. §8.4 of `docs/RECIPES/deploy-eu-colocation.md` is NOT rewritten — its Fly procedure stays exactly as written, and the new leading note records that it does not transfer.

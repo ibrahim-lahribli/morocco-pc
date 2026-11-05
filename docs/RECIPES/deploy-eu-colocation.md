@@ -320,6 +320,13 @@ deployed short SHA. Save the id — it is one of the rows the measurement run wi
 
 ### 8.4 Pin `TRUST_PROXY` from the origin's own evidence (P2 Sprint 2 Step 4)
 
+> **This section is for the Fly host and does not transfer to Render** (the host `render.yaml` creates).
+> Render publishes no inbound address list to pin: the platform documents OUTBOUND ranges only, states
+> that dedicated IPs affect outbound traffic only, and its own guidance reads the client IP from
+> `x-forwarded-for` - a header Render only APPENDS to, so trusting it would let a caller pick its own
+> bucket. `TRUST_PROXY` therefore stays empty there by Decision 64, and the accepted cost is one
+> rate-limit bucket for every caller. Do not run steps 1-3 below against a Render service.
+
 The deploy in 8.2 leaves `TRUST_PROXY` unset, which is correct but not finished: with it unset,
 `request.ip` is the Fly Proxy's address, so the 30/min POST budget is 30/min for the whole
 internet. This section reads the trusted addresses off the running app, pins them, and proves

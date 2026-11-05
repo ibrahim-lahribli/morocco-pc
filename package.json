@@ -16,6 +16,8 @@
     "eval:scenarios": "node scripts/eval-scenarios.js",
     "start:api": "node apps/api/src/server.js",
     "test:api": "node --test \"apps/api/test/unit/*.test.js\"",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include=\"src/**\" \"src/**/*.test.js\"",
+    "test:coverage:api": "node --test --experimental-test-coverage --test-coverage-include=\"apps/api/src/**\" \"apps/api/test/unit/*.test.js\"",
     "test:api:db": "node apps/api/test/run-db-tests.js"
   },
   "dependencies": {

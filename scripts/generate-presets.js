@@ -12,6 +12,13 @@
  * ribbon as landing pages, which is why the id it hands a client is a real
  * recommendation id that GET /v1/recommendations/{id} answers.
  *
+ * A PASS THAT ASSEMBLED NOTHING IS NOT A PRESET (R-26). Two keys at 6 000 MAD
+ * committed a pass whose every build was rejected, so the preset pointed at a
+ * recommendation that answers `builds: []` - a landing page with nothing on it.
+ * A pass is recorded only when it carries at least one `build_candidate` row;
+ * otherwise it is deleted in FK order and the key is reported as `empty-pool`,
+ * exactly like a pass that never assembled at all.
+ *
  * WHY IT REUSES THE API'S WRITER INSTEAD OF ITS OWN SQL. One writer for
  * `recommendation_query` is what keeps a generated pass indistinguishable from a
  * POSTed one - same profile/query pair, same commit path, same pass facts. The
@@ -48,7 +55,7 @@
  * Usage: node scripts/generate-presets.js [--budget-from=N] [--budget-to=N]
  *          [--step=N] [--use-case=U]... [--currency=CCC]
  *          [--model=<name@version>] [--dry-run|--commit|--cleanup[=<version>]]
- *          [--help]
+ *          [--target-env=<NAME> [--restore-point=<id>]] [--help]
  *
  * `--dry-run` is the DEFAULT: the ribbon is printed and nothing is written. The
  * `=<value>` form is mandatory for a valued flag (the parser matches prefixes),
@@ -60,8 +67,17 @@
  * line carrying both can never be read as a committed ribbon.
  *
  * Every write goes through `getWriteTestDbUrl()` (scripts/lib/db-url.js), which
- * refuses to run against the shared database - the branch is the only target a
- * pass may be written to. The scoring model is a PIN (`--model=` /
+ * refuses to run against the shared database - the branch is the DEFAULT target a
+ * pass may be written to. `--target-env=<NAME>` is the one way to write somewhere
+ * else, and it exists because a release environment's presets cannot be copied
+ * from the TEST branch: a preset row is keyed by catalog version, and the branch
+ * and the release database carry different ones (R-24). The gate is a DIGEST
+ * comparison, not a name check - a second variable name pointing at the shared
+ * database is refused - and a `--commit`/`--cleanup` against a named target needs
+ * `--restore-point=<id>`, the same rule `apply-api-role.js` applies.
+ * The audit line prints that restore point beside the digest, so a release write
+ * is traceable from the run's own output rather than from a document.
+ * The scoring model is a PIN (`--model=` /
  * `SCORING_MODEL_PIN`), never "whichever is active": a pin selects among active
  * models and can never activate one, and a comparison harness that silently
  * measured a different model than it recorded would be worse than no harness.
@@ -71,7 +87,8 @@ require('dotenv').config();
 
 const { Client } = require('pg');
 
-const { getWriteTestDbUrl } = require('./lib/db-url');
+const { CONNECTION_TIMEOUT_MILLIS, resolveTestDbUrl } = require('./lib/db-url');
+const { applyLogTarget, isValidRestorePointId } = require('./lib/migrations');
 const modelPin = require('./lib/model-pin');
 const passRows = require('./lib/pass-rows');
 
@@ -98,9 +115,11 @@ const ENGINE_VERSION = process.env.ENGINE_VERSION || 'generate-presets';
 const USAGE = [
   'usage: node scripts/generate-presets.js [--budget-from=N] [--budget-to=N] [--step=N]',
   '         [--use-case=U]... [--currency=CCC] [--model=<name@version>]',
-  '         [--dry-run|--commit|--cleanup[=<catalog-version>]] [--help]',
+  '         [--dry-run|--commit|--cleanup[=<catalog-version>]]',
+  '         [--target-env=<NAME> [--restore-point=<id>]] [--help]',
   'Environment: SCORING_MODEL_PIN (overridden by --model=<name@version>; else the default seed-minimal-v1@1.0.0).',
-  'Default is --dry-run: nothing is written. Writes go to TEST_DATABASE_URL only.',
+  'Default is --dry-run: nothing is written. Without --target-env, writes go to TEST_DATABASE_URL only.',
+  'A named target must not digest to the shared database, and --commit/--cleanup against it needs --restore-point=<id>.',
 ].join('\n');
 
 /**
@@ -118,6 +137,41 @@ class UsageError extends Error {}
 
 function fail(message) {
   throw new UsageError(message);
+}
+
+/**
+ * Variable names the two default paths already own.
+ *
+ * `DATABASE_URL` is the shared database (never a preset target), and
+ * `TEST_DATABASE_URL` is what the no-flag path guards. Refusing both by name
+ * keeps ONE meaning per invocation: either the branch guard ran, or an explicit
+ * target did.
+ */
+const RESERVED_TARGET_ENVS = new Set(['DATABASE_URL', 'TEST_DATABASE_URL']);
+
+/**
+ * `--target-env` value: a VARIABLE NAME, never a URL.
+ *
+ * Same rule as `apply-api-role.js`, for the same reason: a URL on the command
+ * line lands in shell history and in `ps`, and a connection string carries a
+ * password. The variable is shape-checked here so a typo fails before anything
+ * is read or dialled.
+ *
+ * @param {string} raw the value after `--target-env=`
+ * @returns {string} the variable name
+ * @throws {UsageError} on a non-name, a reserved name, or an empty value
+ */
+function parseTargetEnvName(raw) {
+  const name = typeof raw === 'string' ? raw.trim() : '';
+  if (!/^[A-Z][A-Z0-9_]*$/.test(name)) {
+    fail('--target-env expects an environment variable NAME matching ^[A-Z][A-Z0-9_]*$'
+      + ' (received: ' + JSON.stringify(raw) + '); pass a URL through the variable, never on the command line');
+  }
+  if (RESERVED_TARGET_ENVS.has(name)) {
+    fail('--target-env=' + name + ' is reserved: omit --target-env for the TEST branch,'
+      + ' and never target the shared DATABASE_URL');
+  }
+  return name;
 }
 
 /**
@@ -140,6 +194,8 @@ function parseArgs(argv, env = process.env) {
   const args = {
     mode: 'dry-run',
     cleanupVersion: null,
+    targetEnv: null,
+    restorePoint: null,
     budgetFrom: DEFAULT_BUDGET_FROM,
     budgetTo: DEFAULT_BUDGET_TO,
     step: DEFAULT_STEP,
@@ -195,6 +251,10 @@ function parseArgs(argv, env = process.env) {
       args.useCases.push(value);
     } else if (arg.startsWith('--currency=')) {
       args.currency = arg.slice('--currency='.length);
+    } else if (arg.startsWith('--target-env=')) {
+      args.targetEnv = parseTargetEnvName(arg.slice('--target-env='.length));
+    } else if (arg.startsWith('--restore-point=')) {
+      args.restorePoint = arg.slice('--restore-point='.length);
     } else if (arg.startsWith(modelPin.MODEL_FLAG)) {
       // Read by modelPinValue below; matched here so the flag is not "unknown".
       // `--model=` with an empty value is a mistake the pin reader refuses.
@@ -212,6 +272,15 @@ function parseArgs(argv, env = process.env) {
     // so the use cases collected above are dropped rather than silently scoping
     // a delete that its own scope flag (`--cleanup=<version>`) already defines.
     args.useCases = [];
+  }
+  // A write against a named target needs a restore point, exactly as
+  // apply-api-role.js requires one: the flag names a database this checkout does
+  // not own, and a restore point nobody named is not a rollback plan. A dry run
+  // writes nothing, so it needs none.
+  if (args.targetEnv !== null && args.mode !== 'dry-run' && !isValidRestorePointId(args.restorePoint)) {
+    fail('--' + args.mode + ' against --target-env=' + args.targetEnv
+      + ' needs --restore-point=<id> matching ^[A-Za-z0-9_-]{8,}$ (received: '
+      + JSON.stringify(args.restorePoint) + '). A placeholder fails that shape on purpose.');
   }
 
   // Flag beats environment beats the legacy default; a blank flag does NOT shadow
@@ -350,17 +419,30 @@ async function ensureKey(client, key) {
 /**
  * Run one pass for a key and record the preset.
  *
- * `EMPTY_CANDIDATE_POOL` is handled as the pass's own outcome rather than as a
- * failure: such a pass throws inside the read stage, BEFORE its write
- * transaction, so its query row has no pass facts and is not an answer. The row
- * this function created is removed again (leaving no residue and no preset) and
- * the key is reported as `empty-pool`, which is what it is - the catalog cannot
- * build anything at that budget, so there is no landing page to serve.
+ * TWO ways a pass can produce no landing page, and they are the SAME answer:
+ * `EMPTY_CANDIDATE_POOL` (the read stage found nothing to assemble, thrown
+ * BEFORE the pass writes its own facts) and a COMMITTED pass that ended with
+ * zero `build_candidate` rows, because every assembled build was rejected - the
+ * shape R-26 measured at 6 000 MAD. The second used to be recorded, which is how
+ * the ribbon advertised pages that answer `builds: []`. Both are reported as
+ * `empty-pool` and leave no residue and no preset, so the endpoint only ever
+ * names a pass a visitor can actually look at.
  *
+ * `collaborators` exists so the DB-free suite can drive THIS branch with fakes -
+ * the same reason `ensureKey` and `inspectKey` are separate functions: a test
+ * that re-implemented the rule could agree with itself while the script
+ * disagreed.
+ *
+ * @param {object} client a single dedicated connection
+ * @param {object} key { scoringModelId, useCase, currency, catalogVersion, budgetAmount }
+ * @param {object} [collaborators] {repository, engine, deletePasses} overrides for tests
  * @returns {Promise<{status: 'created'|'empty-pool', queryId: string|null}>}
  */
-async function generateOne(client, key) {
-  const created = await repository.createRecommendationQuery(client, {
+async function generateOne(client, key, collaborators = {}) {
+  const repo = collaborators.repository || repository;
+  const run = collaborators.engine || engine;
+  const removePasses = collaborators.deletePasses || deletePasses;
+  const created = await repo.createRecommendationQuery(client, {
     scoringModelId: key.scoringModelId,
     budgetAmount: key.budgetAmount,
     currency: key.currency,
@@ -368,15 +450,21 @@ async function generateOne(client, key) {
     catalogVersion: key.catalogVersion,
   });
   try {
-    await engine.runFullRun(client, created.queryId, ENGINE_VERSION);
+    await run.runFullRun(client, created.queryId, ENGINE_VERSION);
   } catch (error) {
     if (error && error.code === 'EMPTY_CANDIDATE_POOL') {
-      await deletePasses(client, [created.queryId]);
+      await removePasses(client, [created.queryId]);
       return { status: 'empty-pool', queryId: null };
     }
     throw error;
   }
-  await repository.upsertPreset(client, {
+  // A committed pass with no builds is not a landing page (R-26): the endpoint
+  // would serve a recommendation whose `builds` is the empty array.
+  if (await repo.countBuildCandidates(client, created.queryId) === 0) {
+    await removePasses(client, [created.queryId]);
+    return { status: 'empty-pool', queryId: null };
+  }
+  await repo.upsertPreset(client, {
     useCase: key.useCase,
     currency: key.currency,
     catalogVersion: key.catalogVersion,
@@ -419,9 +507,101 @@ async function resolveRun(db, args) {
   return { model, useCases, catalogVersion };
 }
 
+/**
+ * Resolve the connection this run may write to.
+ *
+ * Two shapes, and the asymmetry is deliberate. WITHOUT `--target-env` the run
+ * goes through `resolveTestDbUrl()`, the branch guard every write-capable test in
+ * this repo uses: `TEST_DATABASE_URL`, provably not the shared HOST. WITH it, the
+ * guard is a DIGEST comparison against `DATABASE_URL` plus a restore point for any
+ * write, because the variable NAME proves nothing about what it points at - an
+ * alias of the shared database under another name is the case this exists to
+ * catch.
+ *
+ * The digest is `applyLogTarget()`'s `db:<12 hex>`, the same identity every other
+ * tracked apply prints, so a run can be quoted in a report without quoting a host
+ * or a credential.
+ *
+ * @param {object} args parsed argv
+ * @param {object} [env] injected for tests (the db-url.js / model-pin.js convention)
+ * @returns {{connectionString: string, connectionTimeoutMillis: number,
+ *   label: string, digest: string|null, nonTest: boolean}}
+ * @throws {Error} when the named variable is unset, a URL is unusable, or the
+ *   target is the shared database
+ */
+function resolveTarget(args, env = process.env) {
+  if (args.targetEnv === null) {
+    return Object.assign(resolveTestDbUrl(env), {
+      label: 'TEST_DATABASE_URL (write guard)',
+      digest: null,
+      nonTest: false,
+    });
+  }
+  const raw = env[args.targetEnv];
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    throw new Error('--target-env=' + args.targetEnv + ' names an unset or empty variable');
+  }
+  const shared = env.DATABASE_URL;
+  if (typeof shared !== 'string' || shared.trim() === '') {
+    throw new Error('DATABASE_URL is not set, so --target-env=' + args.targetEnv
+      + ' cannot be proven distinct from the shared database');
+  }
+  let digest;
+  let sharedDigest;
+  try {
+    digest = applyLogTarget(raw);
+    sharedDigest = applyLogTarget(shared);
+  } catch (error) {
+    throw new Error('--target-env=' + args.targetEnv + ' or DATABASE_URL is not a usable connection string ('
+      + (error && error.message ? error.message : String(error)) + ')');
+  }
+  if (digest === sharedDigest) {
+    throw new Error('REFUSING to write: --target-env=' + args.targetEnv
+      + ' targets the SHARED database (' + digest + '); presets belong on a branch or on the environment they serve');
+  }
+  return {
+    connectionString: raw,
+    connectionTimeoutMillis: CONNECTION_TIMEOUT_MILLIS,
+    label: args.targetEnv,
+    digest,
+    nonTest: true,
+  };
+}
+
+/** One line naming the target, without a host: `target: VAR (db:<12 hex>)`. */
+function targetLine(target) {
+  return 'target: ' + target.label + (target.digest === null ? '' : ' (' + target.digest + ')');
+}
+
+/**
+ * The line a release write prints before it connects.
+ *
+ * The digest proves WHICH database a run changed without quoting a host; the
+ * restore point is the other half, and it used to be validated and then dropped,
+ * leaving the only trace of it in whatever document described the run. A dry run
+ * has no restore point, so it prints no empty field.
+ *
+ * @param {{digest: string}} target the resolved target
+ * @param {string|null} restorePoint the id the write relies on, or null
+ * @returns {string} `AUDIT TARGET: db:<12 hex>[ restore-point=<id>]`
+ */
+function auditTargetLine(target, restorePoint) {
+  return 'AUDIT TARGET: ' + target.digest + (restorePoint ? ' restore-point=' + restorePoint : '');
+}
+
 async function main() {
   const args = parseArgs(process.argv);
-  const client = new Client({ ...getWriteTestDbUrl(), connectionTimeoutMillis: 15000 });
+  const target = resolveTarget(args);
+  // Printed BEFORE the connection and before any write: a long commit run has to
+  // say which database it is about to change, and a pooled host is not quotable.
+  console.log(targetLine(target));
+  if (target.nonTest) {
+    console.log(auditTargetLine(target, args.restorePoint));
+  }
+  const client = new Client({
+    connectionString: target.connectionString,
+    connectionTimeoutMillis: target.connectionTimeoutMillis,
+  });
   await client.connect();
   try {
     if (args.mode === 'cleanup') {
@@ -495,9 +675,17 @@ async function main() {
       + (emptyPool > 0 ? ', ' + emptyPool + ' key(s) assembled nothing and were not recorded' : '')
       + (pruned > 0 ? ', ' + pruned + ' superseded row(s) pruned with ' + prunedPasses + ' pass(es)' : ''));
     if (args.mode === 'commit' && created > 0) {
-      console.log('NOTE: the generated passes are unmarked `recommendation_query` rows, so'
-        + ' `npm run eval:scenarios` will refuse to run until they are removed:'
-        + ' node scripts/generate-presets.js --cleanup');
+      // The golden-harness warning is TRUE only for the TEST branch: the harness
+      // targets TEST_DATABASE_URL alone, so a release environment's passes cannot
+      // block it. Saying otherwise would send an operator to delete a shelf they
+      // just paid 54 engine passes to build.
+      console.log(target.nonTest
+        ? 'NOTE: ' + created + ' unmarked `recommendation_query` row(s) now live on '
+          + target.label + ' (' + target.digest + '). `npm run eval:scenarios` targets the TEST branch, so it is'
+          + ' unaffected; `check-target-parity` against shared will report these as EXPECTED DIFFs (R-14).'
+        : 'NOTE: the generated passes are unmarked `recommendation_query` rows, so'
+          + ' `npm run eval:scenarios` will refuse to run until they are removed:'
+          + ' node scripts/generate-presets.js --cleanup');
     }
   } finally {
     await client.end();
@@ -512,6 +700,9 @@ module.exports = {
   ensureKey,
   inspectKey,
   resolveRun,
+  resolveTarget,
+  targetLine,
+  auditTargetLine,
   UsageError,
   ENGINE_VERSION,
   USAGE,
