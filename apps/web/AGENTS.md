@@ -16,7 +16,8 @@ This package is being redesigned in place (branch `web-redesign`). Before touchi
 - `docs/web-v2/AGENT.md` — the operating rules (scope, gates, verification, escalation)
 - `docs/web-v2/PLAN.md` · `TOKENS.md` · `DEVIATIONS.md` · `SCREENS.md` · `FEASIBILITY.md`
 
-Colours and type come from DESIGN.md in full; tokens live only in `app/globals.css`.
+Colours and type come from DESIGN.md; tokens live only in `app/globals.css`. Three pieces are NOT
+carried — bare `rounded`, `space-xs…xl`, `label-lg`/`label-md` — see `TOKENS.md` §9.
 
 ## Test viewports (S6 layout gate)
 

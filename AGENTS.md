@@ -291,12 +291,11 @@ states (`e2e/legal.spec.ts`, `e2e/analytics.spec.ts`, `e2e/states.spec.ts`), S23
 (`e2e/compare.spec.ts`, 11 specs) and S25's saved builds at `/{locale}/enregistrements`
 (`e2e/saved.spec.ts` 11, `e2e/saved-model.spec.ts` 12, plus 2 footer-entry specs in
 `e2e/shell.spec.ts`) plus S26's input effects (`e2e/inputs-applied.spec.ts`, 5 specs, Decision 52) plus S24's live swap control (`e2e/swap.spec.ts`, 10 specs, Decisions 55 + 56). The suite's size is
-not pinned here — `cd apps/web && npx playwright test --list` prints it. Measured 2026-10-26 on a fresh
-`next build` without `E2E_BROWSER_API` it was **378 specs, 376 passed / 2 skipped**, the two
-skips being `e2e/wizard-browser-api.spec.ts` (needs `E2E_BROWSER_API=1`) and `e2e/wizard-engine.spec.ts` (the
-opt-in real-engine harness below). The figures before the swap commit added its three apply specs were 373
-passed / 2 skipped of 375 (2026-10-25), and 361 specs with `E2E_BROWSER_API=1` (2026-10-23) were 360 passed
-and 1 skipped — 359 passed and 2 skipped without it. The last CI evidence for this
+not pinned here — `cd apps/web && npx playwright test --list` prints it, and that is the only figure to
+quote. The two skips are `e2e/wizard-browser-api.spec.ts` (needs `E2E_BROWSER_API=1`) and
+`e2e/wizard-engine.spec.ts` (the opt-in real-engine harness below), so the passing count depends on which
+harness a run enables — and since S6 `npm test` runs four viewport projects, a RUN count is not a SPEC
+count either. The last CI evidence for this
 job is the S22 runs listed below — S23 and S25 are local commits, not pushed, so their figures are
 a local measurement, not a CI run.
 `next build` reports the four per-preset OG images as `●`, the shelf as `●` per locale, and

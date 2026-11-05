@@ -1,7 +1,8 @@
 # Progress — web redesign (phases 0-3)
 
 Branch `web-redesign` (created 2026-11-03 from `master` @ `e3fe882`). Plan: `PLAN.md`.
-Implementation plan: `docs/superpowers/plans/2026-11-03-web-redesign-phase-0.md`.
+Implementation plans: `docs/superpowers/plans/2026-11-03-web-redesign-phase-0.md`,
+`…-phase-2.md` and `…-phase-3.md`.
 
 Every row below was RUN on this machine unless it says BLOCKED. No `.env` value was read.
 
@@ -134,7 +135,8 @@ it is the owner's call (it is the only irreversible act in this phase) and is de
 
 ## Phase 1 — tokens (2026-11-03)
 
-Status: **done**. Owner decision: DESIGN.md is adopted in full, superseding the earlier partial
+Status: **done**. Owner decision: DESIGN.md's palette and its type scale are adopted — 47/47 ramp
+colours and all 10 type steps — with the three gaps in `TOKENS.md` §9, superseding the earlier partial
 adoption (D-03/D-04/D-05/D-06).
 
 | Gate | Result |
@@ -581,6 +583,24 @@ The sequence races its URL writes when successive presses land faster than a com
 `budget-step.tsx` `choose` path), which D7 does not touch. It is a pre-existing flake, carried
 as a separate finding — no assertion was relaxed for it.
 
+## Task 2 — S1, the header asks tab-match (commit `fc937c3`)
+
+Added 2026-11-05: the task shipped in `fc937c3` but the close-out never gave it a row, so the gates
+below were RUN on the closing tree — not copied from memory.
+
+`components/header-nav.tsx` had its own inline current-page rule; it now calls `isTabPath` from
+`components/shell/tab-match.ts`, the same function the bottom tab bar uses, and builds each href with
+`localePath` from the `path` the layout passes. The two navigations can no longer disagree about which
+page is current, and `/composants-x` lights nothing in either.
+
+| command | result (2026-11-05) |
+|---|---|
+| `npm run typecheck` | PASS (exit 0) |
+| `npm run lint` | PASS (exit 0, 0 warnings) |
+| `npm run check:tokens` | PASS — 104 files |
+| `npm run check:i18n` | PASS — 101 files, 2 catalogues |
+| `CI=1 npx playwright test e2e/shell.spec.ts` | **PASS — 40/40 across the four projects** (6.9 s), including the `/composants-x` boundary case |
+
 ## Task 3 — S2 direct primitive imports in the error boundary (2026-11-04)
 
 `app/[locale]/error.tsx` imported `Alert`, `Button` and `LinkButton` from the
@@ -594,7 +614,7 @@ transfer bytes, median of 3 — on both fixture URLs, before and after, each fro
 | `/fr/config-pc-gamer-9000-dh` | 171 380 B | 169 641 B | **−1 739 B** |
 
 KEPT: script falls on both routes by the same 1 739 B, so the boundary's chunk was
-carrying kit primitives it never renders. The
+carrying kit primitives it never renders.
 
 Correction (2026-11-04, review of `5c48d57`): the first version of this record — and the
 commit message — called `error.tsx` "the tree's only client island" importing the barrel.
@@ -602,7 +622,8 @@ That is false: ten other client components import it (the wizard steps, the kit
 islands, the share bar, the swap panel, the saved-builds view). The measured 1 739 B is
 real and the change stands; only the uniqueness claim was wrong, and it is corrected here
 rather than rewritten in history.
-after-run also passes all four enforced assertions (LCP medians 2 497 / 2 483 ms, CLS 0,
+
+The after-run also passes all four enforced assertions (LCP medians 2 497 / 2 483 ms, CLS 0,
 performance 0.97 / 0.98); the before-run missed only LCP (2 561 / 2 515 ms), the T7 sample
 band, and is recorded here as the reason the before pass is not claimed as green.
 
@@ -636,6 +657,22 @@ brief's "do not add a probe route or test-only code". Options, for an owner deci
    trades the page's id-preserving retry for the boundary's generic one.
 4. **Unit-test the boundary** — needs vitest, which PLAN.md A2 says must arrive with
    `test:unit` and its `web.yml` step; it would not be Playwright.
+
+## Task 5 — the sixth API request, with priorities (commit `c062a3e`)
+
+Added 2026-11-05, same reason as Task 2: documentation only, but it owed a row and its gates.
+`API_REQUESTS.md` gained the `reasons[]` gap — PARTIAL, because Decision 44's frozen records have no
+route and only `BUDGET_USED_PCT`, `GPU_SHARE` and `INPUT_APPLIED` are derivable from persisted rows, so
+a GET revisit renders fewer reasons, never more. The index gained a Priority column: P1 = price
+observation date and `reasons[]`; P2 = per-part compatibility; P3 = images, retailer rows, single-build GET.
+
+| command | result (2026-11-05) |
+|---|---|
+| `npm run typecheck` | PASS (exit 0) |
+| `npm run lint` | PASS (exit 0, 0 warnings) |
+| `npm run check:tokens` | PASS — 104 files |
+| `npm run check:i18n` | PASS — 101 files, 2 catalogues |
+| specs | none touched — a documentation row changes no test input |
 
 ## Task 6 — S6 viewport projects (2026-11-04)
 

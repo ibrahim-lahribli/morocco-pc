@@ -1,4 +1,4 @@
-# TOKENS.md — DESIGN.md, adopted in full
+# TOKENS.md — DESIGN.md, adopted with three recorded gaps
 
 Source: `apps/web/design/stitch/moroccan_hardware_studio/DESIGN.md`. Implementation: the `@theme`
 block in `apps/web/app/globals.css` — the only file allowed a raw colour (`scripts/check-tokens.mjs`
@@ -127,3 +127,19 @@ tinted indigo), bar (the sticky bottom bar's 0 −4 20). Spacing: `gutter` 20 px
 `--font-sans` Inter via `next/font`; `--font-arabic` the **vendored** IBM Plex Sans Arabic with an
 `ar`-only preload (converting it to `next/font` measured 136 KB of unused Arabic on every `/fr`);
 `--font-mono` Geist Mono, `preload: false`.
+
+## 9. What was NOT carried (three gaps, measured 2026-11-05)
+
+The colour and type halves ARE complete: **47/47 ramp colours present** (46 name-for-name, `surface`
+reconciled by D-12), **67 raw colours + the 13 aliases in §4**, and **all 10 type steps** with their
+weights and tracking. Three pieces of DESIGN.md have no token, recorded here so the pack does not claim
+more than it carries:
+
+| Gap | DESIGN.md | Today | Effect |
+|---|---|---|---|
+| `rounded.DEFAULT` | `0.5rem` (8 px) | no `--radius` default; the built CSS emits `.rounded{border-radius:.25rem}` (4 px) | 6 bare-`rounded` sites, all `Skeleton` placeholders, draw 4 px. Use `rounded-card` / `rounded-control` / `rounded-md` instead |
+| `space-xs…space-xl` | 4 / 8 / 16 / 24 / 40 px | not tokenised; the app uses Tailwind's spacing scale plus `--spacing-gutter`, `-gutter-mobile`, `-margin`, `-margin-mobile`, `-control`, `-tap` | nothing references the design's `space-*` names, so no surface renders differently |
+| `label-lg` / `label-md` | 14/20/600 and 12/16/500 | no separate steps; reached as `text-compact` (14/20/400) and `text-caption` (12/16/400) plus a weight utility | a call site must add `font-medium`/`font-semibold` itself; no existing call site does |
+
+Closing the first gap is a token addition plus a six-site sweep; the other two are naming decisions. All
+three belong to a Phase 4/5 token task, not to this close-out.
