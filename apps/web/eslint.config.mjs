@@ -16,6 +16,13 @@ const eslintConfig = defineConfig([
     // linting the bundled worker output buries the real signal under ~79k problems.
     ".open-next/**",
     ".wrangler/**",
+    // `tmp/` is GITIGNORED scratch (`.gitignore`): one-off probes and scripts from
+    // the LCP/G3 investigations. It is not app code and CI never checks it out, so
+    // a probe left in there must not be able to redden the gate. Measured
+    // 2026-11-05: two scratch files in this tree accounted for the whole lint
+    // report (one `no-require-imports` error, one unused-variable warning) while
+    // `app/`, `components/` and `lib/` were clean.
+    "tmp/**",
   ]),
   {
     // @lhci/cli LOADS this file with require(), so CommonJS is the only shape

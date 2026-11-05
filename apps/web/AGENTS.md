@@ -40,7 +40,7 @@ project or spec total into prose: `npx playwright test --list` prints the curren
 `npm run test:lighthouse` runs the ENFORCED budgets (`lighthouserc.cjs`: CLS 0.1, script
 174 080 B, `categories:performance` 0.90, all `error`, median of three, two fixture URLs) and
 needs `npm run build` first; the harness starts the app on 3210 and the fixture mock on 3211
-itself and refuses a busy port. Its LCP assertion is a `warn` since 2026-11-05 (DEV-01), so the
+itself and refuses a busy port. Its LCP assertion is a `warn` since 2026-11-05 (D-29), so the
 run still exits 0 when only LCP misses.
 
 `npm run test:lighthouse:devtools` measures the same two URLs under

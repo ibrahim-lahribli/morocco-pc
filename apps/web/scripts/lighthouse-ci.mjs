@@ -16,9 +16,10 @@
  *      redirect collects happily and every budget passes on the wrong page,
  *      which is the same lie as measuring a dev server). S16 added a second
  *      measured page, so this probes the whole list instead of its first entry);
- *   4. runs `lhci autorun` against the config named by `--config`
+ *   4. runs `lhci autorun` against the config named by `--config=<path>`
  *      (`lighthouserc.cjs` by default; `lighthouserc.devtools.cjs` is the
- *      real-throttle LCP check, non-blocking in CI);
+ *      real-throttle LCP check, non-blocking in CI). The `=` form is mandatory:
+ *      `--config <path>` exits 2 with usage instead of being ignored;
  *   5. stops both servers even when Lighthouse fails or the run is interrupted,
  *      and frees the ports.
  *
@@ -160,13 +161,48 @@ function dumpAssertions() {
   }
 }
 
+const USAGE = "usage: node scripts/lighthouse-ci.mjs [--config=<path>]";
+
+/** Usage error: the same exit code and shape `scripts/check-offer-freshness.js` uses. */
+function usageError(message) {
+  console.error(message);
+  console.error(USAGE);
+  process.exit(2);
+}
+
+/**
+ * Arguments are `=`-only, and an unrecognised one is an ERROR rather than
+ * something to ignore — the same rule the root scripts apply to `--fail-days=N`.
+ *
+ * Why it matters here: this harness used to pick the config with
+ * `argv.find(arg => arg.startsWith("--config="))`, so `--config ./x.cjs` (the
+ * space form, which every other CLI on the box accepts) matched nothing and was
+ * silently dropped — the run then measured `lighthouserc.cjs`, printed a green
+ * budget table and exited 0 for a config nobody asked for. A missing value has
+ * the same problem in the other direction: `--config=` resolves to the app root
+ * and fails later with a confusing ENOENT.
+ */
+function parseArgs(argv) {
+  let config = "./lighthouserc.cjs";
+  for (const arg of argv) {
+    if (arg.startsWith("--config=")) {
+      const value = arg.slice("--config=".length);
+      if (value === "") usageError("--config needs a path: --config=./lighthouserc.devtools.cjs");
+      config = value;
+      continue;
+    }
+    usageError(
+      `unrecognised argument ${JSON.stringify(arg)} — the path is written with an equals sign (\`--config=<path>\`), and a space-separated value is a usage error`,
+    );
+  }
+  return { config };
+}
+
 async function main() {
   // The pages to measure come FROM the config, not from a second copy of the
   // URLs: the routes the budgets name and the routes this harness proves are up
   // have to be the same strings, or the proof is about some other page.
-  const configArg = (
-    process.argv.find((arg) => arg.startsWith("--config=")) ?? "--config=./lighthouserc.cjs"
-  ).slice("--config=".length);
+  const { config: configArg } = parseArgs(process.argv.slice(2));
   const configPath = path.resolve(ROOT, configArg);
   if (!fs.existsSync(configPath)) throw new Error(`no Lighthouse config at ${configArg}`);
   const { default: config } = await import(pathToFileURL(configPath).href);
