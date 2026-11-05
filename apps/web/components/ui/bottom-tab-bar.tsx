@@ -106,8 +106,12 @@ export function BottomTabBar({ label, items, current, className }: BottomTabBarP
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   // `relative` anchors the active indicator below (absolute, so
-                  // the cell's height never changes with the state).
-                  "relative flex min-w-12 flex-col items-center justify-center gap-0.5",
+                  // the cell's height never changes with the state). `focus-inset`
+                  // draws the focus ring just inside the cell: an edge cell sits
+                  // 4 px from the viewport's side, so the default ring at a 2 px
+                  // offset lands ON that boundary and is clipped (globals.css,
+                  // pinned by S11).
+                  "relative flex min-w-12 flex-col items-center justify-center gap-0.5 focus-inset",
                   item.raised
                     ? // The raised cell is its own shape, so its label sits under it
                       // rather than inside a 56 px column.

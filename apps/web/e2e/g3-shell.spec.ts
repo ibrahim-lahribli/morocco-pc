@@ -386,7 +386,13 @@ test.describe("G3 shell", () => {
       });
       expect(expected).toBeGreaterThanOrEqual(6);
 
-      const seen: { index: number; key: string; outline: string; shadow: string }[] = [];
+      const seen: {
+        index: number;
+        key: string;
+        outline: string;
+        shadow: string;
+        ring: { left: number; top: number; right: number; bottom: number };
+      }[] = [];
       for (let press = 0; press < 160 && seen.length < expected; press += 1) {
         await page.keyboard.press("Tab");
         const hit = await page.evaluate(() => {
@@ -395,11 +401,23 @@ test.describe("G3 shell", () => {
           const index = el.getAttribute("data-g3-focus");
           if (index === null) return null;
           const style = getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          // The indicator's OUTER edge: the box, grown by the offset and the
+          // stroke. A negative offset (the tab bar's inset ring) shrinks it, which
+          // is the fix for a ring that a `fixed` bar pushes off the viewport.
+          const width = Number.parseFloat(style.outlineWidth) || 0;
+          const offset = Number.parseFloat(style.outlineOffset) || 0;
           return {
             index: Number(index),
             key: `${el.getAttribute("href") ?? "?"} "${(el.getAttribute("aria-label") ?? el.textContent ?? "").trim().slice(0, 18)}"`,
-            outline: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor}`,
+            outline: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor} offset ${style.outlineOffset}`,
             shadow: style.boxShadow,
+            ring: {
+              left: Math.round((rect.left - offset - width) * 100) / 100,
+              top: Math.round((rect.top - offset - width) * 100) / 100,
+              right: Math.round((rect.right + offset + width) * 100) / 100,
+              bottom: Math.round((rect.bottom + offset + width) * 100) / 100,
+            },
           };
         });
         if (hit === null) continue;
@@ -409,7 +427,9 @@ test.describe("G3 shell", () => {
 
       console.log(`REPORT focus /${locale}: reached ${seen.length} of ${expected} controls by Tab`);
       for (const row of seen) {
-        console.log(`REPORT   focus #${row.index} ${row.key}: outline[${row.outline}] shadow[${row.shadow}]`);
+        console.log(
+          `REPORT   focus #${row.index} ${row.key}: outline[${row.outline}] shadow[${row.shadow}] ring x ${row.ring.left}..${row.ring.right} y ${row.ring.top}..${row.ring.bottom} viewport 360x800`,
+        );
       }
       // Every control must have been REACHED by Tab: an unreachable control has
       // no focus indicator to speak of, so the count is an assertion of its own.
@@ -422,6 +442,38 @@ test.describe("G3 shell", () => {
         const shadowed = row.shadow !== "none" && !row.shadow.endsWith(" 0px 0px 0px 0px");
         expect(outlined || shadowed, `${row.key} on /${locale} has no visible focus indicator`).toBe(true);
       }
+
+      // ... and the indicator must be INSIDE the viewport. A ring that is drawn
+      // is not the same as a ring that can be seen: the five tab cells are fixed
+      // to the bottom edge and the first/last sit 4 px from the sides, so the
+      // default 2 px + 2 px offset put an edge cell's ring outer edge exactly at
+      // x=0 / x=360 — cut off at the boundary. `focus-inset` (globals.css) draws
+      // the bar's rings 2 px inside instead. 1 px of clearance is required, not
+      // 0: a ring touching the edge is a ring half-painted.
+      const viewport = page.viewportSize() ?? { width: 360, height: 800 };
+      const clipped = seen
+        .filter(
+          (row) =>
+            row.ring.left < 1 ||
+            row.ring.top < 1 ||
+            row.ring.right > viewport.width - 1 ||
+            row.ring.bottom > viewport.height - 1,
+        )
+        .map((row) => {
+          const over: string[] = [];
+          if (row.ring.left < 1) over.push(`left ${row.ring.left}`);
+          if (row.ring.top < 1) over.push(`top ${row.ring.top}`);
+          if (row.ring.right > viewport.width - 1) over.push(`right ${row.ring.right} > ${viewport.width - 1}`);
+          if (row.ring.bottom > viewport.height - 1) over.push(`bottom ${row.ring.bottom} > ${viewport.height - 1}`);
+          return `${row.key} (${over.join(", ")})`;
+        });
+      console.log(
+        `REPORT focus rings /${locale}: ${seen.length} measured, ${clipped.length} clipped by the ${viewport.width}x${viewport.height} viewport`,
+      );
+      expect(
+        clipped,
+        `focus ring clipped by the viewport on /${locale}: ${clipped.join("; ")}`,
+      ).toHaveLength(0);
     }
   });
 

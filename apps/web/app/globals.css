@@ -337,6 +337,19 @@ html[lang="ar"] body {
     outline-offset: 2px;
   }
 
+  /*
+   * ... and a variant for a control whose ring has nowhere to go. The tab bar's
+   * cells sit 4 px from the viewport's edges, so a 2 px ring at a 2 px offset
+   * lands its outer edge exactly ON the boundary (measured: x=0 on the first
+   * cell, x=360 on the last) and reads as clipped. A negative offset draws the
+   * same 2 px ring just INSIDE the box, where it cannot be cut off — `e2e/
+   * g3-shell.spec.ts` S11 asserts the ring's outer edge stays inside the
+   * viewport, so a control that needs this class and lacks it fails there.
+   */
+  .focus-inset:focus-visible {
+    outline-offset: -2px;
+  }
+
   ::selection {
     background-color: var(--color-primary-soft);
     color: var(--color-ink);
