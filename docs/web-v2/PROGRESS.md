@@ -780,3 +780,95 @@ with the evidence that satisfies it. Nothing below is inferred from a green suit
 | `npm run test:lighthouse` | `apps/web` | PASS (exit 0) — 4 `error` assertions, both URLs, median of 3 |
 | `node scripts/verify-docs.js --offline` | repo root | PASS |
 | `npm run gen:decisions -- --check` | repo root | PASS — `docs/DECISION_INDEX.md` fresh |
+
+## PR 2 Task 6 — the LCP experiment: the h1 is not the lever (2026-11-05)
+
+**Verdict: nothing committed.** Promoting the `h1` to the largest painted text does flip the LCP
+element — and moves the metric by **−1 ms on the result route and +81 ms on the preset route**.
+The 100 ms bar is not met, so the tree carries no change and this record is the deliverable.
+Every number below was measured on this machine, `npm run test:lighthouse` on the built app.
+
+### 1. The LCP element at HEAD
+
+| Route | LCP element | Rect (W×H, top) | Time |
+|---|---|---|---|
+| `/fr/config/3f5a…` | `div[data-effect="APPLIED"]` — the "Usage — a choisi le profil…" row inside `InputsApplied` | 294×78, top 273 | **2 491 ms** (2502 / 2487 / 2491) |
+| `/fr/config-pc-gamer-9000-dh` | `p.mt-2 max-w-prose text-body` — the preset's budget paragraph | 328×96, top 176 | **2 479 ms** (2879 / 2479 / 2475) |
+
+Neither is the `h1`. On the result route the h1 is a short title at 28 px; the candidate is a
+78 px-tall paragraph in the `dl` two blocks below it. On the preset route the candidate is the
+intro sentence directly under the h1 and the h1 itself never enters the candidate list.
+
+### 2. The experiment (temporary, reverted, never committed)
+
+LCP area is derived from the painted box, so an `h1` cannot become the candidate while it keeps
+`text-heading` (28 px): the result page's candidate already occupies 294×78 = 22 932 px², more than
+a 28 px title line can reach. **"No layout change" is therefore not achievable** — the smallest
+change that produces the phenomenon is a type step, which is what was measured:
+`text-heading` → `text-display-lg` (40 px) on `app/[locale]/config/[id]/page.tsx:301` and
+`app/[locale]/[presetSlug]/page.tsx:177`, plus `numberOfRuns: 3` → `5` in `lighthouserc.cjs`.
+Then `npm run build` and `npm run test:lighthouse`. All three edits were reverted with
+`git checkout --` and `git diff --stat` is empty; nothing from this section is in a commit except
+this prose.
+
+| Route | HEAD, median of 3 | h1 candidate, median of 5 | Δ | h1 became LCP? |
+|---|---|---|---|---|
+| result | 2 491 ms | **2 490.0 ms** (2488 / 2485 / 2494 / 2490 / 2490) | **−1 ms** | yes — rect 328×96, top 96 |
+| preset | 2 479 ms | **2 560.0 ms** (2489 / 2560 / 2878 / 2478 / 2711) | **+81 ms** | yes — rect 328×96, top 96 |
+
+The element flipped on both routes, so the experiment did what it set out to do; the clock did not
+follow. FCP stays at **908–916 ms**, CLS **0.000 → 0.000** and script transfer is **byte-identical**
+(170 942 / 169 670 B) — the promotion costs nothing and buys nothing. The preset figure is the only
+one that moved and it moved the wrong way, inside its own noise band (2 478–2 878 ms across five
+runs of a single build); it also tripped the 2 500 ms `error` assertion, so that run exited 1.
+
+### 3. What the numbers say instead
+
+Both routes paint LCP roughly **1.58 s after FCP** (908 → 2 490) even though the network has been
+**idle since 264 ms / 206 ms** — every one of the 28 and 30 requests finished *before* first paint —
+with no render-blocking resource (`render-blocking-resources`: 0 ms of savings), a passing
+`font-display` audit, **CLS 0.000** and a main thread that is essentially never blocked
+(**TBT 29 ms / 16 ms**, one long task). Swapping the money element changed the element and left the
+time where it was, on both routes, five runs each.
+
+So both usual suspects — a late fetch and a blocked main thread — are ruled out by measurement, and
+the one property that demonstrably does NOT matter is which element is largest. **That closes the h1
+hypothesis**: an element cannot change the cost of a paint that has not happened yet. What stays
+unattributed is *why* the LCP entry lands 1.58 s after FCP on an otherwise idle page; settling that
+needs a frame-level trace, which this task did not run, and it is different work from the change this
+task was asked to test.
+
+### 4. CSS chunk audit — no theme tokens to reclaim
+
+`apps/web/.next/static/chunks/14p3_cel317jz.css` is **93 711 B** on this build (the 93 644 B in the
+brief is 67 B stale). Of **421** custom-property declarations (**234** unique), **230** are
+referenced by a `var()` and **11 are not, for 286 B in total** — every one a compiler internal, not
+a design token:
+
+`--tw-inset-shadow-color` 32 B · `--tw-inset-ring-color` 30 · `--tw-drop-shadow-size` 30 ·
+`--tw-inset-shadow-alpha` 29 · `--lightningcss-light` 29 · `--tw-ring-offset-color` 28 ·
+`--tw-drop-shadow-alpha` 28 · `--lightningcss-dark` 22 · `--tw-opacity` 21 ·
+`--tw-translate-z` 19 · `--tw-scale-z` 18
+
+**Zero project tokens are emitted without a reference.** There is no unused-theme-variable pool to
+delete here: the 286 B is Tailwind's and Lightning CSS's own bookkeeping, and removing it would mean
+stripping the compiler rather than trimming the theme.
+
+### 5. Proposal — NOT applied: warn tier at 2 300 ms, runs 5
+
+`lighthouserc.cjs` is unmodified (`git diff` empty). Proposed and left for the owner:
+
+- **`warn` at 2 300 ms, `error` unchanged at 2 500 ms.** A warn 200 ms ahead of the error turns a
+  drift into a visible warning while the build is still green, instead of the first signal being a
+  red run at 2 500.31 ms on unchanged code (which is exactly what happened once this session).
+- **`runs=5` instead of 3.** The preset route's five samples on one build span **2 478–2 878 ms**
+  (400 ms), so a median of three is not a median of anything on that route; five is the cheapest
+  count that makes the median stable enough for a 200 ms tier to mean something. Cost: the gate goes
+  from 6 to 10 Lighthouse runs.
+
+### 6. Arabic rail flake — 20 repeats, 0 failures
+
+`npx playwright test e2e/wizard-budget.spec.ts --project=mobile-360 -g "Arabic" --repeat-each=20`
+→ **40 passed (12.9 s), exit 0**, covering the Arabic rail test and "/ar/configurer speaks Arabic
+about the same clamp". The flake family fixed in `77491d7` did not recur in this sample; nothing was
+changed for it in this PR.
