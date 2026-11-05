@@ -26,7 +26,8 @@ import { ImageResponse } from "next/og";
 
 import { orderBuilds, priceProvenance, type PriceProvenance } from "@/lib/result/model";
 import { loadRecommendationCached } from "@/lib/result/load";
-import { formatMoney, type AppLocale } from "@/lib/i18n/format";
+import { type AppLocale } from "@/lib/i18n/format";
+import { formatOgMoney } from "@/lib/i18n/og-unit";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
@@ -46,7 +47,7 @@ const INFO_SOFT = "#e6f2fa";
  * The card always shouts the FRENCH honesty word (the badge's vocabulary,
  * capitalised here): an Arabic og:title is text sent by generateMetadata,
  * while this word is part of the drawn card. The MONEY is locale-aware (D7),
- * and Satori renders the Arabic unit with its fallback face - measured
+ * whose unit is drawn in VISUAL order (D-31, og-unit.ts) - Satori has no bidi - in the fallback face, measured
  * 2026-11-04. The supporting sentence stays French until Phase 6 (D-28).
  */
 const WORD: Record<PriceProvenance, string> = {
@@ -77,9 +78,9 @@ export default async function Image({
 
   const headline =
     total !== null && budget !== null
-      ? `${formatMoney(total, appLocale)} / ${formatMoney(budget, appLocale)}`
+      ? `${formatOgMoney(total, appLocale)} / ${formatOgMoney(budget, appLocale)}`
       : total !== null
-        ? formatMoney(total, appLocale)
+        ? formatOgMoney(total, appLocale)
         : "";
 
   return new ImageResponse(

@@ -26,13 +26,14 @@
  *
  * The supporting sentences stay French in both locales; only the unit is
  * locale-aware (D7), because it is part of the number the card exists to show.
- * The Arabic unit renders in the card's default face (measured 2026-11-04); no
+ * The Arabic unit (VISUAL order, D-31) renders in the default face (measured 2026-11-04); no
  * OG font is added (D7 scope), and localising the sentences is Phase 6's restyle.
  */
 import { ImageResponse } from "next/og";
 
 import { routing } from "@/i18n/routing";
-import { formatMoney, type AppLocale } from "@/lib/i18n/format";
+import { type AppLocale } from "@/lib/i18n/format";
+import { formatOgMoney } from "@/lib/i18n/og-unit";
 import { presetsForBuild } from "@/lib/presets/load";
 import { parsePresetSlug } from "@/lib/presets/model";
 
@@ -76,7 +77,7 @@ export default async function Image({
   // A slug the grammar refuses gets the brand card: the page 404s, and an image
   // is not the place to invent a budget a URL did not name.
   const parsed = parsePresetSlug(presetSlug);
-  const headline = parsed === null ? "" : formatMoney(parsed.budget, appLocale);
+  const headline = parsed === null ? "" : formatOgMoney(parsed.budget, appLocale);
 
   return new ImageResponse(
     (

@@ -35,6 +35,13 @@ A spec joins the layout set by tagging its `test(` or `test.describe(`:
 `test("name", { tag: "@layout" }, async ({ page }) => …)`. Tag only assertions that can actually
 differ by width — a spec that navigates and reads text does not need three more runs. Never write a
 project or spec total into prose: `npx playwright test --list` prints the current truth.
+## The OG cards' Arabic unit
+
+The share cards are Satori output, and Satori applies no bidi: the `/ar` cards hand it the dirham
+from `lib/i18n/og-unit.ts` already in VISUAL order (D-31), never `formatMoney()`'s logical unit.
+`e2e/og-unit-ink.spec.ts` is the pin — it decodes both Arabic PNGs through a canvas and asserts the
+unit's left-to-right ink runs, so a Satori upgrade that adds bidi reverses them and fails loudly.
+
 ## Lighthouse scripts
 
 `npm run test:lighthouse` runs the ENFORCED budgets (`lighthouserc.cjs`: CLS 0.1, script
