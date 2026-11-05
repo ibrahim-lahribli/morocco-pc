@@ -4,8 +4,21 @@
  * The design's own geometry: a 80 px row (`h-20`) of five equal cells, each a
  * 56 px (`h-14`) column of icon over label, with the CENTRE item raised on a
  * 56 px circle that overlaps the bar's top edge. The active item is filled
- * primary and semibold; the others are muted. Nothing here is colour-only: the
- * active item also carries `aria-current="page"`.
+ * primary and semibold; the others are muted.
+ *
+ * THE ACTIVE CUE IS A SHAPE, NOT A COLOUR (G3). The board draws the current
+ * cell in primary at weight 600 and nothing else -- check its own
+ * `accueil_morocco_pc/code.html`: `data-active-classes="text-primary
+ * font-semibold"`, no indicator and no filled icon, because it has no active
+ * state to draw beyond that. A weight step is a weak cue on a 12 px label and
+ * disappears entirely in greyscale or at a glance, so the current cell also
+ * carries a drawn INDICATOR: a 16 x 3 px pill under the label
+ * (`data-tab-indicator`), which the other four do not have. It is ABSOLUTELY
+ * positioned on purpose -- in flow it would add ~5 px to the cell and make the
+ * icons jump as the user navigates -- and centred with `inset-x-0 mx-auto`, so
+ * it mirrors under `dir="rtl"` for free. `bg-current` paints it in the cell's
+ * own ink, so it stays a dark mark on a greyscale render. `aria-current="page"`
+ * still carries the state for assistive tech; the bar is `aria-hidden`.
  *
  * Three decisions are load-bearing:
  *
@@ -92,7 +105,9 @@ export function BottomTabBar({ label, items, current, className }: BottomTabBarP
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex min-w-12 flex-col items-center justify-center gap-0.5",
+                  // `relative` anchors the active indicator below (absolute, so
+                  // the cell's height never changes with the state).
+                  "relative flex min-w-12 flex-col items-center justify-center gap-0.5",
                   item.raised
                     ? // The raised cell is its own shape, so its label sits under it
                       // rather than inside a 56 px column.
@@ -116,6 +131,10 @@ export function BottomTabBar({ label, items, current, className }: BottomTabBarP
                   <Icon className={item.raised ? "h-7 w-7" : "h-6 w-6"} />
                 </span>
                 <span
+                  // A stable hook for the specs: the cell now holds TWO spans
+                  // (label, then indicator), so "the last span" no longer names
+                  // the label.
+                  data-tab-label=""
                   className={cn(
                     // `text-tab`, not `text-micro`: PLAN.md's 12 px caption floor
                     // for the five labels, and 13 px on Arabic (D-30).
@@ -126,6 +145,13 @@ export function BottomTabBar({ label, items, current, className }: BottomTabBarP
                 >
                   {item.label}
                 </span>
+                {active ? (
+                  <span
+                    aria-hidden="true"
+                    data-tab-indicator=""
+                    className="absolute inset-x-0 bottom-1 mx-auto h-[3px] w-4 rounded-pill bg-current"
+                  />
+                ) : null}
               </Link>
             </li>
           );

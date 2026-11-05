@@ -195,7 +195,9 @@ test.describe("G3 shell", () => {
 
       for (let index = 0; index < 5; index += 1) {
         const link = links.nth(index);
-        const label = link.locator("span").last();
+        // `[data-tab-label]`, not "the last span": the current cell also holds
+        // the active indicator, which is a span too.
+        const label = link.locator("[data-tab-label]");
         const text = (await label.textContent()) ?? "";
         const lines = await lineCount(label);
         const metrics = await label.evaluate((el) => ({
@@ -307,25 +309,54 @@ test.describe("G3 shell", () => {
           "page",
         );
 
-        // The cue the review asks about: not just the primary colour. The
-        // current cell's label is set SEMIBOLD (600) where the others are
-        // MEDIUM (500), so the state survives a greyscale render.
-        const weights = await bar.getByRole("link").evaluateAll((els) =>
+        // THE CUE, and why it is not a colour. Colour alone fails the check the
+        // review asks for, and so does the weight step the pack first recorded:
+        // 500 vs 600 on a 12 px label is nearly invisible at a glance and
+        // vanishes in greyscale. So the current cell carries a DRAWN INDICATOR
+        // (`data-tab-indicator`, a 16x3 px pill under the label) that the other
+        // four do not have — presence and geometry, both readable without
+        // colour, and both asserted below rather than a hex value.
+        const cells = await bar.getByRole("link").evaluateAll((els) =>
           els.map((el) => {
-            const label = el.querySelector("span:last-child");
+            const label = el.querySelector("[data-tab-label]");
+            const indicator = el.querySelector("[data-tab-indicator]");
+            const box = indicator === null ? null : indicator.getBoundingClientRect();
             return {
               text: (label?.textContent ?? "").trim(),
               weight: label === null ? null : getComputedStyle(label).fontWeight,
               current: el.getAttribute("aria-current") === "page",
+              indicator:
+                box === null
+                  ? null
+                  : {
+                      width: Math.round(box.width * 100) / 100,
+                      height: Math.round(box.height * 100) / 100,
+                    },
             };
           }),
         );
-        const active = weights.filter((row) => row.current);
-        const inactive = weights.filter((row) => !row.current);
-        expect(active).toHaveLength(1);
+        const active = cells.filter((row) => row.current);
+        const inactive = cells.filter((row) => !row.current);
+        expect(active, `/${locale}${route.path} marks ${active.length} tabs as current`).toHaveLength(1);
         console.log(
-          `REPORT active tab /${locale}${route.path}: aria-current="page" on "${active[0].text}", font-weight ${active[0].weight} vs ${[...new Set(inactive.map((row) => row.weight))].join("/")} inactive`,
+          `REPORT active tab /${locale}${route.path}: aria-current="page" on "${active[0].text}", indicator ${JSON.stringify(active[0].indicator)}, weight ${active[0].weight} vs ${[...new Set(inactive.map((row) => row.weight))].join("/")} inactive, ${inactive.filter((row) => row.indicator !== null).length} of ${inactive.length} inactive cells carry an indicator`,
         );
+
+        // (a) The cue is PRESENT on the current cell and has a real box — a
+        //     zero-height span would pass a presence check and show nothing.
+        expect(active[0].indicator, `the current tab on /${locale}${route.path} has no indicator`).not.toBeNull();
+        expect(active[0].indicator?.height ?? 0).toBeGreaterThanOrEqual(2);
+        expect(active[0].indicator?.width ?? 0).toBeGreaterThanOrEqual(8);
+
+        // (b) And it is EXCLUSIVE: an indicator on every cell would be
+        //     decoration, not a cue.
+        expect(
+          inactive.filter((row) => row.indicator !== null).map((row) => row.text),
+          `an inactive tab on /${locale}${route.path} carries the active indicator`,
+        ).toHaveLength(0);
+
+        // (c) The weight step is still there as a second cue, but it is no
+        //     longer the one the state depends on.
         expect(Number(active[0].weight)).toBeGreaterThan(Number(inactive[0].weight));
       }
     }
@@ -457,7 +488,7 @@ test.describe("G3 shell", () => {
         .getByRole("link")
         .evaluateAll((els) =>
           els.map((el) => {
-            const label = el.querySelector("span:last-child");
+            const label = el.querySelector("[data-tab-label]");
             return {
               text: (label?.textContent ?? "").trim(),
               fontSize: label === null ? null : getComputedStyle(label).fontSize,
