@@ -40,7 +40,8 @@ remain OPEN, which is why the gate is not passed:
 | d | tab bar copy on a real phone — D-20's "Pièces" / "Gardés" | `DEVIATIONS.md` D-20 |
 
 **Re-verified 2026-11-05 after D-31 - see the G3 re-verification section at the end of this file.**
-Check (b)'s four committed images are still PRE-FIX (ink measured), so regenerate them before judging it.
+Check (b)'s four images were re-captured on 2026-11-05: the unit ink now measures `[10, 40, 10, 37]` and
+`[11, 44, 11, 39]`, so the cards match the shipped render.
 
 The suite's size is deliberately not written into this file's prose: `cd apps/web && npx playwright test
 --list` prints it, and `npm test` now runs four viewport projects, so a run count and a spec count are
@@ -746,7 +747,7 @@ with the evidence that satisfies it. Nothing below is inferred from a green suit
 - **The S4 error-boundary spec LANDED 2026-11-05** (see `## Task 4`): option 2 — a 200 body with no
   `components` — puts the throw inside the render, so `error.tsx` catches it in both locales. A 5xx
   still belongs to the page's own `unavailable` state, deliberately.
-- **`app/global-error.tsx` is NOT shipped — attempted 2026-11-05 and BLOCKED on the byte criterion.**
+- **`app/global-error.tsx` is NOT shipped — attempted 2026-11-05 and reverted on the LCP observation, not on bytes.**
   The boundary was built (its own `html`/`body`, tokens only, no kit component, static French + Arabic
   copy generated from a `globalErrors` namespace through `gen-error-copy.mjs`, so `check:i18n` rule 7
   covers it) and measured on both budgeted URLs: **+801 B of script on each** (result 170 942 → 171 743 B,
@@ -758,7 +759,10 @@ with the evidence that satisfies it. Nothing below is inferred from a green suit
   chunk costing ~140 ms on the one route that sits ON the 2500 ms budget, though LCP at HEAD is itself
   borderline: it has passed at 2491 and failed at 2500.31 on identical code.
 
-  Reverted; the attempt is the `git stash` entry "task5 global-error attempt (+801 B script, BLOCKED)".
+  Reverted, and **the attempt does not survive anywhere**: this file used to point at a `git stash`
+  entry, but `git stash list` and `git reflog show refs/stash` are both empty (stash refs are repo-wide,
+  so no worktree hides it). Only the measurements above remain, so shipping this means rebuilding the
+  boundary. Since D-29 the simulated LCP is a `warn`, so neither gate is red either way.
   The decision — accept the bytes and the LCP risk, or keep Next's default root page — is the owner's.
 - The LCP margin is **14 ms / 9 ms** — the thinnest this gate has run at. T7's local 2 640 ms red did
   not reproduce here, so a future red in the 2.5-2.7 s band is variance until an A/B says otherwise.
@@ -926,7 +930,7 @@ Budgets unchanged (LCP 2 500 ms `warn` since D-29; CLS 0.1, script 174 080 B, pe
 `error`): script margins 3 058 B / 4 330 B. The preset's first run reached 2 561 ms; the median did not
 follow it.
 
-### Finding - all four committed Arabic review images are PRE-FIX (D-31)
+### Finding - all four committed Arabic review images were PRE-FIX, refreshed 2026-11-05 (D-31)
 
 Every committed card predates the D-31 render fix, so it still draws the unit in LOGICAL order.
 Measured with an ink probe (`sharp`, luma < 48, the headline's four rightmost runs):
@@ -939,12 +943,23 @@ Measured with an ink probe (`sharp`, luma < 48, the headline's four rightmost ru
 | `apps/web/design/checks/d7-og-preset-ar.png` | `[40, 11, 43, 11]` | **old** |
 | freshly rendered (this tree, `e2e/og-unit-ink.spec.ts`) | `[10, 40, 10, 37]` / `[11, 44, 11, 39]` | dot, م, dot, د - **correct** |
 
-So owner check (b) must not be judged against those files yet. Refresh with `node scripts/g3-capture.mjs`
-(all 65 `design/g3-review/` captures) plus a re-capture of the two `design/checks/d7-og-*.png`. Not done
-here: it rewrites 67 tracked images from its own servers, a separate reviewable change.
+**Refreshed 2026-11-05.** `node scripts/g3-capture.mjs` ran to exit 0 (65 images, 1 823 KB of 3 072 KB,
+WebKit INSTALLED), and **only the two `og/` cards changed** - the other 63 captures came back
+byte-identical, so nothing else in the pack was stale. The two `design/checks/d7-og-*.png` have no
+committed producer (`tmp/d7-shot.mjs` only writes the price shot), so they were refreshed from the same
+run: same 1200 x 630 cards, and the HEAD versions differed from the pack's only in PNG encoding
+(52 776 / 40 972 B against 13 593 / 9 266 B for the same pixels).
+
+| File | Unit ink after the refresh | Reading |
+|---|---|---|
+| `design/g3-review/og/og-result.ar.1200x630.png` + `design/checks/d7-og-config-ar.png` | `[10, 40, 10, 37]` | dot, م, dot, د - **correct** |
+| `design/g3-review/og/og-preset.ar.1200x630.png` + `design/checks/d7-og-preset-ar.png` | `[11, 44, 11, 39]` | **correct** |
+
+`npx playwright test e2e/og-unit-ink.spec.ts` is **4 passed, exit 0** on the same tree, and both cards
+were viewed at 1 200 x 630: real glyphs, no boxes, legible. Owner check (b) can be judged now.
 
 ### Still not verified
 
-`node scripts/g3-capture.mjs` (and WebKit's presence), a clean `npm ci`, visual legibility of the cards,
-and the four owner checks. G3 stays **evidence complete, awaiting owner sign-off** - only the owner
-closes it.
+A clean `npm ci` and the four owner checks. `node scripts/g3-capture.mjs` ran on 2026-11-05 to exit 0
+(WebKit INSTALLED) and the two cards were viewed at 1 200 x 630, so capture and legibility are no longer
+open. G3 stays **evidence complete, awaiting owner sign-off** - only the owner closes it.
