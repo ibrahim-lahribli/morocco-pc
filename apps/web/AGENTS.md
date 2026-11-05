@@ -35,3 +35,16 @@ A spec joins the layout set by tagging its `test(` or `test.describe(`:
 `test("name", { tag: "@layout" }, async ({ page }) => …)`. Tag only assertions that can actually
 differ by width — a spec that navigates and reads text does not need three more runs. Never write a
 project or spec total into prose: `npx playwright test --list` prints the current truth.
+## Lighthouse scripts
+
+`npm run test:lighthouse` runs the ENFORCED budgets (`lighthouserc.cjs`: CLS 0.1, script
+174 080 B, `categories:performance` 0.90, all `error`, median of three, two fixture URLs) and
+needs `npm run build` first; the harness starts the app on 3210 and the fixture mock on 3211
+itself and refuses a busy port. Its LCP assertion is a `warn` since 2026-11-05 (DEV-01), so the
+run still exits 0 when only LCP misses.
+
+`npm run test:lighthouse:devtools` measures the same two URLs under
+`throttlingMethod: "devtools"` (`lighthouserc.devtools.cjs`), asserting LCP <= 2500 ms as `error`
+inside that config, and writes `.lighthouseci-devtools/`. It is NON-BLOCKING in CI (its job is
+`continue-on-error`) until the promotion rule in that config's header is met — read its LCP
+rather than treating a red run as a regression.

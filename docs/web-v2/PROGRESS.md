@@ -872,3 +872,19 @@ stripping the compiler rather than trimming the theme.
 → **40 passed (12.9 s), exit 0**, covering the Arabic rail test and "/ar/configurer speaks Arabic
 about the same clamp". The flake family fixed in `77491d7` did not recur in this sample; nothing was
 changed for it in this PR.
+## Lighthouse gate policy (2026-11-05, owner-approved)
+
+The LCP error gate moves from the SIMULATED measurement to the DEVTOOLS one, on the evidence in
+`LCP_INVESTIGATION_2.md`: 40 devtools runs at 1 773-1 922 ms (sigma 24-44 ms, margin ~670 ms),
+against simulated medians of 2 475-2 628 ms with single runs to 2 879 ms.
+
+Staged, so nothing enforced today is removed before its replacement has a distribution:
+
+| State | Simulated LCP (`lighthouserc.cjs`) | Devtools LCP (`lighthouserc.devtools.cjs`) |
+|---|---|---|
+| now | `warn` at 2 500 ms — does not fail the job | `error` inside its own config, but the CI job is `continue-on-error` |
+| after promotion | stays a projection bound | becomes blocking if about ten CI runs stay under 2 200 ms |
+
+CLS (0.1), script size (174 080 B) and `categories:performance` (0.90) are unchanged and still
+`error`, median of three, on both fixture URLs. `npm run test:lighthouse` must still exit 0 with
+the LCP warning allowed; `npm run test:lighthouse:devtools` is the new measurement.

@@ -12,9 +12,11 @@
  * `scripts/lighthouse-ci.mjs` starts the built app and the mock before this
  * config is read — `lhci autorun` on its own would measure whatever happens to
  * be listening, which is how a budget quietly becomes a lie.
- * * ENFORCED, per S19: all four assertions are `error`, so a regression fails the
- * web job instead of only decorating its artifact. They were `warn` from S6
- * until the budgets had run on a few real runners (2026-10-21).
+ * * LCP IS A WARNING since 2026-11-05 (owner-approved): a simulated miss no longer
+ * fails the job, it prints in the report instead. The other three stay `error`, as
+ * they have since S19 (`warn` from S6 until the budgets ran on real runners,
+ * 2026-10-21). The real-throttle LCP gate is `lighthouserc.devtools.cjs`: see its
+ * header for the promotion rule; this file's LCP line is the projection bound.
  *
  * `aggregationMethod: "median"` is part of the enforcement, not a detail: with
  * LHCI's default (`optimistic`, the MINIMUM of three runs for a max-assertion)
@@ -70,7 +72,7 @@ module.exports = {
       // optimistic default on its own.
       aggregationMethod: "median",
       assertions: {
-        "largest-contentful-paint": ["error", { maxNumericValue: 2500 }],
+        "largest-contentful-paint": ["warn", { maxNumericValue: 2500 }],
         "cumulative-layout-shift": ["error", { maxNumericValue: 0.1 }],
         "resource-summary:script:size": ["error", { maxNumericValue: 174080 }],
         // S26's exit gate: the category SCORE, taken as the median of the three

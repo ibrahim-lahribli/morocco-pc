@@ -97,3 +97,36 @@ jobs:
           path: apps/web/test-results
           retention-days: 7
           if-no-files-found: ignore
+  # The real-throttle LCP check (2026-11-05 policy change). NON-BLOCKING on purpose:
+  # `continue-on-error` keeps a red assertion out of this workflow's verdict while the
+  # check earns a CI distribution. The promotion rule (about ten runs under 2 200 ms)
+  # is in apps/web/lighthouserc.devtools.cjs; until then the simulated LCP only warns.
+  web-lighthouse-devtools:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Lighthouse LCP under devtools throttling (non-blocking)
+        run: npm run test:lighthouse:devtools
+      - name: Upload devtools Lighthouse report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-lighthouse-devtools-report
+          path: apps/web/.lighthouseci-devtools
+          # DOT directory, same trap as the enforced report's upload.
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: warn

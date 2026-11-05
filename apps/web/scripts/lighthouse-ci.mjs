@@ -16,14 +16,18 @@
  *      redirect collects happily and every budget passes on the wrong page,
  *      which is the same lie as measuring a dev server). S16 added a second
  *      measured page, so this probes the whole list instead of its first entry);
- *   4. runs `lhci autorun` (the config is `lighthouserc.cjs`);
+ *   4. runs `lhci autorun` against the config named by `--config`
+ *      (`lighthouserc.cjs` by default; `lighthouserc.devtools.cjs` is the
+ *      real-throttle LCP check, non-blocking in CI);
  *   5. stops both servers even when Lighthouse fails or the run is interrupted,
  *      and frees the ports.
  *
- * Exit code is Lighthouse's: since S19 the assertions are `error`, so a budget
- * miss fails this script (and the web job) — a collect failure and a `warn`-level
- * miss are non-zero too. Server output is buffered and printed only when
- * something goes wrong, so a green run stays readable.
+ * Exit code is Lighthouse's. The enforced assertions are still `error` (S19), so a
+ * miss fails this script and the web job; the LCP line is a `warn` since the
+ * 2026-11-05 policy change, and LHCI exits 0 when only warnings fire. That is what
+ * keeps the other three gating while the LCP number is read rather than enforced.
+ * Server output is buffered and printed only when something goes wrong, so a green
+ * run stays readable.
  *
  * On a failure `assertion-results.json` is printed as well: LHCI's own summary
  * names the assertion but not the aggregate it compared against, and "the median
@@ -160,7 +164,11 @@ async function main() {
   // The pages to measure come FROM the config, not from a second copy of the
   // URLs: the routes the budgets name and the routes this harness proves are up
   // have to be the same strings, or the proof is about some other page.
-  const configPath = path.join(ROOT, "lighthouserc.cjs");
+  const configArg = (
+    process.argv.find((arg) => arg.startsWith("--config=")) ?? "--config=./lighthouserc.cjs"
+  ).slice("--config=".length);
+  const configPath = path.resolve(ROOT, configArg);
+  if (!fs.existsSync(configPath)) throw new Error(`no Lighthouse config at ${configArg}`);
   const { default: config } = await import(pathToFileURL(configPath).href);
   const measuredUrls = config.ci.collect.url;
 
@@ -211,10 +219,10 @@ async function main() {
   }
 
   console.log(
-    `Measuring ${measuredUrls.length} page(s) (fixture mock on ${MOCK_PORT}), enforced budgets from lighthouserc.cjs:`,
+    `Measuring ${measuredUrls.length} page(s) (fixture mock on ${MOCK_PORT}), budgets from ${configArg}:`,
   );
   for (const measuredUrl of measuredUrls) console.log(`  ${measuredUrl}`);
-  const result = spawnSync(process.execPath, [LHCI_CLI, "autorun"], {
+  const result = spawnSync(process.execPath, [LHCI_CLI, "autorun", `--config=${configArg}`], {
     cwd: ROOT,
     stdio: "inherit",
   });
