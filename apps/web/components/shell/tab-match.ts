@@ -16,11 +16,6 @@
  */
 
 /**
- * Does `rest` (the pathname with the locale prefix removed) belong to the section
- * at `path`? `/` matches the root only and never anything else, which is why it is
- * its own case rather than a `startsWith`.
- */
-/**
  * The pathname with the locale prefix removed, e.g. `/fr/composants` →
  * `/composants` and `/fr` → `""`.
  *
@@ -35,6 +30,11 @@ export function localeRest(pathname: string, locale: string): string {
   return pathname.startsWith(`${root}/`) ? pathname.slice(root.length) : pathname;
 }
 
+/**
+ * Does `rest` (the pathname with the locale prefix removed) belong to the section
+ * at `path`? `/` matches the root only and never anything else, which is why it is
+ * its own case rather than a `startsWith`.
+ */
 export function isTabPath(rest: string, path: string): boolean {
   if (path === "/") return rest === "" || rest === "/";
   return rest === path || rest.startsWith(`${path}/`);

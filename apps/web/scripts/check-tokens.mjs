@@ -14,6 +14,9 @@
  *   3. PHYSICAL SIDE     - `ml-`, `pr-`, `left-`, `border-l-`. Logical
  *                          properties (`ms/me/ps/pe/start/end`) mirror under
  *                          `dir="rtl"`; these do not.
+ *   4. PHYSICAL ALIGN    - `text-left` / `text-right`. The logical pair
+ *                          (`text-start` / `text-end`) mirrors under `dir`;
+ *                          these do not.
  *   5. BARE RADIUS       - `rounded` with no suffix is Tailwind's 0.25rem, not
  *                          DESIGN.md's 0.5rem DEFAULT. Use a radius token:
  *                          `rounded-base` (8 px), `-card`, `-control`, `-md`,
