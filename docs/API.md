@@ -139,7 +139,7 @@ Environment variables (see `apps/api/.env.example` for the full list):
 | `DATABASE_URL` | The pool target when `API_ALLOW_SHARED=1` — the deployed shape, and the only variable the pool reads in it. |
 | `TEST_DATABASE_URL` | The pool target when `API_ALLOW_SHARED` is not `1` — the local/TEST shape. The guard then compares its hostname with `DATABASE_URL`'s and refuses equal hosts. UNUSED in the deployed shape, where it must be unset. |
 | `API_ALLOW_SHARED` | Must be exactly `1` to target `DATABASE_URL`. |
-| `SCORING_MODEL_PIN` | The ONE scoring model this deployment serves, as `name@version`. **Unset (the default) keeps the pre-existing rule: the newest ACTIVE row** — which is how a seed apply changed what the demo origin served with no deploy (OG-54). Set, it is a SELECTOR among ACTIVE rows only, the same grammar as `scripts/lib/model-pin.js` (Decision 39): a malformed value fails at STARTUP, and a pin matching no active row — or more than one — answers `503 SCORING_MODEL_UNAVAILABLE` instead of serving a different model. |
+| `SCORING_MODEL_PIN` | The ONE scoring model this deployment serves, as `name@version`. **Unset (the default) keeps the pre-existing rule: the newest ACTIVE row** — which is how a seed apply changed what the since-retired demo origin served with no deploy (OG-54). Set, it is a SELECTOR among ACTIVE rows only, the same grammar as `scripts/lib/model-pin.js` (Decision 39): a malformed value fails at STARTUP, and a pin matching no active row — or more than one — answers `503 SCORING_MODEL_UNAVAILABLE` instead of serving a different model. |
 
 ### Database target (write safety)
 
@@ -200,9 +200,10 @@ database from restore point `br-ancient-cake-axh57vpj` (HEAD `3f0c166`, audit ta
 `201` with 1 build in 52 statements, no `42501`, and all six Layer 4 tables back at 0.
 The EU production database got the same treatment on 2026-10-23 (restore point
 `br-late-rice-b906upai`, audit target `db:2d66f26d7ddc`, 20/20 self-check, then the same smoke
-test green as the role), and a CORRECTION (2026-10-31): a deploy HAS happened since - on Render, against the SHARED database, not EU. `https://morocco-pc.onrender.com` is a Free demo origin (`deploy-free-host.md` 5.1) that spins down after 15 idle minutes and must never be read as the launch path; it runs on the owner's credentials today, because `check-deployed-role.js --target=env:DATABASE_URL` measured **FAIL** against it on 2026-10-29 (1 of 1 session as `neondb_owner`), which is OG-54 item 1. The EU project remains undeployed.
-The EU app's `DATABASE_URL` secret, when it is created, must carry the ROLE's connection string
-rather than the owner's - that rotation is an owner step (OG-54), not something the apply did.
+test green as the role), and a CORRECTION (2026-10-31, superseded 2026-11-06): the deploy that existed then ran on Render against the SHARED database, not EU — `https://morocco-pc.onrender.com`, a Free demo origin (`deploy-free-host.md` 5.1) that spun down after 15 idle minutes and was never the launch path. It ran on the owner's credentials, because `check-deployed-role.js --target=env:DATABASE_URL` measured **FAIL** against it on 2026-10-29 (1 of 1 session as `neondb_owner`), which is OG-54 item 1. It was suspended on 2026-11-06 (R-05), and `morocco-pc-api-eu` is now the only deployed host.
+The EU app's `DATABASE_URL` secret must carry the ROLE's connection string rather than the
+owner's - that rotation is an owner step (OG-54), not something the apply did; it is what the EU
+service runs on today.
 
 ### The database role
 
@@ -1256,7 +1257,10 @@ profile id is captured before the query is deleted).
 - **`test:api:db` is VERIFIED in CI since 2026-10-19**, on both a dispatched run and a push:
   run 39120485573 answered `9 passed / 0 failed` on a GitHub runner, and dispatch run 39207745723
   on `master` completed with every `recurring-gates` step PASS. What remains OPEN is the opposite
-  direction: no CI run exercises a DEPLOYED origin — but both hosts have been exercised BY HAND on 2026-11-02: the demo origin on shared (`https://morocco-pc.onrender.com`, `engine_version: "dev"`) and the EU host (`https://morocco-pc-api-eu.onrender.com`, `engine_version: "d2de4fb"`, pinned to `launch-v2@2.4.0`, one committed pass). CI still proves neither: it holds no host credential.
+  direction: no CI run exercises a DEPLOYED origin — but the EU host has been exercised BY HAND on 2026-11-02
+  (`https://morocco-pc-api-eu.onrender.com`, `engine_version: "d2de4fb"`, pinned to `launch-v2@2.4.0`,
+  one committed pass). The demo origin that used to be exercised alongside it was suspended on
+  2026-11-06 (R-05). CI still proves neither: it holds no host credential.
 - **CI pins Node 22 with no matrix.** The API suites were verified locally on
   Node 22 and on the default Node 24; only 22 runs in CI.
 - **No pagination on `builds`.** The engine persists at most
