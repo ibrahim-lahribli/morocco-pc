@@ -235,7 +235,7 @@ Command gotchas (verified 2026-09-28):
   no such var, so it exports an EMPTY value that shadows the one `dotenv` just loaded, and the
   failure surfaces as a bare `ERR` with an empty message.
 - Adding a decision to the log **breaks `verify-docs` by design**: `scripts/verify-docs.js` hardcodes
-  the expected heading and `Status:` counts (now 47 / 53) and derives AGENTS.md's required
+  the expected heading and `Status:` counts (now 62 `## Decision` headings + 5 nested, 68 `Status:` lines) and derives AGENTS.md's required
   "Decisions 1-N" from that parse. Bump both counts when you add Decision N+1, and update the
   `database/migrations/` range cited in AGENTS.md §4 or `migrations-range-documented` warns. `docs/DECISION_INDEX.md` embeds each entry's WHOLE `Status:` line, so editing that line alone (even with no heading change) makes the index stale — re-run `npm run gen:decisions`; editing only a body section does not.
 - Writing a spec-data seed: put the guard in the DML, not only the header comment. `UPDATE..FROM

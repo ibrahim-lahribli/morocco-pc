@@ -75,13 +75,13 @@ CPU depth 10, 2.4.0 CPU-only depth 10). `apps/api/src/repository.js` selects the
 **shared and the demo origin serve `launch-v2@2.4.0`** and neither sets a pin — that is insertion order,
 so a seed apply could move it. The EU service is the exception, and it is MEASURED rather than declared:
 `render.yaml` sets `SCORING_MODEL_PIN: launch-v2@2.4.0` (Decision 63), the deployed process boots with
-`scoring_model: "launch-v2@2.4.0"` instead of the newest-ACTIVE fallback, and one committed pass recorded
-`recommendation_query.scoring_model_id` = 2.4.0. R-06 is closed on that evidence.
+`scoring_model: "launch-v2@2.4.0"` instead of the newest-ACTIVE fallback, and **52** committed passes record
+`recommendation_query.scoring_model_id` = 2.4.0 (measured 2026-11-06). R-06 is closed on that evidence.
 `launch-v2@2.4.0` is the version the gate measures green (82 PASS / 3 EXPECTED-RED / 1 UNKNOWN); it is
 adopted for the private beta as an explicit PROVISIONAL OVERRIDE of Decision 57 item 3, NOT as a
 satisfaction of it — A1/A3/A4 are still `hypothesis` and OG-43 is open.
 
-## 5. Measured numbers (2026-11-02, this checkout)
+## 5. Measured numbers (2026-11-02; the offer-freshness date and the EU pass count re-measured 2026-11-06)
 
 - `npm run test:unit` **1261 pass / 0 fail / 0 cancelled** (Node 24.21.0 and Node 22);
   `npm run test:scripts` **443 / 0**; `npm run test:api` **193 / 0**; `npm run test:api:db` **17 / 0**
@@ -100,7 +100,7 @@ satisfaction of it — A1/A3/A4 are still `hypothesis` and OG-43 is open.
   candidate 16/0, component 126/0, rejection 24/0).
 - `check-offer-provenance.js` **INCONCLUSIVE** everywhere: 114 seed offers, 0 verified, 2 stores on
   the reserved `example.ma` domain. `check-offer-freshness.js` reports the first SEED expiry at
-  **2026-11-03**.
+  **2026-12-01** (24.3 days from 2026-11-06).
 - Real passes through `orchestrator.runRecommendation`, `launch-v2@2.4.0`: GAMING 21 500 @1440p →
   25 builds over 13 distinct (CPU, GPU) pairs, rank-1 score 60.83 at 19 976; OFFICE at 12 000, 20 000
   and 30 000 all return the identical 9 076 build (score 59.60) — `build_score` carries no budget term.

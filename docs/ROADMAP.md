@@ -23,15 +23,15 @@ Unchanged from `PLAN_PLATFORM_CONSTRAINTS.md`, and the same rules `AGENTS.md` §
 - an owner action (a cloud account, a secret rotation, a restore point, a real retailer) is named as
   such and never simulated by an agent.
 
-## 2. Position on 2026-11-02 (measured, not asserted)
+## 2. Position on 2026-11-06 (measured, not asserted)
 
 | Thing | State |
 |---|---|
 | Schema | 23 migrations, ledger **23** on shared, TEST and EU; `run-migrations.js --check` reports no pending file |
 | API | Fastify, contract **v1.10.0**, ten paths, snapshot `apps/api/test/unit/openapi-v1.10.json` |
-| Deployed origins | **one** — `https://morocco-pc.onrender.com` (Render Free, serves the SHARED database, answers `engine_version: "dev"`, spins down after 15 idle minutes). No EU host has ever been deployed. |
-| DB roles | `morocco_pc_api` provisioned on shared and EU, self-check 21/21, smoke green as the role — and **not used by the deployed app** (`check-deployed-role.js`: FAIL, `neondb_owner`) |
-| Served scoring model | the newest ACTIVE row; on shared that is `launch-v2@2.4.0` (six ACTIVE `launch-v2` versions, `seed-minimal-v1` INACTIVE). Nothing pins a model at deploy. |
+| Deployed origins | **two**, both Render Free and both scaling to zero after 15 idle minutes. `https://morocco-pc.onrender.com` serves the SHARED database and answers `engine_version: "dev"`; `https://morocco-pc-api-eu.onrender.com` (Frankfurt, created from `render.yaml`) is the private-beta host on the EU database and answers `engine_version: "d2de4fb"`. |
+| DB roles | `morocco_pc_api` is provisioned on shared and EU (self-check 21/21) and the EU host **uses it**: `check-deployed-role.js --target=env:TARGET_DATABASE_URL` answers PASS (every tagged `morocco-pc-api` session authenticated as `morocco_pc_api`). The demo origin still authenticates as `neondb_owner` (FAIL, session started 2026-11-06T18:12Z) |
+| Served scoring model | shared serves the newest ACTIVE row, `launch-v2@2.4.0` (six ACTIVE `launch-v2` versions, `seed-minimal-v1` INACTIVE). The EU host is **pinned at deploy**: `render.yaml` sets `SCORING_MODEL_PIN: launch-v2@2.4.0` (Decision 63), and 52 persisted passes record that model |
 | CI | `unit-and-docs` on push/PR (includes the read-only catalogue-identity and deferred-rules gates when the secret exists); `recurring-gates` nightly + dispatch |
 | Tests | engine **1261**, scripts **463**, API **193** (0 failed; engine/API measured 2026-11-03, scripts 2026-11-04); `test:api:db` **17**, nightly only |
 
