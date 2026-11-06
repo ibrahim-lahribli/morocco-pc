@@ -56,14 +56,14 @@ shortcut section (whether to render at all).
 }
 ```
 
-| Field                | Use on the homepage                                                                                   |
-| -------------------- | ----------------------------------------------------------------------------------------------------- |
-| `use_cases[].value`  | the three finder options' wire values                                                                 |
-| `currencies[].value` | confirm `MAD` is served before posting; the app's rendered currency still comes from `Price.currency` |
-| `inputs_applied`     | if it lacks `"resolution"`, hide the shortcut tiles (the model gives resolution no meaning)           |
-| `resolutions`        | the values behind the 1080p / 1440p tiles                                                             |
-| `priorities`         | **not used** (the API default order is the product decision)                                          |
-| `label`              | **not used** — labels come from the dictionary for voice/Arabic                                       |
+| Field                | Use on the homepage                                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `use_cases[].value`  | the three finder options' wire values                                                                            |
+| `currencies[].value` | confirm `MAD` is served before posting; render with the detail's `currency`, falling back to the confirmed `MAD` |
+| `inputs_applied`     | if it lacks `"resolution"`, hide the shortcut tiles (the model gives resolution no meaning)                      |
+| `resolutions`        | the values behind the 1080p / 1440p tiles                                                                        |
+| `priorities`         | **not used** (the API default order is the product decision)                                                     |
+| `label`              | **not used** — labels come from the dictionary for voice/Arabic                                                  |
 
 **Failures:** 429, 500, 503 (503 = no active model / no usable vocabulary).
 
@@ -106,14 +106,27 @@ No `resolution`, no `budget`, no `limit` — and unknown query parameters are re
 }
 ```
 
-| Field                         | Homepage use                                                                                             |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `presets[].budget_amount`     | the card's budget tier, the "Dès X DH" line, the primary sort key                                        |
-| `presets[].recommendation_id` | the key for the detail read and the card's identity                                                      |
-| `presets[].build_score`       | the performance overlay (`Score {n}/100`); `null` means "pass assembled nothing" → render "—", never `0` |
-| `presets[].price_status`      | the price badge: `verified` → "Vérifié", `indicative` → "Indicatif", `null` → no badge                   |
-| `catalog_version`             | part of the query key, so a price update invalidates the render                                          |
-| `generated_at`                | **not rendered** in Step 1 (no "as of" copy approved)                                                    |
+| Field                         | Homepage use                                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `presets[].budget_amount`     | the served preset budget (the card's budget label) and the ladder key; responses arrive ordered by it        |
+| `presets[].recommendation_id` | the key for the detail read and the card's identity                                                          |
+| `presets[].build_score`       | the configuration score (`builds.scoreLabel`); `null` means "pass assembled nothing" → render "—", never `0` |
+| `presets[].price_status`      | the price badge: `verified` → "Prix vérifié", `indicative` → "Prix indicatif", `null` → no badge             |
+| `catalog_version`             | part of the query key, so a price update invalidates the render                                              |
+| `generated_at`                | **not rendered** in Step 1 (no "as of" copy approved)                                                        |
+
+**Deterministic selection (owner decision: 12,000 MAD ceiling).** For each use case,
+select the highest row with `budget_amount <= 12_000`: filter the ascending list
+(`SELECT_PRESETS_SQL` already orders by `budget_amount ASC`) to rows at or below 12,000
+and take the last one. Never select the median of the ladder and never fall back to a
+row above 12,000 — a use case with no qualifying preset keeps its slot and shows its
+empty state. The selected row's `budget_amount` is the displayed tier: it may be below
+12,000 and is never labelled as an exact 12,000 DH build. Detail reads are requested
+only for those three ids, in the fixed order Gaming → Office → Workstation; a missing
+detail never substitutes another use case, and a preset whose `builds` is empty makes
+no complete-PC claim. After a finder answer, pick the highest preset of the **selected**
+use case with `budget_amount <= visitorBudget` (empty state when none,
+`builds.budgetCap` when the budget exceeds the top tier).
 
 **What a preset is not.** It carries **no title, no components, no total price**. It is a
 pointer to a persisted recommendation. The card's spec pills, total price, rationale and
@@ -128,10 +141,7 @@ compatibility status therefore require §4.
 | 429                    | rate limit (120/min reads)                       | error block with retry after `retryAfterSeconds` |
 | 500 / 503              | server or no active model                        | error block with retry                           |
 
-**Calls:** one per use case. `Tous les profils` needs three (`GAMING`, `OFFICE`,
-`WORKSTATION`) because the route takes exactly one; they run in parallel, deduped by
-`recommendation_id`, sorted by `budget_amount` ascending. A specific filter tab reuses the
-already-fetched list — no refetch.
+**Calls:** exactly one per use case — three for the initial cards (`GAMING`, `OFFICE`, `WORKSTATION`) — because the route takes exactly one; they run in parallel and each response stays keyed by its use case. Step 1 has no filter tabs: the section shows one card per use case, and the finder narrows it (selection rule below).
 
 ---
 
@@ -193,18 +203,18 @@ already-fetched list — no refetch.
 
 **Field mapping to the card**
 
-| Card element            | Field                                          | Rule                                                                                                                                                                    |
-| ----------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Title                   | —                                              | **ours**: `{usage label} · {budget tier}` from the dictionary; the API has no title                                                                                     |
-| Total price             | `builds[0].total_price`                        | `formatPrice(value, Price.currency)`; `null` → show `budget_amount` labelled "Budget visé"                                                                              |
-| Price badge             | `builds[0].price_status`                       | `verified` → `Badge tone="verified"`, else `tone="indicative"`                                                                                                          |
-| Compatibility badge     | `builds[0].compatibility_status`               | `PASS` → "Compatibilité vérifiée"; any other value → no badge (never render an unknown verdict as OK)                                                                   |
-| Score overlay           | `builds[0].build_score`                        | "Score {n}/100"; `null` → "—"                                                                                                                                           |
-| Spec pills              | `builds[0].components[]`                       | first four by role order `CPU`, `GPU`, `RAM`, `SSD_BOOT`, showing `name` (not `variant`, which may be `null`)                                                           |
-| Rationale               | `builds[0].explanation`                        | if present, one clamped line; `null` → omit the block                                                                                                                   |
-| Pattern/archetype       | `builds[0].strategy_key`                       | not rendered in Step 1; reserved for Step 2                                                                                                                             |
-| Disclaimer              | `disclaimer`                                   | rendered once under the price row, not per card                                                                                                                         |
-| Floor hint (empty card) | `budget_floor.cheapest_total`, `within_budget` | when `builds: []`, a hint "Un ensemble compatible commence vers {amount}" only if `cheapest_total` is non-null; `within_budget: null` means missing roles — say nothing |
+| Card element      | Field                            | Rule                                                                                                                                         |
+| ----------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Title             | —                                | **ours**: the use-case label (`builds.category.*`); the API carries no title and the H3 copy is open (Q-16)                                  |
+| Total price       | `builds[0].total_price`          | `formatPrice(value, detail.currency)`; `null` → show `budget_amount` labelled "Budget visé"                                                  |
+| Price badge       | `builds[0].price_status`         | `verified` → `builds.badge.verified` ("Prix vérifié"), else `builds.badge.indicative`                                                        |
+| Compatibility     | `builds[0].compatibility_status` | **not rendered on the homepage card** in Step 1 (§6 carries the score and price badges only); never turn an unknown verdict into an OK claim |
+| Score overlay     | `builds[0].build_score`          | `builds.scoreLabel` + "{n}/100", never FPS or a benchmark; `null` → "—"                                                                      |
+| Spec pills        | `builds[0].components[]`         | first four by role order `CPU`, `GPU`, `RAM`, `SSD_BOOT`, showing `name` (not `variant`, which may be `null`)                                |
+| Rationale         | `builds[0].explanation`          | if present, one clamped line; `null` → omit the block                                                                                        |
+| Pattern/archetype | `builds[0].strategy_key`         | not rendered in Step 1; reserved for Step 2                                                                                                  |
+| Disclaimer        | `disclaimer`                     | rendered once under the price row, not per card                                                                                              |
+| `budget_floor`    | `budget_floor.*`                 | **not rendered** — never used as a build price or as proof an assembly exists (§6)                                                           |
 
 **Deliberate non-mappings**
 
@@ -236,13 +246,13 @@ that card only.
 { "budget_amount": 12000, "currency": "MAD", "use_case": "GAMING", "resolution": "1440p" }
 ```
 
-| Field           | Homepage source          | Notes                                                                            |
-| --------------- | ------------------------ | -------------------------------------------------------------------------------- |
-| `budget_amount` | finder store             | JSON **number**, integer, 3 500–100 000 client-side; API accepts up to 1 000 000 |
-| `currency`      | `Price.currency` (`MAD`) | must be an advertised value                                                      |
-| `use_case`      | finder store             | `GAMING` \| `OFFICE` \| `WORKSTATION` (served vocabulary)                        |
-| `resolution`    | shortcut tiles only      | omitted when the visitor never chose one                                         |
-| `priority`      | **never sent**           | the default order is the product decision                                        |
+| Field           | Homepage source                     | Notes                                                                            |
+| --------------- | ----------------------------------- | -------------------------------------------------------------------------------- |
+| `budget_amount` | finder store                        | JSON **number**, integer, 3 500–100 000 client-side; API accepts up to 1 000 000 |
+| `currency`      | `MAD`, confirmed via `meta/options` | must be an advertised value                                                      |
+| `use_case`      | finder store                        | `GAMING` \| `OFFICE` \| `WORKSTATION` (served vocabulary)                        |
+| `resolution`    | shortcut tiles only                 | omitted when the visitor never chose one                                         |
+| `priority`      | **never sent**                      | the default order is the product decision                                        |
 
 **Responses:** `201` (new pass) and `200` (`reused: true`, same `id`) carry the same body —
 the homepage only needs `id` to navigate. Both count as success.
@@ -269,15 +279,15 @@ only on an explicit CTA, never on load, never on filter change, and never in a r
 
 ## 6. Endpoints deliberately **not** used on the homepage
 
-| Need in the brief                        | Endpoint                                                  | Why not now                                                |
-| ---------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------- |
-| "Featured guides" content                | none exists                                               | static typed content module; guide routes are Step 4       |
-| "Trust / methodology" copy               | none exists                                               | static dictionary copy                                     |
-| "Toutes les configurations (N)"          | `GET /v1/catalog/products` lists _components_, not builds | there is no builds index; the link is disabled in Step 1   |
-| Saved builds / header badge              | none exists (no auth, no persistence in V2)               | omitted                                                    |
-| 1080p / 1440p "from" prices              | `GET /v1/presets` has no resolution parameter             | tiles carry no price                                       |
-| Hero "Sélection du moment" rig           | `GET /v1/presets` + §4 detail                             | only when data is available; otherwise the text-only shell |
-| Liveness banner ("Index MAD temps réel") | `GET /v1/health` exists                                   | not a price index; the banner stays static copy            |
+| Need in the brief                        | Endpoint                                                  | Why not now                                                                                   |
+| ---------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| "Featured guides" content                | none exists                                               | static typed content module; guide routes are Step 4                                          |
+| "Trust / methodology" copy               | none exists                                               | static dictionary copy                                                                        |
+| "Toutes les configurations (N)"          | `GET /v1/catalog/products` lists _components_, not builds | there is no builds index; the link is disabled in Step 1                                      |
+| Saved builds / header badge              | none exists (no auth, no persistence in V2)               | omitted                                                                                       |
+| 1080p / 1440p "from" prices              | `GET /v1/presets` has no resolution parameter             | tiles carry no price                                                                          |
+| Hero "Sélection du moment" rig           | `GET /v1/presets` + §4 detail                             | only when data is available (source use case undecided — Q-19); otherwise the text-only shell |
+| Liveness banner ("Index MAD temps réel") | `GET /v1/health` exists                                   | not a price index; the banner stays static copy                                               |
 
 ---
 
