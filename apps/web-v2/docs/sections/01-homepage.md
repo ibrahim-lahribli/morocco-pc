@@ -20,10 +20,13 @@ no rework of the approved Figma frames.
    are peers, not VALUE / BALANCED / PERFORMANCE tiers. Do not call one "the most
    recommended", "best", or "most popular" and do not compare their scores across use
    cases.
-2. **Initial representative budget is data-derived.** For each use case, select the
-   median row from the API's ascending preset list. For an even number of rows, choose
-   the lower median at index `Math.floor((length - 1) / 2)`. This avoids inventing a fixed
-   editorial budget.
+2. **Initial representative budget is 12,000 MAD.** For each use case, select the
+   highest preset row from the API's ascending list whose `budget_amount` is less than
+   or equal to `12_000`. This keeps the three generic homepage examples aligned with
+   the finder's 5,000–15,000 DH choices. The selected row's `budget_amount` remains its
+   actual served tier: 12,000 MAD is the selection ceiling, not a claim that the PC costs
+   exactly 12,000 MAD. If a use case has no preset at or below this ceiling, preserve its
+   card slot and show the no-configuration state; never select a more expensive preset.
 3. **Finder selection is budget-aware but not a new recommendation.** While homepage
    POST remains disabled, choose the highest pre-generated preset for the selected use
    case whose `budget_amount` is less than or equal to the visitor's budget. If none
@@ -446,13 +449,18 @@ use case confirmed by `meta/options`) plus `GET /v1/recommendations/{recommendat
 for the three selected preset IDs. Full mapping is in §13 and
 `01-homepage-api-mapping.md`.
 
-**Deterministic initial selection.** The presets endpoint returns rows ordered by
-`budget_amount` ascending. For each use case, select the median row from that response;
-when there is an even number of rows, use the lower median at index
-`Math.floor((length - 1) / 2)`. This uses the real available budget ladder and avoids
-inventing a fixed editorial budget. Keep a stable display order: Gaming, Studies & Office,
-Professional & Creation. Do not sort use cases by score, price, API response order, or
-strategy. Request detail only for the three selected `recommendation_id` values.
+**Deterministic initial selection (owner decision: 12,000 MAD).** The presets endpoint
+returns rows ordered by `budget_amount` ascending. For each use case, select the
+highest row whose `budget_amount <= 12_000`. In implementation terms, filter the
+ascending list to rows at or below 12,000 and select the final row in that filtered list.
+Do not select the median of the entire ladder and do not fall back to a row above 12,000.
+This keeps the generic homepage examples relevant to the finder's 5,000 / 8,000 / 12,000 /
+15,000 DH choices. The selected preset's actual `budget_amount` is the displayed tier;
+it may be below 12,000 and must not be labelled as an exact 12,000 DH build. Keep a
+stable display order: Gaming, Studies & Office, Professional & Creation. Do not sort use
+cases by score, price, API response order, or strategy. Request detail only for the
+selected `recommendation_id` in each use-case slot. If a use case has no preset at or
+below 12,000, preserve its slot and show the no-configuration state.
 
 If one use case returns no presets or its selected detail cannot be loaded, preserve that
 use-case card slot and show its own empty/unavailable state. Do not silently substitute a
@@ -504,7 +512,7 @@ cross-use-case ranking.
 | `builds.loading`              | Chargement des configurations…                                                                                               |
 | `builds.budgetCap`            | Configuration pré-générée la plus élevée disponible : {amount}                                                               |
 
-**Interactions.** On first visit, render one median-budget preset per use case. The finder
+**Interactions.** On first visit, render one generic preset per use case using the 12,000 MAD ceiling: the highest preset whose `budget_amount` is at or below 12,000. Never use a higher preset for the generic state. The finder
 selection narrows the display to the selected use case and chooses the greatest preset
 budget that does not exceed the visitor's chosen budget. The chosen preset may be below
 the requested budget; label it by its actual served preset budget. If the requested budget
@@ -1000,9 +1008,11 @@ item is reported as skipped.
 
 ### 16.4 Personalised vs generic states
 
-- [ ] Generic (default) state shows exactly one median-budget preset for each of GAMING,
-      OFFICE and WORKSTATION, in that fixed order; no price or score is hard-coded and no
-      placeholder number reaches the DOM.
+- [ ] Generic (default) state shows exactly one preset for each of GAMING, OFFICE and
+      WORKSTATION, in that fixed order: the highest available preset with
+      `budget_amount <= 12,000 MAD`. No preset above 12,000 is used for the initial cards.
+      If no qualifying preset exists for a use case, its slot shows the no-configuration
+      state. No price or score is hard-coded and no placeholder number reaches the DOM.
 - [ ] The three cards are peers; the UI does not rank unlike use cases or call one "most
       recommended".
 - [ ] Any displayed `build_score` is labelled "Score de configuration" and help text
@@ -1133,5 +1143,5 @@ Defaults are chosen so implementation can start; each answer may change the spec
 | Q-11 | Guides section shows "(14)" but only four guides exist and no endpoint serves them.                                                    | render "Tous les guides d'achat" without a count                                                                           | copy                                           |
 | Q-12 | Guide cards have no routes until Step 4.                                                                                               | `NEXT_PUBLIC_GUIDES_ENABLED=off`, non-navigating cards                                                                     | four placeholder cards                         |
 | Q-13 | No analytics provider exists in V2.                                                                                                    | emit no events                                                                                                             | measurement                                    |
-| Q-14 | Should the homepage configuration cards be personalized by the finder before submit?                                                   | resolved: initial cards are one median preset per use case; finder selects highest same-use-case preset at or below budget | no backend write in homepage MVP               |
+| Q-14 | Which budget determines the generic homepage configurations before finder selection?                                                       | resolved by owner: 12,000 MAD ceiling; choose the highest same-use-case preset at or below it; finder later uses the visitor's own budget | no backend write in homepage MVP               |
 | Q-15 | Arabic copy for the new namespace has no approved source.                                                                              | author with review, keep key/placeholder parity                                                                            | launch readiness                               |
