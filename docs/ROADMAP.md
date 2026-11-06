@@ -29,8 +29,8 @@ Unchanged from `PLAN_PLATFORM_CONSTRAINTS.md`, and the same rules `AGENTS.md` §
 |---|---|
 | Schema | 23 migrations, ledger **23** on shared, TEST and EU; `run-migrations.js --check` reports no pending file |
 | API | Fastify, contract **v1.10.0**, ten paths, snapshot `apps/api/test/unit/openapi-v1.10.json` |
-| Deployed origins | **two**, both Render Free and both scaling to zero after 15 idle minutes. `https://morocco-pc.onrender.com` serves the SHARED database and answers `engine_version: "dev"`; `https://morocco-pc-api-eu.onrender.com` (Frankfurt, created from `render.yaml`) is the private-beta host on the EU database and answers `engine_version: "d2de4fb"`. |
-| DB roles | `morocco_pc_api` is provisioned on shared and EU (self-check 21/21) and the EU host **uses it**: `check-deployed-role.js --target=env:TARGET_DATABASE_URL` answers PASS (every tagged `morocco-pc-api` session authenticated as `morocco_pc_api`). The demo origin still authenticates as `neondb_owner` (FAIL, session started 2026-11-06T18:12Z) |
+| Deployed origins | **one**: `https://morocco-pc-api-eu.onrender.com` (Render Free, Frankfurt, created from `render.yaml`), the private-beta host on the EU database, answering `engine_version: "d2de4fb"`; it scales to zero after 15 idle minutes. The second Render service — the demo origin on the shared database — was **suspended 2026-11-06** (deletion pending, R-05) and is no longer a target. |
+| DB roles | `morocco_pc_api` is provisioned on shared and EU (self-check 21/21) and the EU host **uses it**: `check-deployed-role.js --target=env:TARGET_DATABASE_URL` answers PASS (every tagged `morocco-pc-api` session authenticated as `morocco_pc_api`). The retired demo origin authenticated as `neondb_owner` (FAIL, session started 2026-11-06T18:12Z) until it was suspended that day |
 | Served scoring model | shared serves the newest ACTIVE row, `launch-v2@2.4.0` (six ACTIVE `launch-v2` versions, `seed-minimal-v1` INACTIVE). The EU host is **pinned at deploy**: `render.yaml` sets `SCORING_MODEL_PIN: launch-v2@2.4.0` (Decision 63), and 52 persisted passes record that model |
 | CI | `unit-and-docs` on push/PR (includes the read-only catalogue-identity and deferred-rules gates when the secret exists); `recurring-gates` nightly + dispatch |
 | Tests | engine **1261**, scripts **463**, API **193** (0 failed; engine/API measured 2026-11-03, scripts 2026-11-04); `test:api:db` **17**, nightly only |
@@ -67,8 +67,8 @@ Each item's current state, evidence and severity live in `OPEN_POINTS.md`; this 
 
 | Action | Unblocks | R-id |
 |---|---|---|
-| Rotate the **demo origin's** DB credential onto `morocco_pc_api` (the EU host already uses it and measures PASS) | P3 S2's remaining half; the last FAIL in `check-deployed-role.js` | R-05 |
-| Pin the release scoring model at deploy — **done 2026-11-02** (Decision 63, `render.yaml`, boot line measured on the EU host) | the served-model drift between the pinned EU host and the unpinned demo origin | R-06 (closed; the demo origin still selects by insertion order) |
+| Delete the suspended **demo service** and rotate the owner password it held (`neondb_owner`; the EU host already uses `morocco_pc_api` and measures PASS) | P3 S2's remaining half — R-05 cannot close before the service is gone and the owner password is rotated | R-05 |
+| Pin the release scoring model at deploy — **done 2026-11-02** (Decision 63, `render.yaml`, boot line measured on the EU host) | the served-model drift between the pinned EU host and the unpinned shared database | R-06 (closed; shared still selects by insertion order) |
 | Raise the EU service off `plan: free` so it stops sleeping, then measure the V1 latency table | P1 S1 Steps 7–9, P1 S3's latency table, P2 S2 Step 4, P3 S3, Sentry Step 3, web S26 | R-08 |
 | A retailer with readable terms | every P4 real-data item: real offers, provenance PASS, freshness PASS | R-01 |
 | A monitoring account + DSN | P3 S4 Steps 3–6 | R-08 |
