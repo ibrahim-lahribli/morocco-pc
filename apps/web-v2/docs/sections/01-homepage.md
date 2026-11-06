@@ -13,6 +13,27 @@ here.
 invention, no design-token change, no change to V1 (`apps/web`), no V2 workflow change,
 no rework of the approved Figma frames.
 
+## Product decisions confirmed for this homepage
+
+1. **The initial three cards represent three use cases:** one Gaming (`GAMING`), one
+   Studies & Office (`OFFICE`), and one Professional & Creation (`WORKSTATION`). These
+   are peers, not VALUE / BALANCED / PERFORMANCE tiers. Do not call one "the most
+   recommended", "best", or "most popular" and do not compare their scores across use
+   cases.
+2. **Initial representative budget is data-derived.** For each use case, select the
+   median row from the API's ascending preset list. For an even number of rows, choose
+   the lower median at index `Math.floor((length - 1) / 2)`. This avoids inventing a fixed
+   editorial budget.
+3. **Finder selection is budget-aware but not a new recommendation.** While homepage
+   POST remains disabled, choose the highest pre-generated preset for the selected use
+   case whose `budget_amount` is less than or equal to the visitor's budget. If none
+   exists, show an honest no-match state. If the visitor's budget is above the largest
+   available tier, show the highest available tier with a clear cap note; do not imply
+   that it is tailored to the full budget.
+4. **Prices and scores are described literally.** Show price provenance from the API;
+   never imply live retailer verification. Label `build_score` as a configuration score,
+   not FPS, benchmark, or gaming performance.
+
 ---
 
 ## 1. Design references
@@ -40,7 +61,8 @@ Two structural differences are therefore **by design**, and the responsive strat
 
 1. Mobile has a **resolution-shortcut** row (`23:1344`: Gaming 1080p / Gaming 1440p).
    Desktop has no such row; it has a four-tile **categories & usages** grid (`19:426`)
-   that mobile does not show.
+   that mobile does not show. Step 1 keeps both as responsive variants of one discovery
+   pathways component.
 2. Mobile shows **2 guides**, mobile's final CTA is a compact card; desktop shows
    **4 guides** in one row and a wide gradient CTA banner.
 
@@ -49,8 +71,8 @@ The eight sections the implementation must ship (per the Step 1 brief) are:
 1. Header and navigation — banner (desktop) + sticky header + bottom nav (mobile).
 2. Hero and budget/usage finder.
 3. Recommended complete PC configurations.
-4. Performance shortcuts (1080p / 1440p) — the mobile row; on desktop the same
-   navigation lives in the categories grid, see §2.3.
+4. Discovery pathways — desktop `Catégories & usages` grid; mobile Gaming 1080p / 1440p
+   resolution shortcuts. This is one responsive section with two frame-accurate variants.
 5. Trust and recommendation methodology.
 6. Featured guides.
 7. Final CTA.
@@ -99,11 +121,11 @@ locale layout owns it; sections do not re-declare horizontal padding.
 
 | Viewport           | Grid                      | Header                | Finder                             | Builds                   | Shortcuts                | Trust             | Guides         |
 | ------------------ | ------------------------- | --------------------- | ---------------------------------- | ------------------------ | ------------------------ | ----------------- | -------------- |
-| 360 px             | 1 col, 16 px margins      | 56 px sticky          | stacked, 2×2 presets               | featured + 2 rows        | 2 tiles, 1 per column    | stacked list card | 2 cards, 1 col |
+| 360 px             | 1 col, 16 px margins      | 56 px sticky          | stacked, 2×2 presets               | 3 use-case cards stacked        | 2 tiles, 1 per column    | stacked list card | 2 cards, 1 col |
 | 390 px             | same                      | same                  | same                               | same                     | same                     | same              | same           |
 | 430 px             | same (wider gutters only) | same                  | same                               | same                     | same                     | same              | same           |
 | 768–1023 px (`md`) | 1–2 col                   | 64 px, horizontal nav | presets in one row of 4            | 2 col, featured spans    | 2 tiles inline           | 3 col             | 2 col          |
-| 1280 px (`lg`+)    | 12-col, 40 px gap         | 64 px, horizontal nav | 2 answers side by side in the card | 3 cards, middle featured | inline, right of heading | 3 col             | 4 col          |
+| 1280 px (`lg`+)    | 12-col, 40 px gap         | 64 px, horizontal nav | 2 answers side by side in the card | 3 use-case cards, one per use case | inline, right of heading | 3 col             | 4 col          |
 
 Tailwind's stock breakpoints (`sm` 640, `md` 768, `lg` 1024, `xl` 1280) are enough. No
 custom breakpoint token is added.
@@ -127,17 +149,18 @@ two files):
 | Component                 | Variant                       | Difference                                                                                                                                            |
 | ------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `FeaturedBuildCard`       | `featured` (mobile + desktop) | identical structure; desktop adds the floating "Le plus recommandé" badge above the card edge and a 2 px primary ring                                 |
-| `RecommendedBuildSection` | —                             | grid switches from "1 featured + 2 compact rows" to "3 cards, middle featured"; the **same** three data items drive both, the layout prop is CSS only |
+| `RecommendedBuildSection` | —                             | grid switches from "1 featured + 2 compact rows" to "3 use-case cards, one per use case"; the **same** three data items drive both, the layout prop is CSS only |
 | `FeaturedGuides`          | —                             | renders 4 items; items 3–4 are `max-lg:hidden` (2 on mobile, 4 on desktop). Content stays in the DOM for one code path                                |
 | `FinalRecommendationCTA`  | —                             | desktop gradient banner with a large button; mobile compact primary-variant card with a 48 px button. Same copy, same action                          |
-| `ResolutionShortcuts`     | —                             | hidden from `lg` up (desktop represents the same choices in the categories grid)                                                                      |
+| `ResolutionShortcuts`     | —                             | desktop shows the four-tile categories grid; mobile shows Gaming 1080p / 1440p shortcuts                                                                      |
 
-**Category grid (desktop only).** The desktop frame's four use-case tiles (`19:426`)
-duplicate the finder's three usage options plus a resolution split. Step 1 does **not**
-ship a separate categories section: that section is not in the approved eight-section
-list, and it would duplicate the finder. Instead the desktop resolution shortcuts render
-inline beside the recommended-configurations heading (see §5.4). This is Q-04 and the
-default is "no categories section".
+**Discovery pathways (responsive variants).** Keep the desktop frame's `Catégories &
+usages` grid (`19:426`) and the mobile frame's Gaming 1080p / 1440p shortcuts
+(`23:1344`). They are two presentations of one `DiscoveryPathways` component, not two
+page implementations. Desktop tiles preselect their mapped finder use case; mobile
+resolution tiles set Gaming plus a resolution only when `resolution` appears in
+`inputs_applied`. Neither variant submits a recommendation. This resolves Q-04 in favour
+of preserving the approved desktop frame.
 
 ### 2.3 Layout rules
 
@@ -187,8 +210,8 @@ renders neither (no saved-builds route exists and no count source exists) — Q-
 | `banner.currencyIndex`                                 | Index MAD temps réel                                                                            |
 | `banner.arabicBadge`                                   | متوفر باللغة العربية                                                                            |
 
-If the update date is shown dynamically, it is a `{date}` placeholder formatted per
-locale; Step 1 uses the static sentence (no date source exists).
+No update date is displayed because no verified freshness timestamp or live price-index
+source exists for this banner.
 
 **Interactions.** Nav anchors scroll to `#configurations`, `#guides`, `#confiance`.
 Locale switch preserves the page (already implemented by `LocaleSwitcher`). `aria-current`
@@ -219,12 +242,12 @@ interactive block above the fold.
 **Desktop composition.** 12-column grid, two 6-column halves, 40 px gap, 64 px vertical
 padding:
 
-- **Start column** (hero copy): pill "Guide N°1 au Maroc · 100% Indépendant"; H1 in two
+- **Start column** (hero copy): pill "Configurateur PC pour le Maroc"; H1 in two
   lines — "Le bon PC," then "au **bon budget**." with the second phrase in the primary
   gradient (`bg-linear-to-r from-primary-deep to-primary` + `bg-clip-text`); intro
   paragraph; three trust chips ("1 minute chrono", "100 % Gratuit", "Sans inscription
   requise"); the featured rig preview card (176 px media, "Vue Référence" overlay,
-  eyebrow "SÉLECTION DU MOMENT", "Score Perf : 92/100" pill, title, one-line rationale,
+  eyebrow "SÉLECTION DU MOMENT", "Aperçu de configuration" pill, title, one-line rationale,
   price + "Détails specs →").
 - **End column** (finder card, `rounded-sheet` 24 px, `shadow-level-2`): header row
   ("Simulateur Express" + dot, "Étape 1 sur 2" pill), question 1 (budget), question 2
@@ -241,21 +264,21 @@ usage cards, 48 px CTA, microcopy "Gratuit · Sans compte · Environ 1 minute".
 `HeroRigPreview` (new, server; reuses `Badge`, `Card`), `BudgetUsageFinder` (new,
 client island), `BudgetPresetGrid`, `CustomBudgetField`, `UsageSelector`,
 `FinderCta`. Price rendering wherever an amount appears: `formatPrice` with the
-dictionary currency from `Price.currency`.
+dictionary currency from the recommendation detail currency or the confirmed `MAD` preset-query currency.
 
 **Content keys.**
 
 | Key                                     | French source                                                                                                                                                    |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hero.eyebrow`                          | Guide N°1 au Maroc · 100 % Indépendant                                                                                                                           |
+| `hero.eyebrow`                          | Configurateur PC pour le Maroc                                                                                                                           |
 | `hero.titleLead`                        | Le bon PC,                                                                                                                                                       |
 | `hero.titleAccent`                      | au bon budget.                                                                                                                                                   |
-| `hero.intro`                            | Gaming, études ou travail : trouvez une configuration équilibrée sans vous tromper de socket ni payer trop cher. Estimations directes en Dirhams marocains (DH). |
+| `hero.intro`                            | Gaming, études ou travail : trouvez une configuration selon votre budget et votre usage. Les prix affichés sont indicatifs et exprimés en dirhams marocains (MAD). |
 | `hero.chip.time`                        | 1 minute chrono                                                                                                                                                  |
 | `hero.chip.free`                        | 100 % Gratuit                                                                                                                                                    |
 | `hero.chip.noAccount`                   | Sans inscription requise                                                                                                                                         |
 | `hero.preview.eyebrow`                  | Sélection du moment                                                                                                                                              |
-| `hero.preview.score`                    | Score Perf : {score}/100                                                                                                                                         |
+| `hero.preview.score`                    | Score de configuration : {score}/100                                                                                                                                         |
 | `hero.preview.caption`                  | Vue Référence                                                                                                                                                    |
 | `hero.preview.details`                  | Détails specs →                                                                                                                                                  |
 | `finder.badge`                          | Simulateur Express                                                                                                                                               |
@@ -310,7 +333,7 @@ region and are referenced by `aria-describedby` on the group. The CTA reports
 
 `5 000`, `8 000`, `12 000`, `15 000` DH — the same four the Step 0 `lib/demo/store.ts`
 already declares (`BUDGET_OPTIONS`). The mobile frame renders the last one as "15 000
-DH+" — the label is `foreground`/`15 000 DH+` visually, but the value submitted is
+DH+" — the label is `foreground`/`15 000 DH` visually, but the value submitted is
 exactly `15000`; the "+" is copy, never a range query. The store constant is reused (not
 copied) and the homepage store is a **new** module (§6.3); `lib/demo/store.ts` is left
 untouched for the preview page until that page is deleted.
@@ -376,7 +399,7 @@ Submit is a TanStack Query **mutation** (`retry: false`, per the established pol
 a POST runs and persists an engine pass).
 
 - **Payload:** `{ budget_amount, currency, use_case, resolution? }`, `currency` from
-  `Price.currency` (`MAD`). `priority` is not sent (the API's default order).
+  the recommendation detail currency or the confirmed `MAD` preset-query currency (`MAD`). `priority` is not sent (the API's default order).
 - **Pending:** button shows `finder.ctaPending`, `aria-busy="true"`, spinner replaces the
   arrow; the rest of the form is `pointer-events-none` but keeps its values.
 - **Success:** `router.push` to `/[locale]/resultats/{id}` (Step 2 route). The response
@@ -397,150 +420,170 @@ same object; Step 2's results page is addressed only by `id` from the API. No
 recommendation input is duplicated in the URL, so a shared link cannot disagree with the
 persisted pass. If Step 2 has not landed, the CTA is behind
 `NEXT_PUBLIC_HOMEPAGE_SUBMIT=off` (default **off** in Step 1) and instead performs a
-**no-write** action: it stores the answers and scrolls to the recommended
-configurations, filtered to the chosen usage. This is the only way Step 1 ships without
-creating orphan engine passes. Q-08 asks for confirmation of the merge order.
+**no-write** action: it stores the answers and scrolls to the selected use case's best available
+pre-generated preset within budget. This is the only way Step 1 ships without
+creating orphan engine passes. Q-08 records the agreed gate until the results route exists.
 
 ---
 
 ## 6. Section 3 — Recommended complete PC configurations
 
-**Purpose.** Prove the promise with real presets before asking for input: three complete
-builds with price, component summary and compatibility/price status.
+**Purpose.** Show one real, complete example for each supported use case so a first-time
+visitor can understand the breadth of Morocco-PC before using the finder.
+
+**Initial card decision (confirmed).** The three initial cards are:
+1. Gaming — API value `GAMING`.
+2. Studies & Office — API value `OFFICE`.
+3. Professional & Creation — API value `WORKSTATION`.
+
+These are three use-case examples, not VALUE / BALANCED / PERFORMANCE strategy tiers.
+The cards are peers. Do not call one "the most recommended", "best", or "most popular"
+and do not compare their `build_score` values across different use cases.
 
 **Data source.** `GET /v1/presets?use_case=…&currency=MAD` (read-only, one request per
-use case) plus `GET /v1/recommendations/{recommendation_id}` for the ≤ 3 presets shown.
-Full mapping in §9 and in `01-homepage-api-mapping.md`.
+use case confirmed by `meta/options`) plus `GET /v1/recommendations/{recommendation_id}`
+for the three selected preset IDs. Full mapping is in §13 and
+`01-homepage-api-mapping.md`.
 
-**Desktop composition.** Eyebrow "CONFIGURATIONS PRÊTES À MONTER", H2 "Des PC adaptés à
-votre budget", one-line intro, filter tabs on the end side (Tous les profils / Gaming
-1080p-1440p / Études & Bureautique / Création & Studio — a segmented control on
-`bg-surface-sunken` with the active tab in `bg-primary text-on-primary`). Below: three
-cards. Card anatomy: category pill + price-status badge; 192 px media with a
-performance overlay; H3; 2×2 spec pills; a one-line rationale ("Pourquoi ce choix ?");
-price row with `text-price` and a source sentence; primary "Voir la configuration
-complète" button and an accent icon action. The **middle** card is featured: 2 px primary
-ring, a floating "Le plus recommandé · Idéal 1080p Ultra" pill straddling the top edge.
+**Deterministic initial selection.** The presets endpoint returns rows ordered by
+`budget_amount` ascending. For each use case, select the median row from that response;
+when there is an even number of rows, use the lower median at index
+`Math.floor((length - 1) / 2)`. This uses the real available budget ladder and avoids
+inventing a fixed editorial budget. Keep a stable display order: Gaming, Studies & Office,
+Professional & Creation. Do not sort use cases by score, price, API response order, or
+strategy. Request detail only for the three selected `recommendation_id` values.
 
-**Mobile composition.** Same heading + intro, then horizontally scrollable filter chips
-(Tous / Gaming 1080p / Études), then one featured card (badges "Recommandé · Équilibré"
-and "Compatibilité vérifiée", 144 px media, H3, one-line spec summary, divided price row
-with "PRIX INDICATIF BOUTIQUES" label and a compact "Voir la config" button), then two
-compact rows (title, spec line, "Dès X DH", `Détails` button), then a `Voir toutes les
-configurations (N)` link.
+If one use case returns no presets or its selected detail cannot be loaded, preserve that
+use-case card slot and show its own empty/unavailable state. Do not silently substitute a
+second Gaming preset or another use case. If the selected detail has no builds, show no
+complete configuration for that slot; never render a `budget_floor` value as a build
+price or as proof that a compatible build exists.
 
-**Components.** `RecommendedBuildSection` (client island, owns the query and the filter),
-`BuildFilterTabs`, `FeaturedBuildCard`, `CompactBuildRow`, `SpecPill`,
-`PriceStatusBadge` (wraps `Badge`), `BuildMediaPlaceholder`.
+**Desktop composition.** Eyebrow "CONFIGURATIONS PRÊTES À MONTER", H2 "Trois usages,
+trois configurations", one-line intro, then three cards in fixed use-case order. Each
+card has a use-case label, price-status badge, 192 px token-only media placeholder, H3,
+up to four spec pills, optional rationale, served total price and a compact details
+action. Use equal visual weight across all three cards. The Figma centre-card ring may be
+retained as decoration only; it must not be paired with "Le plus recommandé" or any
+claim that ranks OFFICE above the other use cases.
+
+**Mobile composition.** Same three use-case examples in the same order: Gaming, Studies &
+Office, Professional & Creation. Render Gaming first, followed by the other two as compact
+cards if required by the approved mobile frame. A compact/featured layout is a responsive
+density choice only; it must not imply that Gaming is objectively more recommended.
+
+**Components.** `RecommendedBuildSection` (client island, owns preset queries and
+budget-aware selection), `FeaturedBuildCard`, `CompactBuildRow`, `SpecPill`,
+`PriceStatusBadge` (wraps `Badge`), `BuildMediaPlaceholder`. Filter tabs are not
+needed for the initial state: the three use cases are shown simultaneously. After finder
+selection, the section shows the matching selected-use-case preset, not an arbitrary
+cross-use-case ranking.
 
 **Content keys.**
 
-| Key                        | French source                                                                                        |
-| -------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `builds.eyebrow`           | Configurations prêtes à monter                                                                       |
-| `builds.title`             | Des PC adaptés à votre budget                                                                        |
-| `builds.intro`             | Configurations équilibrées et testées pour le marché marocain.                                       |
-| `builds.filters.all`       | Tous les profils                                                                                     |
-| `builds.filters.gaming`    | Gaming 1080p / 1440p                                                                                 |
-| `builds.filters.office`    | Études & Bureautique                                                                                 |
-| `builds.filters.creation`  | Création & Studio                                                                                    |
-| `builds.badge.recommended` | Recommandé · Équilibré                                                                               |
-| `builds.badge.compatible`  | Compatibilité vérifiée                                                                               |
-| `builds.priceLabel`        | Prix indicatif boutiques                                                                             |
-| `builds.priceSource`       | Estimation boutiques Maroc                                                                           |
-| `builds.cta`               | Voir la configuration complète                                                                       |
-| `builds.compactCta`        | Détails                                                                                              |
-| `builds.why`               | Pourquoi ce choix ?                                                                                  |
-| `builds.viewAll`           | Voir toutes les configurations ({count})                                                             |
-| `builds.empty.title`       | Aucune configuration générée pour le moment                                                          |
-| `builds.empty.body`        | Nos configurations sont régénérées après chaque mise à jour des prix. Revenez dans quelques minutes. |
-| `builds.error.title`       | Les configurations n'ont pas pu être chargées                                                        |
-| `builds.error.body`        | Vérifiez votre connexion, puis réessayez.                                                            |
-| `builds.error.retry`       | Réessayer                                                                                            |
-| `builds.loading`           | Chargement des configurations…                                                                       |
+| Key | French source |
+| --- | --- |
+| `builds.eyebrow` | Configurations prêtes à monter |
+| `builds.title` | Trois usages, trois configurations |
+| `builds.intro` | Découvrez un exemple de configuration pour le jeu, les études et le travail. |
+| `builds.category.gaming` | Gaming |
+| `builds.category.office` | Études & bureautique |
+| `builds.category.workstation` | Création & travail professionnel |
+| `builds.badge.verified` | Prix vérifié |
+| `builds.badge.indicative` | Prix indicatif |
+| `builds.priceLabel` | Prix de la configuration |
+| `builds.scoreLabel` | Score de configuration |
+| `builds.scoreHelp` | Score calculé à partir des évaluations des composants et des inconnues de compatibilité. Ce n'est ni un FPS ni un benchmark. |
+| `builds.cta` | Voir la configuration |
+| `builds.empty.title` | Aucune configuration disponible pour cet usage |
+| `builds.empty.body` | Aucune configuration complète n'est disponible dans les budgets pré-générés pour le moment. |
+| `builds.error.title` | Les configurations n'ont pas pu être chargées |
+| `builds.error.body` | Vérifiez votre connexion, puis réessayez. |
+| `builds.error.retry` | Réessayer |
+| `builds.loading` | Chargement des configurations… |
+| `builds.budgetCap` | Configuration pré-générée la plus élevée disponible : {amount} |
 
-**Interactions.** Filter tabs filter the already-fetched list client-side (no refetch):
-`Tous` merges the three use cases (deduped by `recommendation_id`, sorted by
-`budget_amount`), a specific tab filters by use case. Each filter is a native radio in a
-segmented group (`role="radiogroup"` semantics via `<fieldset>`/`<legend class="sr-only">`),
-so arrow keys work and the state is announced. "Voir la configuration complète" navigates
-to the Step 2 results route; in Step 1 (`NEXT_PUBLIC_HOMEPAGE_SUBMIT=off`) it is a
-non-navigating button that scrolls to the finder with the same budget pre-selected
-(Q-08). `Voir toutes les configurations (N)` is disabled in Step 1 (no catalogue route).
+**Interactions.** On first visit, render one median-budget preset per use case. The finder
+selection narrows the display to the selected use case and chooses the greatest preset
+budget that does not exceed the visitor's chosen budget. The chosen preset may be below
+the requested budget; label it by its actual served preset budget. If the requested budget
+exceeds the largest available preset, show `builds.budgetCap` and do not imply the PC is
+tailored to the full amount. If no preset budget is less than or equal to the visitor's
+budget, show `builds.empty.*`. No filter change or scroll action makes an API write. In
+Step 1, the card details action is non-navigating until the Step 2 result route is
+available; never link to a missing route.
 
-**Responsive behaviour.** 1 card + 2 rows (mobile) → 2 columns (`md`) → 3 columns with the
-middle ring (`lg`). The filter row scrolls horizontally on mobile with `-mx-margin-mobile
-px-margin-mobile`, never the page. Media height 144 px mobile / 192 px desktop.
+**Responsive behaviour.** Desktop: three equal columns from `lg`; `md`: two columns
+with the third spanning as needed; mobile: one card followed by two compact cards. The
+featured treatment is visual only and does not imply ranking. Media height 144 px mobile /
+192 px desktop.
 
 **States.**
 
-| State                                   | Rendering                                                                                                                     |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Loading                                 | 3 skeleton cards with the same geometry; `aria-busy="true"` on the section, `builds.loading` in an `sr-only` live region      |
-| Empty (`presets: []`)                   | `builds.empty.*` card with a retry action; never an error style                                                               |
-| Zero-build preset (`build_score: null`) | Card renders with "—" as the score and no overlay; price shows `budget_amount` labelled "Budget visé", never as a build price |
-| Error (5xx/timeout/offline)             | `builds.error.*` block with retry; the rest of the page stays usable                                                          |
-| Stale (catalog changed)                 | Not applicable: `catalog_version` changes invalidate the query key (see §9)                                                   |
+| State | Rendering |
+| --- | --- |
+| Loading | Three skeletons matching the three use-case slots; `aria-busy="true"` and `builds.loading` in a polite live region |
+| Empty use case | Keep that category's slot and show `builds.empty.*`; do not substitute another use case |
+| No preset within visitor budget | Show `builds.empty.*`; never show a more expensive preset as suitable |
+| Budget above highest served tier | Show the highest available tier plus `builds.budgetCap`; do not describe it as an exact-budget result |
+| Detail with no build | Do not render a complete-PC claim or a price; never present `budget_floor.cheapest_total` as an assembled build |
+| Indicative price | Show the indicative badge and API disclaimer; do not imply a current retailer quote |
+| Error (5xx/timeout/offline) | `builds.error.*` block with retry; the rest of the page stays usable |
 
-**Accessibility.** The filter group has a visible legend on desktop and an `sr-only`
-legend on mobile. Cards are `<article>` with `aria-labelledby` pointing at the H3. Price
-text carries an `aria-label` with the full formatted amount ("7 450 dirhams"), so a
-screen reader does not read "DH" as letters. Status badges' text comes from the
-dictionary, never from the API's English enum. The featured ring is decorative; the
-"Recommandé" badge is the accessible signal. No auto-rotating carousel: mobile uses a
-scroll container, and if a snap carousel is added it must be a plain overflow container
-with visible scroll affordance.
+**Accessibility.** The three categories have explicit accessible names. Card order is fixed
+and does not change after hydration. Cards are `<article>` with `aria-labelledby`
+pointing at the H3. Price text carries an `aria-label` with the full formatted amount.
+Status badges' text comes from the dictionary, never from the API's English enum. The
+featured visual treatment is decorative and has no "recommended" accessible label. No
+auto-rotating carousel.
 
----
+## 7. Section 4 — Discovery pathways
 
-## 7. Section 4 — Performance shortcuts (1080p / 1440p)
+**Purpose.** Preserve each approved frame's discovery affordance without building two
+homepage implementations.
 
-**Purpose.** Give the two most common gaming targets a one-tap path without asking for a
-resolution choice in the form.
+**Desktop composition.** Render the approved four-tile `Catégories & usages` grid
+(`19:426`) after the trust section, with actions that preselect the corresponding finder
+use case. Keep the Figma tile hierarchy and visual treatment. Use only product-supported
+use cases mapped in the Homepage dictionaries; a resolution tile is a discovery shortcut,
+not a new API use case.
 
-**Desktop composition.** Inline with the recommended-configurations heading: two outline
-buttons, "Gaming 1080p" and "Gaming 1440p", each carrying the resolution as `data-*` and
-as accessible text.
+**Mobile composition.** Render the two Gaming resolution shortcuts from `23:1344`
+immediately after recommended configurations: Gaming 1080p and Gaming 1440p. Each tile
+sets `use_case=GAMING` and its resolution, then moves focus to the finder.
 
-**Mobile composition.** Its own row under the section, per `23:1344`: a `text-label-sm`
-uppercase eyebrow "RACCOURCIS PAR RÉSOLUTION" then two bordered tiles side by side
-(label + optional price line).
-
-**Components.** `ResolutionShortcuts` (client), reusing `Button` (`variant="outline"`).
-Both breakpoints render the same component; the desktop/mobile difference is a `layout`
-prop that only changes wrapper classes.
+**Components.** One `DiscoveryPathways` client component with desktop-category and
+mobile-resolution variants. It is one responsive component tree, not a desktop page and
+a mobile page.
 
 **Content keys.**
 
-| Key                    | French source             |
-| ---------------------- | ------------------------- |
-| `shortcuts.eyebrow`    | Raccourcis par résolution |
-| `shortcuts.gaming1080` | Gaming 1080p              |
-| `shortcuts.gaming1440` | Gaming 1440p              |
-| `shortcuts.from`       | Dès {amount}              |
+| Key | French source |
+| --- | --- |
+| `pathways.eyebrow` | Catégories & usages |
+| `pathways.gaming` | Gaming |
+| `pathways.office` | Études & bureautique |
+| `pathways.workstation` | Création & travail professionnel |
+| `pathways.gaming1080` | Gaming 1080p |
+| `pathways.gaming1440` | Gaming 1440p |
 
-`shortcuts.from` exists in the dictionary but is **not rendered** in Step 1 (no served
-resolution-specific price; Q-07). Keeping the key documents the intended copy without
-faking a number.
+**Interactions.** Desktop tiles set their mapped use case in the finder and focus its
+usage group. Mobile tiles set Gaming plus the selected resolution and focus the finder.
+No pathway makes a network write. Resolution tiles are hidden unless
+`inputs_applied` includes `resolution`; an advertised resolution value alone does not
+prove the active model reads it.
 
-**Interactions.** Sets `use_case=GAMING` + `resolution=1080p|1440p` in the finder store,
-`aria-pressed` reflects the active tile, and focus moves to the finder's budget group
-(`ref.focus()` or `scrollIntoView` + `tabindex="-1"` on the fieldset). No API call.
+**Responsive behaviour.** Desktop category grid is shown from `lg`; mobile resolution
+tiles are shown below `lg`. Use responsive placement to match the two approved frame
+sequences while retaining one component and one state owner. Verify keyboard and
+screen-reader reading order at both breakpoints.
 
-**Responsive behaviour.** Row of two from `320 px`; each tile `flex-1`, min height 64 px
-(mobile) / 44 px (desktop button). Hidden at `lg` inside the section's mobile slot and
-rendered beside the heading instead — one instance, two slots, chosen by CSS, so no
-duplicated markup and no hydration difference.
+**States.** Static, except resolution tiles are hidden when the active model does not read
+resolution or authoritative metadata is unavailable.
 
-**States.** No loading/error (static). A tile whose resolution the active model does not
-accept is not shown: the section reads `inputs_applied` from `GET /v1/meta/options` and
-hides the tiles when `resolution` is absent. Empty state = section hidden entirely.
-
-**Accessibility.** Each tile is a `<button type="button">` with `aria-pressed`; the label
-is "Gaming 1080p" and, when a price exists, `aria-describedby` points at the price line.
-44 px minimum target; focus ring from the kit.
-
----
+**Accessibility.** Every tile is a labelled button with a 44 px minimum target and a
+visible focus ring. Selected shortcuts expose `aria-pressed`. Hidden variants are absent
+from the accessibility tree.
 
 ## 8. Section 5 — Trust and recommendation methodology
 
@@ -567,18 +610,18 @@ the methodology link start-aligned.
 | `trust.eyebrow`                     | Transparence & rigueur                                                                                                                                      |
 | `trust.title`                       | Pourquoi faire confiance à Morocco-PC ?                                                                                                                     |
 | `trust.intro`                       | Nous ne vendons aucun composant en direct. Notre seul objectif est de vous éviter les erreurs d'achat et les dépenses superflues.                           |
-| `trust.pillars.compatibility.title` | Compatibilité 100 % vérifiée                                                                                                                                |
-| `trust.pillars.compatibility.body`  | Des composants rigoureusement analysés pour fonctionner ensemble sans goulot d'étranglement (bottleneck), avec alimentations certifiées et sockets adaptés. |
-| `trust.pillars.compatibility.foot`  | Vérification automatique TDP & dimensions                                                                                                                   |
-| `trust.pillars.prices.title`        | Prix en Dirhams (MAD / DH)                                                                                                                                  |
-| `trust.pillars.prices.body`         | Finies les conversions douteuses depuis l'Europe ou les USA. Les montants reflètent fidèlement les prix des distributeurs et boutiques physiques au Maroc.  |
-| `trust.pillars.prices.foot`         | Actualisation hebdomadaire                                                                                                                                  |
+| `trust.pillars.compatibility.title` | Compatibilité analysée                                                                                                                                |
+| `trust.pillars.compatibility.body`  | Les composants sont contrôlés selon les caractéristiques et les règles de compatibilité disponibles (socket, mémoire, dimensions et alimentation). Certaines données peuvent rester inconnues. |
+| `trust.pillars.compatibility.foot`  | Les statuts reflètent les contrôles réellement effectués                                                                                                                   |
+| `trust.pillars.prices.title`        | Prix indicatifs en dirhams (MAD / DH)                                                                                                                                  |
+| `trust.pillars.prices.body`         | Les montants proviennent des offres enregistrées et leur provenance est indiquée. Ils peuvent différer des prix actuellement pratiqués en boutique.  |
+| `trust.pillars.prices.foot`         | Prix non actualisés en temps réel                                                                                                                                  |
 | `trust.pillars.free.title`          | 100 % Gratuit & sans compte                                                                                                                                 |
 | `trust.pillars.free.body`           | Obtenez vos recommandations en toute liberté, sans avoir besoin de créer un compte ni laisser de coordonnées personnelles ou numéro de téléphone.           |
 | `trust.pillars.free.foot`           | Libre accès immédiat                                                                                                                                        |
 | `trust.methodologyLink`             | Comment fonctionnent nos recommandations ?                                                                                                                  |
 
-Copy caution: "Actualisation hebdomadaire" and "Vérification automatique du TDP" are
+Copy caution: "Prix non actualisés en temps réel" and "Vérification automatique du TDP" are
 **product claims**. They are true of the engine (weekly offer refresh, compatibility
 rules) and stay, but the implementation must not derive them from data it does not have.
 If product wants live figures ("prices refreshed 3 days ago"), that is a separate data
@@ -625,7 +668,7 @@ repository. Step 1 ships a static, typed content module
 
 | Slug (future route)                  | Category        | Reading time | Title                                                      |
 | ------------------------------------ | --------------- | ------------ | ---------------------------------------------------------- |
-| `quel-budget-pc-gamer-maroc`         | Guide pratique  | 4 min        | Quel budget pour un PC gamer au Maroc en 2025 ?            |
+| `quel-budget-pc-gamer-maroc`         | Guide pratique  | 4 min        | Quel budget pour un PC gamer au Maroc ?            |
 | `choisir-carte-graphique-nvidia-amd` | Comparatif      | 6 min        | Bien choisir sa carte graphique : Nvidia RTX vs AMD Radeon |
 | `combien-de-ram-16-ou-32-go`         | Conseils        | 3 min        | Combien de RAM faut-il vraiment : 16 Go ou 32 Go ?         |
 | `pc-fixe-vs-pc-portable-maroc`       | Dossier spécial | 5 min        | PC fixe vs PC portable au Maroc : le vrai comparatif       |
@@ -725,8 +768,10 @@ kept as-is.
 **Mobile composition.** Per `23:1440`: hairline, brand row (24 px tile + "Morocco**PC**")
 and "Casablanca · Rabat · Maroc" on the end side, a wrapped link row (À propos ·
 Boutiques · Méthodologie · Contact), then a copyright row. Then the fixed bottom nav
-(`23:1489`): Accueil (current), Composants, a raised circular Configurer FAB, Guides,
-Enregistrés; 56 px + `env(safe-area-inset-bottom)`.
+(`23:1489`): Accueil (current), a raised circular Configurer FAB, and only destinations
+that exist in Step 1. Composants and Enregistrés are hidden or visibly disabled without
+an `href` until their routes exist; Guides is likewise non-navigating until Step 4.
+Keep the 56 px + `env(safe-area-inset-bottom)` geometry.
 
 **Components.** `SiteFooter` (extend props: optional `location` and `links[]`),
 `MobileNav` (exists; add `saved` only when the saved route exists).
@@ -742,8 +787,9 @@ Enregistrés; 56 px + `env(safe-area-inset-bottom)`.
 
 **Interactions.** Footer links are placeholders until their pages exist (same pattern as
 the methodology link: `aria-disabled`, no `href`). The mobile nav's centre action scrolls
-to `#simulateur`; the other items anchor to homepage sections (`#configurations`,
-`#guides`, `#confiance`), matching Step 0's anchor approach, so nothing links to a 404.
+to `#simulateur`; unavailable Composants, Guides and Enregistrés destinations have no
+`href` and never point at an unrelated homepage anchor. Only actual homepage anchors
+such as Accueil and Configurer remain interactive.
 
 **Responsive behaviour.** Footer: stacked and centred on mobile, one row `lg`. Bottom nav
 `lg:hidden`; the layout already reserves `pb-24` for it.
@@ -776,7 +822,7 @@ components/home/
   budget-preset-grid.tsx          client   radios (or server markup driven by RHF)
   custom-budget-field.tsx         client   numeric input + slider (lg)
   usage-selector.tsx              client   three radios
-  resolution-shortcuts.tsx        client   two tiles
+  discovery-pathways.tsx          client   desktop categories + mobile resolution shortcuts
   recommended-build-section.tsx   client   query + filter + layout
   featured-build-card.tsx         server   presentational
   compact-build-row.tsx           server   presentational
@@ -834,7 +880,7 @@ Full field-level mapping: `01-homepage-api-mapping.md`. Contract version: **1.10
 | ----------------------------------------------------- | ------------------------------------- | ------------------------------------------------ |
 | Usage options + whether resolution is accepted        | `GET /v1/meta/options`                | **yes** (finder), fallback constants if it fails |
 | Currency vocabulary                                   | `GET /v1/meta/options` (`currencies`) | **yes**, only to confirm `MAD`                   |
-| Generic complete builds per budget                    | `GET /v1/presets?use_case&currency`   | **yes** (section 3)                              |
+| One generic preset per use case; budget-aware lookup                    | `GET /v1/presets?use_case&currency`   | **yes** (section 3)                              |
 | Build detail (components, score, status) for a preset | `GET /v1/recommendations/{id}`        | **yes** (≤ 3 fan-out)                            |
 | Personalised answer for the finder                    | `POST /v1/recommendations`            | **yes**, on CTA only, gated (Q-08)               |
 | A persisted pass by id                                | `GET /v1/recommendations/{id}`        | no — Step 2                                      |
@@ -857,7 +903,7 @@ Rules that follow from the contract:
   resolution comes only from the finder.
 - **Prices are never invented.** The frames' prices (7 450 / 4 890 / 13 900 / 5 500 /
   11 000 / 3 200 / 9 800) are design placeholders; only served `total_price` /
-  `budget_amount` values are rendered, through `formatPrice` with `Price.currency`.
+  `budget_amount` values are rendered, through `formatPrice(value, currency)` with the detail currency when non-null, otherwise the confirmed `MAD` query currency.
 - **Rate limits are real.** 120/min for reads, 30/min for POST; a 429 is a UI state with
   `retryAfterSeconds`, never a silent retry (the query client already refuses 429).
 
@@ -895,7 +941,7 @@ preset whose prices were invalidated).
   authored, not machine-copied: same keys, same placeholders, Arabic-Indic vs Latin digits
   as the existing dictionaries use (Latin digits, per `lib/format/price.ts`).
 - Every visible string comes from the dictionary or a prop: no literal in a component
-  (including "DH", which is `Price.currency`).
+  (including "DH", which is the recommendation detail currency or the confirmed `MAD` preset-query currency).
 - Plurals/placeholders: `{minutes}`, `{count}`, `{score}`, `{amount}`, `{seconds}`,
   `{current}`/`{total}`. Amounts inside a translated sentence are passed already
   formatted with `formatPrice`, never concatenated around a symbol.
@@ -919,8 +965,8 @@ item is reported as skipped.
 - [ ] At 390 px the page order matches `23:1179`: hero → finder → configurations →
       shortcuts → trust → guides → CTA → footer, with the bottom nav fixed.
 - [ ] At 1440 px the composition matches `19:3`: banner, hero with preview card and
-      side-by-side finder, three configuration cards with the middle one featured, trust
-      in three columns, four guides in a row, gradient CTA.
+      side-by-side finder, three use-case cards, trust in three columns, desktop
+      Catégories & usages grid, four guides in a row, gradient CTA.
 - [ ] Every colour used is a token utility; `npm run lint` plus a diff review finds no hex
       literal and no `ml/mr/pl/pr/left/right/text-left` utility in the new components.
 - [ ] Type steps come from the existing scale; no new `text-[…]` arbitrary size.
@@ -932,7 +978,7 @@ item is reported as skipped.
 - [ ] No horizontal page scroll at 360, 390, 430, 1280 or 1440 px, in `fr` and `ar`.
 - [ ] 360/390/430 render the single-column composition; 1280/1440 render `max-w-page`
       centred with the 12-column layout.
-- [ ] The configuration section is "1 featured + 2 rows" up to `md` and "3 cards" from
+- [ ] The configuration section is "1 3 use-case cards stacked" up to `md` and "3 cards" from
       `lg`, from one component tree (no duplicated markup).
 - [ ] The bottom nav never covers the final CTA or the footer at 360 px.
 - [ ] Touch targets are ≥ 44 px (48 px on mobile) — audited on every interactive element.
@@ -953,11 +999,20 @@ item is reported as skipped.
 
 ### 16.4 Personalised vs generic states
 
-- [ ] Generic (default) state shows only served presets; no price or score is hard-coded
-      and no placeholder number reaches the DOM.
-- [ ] After a finder selection the homepage does not render a pass: with
-      `NEXT_PUBLIC_HOMEPAGE_SUBMIT=off` it scrolls to the filtered configuration list; with
-      `on` it posts once and navigates to `/[locale]/resultats/{id}`.
+- [ ] Generic (default) state shows exactly one median-budget preset for each of GAMING,
+      OFFICE and WORKSTATION, in that fixed order; no price or score is hard-coded and no
+      placeholder number reaches the DOM.
+- [ ] The three cards are peers; the UI does not rank unlike use cases or call one "most
+      recommended".
+- [ ] Any displayed `build_score` is labelled "Score de configuration" and help text
+      states it is neither FPS nor a benchmark.
+- [ ] Price badges and copy reflect API provenance; no real-time, weekly-refresh or
+      verified-retailer claim appears while price evidence remains unverified.
+- [ ] With homepage POST disabled, finder selection chooses only the greatest same-use-
+      case preset with `budget_amount <= visitorBudget`; it never shows an over-budget
+      preset as suitable and no match produces the no-match state.
+- [ ] With `NEXT_PUBLIC_HOMEPAGE_SUBMIT=on`, the CTA posts once and navigates to
+      `/[locale]/resultats/{id}`.
 - [ ] A zero-build preset renders "—" for the score and never shows `0`.
 - [ ] `presets: []` renders the empty copy, not an error; a 500 renders the error copy.
 
@@ -1067,15 +1122,15 @@ Defaults are chosen so implementation can start; each answer may change the spec
 | Q-01 | The frames' saffron `#FFA51B` and canvas `#F9F9FF` differ from the token palette. Accept the token-mapped rendering, or change tokens? | accept tokens (no token change allowed in Step 1)                             | visible brand delta on CTAs            |
 | Q-02 | Desktop H1 is 48 px in the frame, `text-display-lg` is 40 px. Add a 48 px step or use 40?                                              | use 40                                                                        | hero height, line breaks               |
 | Q-03 | Build and guide photography is unavailable. Token placeholders acceptable for Step 1?                                                  | yes                                                                           | visual fidelity                        |
-| Q-04 | Desktop's "Catégories & usages" 4-tile section is not in the approved eight-section list. Ship it?                                     | no (shortcuts cover the same choices)                                         | extra section, duplicate intent        |
+| Q-04 | Desktop's "Catégories & usages" 4-tile section is not in the mobile section list. Ship it?                                              | resolved: preserve desktop category grid; mobile retains resolution shortcuts | one responsive section with two frame variants |
 | Q-05 | Mobile header shows a saved-builds icon with a count and an unidentified circular icon.                                                | omit both                                                                     | header parity                          |
 | Q-06 | Hero preview card's "Détails specs →" has no destination until a product page exists.                                                  | render as text, no link                                                       | one dead-ish CTA                       |
 | Q-07 | `GET /v1/presets` has no `resolution` parameter, so 1080p/1440p "Dès X DH" cannot be derived.                                          | omit prices in shortcut tiles                                                 | needs an API change                    |
 | Q-08 | The results route (`/[locale]/resultats/{id}`) is Step 2. Ship the POST-on-CTA now or gate it?                                         | gated off (`NEXT_PUBLIC_HOMEPAGE_SUBMIT=off`); CTA scrolls to filtered builds | orphan passes vs. a non-functional CTA |
-| Q-09 | Trust copy makes claims ("actualisation hebdomadaire", "vérification TDP"). Keep as static copy?                                       | keep static; no data binding                                                  | legal/product review                   |
+| Q-09 | Trust copy makes claims ("actualisation hebdomadaire", "vérification TDP"). Keep as static copy?                                       | resolved: remove freshness and absolute compatibility claims; describe API statuses only | misleading product claims              |
 | Q-10 | Methodology link has no page.                                                                                                          | self-anchor, `aria-disabled`                                                  | one placeholder link                   |
 | Q-11 | Guides section shows "(14)" but only four guides exist and no endpoint serves them.                                                    | render "Tous les guides d'achat" without a count                              | copy                                   |
 | Q-12 | Guide cards have no routes until Step 4.                                                                                               | `NEXT_PUBLIC_GUIDES_ENABLED=off`, non-navigating cards                        | four placeholder cards                 |
 | Q-13 | No analytics provider exists in V2.                                                                                                    | emit no events                                                                | measurement                            |
-| Q-14 | Should the homepage configuration cards be personalized by the finder before submit?                                                   | no: generic presets, and the finder only filters on submit-path               | scope creep                            |
+| Q-14 | Should the homepage configuration cards be personalized by the finder before submit?                                                   | resolved: initial cards are one median preset per use case; finder selects highest same-use-case preset at or below budget | no backend write in homepage MVP |
 | Q-15 | Arabic copy for the new namespace has no approved source.                                                                              | author with review, keep key/placeholder parity                               | launch readiness                       |
