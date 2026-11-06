@@ -74,6 +74,16 @@ The shell makes no API request on load and needs no credentials. A browser call
 to the API only succeeds when the API's own `ALLOWED_ORIGINS` includes this
 app's origin (`http://localhost:3220` locally).
 
+Both API variables are optional, and an empty value means the same as an unset
+one. With neither set, the browser and the server both default to
+`http://localhost:3000` (the API's own `PORT` default), so a local run needs no
+API configuration at all — only a listening API. A blank `API_BASE_URL=` does
+not shadow a valid `NEXT_PUBLIC_API_BASE_URL`, and `isApiConfigured()` is false
+only when neither variable names an origin.
+
+The client is wired but not yet exercised: no page calls the API in this step,
+and the live integration stays unverified until the separate smoke-test task.
+
 ## Structure
 
 ```
@@ -179,8 +189,12 @@ fixture instead of assuming a server is listening.
 `createQueryClient()` (mounted once by `ApiProvider` in the locale layout):
 
 - 30 s `staleTime`, 5 min `gcTime`
-- queries retry only network failures, 408 and 5xx, at most twice
-- 4xx responses are never retried; a 429's `Retry-After` stays a UI countdown
+- HTTP 5xx and 408 responses are retried **twice** (`MAX_QUERY_RETRIES = 2`), as is an
+  `ApiError` with `status: 0`
+- a fetch `TypeError` (offline, DNS, CORS) is retried **once**; any other
+  unexpected error is not retried at all
+- 4xx responses are never retried, 429 included: its `Retry-After` stays a UI
+  countdown rather than being retried silently
 - mutations never auto-retry: `POST /v1/recommendations` runs and persists an
   engine pass, so the screen owns the retry decision
 
