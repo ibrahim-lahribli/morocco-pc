@@ -5,9 +5,9 @@
 # Blueprint YAML reference (https://render.com/docs/blueprint-spec); this file is only the subset
 # this API needs.
 #
-# Scope: this defines ONE new service, `morocco-pc-api-eu`. It does not touch the existing
-# `morocco-pc` demo origin (`https://morocco-pc.onrender.com`), which serves the SHARED database
-# and is not described here on purpose - Render applies a Blueprint only to the resources it names.
+# Scope: this defines ONE new service, `morocco-pc-api-eu`. The `morocco-pc` demo origin that used to
+# serve the SHARED database was suspended on 2026-11-06 (deletion pending, docs/OPEN_POINTS.md R-05);
+# it is not described here, and Render applies a Blueprint only to the resources it names.
 services:
   - type: web
     name: morocco-pc-api-eu

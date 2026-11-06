@@ -1,5 +1,10 @@
 # Recipe: deploy the API to a free host
 
+**Status 2026-11-06: the Render service this recipe produced (`https://morocco-pc.onrender.com`) was
+suspended** and its deletion is pending (R-05). Sections 4, 5.1 and 5.2 stay as the dated record of what
+that origin measured — do not redeploy it, and treat its URL as dead. The free-host survey (section 2)
+and the Northflank option remain current.
+
 **Status 2026-10-28: the Koyeb free instance this recipe used to describe no longer exists.**
 Koyeb agreed to join Mistral AI (announced 2026-02-17). Koyeb's own announcement says the
 Starter plan "will soon be removed and new users will instead need to subscribe to the Pro,

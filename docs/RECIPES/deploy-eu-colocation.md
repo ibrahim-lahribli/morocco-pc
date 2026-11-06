@@ -803,8 +803,9 @@ replay, not for the project's life; export anything you need to keep before dele
 
 The EU Render service is committed as a Blueprint at the repository root, so the fields in section 12
 are reviewable and reproducible instead of re-typed in a dashboard. The file defines ONE new service
-(`morocco-pc-api-eu`); it does not touch the existing `morocco-pc` demo origin, because a Blueprint only
-applies to the resources it names.
+(`morocco-pc-api-eu`); it did not touch the `morocco-pc` demo origin that existed then, because a
+Blueprint only applies to the resources it names. That demo service was suspended on 2026-11-06 (R-05),
+so `morocco-pc-api-eu` is the only Render resource this file describes.
 
 - **`dockerContext: .` is load-bearing, not a default worth omitting.** `apps/api/Dockerfile` copies
   `src/` (the engine) and `scripts/lib/db-url.js` relative to the repository root, so a context of
@@ -815,7 +816,7 @@ applies to the resources it names.
   from it - change that one line to the always-on plan id (`0.5c-512mb`, 0.5 CPU / 512 MB, per the
   Render plan table; the dashboard label Starter is not a Blueprint plan id) when V1 is measured.
 - **`ENGINE_VERSION` has no default on purpose.** Set it to `git rev-parse --short HEAD` at deploy time;
-  leaving it unset is exactly why the 2026-10-28 demo origin answers `engine_version: "dev"`
+  leaving it unset is exactly why the 2026-10-28 demo origin answered `engine_version: "dev"`
   (`deploy-free-host.md` section 5.1), and `SENTRY_RELEASE` falls back to this same value.
 - **`DATABASE_URL` must be the EU POOLED url connecting as `morocco_pc_api`**, built from the password
   `scripts/apply-api-role.js` wrote to `$HOME/.morocco-pc/api-role-eu.password` (the EU file section 8.5 names - a plain `api-role.password` exists for the shared database and is the WRONG credential here). Deploying on the owner

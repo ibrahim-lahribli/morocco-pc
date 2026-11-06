@@ -54,8 +54,11 @@ the build and the suite keep their fixture path:
 
 ```
 NEXT_PUBLIC_API_BASE_URL=/api
-API_BASE_URL=https://morocco-pc.onrender.com
+API_BASE_URL=https://morocco-pc-api-eu.onrender.com
 ```
+
+The EU host sleeps after 15 idle minutes on its free plan, so the first request of a session can take
+~20 s to answer.
 
 A RELATIVE public base makes this server the API's front door: the browser calls
 `/api/v1/...` on the app's own origin and `next.config.ts` forwards each request
