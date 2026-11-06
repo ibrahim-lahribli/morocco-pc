@@ -38,8 +38,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          # package.json declares engines.node ">=22.12".
-          node-version: "22.12"
+          # package.json declares engines.node
+          # "^22.22.2 || ^24.15.0 || >=26.0.0". The 22.x floor is 22.22.2, not
+          # 22.19.0: undici 8.12.4 declares >=22.19.0, but jsdom 31 (which pulls
+          # undici in) declares ^22.22.2 on this line. `22` is the latest 22.x
+          # release, so it stays inside the range instead of pinning a patch.
+          node-version: "22"
           cache: npm
           # V2's own lockfile, never the root or V1 one.
           cache-dependency-path: apps/web-v2/package-lock.json
