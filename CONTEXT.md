@@ -81,7 +81,8 @@ so a seed apply could move it. The EU service is the exception, and it is MEASUR
 adopted for the private beta as an explicit PROVISIONAL OVERRIDE of Decision 57 item 3, NOT as a
 satisfaction of it — A1/A3/A4 are still `hypothesis` and OG-43 is open.
 
-## 5. Measured numbers (2026-11-02; the offer-freshness date and the EU pass count re-measured 2026-11-06)
+## 5. Measured numbers (2026-11-02; the offer-freshness date, the EU pass count and the R-14 parity
+DIFFs re-measured 2026-11-06)
 
 - `npm run test:unit` **1261 pass / 0 fail / 0 cancelled** (Node 24.21.0 and Node 22);
   `npm run test:scripts` **443 / 0**; `npm run test:api` **193 / 0**; `npm run test:api:db` **17 / 0**
@@ -95,9 +96,10 @@ satisfaction of it — A1/A3/A4 are still `hypothesis` and OG-43 is open.
 - EU after seeds 023–028: **113 products, 84 families, 24 variants, 114 offers, 319 assessments, 22
   cooler socket rows, 7 `scoring_model` rows (6 ACTIVE), identity gaps 0**, ledger at 23. Parity with
   shared is MATCH on ledger-files, `tables` 44, `schema-shape` 470 (digest `4110c1517a14a0ef` on both
-  sides), model pins, product, variant, offer, assessment, model, benchmark, store and preset counts;
-  the only differences are the five Layer-4 residue rows R-14 tracks (query 12/0, result 16/0,
-  candidate 16/0, component 126/0, rejection 24/0).
+  sides), model pins, product, variant, offer, assessment, model, benchmark and store counts;
+  the only differences are the six Layer-4 row DIFFs R-14 tracks, shared vs EU: query 12 vs 52,
+  result 16 vs 142, candidate 16 vs 142, component 126 vs 1093, rejection 24 vs 104, preset 0 vs 52
+  (the EU side is the deliberate preset shelf, the shared side the demo residue).
 - `check-offer-provenance.js` **INCONCLUSIVE** everywhere: 114 seed offers, 0 verified, 2 stores on
   the reserved `example.ma` domain. `check-offer-freshness.js` reports the first SEED expiry at
   **2026-12-01** (24.3 days from 2026-11-06).
