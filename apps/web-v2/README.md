@@ -13,7 +13,7 @@ bilingual (French / Arabic) design system. It runs independently of V1
 
 ## Requirements
 
-- Node.js ≥ 22.12
+- Node.js `^22.22.2 || ^24.15.0 || >=26.0.0` (the floor jsdom 31 declares; CI runs the latest 22.x)
 - npm (the repository's package manager; a lockfile is committed)
 
 ## Install and run
