@@ -106,14 +106,14 @@ No `resolution`, no `budget`, no `limit` — and unknown query parameters are re
 }
 ```
 
-| Field                         | Homepage use                                                                                                 |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `presets[].budget_amount`     | the served preset budget (the card's budget label) and the ladder key; responses arrive ordered by it        |
-| `presets[].recommendation_id` | the key for the detail read and the card's identity                                                          |
-| `presets[].build_score`       | the configuration score (`builds.scoreLabel`); `null` means "pass assembled nothing" → render "—", never `0` |
-| `presets[].price_status`      | the price badge: `verified` → "Prix vérifié", `indicative` → "Prix indicatif", `null` → no badge             |
-| `catalog_version`             | part of the query key, so a price update invalidates the render                                              |
-| `generated_at`                | **not rendered** in Step 1 (no "as of" copy approved)                                                        |
+| Field                         | Homepage use                                                                                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `presets[].budget_amount`     | the served preset budget, rendered as the card's `builds.budgetLabel` line via `formatPrice(value, currency)`; also the ladder key — responses arrive ordered by it |
+| `presets[].recommendation_id` | the key for the detail read and the card's identity                                                                                                                 |
+| `presets[].build_score`       | the configuration score (`builds.scoreLabel`); `null` means "pass assembled nothing" → render "—", never `0`                                                        |
+| `presets[].price_status`      | the price badge: `verified` → `builds.badge.verified`, `indicative` → `builds.badge.indicative`, `null` → no badge                                                  |
+| `catalog_version`             | part of the query key, so a price update invalidates the render                                                                                                     |
+| `generated_at`                | **not rendered** in Step 1 (no "as of" copy approved)                                                                                                               |
 
 **Deterministic selection (owner decision: 12,000 MAD ceiling).** For each use case,
 select the highest row with `budget_amount <= 12_000`: filter the ascending list
@@ -206,8 +206,8 @@ compatibility status therefore require §4.
 | Card element      | Field                            | Rule                                                                                                                                         |
 | ----------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Title             | —                                | **ours**: the use-case label (`builds.category.*`); the API carries no title and the H3 copy is open (Q-16)                                  |
-| Total price       | `builds[0].total_price`          | `formatPrice(value, detail.currency)`; `null` → show `budget_amount` labelled "Budget visé"                                                  |
-| Price badge       | `builds[0].price_status`         | `verified` → `builds.badge.verified` ("Prix vérifié"), else `builds.badge.indicative`                                                        |
+| Total price       | `builds[0].total_price`          | `formatPrice(value, detail.currency)`; `null` → render no price, keeping the `builds.budgetLabel` line — never relabel the budget as a price |
+| Price badge       | `builds[0].price_status`         | `verified` → `builds.badge.verified`; `indicative` → `builds.badge.indicative`; `null` → **no badge** (never a placeholder "indicatif")      |
 | Compatibility     | `builds[0].compatibility_status` | **not rendered on the homepage card** in Step 1 (§6 carries the score and price badges only); never turn an unknown verdict into an OK claim |
 | Score overlay     | `builds[0].build_score`          | `builds.scoreLabel` + "{n}/100", never FPS or a benchmark; `null` → "—"                                                                      |
 | Spec pills        | `builds[0].components[]`         | first four by role order `CPU`, `GPU`, `RAM`, `SSD_BOOT`, showing `name` (not `variant`, which may be `null`)                                |

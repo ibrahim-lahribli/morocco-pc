@@ -186,8 +186,9 @@ they scroll: configure, browse guides, saved builds. On mobile it also carries t
 persistent finder entry point.
 
 **Desktop composition.** Announcement banner (full-bleed, `bg-surface-muted`, 10 px 32 px
-padding): a 8 px accent dot, the label "Mise à jour :" in `text-label-md`, no update sentence until its copy is cleared (Q-17), then two pills on the end side — "Index MAD temps
-réel" (`rounded-pill`, `bg-surface-sunken`) and the Arabic availability chip
+padding): a 8 px accent dot, the label "Mise à jour :" in `text-label-md`
+(`banner.updateLabel`), no update sentence and no live-index pill until that copy is
+cleared (Q-17), then one pill on the end side — the Arabic availability chip
 (`bg-surface-sunken`, `text-primary`). Below it, the existing `SiteHeader` (64 px, sticky,
 `bg-background/90` + blur): brand mark + wordmark, primary nav anchors (`lg` only),
 locale switcher.
@@ -264,8 +265,9 @@ usage cards, 48 px CTA, microcopy "Gratuit · Sans compte · Environ 1 minute".
 **Components.** `HomepageHero` (new, server), `HeroTrustChips` (new, server),
 `HeroRigPreview` (new, server; reuses `Badge`, `Card`), `BudgetUsageFinder` (new,
 client island), `BudgetPresetGrid`, `CustomBudgetField`, `UsageSelector`,
-`FinderCta`. Price rendering wherever an amount appears: `formatPrice` with the
-dictionary currency from the recommendation detail currency or the confirmed `MAD` preset-query currency.
+`FinderCta`. Price rendering wherever an amount appears: `formatPrice(value, currency)`,
+with `currency` taken from the rendered detail when one exists and from `meta/options`
+otherwise.
 
 **Content keys.**
 
@@ -388,7 +390,8 @@ journey only through the shortcut tiles (`1080p` / `1440p`), which pre-set
   price in these tiles**, because `GET /v1/presets` has no resolution parameter, so no
   served number backs a 1440p "from" price (Q-07). A price is only shown when a real
   field carries it.
-- Desktop: the four-tile `Catégories & usages` grid (§7) carries the same two choices; the resolution tiles stay the mobile variant.
+- Desktop: no resolution shortcut — the four-tile `Catégories & usages` grid (§7) offers
+  the three use cases instead, so the 1080p / 1440p tiles stay the mobile variant.
 - Selecting a tile sets `resolution` in the finder store, marks the tile
   `aria-pressed="true"`, and does not submit.
 
@@ -397,8 +400,10 @@ journey only through the shortcut tiles (`1080p` / `1440p`), which pre-set
 Submit is a TanStack Query **mutation** (`retry: false`, per the established policy —
 a POST runs and persists an engine pass).
 
-- **Payload:** `{ budget_amount, currency, use_case, resolution? }`, `currency` from
-  the recommendation detail currency or the confirmed `MAD` preset-query currency (`MAD`). `priority` is not sent (the API's default order).
+- **Payload:** `{ budget_amount, currency, use_case, resolution? }`. `currency` is `MAD`,
+  confirmed as an advertised value by `GET /v1/meta/options`; it is never read from a
+  recommendation detail, because the first submit has none. `priority` is not sent (the
+  API's default order).
 - **Pending:** button shows `finder.ctaPending`, `aria-busy="true"`, spinner replaces the
   arrow; the rest of the form is `pointer-events-none` but keeps its values.
 - **Success:** `router.push` to `/[locale]/resultats/{id}` (Step 2 route). The response
@@ -466,9 +471,12 @@ price or as proof that a compatible build exists.
 
 **Desktop composition.** Eyebrow "CONFIGURATIONS PRÊTES À MONTER", H2 "Trois usages,
 trois configurations", one-line intro, then three cards in fixed use-case order. Each
-card has a use-case label, price-status badge, 192 px token-only media placeholder, H3,
-up to four spec pills, optional rationale, served total price and a compact details
-action. Use equal visual weight across all three cards. The Figma centre-card ring may be
+card has an H3 carrying the use-case label (`builds.category.*`), a `builds.budgetLabel`
+line showing the served `budget_amount`, a price-status badge, a 192 px token-only media
+placeholder, up to four spec pills, an optional rationale, the served total price and a
+compact details action. The budget line always renders from the preset; the price renders
+only when `total_price` is non-null, so a null price never turns the budget into a price.
+Use equal visual weight across all three cards. The Figma centre-card ring may be
 retained as decoration only; it must not be paired with "Le plus recommandé" or any
 claim that ranks OFFICE above the other use cases.
 
@@ -497,6 +505,7 @@ cross-use-case ranking.
 | `builds.badge.verified`       | Prix vérifié                                                                                                                 |
 | `builds.badge.indicative`     | Prix indicatif                                                                                                               |
 | `builds.priceLabel`           | Prix de la configuration                                                                                                     |
+| `builds.budgetLabel`          | Budget visé                                                                                                                  |
 | `builds.scoreLabel`           | Score de configuration                                                                                                       |
 | `builds.scoreHelp`            | Score calculé à partir des évaluations des composants et des inconnues de compatibilité. Ce n'est ni un FPS ni un benchmark. |
 | `builds.cta`                  | Voir la configuration                                                                                                        |
@@ -943,7 +952,7 @@ preset whose prices were invalidated).
   authored, not machine-copied: same keys, same placeholders, Arabic-Indic vs Latin digits
   as the existing dictionaries use (Latin digits, per `lib/format/price.ts`).
 - Every visible string comes from the dictionary or a prop: no literal in a component
-  (including "DH", which is the recommendation detail currency or the confirmed `MAD` preset-query currency).
+  (including "DH", which comes from the currency `formatPrice` is given: the rendered detail's when one exists, otherwise the `MAD` confirmed by `meta/options`).
 - Plurals/placeholders: `{minutes}`, `{count}`, `{score}`, `{amount}`, `{seconds}`,
   `{current}`/`{total}`. Amounts inside a translated sentence are passed already
   formatted with `formatPrice`, never concatenated around a symbol.
@@ -1136,7 +1145,7 @@ Defaults are chosen so implementation can start; each answer may change the spec
 | Q-13 | No analytics provider exists in V2.                                                                                                             | emit no events                                                                                                                            | measurement                                    |
 | Q-14 | Which budget determines the generic homepage configurations before finder selection?                                                            | resolved by owner: 12,000 MAD ceiling; choose the highest same-use-case preset at or below it; finder later uses the visitor's own budget | no backend write in homepage MVP               |
 | Q-15 | Arabic copy for the new namespace has no approved source.                                                                                       | author with review, keep key/placeholder parity                                                                                           | launch readiness                               |
-| Q-16 | `GET /v1/presets` carries no title and a build has no name field. What heads the card?                                                          | use the use-case label as the card heading (plus the served budget); invent no build name                                                 | card hierarchy, copy, SEO                      |
+| Q-16 | `GET /v1/presets` carries no title and a build has no name field. What heads the card?                                                          | use the use-case label as the card heading, with the served budget on a `builds.budgetLabel` line; invent no build name                   | card hierarchy, copy, SEO                      |
 | Q-17 | Banner copy ("Tarifs et disponibilités vérifiés ce mois-ci", "Index MAD temps réel") asserts verification and a live index that nothing serves. | render the label and Arabic chip only; re-approve the claims before shipping them                                                         | header parity, trust                           |
 | Q-18 | The peer rule drops the approved frame's filter tabs and the "Le plus recommandé" badge. Accept the fidelity trade?                             | yes: three peers, no tabs, no ranking badge                                                                                               | visual fidelity to `19:172`                    |
 | Q-19 | With one card per use case, which preset backs the hero's "Sélection du moment" preview?                                                        | the Gaming card's preset already fetched for section 3 (highest at or below 12,000 MAD; no extra request)                                 | hero content, request count                    |
