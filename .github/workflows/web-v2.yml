@@ -1,0 +1,72 @@
+name: web-v2
+
+# apps/web-v2 is a standalone package (same rule as OD4 for apps/web): its own
+# manifest, its own lockfile, its own Node requirement and its own workflow. A V2
+# push therefore never runs the V1 gates, and `ci.yml` / `web.yml` are untouched.
+#
+# No secrets and no database: the unit suite is DB-free (jsdom + injected fetch),
+# and Playwright drives the committed design-system preview, which makes no API
+# request. Nothing here proves the API integration — that is a separate task.
+
+on:
+  push:
+    paths:
+      - "apps/web-v2/**"
+      # The client's types are generated from THIS committed snapshot, so a
+      # contract change is a V2 change even when no file under apps/web-v2 moved.
+      - "apps/api/test/unit/openapi-v1.10.json"
+      - ".github/workflows/web-v2.yml"
+  pull_request:
+    paths:
+      - "apps/web-v2/**"
+      - "apps/api/test/unit/openapi-v1.10.json"
+      - ".github/workflows/web-v2.yml"
+  workflow_dispatch:
+
+jobs:
+  web-v2:
+    runs-on: ubuntu-latest
+    # Read-only: this job builds and tests, it never writes to the repo.
+    permissions:
+      contents: read
+    defaults:
+      run:
+        # Every step below is a package script of V2; a `uses:` step is unaffected
+        # by this, which is why artifact paths stay repo-relative.
+        working-directory: apps/web-v2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # package.json declares engines.node ">=22.12".
+          node-version: "22.12"
+          cache: npm
+          # V2's own lockfile, never the root or V1 one.
+          cache-dependency-path: apps/web-v2/package-lock.json
+      - run: npm ci
+      # The static gates run first: each is seconds, and each names the rule it
+      # breaks, so a failure here reads better than a Playwright trace.
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      # Contract drift: the committed lib/api/schema.d.ts must still be identical
+      # to what the generator produces from the API's snapshot — which is why the
+      # triggers above include that snapshot's path.
+      - run: npm run check:api-types
+      - run: npm test
+      # Production build gate, the same command CI ships. Playwright starts its
+      # own dev server on port 3220, so the browser suite exercises the app
+      # source, not this build's output.
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      # Traces, screenshots and videos (trace: on-first-retry) only exist on a
+      # failed run; a green run has nothing to upload.
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-v2-playwright-test-results
+          path: apps/web-v2/test-results
+          retention-days: 7
+          if-no-files-found: ignore
