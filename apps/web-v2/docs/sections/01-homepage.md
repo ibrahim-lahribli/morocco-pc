@@ -119,12 +119,12 @@ The kit already fixes the container: `mx-auto w-full max-w-page px-margin-mobile
 md:px-margin` (`max-w-page` = 1280 px, `margin-mobile` = 16 px, `margin` = 32 px). The
 locale layout owns it; sections do not re-declare horizontal padding.
 
-| Viewport           | Grid                      | Header                | Finder                             | Builds                   | Shortcuts                | Trust             | Guides         |
-| ------------------ | ------------------------- | --------------------- | ---------------------------------- | ------------------------ | ------------------------ | ----------------- | -------------- |
-| 360 px             | 1 col, 16 px margins      | 56 px sticky          | stacked, 2×2 presets               | 3 use-case cards stacked        | 2 tiles, 1 per column    | stacked list card | 2 cards, 1 col |
-| 390 px             | same                      | same                  | same                               | same                     | same                     | same              | same           |
-| 430 px             | same (wider gutters only) | same                  | same                               | same                     | same                     | same              | same           |
-| 768–1023 px (`md`) | 1–2 col                   | 64 px, horizontal nav | presets in one row of 4            | 2 col, featured spans    | 2 tiles inline           | 3 col             | 2 col          |
+| Viewport           | Grid                      | Header                | Finder                             | Builds                             | Shortcuts                | Trust             | Guides         |
+| ------------------ | ------------------------- | --------------------- | ---------------------------------- | ---------------------------------- | ------------------------ | ----------------- | -------------- |
+| 360 px             | 1 col, 16 px margins      | 56 px sticky          | stacked, 2×2 presets               | 3 use-case cards stacked           | 2 tiles, 1 per column    | stacked list card | 2 cards, 1 col |
+| 390 px             | same                      | same                  | same                               | same                               | same                     | same              | same           |
+| 430 px             | same (wider gutters only) | same                  | same                               | same                               | same                     | same              | same           |
+| 768–1023 px (`md`) | 1–2 col                   | 64 px, horizontal nav | presets in one row of 4            | 2 col, featured spans              | 2 tiles inline           | 3 col             | 2 col          |
 | 1280 px (`lg`+)    | 12-col, 40 px gap         | 64 px, horizontal nav | 2 answers side by side in the card | 3 use-case cards, one per use case | inline, right of heading | 3 col             | 4 col          |
 
 Tailwind's stock breakpoints (`sm` 640, `md` 768, `lg` 1024, `xl` 1280) are enough. No
@@ -146,13 +146,13 @@ Shared, identical at every width (only spacing/columns change):
 Genuinely different presentation (one component, two variants driven by a prop, never
 two files):
 
-| Component                 | Variant                       | Difference                                                                                                                                            |
-| ------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FeaturedBuildCard`       | `featured` (mobile + desktop) | identical structure; desktop adds the floating "Le plus recommandé" badge above the card edge and a 2 px primary ring                                 |
+| Component                 | Variant                       | Difference                                                                                                                                                      |
+| ------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FeaturedBuildCard`       | `featured` (mobile + desktop) | identical structure; desktop adds the floating "Le plus recommandé" badge above the card edge and a 2 px primary ring                                           |
 | `RecommendedBuildSection` | —                             | grid switches from "1 featured + 2 compact rows" to "3 use-case cards, one per use case"; the **same** three data items drive both, the layout prop is CSS only |
-| `FeaturedGuides`          | —                             | renders 4 items; items 3–4 are `max-lg:hidden` (2 on mobile, 4 on desktop). Content stays in the DOM for one code path                                |
-| `FinalRecommendationCTA`  | —                             | desktop gradient banner with a large button; mobile compact primary-variant card with a 48 px button. Same copy, same action                          |
-| `ResolutionShortcuts`     | —                             | desktop shows the four-tile categories grid; mobile shows Gaming 1080p / 1440p shortcuts                                                                      |
+| `FeaturedGuides`          | —                             | renders 4 items; items 3–4 are `max-lg:hidden` (2 on mobile, 4 on desktop). Content stays in the DOM for one code path                                          |
+| `FinalRecommendationCTA`  | —                             | desktop gradient banner with a large button; mobile compact primary-variant card with a 48 px button. Same copy, same action                                    |
+| `ResolutionShortcuts`     | —                             | desktop shows the four-tile categories grid; mobile shows Gaming 1080p / 1440p shortcuts                                                                        |
 
 **Discovery pathways (responsive variants).** Keep the desktop frame's `Catégories &
 usages` grid (`19:426`) and the mobile frame's Gaming 1080p / 1440p shortcuts
@@ -268,39 +268,39 @@ dictionary currency from the recommendation detail currency or the confirmed `MA
 
 **Content keys.**
 
-| Key                                     | French source                                                                                                                                                    |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hero.eyebrow`                          | Configurateur PC pour le Maroc                                                                                                                           |
-| `hero.titleLead`                        | Le bon PC,                                                                                                                                                       |
-| `hero.titleAccent`                      | au bon budget.                                                                                                                                                   |
+| Key                                     | French source                                                                                                                                                      |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `hero.eyebrow`                          | Configurateur PC pour le Maroc                                                                                                                                     |
+| `hero.titleLead`                        | Le bon PC,                                                                                                                                                         |
+| `hero.titleAccent`                      | au bon budget.                                                                                                                                                     |
 | `hero.intro`                            | Gaming, études ou travail : trouvez une configuration selon votre budget et votre usage. Les prix affichés sont indicatifs et exprimés en dirhams marocains (MAD). |
-| `hero.chip.time`                        | 1 minute chrono                                                                                                                                                  |
-| `hero.chip.free`                        | 100 % Gratuit                                                                                                                                                    |
-| `hero.chip.noAccount`                   | Sans inscription requise                                                                                                                                         |
-| `hero.preview.eyebrow`                  | Sélection du moment                                                                                                                                              |
-| `hero.preview.score`                    | Score de configuration : {score}/100                                                                                                                                         |
-| `hero.preview.caption`                  | Vue Référence                                                                                                                                                    |
-| `hero.preview.details`                  | Détails specs →                                                                                                                                                  |
-| `finder.badge`                          | Simulateur Express                                                                                                                                               |
-| `finder.step`                           | Étape {current} sur {total}                                                                                                                                      |
-| `finder.budget.question`                | Quel est votre budget ?                                                                                                                                          |
-| `finder.budget.hint`                    | Marché marocain (MAD)                                                                                                                                            |
-| `finder.budget.unset`                   | À définir                                                                                                                                                        |
-| `finder.budget.presetLabel`             | Budget de {amount}                                                                                                                                               |
-| `finder.budget.customToggle`            | Autre budget personnalisé                                                                                                                                        |
-| `finder.budget.customLabel`             | Budget exact en dirhams                                                                                                                                          |
-| `finder.budget.customHint`              | Entre {min} et {max} DH                                                                                                                                          |
-| `finder.usage.question`                 | Que voulez-vous faire avec votre PC ?                                                                                                                            |
-| `finder.usage.gaming.title` / `.body`   | Jeux vidéo & Gaming / Fortnite, Valorant, GTA V, EA FC 24, Cyberpunk 2077…                                                                                       |
-| `finder.usage.office.title` / `.body`   | Études et bureautique / Cours, navigation 40+ onglets, Office, visioconférences HD                                                                               |
-| `finder.usage.creation.title` / `.body` | Création et travail pro / Montage 4K Premiere / DaVinci, Blender 3D, code et virtualisation                                                                      |
-| `finder.cta`                            | Trouver mon PC                                                                                                                                                   |
-| `finder.ctaPending`                     | Recherche en cours…                                                                                                                                              |
-| `finder.note`                           | 1 minute · 100 % Gratuit · Sans compte · Prix actualisés en DH                                                                                                   |
-| `finder.error.required`                 | Choisissez un budget et un usage pour continuer.                                                                                                                 |
-| `finder.error.budgetRange`              | Saisissez un budget entre {min} et {max} DH.                                                                                                                     |
-| `finder.error.submit`                   | La recherche a échoué. Réessayez.                                                                                                                                |
-| `finder.error.rateLimited`              | Trop de recherches. Réessayez dans {seconds} s.                                                                                                                  |
+| `hero.chip.time`                        | 1 minute chrono                                                                                                                                                    |
+| `hero.chip.free`                        | 100 % Gratuit                                                                                                                                                      |
+| `hero.chip.noAccount`                   | Sans inscription requise                                                                                                                                           |
+| `hero.preview.eyebrow`                  | Sélection du moment                                                                                                                                                |
+| `hero.preview.score`                    | Score de configuration : {score}/100                                                                                                                               |
+| `hero.preview.caption`                  | Vue Référence                                                                                                                                                      |
+| `hero.preview.details`                  | Détails specs →                                                                                                                                                    |
+| `finder.badge`                          | Simulateur Express                                                                                                                                                 |
+| `finder.step`                           | Étape {current} sur {total}                                                                                                                                        |
+| `finder.budget.question`                | Quel est votre budget ?                                                                                                                                            |
+| `finder.budget.hint`                    | Marché marocain (MAD)                                                                                                                                              |
+| `finder.budget.unset`                   | À définir                                                                                                                                                          |
+| `finder.budget.presetLabel`             | Budget de {amount}                                                                                                                                                 |
+| `finder.budget.customToggle`            | Autre budget personnalisé                                                                                                                                          |
+| `finder.budget.customLabel`             | Budget exact en dirhams                                                                                                                                            |
+| `finder.budget.customHint`              | Entre {min} et {max} DH                                                                                                                                            |
+| `finder.usage.question`                 | Que voulez-vous faire avec votre PC ?                                                                                                                              |
+| `finder.usage.gaming.title` / `.body`   | Jeux vidéo & Gaming / Fortnite, Valorant, GTA V, EA FC 24, Cyberpunk 2077…                                                                                         |
+| `finder.usage.office.title` / `.body`   | Études et bureautique / Cours, navigation 40+ onglets, Office, visioconférences HD                                                                                 |
+| `finder.usage.creation.title` / `.body` | Création et travail pro / Montage 4K Premiere / DaVinci, Blender 3D, code et virtualisation                                                                        |
+| `finder.cta`                            | Trouver mon PC                                                                                                                                                     |
+| `finder.ctaPending`                     | Recherche en cours…                                                                                                                                                |
+| `finder.note`                           | 1 minute · 100 % Gratuit · Sans compte · Prix actualisés en DH                                                                                                     |
+| `finder.error.required`                 | Choisissez un budget et un usage pour continuer.                                                                                                                   |
+| `finder.error.budgetRange`              | Saisissez un budget entre {min} et {max} DH.                                                                                                                       |
+| `finder.error.submit`                   | La recherche a échoué. Réessayez.                                                                                                                                  |
+| `finder.error.rateLimited`              | Trop de recherches. Réessayez dans {seconds} s.                                                                                                                    |
 
 **Interactions.** See §5 for the finder as a unit. Hero has no interaction except the
 preview card's "Détails specs" link, which is disabled in Step 1 (no product page yet —
@@ -432,6 +432,7 @@ creating orphan engine passes. Q-08 records the agreed gate until the results ro
 visitor can understand the breadth of Morocco-PC before using the finder.
 
 **Initial card decision (confirmed).** The three initial cards are:
+
 1. Gaming — API value `GAMING`.
 2. Studies & Office — API value `OFFICE`.
 3. Professional & Creation — API value `WORKSTATION`.
@@ -481,27 +482,27 @@ cross-use-case ranking.
 
 **Content keys.**
 
-| Key | French source |
-| --- | --- |
-| `builds.eyebrow` | Configurations prêtes à monter |
-| `builds.title` | Trois usages, trois configurations |
-| `builds.intro` | Découvrez un exemple de configuration pour le jeu, les études et le travail. |
-| `builds.category.gaming` | Gaming |
-| `builds.category.office` | Études & bureautique |
-| `builds.category.workstation` | Création & travail professionnel |
-| `builds.badge.verified` | Prix vérifié |
-| `builds.badge.indicative` | Prix indicatif |
-| `builds.priceLabel` | Prix de la configuration |
-| `builds.scoreLabel` | Score de configuration |
-| `builds.scoreHelp` | Score calculé à partir des évaluations des composants et des inconnues de compatibilité. Ce n'est ni un FPS ni un benchmark. |
-| `builds.cta` | Voir la configuration |
-| `builds.empty.title` | Aucune configuration disponible pour cet usage |
-| `builds.empty.body` | Aucune configuration complète n'est disponible dans les budgets pré-générés pour le moment. |
-| `builds.error.title` | Les configurations n'ont pas pu être chargées |
-| `builds.error.body` | Vérifiez votre connexion, puis réessayez. |
-| `builds.error.retry` | Réessayer |
-| `builds.loading` | Chargement des configurations… |
-| `builds.budgetCap` | Configuration pré-générée la plus élevée disponible : {amount} |
+| Key                           | French source                                                                                                                |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `builds.eyebrow`              | Configurations prêtes à monter                                                                                               |
+| `builds.title`                | Trois usages, trois configurations                                                                                           |
+| `builds.intro`                | Découvrez un exemple de configuration pour le jeu, les études et le travail.                                                 |
+| `builds.category.gaming`      | Gaming                                                                                                                       |
+| `builds.category.office`      | Études & bureautique                                                                                                         |
+| `builds.category.workstation` | Création & travail professionnel                                                                                             |
+| `builds.badge.verified`       | Prix vérifié                                                                                                                 |
+| `builds.badge.indicative`     | Prix indicatif                                                                                                               |
+| `builds.priceLabel`           | Prix de la configuration                                                                                                     |
+| `builds.scoreLabel`           | Score de configuration                                                                                                       |
+| `builds.scoreHelp`            | Score calculé à partir des évaluations des composants et des inconnues de compatibilité. Ce n'est ni un FPS ni un benchmark. |
+| `builds.cta`                  | Voir la configuration                                                                                                        |
+| `builds.empty.title`          | Aucune configuration disponible pour cet usage                                                                               |
+| `builds.empty.body`           | Aucune configuration complète n'est disponible dans les budgets pré-générés pour le moment.                                  |
+| `builds.error.title`          | Les configurations n'ont pas pu être chargées                                                                                |
+| `builds.error.body`           | Vérifiez votre connexion, puis réessayez.                                                                                    |
+| `builds.error.retry`          | Réessayer                                                                                                                    |
+| `builds.loading`              | Chargement des configurations…                                                                                               |
+| `builds.budgetCap`            | Configuration pré-générée la plus élevée disponible : {amount}                                                               |
 
 **Interactions.** On first visit, render one median-budget preset per use case. The finder
 selection narrows the display to the selected use case and chooses the greatest preset
@@ -520,15 +521,15 @@ featured treatment is visual only and does not imply ranking. Media height 144 p
 
 **States.**
 
-| State | Rendering |
-| --- | --- |
-| Loading | Three skeletons matching the three use-case slots; `aria-busy="true"` and `builds.loading` in a polite live region |
-| Empty use case | Keep that category's slot and show `builds.empty.*`; do not substitute another use case |
-| No preset within visitor budget | Show `builds.empty.*`; never show a more expensive preset as suitable |
-| Budget above highest served tier | Show the highest available tier plus `builds.budgetCap`; do not describe it as an exact-budget result |
-| Detail with no build | Do not render a complete-PC claim or a price; never present `budget_floor.cheapest_total` as an assembled build |
-| Indicative price | Show the indicative badge and API disclaimer; do not imply a current retailer quote |
-| Error (5xx/timeout/offline) | `builds.error.*` block with retry; the rest of the page stays usable |
+| State                            | Rendering                                                                                                          |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Loading                          | Three skeletons matching the three use-case slots; `aria-busy="true"` and `builds.loading` in a polite live region |
+| Empty use case                   | Keep that category's slot and show `builds.empty.*`; do not substitute another use case                            |
+| No preset within visitor budget  | Show `builds.empty.*`; never show a more expensive preset as suitable                                              |
+| Budget above highest served tier | Show the highest available tier plus `builds.budgetCap`; do not describe it as an exact-budget result              |
+| Detail with no build             | Do not render a complete-PC claim or a price; never present `budget_floor.cheapest_total` as an assembled build    |
+| Indicative price                 | Show the indicative badge and API disclaimer; do not imply a current retailer quote                                |
+| Error (5xx/timeout/offline)      | `builds.error.*` block with retry; the rest of the page stays usable                                               |
 
 **Accessibility.** The three categories have explicit accessible names. Card order is fixed
 and does not change after hydration. Cards are `<article>` with `aria-labelledby`
@@ -558,14 +559,14 @@ a mobile page.
 
 **Content keys.**
 
-| Key | French source |
-| --- | --- |
-| `pathways.eyebrow` | Catégories & usages |
-| `pathways.gaming` | Gaming |
-| `pathways.office` | Études & bureautique |
+| Key                    | French source                    |
+| ---------------------- | -------------------------------- |
+| `pathways.eyebrow`     | Catégories & usages              |
+| `pathways.gaming`      | Gaming                           |
+| `pathways.office`      | Études & bureautique             |
 | `pathways.workstation` | Création & travail professionnel |
-| `pathways.gaming1080` | Gaming 1080p |
-| `pathways.gaming1440` | Gaming 1440p |
+| `pathways.gaming1080`  | Gaming 1080p                     |
+| `pathways.gaming1440`  | Gaming 1440p                     |
 
 **Interactions.** Desktop tiles set their mapped use case in the finder and focus its
 usage group. Mobile tiles set Gaming plus the selected resolution and focus the finder.
@@ -605,21 +606,21 @@ the methodology link start-aligned.
 
 **Content keys.**
 
-| Key                                 | French source                                                                                                                                               |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `trust.eyebrow`                     | Transparence & rigueur                                                                                                                                      |
-| `trust.title`                       | Pourquoi faire confiance à Morocco-PC ?                                                                                                                     |
-| `trust.intro`                       | Nous ne vendons aucun composant en direct. Notre seul objectif est de vous éviter les erreurs d'achat et les dépenses superflues.                           |
-| `trust.pillars.compatibility.title` | Compatibilité analysée                                                                                                                                |
+| Key                                 | French source                                                                                                                                                                                  |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trust.eyebrow`                     | Transparence & rigueur                                                                                                                                                                         |
+| `trust.title`                       | Pourquoi faire confiance à Morocco-PC ?                                                                                                                                                        |
+| `trust.intro`                       | Nous ne vendons aucun composant en direct. Notre seul objectif est de vous éviter les erreurs d'achat et les dépenses superflues.                                                              |
+| `trust.pillars.compatibility.title` | Compatibilité analysée                                                                                                                                                                         |
 | `trust.pillars.compatibility.body`  | Les composants sont contrôlés selon les caractéristiques et les règles de compatibilité disponibles (socket, mémoire, dimensions et alimentation). Certaines données peuvent rester inconnues. |
-| `trust.pillars.compatibility.foot`  | Les statuts reflètent les contrôles réellement effectués                                                                                                                   |
-| `trust.pillars.prices.title`        | Prix indicatifs en dirhams (MAD / DH)                                                                                                                                  |
-| `trust.pillars.prices.body`         | Les montants proviennent des offres enregistrées et leur provenance est indiquée. Ils peuvent différer des prix actuellement pratiqués en boutique.  |
-| `trust.pillars.prices.foot`         | Prix non actualisés en temps réel                                                                                                                                  |
-| `trust.pillars.free.title`          | 100 % Gratuit & sans compte                                                                                                                                 |
-| `trust.pillars.free.body`           | Obtenez vos recommandations en toute liberté, sans avoir besoin de créer un compte ni laisser de coordonnées personnelles ou numéro de téléphone.           |
-| `trust.pillars.free.foot`           | Libre accès immédiat                                                                                                                                        |
-| `trust.methodologyLink`             | Comment fonctionnent nos recommandations ?                                                                                                                  |
+| `trust.pillars.compatibility.foot`  | Les statuts reflètent les contrôles réellement effectués                                                                                                                                       |
+| `trust.pillars.prices.title`        | Prix indicatifs en dirhams (MAD / DH)                                                                                                                                                          |
+| `trust.pillars.prices.body`         | Les montants proviennent des offres enregistrées et leur provenance est indiquée. Ils peuvent différer des prix actuellement pratiqués en boutique.                                            |
+| `trust.pillars.prices.foot`         | Prix non actualisés en temps réel                                                                                                                                                              |
+| `trust.pillars.free.title`          | 100 % Gratuit & sans compte                                                                                                                                                                    |
+| `trust.pillars.free.body`           | Obtenez vos recommandations en toute liberté, sans avoir besoin de créer un compte ni laisser de coordonnées personnelles ou numéro de téléphone.                                              |
+| `trust.pillars.free.foot`           | Libre accès immédiat                                                                                                                                                                           |
+| `trust.methodologyLink`             | Comment fonctionnent nos recommandations ?                                                                                                                                                     |
 
 Copy caution: "Prix non actualisés en temps réel" and "Vérification automatique du TDP" are
 **product claims**. They are true of the engine (weekly offer refresh, compatibility
@@ -668,7 +669,7 @@ repository. Step 1 ships a static, typed content module
 
 | Slug (future route)                  | Category        | Reading time | Title                                                      |
 | ------------------------------------ | --------------- | ------------ | ---------------------------------------------------------- |
-| `quel-budget-pc-gamer-maroc`         | Guide pratique  | 4 min        | Quel budget pour un PC gamer au Maroc ?            |
+| `quel-budget-pc-gamer-maroc`         | Guide pratique  | 4 min        | Quel budget pour un PC gamer au Maroc ?                    |
 | `choisir-carte-graphique-nvidia-amd` | Comparatif      | 6 min        | Bien choisir sa carte graphique : Nvidia RTX vs AMD Radeon |
 | `combien-de-ram-16-ou-32-go`         | Conseils        | 3 min        | Combien de RAM faut-il vraiment : 16 Go ou 32 Go ?         |
 | `pc-fixe-vs-pc-portable-maroc`       | Dossier spécial | 5 min        | PC fixe vs PC portable au Maroc : le vrai comparatif       |
@@ -880,7 +881,7 @@ Full field-level mapping: `01-homepage-api-mapping.md`. Contract version: **1.10
 | ----------------------------------------------------- | ------------------------------------- | ------------------------------------------------ |
 | Usage options + whether resolution is accepted        | `GET /v1/meta/options`                | **yes** (finder), fallback constants if it fails |
 | Currency vocabulary                                   | `GET /v1/meta/options` (`currencies`) | **yes**, only to confirm `MAD`                   |
-| One generic preset per use case; budget-aware lookup                    | `GET /v1/presets?use_case&currency`   | **yes** (section 3)                              |
+| One generic preset per use case; budget-aware lookup  | `GET /v1/presets?use_case&currency`   | **yes** (section 3)                              |
 | Build detail (components, score, status) for a preset | `GET /v1/recommendations/{id}`        | **yes** (≤ 3 fan-out)                            |
 | Personalised answer for the finder                    | `POST /v1/recommendations`            | **yes**, on CTA only, gated (Q-08)               |
 | A persisted pass by id                                | `GET /v1/recommendations/{id}`        | no — Step 2                                      |
@@ -1117,20 +1118,20 @@ Nothing in step 1–8 touches `apps/api`, V1, the workflows or the tokens.
 
 Defaults are chosen so implementation can start; each answer may change the spec.
 
-| #    | Question                                                                                                                               | Default taken                                                                 | Impact if changed                      |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------- |
-| Q-01 | The frames' saffron `#FFA51B` and canvas `#F9F9FF` differ from the token palette. Accept the token-mapped rendering, or change tokens? | accept tokens (no token change allowed in Step 1)                             | visible brand delta on CTAs            |
-| Q-02 | Desktop H1 is 48 px in the frame, `text-display-lg` is 40 px. Add a 48 px step or use 40?                                              | use 40                                                                        | hero height, line breaks               |
-| Q-03 | Build and guide photography is unavailable. Token placeholders acceptable for Step 1?                                                  | yes                                                                           | visual fidelity                        |
-| Q-04 | Desktop's "Catégories & usages" 4-tile section is not in the mobile section list. Ship it?                                              | resolved: preserve desktop category grid; mobile retains resolution shortcuts | one responsive section with two frame variants |
-| Q-05 | Mobile header shows a saved-builds icon with a count and an unidentified circular icon.                                                | omit both                                                                     | header parity                          |
-| Q-06 | Hero preview card's "Détails specs →" has no destination until a product page exists.                                                  | render as text, no link                                                       | one dead-ish CTA                       |
-| Q-07 | `GET /v1/presets` has no `resolution` parameter, so 1080p/1440p "Dès X DH" cannot be derived.                                          | omit prices in shortcut tiles                                                 | needs an API change                    |
-| Q-08 | The results route (`/[locale]/resultats/{id}`) is Step 2. Ship the POST-on-CTA now or gate it?                                         | gated off (`NEXT_PUBLIC_HOMEPAGE_SUBMIT=off`); CTA scrolls to filtered builds | orphan passes vs. a non-functional CTA |
-| Q-09 | Trust copy makes claims ("actualisation hebdomadaire", "vérification TDP"). Keep as static copy?                                       | resolved: remove freshness and absolute compatibility claims; describe API statuses only | misleading product claims              |
-| Q-10 | Methodology link has no page.                                                                                                          | self-anchor, `aria-disabled`                                                  | one placeholder link                   |
-| Q-11 | Guides section shows "(14)" but only four guides exist and no endpoint serves them.                                                    | render "Tous les guides d'achat" without a count                              | copy                                   |
-| Q-12 | Guide cards have no routes until Step 4.                                                                                               | `NEXT_PUBLIC_GUIDES_ENABLED=off`, non-navigating cards                        | four placeholder cards                 |
-| Q-13 | No analytics provider exists in V2.                                                                                                    | emit no events                                                                | measurement                            |
-| Q-14 | Should the homepage configuration cards be personalized by the finder before submit?                                                   | resolved: initial cards are one median preset per use case; finder selects highest same-use-case preset at or below budget | no backend write in homepage MVP |
-| Q-15 | Arabic copy for the new namespace has no approved source.                                                                              | author with review, keep key/placeholder parity                               | launch readiness                       |
+| #    | Question                                                                                                                               | Default taken                                                                                                              | Impact if changed                              |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Q-01 | The frames' saffron `#FFA51B` and canvas `#F9F9FF` differ from the token palette. Accept the token-mapped rendering, or change tokens? | accept tokens (no token change allowed in Step 1)                                                                          | visible brand delta on CTAs                    |
+| Q-02 | Desktop H1 is 48 px in the frame, `text-display-lg` is 40 px. Add a 48 px step or use 40?                                              | use 40                                                                                                                     | hero height, line breaks                       |
+| Q-03 | Build and guide photography is unavailable. Token placeholders acceptable for Step 1?                                                  | yes                                                                                                                        | visual fidelity                                |
+| Q-04 | Desktop's "Catégories & usages" 4-tile section is not in the mobile section list. Ship it?                                             | resolved: preserve desktop category grid; mobile retains resolution shortcuts                                              | one responsive section with two frame variants |
+| Q-05 | Mobile header shows a saved-builds icon with a count and an unidentified circular icon.                                                | omit both                                                                                                                  | header parity                                  |
+| Q-06 | Hero preview card's "Détails specs →" has no destination until a product page exists.                                                  | render as text, no link                                                                                                    | one dead-ish CTA                               |
+| Q-07 | `GET /v1/presets` has no `resolution` parameter, so 1080p/1440p "Dès X DH" cannot be derived.                                          | omit prices in shortcut tiles                                                                                              | needs an API change                            |
+| Q-08 | The results route (`/[locale]/resultats/{id}`) is Step 2. Ship the POST-on-CTA now or gate it?                                         | gated off (`NEXT_PUBLIC_HOMEPAGE_SUBMIT=off`); CTA scrolls to filtered builds                                              | orphan passes vs. a non-functional CTA         |
+| Q-09 | Trust copy makes claims ("actualisation hebdomadaire", "vérification TDP"). Keep as static copy?                                       | resolved: remove freshness and absolute compatibility claims; describe API statuses only                                   | misleading product claims                      |
+| Q-10 | Methodology link has no page.                                                                                                          | self-anchor, `aria-disabled`                                                                                               | one placeholder link                           |
+| Q-11 | Guides section shows "(14)" but only four guides exist and no endpoint serves them.                                                    | render "Tous les guides d'achat" without a count                                                                           | copy                                           |
+| Q-12 | Guide cards have no routes until Step 4.                                                                                               | `NEXT_PUBLIC_GUIDES_ENABLED=off`, non-navigating cards                                                                     | four placeholder cards                         |
+| Q-13 | No analytics provider exists in V2.                                                                                                    | emit no events                                                                                                             | measurement                                    |
+| Q-14 | Should the homepage configuration cards be personalized by the finder before submit?                                                   | resolved: initial cards are one median preset per use case; finder selects highest same-use-case preset at or below budget | no backend write in homepage MVP               |
+| Q-15 | Arabic copy for the new namespace has no approved source.                                                                              | author with review, keep key/placeholder parity                                                                            | launch readiness                               |
