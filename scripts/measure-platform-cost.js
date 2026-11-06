@@ -67,6 +67,7 @@ const filtering = require(path.join(root, 'filtering', 'index.js'));
 const scoring = require(path.join(root, 'scoring', 'index.js'));
 const retention = require(path.join(root, 'retention', 'index.js'));
 const assembly = require(path.join(root, 'assembly', 'index.js'));
+const ranking = require(path.join(root, 'ranking', 'index.js'));
 const { priceKey } = require(path.join(root, 'assembly', 'prices'));
 const {
   FINAL_STATUSES,
@@ -234,7 +235,12 @@ async function main() {
     const ramPool = (filteringContext.candidates.RAM || []).filter(eligible);
 
     const names = new Map();
-    const wanted = new Set([...cpuPool, ...boardPool, ...ramPool].map((c) => c.product_id));
+    // GPU names are resolved too: the cheapest-at-floor line prints one even when
+    // no build picks it (e.g. an OFFICE query with an iGPU).
+    const gpuPoolForNames = (filteringContext.candidates.GPU || []).filter(eligible);
+    const wanted = new Set(
+      [...cpuPool, ...boardPool, ...ramPool, ...gpuPoolForNames].map((c) => c.product_id)
+    );
     if (wanted.size > 0) {
       const rows = await db.query(
         'SELECT id::text AS id, name FROM product WHERE id::text = ANY($1::text[])',
@@ -495,6 +501,140 @@ async function main() {
       console.log('RESULT: ' + noBuild + ' of ' + ordered.length
         + ' retained CPU(s) assemble ZERO build(s) at ' + BUDGET + ' ' + INPUT.currency
         + ' (R-04 claimed 8 of 10 cannot produce an in-budget build)');
+    }
+
+    // ----------------------------------------------------------------
+    // Ranked result: the SAME composition full-run.js uses (Engine 4 STEP 3
+    // build scores -> rankBuilds -> selectArchetypes), read-only. Nothing is
+    // persisted, and no engine module is changed - the script calls the same
+    // public functions the orchestrator calls, in the same order.
+    // ----------------------------------------------------------------
+    console.log('');
+    console.log('=== ranked result at ' + BUDGET + ' ' + INPUT.currency
+      + ' (' + RESOLUTION + ', model ' + MODEL_PIN + ') ===');
+    if (assemblyBuilds === null) {
+      console.log('ranked: unavailable (assembly failed)');
+    } else if (assemblyBuilds.length === 0) {
+      console.log('ranked: no builds - this query assembles nothing (zero-build outcome)');
+    } else {
+      // Resolve every component name the ranked output may print (GPU included).
+      const buildComponentIds = new Set();
+      for (const build of assemblyBuilds) {
+        const components = Array.isArray(build.components) ? build.components : [];
+        for (const component of components) {
+          if (component && component.product_id !== undefined && component.product_id !== null) {
+            buildComponentIds.add(String(component.product_id));
+          }
+        }
+      }
+      const missingIds = [...buildComponentIds].filter((id) => !names.has(id));
+      if (missingIds.length > 0) {
+        const rows = await db.query(
+          'SELECT id::text AS id, name FROM product WHERE id::text = ANY($1::text[])',
+          [missingIds]
+        );
+        for (const row of rows.rows) names.set(row.id, row.name);
+      }
+      const buildScores = scoring.computeBuildScores({
+        builds: assemblyBuilds,
+        assessments: assessmentResult.assessments,
+        configuration,
+        nowMs: Date.now(), // same approximation as the candidate scores above
+      });
+      const scoredBuilds = assemblyBuilds.map((build, index) =>
+        Object.freeze({ ...build, build_score: buildScores.scores[index].build_score })
+      );
+      const rankedResult = ranking.rankBuilds({ builds: scoredBuilds });
+      // Decision 58: mirror resolveArchetypeObjectives (not exported there).
+      const objectivesOptIn = configuration.apply_archetype_objectives === true;
+      const useCaseProfile = configuration.use_case_profiles
+        && configuration.use_case_profiles[USE_CASE];
+      const archetypeObjectives = objectivesOptIn
+        && useCaseProfile
+        && useCaseProfile.archetype_objectives
+        && typeof useCaseProfile.archetype_objectives === 'object'
+        ? useCaseProfile.archetype_objectives
+        : null;
+      const selection = ranking.selectArchetypes({
+        ranked: rankedResult.ranked,
+        budget: { amount: BUDGET, currency: INPUT.currency },
+        priority: null, // the preset shelf's passes carry no priority
+        archetypeObjectives,
+      });
+
+      // An archetype entry WRAPS the build (`{ strategy_key, ..., build }`), so
+      // the components live one level down; assembly emits them as an array.
+      const roleOf = (component) => component.component_role || component.role || null;
+      const componentsOf = (entry) => {
+        const build = entry && entry.build ? entry.build : entry;
+        const components = build && build.components ? build.components : null;
+        if (components === null) return [];
+        return Array.isArray(components) ? components : Object.values(components);
+      };
+      const componentName = (entry, role) => {
+        const found = componentsOf(entry).filter((component) => roleOf(component) === role);
+        if (found.length === 0) return null;
+        const component = found[0];
+        return names.get(component.product_id) || String(component.product_id).slice(0, 8);
+      };
+      const gpuComponent = (entry) =>
+        componentsOf(entry).filter((component) => roleOf(component) === 'GPU')[0] || null;
+      const distinctGpuIds = new Set(
+        selection.archetypes
+          .map((archetype) => gpuComponent(archetype))
+          .filter((component) => component !== null)
+          .map((component) => String(component.product_id))
+      );
+      const allBuildGpuIds = new Set(
+        rankedResult.ranked
+          .map((build) => gpuComponent(build))
+          .filter((component) => component !== null)
+          .map((component) => String(component.product_id))
+      );
+      console.log('builds=' + selection.archetypes.length
+        + ' ranked_pool=' + rankedResult.ranked.length
+        + ' archetypes=' + selection.archetypes.length
+        + ' distinct_gpus=' + distinctGpuIds.size
+        + ' distinct_gpus_all_builds=' + allBuildGpuIds.size);
+      for (const archetype of selection.archetypes) {
+        const gpu = gpuComponent(archetype);
+        const gpuId = gpu === null ? null : String(gpu.product_id);
+        console.log('  rank=' + archetype.persisted_rank
+          + ' strategy=' + String(archetype.strategy_key).padEnd(11)
+          + ' price=' + String(Math.round(archetype.total_price)).padStart(6)
+          + ' score=' + String(archetype.build_score).padStart(6)
+          + ' share=' + (archetype.total_price / BUDGET).toFixed(3)
+          + ' gpu="' + (gpu === null ? 'NONE' : (names.get(gpuId) || gpuId.slice(0, 8))) + '"'
+          + ' cpu="' + (componentName(archetype, 'CPU') || 'NONE') + '"');
+      }
+      // Whether the rank-1 GPU is the cheapest priced GPU that meets the floor.
+      const gpuCandidates = (filteringContext.candidates.GPU || []).filter(eligible);
+      const vramOf = (candidate) => {
+        const specs = filteringContext.specs;
+        const key = 'v:' + candidate.product_variant_id;
+        const spec = specs && Object.prototype.hasOwnProperty.call(specs, key) ? specs[key] : null;
+        return spec && typeof spec.vram_capacity_gb === 'number' ? spec.vram_capacity_gb : null;
+      };
+      const pricedGpus = gpuCandidates
+        .map((candidate) => ({ candidate, price: priceOf(candidate), vram: vramOf(candidate) }))
+        .filter((entry) => entry.price !== null);
+      const floorGb = vramFloorFor(configuration);
+      const atFloor = pricedGpus.filter((entry) =>
+        floorGb === null || entry.vram === null || entry.vram >= floorGb);
+      const cheapestAtFloor = atFloor.slice().sort((a, b) => a.price - b.price || (String(a.candidate.product_id) < String(b.candidate.product_id) ? -1 : 1))[0];
+      const rank1 = selection.archetypes[0];
+      const rank1Gpu = rank1 ? gpuComponent(rank1) : null;
+      const cheapestLabel = cheapestAtFloor === undefined
+        ? 'none'
+        : '"' + (names.get(String(cheapestAtFloor.candidate.product_id)) || 'unnamed') + '"@' + cheapestAtFloor.price;
+      console.log('gpu-pool: priced=' + pricedGpus.length
+        + ' eligible_at_floor=' + atFloor.length
+        + ' floor=' + (floorGb === null ? 'none' : floorGb + ' GB')
+        + ' cheapest=' + cheapestLabel);
+      console.log('rank1_gpu_is_cheapest_at_floor: '
+        + (cheapestAtFloor && rank1Gpu
+          ? String(String(rank1Gpu.product_id) === String(cheapestAtFloor.candidate.product_id))
+          : 'unknown'));
     }
 
     console.log('RESULT: measured (read-only; no rows written)');
