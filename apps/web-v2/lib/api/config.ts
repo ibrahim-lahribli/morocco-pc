@@ -47,7 +47,17 @@ export function resolveServerApiBaseUrl(env: ApiEnvironment = process.env): stri
   return configured === "" ? DEFAULT_API_BASE_URL : configured;
 }
 
-/** Whether an API origin was explicitly configured (either variable). */
+/**
+ * Whether an API origin was explicitly configured (either variable).
+ *
+ * Each variable is normalized on its own before the check. An
+ * `API_BASE_URL` that exists but is EMPTY (a copied `.env.local` with the
+ * value left blank) must not hide a valid `NEXT_PUBLIC_API_BASE_URL`, which
+ * is exactly what nullish coalescing does with it: `""` is not nullish.
+ */
 export function isApiConfigured(env: ApiEnvironment = process.env): boolean {
-  return normalizeApiBaseUrl(env.API_BASE_URL ?? env.NEXT_PUBLIC_API_BASE_URL ?? "") !== "";
+  const serverUrl = normalizeApiBaseUrl(env.API_BASE_URL ?? "");
+  const publicUrl = normalizeApiBaseUrl(env.NEXT_PUBLIC_API_BASE_URL ?? "");
+
+  return serverUrl !== "" || publicUrl !== "";
 }

@@ -57,13 +57,40 @@ describe("resolveServerApiBaseUrl", () => {
 });
 
 describe("isApiConfigured", () => {
-  it("is false when neither variable names an origin", () => {
+  it("is false when both variables are missing", () => {
     expect(isApiConfigured({})).toBe(false);
-    expect(isApiConfigured({ NEXT_PUBLIC_API_BASE_URL: "   " })).toBe(false);
   });
 
-  it("is true when either variable names an origin", () => {
+  it("is false when both variables are empty", () => {
+    expect(isApiConfigured({ NEXT_PUBLIC_API_BASE_URL: "", API_BASE_URL: "" })).toBe(false);
+    expect(isApiConfigured({ NEXT_PUBLIC_API_BASE_URL: "   ", API_BASE_URL: "  " })).toBe(false);
+  });
+
+  it("is true when only the public variable is configured", () => {
     expect(isApiConfigured({ NEXT_PUBLIC_API_BASE_URL: "https://api.example.ma" })).toBe(true);
+  });
+
+  it("is true when only the server variable is configured", () => {
     expect(isApiConfigured({ API_BASE_URL: "http://api.internal:3000" })).toBe(true);
+  });
+
+  it("is true when the server variable is empty but the public one is valid", () => {
+    // Regression: nullish coalescing kept the empty `API_BASE_URL` and reported
+    // the API unconfigured even though the browser origin was named.
+    expect(
+      isApiConfigured({ API_BASE_URL: "", NEXT_PUBLIC_API_BASE_URL: "https://api.example.ma" }),
+    ).toBe(true);
+    expect(
+      isApiConfigured({ API_BASE_URL: "   ", NEXT_PUBLIC_API_BASE_URL: "https://api.example.ma" }),
+    ).toBe(true);
+  });
+
+  it("is true when both variables are valid", () => {
+    expect(
+      isApiConfigured({
+        NEXT_PUBLIC_API_BASE_URL: "https://api.example.ma",
+        API_BASE_URL: "http://api.internal:3000",
+      }),
+    ).toBe(true);
   });
 });
