@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+/*
+ * Morocco-PC V2 design tokens.
+ *
+ * Source of truth: the supplied Stitch project
+ * (`apps/web-v2/stitch_morocco_pc_builder_app/moroccan_hardware_studio/DESIGN.md`)
+ * and the `accueil` / `configurateur` reference screens. Values are the design's
+ * own — do not "improve" a colour, type step or radius here without updating
+ * `docs/DESIGN_SYSTEM.md` and the design source together.
+ *
+ * Three layers, and components may only use the semantic layer:
+ *   brand      - the palette exactly as designed (indigo, saffron, pale blue)
+ *   semantic   - what a surface means (background, foreground, verified, indicative)
+ *   component  - decisions the design made once (control height, card radius)
+ *
+ * Direction: every component uses CSS logical properties (ms/me, ps/pe,
+ * start/end), so Arabic RTL is a mirror, never a second stylesheet.
+ */
+@theme {
+  /* brand palette */
+  --color-primary: #3730a3; /* primary-container, deep indigo */
+  --color-primary-deep: #1f108e; /* primary, the darkest indigo */
+  --color-primary-hover: #312e81; /* hover lift */
+  --color-primary-soft: #eef2ff; /* tint behind icons and quiet actions */
+  --color-on-primary: #ffffff;
+
+  --color-accent: #f59e0b; /* warm saffron */
+  --color-accent-strong: #fea619;
+  --color-accent-soft: #fef3c7;
+  --color-accent-ink: #92400e;
+  --color-on-accent: #2a1700;
+
+  /* surfaces and neutrals */
+  --color-background: #f8f9ff; /* pale blue page canvas */
+  --color-surface: #ffffff; /* white cards */
+  --color-surface-muted: #eff4ff;
+  --color-surface-sunken: #e5eeff;
+  --color-foreground: #0b1c30;
+  --color-muted: #464553;
+  --color-subtle: #64748b;
+  --color-border: #e2e8f0;
+  --color-outline: #c8c4d5;
+
+  /* semantic states */
+  --color-verified: #047857;
+  --color-verified-soft: #ecfdf5;
+  --color-verified-border: #a7f3d0;
+  --color-indicative: #b45309;
+  --color-indicative-soft: #fffbeb;
+  --color-indicative-border: #fde68a;
+  --color-estimated: #475569;
+  --color-estimated-soft: #f1f5f9;
+  --color-estimated-border: #cbd5e1;
+  --color-danger: #ba1a1a;
+  --color-danger-soft: #ffdad6;
+
+  /* typography: Inter for Latin, IBM Plex Sans Arabic for Arabic */
+  --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-arabic:
+    var(--font-plex-arabic), "IBM Plex Sans Arabic", "Inter", ui-sans-serif, sans-serif;
+
+  --text-display-lg: 2.5rem; /* 40px */
+  --text-display-lg--line-height: 3rem;
+  --text-display-lg--letter-spacing: -0.02em;
+  --text-display-lg--font-weight: 700;
+
+  --text-display: 1.875rem; /* 30px, mobile display */
+  --text-display--line-height: 2.375rem;
+  --text-display--letter-spacing: -0.01em;
+  --text-display--font-weight: 700;
+
+  --text-headline-lg: 1.75rem; /* 28px */
+  --text-headline-lg--line-height: 2.25rem;
+  --text-headline-lg--letter-spacing: -0.01em;
+  --text-headline-lg--font-weight: 600;
+
+  --text-headline-md: 1.375rem; /* 22px */
+  --text-headline-md--line-height: 1.75rem;
+  --text-headline-md--font-weight: 600;
+
+  --text-headline-sm: 1.125rem; /* 18px */
+  --text-headline-sm--line-height: 1.5rem;
+  --text-headline-sm--font-weight: 600;
+
+  --text-body-lg: 1rem; /* 16px */
+  --text-body-lg--line-height: 1.5rem;
+
+  --text-body-md: 0.875rem; /* 14px */
+  --text-body-md--line-height: 1.25rem;
+
+  --text-body-sm: 0.75rem; /* 12px */
+  --text-body-sm--line-height: 1rem;
+
+  --text-label-lg: 0.875rem; /* 14px */
+  --text-label-lg--line-height: 1.25rem;
+  --text-label-lg--font-weight: 600;
+
+  --text-label-md: 0.75rem; /* 12px */
+  --text-label-md--line-height: 1rem;
+  --text-label-md--font-weight: 500;
+
+  --text-label-sm: 0.625rem; /* 10px */
+  --text-label-sm--line-height: 0.75rem;
+  --text-label-sm--letter-spacing: 0.04em;
+  --text-label-sm--font-weight: 600;
+
+  --text-price: 1.5rem; /* 24px */
+  --text-price--line-height: 1.75rem;
+  --text-price--letter-spacing: -0.01em;
+  --text-price--font-weight: 700;
+
+  /* spacing: 12-column desktop grid, 4-column mobile flow */
+  --spacing-gutter: 1.25rem;
+  --spacing-gutter-mobile: 0.75rem;
+  --spacing-margin: 2rem;
+  --spacing-margin-mobile: 1rem;
+  --spacing-space-xs: 0.25rem;
+  --spacing-space-sm: 0.5rem;
+  --spacing-space-md: 1rem;
+  --spacing-space-lg: 1.5rem;
+  --spacing-space-xl: 2.5rem;
+  --container-page: 80rem; /* 1280px */
+
+  /* radii: 16px cards, 10-12px controls, pills for status */
+  --radius-control: 0.625rem;
+  --radius-field: 0.75rem;
+  --radius-card: 1rem;
+  --radius-sheet: 1.5rem;
+  --radius-pill: 9999px;
+
+  /* elevation: borders carry the structure, shadows stay ambient */
+  --shadow-level-1: 0 1px 3px 0 rgb(15 23 42 / 0.04), 0 2px 8px -1px rgb(15 23 42 / 0.03);
+  --shadow-level-2: 0 8px 24px -4px rgb(55 48 163 / 0.08), 0 2px 6px -1px rgb(15 23 42 / 0.04);
+  --shadow-level-3: 0 -4px 20px -2px rgb(15 23 42 / 0.08);
+  --shadow-fab: 0 8px 20px -4px rgb(55 48 163 / 0.35);
+
+  /* component decisions the design fixed once */
+  --spacing-control-mobile: 3rem; /* 48px minimum touch target */
+  --spacing-tap: 2.75rem; /* 44px accessibility floor */
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * Arabic pages paint in IBM Plex Sans Arabic. The face's CSS is emitted for
+   * every locale but is only downloaded where it is painted: the font module
+   * disables preloading, and this selector is what makes it used.
+   */
+  html[lang="ar"] body {
+    font-family: var(--font-arabic);
+    line-height: 1.6; /* +10% for Arabic ascenders/descenders */
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-primary-soft);
+    color: var(--color-foreground);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

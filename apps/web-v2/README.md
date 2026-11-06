@@ -1,0 +1,209 @@
+# Morocco-PC V2
+
+The V2 frontend foundation: a standalone Next.js App Router application with a
+bilingual (French / Arabic) design system. It runs independently of V1
+(`apps/web`) and shares no frontend code with it.
+
+> **Status: Step 0 + API foundation.** This branch contains the design tokens,
+> the shared component kit, internationalisation, the tooling, a
+> **design-system preview** page, and a typed API client with TanStack Query.
+> It is not the final homepage: no catalog, configurator, results or
+> saved-builds pages exist yet, and the shell makes no API request on load.
+> Do not build those on top of it until Step 0 is reviewed.
+
+## Requirements
+
+- Node.js ≥ 22.12
+- npm (the repository's package manager; a lockfile is committed)
+
+## Install and run
+
+```bash
+cd apps/web-v2
+npm install
+npm run dev          # http://localhost:3220/fr
+```
+
+V2 is a separate package: its own `package.json`, lockfile, config and
+`node_modules`. Installing here does not touch the engine, the API or `apps/web`.
+
+Production:
+
+```bash
+npm run build
+npm run start        # http://localhost:3220/fr
+```
+
+`/` redirects to `/fr` (French is the default locale). `/ar` renders the same
+page in Arabic RTL.
+
+## Scripts
+
+| Script                            | What it does                                                                                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                     | Next dev server on **port 3220**                                                                                                                  |
+| `npm run build`                   | Production build                                                                                                                                  |
+| `npm run start`                   | Serve the production build on port 3220                                                                                                           |
+| `npm run typecheck`               | `tsc --noEmit` (strict)                                                                                                                           |
+| `npm run lint`                    | ESLint 9 flat config (`eslint-config-next`)                                                                                                       |
+| `npm run format` / `format:check` | Prettier, with Tailwind class sorting                                                                                                             |
+| `npm test`                        | Vitest unit tests (jsdom)                                                                                                                         |
+| `npm run test:watch`              | Vitest in watch mode                                                                                                                              |
+| `npm run test:e2e`                | Playwright browser tests (starts the dev server)                                                                                                  |
+| `npm run gen:api-types`           | Regenerate `lib/api/schema.d.ts` from the API's committed OpenAPI contract                                                                        |
+| `npm run check:api-types`         | Fail when the generated types no longer match that contract                                                                                       |
+| `npm run screenshots`             | Writes `docs/screenshots/desktop-{fr,ar}.png`, `mobile-{fr,ar}.png` (viewport, nav visible) and `mobile-{fr,ar}-full.png`; needs a running server |
+
+Playwright's browser binary is not downloaded by `npm install`. Install it once:
+
+```bash
+npx playwright install chromium
+```
+
+## Environment variables
+
+Copy `.env.example` to `.env.local`. Documented names:
+
+| Variable                   | Scope            | Purpose                                                                                   |
+| -------------------------- | ---------------- | ----------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`     | browser + server | Absolute origin for canonical/OG metadata (not used by Step 0)                            |
+| `NEXT_PUBLIC_API_BASE_URL` | browser          | Public API v1 origin; inlined at build time; defaults to `http://localhost:3000`          |
+| `API_BASE_URL`             | server only      | Server-side API origin for server components/route handlers; falls back to the public one |
+
+The shell makes no API request on load and needs no credentials. A browser call
+to the API only succeeds when the API's own `ALLOWED_ORIGINS` includes this
+app's origin (`http://localhost:3220` locally).
+
+## Structure
+
+```
+app/[locale]/          locale-rooted layout, preview page, 404
+components/ui/         shared kit: Button, Badge, Card, TextField (barrel index.ts)
+components/layout/     header, logo placeholder, locale switcher, footer, mobile nav
+components/demo/       preview-only islands: budget picker, search form, build card
+i18n/                  routing, request config, locale-aware navigation
+messages/              fr.json, ar.json
+lib/                   utils, price formatter, demo store, search schema
+lib/api/               generated schema, client, config, errors, query defaults, derived types
+components/providers/  ApiProvider (TanStack Query, client component)
+scripts/               OpenAPI type generation and drift check, screenshot capture
+tests/                 Vitest unit tests (including tests/api/)
+e2e/                   Playwright specs
+docs/                  DESIGN_SYSTEM.md and evidence screenshots
+```
+
+The supplied Stitch references stay untouched in
+`stitch_morocco_pc_builder_app/`.
+
+## Design system
+
+Tokens are defined once in `app/globals.css` under Tailwind v4's `@theme`, from
+the supplied `DESIGN.md`:
+
+- deep indigo primary `#3730A3`, darkest indigo `#1F108E`, soft indigo surfaces
+- pale blue canvas `#F8F9FF`, white cards, fine `#E2E8F0` borders
+- saffron accent `#F59E0B` and its soft/ink pair
+- verified (emerald), indicative (amber) and estimated (slate) price states
+- a 12-step type scale, 10/12/16 px control-field-card radii, three elevations
+
+Components use semantic token utilities only, and CSS logical properties
+(`ms/me`, `ps/pe`, `start/end`, `text-start`) so RTL mirrors without a second
+stylesheet. `docs/DESIGN_SYSTEM.md` documents every token and component API.
+
+Do not add a colour literal or a physical direction utility to a component. If a
+new token is genuinely needed, add it to `@theme` and document it.
+
+## Internationalisation
+
+`next-intl` with `fr` (default) and `ar`, and a locale prefix on every URL.
+`app/[locale]/layout.tsx` sets `<html lang dir>` from the route, so direction is
+correct in the first byte of HTML. Arabic swaps to IBM Plex Sans Arabic via
+`html[lang="ar"]`; the face is not preloaded on French pages.
+
+No user-facing string belongs in a component: labels arrive as props or through
+`useTranslations` / `getTranslations`. `tests/i18n/messages.test.ts` fails when
+the dictionaries drift in keys or interpolation placeholders.
+
+## API client
+
+The foundation is installed and wired, but no page queries the API yet:
+
+- `@tanstack/react-query` — client cache and retry policy
+- `openapi-typescript` — generates `lib/api/schema.d.ts` from the API contract
+- `openapi-fetch` — typed fetch client
+
+### Contract and drift gate
+
+Types are generated from the API's own committed snapshot,
+`apps/api/test/unit/openapi-v1.10.json` — V2 keeps no second contract. Never
+hand-write an API shape; add a named alias in `lib/api/types.ts` instead.
+
+```bash
+npm run gen:api-types     # rewrite lib/api/schema.d.ts
+npm run check:api-types   # exit 1 when it is stale or missing
+```
+
+The generated file is ignored by ESLint and Prettier, and must never be edited.
+`check:api-types` belongs in the same gate run as `typecheck` whenever the API
+contract changes.
+
+### Browser and server clients
+
+```ts
+import { getBrowserApiClient } from "@/lib/api/client";
+import { unwrapApiResult } from "@/lib/api/errors";
+
+const result = await getBrowserApiClient().GET("/v1/health");
+const health = unwrapApiResult(result); // typed; throws ApiError on failure
+```
+
+`createApiClient({ baseUrl, fetch })` builds an isolated client (the `fetch`
+injection is how tests run without a network). Server components and route
+handlers should create their own with the server origin:
+
+```ts
+import { createApiClient } from "@/lib/api/client";
+import { resolveServerApiBaseUrl } from "@/lib/api/config";
+
+const api = createApiClient({ baseUrl: resolveServerApiBaseUrl() });
+```
+
+`resolveBrowserApiBaseUrl()` reads only `NEXT_PUBLIC_API_BASE_URL`;
+`resolveServerApiBaseUrl()` prefers `API_BASE_URL`, then the public value, then
+`http://localhost:3000`. `isApiConfigured()` distinguishes an explicitly
+configured API from that local fallback — useful when a screen must render a
+fixture instead of assuming a server is listening.
+
+### Query defaults
+
+`createQueryClient()` (mounted once by `ApiProvider` in the locale layout):
+
+- 30 s `staleTime`, 5 min `gcTime`
+- queries retry only network failures, 408 and 5xx, at most twice
+- 4xx responses are never retried; a 429's `Retry-After` stays a UI countdown
+- mutations never auto-retry: `POST /v1/recommendations` runs and persists an
+  engine pass, so the screen owns the retry decision
+
+`ApiError` normalizes the API's `{ error, message, request_id }` envelope and
+exposes `status`, `code`, `requestId`, `retryAfterSeconds` and the raw body.
+`openapi-fetch` throws on transport failures only; every HTTP failure arrives as
+`{ data, error, response }` and becomes `ApiError` through `unwrapApiResult`.
+
+There is no runtime response validation: TypeScript types are erased, so the
+contract is trusted as the API's tested surface. Backend logic stays in the
+Fastify API; V2 owns presentation only.
+
+## Quality gates
+
+- TypeScript strict, including `noUncheckedIndexedAccess`
+- ESLint (`next/core-web-vitals`, `next/typescript`)
+- Prettier + Tailwind class sorting
+- Vitest: dictionaries, price formatting, validation schema, Zustand store, kit accessibility, API config/error/retry/client/provider
+- `npm run check:api-types`: generated API types match `apps/api`'s contract
+- Playwright: FR, AR/RTL mirroring, locale switch, budget selection, search validation, mobile nav, 360 px overflow
+
+## Scope guard
+
+`apps/web` (V1) is unchanged. No V1 component or frontend utility is imported.
+No changes from PR #15 were inspected or reused — the V2 tree was built from the
+supplied design references and the existing API contract only.

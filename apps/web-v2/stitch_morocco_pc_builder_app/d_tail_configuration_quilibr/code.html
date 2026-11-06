@@ -1,0 +1,386 @@
+<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_stack" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "on-primary-fixed": "#0f0069", "primary": "#1f108e", "surface-bright": "#f8f9ff", "secondary-fixed-dim": "#ffb95f", "surface-container": "#e5eeff", "surface-container-high": "#dce9ff", "inverse-on-surface": "#eaf1ff", "surface-container-lowest": "#ffffff", "inverse-primary": "#c3c0ff", "background": "#f8f9ff", "on-primary": "#ffffff", "error": "#ba1a1a", "on-primary-container": "#a9a7ff", "primary-fixed-dim": "#c3c0ff", "tertiary-fixed": "#6ffbbe", "primary-fixed": "#e2dfff", "inverse-surface": "#213145", "surface": "#f8f9ff", "surface-container-low": "#eff4ff", "error-container": "#ffdad6", "on-tertiary-container": "#2dc68d", "tertiary": "#003421", "secondary-fixed": "#ffddb8", "secondary-container": "#fea619", "outline": "#777584", "on-surface-variant": "#464553", "on-surface": "#0b1c30", "on-secondary-fixed": "#2a1700", "on-secondary-fixed-variant": "#653e00", "tertiary-container": "#004d33", "on-tertiary-fixed-variant": "#005236", "on-background": "#0b1c30", "on-error": "#ffffff", "on-error-container": "#93000a", "on-primary-fixed-variant": "#3b35a7", "surface-dim": "#cbdbf5", "outline-variant": "#c8c4d5", "on-tertiary-fixed": "#002113", "on-tertiary": "#ffffff", "surface-container-highest": "#d3e4fe", "primary-container": "#3730a3", "secondary": "#855300", "surface-variant": "#d3e4fe", "tertiary-fixed-dim": "#4edea3", "on-secondary-container": "#684000", "surface-tint": "#544fc0", "on-secondary": "#ffffff" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "gutter": "1.25rem", "space-xs": "0.25rem", "margin": "2rem", "margin-mobile": "1rem", "space-xl": "2.5rem", "space-lg": "1.5rem", "space-sm": "0.5rem", "gutter-mobile": "0.75rem", "space-md": "1rem" }, fontFamily: { "headline-lg": ["Inter"], "display-lg": ["Inter"], "price-display": ["Inter"], "label-lg": ["Inter"], "display-lg-mobile": ["Inter"], "headline-sm": ["Inter"], "body-lg": ["Inter"], "label-sm": ["Inter"], "body-md": ["Inter"], "label-md": ["Inter"], "headline-md": ["Inter"], "body-sm": ["Inter"] }, fontSize: { "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "600" }], "display-lg": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700" }], "price-display": ["24px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "label-lg": ["14px", { "lineHeight": "20px", "fontWeight": "600" }], "display-lg-mobile": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "headline-sm": ["18px", { "lineHeight": "24px", "fontWeight": "600" }], "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }], "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "600" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "label-md": ["12px", { "lineHeight": "16px", "fontWeight": "500" }], "headline-md": ["22px", { "lineHeight": "28px", "fontWeight": "600" }], "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }] } } } };</script><style>@layer base{html,body{width:100%;margin:0;padding:0;min-height:100%;}body{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style></head><body class="bg-surface font-body-md text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-margin-mobile flex items-center justify-between"><div class="flex items-center gap-space-xs"><button aria-label="Retour" class="w-11 h-11 -ml-1.5 flex items-center justify-center rounded-full text-on-surface hover:bg-surface-container-high transition-colors" onclick="history.back()" type="button"><span class="material-symbols-outlined text-[24px]">arrow_back</span></button><h1 class="font-headline-sm text-headline-sm text-on-surface truncate font-bold">Équilibré</h1></div><div class="flex items-center gap-space-sm"><button aria-label="Changer de langue" class="h-11 px-space-sm flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high transition-colors font-label-md text-label-md" type="button"><span class="text-primary-container font-semibold">FR</span><span class="mx-1 text-outline-variant font-normal">|</span><span class="hover:text-primary-container transition-colors font-medium">عربية</span></button></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-safe bg-surface"><div class="flex flex-col w-full pb-28">
+<div class="px-margin-mobile flex flex-col gap-space-md pt-2">
+<!-- Summary Card -->
+<section class="bg-surface-container-lowest rounded-2xl shadow-sm overflow-hidden flex flex-col">
+<!-- PC Image & Verification Badge -->
+<div class="relative w-full h-[120px] bg-surface-container-low overflow-hidden rounded-t-2xl">
+<img alt="Clean minimalist 3D studio render of a modern gaming desktop PC tower on a soft neutral light background" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/AEtjO1XIxlwWM2fnbI_3e8BuuCg5eO3D8UtxGq-6ntv8jcUX3Zz0xZERov4cfq-fQwOGpptR7RF5HXSK54ghytWeKgYBjuVZy7hLn3YA09v8BU5BGAc-R69UMWjH3qfRmbYnP6ah_PAW9a_eDZtdEUnoK2dus5KKzfwnIJWpY4WA6K84GKqELnBg7P9qm5dZJkGEBYopBkVUD4EjxJpDQ7ywvst1qA5pFoXG5RF9XuMLxKk">
+<div class="absolute top-2.5 left-2.5 flex items-center gap-1 bg-surface-container-lowest/95 backdrop-blur-md px-2.5 py-1 rounded-full shadow-sm">
+<span class="material-symbols-outlined text-[16px] text-tertiary-container font-semibold" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Vérifié</span>
+<button aria-label="Informations de vérification" class="w-4 h-4 flex items-center justify-center text-outline hover:text-on-surface transition-colors ml-0.5" onclick="alert('Prix et compatibilité vérifiés sur le marché local')" type="button">
+<span class="material-symbols-outlined text-[14px]">info</span>
+</button>
+</div>
+</div>
+<!-- Overview Info -->
+<div class="p-4 flex flex-col gap-3">
+<div class="flex flex-col gap-0.5">
+<span class="text-[13px] leading-[18px] text-primary-container font-medium">Meilleur rapport qualité/prix</span>
+<div class="flex items-baseline justify-between">
+<span class="font-price-display text-price-display text-on-surface font-bold tracking-tight">7 450 DH</span>
+<span class="text-[13px] leading-[18px] text-on-surface-variant font-normal">Reste 550 DH sur 8 000 DH</span>
+</div>
+</div>
+<!-- Budget Gauge -->
+<div class="w-full bg-surface-container-high rounded-full h-2 overflow-hidden">
+<div class="bg-primary-container h-full rounded-full transition-all duration-500" style="width: 93.1%;"></div>
+</div>
+<!-- Action Buttons -->
+<div class="grid grid-cols-2 gap-space-sm pt-1">
+<button class="min-h-[48px] px-3 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-2 transition-colors active:scale-[0.98]" id="saveBtn" onclick="toggleSavedState(this)" type="button">
+<span class="material-symbols-outlined text-[20px] text-primary-container" id="saveIcon">favorite_border</span>
+<span id="saveLabel" class="">Enregistrer</span>
+</button>
+<a class="min-h-[48px] px-3 rounded-xl bg-tertiary-fixed text-tertiary font-label-lg text-label-lg flex items-center justify-center gap-2 hover:opacity-95 transition-all active:scale-[0.98]" href="https://api.whatsapp.com/send?text=Découvrez%20cette%20configuration%20PC%20Équilibrée%20(7%20450%20DH)%20sur%20MoroccoPC" rel="noopener noreferrer" target="_blank">
+<span class="material-symbols-outlined text-[20px] text-tertiary">chat</span>
+<span class="">Partager</span>
+</a>
+</div>
+</div>
+</section>
+<!-- Compatibility Reassurance Card -->
+<section class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex items-center justify-between transition-all"><div class="flex items-center gap-2.5 min-w-0">
+<span class="material-symbols-outlined text-tertiary-container text-[22px] shrink-0" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label-lg text-label-lg text-on-surface font-medium">Toutes les pièces sont compatibles</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] shrink-0">chevron_right</span></section>
+<!-- Components List Section -->
+<section class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+<div class="flex items-center justify-between pb-1">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Pièces</h2>
+</div>
+<div class="flex flex-col divide-y divide-surface-container-low"><!-- 1. CPU -->
+<div class="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center shrink-0 text-primary-container">
+<span class="material-symbols-outlined text-[20px]">memory</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-[13px] text-outline font-medium">Processeur</span>
+<span class="font-label-lg text-label-lg text-on-surface font-medium leading-snug">AMD Ryzen 5 5600</span>
+<span class="font-label-md text-label-md text-primary-container font-bold">1 300 DH</span>
+</div>
+</div>
+<button class="min-h-[48px] px-2 text-primary-container hover:underline font-label-md text-label-md font-semibold shrink-0 transition-colors flex items-center justify-center" onclick="openReplaceModal('Processeur', 'AMD Ryzen 5 5600', '1 300 DH')" type="button">
+  Remplacer
+</button>
+</div>
+<!-- 2. GPU -->
+<div class="py-3 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center shrink-0 text-primary-container">
+<span class="material-symbols-outlined text-[20px]">videogame_asset</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-[13px] text-outline font-medium">Carte graphique</span>
+<span class="font-label-lg text-label-lg text-on-surface font-medium leading-snug">Nvidia GeForce RTX 4060</span>
+<span class="font-label-md text-label-md text-primary-container font-bold">3 000 DH</span>
+</div>
+</div>
+<button class="min-h-[48px] px-2 text-primary-container hover:underline font-label-md text-label-md font-semibold shrink-0 transition-colors flex items-center justify-center" onclick="openReplaceModal('Carte graphique', 'Nvidia GeForce RTX 4060', '3 000 DH')" type="button">
+  Remplacer
+</button>
+</div>
+<!-- 3. Motherboard -->
+<div class="py-3 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center shrink-0 text-primary-container">
+<span class="material-symbols-outlined text-[20px]">developer_board</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-[13px] text-outline font-medium">Carte mère</span>
+<span class="font-label-lg text-label-lg text-on-surface font-medium leading-snug">Gigabyte B550M DS3H AC</span>
+<span class="font-label-md text-label-md text-primary-container font-bold">900 DH</span>
+</div>
+</div>
+<button class="min-h-[48px] px-2 text-primary-container hover:underline font-label-md text-label-md font-semibold shrink-0 transition-colors flex items-center justify-center" onclick="openReplaceModal('Carte mère', 'Gigabyte B550M DS3H AC', '900 DH')" type="button">
+  Remplacer
+</button>
+</div>
+<!-- 4. RAM -->
+<div class="py-3 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center shrink-0 text-primary-container">
+<span class="material-symbols-outlined text-[20px]">straighten</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-[13px] text-outline font-medium">Mémoire</span>
+<span class="font-label-lg text-label-lg text-on-surface font-medium leading-snug">Corsair Vengeance LPX 16 Go</span>
+<span class="font-label-md text-label-md text-primary-container font-bold">400 DH</span>
+</div>
+</div>
+<button class="min-h-[48px] px-2 text-primary-container hover:underline font-label-md text-label-md font-semibold shrink-0 transition-colors flex items-center justify-center" onclick="openReplaceModal('Mémoire', 'Corsair Vengeance LPX 16 Go', '400 DH')" type="button">
+  Remplacer
+</button>
+</div>
+<!-- 5. Storage -->
+<div class="py-3 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center shrink-0 text-primary-container">
+<span class="material-symbols-outlined text-[20px]">hard_drive</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-[13px] text-outline font-medium">Stockage</span>
+<span class="font-label-lg text-label-lg text-on-surface font-medium leading-snug">Crucial P3 Plus 1 To NVMe</span>
+<span class="font-label-md text-label-md text-primary-container font-bold">600 DH</span>
+</div>
+</div>
+<button class="min-h-[48px] px-2 text-primary-container hover:underline font-label-md text-label-md font-semibold shrink-0 transition-colors flex items-center justify-center" onclick="openReplaceModal('Stockage', 'Crucial P3 Plus 1 To NVMe', '600 DH')" type="button">
+  Remplacer
+</button>
+</div>
+<!-- 6. PSU -->
+<div class="py-3 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center shrink-0 text-primary-container">
+<span class="material-symbols-outlined text-[20px]">bolt</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-[13px] text-outline font-medium">Alimentation</span>
+<span class="font-label-lg text-label-lg text-on-surface font-medium leading-snug">MSI MAG A650BN 650W</span>
+<span class="font-label-md text-label-md text-primary-container font-bold">480 DH</span>
+</div>
+</div>
+<button class="min-h-[48px] px-2 text-primary-container hover:underline font-label-md text-label-md font-semibold shrink-0 transition-colors flex items-center justify-center" onclick="openReplaceModal('Alimentation', 'MSI MAG A650BN 650W', '480 DH')" type="button">
+  Remplacer
+</button>
+</div>
+<!-- 7. Case -->
+<div class="py-3 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center shrink-0 text-primary-container">
+<span class="material-symbols-outlined text-[20px]">desktop_windows</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-[13px] text-outline font-medium">Boîtier</span>
+<span class="font-label-lg text-label-lg text-on-surface font-medium leading-snug">DeepCool CC560 V2 Blanc</span>
+<span class="font-label-md text-label-md text-primary-container font-bold">470 DH</span>
+</div>
+</div>
+<button class="min-h-[48px] px-2 text-primary-container hover:underline font-label-md text-label-md font-semibold shrink-0 transition-colors flex items-center justify-center" onclick="openReplaceModal('Boîtier', 'DeepCool CC560 V2 Blanc', '470 DH')" type="button">
+  Remplacer
+</button>
+</div>
+<!-- 8. Cooler -->
+<div class="py-3 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center shrink-0 text-primary-container">
+<span class="material-symbols-outlined text-[20px]">mode_fan</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="text-[13px] text-outline font-medium">Refroidissement</span>
+<span class="font-label-lg text-label-lg text-on-surface font-medium leading-snug">Thermalright Assassin X 120</span>
+<span class="font-label-md text-label-md text-primary-container font-bold">300 DH</span>
+</div>
+</div>
+<button class="min-h-[48px] px-2 text-primary-container hover:underline font-label-md text-label-md font-semibold shrink-0 transition-colors flex items-center justify-center" onclick="openReplaceModal('Refroidissement', 'Thermalright Assassin X 120', '300 DH')" type="button">
+  Remplacer
+</button>
+</div></div>
+</section>
+<!-- Why This Build Section -->
+<section class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Pourquoi cette configuration ?</h2>
+<ul class="flex flex-col gap-2.5">
+<li class="flex items-start gap-2.5">
+<span class="material-symbols-outlined text-primary-container text-[18px] mt-0.5 shrink-0">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Processeur et carte graphique bien équilibrés</span>
+</li>
+<li class="flex items-start gap-2.5">
+<span class="material-symbols-outlined text-primary-container text-[18px] mt-0.5 shrink-0">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Socket AM4 : vous pourrez changer de processeur plus tard</span>
+</li>
+<li class="flex items-start gap-2.5">
+<span class="material-symbols-outlined text-primary-container text-[18px] mt-0.5 shrink-0">check_circle</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Alimentation avec une marge pour une future mise à niveau</span>
+</li>
+</ul>
+</section>
+<!-- Where To Buy Section -->
+<section class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex flex-col gap-3"><div class="flex flex-col gap-0.5">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Où acheter</h2>
+<p class="text-[13px] text-on-surface-variant font-normal">Prix de la configuration complète</p>
+</div>
+<div class="flex flex-col gap-3">
+<!-- Store 1 -->
+<div class="bg-surface-container-low rounded-xl p-3.5 flex flex-col gap-2.5">
+<div class="flex items-start justify-between gap-2">
+<div class="flex flex-col gap-0.5 min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold">UltraPC</span>
+<span class="font-label-sm text-label-sm text-tertiary-container bg-tertiary-fixed px-1.5 py-0.5 rounded font-semibold">Vérifié</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-label-md text-label-md">
+<span class="material-symbols-outlined text-[15px]">location_on</span>
+<span class="">Casablanca · Prix vérifié le 28 oct.</span>
+</div>
+</div>
+<span class="font-headline-sm text-headline-sm text-primary-container font-bold shrink-0">7 450 DH</span>
+</div>
+<button class="w-full min-h-[48px] rounded-xl bg-primary-container text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 hover:bg-primary transition-colors active:scale-[0.99]" onclick="alert('Redirection vers le catalogue UltraPC Casablanca')" type="button">
+<span class="">Voir chez le vendeur</span>
+<span class="material-symbols-outlined text-[18px]">open_in_new</span>
+</button>
+</div>
+<!-- Store 2 -->
+<div class="bg-surface-container-low rounded-xl p-3.5 flex flex-col gap-2.5">
+<div class="flex items-start justify-between gap-2">
+<div class="flex flex-col gap-0.5 min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold">Setup Game</span>
+<span class="font-label-sm text-label-sm text-secondary bg-secondary-fixed px-1.5 py-0.5 rounded font-semibold">Indicatif</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-label-md text-label-md">
+<span class="material-symbols-outlined text-[15px]">location_on</span>
+<span class="">Rabat · Prix indicatif</span>
+</div>
+</div>
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold shrink-0">7 520 DH</span>
+</div>
+<button class="w-full min-h-[48px] rounded-xl bg-primary-container text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 hover:bg-primary transition-colors active:scale-[0.99]" onclick="alert('Redirection vers le catalogue Setup Game Rabat')" type="button">
+<span class="">Voir chez le vendeur</span>
+<span class="material-symbols-outlined text-[18px]">open_in_new</span>
+</button>
+</div>
+</div></section>
+</div>
+<!-- Sticky Bottom Bar -->
+<div class="fixed bottom-0 left-0 right-0 z-40 bg-surface-container-lowest/95 backdrop-blur-md shadow-[0_-4px_20px_-2px_rgba(15,23,42,0.08)] pb-safe">
+<div class="max-w-[420px] mx-auto h-[76px] px-margin-mobile flex items-center justify-between gap-4">
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase font-semibold">Total</span>
+<div class="flex items-center gap-1.5">
+<span class="font-price-display text-price-display text-on-surface font-bold tracking-tight">7 450 DH</span>
+<span class="font-label-sm text-label-sm text-tertiary-container bg-tertiary-fixed px-1.5 py-0.5 rounded font-semibold">Vérifié</span>
+</div>
+</div>
+<button class="min-h-[48px] px-6 rounded-xl bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg font-semibold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98]" id="bottomSaveCta" onclick="toggleSavedState(document.getElementById('saveBtn'))" type="button">
+<span class="material-symbols-outlined text-[20px]" id="bottomSaveIcon">bookmark_border</span>
+<span id="bottomSaveLabel" class="">Enregistrer</span>
+</button>
+</div>
+</div>
+<!-- Interactive Mock Replace Drawer / Modal -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/40 backdrop-blur-sm hidden flex-col justify-end" id="replaceModal" onclick="closeModalOnBackdrop(event)">
+<div class="bg-surface-container-lowest w-full max-h-[85vh] rounded-t-3xl p-margin-mobile flex flex-col gap-4 shadow-xl overflow-y-auto pb-safe animate-in fade-in duration-200" onclick="event.stopPropagation()">
+<div class="w-12 h-1 bg-surface-container-high rounded-full mx-auto -mt-1"></div>
+<div class="flex items-center justify-between pb-1">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-primary-container uppercase font-bold tracking-wider" id="modalCategory">Composant</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold">Alternatives compatibles</h3>
+</div>
+<button aria-label="Fermer" class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-container-low transition-colors text-on-surface" onclick="closeReplaceModal()" type="button">
+<span class="material-symbols-outlined text-[22px]">close</span>
+</button>
+</div>
+<div class="bg-surface-container-low p-3 rounded-xl flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Choix actuel</span>
+<span class="font-label-lg text-label-lg text-on-surface font-semibold" id="modalCurrentName">-</span>
+</div>
+<span class="font-label-lg text-label-lg text-primary-container font-bold" id="modalCurrentPrice">-</span>
+</div>
+<div class="flex flex-col gap-2.5">
+<!-- Alternative 1 -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-between gap-3 hover:bg-surface-container-low/50 transition-colors">
+<div class="flex flex-col min-w-0">
+<span class="font-label-lg text-label-lg text-on-surface font-semibold truncate">Option Upgrade Boost</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">+15% de performances, socket compatible</span>
+<span class="font-label-md text-label-md text-primary-container font-bold mt-1">+350 DH</span>
+</div>
+<button class="min-h-[48px] px-4 rounded-xl bg-primary-container text-on-primary font-label-md text-label-md font-semibold shrink-0" onclick="selectAlternative('+350 DH')" type="button">
+            Choisir
+          </button>
+</div>
+<!-- Alternative 2 -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-between gap-3 hover:bg-surface-container-low/50 transition-colors">
+<div class="flex flex-col min-w-0">
+<span class="font-label-lg text-label-lg text-on-surface font-semibold truncate">Option Économique</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Rapport prix optimisé, même garantie</span>
+<span class="font-label-md text-label-md text-tertiary-container font-bold mt-1">-210 DH</span>
+</div>
+<button class="min-h-[48px] px-4 rounded-xl bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold shrink-0" onclick="selectAlternative('-210 DH')" type="button">
+            Choisir
+          </button>
+</div>
+<!-- Alternative 3 -->
+<div class="p-3.5 rounded-xl bg-surface-container-lowest shadow-sm flex items-center justify-between gap-3 hover:bg-surface-container-low/50 transition-colors">
+<div class="flex flex-col min-w-0">
+<span class="font-label-lg text-label-lg text-on-surface font-semibold truncate">Option Silencieuse Premium</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Moins de décibels, dissipation renforcée</span>
+<span class="font-label-md text-label-md text-primary-container font-bold mt-1">+180 DH</span>
+</div>
+<button class="min-h-[48px] px-4 rounded-xl bg-primary-container text-on-primary font-label-md text-label-md font-semibold shrink-0" onclick="selectAlternative('+180 DH')" type="button">
+            Choisir
+          </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  let isSaved = false;
+
+  function toggleSavedState(btnElement) {
+    isSaved = !isSaved;
+    const saveIcon = document.getElementById('saveIcon');
+    const saveLabel = document.getElementById('saveLabel');
+    const bottomIcon = document.getElementById('bottomSaveIcon');
+    const bottomLabel = document.getElementById('bottomSaveLabel');
+
+    if (isSaved) {
+      if (saveIcon) {
+        saveIcon.textContent = 'favorite';
+        saveIcon.style.fontVariationSettings = "'FILL' 1";
+      }
+      if (saveLabel) saveLabel.textContent = 'Enregistré !';
+      if (bottomIcon) {
+        bottomIcon.textContent = 'bookmark';
+        bottomIcon.style.fontVariationSettings = "'FILL' 1";
+      }
+      if (bottomLabel) bottomLabel.textContent = 'Enregistré';
+    } else {
+      if (saveIcon) {
+        saveIcon.textContent = 'favorite_border';
+        saveIcon.style.fontVariationSettings = "'FILL' 0";
+      }
+      if (saveLabel) saveLabel.textContent = 'Enregistrer';
+      if (bottomIcon) {
+        bottomIcon.textContent = 'bookmark_border';
+        bottomIcon.style.fontVariationSettings = "'FILL' 0";
+      }
+      if (bottomLabel) bottomLabel.textContent = 'Enregistrer';
+    }
+  }
+
+  function openReplaceModal(category, name, price) {
+    document.getElementById('modalCategory').textContent = category;
+    document.getElementById('modalCurrentName').textContent = name;
+    document.getElementById('modalCurrentPrice').textContent = price;
+    const modal = document.getElementById('replaceModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+
+  function closeReplaceModal() {
+    const modal = document.getElementById('replaceModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+
+  function closeModalOnBackdrop(e) {
+    if (e.target.id === 'replaceModal') {
+      closeReplaceModal();
+    }
+  }
+
+  function selectAlternative(diff) {
+    alert('Composant mis à jour (' + diff + '). Recalcul du total en cours.');
+    closeReplaceModal();
+  }
+</script></main>
+
+
+</body></html>

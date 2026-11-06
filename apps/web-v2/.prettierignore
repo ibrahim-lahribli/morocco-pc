@@ -1,0 +1,9 @@
+.next
+node_modules
+coverage
+playwright-report
+test-results
+package-lock.json
+lib/api/schema.d.ts
+stitch_morocco_pc_builder_app
+docs/screenshots

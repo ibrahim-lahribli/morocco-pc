@@ -1,0 +1,1419 @@
+/**
+ * GENERATED FILE - DO NOT EDIT.
+ *
+ * Source: apps/api/test/unit/openapi-v1.10.json
+ * Regenerate: npm run gen:api-types
+ * Freshness gate: npm run check:api-types
+ */
+
+export interface paths {
+    "/v1/catalog/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Paginated ACTIVE product catalogue, keyset-ordered by slug */
+        get: {
+            parameters: {
+                query?: {
+                    role?: string;
+                    limit?: string;
+                    cursor?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            products: {
+                                id: string;
+                                slug: string;
+                                display_name: string;
+                                category: string;
+                                from_price: number | null;
+                                offer_class: string | null;
+                                has_offer: boolean;
+                                variants: {
+                                    id: string;
+                                    sku: string;
+                                }[];
+                            }[];
+                            next_cursor: string | null;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/catalog/products/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One ACTIVE catalogue product by slug: specs, priced offers, provenance */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            slug: string;
+                            display_name: string;
+                            category: string;
+                            specs: {
+                                [key: string]: unknown;
+                            };
+                            offers: {
+                                price: number;
+                                currency: string;
+                                offer_class: string;
+                            }[];
+                            price_status: "indicative" | "verified" | (never | null);
+                            disclaimer: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/catalog/products/{slug}/price-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The observations behind one product price, oldest first (contract v1.6) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            slug: string;
+                            currency: string;
+                            points: {
+                                observed_at: string;
+                                price: number;
+                                offer_class: string;
+                            }[];
+                            observation_count: number;
+                            latest_price: number | null;
+                            min_price: number | null;
+                            max_price: number | null;
+                            change_amount: number | null;
+                            change_pct: number | null;
+                            disclaimer: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Liveness plus database reachability */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @enum {string} */
+                            status: "ok";
+                            db: "ok" | "down";
+                            engine_version: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/meta/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Accepted use cases, currencies, resolutions and priorities */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            use_cases: {
+                                value: string | number;
+                                label: string;
+                            }[];
+                            currencies: {
+                                value: string | number;
+                                label: string;
+                            }[];
+                            resolutions: {
+                                value: string | number;
+                                label: string;
+                            }[];
+                            priorities: {
+                                value: string | number;
+                                label: string;
+                            }[];
+                            inputs_applied: string[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Generated landing-page presets for one use case and currency */
+        get: {
+            parameters: {
+                query: {
+                    use_case: string;
+                    currency: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            catalog_version: string;
+                            generated_at: string | null;
+                            presets: {
+                                budget_amount: number;
+                                recommendation_id: string;
+                                build_score: number | null;
+                                price_status: "indicative" | "verified" | (never | null);
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a recommendation (one full engine pass) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        budget_amount: number;
+                        currency: string;
+                        use_case: string;
+                        resolution?: string;
+                        priority?: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            budget_amount: number | null;
+                            currency: string | null;
+                            use_case: string | null;
+                            generated_at: string | null;
+                            budget_floor: {
+                                cheapest_total: number | null;
+                                currency: string;
+                                budget_amount: number;
+                                within_budget: boolean | null;
+                                cheapest_by_role: {
+                                    [key: string]: number;
+                                };
+                                missing_roles: string[];
+                            } | null;
+                            engine_version: string | null;
+                            catalog_version: string | null;
+                            reused: boolean;
+                            reason: string | null;
+                            disclaimer: string;
+                            input_effects: {
+                                input: "use_case" | "resolution" | "priority";
+                                effect: "APPLIED" | "NO_EFFECT" | "UNKNOWN";
+                                reason: string;
+                            }[];
+                            served_by: {
+                                engine_version: string;
+                            };
+                            builds: {
+                                rank: number;
+                                engine_version: string | null;
+                                strategy_key: string | null;
+                                total_price: number | null;
+                                build_score: number | null;
+                                compatibility_status: string;
+                                explanation: string | null;
+                                /** Swapped */
+                                swapped: {
+                                    role: string;
+                                    committed_at: string | null;
+                                    engine_version: string | null;
+                                } | null;
+                                price_status: "indicative" | "verified";
+                                components: {
+                                    role: string;
+                                    product_id: string;
+                                    name: string;
+                                    slug: string | null;
+                                    variant: string | null;
+                                    price_used: number | null;
+                                    offer_class: string;
+                                    store_offer_id: string | null;
+                                }[];
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            budget_amount: number | null;
+                            currency: string | null;
+                            use_case: string | null;
+                            generated_at: string | null;
+                            budget_floor: {
+                                cheapest_total: number | null;
+                                currency: string;
+                                budget_amount: number;
+                                within_budget: boolean | null;
+                                cheapest_by_role: {
+                                    [key: string]: number;
+                                };
+                                missing_roles: string[];
+                            } | null;
+                            engine_version: string | null;
+                            catalog_version: string | null;
+                            reused: boolean;
+                            reason: string | null;
+                            disclaimer: string;
+                            input_effects: {
+                                input: "use_case" | "resolution" | "priority";
+                                effect: "APPLIED" | "NO_EFFECT" | "UNKNOWN";
+                                reason: string;
+                            }[];
+                            served_by: {
+                                engine_version: string;
+                            };
+                            builds: {
+                                rank: number;
+                                engine_version: string | null;
+                                strategy_key: string | null;
+                                total_price: number | null;
+                                build_score: number | null;
+                                compatibility_status: string;
+                                explanation: string | null;
+                                swapped: {
+                                    role: string;
+                                    committed_at: string | null;
+                                    engine_version: string | null;
+                                } | null;
+                                price_status: "indicative" | "verified";
+                                components: {
+                                    role: string;
+                                    product_id: string;
+                                    name: string;
+                                    slug: string | null;
+                                    variant: string | null;
+                                    price_used: number | null;
+                                    offer_class: string;
+                                    store_offer_id: string | null;
+                                }[];
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/recommendations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a persisted recommendation */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            id: string;
+                            budget_amount: number | null;
+                            currency: string | null;
+                            use_case: string | null;
+                            generated_at: string | null;
+                            budget_floor: {
+                                cheapest_total: number | null;
+                                currency: string;
+                                budget_amount: number;
+                                within_budget: boolean | null;
+                                cheapest_by_role: {
+                                    [key: string]: number;
+                                };
+                                missing_roles: string[];
+                            } | null;
+                            engine_version: string | null;
+                            catalog_version: string | null;
+                            reused: boolean;
+                            reason: string | null;
+                            disclaimer: string;
+                            input_effects: {
+                                input: "use_case" | "resolution" | "priority";
+                                effect: "APPLIED" | "NO_EFFECT" | "UNKNOWN";
+                                reason: string;
+                            }[];
+                            served_by: {
+                                engine_version: string;
+                            };
+                            builds: {
+                                rank: number;
+                                engine_version: string | null;
+                                strategy_key: string | null;
+                                total_price: number | null;
+                                build_score: number | null;
+                                compatibility_status: string;
+                                explanation: string | null;
+                                swapped: {
+                                    role: string;
+                                    committed_at: string | null;
+                                    engine_version: string | null;
+                                } | null;
+                                price_status: "indicative" | "verified";
+                                components: {
+                                    role: string;
+                                    product_id: string;
+                                    name: string;
+                                    slug: string | null;
+                                    variant: string | null;
+                                    price_used: number | null;
+                                    offer_class: string;
+                                    store_offer_id: string | null;
+                                }[];
+                            }[];
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/recommendations/{id}/builds/{rank}/swap-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview one component swap against a persisted build (read-only) */
+        get: {
+            parameters: {
+                query: {
+                    role: string;
+                    product_id: string;
+                    product_variant_id?: string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                    rank: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            compatibility: {
+                                status: "PASS" | "UNKNOWN" | "FAIL";
+                                pairs: {
+                                    check: string;
+                                    role: string;
+                                    partner_role: string | null;
+                                    status: "PASS" | "UNKNOWN" | "FAIL";
+                                    reason: string | null;
+                                    evidence: {
+                                        [key: string]: unknown;
+                                    }[];
+                                }[];
+                                unknown_pairwise_count: number;
+                            };
+                            price: {
+                                previous: number | null;
+                                next: number | null;
+                                delta: number | null;
+                                offer_class: string | null;
+                                price_status: "indicative" | "verified" | (never | null);
+                            };
+                            budget: {
+                                budget_amount: number | null;
+                                total: number | null;
+                                delta: number | null;
+                                within_budget: boolean | null;
+                            };
+                            catalog_version: string | null;
+                            engine_version: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/recommendations/{id}/builds/{rank}/swap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Commit one component swap: appends a derived build (never edits the pass) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    rank: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        role: string;
+                        product_id: string;
+                        product_variant_id?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            compatibility: {
+                                status: "PASS" | "UNKNOWN" | "FAIL";
+                                pairs: {
+                                    check: string;
+                                    role: string;
+                                    partner_role: string | null;
+                                    status: "PASS" | "UNKNOWN" | "FAIL";
+                                    reason: string | null;
+                                    evidence: {
+                                        [key: string]: unknown;
+                                    }[];
+                                }[];
+                                unknown_pairwise_count: number;
+                            };
+                            price: {
+                                previous: number | null;
+                                next: number | null;
+                                delta: number | null;
+                                offer_class: string | null;
+                                price_status: "indicative" | "verified" | (never | null);
+                            };
+                            budget: {
+                                budget_amount: number | null;
+                                total: number | null;
+                                delta: number | null;
+                                within_budget: boolean | null;
+                            };
+                            swapped: {
+                                role: string;
+                                committed_at: string | null;
+                                engine_version: string | null;
+                            };
+                            catalog_version: string | null;
+                            engine_version: string;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                            message: string;
+                            details?: {
+                                field: string;
+                                message: string;
+                            }[];
+                            request_id?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+}
+export type webhooks = Record<string, never>;
+export interface components {
+    schemas: never;
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
+}
+export type $defs = Record<string, never>;
+export type operations = Record<string, never>;
