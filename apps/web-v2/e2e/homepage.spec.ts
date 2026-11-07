@@ -26,16 +26,19 @@ test.describe("homepage shell", () => {
     await expect(page.getByRole("navigation", { name: "Navigation principale" })).toBeVisible();
   });
 
-  test("issues no API request on load", async ({ page }) => {
+  test("issues only reads on load and never writes", async ({ page }) => {
     const calls: string[] = [];
     await page.route("**/v1/**", (route) => {
-      calls.push(`${route.request().method()} ${route.request().url()}`);
+      calls.push(route.request().method());
       return route.abort();
     });
 
     await page.goto("/fr");
 
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    expect(calls).toEqual([]);
+
+    // The cards hydrate after the shell, so wait for the first read to land.
+    await expect.poll(() => calls.length).toBeGreaterThan(0);
+    expect(new Set(calls)).toEqual(new Set(["GET"]));
   });
 });
