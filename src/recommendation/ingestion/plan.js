@@ -11,7 +11,8 @@
  *   unchanged    stored offer, nothing changed                      -> NO writes
  *   review       ambiguous match                                     -> review queue
  *   unmatched    no match at all                                     -> review queue
- * Rejected rows come from validation, not from the plan.
+ *   rejected     an unusable row (unknown store, or a curated identity
+ *                key that cannot be resolved)                       -> reported, never written
  */
 
 'use strict';
@@ -132,6 +133,15 @@ function buildPlan(listings, context) {
     const storeId = context.storesByName.get(listing.store_name);
     if (!storeId) {
       plan.rejected.push({ listing, reason: 'UNKNOWN_STORE' });
+      continue;
+    }
+
+    // A variant sku names a VARIANT OF a product, so it means nothing on its own.
+    // Ignoring it would let a row whose operator explicitly said which variant they
+    // meant fall back to name/SKU inference, which is exactly the guess this tier
+    // exists to replace. Refuse the half-specified key instead.
+    if (!listing.product_slug && listing.variant_sku) {
+      plan.rejected.push({ listing, reason: 'VARIANT_SKU_WITHOUT_SLUG' });
       continue;
     }
 

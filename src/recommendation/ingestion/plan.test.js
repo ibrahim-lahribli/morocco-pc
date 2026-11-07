@@ -147,6 +147,24 @@ test('a curated product with no variants is product-keyed', () => {
   assert.equal(plan.newOffers[0].match.matched_product_variant_id, null);
 });
 
+test('a variant_sku without a product_slug is rejected, never silently ignored', () => {
+  // A sku is only unique WITHIN a product, so the half-specified key cannot be
+  // resolved. Falling back to inference would hide the typo behind a plausible match.
+  const plan = buildPlan([listing({ variant_sku: 'SEED-GPU-4060', sku: null, title: 'x' })], slugContext());
+  assert.equal(plan.newOffers.length, 0);
+  assert.equal(plan.changed.length, 0);
+  assert.equal(plan.rejected.length, 1);
+  assert.equal(plan.rejected[0].reason, 'VARIANT_SKU_WITHOUT_SLUG');
+});
+
+test('an uncurated listing keeps the inference path untouched', () => {
+  // No product_slug and no variant_sku is the pre-existing path: SKU, then MPN,
+  // then name. It must not be diverted by the curated-key guards.
+  const plan = buildPlan([listing({ sku: 'SEED-R5-7500F', product_slug: null, variant_sku: null })], context());
+  assert.equal(plan.newOffers.length, 1);
+  assert.equal(plan.newOffers[0].match.reason, 'SKU_EXACT');
+});
+
 test('an ambiguous uncurated listing still goes to REVIEW and never becomes an offer', () => {
   const ambiguous = [
     { product_id: 'n1', product_variant_id: null, sku: null, mpn: null, product_slug: 'a', name: 'Seed Ryzen 5 7500F' },
