@@ -91,4 +91,22 @@ test.describe("homepage shell", () => {
       expect(sizes, `section headings at ${width}px`).toEqual([expected, expected, expected]);
     }
   });
+
+  test("sets the hero heading on two lines and its padding per the spec", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/fr");
+
+    const boxes = await page
+      .locator("#hero-title span")
+      .evaluateAll((spans) => spans.map((span) => span.getBoundingClientRect().toJSON()));
+
+    expect(boxes).toHaveLength(2); // one block span per line
+    expect(boxes[1]!.top).toBeGreaterThan(boxes[0]!.bottom - 2); // line 2 starts below line 1
+
+    const paddingTop = await page
+      .locator("section#top")
+      .evaluate((element) => parseFloat(getComputedStyle(element).paddingTop));
+
+    expect(paddingTop).toBe(64);
+  });
 });

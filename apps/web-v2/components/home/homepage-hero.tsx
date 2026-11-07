@@ -23,7 +23,8 @@ export interface HomepageHeroProps {
  *
  * Server-rendered except the finder it receives as children, so the H1, the
  * chips and the preview shell are present with JavaScript disabled. The single
- * `<h1>` on the page lives here.
+ * `<h1>` on the page lives here; its two lines are block spans, so the
+ * composition does not depend on the browser's wrap.
  */
 export function HomepageHero({
   eyebrow,
@@ -37,7 +38,7 @@ export function HomepageHero({
   children,
 }: HomepageHeroProps) {
   return (
-    <section id="top" aria-labelledby="hero-title" className="scroll-mt-24 pt-8 lg:pt-12">
+    <section id="top" aria-labelledby="hero-title" className="scroll-mt-24 pt-10 lg:pt-16">
       <div className="grid gap-8 lg:grid-cols-2 lg:items-start lg:gap-10">
         <div>
           <Badge tone="primary">
@@ -45,12 +46,9 @@ export function HomepageHero({
             {eyebrow}
           </Badge>
 
-          <h1
-            id="hero-title"
-            className="mt-3 max-w-3xl text-display text-balance text-foreground lg:text-display-lg"
-          >
-            {titleLead}{" "}
-            <span className="bg-linear-to-r from-primary-deep to-primary bg-clip-text text-transparent">
+          <h1 id="hero-title" className="mt-3 text-display text-foreground lg:text-display-lg">
+            <span className="block">{titleLead}</span>
+            <span className="block bg-linear-to-r from-primary-deep to-primary bg-clip-text text-transparent">
               {titleAccent}
             </span>
           </h1>
