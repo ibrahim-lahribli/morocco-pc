@@ -118,7 +118,7 @@ export function parseConfiguratorSearchParams(params: RawSearchParams): Configur
 
 export function createRequirementsSchema(
   messages: RequirementsMessages,
-): z.ZodType<RequirementsValues> {
+): z.ZodType<RequirementsValues, RequirementsValues> {
   return z
     .object({
       useCase: z.enum(HOME_USE_CASES).nullable(),

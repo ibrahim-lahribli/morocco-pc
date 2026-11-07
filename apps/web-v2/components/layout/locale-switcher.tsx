@@ -1,8 +1,15 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+
 import { Link, usePathname } from "@/i18n/navigation";
 import { routing, type AppLocale } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
+
+// The search string only changes on navigation, which re-renders anyway.
+const subscribeToLocation = () => () => undefined;
+const getSearch = () => window.location.search;
+const getServerSearch = () => "";
 
 export interface LocaleSwitcherProps {
   /** Accessible name for the switcher's landmark. */
@@ -22,6 +29,13 @@ export interface LocaleSwitcherProps {
 export function LocaleSwitcher({ label, labels, ariaLabels, active }: LocaleSwitcherProps) {
   const pathname = usePathname();
 
+  // The query is client-only state: `useSearchParams` would need a Suspense
+  // boundary and would drop the switcher from the server-rendered HTML, so the
+  // server snapshot is empty and the search string arrives after hydration.
+  const search = useSyncExternalStore(subscribeToLocation, getSearch, getServerSearch);
+
+  const href = search === "" ? pathname : `${pathname}${search}`;
+
   return (
     <nav
       aria-label={label}
@@ -32,7 +46,7 @@ export function LocaleSwitcher({ label, labels, ariaLabels, active }: LocaleSwit
         return (
           <Link
             key={locale}
-            href={pathname}
+            href={href}
             locale={locale}
             hrefLang={locale}
             aria-label={ariaLabels[locale]}

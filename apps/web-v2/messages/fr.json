@@ -221,6 +221,7 @@
       "usageLegend": "Usage principal",
       "submit": "Continuer",
       "saved": "Vos réponses sont enregistrées.",
+      "errorSummary": "Certaines réponses du lien sont invalides. Corrigez les champs signalés.",
       "update": "Mettre à jour",
       "note": "Les prix sont indicatifs et exprimés en dirhams marocains.",
       "usage": {
