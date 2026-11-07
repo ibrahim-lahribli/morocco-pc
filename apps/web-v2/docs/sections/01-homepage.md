@@ -1054,8 +1054,12 @@ item is reported as skipped.
       recommended".
 - [ ] Any displayed `build_score` is labelled "Score de configuration" and help text
       states it is neither FPS nor a benchmark.
-- [ ] Price badges and copy reflect API provenance; no real-time, weekly-refresh or
-      verified-retailer claim appears while price evidence remains unverified.
+- [ ] The card's price badge reads `builds[0].price_status` only: `verified` shows
+      `builds.badge.verified`, `indicative` shows `builds.badge.indicative`, and a `null`
+      status or an empty `builds` array shows **no badge**. `presets[].price_status` is
+      never the card badge source, and an unknown price is never labelled indicative.
+- [ ] No real-time, weekly-refresh or verified-retailer claim appears while price
+      evidence remains unverified.
 - [ ] With homepage POST disabled, finder selection chooses only the greatest same-use-
       case preset with `budget_amount <= visitorBudget`; it never shows an over-budget
       preset as suitable and no match produces the no-match state.
