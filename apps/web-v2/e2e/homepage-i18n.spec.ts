@@ -34,6 +34,25 @@ function horizontalOverflow(page: Page) {
 }
 
 /**
+ * The overflow assertion is about the finished page, and a card only reaches
+ * its final width once the detail read has filled it in. Until then the grid's
+ * implicit track is still clamped to its container and the page reads as
+ * overflowing by nothing — measured: the track is 328 px while the cards are
+ * skeletons and 350.7 px once a price lands. A price is the last thing a card
+ * renders, so waiting for it measures the layout the visitor gets.
+ */
+async function waitForSettledCards(page: Page) {
+  await page.evaluate(() => document.fonts.ready);
+  await expect(page.locator("#configurations article dd").last()).toBeVisible();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+}
+
+/**
  * Where the price digits sit inside their own card.
  *
  * Absolute `x` cannot be compared across locales: in RTL the first card is on
@@ -148,10 +167,7 @@ test.describe("Arabic homepage", () => {
         await page.setViewportSize(breakpoint);
         await page.goto(`/${locale}`);
         await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-        // The cards come from the detail read, and the track they sit in is the
-        // thing that can overflow: measure the laid-out page, not the skeleton.
-        await expect(page.locator("#configurations article").first()).toBeVisible();
-        await expect(page.locator("#configurations article").last()).toBeVisible();
+        await waitForSettledCards(page);
 
         const overflow = await horizontalOverflow(page);
         expect(
