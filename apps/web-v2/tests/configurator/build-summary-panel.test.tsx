@@ -69,6 +69,22 @@ const detail = {
   ],
 } as never;
 
+/** The same pass, loaded successfully, with no assembled build and a priced floor. */
+const zeroBuildDetail = {
+  ...(detail as unknown as Record<string, unknown>),
+  builds: [],
+  budget_floor: {
+    cheapest_total: 8450,
+    currency: "MAD",
+    budget_amount: 12000,
+    within_budget: false,
+    cheapest_by_role: {},
+    missing_roles: [],
+  },
+} as never;
+
+const asRecord = (value: unknown) => value as unknown as Record<string, unknown>;
+
 const renderPanel = (props: Partial<ComponentProps<typeof BuildSummaryPanel>> = {}) =>
   render(
     <NextIntlClientProvider locale="fr" messages={fr}>
@@ -194,6 +210,82 @@ describe("BuildSummaryPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Configuration 2" }));
     expect(onSelectRank).toHaveBeenCalledWith(2);
+  });
+
+  it("treats a loaded pass with zero builds as loaded, not as empty", () => {
+    renderPanel({ detail: zeroBuildDetail });
+
+    expect(screen.getByText("Aucun assemblage pour cette configuration")).toBeInTheDocument();
+    expect(screen.getByText(/Cette configuration a bien été chargée/)).toBeInTheDocument();
+    // The pass is recognised: its own use case and budget are named.
+    expect(screen.getByText(/Jeux vidéo & Gaming/)).toBeInTheDocument();
+    expect(screen.getByText(/12\s?000\s?DH/)).toBeInTheDocument();
+    // …and it is not the unloaded state, whose copy claims nothing is loaded.
+    expect(screen.queryByText("Aucune configuration chargée")).toBeNull();
+    expect(screen.queryByText(fr.Configurator.summary.emptyBody)).toBeNull();
+  });
+
+  it("shows the engine's budget floor, never as a build price", () => {
+    renderPanel({ detail: zeroBuildDetail });
+
+    expect(screen.getByText("Budget minimum estimé")).toBeInTheDocument();
+    expect(screen.getByText(/8\s?450\s?DH/)).toBeInTheDocument();
+    // The floor is a diagnostic: no total, no badge, no components.
+    expect(screen.queryByText("Total indicatif")).toBeNull();
+    expect(screen.queryByText("Prix indicatif")).toBeNull();
+  });
+
+  it("omits the floor when the engine could not price one", () => {
+    renderPanel({
+      detail: {
+        ...asRecord(zeroBuildDetail),
+        budget_floor: {
+          cheapest_total: null,
+          currency: "MAD",
+          budget_amount: 12000,
+          within_budget: null,
+          cheapest_by_role: {},
+          missing_roles: ["GPU"],
+        },
+      } as never,
+    });
+
+    expect(screen.getByText("Aucun assemblage pour cette configuration")).toBeInTheDocument();
+    expect(screen.queryByText("Budget minimum estimé")).toBeNull();
+    expect(screen.queryByText(/^0/)).toBeNull();
+  });
+
+  it("omits the floor when the pass has none at all", () => {
+    renderPanel({
+      detail: { ...asRecord(zeroBuildDetail), budget_floor: null } as never,
+    });
+
+    expect(screen.getByText("Aucun assemblage pour cette configuration")).toBeInTheDocument();
+    expect(screen.queryByText("Budget minimum estimé")).toBeNull();
+  });
+
+  it("keeps a zero-build pass out of the generic empty state after a submit", () => {
+    renderPanel({
+      detail: zeroBuildDetail,
+      submitted: true,
+      requirements: { useCase: "OFFICE", budgetAmount: 8_000 },
+    });
+
+    expect(screen.getByText("Aucun assemblage pour cette configuration")).toBeInTheDocument();
+    expect(screen.queryByText(fr.Configurator.summary.reviewBody)).toBeNull();
+    expect(screen.queryByText(/Vos réponses/)).toBeNull();
+  });
+
+  it("renders a single-build pass as ready", () => {
+    const [firstBuild] = (detail as unknown as { builds: Record<string, unknown>[] }).builds;
+
+    renderPanel({
+      detail: { ...asRecord(detail), builds: [firstBuild] } as never,
+    });
+
+    expect(screen.getByText("AMD Ryzen 5 5600G")).toBeInTheDocument();
+    expect(screen.getByText(/11\s?946/)).toBeInTheDocument();
+    expect(screen.queryByText("Aucun assemblage pour cette configuration")).toBeNull();
   });
 
   it("closes the expanded summary on Escape and returns focus", () => {

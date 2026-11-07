@@ -23,6 +23,9 @@ const PRESET_LADDER = [5_000, 8_000, 12_000, 15_000] as const;
 export const FIRST_TOTAL = 11_946;
 export const SECOND_TOTAL = 13_480;
 
+/** The floor a zero-build pass reports, so a spec can assert the diagnostic. */
+export const FLOOR_TOTAL = 8_450;
+
 export const COMPONENT_NAMES = [
   "AMD Ryzen 5 5600",
   "NVIDIA GeForce RTX 4060",
@@ -61,6 +64,8 @@ export interface ConfiguratorApiControls {
   detailStatus: number | null;
   /** Read before each detail answer, so a spec can observe the loading state. */
   detailDelayMs: number;
+  /** Serve a pass that loaded successfully with `builds: []` and a priced floor. */
+  zeroBuilds: boolean;
 }
 
 export interface StubConfiguratorApi {
@@ -140,6 +145,22 @@ function detailBody(): PresetDetail {
   };
 }
 
+/** The same pass, loaded successfully: no assembled build, but a priced floor. */
+function zeroBuildBody(): PresetDetail {
+  return {
+    ...detailBody(),
+    builds: [],
+    budget_floor: {
+      cheapest_total: FLOOR_TOTAL,
+      currency: "MAD",
+      budget_amount: 12_000,
+      within_budget: false,
+      cheapest_by_role: {},
+      missing_roles: [],
+    },
+  };
+}
+
 export function detailCalls(stub: StubConfiguratorApi): string[] {
   return stub.calls.filter((call) => call.startsWith("GET /v1/recommendations/"));
 }
@@ -160,6 +181,7 @@ export async function stubConfiguratorApi(
   const controls: ConfiguratorApiControls = {
     detailStatus: null,
     detailDelayMs: 0,
+    zeroBuilds: false,
     ...options,
   };
 
@@ -239,7 +261,7 @@ export async function stubConfiguratorApi(
       return route.fulfill({
         status: 200,
         headers: JSON_HEADERS,
-        body: JSON.stringify(detailBody()),
+        body: JSON.stringify(controls.zeroBuilds ? zeroBuildBody() : detailBody()),
       });
     }
 

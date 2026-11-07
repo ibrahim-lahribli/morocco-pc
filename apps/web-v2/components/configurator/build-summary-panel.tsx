@@ -27,7 +27,7 @@ export interface BuildSummaryPanelProps {
   onRetry: () => void;
 }
 
-type SummaryState = "empty" | "loading" | "notFound" | "error" | "ready";
+type SummaryState = "empty" | "loading" | "notFound" | "error" | "ready" | "loadedNoBuilds";
 
 const ROLE_KEYS = new Map<string, string>([
   ["CPU", "CPU"],
@@ -57,13 +57,28 @@ function selectBuild(
   return detail.builds.find((build) => build.rank === activeRank) ?? detail.builds[0];
 }
 
+/**
+ * The floor's priced total, or `null` when the engine never priced one.
+ *
+ * `NULL` != `0`: an unpriced floor, a zero and an absent floor are all "no
+ * number". The floor is a lower-bound diagnostic, so it is never rendered as a
+ * build price and never used to claim a build is within budget.
+ */
+function pricedFloor(detail: PresetDetail | undefined): number | null {
+  const cheapest = detail?.budget_floor?.cheapest_total;
+  if (typeof cheapest !== "number" || !Number.isFinite(cheapest) || cheapest <= 0) return null;
+  return cheapest;
+}
+
 function resolveState(
   detail: PresetDetail | undefined,
   isPending: boolean,
   errorStatus: number | null,
 ): SummaryState {
   if (detail !== undefined) {
-    return detail.builds.length > 0 ? "ready" : "empty";
+    // A pass that loaded and assembled nothing is NOT the unloaded state: it has
+    // its own copy, its own floor and its own absence of a build.
+    return detail.builds.length > 0 ? "ready" : "loadedNoBuilds";
   }
   if (isPending) return "loading";
   if (errorStatus === 404) return "notFound";
@@ -78,6 +93,11 @@ function resolveState(
  * the bottom navigation that expands into the same sheet, never a second copy.
  * The API's `total_price`, `price_status` and `disclaimer` are the only price
  * claims; a missing price stays missing rather than becoming zero.
+ *
+ * A loaded pass with zero builds is its own state (`loadedNoBuilds`): it names
+ * the pass's own use case and budget, says plainly that nothing could be
+ * assembled, and shows the engine's `budget_floor` as a diagnostic — never as a
+ * build price, a component list or a compatibility verdict.
  */
 export function BuildSummaryPanel({
   detail,
@@ -105,6 +125,11 @@ export function BuildSummaryPanel({
   const badge = priceBadge(build?.price_status);
   const displayCurrency = currency === "MAD" ? tPrice("currency") : currency;
   const total = build?.total_price ?? null;
+  const disclaimer = detail?.disclaimer ?? null;
+  const floorTotal = pricedFloor(detail);
+  // The pass's own answers are worth showing in both loaded states: a zero-build
+  // pass still knows which question it answered.
+  const showsPassMeta = state === "ready" || state === "loadedNoBuilds";
   // The contract types `use_case` as `string`. An unrecognised value leaves the
   // label out rather than borrowing one that would name a different use case.
   const rawUseCase = detail?.use_case ?? null;
@@ -122,7 +147,9 @@ export function BuildSummaryPanel({
           ? t("errorTitle")
           : state === "empty"
             ? t("emptyTitle")
-            : null;
+            : state === "loadedNoBuilds"
+              ? t("noBuildsTitle")
+              : null;
 
   const close = () => {
     setOpen(false);
@@ -158,7 +185,7 @@ export function BuildSummaryPanel({
             {t("title")}
           </h2>
 
-          {state === "ready" &&
+          {showsPassMeta &&
           detail?.budget_amount !== null &&
           detail?.budget_amount !== undefined ? (
             <p className="mt-1 text-label-md text-muted">
@@ -176,8 +203,10 @@ export function BuildSummaryPanel({
                 {formatPrice(detail.budget_amount, displayCurrency)}
               </span>
             </p>
-          ) : state === "ready" ? (
-            <p className="mt-1 text-label-md text-muted lg:hidden">{t("eyebrow")}</p>
+          ) : showsPassMeta ? (
+            <p className="mt-1 text-label-md text-muted lg:hidden">
+              {headerStatus ?? t("eyebrow")}
+            </p>
           ) : (
             <p className="text-label-lg font-semibold text-foreground">{headerStatus}</p>
           )}
@@ -259,6 +288,32 @@ export function BuildSummaryPanel({
                   budget: formatPrice(requirements.budgetAmount, displayCurrency),
                 })}
               </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {state === "loadedNoBuilds" ? (
+          <div className="flex flex-col gap-3 p-4">
+            <div>
+              <p className="text-label-md font-semibold text-foreground">{t("noBuildsTitle")}</p>
+              <p className="mt-1 text-body-sm text-muted">{t("noBuildsBody")}</p>
+            </div>
+
+            {floorTotal !== null ? (
+              <div className="border-t border-border pt-3">
+                <p className="text-label-sm font-semibold text-muted">{t("floorLabel")}</p>
+                <p className="mt-0.5 text-label-lg font-bold text-foreground tabular-nums">
+                  {formatPrice(floorTotal, displayCurrency)}
+                </p>
+                <p className="mt-1 text-body-sm text-muted">{t("floorCaveat")}</p>
+              </div>
+            ) : null}
+
+            {disclaimer !== null ? (
+              <div className="border-t border-border pt-3">
+                <p className="text-label-sm font-semibold text-muted">{t("disclaimerLabel")}</p>
+                <p className="mt-1 text-body-sm text-muted">{disclaimer}</p>
+              </div>
             ) : null}
           </div>
         ) : null}

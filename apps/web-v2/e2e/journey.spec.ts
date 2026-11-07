@@ -209,8 +209,9 @@ test.describe("homepage to configurator", () => {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
 
     const bar = await page.locator('[data-slot="build-summary"]').boundingBox();
-    // The mobile nav is selected structurally, not by its translated label.
-    const navContent = await page.locator("nav.fixed ul").boundingBox();
+    // The mobile nav carries a stable slot hook, not a translated label or a
+    // utility class: a styling refactor must not be able to break this test.
+    const navContent = await page.locator('[data-slot="mobile-nav"] ul').boundingBox();
     expect(bar).not.toBeNull();
     expect(navContent).not.toBeNull();
     if (bar === null || navContent === null) return;

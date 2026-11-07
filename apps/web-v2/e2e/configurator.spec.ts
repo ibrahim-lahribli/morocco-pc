@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   COMPONENT_NAMES,
   FIRST_TOTAL,
+  FLOOR_TOTAL,
   FROM_ID,
   SECOND_TOTAL,
   detailCalls,
@@ -129,6 +130,27 @@ test.describe("configurator", () => {
 
     await page.getByRole("radio", { name: USAGE_GAMING }).check({ force: true });
     await expect(page.getByRole("radio", { name: USAGE_GAMING })).toBeChecked();
+
+    expectNoApiViolations(stub);
+  });
+
+  test("names a loaded pass that assembled nothing and shows its floor", async ({ page }) => {
+    const stub = await stubConfiguratorApi(page, { zeroBuilds: true });
+    await page.goto(`/fr/configurateur?from=${FROM_ID}`);
+
+    // Loaded: the pass's own use case and budget are named, and its own state
+    // is described — never "nothing is loaded".
+    await expect(page.getByText(/Usage · Jeux vidéo & Gaming/)).toBeVisible();
+    await expect(page.getByText(/Budget visé · 12\s?000\s?DH/)).toBeVisible();
+    await expect(page.getByText("Aucun assemblage pour cette configuration")).toBeVisible();
+    await expect(page.getByText(/Cette configuration a bien été chargée/)).toBeVisible();
+    await expect(page.getByText("Aucune configuration chargée")).toHaveCount(0);
+
+    // The floor is a diagnostic, not a build price: no total, no component list.
+    await expect(page.getByText("Budget minimum estimé")).toBeVisible();
+    await expect(page.getByText(money(FLOOR_TOTAL))).toBeVisible();
+    await expect(page.getByText("Total indicatif")).toHaveCount(0);
+    await expect(page.locator('[data-slot="build-summary"] dl')).toHaveCount(0);
 
     expectNoApiViolations(stub);
   });

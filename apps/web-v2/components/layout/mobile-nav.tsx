@@ -41,6 +41,7 @@ export function MobileNav({ label, items }: { label: string; items: readonly Mob
   return (
     <nav
       aria-label={label}
+      data-slot="mobile-nav"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-surface/95 pb-[env(safe-area-inset-bottom)] shadow-level-3 backdrop-blur-xl lg:hidden"
     >
       <ul className="mx-auto flex h-20 w-full max-w-page items-center justify-around px-space-xs">

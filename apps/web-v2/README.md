@@ -248,7 +248,7 @@ Fastify API; V2 owns presentation only.
 - ESLint (`next/core-web-vitals`, `next/typescript`)
 - Prettier + Tailwind class sorting
 - Vitest: dictionaries, price formatting, validation schema, Zustand store, kit accessibility, API config/error/retry/client/provider, and the configurator's URL contract, store, queries and form
-- `npm run check:api-types`: generated API types match `apps/api`'s contract- Playwright (54 specs): shell sections and breakpoints, finder answers/CTA/navigation, the cards'
+- `npm run check:api-types`: generated API types match `apps/api`'s contract- Playwright (55 specs): shell sections and breakpoints, finder answers/CTA/navigation, the cards'
   badges and empty/error states, pathways and the closing CTA, the Arabic/RTL pass (direction,
   typeface, mirroring, five widths in both locales, 360 px nav clearance), the configurator (deep
   links, form, loading/404/error/retry, ranked builds, locale switch, 360 px bars, no writes) and

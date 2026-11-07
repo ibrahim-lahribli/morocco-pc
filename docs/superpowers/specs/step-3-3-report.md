@@ -127,15 +127,15 @@ Scope proof (`git diff --stat 8da9521` over the protected set — `components/ho
 are `components/home/budget-usage-finder.tsx` and the comment-only `lib/homepage/config.ts`. No V1 or
 API file, no manifest and no lockfile changed.
 
+That table and the ones above are the **historical Step 3.3 run**, measured before Step 3.3.1. §K
+records the post-fix run separately rather than overwriting these numbers.
+
 ## H. Remaining issues
 
-1. **A generated pass with zero builds is mislabelled.** `resolveState` maps
-   `detail.builds.length === 0` to `"empty"`, so a `from` link to a real pass that assembled nothing
-   shows "Choisissez un usage et un budget, puis continuez" — or, after a submit, the
-   "aucune configuration n'a encore été générée" recap. Both are false: a configuration *is* loaded.
-   `budget_floor` is in the contract and read by nothing, so the plan's "a zero-build pass shows the
-   floor" line is unbuilt. This is a Step 3.2 state-machine gap that Step 3.3 exposes rather than
-   introduces; it needs its own small state (e.g. `"loadedNoBuilds"`) plus floor copy.
+1. ~~**A generated pass with zero builds is mislabelled.**~~ **CLOSED by Step 3.3.1 (§K).** As
+   recorded here originally: `resolveState` mapped `detail.builds.length === 0` to `"empty"`, so a
+   `from` link to a real pass that assembled nothing claimed nothing was loaded, and `budget_floor`
+   was read by nothing. The pass now has its own `loadedNoBuilds` state with its own copy and floor.
 2. **`reused: true` is not labelled.** The field is typed and returned; the summary never says that
    the pass it shows already existed. Harmless while nothing posts, load-bearing at 3.4.
 3. **Resolution and priority are still not asked** — nothing to gate on `inputs_applied` yet. That is
@@ -148,9 +148,11 @@ API file, no manifest and no lockfile changed.
 
 ## I. Git state
 
-Four commits on `feature/v2-design`, nothing pushed:
+Six commits stand on `feature/v2-design` above `8da9521`, and the branch tracks
+`origin/feature/v2-design`:
 
 ```
+9696e77 docs(web-v2): record the Step 3.3 journey and its measured gates
 9fff580 test(web-v2): pin the homepage to configurator journey end to end
 c4fd2e2 docs(web-v2): record the configurator step plans and the 3.1 review
 d996273 feat(web-v2): hand the homepage answers to the configurator
@@ -158,12 +160,18 @@ aefef1d chore(web-v2): wait for the homepage cards before capturing screenshots
 8da9521 docs(web-v2): record the Step 3.2 configurator foundation
 ```
 
+The five Step 3.3 commits are **on the remote**: `origin/feature/v2-design` points at `9696e77`, the
+same commit as local before this fix. An earlier revision of this section said "nothing was pushed"
+and listed four commits; both were wrong — the branch was pushed after that line was written, and the
+list omitted the commit that carried the report itself. The zero-build fix is the sixth commit (the
+one carrying this section) and stays local until the owner pushes.
+
 The pre-existing working tree was preserved rather than reverted: the six evidence screenshots and
 `scripts/screenshots.mjs` were committed intact as `aefef1d`, alongside — not mixed into — the Step 3.3
 change. `app/[locale]/simulateur-preview/` does not exist in this tree and nothing was removed.
 
 The plan says "do not commit or push"; the commits exist because the owner asked for them explicitly.
-Nothing was pushed.
+No further push was made by the agent.
 
 ## J. Step 3.4 recommendation
 
@@ -175,9 +183,55 @@ belong with that work rather than with this one, because only a real generation 
 The architecture fork at `docs/superpowers/specs/step-3-1-configurator-architecture.md` §13.2 (picker
 before or after the pass) still gates the catalogue grid and the GPU swap path, and not this step.
 
+## K. Step 3.3.1 — the loaded-with-no-builds state
+
+**Status:** implemented, tested and gated; the commit that carries this section is the sixth on the
+branch.
+
+`resolveState` now separates a pass that loaded and assembled nothing (`loadedNoBuilds`) from the
+unloaded `empty` state. The new state keeps the pass's own `use_case` and `budget_amount` in the
+header, states plainly that the configuration loaded but no compatible assembly was produced, and
+shows `budget_floor.cheapest_total` as an estimated minimum with its caveat — never as a build
+price, a component list or a compatibility verdict. The floor is omitted when `budget_floor` is
+`null`, when `cheapest_total` is `null`, and when the value is not positive and finite, so `NULL != 0`
+holds and no price is invented. Submitting cannot reach the generic empty copy from that state: the
+recap and the review body live only in the `empty` branch, and the state derives from the detail
+alone.
+
+Copy added under identical keys in both dictionaries: `summary.noBuildsTitle`, `noBuildsBody`,
+`floorLabel`, `floorCaveat`.
+
+Coverage added:
+
+| Suite | Tests |
+| --- | --- |
+| `tests/configurator/build-summary-panel.test.tsx` | no recommendation loaded (existing); **zero builds**; **zero builds after a submit**; **floor shown**; **floor unpriced** (`cheapest_total: null`); **floor absent** (`budget_floor: null`); **one build**; multiple builds (existing) |
+| `e2e/configurator.spec.ts` | **names a loaded pass that assembled nothing and shows its floor** — a valid `from` UUID whose response is `builds: []`; asserts the loaded recognition, the pass's use case and budget, the floor, the absence of the empty copy, of any total and of any component list, and no writes |
+
+Results measured after the fix (§G above stays the historical Step 3.3 run):
+
+| Command | Result |
+| --- | --- |
+| `npm run typecheck` | exit 0 |
+| `npm run lint` | exit 0 |
+| `npm run format:check` | exit 0 |
+| `npm run check:api-types` | exit 0 |
+| `npm test` | **144 passed** across 25 files (historical: 138) |
+| `npm run test:e2e` | **55 passed** in 23.6 s (historical: 54) |
+| `npm run build` | exit 0 |
+
+Also in this change: the Arabic journey test now locates the bottom nav through
+`data-slot="mobile-nav"` (added to `MobileNav`) instead of the utility class `nav.fixed ul`, so a
+styling refactor cannot break the geometry assertion; and the README spec count moved 54 → 55.
+
+Still open after this fix: the `reused: true` label (§H 2), the resolution/priority questions (§H 3)
+and the Arabic sign-off (§H 4).
+
 ## Verdict
 
 **CONDITIONAL** — the URL contract, the handoff, the truthful summary meta line and the whole
 journey pass every gate with no writes anywhere, but the summary still cannot distinguish "no pass
 loaded" from "a pass loaded and produced no build" (§H 1), and the Arabic copy is not
 native-approved (§E).
+
+**Step 3.3.1 closes condition 1** (§K). The verdict now rests on the unsigned Arabic copy alone.
