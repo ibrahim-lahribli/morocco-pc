@@ -156,5 +156,170 @@
         "three": "Niveau 3"
       }
     }
+  },
+  "Homepage": {
+    "banner": {
+      "label": "Configurations PC pour le Maroc",
+      "arabicBadge": "متوفر باللغة العربية"
+    },
+    "hero": {
+      "eyebrow": "Configurateur PC pour le Maroc",
+      "titleLead": "Le bon PC,",
+      "titleAccent": "au bon budget.",
+      "intro": "Gaming, études ou travail : trouvez une configuration selon votre budget et votre usage. Les prix affichés sont indicatifs et exprimés en dirhams marocains (MAD).",
+      "chip": {
+        "time": "1 minute chrono",
+        "free": "100 % Gratuit",
+        "noAccount": "Sans inscription requise"
+      },
+      "preview": {
+        "eyebrow": "Sélection du moment",
+        "score": "Score de configuration : {score}/100",
+        "caption": "Vue Référence",
+        "details": "Détails specs →"
+      }
+    },
+    "finder": {
+      "badge": "Simulateur Express",
+      "step": "Étape {current} sur {total}",
+      "budget": {
+        "question": "Quel est votre budget ?",
+        "hint": "Marché marocain (MAD)",
+        "unset": "À définir",
+        "presetLabel": "Budget de {amount}",
+        "customToggle": "Autre budget personnalisé",
+        "customLabel": "Budget exact en dirhams",
+        "customHint": "Entre {min} et {max} DH"
+      },
+      "usage": {
+        "question": "Que voulez-vous faire avec votre PC ?",
+        "gaming": {
+          "title": "Jeux vidéo & Gaming",
+          "body": "Fortnite, Valorant, GTA V, EA FC 24, Cyberpunk 2077…"
+        },
+        "office": {
+          "title": "Études et bureautique",
+          "body": "Cours, navigation 40+ onglets, Office, visioconférences HD"
+        },
+        "creation": {
+          "title": "Création et travail pro",
+          "body": "Montage 4K Premiere / DaVinci, Blender 3D, code et virtualisation"
+        }
+      },
+      "cta": "Trouver mon PC",
+      "ctaPending": "Recherche en cours…",
+      "note": "1 minute · 100 % Gratuit · Sans compte · Prix en dirhams",
+      "error": {
+        "required": "Choisissez un budget et un usage pour continuer.",
+        "budgetRange": "Saisissez un budget entre {min} et {max} DH.",
+        "submit": "La recherche a échoué. Réessayez.",
+        "rateLimited": "Trop de recherches. Réessayez dans {seconds} s."
+      }
+    },
+    "builds": {
+      "eyebrow": "Configurations prêtes à monter",
+      "title": "Trois usages, trois configurations",
+      "intro": "Découvrez un exemple de configuration pour le jeu, les études et le travail.",
+      "category": {
+        "gaming": "PC Gaming",
+        "office": "PC Bureautique",
+        "workstation": "PC Création & Professionnel"
+      },
+      "badge": {
+        "verified": "Prix vérifié",
+        "indicative": "Prix indicatif"
+      },
+      "priceLabel": "Prix de la configuration",
+      "budgetLabel": "Budget visé",
+      "scoreLabel": "Score de configuration",
+      "scoreValue": "{score}/100",
+      "scoreHelp": "Score calculé à partir des évaluations des composants et des inconnues de compatibilité. Ce n'est ni un FPS ni un benchmark.",
+      "cta": "Voir la configuration",
+      "empty": {
+        "title": "Aucune configuration disponible pour cet usage",
+        "body": "Aucune configuration complète n'est disponible dans les budgets pré-générés pour le moment."
+      },
+      "error": {
+        "title": "Les configurations n'ont pas pu être chargées",
+        "body": "Vérifiez votre connexion, puis réessayez.",
+        "retry": "Réessayer"
+      },
+      "loading": "Chargement des configurations…",
+      "budgetCap": "Configuration pré-générée la plus élevée disponible : {amount}"
+    },
+    "pathways": {
+      "eyebrow": "Catégories & usages",
+      "gaming": "Gaming",
+      "office": "Études & bureautique",
+      "workstation": "Création & travail professionnel",
+      "gaming1080": "Gaming 1080p",
+      "gaming1440": "Gaming 1440p"
+    },
+    "trust": {
+      "eyebrow": "Transparence & rigueur",
+      "title": "Pourquoi faire confiance à Morocco-PC ?",
+      "intro": "Nous ne vendons aucun composant en direct. Notre seul objectif est de vous éviter les erreurs d'achat et les dépenses superflues.",
+      "pillars": {
+        "compatibility": {
+          "title": "Compatibilité analysée",
+          "body": "Les composants sont contrôlés selon les caractéristiques et les règles de compatibilité disponibles (socket, mémoire, dimensions et alimentation). Certaines données peuvent rester inconnues.",
+          "foot": "Les statuts reflètent les contrôles réellement effectués"
+        },
+        "prices": {
+          "title": "Prix indicatifs en dirhams (MAD / DH)",
+          "body": "Les montants proviennent des offres enregistrées et leur provenance est indiquée. Ils peuvent différer des prix actuellement pratiqués en boutique.",
+          "foot": "Prix non actualisés en temps réel"
+        },
+        "free": {
+          "title": "100 % Gratuit & sans compte",
+          "body": "Obtenez vos recommandations en toute liberté, sans avoir besoin de créer un compte ni laisser de coordonnées personnelles ou numéro de téléphone.",
+          "foot": "Libre accès immédiat"
+        }
+      },
+      "methodologyLink": "Comment fonctionnent nos recommandations ?"
+    },
+    "guides": {
+      "eyebrow": "Conseils pratiques",
+      "title": "Bien choisir son PC au Maroc",
+      "intro": "Nos guides d'achat indépendants pour comprendre le matériel avant de dépenser.",
+      "all": "Tous les guides d'achat",
+      "readingTime": "{minutes} min de lecture",
+      "cta": "Lire le guide",
+      "categories": {
+        "practical": "Guide pratique",
+        "comparison": "Comparatif",
+        "advice": "Conseils",
+        "special": "Dossier spécial"
+      },
+      "items": {
+        "budget": {
+          "title": "Quel budget pour un PC gamer au Maroc ?"
+        },
+        "gpu": {
+          "title": "Bien choisir sa carte graphique : Nvidia RTX vs AMD Radeon"
+        },
+        "ram": {
+          "title": "Combien de RAM faut-il vraiment : 16 Go ou 32 Go ?"
+        },
+        "portable": {
+          "title": "PC fixe vs PC portable au Maroc : le vrai comparatif"
+        }
+      }
+    },
+    "finalCta": {
+      "eyebrow": "Diagnostic personnalisé",
+      "title": "Pas sûr de votre choix de configuration ?",
+      "body": "Laissez-nous vous guider pas à pas pour trouver le PC exactement adapté à votre budget, à vos jeux préférés et à vos logiciels de travail.",
+      "cta": "Trouver mon PC en 1 minute"
+    },
+    "footer": {
+      "location": "Casablanca · Rabat · Maroc",
+      "links": {
+        "about": "À propos",
+        "stores": "Boutiques",
+        "methodology": "Méthodologie",
+        "contact": "Contact"
+      }
+    }
   }
 }

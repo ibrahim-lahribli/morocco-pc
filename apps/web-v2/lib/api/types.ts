@@ -27,3 +27,12 @@ export type RecommendationResponse = JsonBody<
 >;
 
 export type PresetsResponse = JsonBody<paths["/v1/presets"]["get"]["responses"][200]>;
+
+/** One row of the preset ladder: a pointer to a persisted pass, not a build. */
+export type Preset = PresetsResponse["presets"][number];
+export type PriceStatus = Preset["price_status"];
+
+/** `GET /v1/recommendations/{id}` — the detail read behind one card. */
+export type PresetDetail = JsonBody<paths["/v1/recommendations/{id}"]["get"]["responses"][200]>;
+export type PresetBuild = PresetDetail["builds"][number];
+export type BuildComponent = PresetBuild["components"][number];
