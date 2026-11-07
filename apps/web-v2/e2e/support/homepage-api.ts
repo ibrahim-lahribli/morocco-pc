@@ -30,6 +30,13 @@ export interface StubHomepageApiOptions {
   failPresetsStatus?: number;
   /** Overrides the price status the served build reports, per use case. */
   detailBadge?: Partial<Record<string, "verified" | "indicative" | null>>;
+  /**
+   * Test latency before the presets answer, so a spec can observe the pending
+   * state of a ladder it is waiting on. Never a product sleep.
+   */
+  presetsDelayMs?: number;
+  /** Test latency before a detail answer, for the same reason. */
+  detailDelayMs?: number;
 }
 
 export interface StubHomepageApiResult {
@@ -49,6 +56,11 @@ const JSON_HEADERS = {
   "content-type": "application/json",
   "access-control-allow-origin": "*",
 };
+
+/** Hold a stub answer open for `ms`, so the caller can observe its pending state. */
+function wait(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
 
 export function presetIdFor(useCase: string, budgetAmount: number): string {
   return `rec-${useCase}-${budgetAmount}`;
@@ -136,6 +148,7 @@ export async function stubHomepageApi(
 
     if (url.pathname === "/v1/presets") {
       const useCase = url.searchParams.get("use_case") ?? "";
+      await wait(options.presetsDelayMs ?? 0);
 
       if (options.failPresetsFor?.includes(useCase)) {
         return route.fulfill({
@@ -167,6 +180,7 @@ export async function stubHomepageApi(
 
     if (url.pathname.startsWith("/v1/recommendations/")) {
       const id = decodeURIComponent(url.pathname.split("/").pop() ?? "");
+      await wait(options.detailDelayMs ?? 0);
       const useCase = id.split("-")[1] ?? "";
       const badge = options.detailBadge?.[useCase] ?? DEFAULT_BADGE[useCase] ?? null;
 
