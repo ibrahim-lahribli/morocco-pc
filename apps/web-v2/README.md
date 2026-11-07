@@ -4,15 +4,17 @@ The V2 frontend foundation: a standalone Next.js App Router application with a
 bilingual (French / Arabic) design system. It runs independently of V1
 (`apps/web`) and shares no frontend code with it.
 
-> **Status: homepage (Step 1) complete, pending native review of the Arabic
-> copy.** The page is seven sections — hero with the budget/usage finder,
-> recommended configurations, discovery pathways, trust, guides, closing call to
-> action, footer — over the design tokens, the component kit, i18n and the typed
-> API client. It performs **only GETs** (`/v1/meta/options`, `/v1/presets`,
-> `/v1/recommendations/{id}`); `NEXT_PUBLIC_HOMEPAGE_SUBMIT` is off, so no
-> recommendation `POST` exists. Resolution shortcuts, the submit path and the
-> results route are deferred to Step 2. No catalog, results or saved-builds page
-> exists.
+> **Status: homepage (Step 1) and the configurator foundation (Step 3.2)
+> complete, pending native review of the Arabic copy.** The homepage is seven
+> sections — hero with the budget/usage finder, recommended configurations,
+> discovery pathways, trust, guides, closing call to action, footer — over the
+> design tokens, the component kit, i18n and the typed API client. The
+> configurator at `/{locale}/configurateur` reads its two answers from
+> `use_case` and `budget`, opens an existing pass from `from=<uuid>` and renders
+> a summary beside the form (a fixed bar above the mobile nav below `lg`). Both
+> screens perform **only GETs** (`/v1/meta/options`, `/v1/presets`,
+> `/v1/recommendations/{id}`); no recommendation `POST` exists. There is no
+> catalogue picker, no swap and no results route yet.
 
 ## Requirements
 
@@ -73,12 +75,15 @@ Copy `.env.example` to `.env.local`. Documented names:
 | `NEXT_PUBLIC_API_BASE_URL` | browser          | Public API v1 origin; inlined at build time; defaults to `http://localhost:3000`          |
 | `API_BASE_URL`             | server only      | Server-side API origin for server components/route handlers; falls back to the public one |
 
-The homepage reads the API and needs no credentials: on load it issues
-`GET /v1/meta/options`, one `GET /v1/presets` per use case, then one
-`GET /v1/recommendations/{id}` per rendered card. It never writes. A browser
-call to the API only succeeds when the API's own `ALLOWED_ORIGINS` includes this
-app's origin (`http://localhost:3220` locally); with no API listening the cards
-show their per-slot error state and the rest of the page is unaffected.
+The homepage and the configurator read the API and need no credentials. On load
+the homepage issues `GET /v1/meta/options`, one `GET /v1/presets` per use case,
+then one `GET /v1/recommendations/{id}` per rendered card; the configurator
+issues `GET /v1/meta/options` once and, only for a `from=<uuid>` URL, a single
+`GET /v1/recommendations/{id}`. Neither writes.
+A browser call to the API only succeeds when the API's own `ALLOWED_ORIGINS`
+includes this app's origin (`http://localhost:3220` locally); with no API
+listening, homepage cards show their per-slot error state, the configurator
+shows its error panel, and the rest of the page is unaffected.
 
 Both API variables are optional, and an empty value means the same as an unset
 one. With neither set, the browser and the server both default to
@@ -87,31 +92,51 @@ API configuration at all — only a listening API. A blank `API_BASE_URL=` does
 not shadow a valid `NEXT_PUBLIC_API_BASE_URL`, and `isApiConfigured()` is false
 only when neither variable names an origin.
 
-The homepage's configuration cards are the only consumer. Nothing else in the
-app calls the API, and no live-API run has been recorded yet: every browser test
-stubs `/v1/**` through `e2e/support/homepage-api.ts`.
+Nothing else in the app calls the API, and no live-API run has been recorded
+yet: every browser test stubs `/v1/**` through `e2e/support/homepage-api.ts` or
+`e2e/support/configurator-api.ts`.
 
 ## Structure
 
 ```
-app/[locale]/          locale-rooted layout, homepage, 404
+app/[locale]/          locale-rooted layout, homepage, configurateur, 404
 components/ui/         shared kit: Button, Badge, Card, TextField (barrel index.ts)
 components/layout/     header, primary/mobile nav, logo, locale switcher, footer
 components/home/       seven homepage sections; islands: finder, cards, pathways, closing CTA
+components/configurator/ requirements form, summary panel, client shell
 i18n/                  routing, request config, locale-aware navigation
 messages/              fr.json, ar.json
 lib/                   utils, price formatter, demo budget presets
 lib/homepage/          finder schema, store, guides, build view-model, flags, use-presets
+lib/configurator/      URL contract, form schema, per-mount store, queries
 lib/api/               generated schema, client, config, errors, query defaults, derived types
 components/providers/  ApiProvider (TanStack Query, client component)
 scripts/               OpenAPI type generation and drift check, screenshot capture
-tests/                 Vitest unit tests (including tests/api/)
-e2e/                   Playwright specs (shell, finder, cards, Arabic/RTL) + support/
+tests/                 Vitest unit tests (including tests/api/ and tests/configurator/)
+e2e/                   Playwright specs (shell, finder, cards, configurator, Arabic/RTL) + support/
 docs/                  DESIGN_SYSTEM.md, homepage-arabic-review.md, evidence screenshots
 ```
 
 The supplied Stitch references stay untouched in
 `stitch_morocco_pc_builder_app/`.
+
+## Configurator
+
+`/{locale}/configurateur` asks two questions — use case and budget — and renders a
+build summary beside them. The URL is the only input:
+
+| Query      | Accepted                          | Invalid value                    |
+| ---------- | --------------------------------- | -------------------------------- |
+| `use_case` | `GAMING`, `OFFICE`, `WORKSTATION` | cleared, message under the group |
+| `budget`   | integer in `[3 500, 100 000]`     | kept verbatim, range message     |
+| `from`     | canonical 8-4-4-4-12 hex UUID     | link error, no request issued    |
+
+Invalid values are shown, never clamped, and valid neighbours survive. The page
+does not rewrite the URL. `Continuer` validates, stores the answers and moves
+focus to the summary heading; it generates nothing. A `from` link loads that
+pass (loading, ready, not-found and error-with-retry states); a build's missing
+price stays absent rather than becoming `0`. Arabic is authored with key parity
+and is not native-approved.
 
 ## Design system
 
@@ -144,8 +169,8 @@ the dictionaries drift in keys or interpolation placeholders.
 
 ## API client
 
-The foundation is installed; the homepage's configuration cards are its only
-consumer:
+The foundation is installed; the homepage cards and the configurator are its
+consumers:
 
 - `@tanstack/react-query` — client cache and retry policy
 - `openapi-typescript` — generates `lib/api/schema.d.ts` from the API contract
@@ -221,9 +246,9 @@ Fastify API; V2 owns presentation only.
 - TypeScript strict, including `noUncheckedIndexedAccess`
 - ESLint (`next/core-web-vitals`, `next/typescript`)
 - Prettier + Tailwind class sorting
-- Vitest: dictionaries, price formatting, validation schema, Zustand store, kit accessibility, API config/error/retry/client/provider
+- Vitest: dictionaries, price formatting, validation schema, Zustand store, kit accessibility, API config/error/retry/client/provider, and the configurator's URL contract, store, queries and form
 - `npm run check:api-types`: generated API types match `apps/api`'s contract
-- Playwright (21 specs): shell sections and breakpoints, finder answers/CTA/focus, the cards' badges and empty/error states, pathways and the closing CTA, and the Arabic/RTL pass (direction, typeface, mirroring, five widths in both locales, 360 px nav clearance)
+- Playwright (44 specs): shell sections and breakpoints, finder answers/CTA/focus, the cards' badges and empty/error states, pathways and the closing CTA, the Arabic/RTL pass (direction, typeface, mirroring, five widths in both locales, 360 px nav clearance), and the configurator (deep links, form, loading/404/error/retry, ranked builds, locale switch, 360 px bars, no writes)
 
 ## Scope guard
 
