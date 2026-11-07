@@ -5,15 +5,19 @@ import type { PresetDetail } from "../../lib/api/types";
 /**
  * Stub every `/v1/**` call the configurator can make.
  *
- * Step 3.2 is read-only: `meta/options` for the currency and
+ * Read-only: `meta/options` for the currency, `presets` for the homepage leg of
+ * the journey (the Step 3.3 spec drives both screens through this one stub) and
  * `recommendations/{id}` for the pass behind a `?from=` link. Nothing here
  * reaches a real API. A non-GET method is recorded as a write and answered
- * `405`; an API path outside those two is recorded as unmatched and answered
- * `404`, so an unexpected call fails the spec instead of returning fixture
- * data that hides it.
+ * `405`; any other API path is recorded as unmatched and answered `404`, so an
+ * unexpected call fails the spec instead of returning fixture data that hides
+ * it.
  */
 
 export const FROM_ID = "3b157941-b4df-4945-a6ae-e6e079644e4c";
+
+/** The same four-tier ladder the homepage stub serves, so both legs agree. */
+const PRESET_LADDER = [5_000, 8_000, 12_000, 15_000] as const;
 
 /** Rank 1 total, and the rank 2 total a spec observes after switching. */
 export const FIRST_TOTAL = 11_946;
@@ -192,6 +196,27 @@ export async function stubConfiguratorApi(
           resolutions: [],
           priorities: [],
           inputs_applied: ["use_case"],
+        }),
+      });
+    }
+
+    if (url.pathname === "/v1/presets") {
+      // One row per tier for any advertised use case: the homepage's cards pick
+      // the tier at or below the ceiling from this ladder, and the ids are the
+      // ones the journey asserts in the URL.
+      const useCase = url.searchParams.get("use_case") ?? "";
+      return route.fulfill({
+        status: 200,
+        headers: JSON_HEADERS,
+        body: JSON.stringify({
+          catalog_version: "stub-v1",
+          generated_at: null,
+          presets: PRESET_LADDER.map((budget_amount) => ({
+            budget_amount,
+            recommendation_id: `rec-${useCase}-${budget_amount}`,
+            build_score: 60 + budget_amount / 1_000,
+            price_status: "indicative",
+          })),
         }),
       });
     }
