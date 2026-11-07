@@ -1225,3 +1225,19 @@ Defaults are chosen so implementation can start; each answer may change the spec
 | Q-18 | The peer rule drops the approved frame's filter tabs and the "Le plus recommandé" badge. Accept the fidelity trade?                             | yes: three peers, no tabs, no ranking badge                                                                                                                                               | visual fidelity to `19:172`                    |
 | Q-19 | With one card per use case, which preset backs the hero's "Sélection du moment" preview?                                                        | the Gaming card's preset already fetched for section 3 (highest at or below 12,000 MAD; no extra request)                                                                                 | hero content, request count                    |
 | Q-20 | Resolution cannot be applied before the Step 2 results route: should the 1080p / 1440p shortcuts ship in the first release?                     | **approved**: hide both variants in the first release, implement no simulated resolution filtering, and restore them once a selected resolution reaches a served card                     | discovery parity with the mobile frame         |
+
+## 19. Deferred cosmetic polish (not release-gating)
+
+Two desktop-only presentation defects were observed during the independent review. They are
+recorded here so they are not lost, and they are deliberately **not** fixed in the closure
+pass: changing them would move approved card geometry.
+
+1. **Spec-pill wrapping at desktop widths.** Four pills can wrap to a second line in the
+   third card, which makes the three peer cards read as unequal heights.
+2. **Score/price row offset.** The score row and the price row do not share a baseline
+   across the three cards when a rationale is present.
+
+Any fix belongs to a design-reviewed change that keeps the three cards at equal weight, may
+not alter the token set, and must re-run `e2e/homepage-builds.spec.ts` plus
+`e2e/homepage.spec.ts`. A visible loading indicator or `aria-busy` redesign is a separate
+proposal and is not part of this backlog.
