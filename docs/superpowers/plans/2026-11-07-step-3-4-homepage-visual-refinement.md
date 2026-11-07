@@ -10,6 +10,27 @@
 
 **Spec:** the Step 3.4 brief (owner message, 2026-11-07) and, as its measurable source, `apps/web-v2/docs/sections/01-homepage.md` (frame-derived: desktop node `19:3`, mobile node `23:1179`), `apps/web-v2/docs/DESIGN_SYSTEM.md`, `apps/web-v2/stitch_morocco_pc_builder_app/accueil_morocco_pc/{code.html,screen.png}`.
 
+## Task ledger (reconciled 2026-11-07, Step 3.4.1)
+
+All eight tasks are delivered and were checked against their commits. The per-step boxes inside each
+task stay unticked: three tasks were executed with the deviations described below rather than
+verbatim, and ticking a step whose wording the work deliberately diverged from would misstate the
+record.
+
+- [x] **Task 1 — Baseline, source record and a non-destructive screenshot harness** (`12b5350`)
+- [x] **Task 2 — One section-header system** (`6e95ab3`)
+- [x] **Task 3 — Hero composition: two lines, 64 px, one measure** (`eec672a`)
+- [x] **Task 4 — Card geometry: one baseline, readable pills, stable slots** (`9bf897d`)
+- [x] **Task 5 — The two untested breakpoints** (`930a100`)
+- [x] **Task 6 — A gate for the RTL rule the design system already states** (`c552ca0`)
+- [x] **Task 7 — Imagery decisions: documented, not invented** (`a67f9ee`)
+- [x] **Task 8 — After screenshots, gates, report** (`f68cb79`)
+
+Three documented deviations, all in `docs/superpowers/specs/step-3-4-report.md` §I: Task 4 added
+`leading-7` and `min-w-0` beyond the plan's minimum; Task 5 wrote the 1024 px configurator check as
+its own spec instead of extending the 360 px one; Task 6 shipped a regex gate that Step 3.4.1 later
+replaced with the token-aware matcher (same rule, wider and now unit-tested coverage).
+
 ## Source-of-truth status (read before Task 1)
 
 The brief names the Figma desktop frame as the primary reference. **Figma is not readable in this session:** `figma-context.get_figma_data` on file `OwaMKYnDfH2AQqj7y0bn2H`, node `0:1` returned HTTP 429 ("Figma API rate limit hit", retry after ≈56 967 s, starter plan). Therefore:
@@ -44,11 +65,13 @@ Cases the brief's tests do not name but that a visitor will hit; each gets a tes
 ### Task 1: Baseline, source record and a non-destructive screenshot harness
 
 **Files:**
+
 - Modify: `apps/web-v2/scripts/screenshots.mjs`
 - Create: `apps/web-v2/docs/screenshots/step-3-4/before-*.png` (generated, committed as evidence)
 - Modify: `apps/web-v2/README.md` (the `screenshots` row)
 
 **Interfaces:**
+
 - Produces: `SCREENSHOT_OUTPUT_DIR` env var, default `docs/screenshots` (unchanged behaviour when unset), honoured as a path relative to `apps/web-v2`.
 
 - [ ] **Step 1: Record the baseline**
@@ -65,7 +88,10 @@ Call `get_figma_data` with `{ fileKey: "OwaMKYnDfH2AQqj7y0bn2H", nodeId: "0:1" }
 `scripts/screenshots.mjs` currently hard-codes `path.resolve(process.cwd(), "docs/screenshots")`. Replace it with:
 
 ```js
-const outputDir = path.resolve(process.cwd(), process.env.SCREENSHOT_OUTPUT_DIR ?? "docs/screenshots");
+const outputDir = path.resolve(
+  process.cwd(),
+  process.env.SCREENSHOT_OUTPUT_DIR ?? "docs/screenshots",
+);
 ```
 
 - [ ] **Step 4: Capture the "before" set against a data-bearing page**
@@ -92,6 +118,7 @@ git commit -m "chore(web-v2): let the screenshot harness target a subdirectory"
 ### Task 2: One section-header system
 
 **Files:**
+
 - Create: `apps/web-v2/components/home/section-heading.tsx`
 - Modify: `apps/web-v2/components/home/recommended-build-section.tsx` (the `<div className="max-w-2xl">…` block)
 - Modify: `apps/web-v2/components/home/trust-highlights.tsx` (the `<div className="text-center">…` block)
@@ -99,13 +126,22 @@ git commit -m "chore(web-v2): let the screenshot harness target a subdirectory"
 - Test: `apps/web-v2/tests/homepage/section-heading.test.tsx`, `apps/web-v2/e2e/homepage.spec.ts`
 
 **Interfaces:**
+
 - Produces: `SectionHeading(props: { id: string; eyebrow: string; title: string; intro?: string; eyebrowFrom?: "base" | "md"; align?: "start" | "center"; action?: React.ReactNode }): JSX.Element`, rendering `<p class="text-label-md font-semibold tracking-wide text-primary uppercase">` (hidden below `md` when `eyebrowFrom` is `"md"`, its default), `<h2 id={id} class="mt-1 text-headline-md text-balance text-foreground lg:text-headline-lg">`, and `<p class="mt-1.5 max-w-prose text-body-md text-muted">` hidden below `md`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```tsx
 it("renders one h2 per section with a stable id and an optional action", () => {
-  render(<SectionHeading id="guides-title" eyebrow="N" title="T" intro="I" action={<span>all</span>} />);
+  render(
+    <SectionHeading
+      id="guides-title"
+      eyebrow="N"
+      title="T"
+      intro="I"
+      action={<span>all</span>}
+    />,
+  );
   const heading = screen.getByRole("heading", { level: 2, name: "T" });
   expect(heading).toHaveAttribute("id", "guides-title");
   expect(screen.getByText("N")).toHaveClass("hidden", "md:block");
@@ -132,9 +168,14 @@ Expected: PASS, and the three existing heading-name assertions unchanged.
 In `e2e/homepage.spec.ts`:
 
 ```ts
-test("gives the three section headings one size per breakpoint", async ({ page }) => {
+test("gives the three section headings one size per breakpoint", async ({
+  page,
+}) => {
   await stubHomepageApi(page);
-  for (const [width, expected] of [[390, 22], [1280, 28]] as const) {
+  for (const [width, expected] of [
+    [390, 22],
+    [1280, 28],
+  ] as const) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/fr");
     const sizes = await page.evaluate(() =>
@@ -159,10 +200,12 @@ git commit -m "feat(web-v2): give the homepage one section-header system"
 ### Task 3: Hero composition — two lines, 64 px, one measure
 
 **Files:**
+
 - Modify: `apps/web-v2/components/home/homepage-hero.tsx`
 - Test: `apps/web-v2/e2e/homepage.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `SectionHeading` is **not** used here (the hero owns the page's only `<h1>`). The `HomepageHero` props are unchanged.
 
 **Why:** the frame's H1 is two lines — "Le bon PC," then "au bon budget." — with the accent phrase on line 2 (`01-homepage.md` §4). The shipped markup puts both phrases in one inline flow inside a ≈588 px column at 1280, so the break is left to the browser's wrap: at 40 px the pair can land on one line, and nothing in the code encodes the frame's composition. The spec also fixes the hero's vertical padding at **64 px** from `lg`; the component ships `pt-8 lg:pt-12` (32/48).
@@ -170,12 +213,16 @@ git commit -m "feat(web-v2): give the homepage one section-header system"
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-test("sets the hero heading on two lines and its padding per the spec", async ({ page }) => {
+test("sets the hero heading on two lines and its padding per the spec", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/fr");
-  const boxes = await page.locator("#hero-title span").evaluateAll((spans) =>
-    spans.map((span) => span.getBoundingClientRect().toJSON()),
-  );
+  const boxes = await page
+    .locator("#hero-title span")
+    .evaluateAll((spans) =>
+      spans.map((span) => span.getBoundingClientRect().toJSON()),
+    );
   expect(boxes).toHaveLength(2); // one block span per line
   expect(boxes[1]!.top).toBeGreaterThan(boxes[0]!.bottom - 2); // line 2 starts below line 1
   const paddingTop = await page
@@ -195,7 +242,10 @@ Expected: FAIL — `boxes[1].top` sits inside line 1 (single line), padding is 4
 In `HomepageHero`: `className="… pt-10 lg:pt-16"` (40/64) on `section#top`. Wrap the lead and the accent in `block` spans so the composition is structural, not width-dependent:
 
 ```tsx
-<h1 id="hero-title" className="mt-3 text-display text-foreground lg:text-display-lg">
+<h1
+  id="hero-title"
+  className="mt-3 text-display text-foreground lg:text-display-lg"
+>
   <span className="block">{titleLead}</span>
   <span className="block bg-linear-to-r from-primary-deep to-primary bg-clip-text text-transparent">
     {titleAccent}
@@ -222,11 +272,13 @@ git commit -m "fix(web-v2): compose the hero heading on two lines at the spec's 
 ### Task 4: Card geometry — one baseline, readable pills, stable slots
 
 **Files:**
+
 - Modify: `apps/web-v2/components/home/featured-build-card.tsx` (the `<dl>` block)
 - Modify: `apps/web-v2/components/home/spec-pill.tsx`
 - Test: `apps/web-v2/tests/homepage/spec-pill.test.tsx`, `apps/web-v2/e2e/homepage-builds.spec.ts`
 
 **Interfaces:**
+
 - `SpecPill` keeps `children: React.ReactNode`; only its classes change (`truncate` → `break-words` with `min-w-0`).
 - The card keeps its `data-slot="build-card"`, `aria-labelledby` and every data field.
 
@@ -264,19 +316,25 @@ test("aligns a card's score and price on one baseline", async ({ page }) => {
   await stubHomepageApi(page);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/fr");
-  const bottoms = await page.locator('[data-slot="build-card"] dl dd').evaluateAll((dds) =>
-    dds.slice(0, 2).map((dd) => dd.getBoundingClientRect().bottom),
-  );
+  const bottoms = await page
+    .locator('[data-slot="build-card"] dl dd')
+    .evaluateAll((dds) =>
+      dds.slice(0, 2).map((dd) => dd.getBoundingClientRect().bottom),
+    );
   expect(Math.abs(bottoms[0]! - bottoms[1]!)).toBeLessThanOrEqual(1);
 });
 
 test("keeps an erroring slot the height of a filled card", async ({ page }) => {
-  await page.route("**/v1/**", (route) => route.fulfill({ status: 503, body: "{}" }));
+  await page.route("**/v1/**", (route) =>
+    route.fulfill({ status: 503, body: "{}" }),
+  );
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/fr");
-  const heights = await page.locator("#configurations > div > article").evaluateAll((cards) =>
-    cards.map((card) => card.getBoundingClientRect().height),
-  );
+  const heights = await page
+    .locator("#configurations > div > article")
+    .evaluateAll((cards) =>
+      cards.map((card) => card.getBoundingClientRect().height),
+    );
   expect(new Set(heights.map((h) => Math.round(h))).size).toBe(1);
 });
 ```
@@ -296,10 +354,12 @@ git commit -m "fix(web-v2): align the build card's score and price and unclamp s
 ### Task 5: The two untested breakpoints
 
 **Files:**
+
 - Modify: `apps/web-v2/e2e/homepage-i18n.spec.ts` (`BREAKPOINTS`)
 - Modify: `apps/web-v2/e2e/configurator.spec.ts` (the 360 px bar test, extended to 1024)
 
 **Interfaces:**
+
 - Consumes: `stubHomepageApi`, `waitForSettledCards`, `horizontalOverflow` (unchanged).
 
 - [ ] **Step 1: Write the failing test**
@@ -314,16 +374,31 @@ Expected: PASS if the layout is already sound; a non-zero value names the offend
 - [ ] **Step 3: Assert the `lg` boundary itself**
 
 ```ts
-test("keeps the three cards one row at 1024 and stacked at 1023", async ({ page }) => {
+test("keeps the three cards one row at 1024 and stacked at 1023", async ({
+  page,
+}) => {
   await stubHomepageApi(page);
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto("/fr");
-  const wide = await page.locator("#configurations article").evaluateAll((cards) =>
-    cards.map((card) => card.getBoundingClientRect().top),
-  );
+  const wide = await page
+    .locator("#configurations article")
+    .evaluateAll((cards) =>
+      cards.map((card) => card.getBoundingClientRect().top),
+    );
   expect(new Set(wide.map((top) => Math.round(top))).size).toBe(1);
   await page.setViewportSize({ width: 1023, height: 900 });
-  await expect.poll(async () => new Set(await page.locator("#configurations article").evaluateAll((cards) => cards.map((card) => Math.round(card.getBoundingClientRect().top)))).size).toBeGreaterThan(1);
+  await expect
+    .poll(
+      async () =>
+        new Set(
+          await page
+            .locator("#configurations article")
+            .evaluateAll((cards) =>
+              cards.map((card) => Math.round(card.getBoundingClientRect().top)),
+            ),
+        ).size,
+    )
+    .toBeGreaterThan(1);
 });
 ```
 
@@ -339,10 +414,12 @@ git commit -m "test(web-v2): cover the 768 and 1024 breakpoints and the lg card 
 ### Task 6: A gate for the RTL rule the design system already states
 
 **Files:**
+
 - Create: `apps/web-v2/tests/homepage/rtl-utilities.test.ts`
 - Test: same file
 
 **Interfaces:**
+
 - Produces: a Vitest suite that reads every `.tsx` under `components/`, asserts none contains a physical-direction utility, and lists every offender by file and line.
 
 **Why:** `DESIGN_SYSTEM.md` forbids `ml/mr/pl/pr`, `left/right`, `text-left/right`, `border-l/r`, `rounded-l/r`. Until now that rule was enforced by reviewer memory; the visual refinement pass is exactly when a physical utility slips in.
@@ -350,7 +427,8 @@ git commit -m "test(web-v2): cover the 768 and 1024 breakpoints and the lg card 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-const FORBIDDEN = /\b(?:ml|mr|pl|pr|border-l|border-r|rounded-l|rounded-r|text-left|text-right)-(?:\[|[a-z0-9])|\b(?:left|right)-\[/g;
+const FORBIDDEN =
+  /\b(?:ml|mr|pl|pr|border-l|border-r|rounded-l|rounded-r|text-left|text-right)-(?:\[|[a-z0-9])|\b(?:left|right)-\[/g;
 
 it("uses logical direction utilities in every component", async () => {
   const files = await glob("components/**/*.tsx");
@@ -379,10 +457,12 @@ git commit -m "test(web-v2): enforce logical direction utilities across componen
 ### Task 7: Imagery decisions — documented, not invented
 
 **Files:**
+
 - Modify: `apps/web-v2/docs/sections/01-homepage.md` (Q-03 row / imagery note)
 - Test: `apps/web-v2/e2e/homepage.spec.ts`
 
 **Interfaces:**
+
 - No component change. Every media slot stays the token gradient (`BuildMediaPlaceholder`, `HeroRigPreview`, `GuideCard`).
 
 **Why:** the brief asks to prioritise real PC imagery "where approved assets are available". None are: the repository ships no photography and §1.2 forbids hot-linking the design file. Inventing stock imagery would violate "do not use unrelated stock imagery". The deliverable is therefore a recorded decision plus a guarantee that no external image dependency appeared.
@@ -390,17 +470,25 @@ git commit -m "test(web-v2): enforce logical direction utilities across componen
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-test("loads no external image and keeps every media slot decorative", async ({ page }) => {
+test("loads no external image and keeps every media slot decorative", async ({
+  page,
+}) => {
   const external: string[] = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
-    if (request.resourceType() === "image" && url.origin !== "http://localhost:3210") external.push(url.href);
+    if (
+      request.resourceType() === "image" &&
+      url.origin !== "http://localhost:3210"
+    )
+      external.push(url.href);
   });
   await stubHomepageApi(page);
   await page.goto("/fr");
   await expect(page.locator("#configurations article").first()).toBeVisible();
   expect(external).toEqual([]);
-  await expect(page.locator("#configurations [aria-hidden='true']").first()).toBeVisible();
+  await expect(
+    page.locator("#configurations [aria-hidden='true']").first(),
+  ).toBeVisible();
 });
 ```
 
@@ -425,11 +513,13 @@ git commit -m "docs(web-v2): record the Step 3.4 imagery decision and pin it in 
 ### Task 8: After screenshots, gates, report
 
 **Files:**
+
 - Create: `apps/web-v2/docs/screenshots/step-3-4/after-*.png`
 - Create: `docs/superpowers/specs/step-3-4-report.md`
 - Modify: `apps/web-v2/README.md` (spec count if Task 5/7 added specs)
 
 **Interfaces:**
+
 - Consumes: `SCREENSHOT_OUTPUT_DIR` from Task 1.
 
 - [ ] **Step 1: Capture the "after" set**
@@ -454,6 +544,7 @@ Expected: every exit code 0; `npm test` reports the unit total (≥145 with Task
 - [ ] **Step 3: Write the report**
 
 `docs/superpowers/specs/step-3-4-report.md` (root, matching `step-3-1`…`step-3-3`; the brief's `apps/web-v2/docs/superpowers/…` path does not exist in this tree). Sections A–L exactly as the brief lists them, plus:
+
 - §C must open with the Figma 429 and name the committed spec + Stitch screen as the measurable reference; no pixel-parity claim.
 - §J must carry the open items: `HeroRigPreview` shows no preset (needs approval), the mobile discovery section is absent by Q-20, no photography (Q-03), Arabic copy unsigned, and any deviation deliberately not fixed.
 - §K: baseline `3a65bad`, every commit of this step, `git status` clean, and "not pushed" unless the owner authorises it.

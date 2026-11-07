@@ -138,6 +138,14 @@ count is the printed figure, not a rounded one.
 - The breakpoint additions extend the existing sweep in `e2e/homepage-i18n.spec.ts` rather than
   introducing a second overflow spec, so there is one place that answers "does any width scroll?".
 
+**Card alignment is intra-card, not cross-card.** The `min-h-7 leading-7` box guarantees two things:
+inside one card the score and the price values share a single 28 px line box, and the score keeps
+that height when the card has no price, so an absent price does not shorten the row. It does **not**
+guarantee that the rows of all three cards sit on one baseline: a card whose title wraps or whose
+pills or rationale are taller pushes its own rows lower, and the cards stay the same height only
+because the grid stretches them. Cross-card row alignment was not part of Step 3.4 and is not
+claimed; it would need a separately approved geometry change.
+
 ## J. Open items needing owner approval
 
 1. Render the real rank-1 preset inside `HeroRigPreview` (`Homepage.hero.preview.score`).
@@ -147,10 +155,19 @@ count is the printed figure, not a rounded one.
 
 ## K. Git state
 
-Eight code-and-docs commits stand on `feature/v2-design` above the `3a65bad` baseline, and this
-report rides on the ninth:
+The step's nine commits sit on `feature/v2-design` above the `3a65bad` baseline, and **the branch is
+pushed**:
+
+| Fact                                    | Verified value                                                                    |
+| --------------------------------------- | --------------------------------------------------------------------------------- |
+| Final Step 3.4 commit                   | `f68cb79` (`docs(web-v2): record the Step 3.4 refinement and its measured gates`) |
+| Remote head, `origin/feature/v2-design` | `f68cb79486a60d8eaf86adb620ec814897bcc779`                                        |
+| Local `HEAD`                            | the same commit — ahead 0, behind 0                                               |
+| Commits above the baseline              | nine (`git rev-list --count 3a65bad..HEAD`)                                       |
+| Working tree                            | clean                                                                             |
 
 ```
+f68cb79 docs(web-v2): record the Step 3.4 refinement and its measured gates
 a67f9ee docs(web-v2): record the imagery decision and pin it in a test
 c552ca0 test(web-v2): enforce the design system's logical-direction rule
 930a100 test(web-v2): cover 768 and 1024 and pin the lg boundaries
@@ -162,8 +179,12 @@ eec672a fix(web-v2): compose the hero heading on two lines at the spec's padding
 3a65bad Step 3.3.1 (baseline, on the remote)
 ```
 
-`git status` is clean after this commit. **Nothing was pushed**: `origin/feature/v2-design` still
-points at `3a65bad`, so the whole step is local until the owner authorises a push.
+**Corrected in Step 3.4.1.** An earlier revision of this section said "nothing was pushed" and that
+`origin/feature/v2-design` still pointed at `3a65bad`. Both statements were true when written and
+became false when the owner authorised the push; they are replaced above with values read from
+`git rev-parse`. The follow-up's own commit is recorded in
+`docs/superpowers/specs/step-3-4-1-verification-report.md` §J rather than being folded into this
+historical list.
 
 ## L. Verdict
 
