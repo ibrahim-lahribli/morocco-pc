@@ -74,8 +74,9 @@ The eight sections the implementation must ship (per the Step 1 brief) are:
 1. Header and navigation — banner (desktop) + sticky header + bottom nav (mobile).
 2. Hero and budget/usage finder.
 3. Recommended complete PC configurations.
-4. Discovery pathways — desktop `Catégories & usages` grid; mobile Gaming 1080p / 1440p
-   resolution shortcuts. This is one responsive section with two frame-accurate variants.
+4. Discovery pathways — desktop `Catégories & usages` grid; the mobile Gaming 1080p / 1440p
+   resolution shortcuts ship hidden in the first release (Q-20). This is one responsive
+   section with two frame-accurate variants.
 5. Trust and recommendation methodology.
 6. Featured guides.
 7. Final CTA.
@@ -155,7 +156,7 @@ two files):
 | `RecommendedBuildSection` | —                             | grid switches from "1 card + 2 compact rows" to "3 equal cards in fixed use-case order"; the **same** three items drive both, the layout prop is CSS only |
 | `FeaturedGuides`          | —                             | renders 4 items; items 3–4 are `max-lg:hidden` (2 on mobile, 4 on desktop). Content stays in the DOM for one code path                                    |
 | `FinalRecommendationCTA`  | —                             | desktop gradient banner with a large button; mobile compact primary-variant card with a 48 px button. Same copy, same action                              |
-| `DiscoveryPathways`       | —                             | desktop shows the four-tile categories grid; mobile shows Gaming 1080p / 1440p shortcuts                                                                  |
+| `DiscoveryPathways`       | —                             | desktop shows the four-tile categories grid; mobile resolution shortcuts deferred (Q-20)                                                                  |
 
 **Discovery pathways (responsive variants).** Keep the desktop frame's `Catégories &
 usages` grid (`19:426`) and the mobile frame's Gaming 1080p / 1440p shortcuts
@@ -381,19 +382,27 @@ Arabic has a translation; the API value is used as the key.
 ### 5.4 Resolution choice and performance shortcuts
 
 The finder does **not** ask for resolution: the engine treats it as optional and the API
-reports whether the model even accepts it (`inputs_applied`). Resolution enters the
-journey only through the shortcut tiles (`1080p` / `1440p`), which pre-set
-`resolution` and `use_case=GAMING` and scroll to the finder.
+reports whether the model even accepts it (`inputs_applied`). Resolution can enter the
+journey only through a shortcut tile that pre-sets `resolution` and `use_case=GAMING` and
+moves focus to the finder.
 
-- Mobile: a two-tile row under the recommended configurations ("Gaming 1080p", "Gaming
-  1440p"). The frame also shows "Dès 5 500 DH" / "Dès 11 000 DH"; **Step 1 renders no
-  price in these tiles**, because `GET /v1/presets` has no resolution parameter, so no
-  served number backs a 1440p "from" price (Q-07). A price is only shown when a real
-  field carries it.
-- Desktop: no resolution shortcut — the four-tile `Catégories & usages` grid (§7) offers
-  the three use cases instead, so the 1080p / 1440p tiles stay the mobile variant.
-- Selecting a tile sets `resolution` in the finder store, marks the tile
-  `aria-pressed="true"`, and does not submit.
+**First functional release: the shortcuts are hidden.** `GET /v1/presets` cannot filter by
+resolution, and the recommendation `POST` stays disabled until the Step 2 results route
+exists (Q-08). A tile a visitor can press but whose resolution reaches no served card is
+worse than no tile, so the 1080p / 1440p row is not rendered in either variant and no
+`resolution` is stored for it (Q-20). The frames' shortcut row is the target for the
+future state, not a Step 1 deliverable.
+
+- Mobile: the two-tile row ("Gaming 1080p", "Gaming 1440p") is deferred with the rest of
+  the shortcut surface. The frame's "Dès 5 500 DH" / "Dès 11 000 DH" prices were never
+  renderable (`GET /v1/presets` has no resolution parameter — Q-07), so hiding the row
+  loses no served price.
+- Desktop: the four-tile `Catégories & usages` grid (§7) offers the three use cases, which
+  is the only discovery affordance the first release ships.
+- **Future enhancement.** Enable both variants once the results route consumes
+  `resolution` and the API can answer a resolution-scoped card; keep the `inputs_applied`
+  gate, set `resolution` in the finder store, mark the tile `aria-pressed="true"`, and
+  still never submit from a tile.
 
 ### 5.5 Main recommendation CTA
 
@@ -447,7 +456,8 @@ and do not compare their `build_score` values across different use cases.
 
 **Data source.** `GET /v1/presets?use_case=…&currency=MAD` (read-only, one request per
 use case confirmed by `meta/options`) plus `GET /v1/recommendations/{recommendation_id}`
-for the three selected preset IDs. Full mapping is in §13 and
+for the three initially selected preset IDs. A later selection reads its own detail (§6,
+**Dynamic detail reads**). Full mapping is in §13 and
 `01-homepage-api-mapping.md`.
 
 **Deterministic initial selection (owner decision: 12,000 MAD).** The presets endpoint
@@ -469,6 +479,18 @@ second Gaming preset or another use case. If the selected detail has no builds, 
 complete configuration for that slot; never render a `budget_floor` value as a build
 price or as proof that a compatible build exists.
 
+**Dynamic detail reads.** The three detail requests on first paint are the initial
+fan-out, not a lifetime limit. When the finder selects a different preset the section
+reads that preset's detail: a cached entry for the same `recommendation_id` and
+`catalog_version` is reused, and otherwise exactly one `GET /v1/recommendations/{id}` is
+issued. The query key is `["recommendation", recommendationId, catalogVersion]`, so a
+catalog bump cannot answer with a detail whose prices were invalidated. While it loads,
+the card keeps its slot and shows no components, score or price badge; a 404 renders the
+card without detail and logs; `builds: []` shows no complete-PC claim; a request error
+degrades that card only, with retry. The previous selection's components are cleared as
+soon as the selection changes — stale specifications from another preset are never
+displayed.
+
 **Desktop composition.** Eyebrow "CONFIGURATIONS PRÊTES À MONTER", H2 "Trois usages,
 trois configurations", one-line intro, then three cards in fixed use-case order. Each
 card has an H3 carrying the use-case label (`builds.category.*`), a `builds.budgetLabel`
@@ -476,6 +498,8 @@ line showing the served `budget_amount`, a price-status badge, a 192 px token-on
 placeholder, up to four spec pills, an optional rationale, the served total price and a
 compact details action. The budget line always renders from the preset; the price renders
 only when `total_price` is non-null, so a null price never turns the budget into a price.
+The price badge comes from that build's `builds[0].price_status`; with no complete build
+there is no badge, and a `null` status is never rendered as "indicatif".
 Use equal visual weight across all three cards. The Figma centre-card ring may be
 retained as decoration only; it must not be paired with "Le plus recommandé" or any
 claim that ranks OFFICE above the other use cases.
@@ -534,15 +558,17 @@ featured treatment is visual only and does not imply ranking. Media height 144 p
 
 **States.**
 
-| State                            | Rendering                                                                                                          |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Loading                          | Three skeletons matching the three use-case slots; `aria-busy="true"` and `builds.loading` in a polite live region |
-| Empty use case                   | Keep that category's slot and show `builds.empty.*`; do not substitute another use case                            |
-| No preset within visitor budget  | Show `builds.empty.*`; never show a more expensive preset as suitable                                              |
-| Budget above highest served tier | Show the highest available tier plus `builds.budgetCap`; do not describe it as an exact-budget result              |
-| Detail with no build             | Do not render a complete-PC claim or a price; never present `budget_floor.cheapest_total` as an assembled build    |
-| Indicative price                 | Show the indicative badge and API disclaimer; do not imply a current retailer quote                                |
-| Error (5xx/timeout/offline)      | `builds.error.*` block with retry; the rest of the page stays usable                                               |
+| State                              | Rendering                                                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Loading                            | Three skeletons matching the three use-case slots; `aria-busy="true"` and `builds.loading` in a polite live region |
+| Detail pending (selection changed) | Keep the slot; clear the previous preset's pills, score and price badge until the new detail arrives               |
+| Detail missing (404)               | Render the card without pills or price badge and log the 404; never fall back to another preset's detail           |
+| Empty use case                     | Keep that category's slot and show `builds.empty.*`; do not substitute another use case                            |
+| No preset within visitor budget    | Show `builds.empty.*`; never show a more expensive preset as suitable                                              |
+| Budget above highest served tier   | Show the highest available tier plus `builds.budgetCap`; do not describe it as an exact-budget result              |
+| Detail with no build               | Do not render a complete-PC claim or a price; never present `budget_floor.cheapest_total` as an assembled build    |
+| Indicative price                   | Badge comes from the rendered build's `price_status`; show the API disclaimer and do not imply a retailer quote    |
+| Error (5xx/timeout/offline)        | `builds.error.*` block with retry; the rest of the page stays usable                                               |
 
 **Accessibility.** The three categories have explicit accessible names. Card order is fixed
 and does not change after hydration. Cards are `<article>` with `aria-labelledby`
@@ -562,9 +588,11 @@ use case. Keep the Figma tile hierarchy and visual treatment. Use only product-s
 use cases mapped in the Homepage dictionaries; a resolution tile is a discovery shortcut,
 not a new API use case.
 
-**Mobile composition.** Render the two Gaming resolution shortcuts from `23:1344`
-immediately after recommended configurations: Gaming 1080p and Gaming 1440p. Each tile
-sets `use_case=GAMING` and its resolution, then moves focus to the finder.
+**Mobile composition.** The frame's two Gaming resolution shortcuts (`23:1344`: Gaming
+1080p, Gaming 1440p) are **not rendered in the first functional release** (Q-20, §5.4):
+the presets endpoint cannot filter by resolution and the `POST` is gated until Step 2, so
+the choice would reach no served card. When they are enabled, each tile sets
+`use_case=GAMING` plus its resolution and moves focus to the finder.
 
 **Components.** One `DiscoveryPathways` client component with desktop-category and
 mobile-resolution variants. It is one responsive component tree, not a desktop page and
@@ -581,19 +609,23 @@ a mobile page.
 | `pathways.gaming1080`  | Gaming 1080p                     |
 | `pathways.gaming1440`  | Gaming 1440p                     |
 
+`pathways.gaming1080` and `pathways.gaming1440` are authored with the deferred tiles
+(Q-20); the first release renders neither key.
+
 **Interactions.** Desktop tiles set their mapped use case in the finder and focus its
-usage group. Mobile tiles set Gaming plus the selected resolution and focus the finder.
-No pathway makes a network write. Resolution tiles are hidden unless
-`inputs_applied` includes `resolution`; an advertised resolution value alone does not
-prove the active model reads it.
+usage group. No pathway makes a network write. The mobile resolution tiles ship hidden
+(Q-20); when enabled they set Gaming plus the selected resolution, focus the finder, and
+stay hidden unless `inputs_applied` includes `resolution` — an advertised resolution value
+alone does not prove the active model reads it.
 
 **Responsive behaviour.** Desktop category grid is shown from `lg`; mobile resolution
 tiles are shown below `lg`. Use responsive placement to match the two approved frame
 sequences while retaining one component and one state owner. Verify keyboard and
 screen-reader reading order at both breakpoints.
 
-**States.** Static, except resolution tiles are hidden when the active model does not read
-resolution or authoritative metadata is unavailable.
+**States.** Static. The mobile resolution tiles are absent in the first release (Q-20);
+once enabled they are also hidden when the active model does not read resolution or
+authoritative metadata is unavailable.
 
 **Accessibility.** Every tile is a labelled button with a 44 px minimum target and a
 visible focus ring. Selected shortcuts expose `aria-pressed`. Hidden variants are absent
@@ -832,7 +864,7 @@ components/home/
   budget-preset-grid.tsx          client   radios (or server markup driven by RHF)
   custom-budget-field.tsx         client   numeric input + slider (lg)
   usage-selector.tsx              client   three radios
-  discovery-pathways.tsx          client   desktop categories + mobile resolution shortcuts
+  discovery-pathways.tsx          client   desktop categories; resolution tiles deferred (Q-20)
   recommended-build-section.tsx   client   query + budget-aware selection + layout
   featured-build-card.tsx         server   presentational
   compact-build-row.tsx           server   presentational
@@ -846,7 +878,7 @@ lib/homepage/
   store.ts                        Zustand: budget, useCase, resolution, step
   guides.ts                       static guide metadata (4 entries)
   builds.ts                       preset → card view-model mapping
-  use-presets.ts                  TanStack Query hook (presets + detail fan-out)
+  use-presets.ts                  TanStack Query hooks (presets + per-selection detail)
 lib/api/
   types.ts                        ADD aliases: Preset, PresetBuild, BuildComponent
 ```
@@ -870,12 +902,12 @@ drops that badge, so it is no longer a required addition.
 
 ### 12.3 State ownership
 
-| State                                | Owner                             | Persistence                                              |
-| ------------------------------------ | --------------------------------- | -------------------------------------------------------- |
-| Budget preset / custom amount        | `lib/homepage/store.ts` (Zustand) | memory only (matches Step 0's deliberate no-cookie rule) |
-| Usage, resolution                    | same store                        | memory only                                              |
-| Server data (presets, preset detail) | TanStack Query                    | 60 s `staleTime`, no `gcTime` override                   |
-| Form validation                      | React Hook Form + Zod resolver    | —                                                        |
+| State                                | Owner                             | Persistence                                                                                                                               |
+| ------------------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Budget preset / custom amount        | `lib/homepage/store.ts` (Zustand) | memory only (matches Step 0's deliberate no-cookie rule)                                                                                  |
+| Usage, resolution                    | same store                        | memory only                                                                                                                               |
+| Server data (presets, preset detail) | TanStack Query                    | 60 s `staleTime`, no `gcTime` override; details keyed by `recommendation_id` + `catalog_version`, cached entries reused across selections |
+| Form validation                      | React Hook Form + Zod resolver    | —                                                                                                                                         |
 
 The finder's answers outlive the finder because the shortcuts and the final CTA write to
 the same store; that is the seam the results page (Step 2) reads.
@@ -892,7 +924,7 @@ Full field-level mapping: `01-homepage-api-mapping.md`. Contract version: **1.10
 | Usage options + whether resolution is accepted        | `GET /v1/meta/options`                | **yes** (finder), fallback constants if it fails |
 | Currency vocabulary                                   | `GET /v1/meta/options` (`currencies`) | **yes**, only to confirm `MAD`                   |
 | One generic preset per use case; budget-aware lookup  | `GET /v1/presets?use_case&currency`   | **yes** (section 3)                              |
-| Build detail (components, score, status) for a preset | `GET /v1/recommendations/{id}`        | **yes** (≤ 3 fan-out)                            |
+| Build detail (components, score, status) for a preset | `GET /v1/recommendations/{id}`        | **yes** (3 initial; +1 per later selection)      |
 | Personalised answer for the finder                    | `POST /v1/recommendations`            | **yes**, on CTA only, gated (Q-08)               |
 | A persisted pass by id                                | `GET /v1/recommendations/{id}`        | no — Step 2                                      |
 | Catalogue listing / product / price history           | `GET /v1/catalog/...`                 | no — Steps 4–6                                   |
@@ -908,8 +940,9 @@ Rules that follow from the contract:
   rendered as served, and `budget_floor` is never rendered at all.
 - **`GET /v1/presets` is not a build list.** A preset is
   `{ budget_amount, recommendation_id, build_score, price_status }` — a **pointer**. The
-  card's component summary requires the detail read. Fan-out is bounded to the three
-  rendered presets, launched in parallel.
+  card's component summary requires the detail read: the three initial reads are the
+  homepage's starting fan-out, not a cap on how many details it may ever show (§6,
+  **Dynamic detail reads**).
 - **Presets have no resolution and no title.** The card's category label is ours (`builds.category.*`); no field carries an H3 build title (Q-16), and resolution comes only from the finder.
 - **Prices are never invented.** The frames' prices (7 450 / 4 890 / 13 900 / 5 500 /
   11 000 / 3 200 / 9 800) are design placeholders; only served `total_price` /
@@ -928,7 +961,7 @@ Rules that follow from the contract:
 | Finder-applied budget filter    | n/a                                                      | no preset ≤ visitor budget → `builds.empty.*`; budget above the top tier → highest tier + `builds.budgetCap` | n/a                                               | filters the already-fetched ladder, no request                 |
 | Preset detail (per card)        | card renders without pills; pills appear when loaded     | preset with `build_score: null` → "—"                                                                        | card renders its preset budget, no component line | one failed detail must not fail the section                    |
 | Finder submit                   | CTA pending state                                        | `builds: []` → results page (Step 2) owns that state                                                         | inline alert + retry; 429 countdown               | the homepage never renders a pass                              |
-| Shortcuts                       | n/a                                                      | hidden when `resolution` ∉ `inputs_applied`                                                                  | n/a                                               |                                                                |
+| Shortcuts                       | n/a                                                      | **not rendered in the first release** (Q-20)                                                                 | n/a                                               | enabled later only when `resolution` ∈ `inputs_applied`        |
 | Hero preview                    | skeleton of equal height                                 | text-only shell                                                                                              | text-only shell                                   | no fake price/score                                            |
 | Rest of the page                | n/a                                                      | n/a                                                                                                          | n/a                                               | server-rendered static                                         |
 
@@ -1002,7 +1035,9 @@ item is reported as skipped.
       input shows the range message and keeps the CTA disabled.
 - [ ] Usage choice is a single selection across three options; keyboard arrows move
       within the group and `Space` selects.
-- [ ] Shortcut tiles set `GAMING` + `1080p|1440p` and move focus to the finder.
+- [ ] No resolution shortcut tile is rendered in the first release (Q-20); when the tiles
+      are enabled they set `GAMING` + `1080p|1440p` and move focus to the finder without
+      submitting.
 - [ ] Submit sends `{ budget_amount, currency: "MAD", use_case, resolution? }` — asserted
       on the intercepted request body in Playwright.
 
@@ -1032,8 +1067,9 @@ item is reported as skipped.
 - [ ] Types come from `lib/api/schema.d.ts` (generated from
       `apps/api/test/unit/openapi-v1.10.json`); `npm run check:api-types` passes.
 - [ ] No endpoint, path or field is used that is absent from the contract.
-- [ ] `GET /v1/presets` is called once per use case and cached 60 s; the detail fan-out is
-      at most three parallel `GET /v1/recommendations/{id}`.
+- [ ] `GET /v1/presets` is called once per use case and cached 60 s; the initial detail
+      read is three parallel `GET /v1/recommendations/{id}` calls, and a later finder
+      selection reuses a cached detail or issues exactly one more — never a lifetime cap.
 - [ ] 429/503/offline each produce their documented state; no silent retry of a 429.
 - [ ] The app still renders (static sections + error state in section 3) when the API is
       unreachable at request time.
@@ -1133,10 +1169,10 @@ Defaults are chosen so implementation can start; each answer may change the spec
 | Q-01 | The frames' saffron `#FFA51B` and canvas `#F9F9FF` differ from the token palette. Accept the token-mapped rendering, or change tokens?          | accept tokens (no token change allowed in Step 1)                                                                                         | visible brand delta on CTAs                    |
 | Q-02 | Desktop H1 is 48 px in the frame, `text-display-lg` is 40 px. Add a 48 px step or use 40?                                                       | use 40                                                                                                                                    | hero height, line breaks                       |
 | Q-03 | Build and guide photography is unavailable. Token placeholders acceptable for Step 1?                                                           | yes                                                                                                                                       | visual fidelity                                |
-| Q-04 | Desktop's "Catégories & usages" 4-tile section is not in the mobile section list. Ship it?                                                      | resolved: preserve desktop category grid; mobile retains resolution shortcuts                                                             | one responsive section with two frame variants |
+| Q-04 | Desktop's "Catégories & usages" 4-tile section is not in the mobile section list. Ship it?                                                      | resolved: preserve desktop category grid; mobile resolution shortcuts deferred to a later release (Q-20)                                  | one responsive section with two frame variants |
 | Q-05 | Mobile header shows a saved-builds icon with a count and an unidentified circular icon.                                                         | omit both                                                                                                                                 | header parity                                  |
 | Q-06 | Hero preview card's "Détails specs →" has no destination until a product page exists.                                                           | render as text, no link                                                                                                                   | one dead-ish CTA                               |
-| Q-07 | `GET /v1/presets` has no `resolution` parameter, so 1080p/1440p "Dès X DH" cannot be derived.                                                   | omit prices in shortcut tiles                                                                                                             | needs an API change                            |
+| Q-07 | `GET /v1/presets` has no `resolution` parameter, so 1080p/1440p "Dès X DH" cannot be derived.                                                   | resolved: the shortcut tiles are deferred (Q-20); no price is derived from a resolution                                                   | needs a resolution-scoped read                 |
 | Q-08 | The results route (`/[locale]/resultats/{id}`) is Step 2. Ship the POST-on-CTA now or gate it?                                                  | gated off (`NEXT_PUBLIC_HOMEPAGE_SUBMIT=off`); CTA scrolls to the best pre-generated preset within budget                                 | orphan passes vs. a non-functional CTA         |
 | Q-09 | Trust copy makes claims ("actualisation hebdomadaire", "vérification TDP"). Keep as static copy?                                                | resolved: remove freshness and absolute compatibility claims; describe API statuses only                                                  | misleading product claims                      |
 | Q-10 | Methodology link has no page.                                                                                                                   | self-anchor, `aria-disabled`                                                                                                              | one placeholder link                           |
@@ -1149,3 +1185,4 @@ Defaults are chosen so implementation can start; each answer may change the spec
 | Q-17 | Banner copy ("Tarifs et disponibilités vérifiés ce mois-ci", "Index MAD temps réel") asserts verification and a live index that nothing serves. | render the label and Arabic chip only; re-approve the claims before shipping them                                                         | header parity, trust                           |
 | Q-18 | The peer rule drops the approved frame's filter tabs and the "Le plus recommandé" badge. Accept the fidelity trade?                             | yes: three peers, no tabs, no ranking badge                                                                                               | visual fidelity to `19:172`                    |
 | Q-19 | With one card per use case, which preset backs the hero's "Sélection du moment" preview?                                                        | the Gaming card's preset already fetched for section 3 (highest at or below 12,000 MAD; no extra request)                                 | hero content, request count                    |
+| Q-20 | Resolution cannot be applied before the Step 2 results route: should the 1080p / 1440p shortcuts ship in the first release?                     | no — hide both variants until a selected resolution reaches a served card; the tiles stay the documented future enhancement               | discovery parity with the mobile frame         |
