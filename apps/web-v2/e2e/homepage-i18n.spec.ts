@@ -148,6 +148,10 @@ test.describe("Arabic homepage", () => {
         await page.setViewportSize(breakpoint);
         await page.goto(`/${locale}`);
         await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+        // The cards come from the detail read, and the track they sit in is the
+        // thing that can overflow: measure the laid-out page, not the skeleton.
+        await expect(page.locator("#configurations article").first()).toBeVisible();
+        await expect(page.locator("#configurations article").last()).toBeVisible();
 
         const overflow = await horizontalOverflow(page);
         expect(

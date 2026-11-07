@@ -95,7 +95,9 @@ export function RecommendedBuildSection() {
       <div
         className={cn(
           "mt-5 lg:mt-8",
-          slots.length === 1 ? "flex flex-col lg:max-w-2xl" : "grid gap-4 lg:grid-cols-3",
+          slots.length === 1
+            ? "flex flex-col lg:max-w-2xl"
+            : "grid grid-cols-1 gap-4 lg:grid-cols-3",
         )}
       >
         {slots.map((slot, index) => (
