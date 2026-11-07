@@ -624,8 +624,6 @@ tiles are deferred in the first release (Q-20); once enabled they are shown belo
 Use responsive placement to match the two approved frame sequences while retaining one
 component and one state owner. Verify keyboard and screen-reader reading order at both
 breakpoints.
-sequences while retaining one component and one state owner. Verify keyboard and
-screen-reader reading order at both breakpoints.
 
 **States.** Static. The mobile resolution tiles are absent in the first release (Q-20);
 once enabled they are also hidden when the active model does not read resolution or
