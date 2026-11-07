@@ -83,7 +83,7 @@ satisfaction of it — A1/A3/A4 are still `hypothesis` and OG-43 is open.
 DIFFs re-measured 2026-11-06)
 
 - `npm run test:unit` **1261 pass / 0 fail / 0 cancelled** (Node 24.21.0 and Node 22);
-  `npm run test:scripts` **443 / 0**; `npm run test:api` **193 / 0**; `npm run test:api:db` **17 / 0**
+  `npm run test:scripts` **463 / 0**; `npm run test:api` **193 / 0**; `npm run test:api:db` **17 / 0**
   (nightly only — it writes to the TEST branch).
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.

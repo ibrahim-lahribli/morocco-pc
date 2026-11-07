@@ -63,8 +63,18 @@ function result(status, confidence, entries, reason) {
  * @returns {{ status:string, confidence:string|null, matched_product_id:string|null,
  *             matched_product_variant_id:string|null, candidates:Array, reason:string }}
  */
-function matchListing(listing, catalog) {
+function matchListing(listing, catalog, curated) {
   const entries = Array.isArray(catalog) ? catalog : [];
+
+  // Tier 0 - CURATED. The operator named a catalogue product (and, for a
+  // variant-keyed part, its variant) explicitly, so nothing is inferred: a human
+  // asserted the identity and resolveCatalogueKey() already validated it against
+  // this same catalogue. Outranks SKU, MPN and name, because those can only ever
+  // guess at what the operator has stated. `curated` is one catalog entry or
+  // null/undefined; it is never constructed here, which keeps this module pure.
+  if (curated) {
+    return result('MATCHED', 'CONFIRMED', [curated], 'CATALOGUE_KEY');
+  }
 
   if (listing.sku) {
     const sku = normalizeModelString(listing.sku);

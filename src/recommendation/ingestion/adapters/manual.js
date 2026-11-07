@@ -14,7 +14,14 @@
  * CSV columns (header row required):
  *   required: source, store_name, listing_identifier, raw_price, currency,
  *             availability, observed_at
- *   optional: product_url, title, sku, mpn, source_note
+ *   optional: product_url, title, sku, mpn, source_note,
+ *             product_slug, variant_sku
+ *
+ * `product_slug` / `variant_sku` are CURATED IDENTITY, not collected data: they
+ * name a catalogue product (and one of its variants) explicitly, so a real
+ * retailer title does not have to contain the catalogue name. They are
+ * validated against the catalogue by plan.js - an unknown key is REJECTED, never
+ * guessed. `sku` stays the RETAILER's sku; `variant_sku` is the CATALOGUE's.
  *
  * Errors are reported with a 1-based line number (CSV header is line 1, so the
  * first data row is line 2; JSON uses the array index + 1). Invalid rows are
@@ -33,7 +40,7 @@ const REQUIRED_COLUMNS = [
   'observed_at',
 ];
 
-const OPTIONAL_COLUMNS = ['product_url', 'title', 'sku', 'mpn', 'source_note'];
+const OPTIONAL_COLUMNS = ['product_url', 'title', 'sku', 'mpn', 'source_note', 'product_slug', 'variant_sku'];
 const KNOWN_COLUMNS = new Set(REQUIRED_COLUMNS.concat(OPTIONAL_COLUMNS));
 
 /** Parse CSV text into an array of arrays, honouring quotes and CRLF. */

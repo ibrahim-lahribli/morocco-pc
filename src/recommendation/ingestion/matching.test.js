@@ -68,3 +68,22 @@ test('no match is UNMATCHED with no candidates', () => {
   assert.equal(res.matched_product_id, null);
   assert.equal(res.candidates.length, 0);
 });
+
+test('a curated catalogue key outranks name inference and is CONFIRMED', () => {
+  const curated = { product_id: 'p2', product_variant_id: 'v2', sku: 'SEED-GPU-4060', mpn: null, name: 'Seed RTX 4060 8GB' };
+  const res = matchListing({ sku: null, mpn: null, title: 'Totally Unknown Retailer Part' }, CATALOG, curated);
+  assert.equal(res.status, 'MATCHED');
+  assert.equal(res.confidence, 'CONFIRMED');
+  assert.equal(res.reason, 'CATALOGUE_KEY');
+  assert.equal(res.matched_product_id, 'p2');
+  assert.equal(res.matched_product_variant_id, 'v2');
+});
+
+test('a curated catalogue key outranks a conflicting inferred match', () => {
+  // The listing's own sku points at p2/v2; the operator's key wins over it.
+  const curated = { product_id: 'p1', product_variant_id: null, sku: null, mpn: null, name: 'Seed Ryzen 5 7500F' };
+  const res = matchListing({ sku: 'seed-gpu-4060', mpn: null, title: null }, CATALOG, curated);
+  assert.equal(res.matched_product_id, 'p1');
+  assert.equal(res.matched_product_variant_id, null);
+  assert.equal(res.reason, 'CATALOGUE_KEY');
+});

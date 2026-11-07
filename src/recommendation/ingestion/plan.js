@@ -11,7 +11,8 @@
  *   unchanged    stored offer, nothing changed                      -> NO writes
  *   review       ambiguous match                                     -> review queue
  *   unmatched    no match at all                                     -> review queue
- * Rejected rows come from validation, not from the plan.
+ *   rejected     an unusable row (unknown store, or a curated identity
+ *                key that cannot be resolved)                       -> reported, never written
  */
 
 'use strict';
@@ -23,19 +24,19 @@ const STORES_SQL = 'SELECT id, name FROM store WHERE is_active = TRUE ORDER BY n
 
 const CATALOG_SQL = [
   'SELECT p.id AS product_id, p.name AS name, p.manufacturer_part_number AS mpn,',
-  '       NULL::uuid AS product_variant_id, NULL::text AS sku',
+  '       p.slug AS product_slug, NULL::uuid AS product_variant_id, NULL::text AS sku',
   '  FROM product p',
   " WHERE p.lifecycle_status = 'ACTIVE'",
   ' UNION ALL',
   'SELECT p.id AS product_id, p.name AS name, p.manufacturer_part_number AS mpn,',
-  '       pv.id AS product_variant_id, pv.sku AS sku',
+  '       p.slug AS product_slug, pv.id AS product_variant_id, pv.sku AS sku',
   '  FROM product p',
   '  JOIN product_variant pv ON pv.product_id = p.id',
   " WHERE p.lifecycle_status = 'ACTIVE'",
 ].join('\n');
 
 const EXISTING_OFFERS_SQL = [
-  'SELECT id, store_id, listing_identifier, price, availability',
+  'SELECT id, store_id, listing_identifier, price, availability, product_id, product_variant_id',
   '  FROM store_offer',
   ' WHERE listing_identifier = ANY($1::text[])',
 ].join('\n');
@@ -59,6 +60,72 @@ function offerKey(storeId, listingIdentifier) {
 }
 
 /**
+ * Resolve operator-supplied catalogue keys to exactly ONE catalogue entry.
+ *
+ * A slug names a PRODUCT; a variant_sku names one of its VARIANTS. Both are
+ * needed for a variant-keyed part, and the reason is mechanical rather than
+ * stylistic: `offers/select.js` matches a GPU candidate ONLY against an offer
+ * carrying the same `product_variant_id`, so a product-keyed GPU offer can never
+ * be selected by the engine. Writing one would look like a success and be a
+ * silent no-op, which is why a slug whose product HAS variants is refused
+ * without a `variant_sku` instead.
+ *
+ * Nothing here guesses: an unknown slug or sku is a REJECTION with its own
+ * reason, so the operator sees the typo.
+ *
+ * @param {object} listing validated listing (needs product_slug, variant_sku)
+ * @param {Array<object>} catalog entries from CATALOG_SQL
+ * @returns {{entry:object}|{reason:string}}
+ */
+function resolveCatalogueKey(listing, catalog) {
+  const slug = listing.product_slug;
+  const entries = catalog.filter((e) => e.product_slug && e.product_slug === slug);
+  if (entries.length === 0) return { reason: 'UNKNOWN_PRODUCT_SLUG' };
+
+  const variantRows = entries.filter((e) => e.product_variant_id !== null);
+  const productRow = entries.find((e) => e.product_variant_id === null) || null;
+
+  if (listing.variant_sku) {
+    const wanted = String(listing.variant_sku).trim();
+    const hits = variantRows.filter((e) => e.sku && String(e.sku).trim() === wanted);
+    // A sku identifies one variant; more than one row is a catalogue defect, not
+    // a choice this function is allowed to make.
+    if (hits.length === 0) return { reason: 'UNKNOWN_VARIANT_SKU' };
+    if (hits.length > 1) return { reason: 'VARIANT_SKU_AMBIGUOUS' };
+    return { entry: hits[0] };
+  }
+
+  if (variantRows.length > 0) return { reason: 'VARIANT_SKU_REQUIRED' };
+  if (productRow === null) return { reason: 'UNKNOWN_PRODUCT_SLUG' };
+  return { entry: productRow };
+}
+
+function sameUuid(a, b) {
+  if (a === null || a === undefined) return b === null || b === undefined;
+  if (b === null || b === undefined) return false;
+  return String(a) === String(b);
+}
+
+/**
+ * True when a CURATED match names a different product or variant than the offer
+ * already stored for the same (store_id, listing_identifier).
+ *
+ * `apply.js`'s UPDATE statement never rewrites `product_id` or
+ * `product_variant_id`, so without this check a re-import that curates a
+ * different product would refresh the OLD product's price, rewrite provenance
+ * and report success - the new key silently ignored. The stored offer is left
+ * untouched and the row is refused instead, so resolving it is a deliberate act.
+ *
+ * Only a curated key is compared: inference is a guess, and holding a guess to
+ * the stored identity would turn a catalogue edit into a spurious rejection.
+ */
+function identityChanged(existing, match) {
+  if (!existing || existing.product_id === undefined) return false;
+  return !sameUuid(existing.product_id, match.matched_product_id)
+    || !sameUuid(existing.product_variant_id, match.matched_product_variant_id);
+}
+
+/**
  * Read the catalog and any offers already stored for these listings' keys.
  * @returns {Promise<{storesByName:Map, catalog:Array, existingByKey:Map}>}
  */
@@ -72,6 +139,10 @@ async function gatherContext(db, listings, storesByName) {
         id: String(row.id),
         price: row.price,
         availability: row.availability,
+        product_id: row.product_id === null || row.product_id === undefined ? null : String(row.product_id),
+        product_variant_id: row.product_variant_id === null || row.product_variant_id === undefined
+          ? null
+          : String(row.product_variant_id),
       });
     }
   }
@@ -94,7 +165,26 @@ function buildPlan(listings, context) {
       continue;
     }
 
-    const match = matchListing(listing, context.catalog);
+    // A variant sku names a VARIANT OF a product, so it means nothing on its own.
+    // Ignoring it would let a row whose operator explicitly said which variant they
+    // meant fall back to name/SKU inference, which is exactly the guess this tier
+    // exists to replace. Refuse the half-specified key instead.
+    if (!listing.product_slug && listing.variant_sku) {
+      plan.rejected.push({ listing, reason: 'VARIANT_SKU_WITHOUT_SLUG' });
+      continue;
+    }
+
+    let match;
+    if (listing.product_slug) {
+      const resolved = resolveCatalogueKey(listing, context.catalog);
+      if (resolved.reason) {
+        plan.rejected.push({ listing, reason: resolved.reason });
+        continue;
+      }
+      match = matchListing(listing, context.catalog, resolved.entry);
+    } else {
+      match = matchListing(listing, context.catalog);
+    }
     if (match.status === 'REVIEW') {
       plan.review.push({ listing, store_id: storeId, match });
       continue;
@@ -105,6 +195,10 @@ function buildPlan(listings, context) {
     }
 
     const existing = context.existingByKey.get(offerKey(storeId, listing.listing_identifier)) || null;
+    if (listing.product_slug && identityChanged(existing, match)) {
+      plan.rejected.push({ listing, reason: 'OFFER_IDENTITY_MISMATCH' });
+      continue;
+    }
     const promotion = decidePromotion(listing, existing);
     const item = { listing, store_id: storeId, match, promotion, existing };
     if (promotion.action === 'INSERT') plan.newOffers.push(item);
@@ -180,6 +274,7 @@ module.exports = {
   loadStores,
   gatherContext,
   buildPlan,
+  resolveCatalogueKey,
   planCounts,
   formatPlan,
 };
