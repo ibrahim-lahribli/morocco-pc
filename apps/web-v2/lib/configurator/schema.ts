@@ -17,6 +17,21 @@ import { BUDGET_MAX, BUDGET_MIN } from "@/lib/homepage/finder-schema";
 
 export type ConfiguratorUseCase = HomeUseCase;
 
+/**
+ * The API's use-case value mapped to the dictionary branch that names it.
+ *
+ * One map, read by the summary header and the no-`from` recap, so a label can
+ * never disagree with the radio that produced the answer. The generated
+ * contract types `use_case` as `string`, so a caller indexes through a
+ * `Record<string, …>` and omits the label when the value is not one of ours.
+ */
+export const USE_CASE_MESSAGE_KEYS: Record<ConfiguratorUseCase, "gaming" | "office" | "creation"> =
+  {
+    GAMING: "gaming",
+    OFFICE: "office",
+    WORKSTATION: "creation",
+  };
+
 export type ConfiguratorErrorCode =
   "USE_CASE_INVALID" | "BUDGET_INVALID" | "BUDGET_RANGE" | "FROM_INVALID";
 
@@ -114,6 +129,37 @@ export function parseConfiguratorSearchParams(params: RawSearchParams): Configur
   }
 
   return { useCase, budgetAmount, budgetText, recommendationId, fieldErrors };
+}
+
+export interface ConfiguratorHandoffAnswers {
+  useCase: ConfiguratorUseCase | null;
+  budgetAmount: number | null;
+}
+
+/**
+ * The inverse of `parseConfiguratorSearchParams`, for the homepage handoff.
+ *
+ * One module owns both directions of the URL contract, so the link the finder
+ * builds and the seed the route parses cannot drift apart. Returns `null`
+ * rather than inventing an answer: an incomplete or out-of-contract pair must
+ * leave the visitor on the page, never navigate to a link the route would have
+ * to flag as invalid.
+ */
+export function buildConfiguratorHref(answers: ConfiguratorHandoffAnswers): string | null {
+  const { useCase, budgetAmount } = answers;
+
+  if (useCase === null || !(HOME_USE_CASES as readonly string[]).includes(useCase)) {
+    return null;
+  }
+  if (budgetAmount === null || !Number.isSafeInteger(budgetAmount)) {
+    return null;
+  }
+  if (budgetAmount < BUDGET_MIN || budgetAmount > BUDGET_MAX) {
+    return null;
+  }
+
+  const params = new URLSearchParams({ use_case: useCase, budget: String(budgetAmount) });
+  return `/configurateur?${params.toString()}`;
 }
 
 export function createRequirementsSchema(

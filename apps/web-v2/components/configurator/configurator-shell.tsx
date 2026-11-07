@@ -30,6 +30,7 @@ export function ConfiguratorShell({ seed }: ConfiguratorShellProps) {
   const [store] = useState(() => createConfiguratorStore(seed));
 
   const phase = useStore(store, (state) => state.phase);
+  const requirements = useStore(store, (state) => state.requirements);
   const recommendationId = useStore(store, (state) => state.recommendationId);
   const activeBuildRank = useStore(store, (state) => state.activeBuildRank);
   const detailQuery = useConfiguratorRecommendation(recommendationId);
@@ -72,6 +73,8 @@ export function ConfiguratorShell({ seed }: ConfiguratorShellProps) {
 
         <BuildSummaryPanel
           detail={detailQuery.data}
+          requirements={requirements}
+          submitted={phase === "review"}
           currency={currency}
           // A disabled query is pending but not loading: passing that through
           // would keep the empty route's summary in the loading state forever.

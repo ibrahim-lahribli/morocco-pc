@@ -173,7 +173,8 @@ test.describe("configurator", () => {
 
     await expect(page.locator("#build-summary-title")).toBeFocused();
     await expect(page.getByRole("button", { name: "Mettre à jour" })).toBeVisible();
-    await expect(page.getByText("Vos réponses sont enregistrées.")).toBeVisible();
+    // Exact: the summary's review copy opens with the same sentence.
+    await expect(page.getByText("Vos réponses sont enregistrées.", { exact: true })).toBeVisible();
     expect(page.url()).toBe(url);
 
     expect(stub.calls).toEqual(["GET /v1/meta/options"]);

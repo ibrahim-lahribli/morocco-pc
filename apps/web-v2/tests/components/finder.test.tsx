@@ -1,11 +1,15 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BudgetUsageFinder } from "@/components/home/budget-usage-finder";
 import { formatPrice, groupNumber } from "@/lib/format/price";
 import { useHomepageStore } from "@/lib/homepage/store";
 import fr from "@/messages/fr.json";
+
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
+
+vi.mock("@/i18n/navigation", () => ({ useRouter: () => ({ push }) }));
 
 const CURRENCY = fr.Price.currency;
 const CUSTOM_LABEL = fr.Homepage.finder.budget.customLabel;
@@ -34,24 +38,9 @@ const preset = (amount: number) =>
 const customField = () => screen.getByRole("spinbutton", { name: CUSTOM_LABEL });
 const cta = () => screen.getByRole("button", { name: fr.Homepage.finder.cta });
 
-/** The submit target the finder scrolls to; a later task renders it in the app. */
-function mountConfigurationsSection() {
-  const section = document.createElement("section");
-  section.id = "configurations";
-  const heading = document.createElement("h2");
-  heading.textContent = "Configurations";
-  section.appendChild(heading);
-  document.body.appendChild(section);
-  return section;
-}
-
 beforeEach(() => {
   useHomepageStore.getState().reset();
-  Element.prototype.scrollIntoView = vi.fn();
-});
-
-afterEach(() => {
-  document.getElementById("configurations")?.remove();
+  push.mockClear();
 });
 
 describe("BudgetUsageFinder", () => {
@@ -113,16 +102,27 @@ describe("BudgetUsageFinder", () => {
     expect(screen.queryByText(plain(RANGE_MESSAGE))).toBeNull();
   });
 
-  it("writes the answers to the store and moves focus to the configurations section", () => {
-    const section = mountConfigurationsSection();
+  it("hands the two answers to the configurator", () => {
     renderFinder();
 
     fireEvent.click(preset(12_000));
     fireEvent.click(screen.getByRole("radio", { name: /Études et bureautique/ }));
     fireEvent.click(cta());
 
+    expect(push).toHaveBeenCalledWith("/configurateur?use_case=OFFICE&budget=12000");
+    expect(push).toHaveBeenCalledTimes(1);
     expect(useHomepageStore.getState().budgetAmount).toBe(12_000);
     expect(useHomepageStore.getState().useCase).toBe("OFFICE");
-    expect(section.querySelector("h2")).toHaveFocus();
+  });
+
+  it("never navigates without both answers", () => {
+    renderFinder();
+
+    fireEvent.click(preset(12_000));
+    expect(cta()).toBeDisabled();
+
+    fireEvent.click(cta());
+
+    expect(push).not.toHaveBeenCalled();
   });
 });

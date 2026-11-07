@@ -137,7 +137,7 @@ test.describe("homepage finder", () => {
     expect(posts).toEqual([]);
   });
 
-  test("moves focus to the configurations heading on submit and never posts", async ({ page }) => {
+  test("hands the answers to the configurator and never posts", async ({ page }) => {
     const { posts } = await stubHomepageApi(page);
     await page.goto("/fr");
 
@@ -146,10 +146,12 @@ test.describe("homepage finder", () => {
 
     await page.getByRole("button", { name: CTA, exact: true }).click();
 
-    // The CTA scrolls to the section and focuses its heading; the URL is
-    // unchanged because Step 1 has no results route to navigate to.
-    await expect(page.locator("#configurations-title")).toBeFocused();
-    await expect(page).toHaveURL(/\/fr$/);
+    // One URL contract: the two answers become query params, and the destination
+    // parses them back into its own radio and budget field rather than
+    // re-asking. The swap is a GET, so nothing is posted along the way.
+    await expect(page).toHaveURL(/\/fr\/configurateur\?use_case=OFFICE&budget=8000$/);
+    await expect(page.getByRole("radio", { name: /Études et bureautique/ })).toBeChecked();
+    await expect(page.getByRole("spinbutton", { name: "Budget (DH)" })).toHaveValue("8000");
     expect(posts).toEqual([]);
   });
 });

@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { useRouter } from "@/i18n/navigation";
+import { buildConfiguratorHref } from "@/lib/configurator/schema";
 import { formatPrice, groupNumber } from "@/lib/format/price";
 import {
   BUDGET_MAX,
@@ -29,10 +31,9 @@ const CUSTOM_BUDGET_ID = "homepage-custom-budget";
  *
  * Three things it deliberately does NOT do. It never asks for a resolution —
  * the shortcuts are deferred and nothing here stores or sends one. Its submit
- * never posts: while the results route does not exist, the CTA moves the
- * visitor to the configurations section instead of firing an engine pass. And
- * it does no data fetching of its own, so loading the page still makes no API
- * request.
+ * never posts: the CTA hands the two answers to the configurator as query
+ * params, so no engine pass is fired from here. And it does no data fetching of
+ * its own, so loading the page still makes no API request.
  *
  * Validation is the Task 1 Zod schema, run synchronously on every render: the
  * answers are two values, and a resolver pass that lands a tick later would let
@@ -42,6 +43,7 @@ const CUSTOM_BUDGET_ID = "homepage-custom-budget";
  * visible numbered markers are decorative.
  */
 export function BudgetUsageFinder() {
+  const router = useRouter();
   const t = useTranslations("Homepage.finder");
   const currency = useTranslations("Price")("currency");
   const setBudgetAmount = useHomepageStore((state) => state.setBudgetAmount);
@@ -100,19 +102,15 @@ export function BudgetUsageFinder() {
       return;
     }
 
-    // The builds section is rendered by a later task; until then the CTA is a
-    // no-op rather than a dead link or a premature POST.
-    const section = document.getElementById("configurations");
-    if (section === null) {
+    // The contract owns the shape, so the finder never assembles a URL by hand:
+    // a null href keeps the visitor here rather than opening a configurator the
+    // route would have to flag as invalid.
+    const href = buildConfiguratorHref({ useCase: storedUseCase, budgetAmount });
+    if (href === null) {
       return;
     }
 
-    section.scrollIntoView({ behavior: "smooth", block: "start" });
-    const heading = section.querySelector<HTMLElement>("h2");
-    if (heading !== null) {
-      heading.tabIndex = -1;
-      heading.focus();
-    }
+    router.push(href);
   };
 
   return (

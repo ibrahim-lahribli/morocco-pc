@@ -78,6 +78,8 @@ const renderPanel = (props: Partial<ComponentProps<typeof BuildSummaryPanel>> = 
         isPending={false}
         errorStatus={null}
         activeBuildRank={1}
+        requirements={{ useCase: "GAMING", budgetAmount: 12_000 }}
+        submitted={false}
         onSelectRank={vi.fn()}
         onRetry={vi.fn()}
         {...props}
@@ -99,6 +101,20 @@ describe("BuildSummaryPanel", () => {
     expect(screen.getByText("Prix indicatifs, non actualisés.")).toBeInTheDocument();
   });
 
+  it("shows the pass's own use case and budget, not the form's", () => {
+    renderPanel({
+      detail: {
+        ...(detail as unknown as Record<string, unknown>),
+        use_case: "OFFICE",
+        budget_amount: 15_000,
+      } as never,
+    });
+
+    expect(screen.getByText(/Études et bureautique/)).toBeInTheDocument();
+    expect(screen.getByText(/15\s?000/)).toBeInTheDocument();
+    expect(screen.queryByText("Jeux vidéo & Gaming")).toBeNull();
+  });
+
   it("keeps a missing total absent instead of showing zero", () => {
     renderPanel({ activeBuildRank: 2 });
 
@@ -110,6 +126,35 @@ describe("BuildSummaryPanel", () => {
     renderPanel({ detail: undefined });
 
     expect(screen.getByText("Aucune configuration chargée")).toBeInTheDocument();
+  });
+
+  it("explains the empty panel before any submit", () => {
+    renderPanel({ detail: undefined });
+
+    expect(screen.getByText(fr.Configurator.summary.emptyBody)).toBeInTheDocument();
+    expect(screen.queryByText(/Vos réponses/)).toBeNull();
+  });
+
+  it("recaps the answers after a submit and claims no build", () => {
+    renderPanel({
+      detail: undefined,
+      submitted: true,
+      requirements: { useCase: "OFFICE", budgetAmount: 8_000 },
+    });
+
+    expect(screen.getByText(fr.Configurator.summary.reviewBody)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Vos réponses : Études et bureautique · 8\s?000\s?DH/),
+    ).toBeInTheDocument();
+  });
+
+  it("never recaps under a loaded pass", () => {
+    renderPanel({
+      submitted: true,
+      requirements: { useCase: "OFFICE", budgetAmount: 8_000 },
+    });
+
+    expect(screen.queryByText(/Vos réponses/)).toBeNull();
   });
 
   it("announces a pending detail and keeps the total absent", () => {

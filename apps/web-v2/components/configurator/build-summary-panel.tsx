@@ -6,11 +6,17 @@ import { useRef, useState } from "react";
 
 import { Badge, Button, buttonVariants } from "@/components/ui";
 import type { PresetBuild, PresetDetail } from "@/lib/api/types";
+import { USE_CASE_MESSAGE_KEYS } from "@/lib/configurator/schema";
+import type { ConfiguratorRequirements } from "@/lib/configurator/store";
 import { formatPrice } from "@/lib/format/price";
 import { cn } from "@/lib/utils";
 
 export interface BuildSummaryPanelProps {
   detail: PresetDetail | undefined;
+  /** The visitor's answers, owned by the store: the recap quotes these. */
+  requirements: ConfiguratorRequirements;
+  /** True once the answers are submitted, so the panel recaps instead of prompting. */
+  submitted: boolean;
   /** The meta-sourced currency code; `MAD` is rendered through `Price.currency`. */
   currency: string;
   isPending: boolean;
@@ -75,6 +81,8 @@ function resolveState(
  */
 export function BuildSummaryPanel({
   detail,
+  requirements,
+  submitted,
   currency,
   isPending,
   errorStatus,
@@ -84,6 +92,7 @@ export function BuildSummaryPanel({
 }: BuildSummaryPanelProps) {
   const t = useTranslations("Configurator.summary");
   const tActions = useTranslations("Configurator.actions");
+  const tRequirements = useTranslations("Configurator.requirements");
   const tRoles = useTranslations("Configurator.roles");
   const tPrice = useTranslations("Price");
   const titleId = "build-summary-title";
@@ -96,6 +105,14 @@ export function BuildSummaryPanel({
   const badge = priceBadge(build?.price_status);
   const displayCurrency = currency === "MAD" ? tPrice("currency") : currency;
   const total = build?.total_price ?? null;
+  // The contract types `use_case` as `string`. An unrecognised value leaves the
+  // label out rather than borrowing one that would name a different use case.
+  const rawUseCase = detail?.use_case ?? null;
+  const useCaseKey =
+    rawUseCase === null
+      ? null
+      : ((USE_CASE_MESSAGE_KEYS as Record<string, "gaming" | "office" | "creation">)[rawUseCase] ??
+        null);
   const headerStatus =
     state === "loading"
       ? t("loading")
@@ -145,6 +162,15 @@ export function BuildSummaryPanel({
           detail?.budget_amount !== null &&
           detail?.budget_amount !== undefined ? (
             <p className="mt-1 text-label-md text-muted">
+              {useCaseKey !== null ? (
+                <>
+                  {t("useCaseLabel")} ·{" "}
+                  <span className="font-semibold text-foreground">
+                    {tRequirements(`usage.${useCaseKey}.title`)}
+                  </span>
+                  <span aria-hidden="true"> · </span>
+                </>
+              ) : null}
               {t("budgetLabel")} ·{" "}
               <span className="font-semibold text-foreground tabular-nums">
                 {formatPrice(detail.budget_amount, displayCurrency)}
@@ -221,7 +247,19 @@ export function BuildSummaryPanel({
 
         {state === "empty" ? (
           <div className="p-4">
-            <p className="text-body-sm text-muted">{t("emptyBody")}</p>
+            <p className="text-body-sm text-muted">
+              {submitted ? t("reviewBody") : t("emptyBody")}
+            </p>
+            {submitted && requirements.useCase !== null && requirements.budgetAmount !== null ? (
+              <p className="mt-2 text-label-md font-semibold text-foreground">
+                {t("reviewRecap", {
+                  useCase: tRequirements(
+                    `usage.${USE_CASE_MESSAGE_KEYS[requirements.useCase]}.title`,
+                  ),
+                  budget: formatPrice(requirements.budgetAmount, displayCurrency),
+                })}
+              </p>
+            ) : null}
           </div>
         ) : null}
 
