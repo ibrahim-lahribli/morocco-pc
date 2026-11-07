@@ -33,8 +33,26 @@ export function normalizeApiBaseUrl(raw: string): string {
   return raw.trim().replace(/\/+$/, "");
 }
 
+/**
+ * The public value the bundler INLINES, read through the literal member
+ * expression Next replaces at build time.
+ *
+ * This hoisted constant is load-bearing, not style. Next rewrites a literal
+ * `process.env.NEXT_PUBLIC_*` member access when it bundles for the browser; it
+ * does NOT rewrite a dynamic lookup that reads the whole `process.env` object
+ * (which is what `env.NEXT_PUBLIC_API_BASE_URL` is when `env` defaults to
+ * `process.env`). In the browser `process.env` is an empty shim, so the dynamic
+ * form silently yields `undefined` and EVERY client falls back to
+ * `DEFAULT_API_BASE_URL` - a configured `NEXT_PUBLIC_API_BASE_URL` never arrives.
+ * Measured 2026-11-07: a build with the staging origin in `.env.local` inlined
+ * `http://localhost:3000` instead, and the browser requested that origin.
+ */
+const INLINED_PUBLIC_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+
 /** The origin a browser uses; never reads the server-only variable. */
-export function resolveBrowserApiBaseUrl(env: ApiEnvironment = process.env): string {
+export function resolveBrowserApiBaseUrl(
+  env: ApiEnvironment = { NEXT_PUBLIC_API_BASE_URL: INLINED_PUBLIC_API_BASE_URL },
+): string {
   const configured = normalizeApiBaseUrl(env.NEXT_PUBLIC_API_BASE_URL ?? "");
   return configured === "" ? DEFAULT_API_BASE_URL : configured;
 }
