@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { stubHomepageApi } from "./support/homepage-api";
+
 test.describe("homepage shell", () => {
   test("renders the approved static sections in French with a single h1", async ({ page }) => {
     await page.goto("/fr");
@@ -40,5 +42,31 @@ test.describe("homepage shell", () => {
     // The cards hydrate after the shell, so wait for the first read to land.
     await expect.poll(() => calls.length).toBeGreaterThan(0);
     expect(new Set(calls)).toEqual(new Set(["GET"]));
+  });
+
+  // Document order, not pixel position: §1.1/§7/§16.1 order a reader must be able to trust
+  // at every breakpoint, with or without layout.
+  test("renders discovery pathways between the configurations and the trust section", async ({
+    page,
+  }) => {
+    await stubHomepageApi(page);
+    await page.goto("/fr");
+
+    const order = await page.evaluate(() => {
+      const elements = ["configurations", "pathways", "confiance"].map((id) =>
+        document.getElementById(id),
+      );
+
+      const [configurations, pathways, trust] = elements;
+      if (!configurations || !pathways || !trust) return null;
+
+      return (
+        Boolean(
+          configurations.compareDocumentPosition(pathways) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ) && Boolean(pathways.compareDocumentPosition(trust) & Node.DOCUMENT_POSITION_FOLLOWING)
+      );
+    });
+
+    expect(order).toBe(true);
   });
 });

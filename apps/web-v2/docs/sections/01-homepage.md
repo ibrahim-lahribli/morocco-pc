@@ -82,6 +82,12 @@ The eight sections the implementation must ship (per the Step 1 brief) are:
 7. Final CTA.
 8. Footer and mobile navigation.
 
+**Numbered order is authoritative where a frame's node order differs.** The frame audits
+above are the design reference; the shipped page renders recommended configurations, then
+discovery pathways, then trust, following the eight-section sequence in this list, §7 and
+the §16.1 acceptance checks. A frame's node order is never edited to match the
+implementation — it records what the design file contains.
+
 ### 1.2 Fidelity deltas between the frames and the Step 0 token set
 
 The Step 0 foundation is the source of truth for tokens (`app/globals.css`,
@@ -596,7 +602,7 @@ auto-rotating carousel.
 homepage implementations.
 
 **Desktop composition.** Render the approved four-tile `Catégories & usages` grid
-(`19:426`) after the trust section, with actions that preselect the corresponding finder
+(`19:426`) after the recommended configurations and before the trust section, with actions that preselect the corresponding finder
 use case. Keep the Figma tile hierarchy and visual treatment. Use only product-supported
 use cases mapped in the Homepage dictionaries; a resolution tile is a discovery shortcut,
 not a new API use case.
@@ -1032,8 +1038,8 @@ item is reported as skipped.
 - [ ] At 390 px the page order matches `23:1179`: hero → finder → configurations →
       shortcuts → trust → guides → CTA → footer, with the bottom nav fixed.
 - [ ] At 1440 px the composition matches `19:3`: banner, hero with preview card and
-      side-by-side finder, three use-case cards, trust in three columns, desktop
-      Catégories & usages grid, four guides in a row, gradient CTA.
+      side-by-side finder, three use-case cards, the desktop Catégories & usages grid,
+      trust in three columns, four guides in a row, gradient CTA.
 - [ ] Every colour used is a token utility; `npm run lint` plus a diff review finds no hex
       literal and no `ml/mr/pl/pr/left/right/text-left` utility in the new components.
 - [ ] Type steps come from the existing scale; no new `text-[…]` arbitrary size.
