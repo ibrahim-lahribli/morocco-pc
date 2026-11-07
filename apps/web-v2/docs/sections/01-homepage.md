@@ -161,10 +161,11 @@ two files):
 **Discovery pathways (responsive variants).** Keep the desktop frame's `Catégories &
 usages` grid (`19:426`) and the mobile frame's Gaming 1080p / 1440p shortcuts
 (`23:1344`). They are two presentations of one `DiscoveryPathways` component, not two
-page implementations. Desktop tiles preselect their mapped finder use case; mobile
-resolution tiles set Gaming plus a resolution only when `resolution` appears in
-`inputs_applied`. Neither variant submits a recommendation. This resolves Q-04 in favour
-of preserving the approved desktop frame.
+page implementations. Desktop tiles preselect their mapped finder use case; the mobile
+resolution tiles ship hidden in the first release (Q-20) and, once enabled, set Gaming
+plus a resolution only when `resolution` appears in `inputs_applied`. Neither variant
+submits a recommendation. This resolves Q-04 in favour of preserving the approved
+desktop frame.
 
 ### 2.3 Layout rules
 
@@ -618,8 +619,11 @@ usage group. No pathway makes a network write. The mobile resolution tiles ship 
 stay hidden unless `inputs_applied` includes `resolution` — an advertised resolution value
 alone does not prove the active model reads it.
 
-**Responsive behaviour.** Desktop category grid is shown from `lg`; mobile resolution
-tiles are shown below `lg`. Use responsive placement to match the two approved frame
+**Responsive behaviour.** Desktop category grid is shown from `lg`. The mobile resolution
+tiles are deferred in the first release (Q-20); once enabled they are shown below `lg`.
+Use responsive placement to match the two approved frame sequences while retaining one
+component and one state owner. Verify keyboard and screen-reader reading order at both
+breakpoints.
 sequences while retaining one component and one state owner. Verify keyboard and
 screen-reader reading order at both breakpoints.
 
