@@ -1,10 +1,9 @@
 import { Link } from "@/i18n/navigation";
 import type { AppLocale } from "@/i18n/routing";
 
-import { PrimaryNav, type PrimaryNavItem } from "@/components/home/primary-nav";
-
 import { LocaleSwitcher } from "./locale-switcher";
 import { Logo } from "./logo";
+import { PrimaryNav, type PrimaryNavItem } from "./primary-nav";
 
 export interface SiteHeaderProps {
   locale: AppLocale;

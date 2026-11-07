@@ -12,14 +12,18 @@ export interface GuideCardProps {
  * One guide preview: token-gradient media, category + reading time, title and
  * the call to action.
  *
- * An `<article aria-disabled="true">` rather than a link: the guide routes and
- * their bodies belong to a later step, so the card states what it is without
- * pointing at a 404.
+ * A plain `<article data-disabled="true">` rather than a link: the guide routes
+ * and their bodies belong to a later step, so the card states what it is without
+ * pointing at a 404. `aria-disabled` used to sit here and was wrong — the
+ * attribute is only supported on widget roles, and `article` is not one, so it
+ * announced nothing while failing `jsx-a11y/role-supports-aria-props`. The card
+ * holds no interactive element for it to disable: the CTA is text, so the hook
+ * is a data attribute for styling and tests only.
  */
 export function GuideCard({ category, minutes, title, cta }: GuideCardProps) {
   return (
     <article
-      aria-disabled="true"
+      data-disabled="true"
       className="flex h-full flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-level-1"
     >
       <div

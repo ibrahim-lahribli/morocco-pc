@@ -5,7 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 
 import { AnnouncementBanner } from "@/components/home/announcement-banner";
-import type { PrimaryNavItem } from "@/components/home/primary-nav";
+import type { PrimaryNavItem } from "@/components/layout/primary-nav";
 import { MobileNav, type MobileNavItem } from "@/components/layout/mobile-nav";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";

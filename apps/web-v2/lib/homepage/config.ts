@@ -8,7 +8,7 @@
  *   mutation at all, so the finder's CTA only moves focus to the cards; when the
  *   results route exists this flag decides whether that CTA may POST.
  * - `GUIDES_ENABLED` gates the guide routes. No guide page exists yet, so the
- *   cards are `aria-disabled` articles rather than links to a 404.
+ *   cards are `data-disabled` articles rather than links to a 404.
  *
  * Neither flag may be turned on without the feature behind it.
  */

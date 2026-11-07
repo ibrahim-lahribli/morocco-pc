@@ -751,7 +751,10 @@ belong to Step 4; Step 1 does not invent thirteen more guides and does not rende
 
 **Interactions.** Cards are links to `/[locale]/guides/{slug}`. Until Step 4 ships that
 route, `NEXT_PUBLIC_GUIDES_ENABLED=off` (default in Step 1) renders the card as an
-`<article>` with `aria-disabled="true"` and no `href` (Q-12).
+`<article>` with `data-disabled="true"` and no `href` (Q-12). The attribute is a data
+hook, not ARIA: `aria-disabled` is only supported on widget roles and `article` is not one,
+so it announced nothing and tripped `jsx-a11y/role-supports-aria-props`. The card contains
+no interactive element for it to disable.
 
 **Responsive behaviour.** Mobile: 2 items, one column; `md`: 2 columns, 4 items; `lg`: 4
 columns. Items 3–4 are visually hidden below `md` with `max-md:hidden`, so one data array
@@ -875,7 +878,6 @@ components/home/
   homepage-hero.tsx               server   hero copy + trust chips + rig preview slot
   hero-rig-preview.tsx            server   preview card (Badge/Card only)
   announcement-banner.tsx         server   desktop banner
-  primary-nav.tsx                 server   header anchors
   budget-usage-finder.tsx         client   the form island (RHF + Zod + mutation)
   budget-preset-grid.tsx          client   radios (or server markup driven by RHF)
   custom-budget-field.tsx         client   numeric input + slider (lg)
