@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-import { stubHomepageApi } from "./support/homepage-api";
+import { CARD_TITLES, stubHomepageApi } from "./support/homepage-api";
+import { waitForSettledCards } from "./support/homepage-ready";
 
 /**
  * The finder island on its own: two answers, one CTA.
@@ -42,6 +43,7 @@ test.describe("homepage finder", () => {
   test("takes the typed amount as the budget and rejects out-of-range values", async ({ page }) => {
     await stubHomepageApi(page);
     await page.goto("/fr");
+    await waitForSettledCards(page);
 
     const cta = page.getByRole("button", { name: CTA, exact: true });
     const amount = page.getByRole("spinbutton", { name: "Budget exact en dirhams" });
@@ -111,6 +113,27 @@ test.describe("homepage finder", () => {
     await page.getByRole("button", { name: "Trouver mon PC en 1 minute" }).click();
     await expect(page.locator("#finder-budget")).toBeFocused();
 
+    expect(posts).toEqual([]);
+  });
+
+  test("narrows the cards to the pathway's use case", async ({ page }) => {
+    const { posts } = await stubHomepageApi(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/fr");
+    await waitForSettledCards(page);
+
+    const section = page.locator("#configurations");
+    await expect(section.locator("article")).toHaveCount(3);
+
+    await page.getByRole("button", { name: "Études & bureautique", exact: true }).click();
+
+    // The tile writes the same store field the radio group does, so the cards
+    // must follow it: a count of 3 here would mean the tile moved the radio and
+    // nothing else.
+    await expect(page.getByRole("radio", { name: USAGE_OFFICE })).toBeChecked();
+    await expect(section.locator("article")).toHaveCount(1);
+    await expect(section.getByRole("heading", { name: CARD_TITLES.OFFICE })).toBeVisible();
+    await expect(section.getByRole("heading", { name: CARD_TITLES.GAMING })).toHaveCount(0);
     expect(posts).toEqual([]);
   });
 
