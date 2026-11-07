@@ -154,7 +154,8 @@ Components use semantic token utilities only, and CSS logical properties
 (`ms/me`, `ps/pe`, `start/end`, `text-start`) so RTL mirrors without a second
 stylesheet. `docs/DESIGN_SYSTEM.md` documents every token and component API.
 
-Do not add a colour literal or a physical direction utility to a component. If a
+Do not add a colour literal or a physical direction utility to a component —
+`tests/homepage/rtl-utilities.test.ts` fails on one. If a
 new token is genuinely needed, add it to `@theme` and document it.
 
 ## Internationalisation
@@ -248,9 +249,10 @@ Fastify API; V2 owns presentation only.
 - ESLint (`next/core-web-vitals`, `next/typescript`)
 - Prettier + Tailwind class sorting
 - Vitest: dictionaries, price formatting, validation schema, Zustand store, kit accessibility, API config/error/retry/client/provider, and the configurator's URL contract, store, queries and form
-- `npm run check:api-types`: generated API types match `apps/api`'s contract- Playwright (55 specs): shell sections and breakpoints, finder answers/CTA/navigation, the cards'
+- `npm run check:api-types`: generated API types match `apps/api`'s contract
+- Playwright (62 specs): shell sections and breakpoints, finder answers/CTA/navigation, the cards'
   badges and empty/error states, pathways and the closing CTA, the Arabic/RTL pass (direction,
-  typeface, mirroring, five widths in both locales, 360 px nav clearance), the configurator (deep
+  typeface, mirroring, seven widths in both locales, 360 px nav clearance), the configurator (deep
   links, form, loading/404/error/retry, ranked builds, locale switch, 360 px bars, no writes) and
   the homepage → configurator journey (three handoffs, reload, back, both locale switches, the
   `from` plus invalid-budget combination)
