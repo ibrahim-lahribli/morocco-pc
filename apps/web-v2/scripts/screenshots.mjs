@@ -1,13 +1,16 @@
 /**
- * Capture the Step 0 evidence screenshots (desktop + mobile, fr + ar).
+ * Capture the homepage evidence screenshots (desktop + mobile, fr + ar).
  *
- * The app must already be running: `npm run build && npm run start` (or
- * `npm run dev`). Usage:
+ * The app must already be running against the API the evidence is meant to
+ * show: `npm run build && npm run start` (or `npm run dev`). The page is
+ * data-bearing, so each capture waits for the recommended-configuration
+ * section to settle before the shot is taken.
  *
+ * Usage:
  *   node scripts/screenshots.mjs
  *   SCREENSHOT_BASE_URL=http://localhost:3220 node scripts/screenshots.mjs
  *
- * Output:
+ * Output (regenerate after a visual change; never hand-edit):
  *   desktop-{fr,ar}.png        full page at 1440 x 1000
  *   mobile-{fr,ar}.png         phone viewport at 390 x 844, bottom nav visible
  *   mobile-{fr,ar}-full.png    full page with the fixed nav hidden, so it does
@@ -20,6 +23,10 @@ import { chromium } from "@playwright/test";
 
 const baseUrl = process.env.SCREENSHOT_BASE_URL ?? "http://localhost:3220";
 const outputDir = path.resolve(process.cwd(), "docs/screenshots");
+// A cold staging API was measured at ~24 s, so allow for it rather than
+// capturing a skeleton and calling it evidence.
+const navigationTimeoutMs = 90_000;
+const settleTimeoutMs = 60_000;
 
 const viewports = [
   { name: "desktop", width: 1440, height: 1000 },
@@ -31,17 +38,52 @@ await mkdir(outputDir, { recursive: true });
 const browser = await chromium.launch();
 try {
   for (const viewport of viewports) {
-    const page = await browser.newPage({
+    const context = await browser.newContext({
       viewport: { width: viewport.width, height: viewport.height },
       deviceScaleFactor: 1,
+      // The page honours prefers-reduced-motion; evidence must not depend on
+      // an entrance transition being mid-flight.
+      reducedMotion: "reduce",
     });
+    const page = await context.newPage();
+    page.setDefaultNavigationTimeout(navigationTimeoutMs);
+    page.setDefaultTimeout(navigationTimeoutMs);
 
     for (const locale of ["fr", "ar"]) {
       await page.goto(`${baseUrl}/${locale}`, { waitUntil: "networkidle" });
       await page.evaluate(async () => {
         await document.fonts.ready;
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       });
-      await page.waitForTimeout(250);
+
+      // The cards are the page's only data-bearing surface. A busy slot means
+      // a skeleton is on screen, so wait for the section to stop reporting one.
+      const settled = await page
+        .waitForFunction(
+          () => {
+            const section = document.querySelector("#configurations");
+            if (section === null) return false;
+            return section.querySelector("[aria-busy='true']") === null;
+          },
+          undefined,
+          { timeout: settleTimeoutMs },
+        )
+        .then(() => true)
+        .catch(() => false);
+
+      if (!settled) {
+        console.warn(
+          `${locale}: #configurations still busy after ${settleTimeoutMs} ms; capturing anyway`,
+        );
+      }
+
+      const articles = await page.locator("#configurations article").count();
+      console.log(`${locale}: ${articles} configuration card(s) visible`);
+      if (articles === 0) {
+        console.warn(
+          `${locale}: no configuration cards — check the API origin, CORS and this run's network before treating these shots as evidence`,
+        );
+      }
 
       const write = async (suffix, fullPage) => {
         const file = path.join(outputDir, `${viewport.name}-${locale}${suffix}.png`);
@@ -70,7 +112,7 @@ try {
       await write("-full", true);
     }
 
-    await page.close();
+    await context.close();
   }
 } finally {
   await browser.close();
