@@ -9,6 +9,11 @@
  * Usage:
  *   node scripts/screenshots.mjs
  *   SCREENSHOT_BASE_URL=http://localhost:3220 node scripts/screenshots.mjs
+ *   SCREENSHOT_OUTPUT_DIR=docs/screenshots/step-3-4/before node scripts/screenshots.mjs
+ *
+ * `SCREENSHOT_OUTPUT_DIR` defaults to `docs/screenshots`, so a refinement pass
+ * can keep its before/after sets in their own directory instead of overwriting
+ * the committed baseline.
  *
  * Output (regenerate after a visual change; never hand-edit):
  *   desktop-{fr,ar}.png        full page at 1440 x 1000
@@ -22,7 +27,10 @@ import path from "node:path";
 import { chromium } from "@playwright/test";
 
 const baseUrl = process.env.SCREENSHOT_BASE_URL ?? "http://localhost:3220";
-const outputDir = path.resolve(process.cwd(), "docs/screenshots");
+const outputDir = path.resolve(
+  process.cwd(),
+  process.env.SCREENSHOT_OUTPUT_DIR ?? "docs/screenshots",
+);
 // A cold staging API was measured at ~24 s, so allow for it rather than
 // capturing a skeleton and calling it evidence.
 const navigationTimeoutMs = 90_000;

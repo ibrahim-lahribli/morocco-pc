@@ -44,20 +44,20 @@ page in Arabic RTL.
 
 ## Scripts
 
-| Script                            | What it does                                                                                                                                      |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`                     | Next dev server on **port 3220**                                                                                                                  |
-| `npm run build`                   | Production build                                                                                                                                  |
-| `npm run start`                   | Serve the production build on port 3220                                                                                                           |
-| `npm run typecheck`               | `tsc --noEmit` (strict)                                                                                                                           |
-| `npm run lint`                    | ESLint 9 flat config (`eslint-config-next`)                                                                                                       |
-| `npm run format` / `format:check` | Prettier, with Tailwind class sorting                                                                                                             |
-| `npm test`                        | Vitest unit tests (jsdom)                                                                                                                         |
-| `npm run test:watch`              | Vitest in watch mode                                                                                                                              |
-| `npm run test:e2e`                | Playwright browser tests (starts the dev server)                                                                                                  |
-| `npm run gen:api-types`           | Regenerate `lib/api/schema.d.ts` from the API's committed OpenAPI contract                                                                        |
-| `npm run check:api-types`         | Fail when the generated types no longer match that contract                                                                                       |
-| `npm run screenshots`             | Writes `docs/screenshots/desktop-{fr,ar}.png`, `mobile-{fr,ar}.png` (viewport, nav visible) and `mobile-{fr,ar}-full.png`; needs a running server |
+| Script                            | What it does                                                                                                                                                                                                                                    |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                     | Next dev server on **port 3220**                                                                                                                                                                                                                |
+| `npm run build`                   | Production build                                                                                                                                                                                                                                |
+| `npm run start`                   | Serve the production build on port 3220                                                                                                                                                                                                         |
+| `npm run typecheck`               | `tsc --noEmit` (strict)                                                                                                                                                                                                                         |
+| `npm run lint`                    | ESLint 9 flat config (`eslint-config-next`)                                                                                                                                                                                                     |
+| `npm run format` / `format:check` | Prettier, with Tailwind class sorting                                                                                                                                                                                                           |
+| `npm test`                        | Vitest unit tests (jsdom)                                                                                                                                                                                                                       |
+| `npm run test:watch`              | Vitest in watch mode                                                                                                                                                                                                                            |
+| `npm run test:e2e`                | Playwright browser tests (starts the dev server)                                                                                                                                                                                                |
+| `npm run gen:api-types`           | Regenerate `lib/api/schema.d.ts` from the API's committed OpenAPI contract                                                                                                                                                                      |
+| `npm run check:api-types`         | Fail when the generated types no longer match that contract                                                                                                                                                                                     |
+| `npm run screenshots`             | Writes `docs/screenshots/desktop-{fr,ar}.png`, `mobile-{fr,ar}.png` (viewport, nav visible) and `mobile-{fr,ar}-full.png`; needs a running server; set `SCREENSHOT_OUTPUT_DIR` to write into a subdirectory instead of overwriting the baseline |
 
 Playwright's browser binary is not downloaded by `npm install`. Install it once:
 
