@@ -142,8 +142,8 @@ Feature islands (`components/home`) compose these and own client state:
   validation and writes to the homepage store. It never POSTs.
 
 The rest of `components/home` is server-rendered and takes its copy as props:
-`AnnouncementBanner`, `PrimaryNav`, `HomepageHero`, `HeroRigPreview`,
-`TrustHighlights`, `FeaturedGuides` and `GuideCard`.
+`AnnouncementBanner`, `HomepageHero`, `HeroRigPreview`, `TrustHighlights`,
+`FeaturedGuides` and `GuideCard`.
 
 ### Layout components
 
@@ -152,6 +152,9 @@ The rest of `components/home` is server-rendered and takes its copy as props:
 - `SiteHeader({ locale, brand, navLabel, languageLabel, labels, ariaLabels, navItems? })`
   — 56 px on mobile, 64 px from `lg`. `navItems` renders the desktop anchor nav
   (`PrimaryNav`), which CSS hides below `lg`; no JavaScript breakpoint logic.
+- `PrimaryNav({ label, items })` — the desktop anchor nav. It lives here, not in
+  `components/home`, because the header renders it: a layout component may not
+  depend on a page feature.
 - `SiteFooter({ brand, tagline, copyright, location?, links? })` — `location`
   and `links` are the mobile rows, and each `links` entry is `aria-disabled` text
   because none of those pages exists yet. The `lg` row is unchanged.
