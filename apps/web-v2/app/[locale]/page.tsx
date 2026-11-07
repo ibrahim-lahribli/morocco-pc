@@ -4,7 +4,9 @@ import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 
 import { BudgetUsageFinder } from "@/components/home/budget-usage-finder";
+import { DiscoveryPathways } from "@/components/home/discovery-pathways";
 import { FeaturedGuides } from "@/components/home/featured-guides";
+import { FinalRecommendationCTA } from "@/components/home/final-recommendation-cta";
 import { HomepageHero } from "@/components/home/homepage-hero";
 import { RecommendedBuildSection } from "@/components/home/recommended-build-section";
 import { TrustHighlights } from "@/components/home/trust-highlights";
@@ -55,8 +57,10 @@ export default async function Homepage({ params }: { params: Promise<{ locale: s
       </HomepageHero>
 
       <RecommendedBuildSection />
+      <DiscoveryPathways />
       <TrustHighlights />
       <FeaturedGuides />
+      <FinalRecommendationCTA />
     </div>
   );
 }

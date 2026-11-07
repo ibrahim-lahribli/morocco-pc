@@ -82,7 +82,7 @@ test.describe("recommended configurations", () => {
     await expect(section.getByRole("heading", { name: CARD_TITLES.GAMING })).toHaveCount(0);
     await expect(section.getByText(/Budget visé · 8\s000\sDH/)).toHaveCount(1);
 
-    await page.getByRole("button", { name: "Trouver mon PC" }).click();
+    await page.getByRole("button", { name: "Trouver mon PC", exact: true }).click();
     await expect(page).toHaveURL(/\/fr$/);
 
     expect(posts).toEqual([]);

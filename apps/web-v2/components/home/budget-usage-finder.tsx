@@ -46,6 +46,7 @@ export function BudgetUsageFinder() {
   const currency = useTranslations("Price")("currency");
   const setBudgetAmount = useHomepageStore((state) => state.setBudgetAmount);
   const setUseCase = useHomepageStore((state) => state.setUseCase);
+  const storedUseCase = useHomepageStore((state) => state.useCase);
 
   const [values, setValues] = useState<FinderValues>(EMPTY_FINDER_VALUES);
 
@@ -62,10 +63,10 @@ export function BudgetUsageFinder() {
   );
 
   const budgetAmount = resolveBudgetAmount(values);
-  const canSubmit = budgetAmount !== null && values.useCase !== null;
+  const canSubmit = budgetAmount !== null && storedUseCase !== null;
 
   // Only a typed amount can be out of range: a preset always is one of the four.
-  const parsed = schema.safeParse(values);
+  const parsed = schema.safeParse({ ...values, useCase: storedUseCase });
   const typedAmountInvalid =
     values.budgetPreset === null &&
     values.customBudget.trim() !== "" &&
@@ -76,21 +77,22 @@ export function BudgetUsageFinder() {
     ? t("error.budgetRange", { min: groupNumber(BUDGET_MIN), max: groupNumber(BUDGET_MAX) })
     : undefined;
 
-  // Mirror every change into the store; the builds section reads it.
+  // The store owns the usage answer: the usage radios and a discovery tile both
+  // write it, so the selected radio and the cards can never disagree. Only the
+  // budget is form-local, and it is mirrored here for the builds section.
   useEffect(() => {
     setBudgetAmount(budgetAmount);
-    setUseCase(values.useCase);
-  }, [budgetAmount, values.useCase, setBudgetAmount, setUseCase]);
+  }, [budgetAmount, setBudgetAmount]);
 
   // One budget answer only: picking a preset drops a typed amount, and typing
   // drops the preset.
   const onPresetChange = (amount: number) =>
-    setValues({ budgetPreset: amount, customBudget: "", useCase: values.useCase });
+    setValues({ budgetPreset: amount, customBudget: "", useCase: null });
 
   const onCustomChange = (raw: string) =>
-    setValues({ budgetPreset: null, customBudget: raw, useCase: values.useCase });
+    setValues({ budgetPreset: null, customBudget: raw, useCase: null });
 
-  const onUsageChange = (useCase: HomeUseCase) => setValues((current) => ({ ...current, useCase }));
+  const onUsageChange = (useCase: HomeUseCase) => setUseCase(useCase);
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -130,7 +132,7 @@ export function BudgetUsageFinder() {
         </div>
 
         <form noValidate onSubmit={onSubmit} className="mt-5 flex flex-col gap-6">
-          <fieldset className="flex flex-col gap-3">
+          <fieldset id="finder-budget" className="flex flex-col gap-3">
             <legend className="mb-1 flex w-full items-center gap-2 text-headline-sm text-foreground">
               <span
                 aria-hidden="true"
@@ -156,7 +158,7 @@ export function BudgetUsageFinder() {
             />
           </fieldset>
 
-          <fieldset className="flex flex-col gap-3">
+          <fieldset id="finder-usage" className="flex flex-col gap-3">
             <legend className="mb-1 flex w-full items-center gap-2 text-headline-sm text-foreground">
               <span
                 aria-hidden="true"
@@ -167,7 +169,7 @@ export function BudgetUsageFinder() {
               {t("usage.question")}
             </legend>
 
-            <UsageSelector value={values.useCase} onChange={onUsageChange} />
+            <UsageSelector value={storedUseCase} onChange={onUsageChange} />
           </fieldset>
 
           <div className="flex flex-col gap-2">

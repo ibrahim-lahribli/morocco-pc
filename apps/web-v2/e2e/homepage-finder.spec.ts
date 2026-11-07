@@ -25,7 +25,7 @@ test.describe("homepage finder", () => {
     await stubHomepageApi(page);
     await page.goto("/fr");
 
-    const cta = page.getByRole("button", { name: CTA });
+    const cta = page.getByRole("button", { name: CTA, exact: true });
     const budgetStatus = page.locator("#simulateur").getByRole("status");
 
     await expect(budgetStatus).toHaveText("À définir");
@@ -43,7 +43,7 @@ test.describe("homepage finder", () => {
     await stubHomepageApi(page);
     await page.goto("/fr");
 
-    const cta = page.getByRole("button", { name: CTA });
+    const cta = page.getByRole("button", { name: CTA, exact: true });
     const amount = page.getByRole("spinbutton", { name: "Budget exact en dirhams" });
     const budgetStatus = page.locator("#simulateur").getByRole("status");
 
@@ -87,6 +87,33 @@ test.describe("homepage finder", () => {
     await expect(budgetStatus).toHaveText(/Budget de 9\s?000\s?DH/);
   });
 
+  test("renders no resolution shortcut tile at any breakpoint", async ({ page }) => {
+    await stubHomepageApi(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/fr");
+    await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
+    await expect(page.getByText(/1080p|1440p/)).toHaveCount(0);
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(page.getByText(/1080p|1440p/)).toHaveCount(0);
+  });
+
+  test("pathways and the closing call to action both lead back to the finder", async ({ page }) => {
+    const { posts } = await stubHomepageApi(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/fr");
+
+    await page.getByRole("button", { name: "Études & bureautique", exact: true }).click();
+    await expect(page.getByRole("radio", { name: USAGE_OFFICE })).toBeChecked();
+    await expect(page.locator("#finder-usage")).toBeFocused();
+
+    await page.getByRole("button", { name: "Trouver mon PC en 1 minute" }).click();
+    await expect(page.locator("#finder-budget")).toBeFocused();
+
+    expect(posts).toEqual([]);
+  });
+
   test("moves focus to the configurations heading on submit and never posts", async ({ page }) => {
     const { posts } = await stubHomepageApi(page);
     await page.goto("/fr");
@@ -94,7 +121,7 @@ test.describe("homepage finder", () => {
     await page.getByRole("radio", { name: BUDGET_PRESET_8000 }).check({ force: true });
     await page.getByRole("radio", { name: USAGE_OFFICE }).check({ force: true });
 
-    await page.getByRole("button", { name: CTA }).click();
+    await page.getByRole("button", { name: CTA, exact: true }).click();
 
     // The CTA scrolls to the section and focuses its heading; the URL is
     // unchanged because Step 1 has no results route to navigate to.
