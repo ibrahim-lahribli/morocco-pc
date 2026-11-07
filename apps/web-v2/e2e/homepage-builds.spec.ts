@@ -212,6 +212,41 @@ test.describe("recommended configurations", () => {
     await expect(section.getByRole("heading", { name: CARD_TITLES.GAMING })).toBeVisible();
   });
 
+  test("aligns a card's score and price on one line", async ({ page }) => {
+    await stubHomepageApi(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/fr");
+    await waitForSettledCards(page);
+
+    // The first card's two values: the score, in the label size, and the price,
+    // in the price size. They share one 28px line box, so both the box and the
+    // text sit on the same line.
+    const boxes = await page.locator('[data-slot="build-card"] dl dd').evaluateAll((values) =>
+      values.slice(0, 2).map((value) => {
+        const box = value.getBoundingClientRect();
+        return { top: box.top, bottom: box.bottom };
+      }),
+    );
+
+    expect(boxes).toHaveLength(2);
+    expect(Math.abs(boxes[0]!.top - boxes[1]!.top)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes[0]!.bottom - boxes[1]!.bottom)).toBeLessThanOrEqual(1);
+  });
+
+  test("keeps an erroring slot the height of a filled card", async ({ page }) => {
+    await stubHomepageApi(page, { failPresetsFor: ["GAMING"] });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/fr");
+    await waitForSettledCards(page);
+
+    const heights = await page
+      .locator("#configurations article")
+      .evaluateAll((cards) => cards.map((card) => Math.round(card.getBoundingClientRect().height)));
+
+    expect(heights).toHaveLength(3);
+    expect(new Set(heights).size, `card heights: ${heights.join(", ")}`).toBe(1);
+  });
+
   test("never writes on load", async ({ page }) => {
     const { posts } = await stubHomepageApi(page);
     await page.goto("/fr");

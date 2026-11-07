@@ -101,10 +101,16 @@ export function FeaturedBuildCard({
           </p>
         ) : null}
 
+        {/*
+          Both value lines share the price's 28px line box, so the two numbers
+          sit on one baseline instead of the score riding 4px high. When a build
+          has no price the score cell still holds that height, keeping the three
+          cards' rows level with each other.
+        */}
         <dl className="mt-auto flex items-end justify-between gap-2 border-t border-border pt-2">
           <div>
             <dt className="text-label-md text-muted">{t("scoreLabel")}</dt>
-            <dd className="text-label-lg font-semibold text-foreground tabular-nums">
+            <dd className="min-h-7 text-label-lg leading-7 font-semibold text-foreground tabular-nums">
               {view.score === null ? "—" : t("scoreValue", { score: view.score })}
             </dd>
           </div>
