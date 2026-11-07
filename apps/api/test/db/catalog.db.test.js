@@ -19,9 +19,10 @@
  *   1. The keyset walk is COMPLETE AND DUPLICATE-FREE. A stub can prove the
  *      cursor arithmetic; only the real `slug > cursor` page against 100 rows
  *      proves no row is skipped or repeated at a page boundary.
- *   2. `from_price` is the cheapest ELIGIBLE offer of that product, computed by
- *      SQL that does not share the statement's implementation - compared against
- *      the offer the detail page serves FIRST.
+ *   2. `from_price` is the offer the engine would select for that product
+ *      (VERIFIED before SEED, then cheapest - Decision 65), computed by SQL that
+ *      does not share the statement's implementation - compared against the
+ *      offer the detail page serves FIRST.
  *   3. Provenance is derived, not assumed: every `offer_class` served today is
  *      `SEED_UNVERIFIED`, because every `store_offer` row has a NULL
  *      `ingestion_record_id` (Decision 35 beta data), and the derived
@@ -155,7 +156,7 @@ test('the role filter narrows by the derived category, and only that category is
   }
 });
 
-test('from_price is the cheapest eligible offer, and the detail page prices the same offer first', async () => {
+test('from_price is the offer the engine would select, and the detail page prices the same offer first', async () => {
   const pool = createPool();
   const app = createApp(pool);
   try {
@@ -169,12 +170,13 @@ test('from_price is the cheapest eligible offer, and the detail page prices the 
     const detail = await getJson(app, '/v1/catalog/products/' + encodeURIComponent(row.slug));
     assert.equal(detail.status, 200);
     assert.ok(detail.body.offers.length > 0, 'a priced product has offers');
-    const cheapest = Math.min(...detail.body.offers.map((offer) => offer.price));
+    const first = detail.body.offers[0];
 
     const page = await getJson(app, '/v1/catalog/products?limit=100');
     const listed = page.body.products.find((product) => product.slug === row.slug);
     assert.ok(listed, 'the product appears in the list');
-    assert.equal(listed.from_price, cheapest, 'the list advertises the cheapest eligible offer, not another one');
+    assert.equal(listed.from_price, first.price, 'the list advertises the offer the detail page serves first');
+    assert.equal(listed.offer_class, first.offer_class, 'the advertised class belongs to the advertised price');
     assert.equal(listed.has_offer, true);
     assert.equal(listed.offer_class, 'SEED_UNVERIFIED', 'the seed catalogue’s provenance label is derived, not assumed');
   } finally {
@@ -253,7 +255,7 @@ test('a GPU product with two variants serves the spec of the variant its cheapes
       'SELECT o.product_variant_id'
       + ' FROM store_offer o'
       + " WHERE o.product_id = $1 AND o.currency = 'MAD' AND o.price > 0 AND o.availability <> 'OUT_OF_STOCK'"
-      + ' ORDER BY o.price ASC, o.id ASC LIMIT 1',
+      + ' ORDER BY (o.ingestion_record_id IS NULL) ASC, o.price ASC, o.id ASC LIMIT 1',
       [multi.id]
     )).rows[0].product_variant_id;
 

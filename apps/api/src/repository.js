@@ -569,9 +569,10 @@ const CATALOG_OFFER_ELIGIBILITY_SQL = [
  *            known without counting
  * $4 text    advertised currency (exact match, no conversion)
  *
- * `best_offer` ranks each product's eligible offers by `(price, id)`: the same
- * total order offers/select.js uses, so the catalog's "from" price and the
- * engine's selected price cannot disagree about which offer is cheapest. The
+ * `best_offer` ranks each product's eligible offers by `(class, price, id)`:
+ * VERIFIED before SEED_UNVERIFIED, then cheapest, then id - the same total
+ * order offers/select.js uses (Decision 65), so the catalog's "from" price and
+ * the engine's selected price cannot disagree about which offer wins. The
  * LEFT JOIN keeps a product with NO eligible offer in the page - silent
  * omission would make the catalog look complete when it is not - and the
  * caller reports `has_offer: false`.
@@ -604,7 +605,8 @@ const SELECT_CATALOG_PRODUCTS_SQL = [
   '),',
   'best_offer AS (',
   '  SELECT o.product_id, o.price, o.ingestion_record_id,',
-  '         ROW_NUMBER() OVER (PARTITION BY o.product_id ORDER BY o.price ASC, o.id ASC) AS rn',
+  '         ROW_NUMBER() OVER (PARTITION BY o.product_id',
+  '           ORDER BY (o.ingestion_record_id IS NULL) ASC, o.price ASC, o.id ASC) AS rn',
   '  FROM store_offer o',
   '  WHERE o.currency = $4',
   '    AND ' + CATALOG_OFFER_ELIGIBILITY_SQL,
@@ -648,9 +650,9 @@ const SELECT_CATALOG_PRODUCT_SQL = [
 ].join('\n');
 
 /**
- * Every ELIGIBLE offer of one product, cheapest first - the detail page's
- * price list. Same eligibility as the list, same total order, so the first row
- * IS the list's `from_price`.
+ * Every ELIGIBLE offer of one product, VERIFIED first then cheapest - the
+ * detail page's price list. Same eligibility as the list, same total order
+ * (Decision 65), so the first row IS the list's `from_price`.
  *
  * $1 uuid  product id
  * $2 text  currency
@@ -661,7 +663,7 @@ const SELECT_CATALOG_OFFERS_SQL = [
   'WHERE o.product_id = $1',
   '  AND o.currency = $2',
   '  AND ' + CATALOG_OFFER_ELIGIBILITY_SQL,
-  'ORDER BY o.price ASC, o.id ASC',
+  'ORDER BY (o.ingestion_record_id IS NULL) ASC, o.price ASC, o.id ASC',
 ].join('\n');
 
 /**

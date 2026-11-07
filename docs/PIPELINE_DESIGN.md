@@ -116,7 +116,8 @@ INSERT or UPDATE:
 2. Two different listings from the same store mapping to the same variant are
    **allowed** (they have different `listing_identifier`s and are outside the
    partial legacy index). The engine's Stage 1 selection already picks the
-   cheapest eligible offer per candidate (`src/recommendation/offers/select.js`),
+   highest-precedence eligible offer per candidate - VERIFIED before SEED, then cheapest
+   (Decision 65, `src/recommendation/offers/select.js`),
    so duplicates do not corrupt a build. Listings whose match confidence is
    below MEDIUM go to the review queue instead of becoming offers at all.
 3. A new ingested offer for a product/variant that already has a **seed**

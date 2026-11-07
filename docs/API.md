@@ -819,9 +819,10 @@ The read-only catalogue page (Platform P2 Sprint 3, contract v1.5, Decision 50):
   next page asks for `slug > cursor`. A page boundary revisited returns the same rows; no row
   is skipped or repeated, and no `OFFSET` is involved. `next_cursor: null` means the last page.
 - `category` is **derived** from spec-table presence; `product` has no category column.
-- `from_price` is the cheapest **eligible** offer of that product in MAD - `price > 0`,
-  `availability <> 'OUT_OF_STOCK'`, and inside the 30-day freshness window unless it is a seed
-  offer (the same eligibility the engine prices with). `offer_class` is that price's Decision 35
+- `from_price` is the offer the engine would select: the cheapest VERIFIED eligible offer if one
+  exists, otherwise the cheapest SEED_UNVERIFIED one, in MAD - `price > 0`,
+  `availability <> 'OUT_OF_STOCK'`, and inside the 30-day freshness window unless it is a seed offer
+  (the same eligibility the engine prices with). `offer_class` is that price's Decision 35
   provenance; `has_offer: false` with a `null` `from_price` means "no eligible offer yet", and
   such a product is still listed rather than silently dropped.
 - There is **no `use_case` parameter**, although the sprint sketch listed one: the active model
@@ -855,9 +856,9 @@ One product page: identity, specs, every eligible offer, and the derived price s
 
 - `specs` is the canonical spec table's row as ONE flat object, with identity and audit
   columns stripped. A GPU's spec belongs to the **variant whose price is shown** (the variant
-  of the cheapest eligible offer; the lowest-id variant when there is no offer), so the spec and
+  of the offer served first (VERIFIED before seed); the lowest-id variant when there is no offer), so the spec and
   the price cannot describe two different cards.
-- `offers` is every eligible offer, cheapest first, each carrying its provenance class. The list
+- `offers` is every eligible offer, VERIFIED first then cheapest, each carrying its provenance class. The list
   endpoint's `from_price` is this list's first price.
 - `price_status` is derived exactly as the recommendation response derives it: `"verified"` only
   when the product HAS offers and every one is `VERIFIED`; `"indicative"` when any is not (an

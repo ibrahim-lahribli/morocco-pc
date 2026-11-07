@@ -31,9 +31,11 @@
  *       null-variant candidate    -> only NULL-variant offers, same product
  *       non-null variant candidate -> exact (product_id, variant_id) match
  *
- * Ordering: cheapest eligible offer wins per candidate; equal prices break
- * by store_offer.id ascending. SQL orders deterministically and JS re-applies
- * the same total order, so shuffled equivalent rows stay deterministic.
+ * Ordering (Decision 65, 2026-11-07): a VERIFIED offer outranks a
+ * SEED_UNVERIFIED one REGARDLESS of price; inside one class the cheapest wins,
+ * and equal prices break by store_offer.id ascending. SQL orders
+ * deterministically and JS re-applies the same total order, so shuffled
+ * equivalent rows stay deterministic.
  *
  * Decision timestamp: the single CURRENT_TIMESTAMP value returned by the
  * Stage 1 query (CURRENT_TIMESTAMP AS price_checked_at), converted to the
@@ -86,7 +88,7 @@ const SELECT_OFFER_PRICES_SQL = [
   'AND o.price > 0',
   "AND o.availability != 'OUT_OF_STOCK'",
   "AND (o.last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days' OR ($3 AND o.ingestion_record_id IS NULL))",
-  'ORDER BY o.price ASC, o.id ASC',
+  'ORDER BY (o.ingestion_record_id IS NOT NULL) DESC, o.price ASC, o.id ASC',
 ].join(' ');
 
 // Keep the legacy query byte-for-byte when no explicit run time is supplied.
@@ -202,7 +204,24 @@ function candidateMatchesOffer(candidate, offer) {
   return offer.product_variant_id === candidate.product_variant_id;
 }
 
-function isCheaperOffer(a, b) {
+/**
+ * Provenance rank: VERIFIED (0) ranks ahead of SEED_UNVERIFIED (1).
+ * Decision 65 makes this the FIRST key of the selection order.
+ */
+function offerClassRank(offerClass) {
+  return offerClass === VERIFIED ? 0 : 1;
+}
+
+/**
+ * Total order for the one-offer selection: class rank, then price, then
+ * store_offer.id (Decision 65 + Decision 8). Code-unit comparison only; no
+ * localeCompare, so the order is identical on every host.
+ */
+function ranksBefore(a, b) {
+  const classDelta = offerClassRank(a.offer_class) - offerClassRank(b.offer_class);
+  if (classDelta !== 0) {
+    return classDelta < 0;
+  }
   if (a.price !== b.price) {
     return a.price < b.price;
   }
@@ -266,7 +285,9 @@ function normalizeOfferRow(row, currency, decisionMs, allowUnverifiedSeedOffers)
 }
 
 /**
- * Select the cheapest eligible offer per candidate.
+ * Select the highest-precedence eligible offer per candidate: a VERIFIED
+ * offer before any SEED_UNVERIFIED one, then cheapest, then offer id
+ * (Decision 65).
  *
  * Investigated candidate split: product-level (NULL variant) candidates
  * match only NULL-variant offers; variant-level candidates match only the
@@ -335,7 +356,7 @@ async function selectOfferPrices(candidatePoolResult, db, options) {
       if (!candidateMatchesOffer(candidate, offer)) {
         continue;
       }
-      if (best === null || isCheaperOffer(offer, best)) {
+      if (best === null || ranksBefore(offer, best)) {
         best = offer;
       }
     }

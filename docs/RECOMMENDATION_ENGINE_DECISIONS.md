@@ -5209,7 +5209,7 @@ It does not supersede a decision, but it QUALIFIES Decision 36 item 11: "30/min/
 
 ## Decision 50 — the catalog is a keyset page over `slug`, and every catalog price carries its Decision 35 provenance (Platform P2 Sprint 3)
 
-Status: RESOLVED 2026-10-17; IMPLEMENTED 2026-10-17 — the catalog is served read-only: `GET /v1/catalog/products` pages ACTIVE products with a keyset on the unique `slug`, and `GET /v1/catalog/products/:slug` serves the spec row, every eligible offer and a derived `price_status`; every price travels with its provenance class, and an unpriced product is listed rather than hidden.
+Status: RESOLVED 2026-10-17; IMPLEMENTED 2026-10-17 — the catalog is served read-only: `GET /v1/catalog/products` pages ACTIVE products with a keyset on the unique `slug`, and `GET /v1/catalog/products/:slug` serves the spec row, every eligible offer and a derived `price_status`; every price travels with its provenance class, and an unpriced product is listed rather than hidden. AMENDED 2026-11-07 by Decision 65 (verified-first offer order).
 
 Date: 2026-10-17. Platform P2 Sprint 3 of `PLAN_PLATFORM_P2.md` (the read-only catalog sprint). It records the contract that sprint sketched but could not state: the sketch named a `use_case` parameter no model can honour and a `specs` object with no shape. It is NOT an engine change - not one module under `src/recommendation/` is touched, no score, rank or persisted row changes - and it needs NO migration: `product.slug` / `display_name` (020) are applied on both databases and the offer class is derivable. It closes no gap; Sprint 3's Step 7 (may catalog pages be public?) remains the owner's decision.
 
@@ -5261,6 +5261,10 @@ Paging with `OFFSET` over `product.name` can repeat or skip a row, because the n
 ### Supersedes / superseded by
 
 It supersedes no decision. It extends the API surface Decision 36 defines with two read-only paths, consuming Decision 35's provenance classes, Decision 37's "vocabulary belongs to the model" principle (hence no `use_case`), and migration 020's `slug`. It corrects `PLAN_PLATFORM_P2.md` Sprint 3's interface line in place (step 1-6 ticked, the `use_case` removal and the read-only DB suite recorded in its status block) and `docs/OPEN_GAPS.md` OG-52's P2 catalog clause. No dated banner anywhere is retro-edited.
+
+### UPDATE 2026-11-07 — the offer order is verified-first (Decision 65)
+
+`from_price`, the detail page's offer list and the engine's Stage 1 now share ONE total order: provenance class (`VERIFIED` before `SEED_UNVERIFIED`), then `price`, then `store_offer.id`. `CATALOG_OFFER_ELIGIBILITY_SQL` is unchanged — only the ranking is. On shared and EU this is unobservable today (0 VERIFIED offers); the TEST branch holds 2. See Decision 65.
 ## Decision 51 — a price history is one point per observation MOMENT, and its summary reports thin data instead of inventing a trend (S25 unblock)
 
 Status: RESOLVED 2026-10-23; IMPLEMENTED 2026-10-23 — `GET /v1/catalog/products/:slug/price-history` serves a product's recorded observations oldest-first, with each point's Decision 35 provenance class and a summary whose change fields stay null until there are two observation moments; contract **v1.6**.
@@ -6282,3 +6286,64 @@ The tempting substitutes are worse than the empty value. Fastify's `trustProxy: 
 ### Amends
 
 Decision 63's environment (the Render-hosted EU service) is the subject; no earlier decision is superseded. §8.4 of `docs/RECIPES/deploy-eu-colocation.md` is NOT rewritten — its Fly procedure stays exactly as written, and the new leading note records that it does not transfer.
+
+## Decision 65 — VERIFIED offers outrank SEED_UNVERIFIED offers regardless of price
+
+Status: RESOLVED 2026-11-07; IMPLEMENTED 2026-11-07 — Stage 1 ranks a VERIFIED offer ahead of any SEED_UNVERIFIED one regardless of price, with the cheapest and then `store_offer.id` breaking ties inside a class; the catalog's `from_price` and detail offer list use the same total order, while eligibility, Decision 7's 30-day window and Decision 35's waiver and provenance labelling are unchanged.
+
+Date: 2026-11-07. Scope: the Stage 1 selection ORDER among already-eligible offers (`src/recommendation/offers/select.js`) and the catalog read that advertises the same price (`apps/api/src/repository.js`). It is NOT a freshness change (Decision 7's window is untouched), NOT a change to Decision 35's seed waiver or to the provenance labelling, NOT a migration or seed (the `schema_migrations` ledger stands at 23 on shared, TEST and EU), NOT a scoring-model change (no weight, floor or quota moves), and NOT a data change: no offer, price, MPN or GTIN is created or edited (Decision 61). It binds shared, TEST and EU equally — a per-environment comparator would make `check-target-parity` and the golden pins describe different engines.
+
+### Current situation
+
+Stage 1 answers one question per candidate: which ELIGIBLE offer is selected, and at what price. Eligibility is exact and unchanged by this decision: currency equal to the query currency, `price > 0`, `availability != 'OUT_OF_STOCK'`, and a `last_checked_at` inside Decision 7's 30-day inclusive window — waived for a SEED offer only, and only when the caller sets `options.allow_unverified_seed_offers` (Decision 35). `normalizeOfferRow()` derives the provenance class from `ingestion_record_id` (`NULL` = `SEED_UNVERIFIED`, non-`NULL` = `VERIFIED`) and the class travels on the Engine 3 price carrier, which `build_component` snapshots (migration 018).
+
+Before this decision, selection ignored that class: the single Stage 1 query ordered `ORDER BY o.price ASC, o.id ASC` (`SELECT_OFFER_PRICES_SQL`), and the JS pass re-applied the same total order through a price/id comparator. Cheapest won; provenance was a label, never a comparator. The HTTP path always turns the waiver ON (`apps/api/src/engine.js:39` freezes `API_ENGINE_OPTIONS = { allow_unverified_seed_offers: true }`), so every API-driven pass admitted seeds outside the 30-day window; the CLI/golden path defaults the option OFF.
+
+Measured 2026-11-07: shared holds **114 offers, 0 VERIFIED**; EU holds **114 offers, 0 VERIFIED**; the TEST branch holds **116 offers, 2 VERIFIED**. On shared and EU the new order is therefore unobservable today; it binds when the curated/ingestion path adds VERIFIED offers (R-01/R-10). The catalog read computed `from_price` with the same cheapest-first tie-break as Stage 1, deliberately, so the new order had to move in both places at once.
+
+### Problem
+
+Cheapest-first made the served price a function of DATA AGE rather than of provenance. Seed prices are old by construction, and the measured gap between a seed price and its retailer price is 6.5 %–35.5 %, so a seed offer is usually the cheapest eligible one. The moment a VERIFIED offer existed for the same product, Stage 1 kept choosing the cheaper SEED row: the build was ranked, assembled and persisted on a price the repo itself classifies as unverified, while a better-provenanced offer sat unused. The build still carried `offer_class = SEED_UNVERIFIED`, so the label was honest while the selection was not.
+
+The opposite failure is real and is why this needed a ruling rather than a bug fix: preferring verified offers raises prices, so budget headroom, retention minima, golden assertions and the preset shelf move. That cost is accepted explicitly here. A third failure is divergence: if Stage 1 prefers VERIFIED while the catalog's `from_price` keeps the old comparator, the listing advertises the cheaper seed price and the build charges the verified one.
+
+### Decision
+
+1. **Precedence.** Among the eligible offers for one candidate, an offer with `offer_class = VERIFIED` outranks an offer with `offer_class = SEED_UNVERIFIED` **regardless of price**. Inside one class the existing total order stands: cheaper first, then `store_offer.id ASC`. Implemented in the SQL `ORDER BY` (`(o.ingestion_record_id IS NOT NULL) DESC, o.price ASC, o.id ASC`) and mirrored in JS (`offerClassRank()` / `ranksBefore()`), so the two layers cannot disagree.
+2. **Eligibility is unchanged.** This decision reorders eligible offers only. `OUT_OF_STOCK`, currency, `price > 0`, Decision 7's 30-day window and Decision 35's seed-only waiver keep their exact semantics. A stale VERIFIED offer stays INELIGIBLE, so a fresh SEED offer may still win on eligibility alone; no "verified therefore fresh" shortcut exists.
+3. **Scope of the effect.** The rule is observable only where a candidate has BOTH classes eligible and `allow_unverified_seed_offers` is ON. With the option OFF, seeds are ineligible and behaviour is identical to before. Because `apps/api/src/engine.js:39` always sets it ON, the rule is live for every HTTP pass.
+4. **No build is lost by construction.** A candidate whose only eligible offers are seeds still selects its cheapest seed (the waiver is ON); the rule can raise a selected price but cannot empty a previously non-empty candidate. No new product or offer is required.
+5. **The catalog moves in the same change.** `SELECT_CATALOG_PRODUCTS_SQL`'s `best_offer` ranking and `SELECT_CATALOG_OFFERS_SQL` use the identical class-then-price comparator, so a listing's `from_price` and its first offer are the offer Stage 1 would price. The eligibility fragment `CATALOG_OFFER_ELIGIBILITY_SQL` is unchanged.
+6. **Labelling and storage are untouched.** `offer_class` and `offer_id` keep travelling on the price carrier and `build_component` keeps snapshotting them (Decision 35, migration 018). No column, enum, index, constraint or seed changes.
+7. **Determinism is preserved and pinned.** The comparator stays a total order (class, then price, then offer id) with no clock, randomness or locale comparison. Six tests in `offers/select.test.js` pin: dearer verified over cheaper seed; cheapest verified inside the class; equal price preferring verified; seed-only fallback; waiver-OFF seed ineligibility; and one-class pools keeping the old cheapest-then-id order.
+8. **Evidence gates, not threshold tuning.** The golden harness is to be re-run at the named pin, and any A-row whose selected offer or price moves is re-approved explicitly per row. No threshold is edited to absorb the price rise, and no committed baseline is regenerated without approval.
+9. **Rollback is one comparator.** Reverting the class rank (SQL order term + JS branch) restores the previous behaviour exactly; no data is written by the rule, so no restore point is consumed. Persisted `offer_class` snapshots stay correct either way.
+
+### Rejected alternatives
+
+- **Keep cheapest-first.** Rejected: it prices builds on rows the repo itself marks unverified whenever a cheaper seed exists — the A2 defect, not a defensible policy.
+- **"Prefer verified only within X % of the seed price."** Rejected: X would be an invented tolerance with no measured basis, making the served price depend on a magic constant no test can justify.
+- **Exclude seeds entirely once any verified offer exists.** Rejected: that is an ELIGIBILITY change, can empty otherwise-serviceable candidates, and defeats the coverage purpose Decision 35's waiver exists for.
+- **Rank by `last_checked_at` (freshest wins).** Rejected: a fresh seed is still unverified; this conflates recency with provenance.
+- **Apply it on EU only.** Rejected: divergent comparators across shared/TEST/EU make the parity gate and the golden pins speak about different engines.
+- **Label-only (Decision 35, already implemented).** Rejected as a substitute: the label exists and is correct; what was missing is that selection ignored it.
+
+### Verdict for this pass
+
+- **PASS — item 1:** `SELECT_OFFER_PRICES_SQL` carries the class rank and `ranksBefore()` replaces the price-only comparator; the SQL-token test asserts the new `ORDER BY`, and the six Decision 65 tests pass.
+- **PASS — item 2:** eligibility clauses are byte-unchanged; the existing "option ON does NOT rescue a stale VERIFIED offer" test still passes, and no test was relaxed.
+- **PASS — item 3:** `apps/api/src/engine.js:39` is unchanged and still sets the waiver ON; the seed-only fallback test covers the ON path.
+- **PASS — item 4:** the seed-only test selects the cheapest seed, so a previously non-empty candidate stays non-empty.
+- **PASS — item 5:** the list's `ROW_NUMBER()` window and the detail statement both rank by class first; `apps/api/test/db/catalog.db.test.js` (read-only, TEST branch) passes **7/7**, including the rewritten "from_price is the offer the engine would select" case.
+- **PASS — item 6:** no migration, seed or data write; the only code files touched are `offers/select.js`, `offers/select.test.js`, `apps/api/src/repository.js` and `apps/api/test/db/catalog.db.test.js`.
+- **PASS — item 7:** measured after the change: `test:unit` **1284 / 0**, `test:api` **193 / 0**, `test:scripts` **479 / 0** (6 new unit tests), Node 24.21.0.
+- **NOT RUN — item 8, and not claimed:** the golden harness (`eval:scenarios`), `test:api:db` as a whole and `verify:pi1` were not run. They write to the TEST branch and the golden run needs a model pin; A-row re-approval after the price change is therefore still OWED, and this entry does not claim the golden record was refreshed.
+- **PASS — item 9:** the rollback is the two class-rank terms; nothing else depends on them.
+
+Measured behaviour change today: none on shared or EU (0 VERIFIED offers there). The TEST branch's 2 VERIFIED offers are the only place the new order is observable, and the catalog DB test exercised that branch.
+
+### Amends
+
+- **Decision 8's total order** is extended, not superseded: inside one provenance class `ORDER BY price ASC, store_offer.id ASC` stands exactly as written. Decision 8's body was **NOT** edited; this entry is the record.
+- **Decision 50** (the catalog price surface) is amended in place with a dated `### UPDATE` block and an amended `Status:` line, because its `from_price` and offer list now use the class-first order. The eligibility predicate it documents does not change.
+- Decision 7 (freshness) and Decision 35 (waiver, provenance labelling) are unchanged and are relied on as written.

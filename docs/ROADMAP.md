@@ -33,7 +33,7 @@ Unchanged from `PLAN_PLATFORM_CONSTRAINTS.md`, and the same rules `AGENTS.md` §
 | DB roles | `morocco_pc_api` is provisioned on shared and EU (self-check 21/21) and the EU host **uses it**: `check-deployed-role.js --target=env:TARGET_DATABASE_URL` answers PASS (every tagged `morocco-pc-api` session authenticated as `morocco_pc_api`). The retired demo origin authenticated as `neondb_owner` (FAIL, session started 2026-11-06T18:12Z) until it was suspended that day |
 | Served scoring model | shared serves the newest ACTIVE row, `launch-v2@2.4.0` (six ACTIVE `launch-v2` versions, `seed-minimal-v1` INACTIVE). The EU host is **pinned at deploy**: `render.yaml` sets `SCORING_MODEL_PIN: launch-v2@2.4.0` (Decision 63), and 52 persisted passes record that model |
 | CI | `unit-and-docs` on push/PR (includes the read-only catalogue-identity and deferred-rules gates when the secret exists); `recurring-gates` nightly + dispatch |
-| Tests | engine **1261**, scripts **463**, API **193** (0 failed; engine/API measured 2026-11-03, scripts 2026-11-04); `test:api:db` **17**, nightly only |
+| Tests | engine **1284**, scripts **479**, API **193** (0 failed, all three measured 2026-11-07); `test:api:db` **17**, nightly only |
 
 ## 3. Sprint ledger (21 sprints: 16 DONE, 3 PARTIAL, 2 NOT STARTED)
 

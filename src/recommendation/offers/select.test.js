@@ -247,7 +247,7 @@ test('SQL contains required clauses and no forbidden tokens', async () => {
     'FROM store_offer',
     "o.last_checked_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'",
     "o.availability != 'OUT_OF_STOCK'",
-    'ORDER BY o.price ASC, o.id ASC',
+    'ORDER BY (o.ingestion_record_id IS NOT NULL) DESC, o.price ASC, o.id ASC',
     'CURRENT_TIMESTAMP AS price_checked_at',
     '$1',
     '$2',
@@ -409,4 +409,78 @@ test("Decision 38: explicit asOf controls the 30-day freshness boundary and pric
   const legacy = makeDb(rows);
   const old = await selectOfferPrices(poolResult([cpu("cpu-1")]), legacy);
   assert.deepEqual(old, out); assert.equal(legacy.calls[0].params.length, 3);
+});
+
+// ---------------------------------------------------------------------------
+// Decision 65: VERIFIED offers outrank SEED_UNVERIFIED regardless of price.
+// ---------------------------------------------------------------------------
+
+test('Decision 65: a dearer VERIFIED offer outranks a cheaper SEED offer', async () => {
+  const db = makeDb([
+    offerRow({ id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', price: 100, ingestion_record_id: null }),
+    offerRow({ id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', price: 200, ingestion_record_id: VERIFIED_RECORD }),
+  ]);
+  const out = await selectOfferPrices(poolResult([cpu('cpu-1')]), db);
+  const entry = out.prices[priceKey('cpu-1', null, 'CPU')];
+  assert.equal(entry.selected_price, 200);
+  assert.equal(entry.offer_class, 'VERIFIED');
+  assert.equal(entry.offer_id, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
+});
+
+test('Decision 65: the cheapest VERIFIED offer wins inside the VERIFIED class', async () => {
+  const db = makeDb([
+    offerRow({ id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', price: 100, ingestion_record_id: null }),
+    offerRow({ id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', price: 300, ingestion_record_id: VERIFIED_RECORD }),
+    offerRow({ id: 'cccccccc-cccc-cccc-cccc-cccccccccccc', price: 200, ingestion_record_id: VERIFIED_RECORD }),
+  ]);
+  const out = await selectOfferPrices(poolResult([cpu('cpu-1')]), db);
+  const entry = out.prices[priceKey('cpu-1', null, 'CPU')];
+  assert.equal(entry.selected_price, 200);
+  assert.equal(entry.offer_id, 'cccccccc-cccc-cccc-cccc-cccccccccccc');
+});
+
+test('Decision 65: at equal price the VERIFIED offer outranks the SEED offer', async () => {
+  const db = makeDb([
+    offerRow({ id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', price: 500, ingestion_record_id: null }),
+    offerRow({ id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', price: 500, ingestion_record_id: VERIFIED_RECORD }),
+  ]);
+  const out = await selectOfferPrices(poolResult([cpu('cpu-1')]), db);
+  const entry = out.prices[priceKey('cpu-1', null, 'CPU')];
+  assert.equal(entry.selected_price, 500);
+  assert.equal(entry.offer_class, 'VERIFIED');
+  assert.equal(entry.offer_id, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
+});
+
+test('Decision 65: a seed-only candidate still selects its cheapest seed', async () => {
+  const db = makeDb([
+    offerRow({ id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', price: 150, ingestion_record_id: null }),
+    offerRow({ id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', price: 100, ingestion_record_id: null }),
+  ]);
+  const out = await selectOfferPrices(poolResult([cpu('cpu-1')]), db);
+  const entry = out.prices[priceKey('cpu-1', null, 'CPU')];
+  assert.equal(entry.selected_price, 100);
+  assert.equal(entry.offer_class, 'SEED_UNVERIFIED');
+});
+
+test('Decision 65: with the waiver OFF a cheaper seed stays ineligible, so the VERIFIED offer wins', async () => {
+  const db = makeDb([
+    offerRow({ id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', price: 50, ingestion_record_id: null }),
+    offerRow({ id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', price: 500, ingestion_record_id: VERIFIED_RECORD }),
+  ]);
+  const out = await selectOfferPrices(poolResult([cpu('cpu-1')]), db);
+  const entry = out.prices[priceKey('cpu-1', null, 'CPU')];
+  assert.equal(entry.selected_price, 500);
+  assert.equal(entry.offer_class, 'VERIFIED');
+});
+
+test('Decision 65: one-class pools keep the old cheapest-then-id order', async () => {
+  const rows = [
+    offerRow({ id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', price: 200, ingestion_record_id: null }),
+    offerRow({ id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', price: 100, ingestion_record_id: null }),
+  ];
+  const first = await selectOfferPrices(poolResult([cpu('cpu-1')]), makeDb(rows));
+  const second = await selectOfferPrices(poolResult([cpu('cpu-1')]), makeDb([rows[1], rows[0]]));
+  assert.deepEqual(second.prices, first.prices);
+  assert.equal(Object.values(first.prices)[0].selected_price, 100);
+  assert.equal(Object.values(first.prices)[0].offer_class, 'SEED_UNVERIFIED');
 });

@@ -44,7 +44,7 @@ this document calls one of these rules unenforced while its module is in the
 tree.
 
 Authoritative for engine behaviour: RECOMMENDATION_ENGINE_DECISIONS.md
-(Decisions 1-64) and the code.
+(Decisions 1-65) and the code.
 
 Date: 2026-09-12. Baseline: migrations 001-011 applied and catalog-verified.
 
@@ -723,7 +723,7 @@ Engine 2 - Candidate component selector
     Logical pipeline (Decision 6):
       Engine 2C candidate pool
         → Stage 1 offer pre-selection / price attachment (owns offer
-          selection + price attachment; cheapest eligible offer per
+          selection + price attachment; verified-first, cheapest-within-class per
           product; no-offer exclusion; price carrier = selected_price,
           currency, store_id, price_checked_at)
         → Engine 2D compatibility (price-agnostic; consumes 2D verdicts
@@ -783,6 +783,10 @@ existing `scripts/test-*.js` transaction/rollback style.
   offers for a candidate, `ORDER BY price ASC, store_offer.id ASC`, take the
   first. `store_offer.id` is the unique primary key, so the ordering is total
   and the all-keys-equal case cannot occur; no further fallback key exists.
+* Stage 1 provenance precedence (Decision 65, 2026-11-07): among a candidate's
+  eligible offers, `VERIFIED` outranks `SEED_UNVERIFIED` REGARDLESS of price;
+  inside one class the Decision 8 order applies. The catalog's `from_price`
+  and offer list use the same total order.
 * Stage 1 product/variant offer applicability (Decision 9, 2026-09-16):
   STRICT exact matching, no fallback and no cross-variant matching --
   variant-keyed candidates (GPU today) require
@@ -815,7 +819,8 @@ existing `scripts/test-*.js` transaction/rollback style.
   eligible offers have identical `price` in the same `currency`, no
   deterministic selection rule existed in architecture, schema, migrations,
   or code. Engine 3 requires deterministic input. **RESOLVED (Decision 8,
-  2026-09-16):** `ORDER BY price ASC, store_offer.id ASC`, take the first --
+  2026-09-16; class rank added by Decision 65):** within one class,
+  `ORDER BY price ASC, store_offer.id ASC`, take the first --
   `store_offer.id` is the unique primary key, so the ordering is total and
   the all-keys-equal case cannot occur. Supersedes the former "DECISION
   REQUIRED (Decision 6, gap 2)" status; see

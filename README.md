@@ -17,7 +17,7 @@ What is open, with severity and owner, is [`docs/OPEN_POINTS.md`](docs/OPEN_POIN
 
 ```bash
 npm install
-npm run test:unit        # engine suite, no database needed (1278 tests)
+npm run test:unit        # engine suite, no database needed (1284 tests)
 npm run test:scripts     # gate/CLI suites (479)
 npm run test:api         # HTTP contract suites, DB-free (193)
 npm run test:db          # connectivity + table listing
