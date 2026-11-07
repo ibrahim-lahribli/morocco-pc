@@ -3,6 +3,8 @@ import { getTranslations } from "next-intl/server";
 
 import { cn } from "@/lib/utils";
 
+import { SectionHeading } from "./section-heading";
+
 type PillarKey = "compatibility" | "prices" | "free";
 
 const PILLARS: readonly { key: PillarKey; icon: LucideIcon; tile: string }[] = [
@@ -24,20 +26,13 @@ export async function TrustHighlights() {
 
   return (
     <section id="confiance" aria-labelledby="confiance-title" className="scroll-mt-24">
-      <div className="text-center">
-        <p className="hidden text-label-md font-semibold tracking-wide text-primary uppercase md:block">
-          {t("eyebrow")}
-        </p>
-        <h2
-          id="confiance-title"
-          className="mt-1 text-headline-md text-balance text-foreground lg:text-headline-lg"
-        >
-          {t("title")}
-        </h2>
-        <p className="mx-auto mt-2 hidden max-w-2xl text-body-md text-muted md:block">
-          {t("intro")}
-        </p>
-      </div>
+      <SectionHeading
+        id="confiance-title"
+        eyebrow={t("eyebrow")}
+        title={t("title")}
+        intro={t("intro")}
+        align="center"
+      />
 
       <ul className="mt-5 divide-y divide-border overflow-hidden rounded-card border border-border bg-surface shadow-level-1 lg:mt-8 lg:grid lg:grid-cols-3 lg:gap-6 lg:divide-y-0 lg:overflow-visible lg:border-0 lg:bg-transparent lg:shadow-none">
         {PILLARS.map((pillar) => {

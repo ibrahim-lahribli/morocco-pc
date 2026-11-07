@@ -19,6 +19,7 @@ import { useMetaOptions, usePresets, useRecommendationDetail } from "@/lib/homep
 import { cn } from "@/lib/utils";
 
 import { FeaturedBuildCard } from "./featured-build-card";
+import { SectionHeading } from "./section-heading";
 
 const CATEGORY_KEY: Record<HomeUseCase, "gaming" | "office" | "workstation"> = {
   GAMING: "gaming",
@@ -79,17 +80,14 @@ export function RecommendedBuildSection() {
   return (
     <section id="configurations" aria-labelledby="configurations-title" className="scroll-mt-24">
       <div className="max-w-2xl">
-        <p className="text-label-md font-semibold tracking-wide text-primary uppercase">
-          {t("eyebrow")}
-        </p>
-        <h2
+        <SectionHeading
           id="configurations-title"
-          tabIndex={-1}
-          className="mt-1 text-headline-md text-balance text-foreground focus:outline-none lg:text-headline-lg"
-        >
-          {t("title")}
-        </h2>
-        <p className="mt-1.5 text-body-md text-muted">{t("intro")}</p>
+          eyebrow={t("eyebrow")}
+          title={t("title")}
+          intro={t("intro")}
+          from="base"
+          focusableHeading
+        />
       </div>
 
       <div

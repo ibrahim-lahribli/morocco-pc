@@ -69,4 +69,26 @@ test.describe("homepage shell", () => {
 
     expect(order).toBe(true);
   });
+
+  test("gives the three section headings one size per breakpoint", async ({ page }) => {
+    await stubHomepageApi(page);
+
+    for (const [width, expected] of [
+      [390, 22],
+      [1280, 28],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/fr");
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+      const sizes = await page.evaluate(() =>
+        ["configurations-title", "confiance-title", "guides-title"].map((id) => {
+          const element = document.getElementById(id);
+          return element === null ? null : parseFloat(getComputedStyle(element).fontSize);
+        }),
+      );
+
+      expect(sizes, `section headings at ${width}px`).toEqual([expected, expected, expected]);
+    }
+  });
 });

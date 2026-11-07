@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { GUIDES } from "@/lib/homepage/guides";
 
 import { GuideCard } from "./guide-card";
+import { SectionHeading } from "./section-heading";
 
 /**
  * The four featured guides.
@@ -23,25 +24,19 @@ export async function FeaturedGuides() {
 
   return (
     <section id="guides" aria-labelledby="guides-title" className="scroll-mt-24">
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="hidden text-label-md font-semibold tracking-wide text-primary uppercase md:block">
-            {t("eyebrow")}
+      <SectionHeading
+        id="guides-title"
+        eyebrow={t("eyebrow")}
+        title={t("title")}
+        intro={t("intro")}
+        action={
+          <p className="text-start lg:text-end">
+            <span aria-disabled="true" className="text-label-lg text-primary">
+              {t("all")}
+            </span>
           </p>
-          <h2
-            id="guides-title"
-            className="mt-1 text-headline-md text-balance text-foreground lg:text-headline-lg"
-          >
-            {t("title")}
-          </h2>
-          <p className="mt-1.5 hidden max-w-prose text-body-md text-muted md:block">{t("intro")}</p>
-        </div>
-        <p className="text-start lg:text-end">
-          <span aria-disabled="true" className="text-label-lg text-primary">
-            {t("all")}
-          </span>
-        </p>
-      </div>
+        }
+      />
 
       <ul className="mt-5 grid gap-4 md:grid-cols-2 lg:mt-8 lg:grid-cols-4">
         {GUIDES.map((guide, index) => (
