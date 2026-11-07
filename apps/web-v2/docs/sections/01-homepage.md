@@ -1,7 +1,11 @@
 # 01 — Homepage implementation specification
 
-**Status:** specification only. Nothing in this document is implemented. It is ready for
-human review, then for the Step 1 implementation agent.
+**Status:** **approved specification, Step 1 implemented.** The Step 1 homepage ships on
+branch `feature/v2-design` (baseline `0dff27b`), and this document remains the
+authoritative product and acceptance contract for it. Two release-readiness checks are
+still outstanding: integration against the real API (the independent review ran against
+stubbed `/v1/**` responses) and the native-language review of the Arabic copy recorded in
+`../homepage-arabic-review.md`. Neither weakens an approved requirement in this document.
 
 **Scope of this document.** The approved Morocco-PC V2 homepage: layout, section
 behaviour, component architecture, API mapping, states, i18n/RTL, accessibility and
@@ -602,10 +606,10 @@ auto-rotating carousel.
 homepage implementations.
 
 **Desktop composition.** Render the approved four-tile `Catégories & usages` grid
-(`19:426`) after the recommended configurations and before the trust section, with actions that preselect the corresponding finder
-use case. Keep the Figma tile hierarchy and visual treatment. Use only product-supported
-use cases mapped in the Homepage dictionaries; a resolution tile is a discovery shortcut,
-not a new API use case.
+(`19:426`) after the recommended configurations and before the trust section, with
+actions that preselect the corresponding finder use case. Keep the Figma tile hierarchy
+and visual treatment. Use only product-supported use cases mapped in the Homepage
+dictionaries; a resolution tile is a discovery shortcut, not a new API use case.
 
 **Mobile composition.** The frame's two Gaming resolution shortcuts (`23:1344`: Gaming
 1080p, Gaming 1440p) are **not rendered in the first functional release** (Q-20, §5.4):
