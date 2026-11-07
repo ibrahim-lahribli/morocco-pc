@@ -36,7 +36,7 @@ const CATALOG_SQL = [
 ].join('\n');
 
 const EXISTING_OFFERS_SQL = [
-  'SELECT id, store_id, listing_identifier, price, availability',
+  'SELECT id, store_id, listing_identifier, price, availability, product_id, product_variant_id',
   '  FROM store_offer',
   ' WHERE listing_identifier = ANY($1::text[])',
 ].join('\n');
@@ -100,6 +100,31 @@ function resolveCatalogueKey(listing, catalog) {
   return { entry: productRow };
 }
 
+function sameUuid(a, b) {
+  if (a === null || a === undefined) return b === null || b === undefined;
+  if (b === null || b === undefined) return false;
+  return String(a) === String(b);
+}
+
+/**
+ * True when a CURATED match names a different product or variant than the offer
+ * already stored for the same (store_id, listing_identifier).
+ *
+ * `apply.js`'s UPDATE statement never rewrites `product_id` or
+ * `product_variant_id`, so without this check a re-import that curates a
+ * different product would refresh the OLD product's price, rewrite provenance
+ * and report success - the new key silently ignored. The stored offer is left
+ * untouched and the row is refused instead, so resolving it is a deliberate act.
+ *
+ * Only a curated key is compared: inference is a guess, and holding a guess to
+ * the stored identity would turn a catalogue edit into a spurious rejection.
+ */
+function identityChanged(existing, match) {
+  if (!existing || existing.product_id === undefined) return false;
+  return !sameUuid(existing.product_id, match.matched_product_id)
+    || !sameUuid(existing.product_variant_id, match.matched_product_variant_id);
+}
+
 /**
  * Read the catalog and any offers already stored for these listings' keys.
  * @returns {Promise<{storesByName:Map, catalog:Array, existingByKey:Map}>}
@@ -114,6 +139,10 @@ async function gatherContext(db, listings, storesByName) {
         id: String(row.id),
         price: row.price,
         availability: row.availability,
+        product_id: row.product_id === null || row.product_id === undefined ? null : String(row.product_id),
+        product_variant_id: row.product_variant_id === null || row.product_variant_id === undefined
+          ? null
+          : String(row.product_variant_id),
       });
     }
   }
@@ -166,6 +195,10 @@ function buildPlan(listings, context) {
     }
 
     const existing = context.existingByKey.get(offerKey(storeId, listing.listing_identifier)) || null;
+    if (listing.product_slug && identityChanged(existing, match)) {
+      plan.rejected.push({ listing, reason: 'OFFER_IDENTITY_MISMATCH' });
+      continue;
+    }
     const promotion = decidePromotion(listing, existing);
     const item = { listing, store_id: storeId, match, promotion, existing };
     if (promotion.action === 'INSERT') plan.newOffers.push(item);

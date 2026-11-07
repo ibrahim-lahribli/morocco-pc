@@ -186,3 +186,63 @@ test('a curated listing re-planned against its stored offer is UNCHANGED (idempo
   assert.equal(plan.newOffers.length, 0);
   assert.equal(plan.changed.length, 0);
 });
+
+// --- a curated re-import may not silently change a stored offer's identity ---
+
+const REIMPORT_CATALOG = [
+  { product_id: 'p1', product_variant_id: null, sku: null, mpn: null, product_slug: 'seed-b550m-pro-vdh', name: 'Seed B550M PRO-VDH' },
+  { product_id: 'p2', product_variant_id: null, sku: null, mpn: null, product_slug: 'seed-b450m-ds3h', name: 'Seed B450M DS3H' },
+  { product_id: 'g1', product_variant_id: null, sku: null, mpn: null, product_slug: 'seed-rtx-4060-8gb', name: 'Seed RTX 4060 8GB' },
+  { product_id: 'g1', product_variant_id: 'gv1', sku: 'SEED-GPU-4060', mpn: null, product_slug: 'seed-rtx-4060-8gb', name: 'Seed RTX 4060 8GB' },
+];
+
+function reimportContext(stored) {
+  return {
+    storesByName: new Map([['Seed UltraPC', 'store-1']]),
+    catalog: REIMPORT_CATALOG,
+    existingByKey: new Map([['store-1\u0000L-1', stored]]),
+  };
+}
+
+test('a curated re-import naming a different product is rejected, not silently refiled', () => {
+  // apply.js never updates product_id, so proceeding would refresh the OLD
+  // product's price and report success while ignoring the new key.
+  const plan = buildPlan(
+    [listing({ product_slug: 'seed-b450m-ds3h', title: 'x' })],
+    reimportContext({ id: 'o1', price: 1299, availability: 'IN_STOCK', product_id: 'p1', product_variant_id: null })
+  );
+  assert.equal(plan.changed.length, 0);
+  assert.equal(plan.unchanged.length, 0);
+  assert.equal(plan.rejected.length, 1);
+  assert.equal(plan.rejected[0].reason, 'OFFER_IDENTITY_MISMATCH');
+});
+
+test('a curated re-import that changes only the variant is rejected too', () => {
+  const plan = buildPlan(
+    [listing({ product_slug: 'seed-rtx-4060-8gb', variant_sku: 'SEED-GPU-4060' })],
+    reimportContext({ id: 'o1', price: 1299, availability: 'IN_STOCK', product_id: 'g1', product_variant_id: null })
+  );
+  assert.equal(plan.rejected.length, 1);
+  assert.equal(plan.rejected[0].reason, 'OFFER_IDENTITY_MISMATCH');
+});
+
+test('a curated re-import of the SAME identity still refreshes the price', () => {
+  const plan = buildPlan(
+    [listing({ product_slug: 'seed-b550m-pro-vdh', price: 899, title: 'x' })],
+    reimportContext({ id: 'o1', price: 1299, availability: 'IN_STOCK', product_id: 'p1', product_variant_id: null })
+  );
+  assert.equal(plan.rejected.length, 0);
+  assert.equal(plan.changed.length, 1);
+  assert.deepEqual(plan.changed[0].promotion.changedFields, ['price']);
+});
+
+test('an uncurated re-import keeps the old behaviour: inference is not an assertion', () => {
+  // Only a CURATED key is held to the stored identity; an inferred match on a
+  // different product still refreshes the stored offer, as it always has.
+  const plan = buildPlan(
+    [listing({ sku: 'SEED-GPU-4060', price: 899, product_slug: null, variant_sku: null })],
+    reimportContext({ id: 'o1', price: 1299, availability: 'IN_STOCK', product_id: 'p1', product_variant_id: null })
+  );
+  assert.equal(plan.rejected.length, 0);
+  assert.equal(plan.changed.length, 1);
+});
