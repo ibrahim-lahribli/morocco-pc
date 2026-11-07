@@ -519,7 +519,6 @@ claim that ranks OFFICE above the other use cases.
 **Mobile composition.** The same three cards in the same order — PC Gaming, PC Bureautique,
 PC Création & Professionnel (the approved `builds.category.*` titles, Q-16). Render PC
 Gaming first, followed by the other two as compact
-Office, Professional & Creation. Render Gaming first, followed by the other two as compact
 cards if required by the approved mobile frame. A compact/featured layout is a responsive
 density choice only; it must not imply that Gaming is objectively more recommended.
 
