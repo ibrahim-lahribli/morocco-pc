@@ -109,4 +109,29 @@ test.describe("homepage shell", () => {
 
     expect(paddingTop).toBe(64);
   });
+
+  test("loads no external image and keeps every media slot decorative", async ({ page }) => {
+    const images: string[] = [];
+    page.on("request", (request) => {
+      if (request.resourceType() === "image") images.push(request.url());
+    });
+
+    await stubHomepageApi(page);
+    await page.goto("/fr");
+    await expect(page.locator("#configurations article").first()).toBeVisible();
+
+    // The repository ships no photography and the design file must not be
+    // hot-linked, so the page's only images are its own: a third-party origin
+    // here would mean an asset dependency nobody approved.
+    const origin = new URL(page.url()).origin;
+    const external = images.filter(
+      (url) => /^https?:/i.test(url) && new URL(url).origin !== origin,
+    );
+    expect(external).toEqual([]);
+
+    // The media slot carries no meaning of its own: the card's heading does.
+    await expect(
+      page.locator("#configurations article [aria-hidden='true']").first(),
+    ).toBeVisible();
+  });
 });

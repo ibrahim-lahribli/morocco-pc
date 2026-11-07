@@ -124,6 +124,13 @@ in the repository. Step 1 renders **token-only placeholders** (the existing
 `BuildCardPreview` gradient frame pattern) and must not hot-link Figma images. Real
 imagery is a separate content task (Q-03).
 
+**Step 3.4 decision (imagery).** The visual refinement pass ships no photography either: none is
+approved, and a stock substitute would misrepresent the product. The three media slots keep one
+gradient treatment, one radius and one decorative role. The assets a later pass needs, and the only
+ones it should add, are one hero rig shot (16:9, at least 1200 px wide), three configuration shots
+(4:3), and four guide thumbnails (16:9). `e2e/homepage.spec.ts` fails when the page requests an image
+from an origin other than its own, so a hot-linked asset cannot slip in unnoticed.
+
 ---
 
 ## 2. Responsive implementation strategy
