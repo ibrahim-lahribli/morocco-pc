@@ -23,12 +23,12 @@ const STORES_SQL = 'SELECT id, name FROM store WHERE is_active = TRUE ORDER BY n
 
 const CATALOG_SQL = [
   'SELECT p.id AS product_id, p.name AS name, p.manufacturer_part_number AS mpn,',
-  '       NULL::uuid AS product_variant_id, NULL::text AS sku',
+  '       p.slug AS product_slug, NULL::uuid AS product_variant_id, NULL::text AS sku',
   '  FROM product p',
   " WHERE p.lifecycle_status = 'ACTIVE'",
   ' UNION ALL',
   'SELECT p.id AS product_id, p.name AS name, p.manufacturer_part_number AS mpn,',
-  '       pv.id AS product_variant_id, pv.sku AS sku',
+  '       p.slug AS product_slug, pv.id AS product_variant_id, pv.sku AS sku',
   '  FROM product p',
   '  JOIN product_variant pv ON pv.product_id = p.id',
   " WHERE p.lifecycle_status = 'ACTIVE'",
@@ -56,6 +56,47 @@ async function loadStores(db) {
 
 function offerKey(storeId, listingIdentifier) {
   return String(storeId) + '\u0000' + String(listingIdentifier);
+}
+
+/**
+ * Resolve operator-supplied catalogue keys to exactly ONE catalogue entry.
+ *
+ * A slug names a PRODUCT; a variant_sku names one of its VARIANTS. Both are
+ * needed for a variant-keyed part, and the reason is mechanical rather than
+ * stylistic: `offers/select.js` matches a GPU candidate ONLY against an offer
+ * carrying the same `product_variant_id`, so a product-keyed GPU offer can never
+ * be selected by the engine. Writing one would look like a success and be a
+ * silent no-op, which is why a slug whose product HAS variants is refused
+ * without a `variant_sku` instead.
+ *
+ * Nothing here guesses: an unknown slug or sku is a REJECTION with its own
+ * reason, so the operator sees the typo.
+ *
+ * @param {object} listing validated listing (needs product_slug, variant_sku)
+ * @param {Array<object>} catalog entries from CATALOG_SQL
+ * @returns {{entry:object}|{reason:string}}
+ */
+function resolveCatalogueKey(listing, catalog) {
+  const slug = listing.product_slug;
+  const entries = catalog.filter((e) => e.product_slug && e.product_slug === slug);
+  if (entries.length === 0) return { reason: 'UNKNOWN_PRODUCT_SLUG' };
+
+  const variantRows = entries.filter((e) => e.product_variant_id !== null);
+  const productRow = entries.find((e) => e.product_variant_id === null) || null;
+
+  if (listing.variant_sku) {
+    const wanted = String(listing.variant_sku).trim();
+    const hits = variantRows.filter((e) => e.sku && String(e.sku).trim() === wanted);
+    // A sku identifies one variant; more than one row is a catalogue defect, not
+    // a choice this function is allowed to make.
+    if (hits.length === 0) return { reason: 'UNKNOWN_VARIANT_SKU' };
+    if (hits.length > 1) return { reason: 'VARIANT_SKU_AMBIGUOUS' };
+    return { entry: hits[0] };
+  }
+
+  if (variantRows.length > 0) return { reason: 'VARIANT_SKU_REQUIRED' };
+  if (productRow === null) return { reason: 'UNKNOWN_PRODUCT_SLUG' };
+  return { entry: productRow };
 }
 
 /**
@@ -94,7 +135,17 @@ function buildPlan(listings, context) {
       continue;
     }
 
-    const match = matchListing(listing, context.catalog);
+    let match;
+    if (listing.product_slug) {
+      const resolved = resolveCatalogueKey(listing, context.catalog);
+      if (resolved.reason) {
+        plan.rejected.push({ listing, reason: resolved.reason });
+        continue;
+      }
+      match = matchListing(listing, context.catalog, resolved.entry);
+    } else {
+      match = matchListing(listing, context.catalog);
+    }
     if (match.status === 'REVIEW') {
       plan.review.push({ listing, store_id: storeId, match });
       continue;
@@ -180,6 +231,7 @@ module.exports = {
   loadStores,
   gatherContext,
   buildPlan,
+  resolveCatalogueKey,
   planCounts,
   formatPlan,
 };

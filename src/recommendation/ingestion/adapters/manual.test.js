@@ -60,3 +60,11 @@ test('a non-array JSON document is rejected', () => {
   const out = parseManualText('{"offers": 5}');
   assert.equal(out.errors[0].reason, 'JSON_MUST_BE_ARRAY');
 });
+
+test('the curated identity columns are accepted, not rejected as unknown', () => {
+  const csv = HEADER + ',product_slug,variant_sku\nmanual,Seed UltraPC,L1,1299,MAD,IN_STOCK,2026-10-01T00:00:00Z,seed-rtx-4060-8gb,SEED-GPU-4060\n';
+  const out = parseManualText(csv, { format: 'csv' });
+  assert.equal(out.errors.length, 0);
+  assert.equal(out.rows[0].product_slug, 'seed-rtx-4060-8gb');
+  assert.equal(out.rows[0].variant_sku, 'SEED-GPU-4060');
+});

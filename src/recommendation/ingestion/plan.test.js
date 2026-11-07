@@ -86,3 +86,85 @@ test('planCounts and formatPlan report every bucket', () => {
   assert.match(text, /\[NEW\] line 2/);
   assert.match(text, /raw_price:PRICE_EMPTY/);
 });
+
+// --- curated catalogue keys (product_slug / variant_sku) ---------------------
+
+const SLUG_CATALOG = [
+  { product_id: 'g1', product_variant_id: null, sku: null, mpn: null, product_slug: 'seed-rtx-4060-8gb', name: 'Seed RTX 4060 8GB' },
+  { product_id: 'g1', product_variant_id: 'gv1', sku: 'SEED-GPU-4060', mpn: null, product_slug: 'seed-rtx-4060-8gb', name: 'Seed RTX 4060 8GB' },
+  { product_id: 'm1', product_variant_id: null, sku: null, mpn: null, product_slug: 'seed-b550m-pro-vdh', name: 'Seed B550M PRO-VDH' },
+];
+
+function slugContext(existing) {
+  return {
+    storesByName: new Map([['Seed UltraPC', 'store-1']]),
+    catalog: SLUG_CATALOG,
+    existingByKey: new Map(existing || []),
+  };
+}
+
+test('a curated variant_sku produces a VARIANT-keyed offer (the GPU case)', () => {
+  const plan = buildPlan(
+    [listing({ product_slug: 'seed-rtx-4060-8gb', variant_sku: 'SEED-GPU-4060', sku: null, title: 'Retailer title sharing no words with the catalogue' })],
+    slugContext()
+  );
+  assert.equal(plan.newOffers.length, 1);
+  assert.equal(plan.newOffers[0].match.matched_product_id, 'g1');
+  assert.equal(plan.newOffers[0].match.matched_product_variant_id, 'gv1');
+  assert.equal(plan.newOffers[0].match.reason, 'CATALOGUE_KEY');
+});
+
+test('a curated slug whose product HAS variants is refused without variant_sku', () => {
+  // A product-keyed GPU offer is unselectable by offers/select.js, so writing one
+  // would look like success and change nothing. Refuse it instead.
+  const plan = buildPlan([listing({ product_slug: 'seed-rtx-4060-8gb', sku: null, title: 'x' })], slugContext());
+  assert.equal(plan.newOffers.length, 0);
+  assert.equal(plan.rejected.length, 1);
+  assert.equal(plan.rejected[0].reason, 'VARIANT_SKU_REQUIRED');
+});
+
+test('an unknown slug is rejected, never guessed', () => {
+  const plan = buildPlan(
+    [listing({ product_slug: 'no-such-product', sku: null, title: 'Seed B550M PRO-VDH' })],
+    slugContext()
+  );
+  assert.equal(plan.newOffers.length, 0);
+  assert.equal(plan.rejected[0].reason, 'UNKNOWN_PRODUCT_SLUG');
+});
+
+test('an unknown or foreign variant_sku is rejected', () => {
+  const unknown = buildPlan([listing({ product_slug: 'seed-rtx-4060-8gb', variant_sku: 'NOPE' })], slugContext());
+  assert.equal(unknown.rejected[0].reason, 'UNKNOWN_VARIANT_SKU');
+  // A real sku, but belonging to a different product, must not resolve.
+  const foreign = buildPlan([listing({ product_slug: 'seed-b550m-pro-vdh', variant_sku: 'SEED-GPU-4060' })], slugContext());
+  assert.equal(foreign.rejected[0].reason, 'UNKNOWN_VARIANT_SKU');
+});
+
+test('a curated product with no variants is product-keyed', () => {
+  const plan = buildPlan([listing({ product_slug: 'seed-b550m-pro-vdh', title: 'x' })], slugContext());
+  assert.equal(plan.newOffers.length, 1);
+  assert.equal(plan.newOffers[0].match.matched_product_id, 'm1');
+  assert.equal(plan.newOffers[0].match.matched_product_variant_id, null);
+});
+
+test('an ambiguous uncurated listing still goes to REVIEW and never becomes an offer', () => {
+  const ambiguous = [
+    { product_id: 'n1', product_variant_id: null, sku: null, mpn: null, product_slug: 'a', name: 'Seed Ryzen 5 7500F' },
+    { product_id: 'n2', product_variant_id: null, sku: null, mpn: null, product_slug: 'b', name: 'Ryzen 5 7500F Processor' },
+  ];
+  const plan = buildPlan(
+    [listing({ sku: null, mpn: null, product_slug: null, variant_sku: null, title: 'AMD Ryzen 5 7500F Processor' })],
+    { storesByName: new Map([['Seed UltraPC', 'store-1']]), catalog: ambiguous, existingByKey: new Map() }
+  );
+  assert.equal(plan.newOffers.length, 0);
+  assert.equal(plan.review.length, 1);
+  assert.equal(plan.review[0].match.reason, 'NAME_AMBIGUOUS');
+});
+
+test('a curated listing re-planned against its stored offer is UNCHANGED (idempotent)', () => {
+  const context = slugContext([['store-1\u0000L-1', { id: 'o1', price: 1299, availability: 'IN_STOCK' }]]);
+  const plan = buildPlan([listing({ product_slug: 'seed-rtx-4060-8gb', variant_sku: 'SEED-GPU-4060' })], context);
+  assert.equal(plan.unchanged.length, 1);
+  assert.equal(plan.newOffers.length, 0);
+  assert.equal(plan.changed.length, 0);
+});

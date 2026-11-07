@@ -20,6 +20,8 @@
  *   title               listing title, used for matching            (string|null)
  *   sku                 retailer SKU, used for matching             (string|null)
  *   mpn                 manufacturer part number, used for matching (string|null)
+ *   product_slug        catalogue product slug - curated identity  (string|null)
+ *   variant_sku         catalogue variant sku - curated identity   (string|null)
  *   source_note         where/when the row was collected            (string|null) *     raw_data            original row object, kept for staging       (object)
  *     line                1-based source line/index, for reports        (number)
  *
@@ -43,7 +45,7 @@ const REQUIRED_FIELDS = [
 ];
 
 /** Optional fields, defaulted to null when absent. */
-const OPTIONAL_FIELDS = ['product_url', 'title', 'sku', 'mpn', 'source_note'];
+const OPTIONAL_FIELDS = ['product_url', 'title', 'sku', 'mpn', 'source_note', 'product_slug', 'variant_sku'];
 
 /**
  * Parse a MAD price string into a finite positive number.
@@ -204,6 +206,8 @@ function validateListings(rows, ctx) {
       title: toNullableString(row.title),
       sku: toNullableString(row.sku),
       mpn: toNullableString(row.mpn),
+      product_slug: toNullableString(row.product_slug),
+      variant_sku: toNullableString(row.variant_sku),
       source_note: toNullableString(row.source_note),
       raw_data: row.raw_data && typeof row.raw_data === 'object' ? row.raw_data : null,
     }));
