@@ -200,5 +200,90 @@
         "contact": "Contact"
       }
     }
+  },
+  "Configurator": {
+    "metadata": {
+      "title": "Configurateur PC",
+      "description": "Composez votre configuration PC selon votre usage et votre budget. Les prix affichés sont indicatifs, en dirhams marocains."
+    },
+    "page": {
+      "eyebrow": "Configurateur",
+      "title": "Votre configuration, pièce par pièce",
+      "intro": "Dites-nous comment vous utilisez votre PC et le budget que vous avez en tête. Nous partons de vos besoins, pas d'une liste de composants."
+    },
+    "requirements": {
+      "badge": "Vos besoins",
+      "title": "Deux réponses suffisent",
+      "intro": "L'usage et le budget orientent la configuration. Vous pourrez ajuster les détails ensuite.",
+      "budgetLabel": "Budget (DH)",
+      "budgetHint": "Entre 3 500 et 100 000 DH.",
+      "budgetPlaceholder": "12 000",
+      "usageLegend": "Usage principal",
+      "submit": "Continuer",
+      "saved": "Vos réponses sont enregistrées.",
+      "update": "Mettre à jour",
+      "note": "Les prix sont indicatifs et exprimés en dirhams marocains.",
+      "usage": {
+        "gaming": {
+          "title": "Jeux vidéo & Gaming",
+          "body": "Pour jouer confortablement en 1080p ou 1440p."
+        },
+        "office": {
+          "title": "Études et bureautique",
+          "body": "Pour les cours, la navigation et les logiciels du quotidien."
+        },
+        "creation": {
+          "title": "Création et travail pro",
+          "body": "Pour la photo, la vidéo, le code ou la 3D."
+        }
+      }
+    },
+    "summary": {
+      "eyebrow": "Configuration",
+      "title": "Votre configuration",
+      "emptyTitle": "Aucune configuration chargée",
+      "emptyBody": "Renseignez vos besoins puis continuez. Pour afficher une configuration existante, ouvrez le configurateur depuis son lien.",
+      "loading": "Chargement de la configuration…",
+      "errorTitle": "La configuration n'a pas pu être chargée",
+      "errorBody": "Le service ne répond pas pour le moment. Réessayez dans un instant.",
+      "retry": "Réessayer",
+      "notFoundTitle": "Configuration introuvable",
+      "notFoundBody": "Cette configuration n'est plus disponible. Vous pouvez continuer avec vos propres réponses.",
+      "componentsTitle": "Composants",
+      "noComponents": "Aucun composant détaillé pour cette configuration.",
+      "totalLabel": "Total indicatif",
+      "budgetLabel": "Budget visé",
+      "rankLabel": "Configurations proposées",
+      "rankOption": "Configuration {rank}",
+      "priceUnavailable": "Prix non disponible",
+      "disclaimerLabel": "À propos des prix",
+      "badge": {
+        "verified": "Prix vérifié",
+        "indicative": "Prix indicatif"
+      }
+    },
+    "errors": {
+      "useCaseRequired": "Choisissez un usage pour continuer.",
+      "budgetRequired": "Saisissez un budget.",
+      "budgetInvalid": "Saisissez un budget en dirhams, sans espace ni virgule.",
+      "budgetRange": "Saisissez un budget entre 3 500 et 100 000 DH.",
+      "fromInvalid": "Ce lien de configuration est invalide."
+    },
+    "roles": {
+      "CPU": "Processeur",
+      "GPU": "Carte graphique",
+      "MOTHERBOARD": "Carte mère",
+      "RAM": "Mémoire",
+      "SSD_BOOT": "SSD système",
+      "SSD_SECONDARY": "SSD secondaire",
+      "PSU": "Alimentation",
+      "CASE": "Boîtier",
+      "CPU_COOLER": "Refroidissement CPU",
+      "other": "Autre"
+    },
+    "actions": {
+      "expand": "Afficher le détail",
+      "collapse": "Masquer le détail"
+    }
   }
 }
