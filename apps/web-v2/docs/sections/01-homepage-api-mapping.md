@@ -286,15 +286,15 @@ only on an explicit CTA, never on load, never on filter change, and never in a r
 
 ## 6. Endpoints deliberately **not** used on the homepage
 
-| Need in the brief                        | Endpoint                                                  | Why not now                                                                                   |
-| ---------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| "Featured guides" content                | none exists                                               | static typed content module; guide routes are Step 4                                          |
-| "Trust / methodology" copy               | none exists                                               | static dictionary copy                                                                        |
-| "Toutes les configurations (N)"          | `GET /v1/catalog/products` lists _components_, not builds | there is no builds index; the link is disabled in Step 1                                      |
-| Saved builds / header badge              | none exists (no auth, no persistence in V2)               | omitted                                                                                       |
-| 1080p / 1440p "from" prices              | `GET /v1/presets` has no resolution parameter             | tiles deferred (Q-20); no price is derived                                                    |
-| Hero "Sélection du moment" rig           | `GET /v1/presets` + §4 detail                             | only when data is available (source use case undecided — Q-19); otherwise the text-only shell |
-| Liveness banner ("Index MAD temps réel") | `GET /v1/health` exists                                   | not a price index; the banner stays static copy                                               |
+| Need in the brief                        | Endpoint                                                  | Why not now                                                                                               |
+| ---------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| "Featured guides" content                | none exists                                               | static typed content module; guide routes are Step 4                                                      |
+| "Trust / methodology" copy               | none exists                                               | static dictionary copy                                                                                    |
+| "Toutes les configurations (N)"          | `GET /v1/catalog/products` lists _components_, not builds | there is no builds index; the link is disabled in Step 1                                                  |
+| Saved builds / header badge              | none exists (no auth, no persistence in V2)               | omitted                                                                                                   |
+| 1080p / 1440p "from" prices              | `GET /v1/presets` has no resolution parameter             | tiles deferred (Q-20, approved); no price is derived and no simulated resolution filtering is implemented |
+| Hero "Sélection du moment" rig           | `GET /v1/presets` + §4 detail                             | only when data is available (source use case undecided — Q-19); otherwise the text-only shell             |
+| Liveness banner ("Index MAD temps réel") | `GET /v1/health` exists                                   | **removed by owner decision (Q-17)**: not a price index, and the claim ships in neither dictionary        |
 
 ---
 

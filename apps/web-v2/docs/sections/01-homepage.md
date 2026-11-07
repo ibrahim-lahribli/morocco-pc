@@ -101,9 +101,13 @@ token; do not add a token, and do not hard-code the Figma hex.
 | 48 px / 800 hero heading     | desktop hero             | `text-display-lg` (40/48/700)                              | **visible**: 40 px, not 48 px                |
 | 24 px hero heading           | mobile hero              | `text-display` (30/38/700) or `text-headline-lg` (28)      | see Q-02                                     |
 
-These deltas are accepted for Step 1 and recorded as review questions (Q-01, Q-02). The
-authoritative fidelity target is "the approved frame's layout and hierarchy, rendered
-with the Step 0 token set", not a pixel-for-pixel colour clone.
+These deltas are **approved by the owner for the first functional release** (Q-01, Q-02).
+Retain the existing semantic token system: the existing `accent` and `bg-background`
+tokens, and the 40 px `text-display-lg` heading. No new token and no hard-coded visual
+exception is introduced without explicit design-owner approval, and this table is the
+record of the differences accepted from the approved frames. The authoritative fidelity
+target is "the approved frame's layout and hierarchy, rendered with the Step 0 token
+set", not a pixel-for-pixel colour clone.
 
 Images: the frames use photographic build shots and guide thumbnails. No image asset is
 in the repository. Step 1 renders **token-only placeholders** (the existing
@@ -188,10 +192,10 @@ they scroll: configure, browse guides, saved builds. On mobile it also carries t
 persistent finder entry point.
 
 **Desktop composition.** Announcement banner (full-bleed, `bg-surface-muted`, 10 px 32 px
-padding): a 8 px accent dot, the label "Mise à jour :" in `text-label-md`
-(`banner.updateLabel`), no update sentence and no live-index pill until that copy is
-cleared (Q-17), then one pill on the end side — the Arabic availability chip
-(`bg-surface-sunken`, `text-primary`). Below it, the existing `SiteHeader` (64 px, sticky,
+padding): an 8 px accent dot and one neutral label in `text-label-md` (`banner.label`),
+then, on the end side, the Arabic availability chip (`bg-surface-sunken`, `text-primary`,
+`banner.arabicBadge`) rendered only when the Arabic experience is live. Below it, the
+existing `SiteHeader` (64 px, sticky,
 `bg-background/90` + blur): brand mark + wordmark, primary nav anchors (`lg` only),
 locale switcher.
 
@@ -205,17 +209,20 @@ renders neither (no saved-builds route exists and no count source exists) — Q-
 
 **Content keys** (`Homepage` namespace unless stated).
 
-| Key                                                    | French source (from frame)                                                                      |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `Shell.nav.home` / `.configure` / `.guides` / `.saved` | Accueil / Configurer / Guides / Enregistrés                                                     |
-| `Shell.mobileNav`                                      | Navigation mobile                                                                               |
-| `Shell.primaryNav`                                     | Navigation principale                                                                           |
-| `banner.updateLabel`                                   | Mise à jour :                                                                                   |
-| `banner.updateText`                                    | Tarifs et disponibilités vérifiés ce mois-ci au Maroc 🇲🇦 (Casablanca, Rabat, Tanger & En ligne) |
-| `banner.currencyIndex`                                 | Index MAD temps réel                                                                            |
-| `banner.arabicBadge`                                   | متوفر باللغة العربية                                                                            |
+| Key                                                    | French source (from frame)                  |
+| ------------------------------------------------------ | ------------------------------------------- |
+| `Shell.nav.home` / `.configure` / `.guides` / `.saved` | Accueil / Configurer / Guides / Enregistrés |
+| `Shell.mobileNav`                                      | Navigation mobile                           |
+| `Shell.primaryNav`                                     | Navigation principale                       |
+| `banner.label`                                         | Configurations PC pour le Maroc             |
+| `banner.arabicBadge`                                   | متوفر باللغة العربية                        |
 
-No update date is displayed because no verified freshness timestamp or live price-index source exists for this banner. The `banner.updateText` and `banner.currencyIndex` strings still assert a verification and a live index, which no source backs, so Step 1 renders `banner.updateLabel` and `banner.arabicBadge` only (Q-17).
+**Banner copy (Q-17, approved).** The monthly-verification sentence (`banner.updateText`)
+and the live-index pill (`banner.currencyIndex`) are removed by owner decision and must
+not exist in `fr.json` or `ar.json`: no source backs a verification cadence or a real-time
+MAD index. What remains is neutral and truthful — the `banner.label` text and, only when
+the Arabic experience is live, `banner.arabicBadge`. No update date is displayed because
+no verified freshness timestamp exists for this banner.
 
 **Interactions.** Nav anchors scroll to `#configurations`, `#guides`, `#confiance`.
 Locale switch preserves the page (already implemented by `LocaleSwitcher`). `aria-current`
@@ -494,7 +501,10 @@ displayed.
 
 **Desktop composition.** Eyebrow "CONFIGURATIONS PRÊTES À MONTER", H2 "Trois usages,
 trois configurations", one-line intro, then three cards in fixed use-case order. Each
-card has an H3 carrying the use-case label (`builds.category.*`), a `builds.budgetLabel`
+card's H3 is the **localized use-case label**, the approved card title (Q-16):
+`builds.category.gaming` = "PC Gaming", `.office` = "PC Bureautique", `.workstation` =
+"PC Création & Professionnel". No configuration name is invented, because neither the
+preset nor the build carries one. Under the H3, a `builds.budgetLabel`
 line showing the served `budget_amount`, a price-status badge, a 192 px token-only media
 placeholder, up to four spec pills, an optional rationale, the served total price and a
 compact details action. The budget line always renders from the preset; the price renders
@@ -524,9 +534,9 @@ cross-use-case ranking.
 | `builds.eyebrow`              | Configurations prêtes à monter                                                                                               |
 | `builds.title`                | Trois usages, trois configurations                                                                                           |
 | `builds.intro`                | Découvrez un exemple de configuration pour le jeu, les études et le travail.                                                 |
-| `builds.category.gaming`      | Gaming                                                                                                                       |
-| `builds.category.office`      | Études & bureautique                                                                                                         |
-| `builds.category.workstation` | Création & travail professionnel                                                                                             |
+| `builds.category.gaming`      | PC Gaming                                                                                                                    |
+| `builds.category.office`      | PC Bureautique                                                                                                               |
+| `builds.category.workstation` | PC Création & Professionnel                                                                                                  |
 | `builds.badge.verified`       | Prix vérifié                                                                                                                 |
 | `builds.badge.indicative`     | Prix indicatif                                                                                                               |
 | `builds.priceLabel`           | Prix de la configuration                                                                                                     |
@@ -592,7 +602,9 @@ not a new API use case.
 **Mobile composition.** The frame's two Gaming resolution shortcuts (`23:1344`: Gaming
 1080p, Gaming 1440p) are **not rendered in the first functional release** (Q-20, §5.4):
 the presets endpoint cannot filter by resolution and the `POST` is gated until Step 2, so
-the choice would reach no served card. When they are enabled, each tile sets
+the choice would reach no served card. **No simulated resolution filtering is
+implemented** (Q-20, approved): the tiles are hidden rather than wired to a client-side
+approximation the served cards would ignore. When they are enabled, each tile sets
 `use_case=GAMING` plus its resolution and moves focus to the finder.
 
 **Components.** One `DiscoveryPathways` client component with desktop-category and
@@ -945,7 +957,7 @@ Rules that follow from the contract:
   card's component summary requires the detail read: the three initial reads are the
   homepage's starting fan-out, not a cap on how many details it may ever show (§6,
   **Dynamic detail reads**).
-- **Presets have no resolution and no title.** The card's category label is ours (`builds.category.*`); no field carries an H3 build title (Q-16), and resolution comes only from the finder.
+- **Presets have no resolution and no title.** The card title is the localized use-case label (`builds.category.*` — PC Gaming / PC Bureautique / PC Création & Professionnel, Q-16 approved); no field carries a build name, so none is invented. Resolution comes only from the finder.
 - **Prices are never invented.** The frames' prices (7 450 / 4 890 / 13 900 / 5 500 /
   11 000 / 3 200 / 9 800) are design placeholders; only served `total_price` /
   `budget_amount` values are rendered, through `formatPrice(value, currency)` with the detail currency when non-null, otherwise the confirmed `MAD` query currency.
@@ -956,16 +968,16 @@ Rules that follow from the contract:
 
 ## 14. UI states
 
-| Surface                         | Loading                                                  | Empty                                                                                                        | Error                                             | Notes                                                          |
-| ------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- | -------------------------------------------------------------- |
-| Finder options (`meta/options`) | render the three fallback usages immediately; no spinner | never empty (fallback)                                                                                       | silent fallback, logged; the form still works     | a form must never be blocked by a vocabulary call              |
-| Recommended builds (presets)    | 3 skeletons, section `aria-busy`                         | `builds.empty.*` + retry                                                                                     | `builds.error.*` + retry                          | `presets: []` is a **valid 200**; each use case keeps its slot |
-| Finder-applied budget filter    | n/a                                                      | no preset ≤ visitor budget → `builds.empty.*`; budget above the top tier → highest tier + `builds.budgetCap` | n/a                                               | filters the already-fetched ladder, no request                 |
-| Preset detail (per card)        | card renders without pills; pills appear when loaded     | preset with `build_score: null` → "—"                                                                        | card renders its preset budget, no component line | one failed detail must not fail the section                    |
-| Finder submit                   | CTA pending state                                        | `builds: []` → results page (Step 2) owns that state                                                         | inline alert + retry; 429 countdown               | the homepage never renders a pass                              |
-| Shortcuts                       | n/a                                                      | **not rendered in the first release** (Q-20)                                                                 | n/a                                               | enabled later only when `resolution` ∈ `inputs_applied`        |
-| Hero preview                    | skeleton of equal height                                 | text-only shell                                                                                              | text-only shell                                   | no fake price/score                                            |
-| Rest of the page                | n/a                                                      | n/a                                                                                                          | n/a                                               | server-rendered static                                         |
+| Surface                         | Loading                                                  | Empty                                                                                                        | Error                                             | Notes                                                                                         |
+| ------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Finder options (`meta/options`) | render the three fallback usages immediately; no spinner | never empty (fallback)                                                                                       | silent fallback, logged; the form still works     | a form must never be blocked by a vocabulary call                                             |
+| Recommended builds (presets)    | 3 skeletons, section `aria-busy`                         | `builds.empty.*` + retry                                                                                     | `builds.error.*` + retry                          | `presets: []` is a **valid 200**; each use case keeps its slot                                |
+| Finder-applied budget filter    | n/a                                                      | no preset ≤ visitor budget → `builds.empty.*`; budget above the top tier → highest tier + `builds.budgetCap` | n/a                                               | filters the already-fetched ladder, no request                                                |
+| Preset detail (per card)        | card renders without pills; pills appear when loaded     | preset with `build_score: null` → "—"                                                                        | card renders its preset budget, no component line | one failed detail must not fail the section                                                   |
+| Finder submit                   | CTA pending state                                        | `builds: []` → results page (Step 2) owns that state                                                         | inline alert + retry; 429 countdown               | the homepage never renders a pass                                                             |
+| Shortcuts                       | n/a                                                      | **not rendered in the first release** (Q-20)                                                                 | n/a                                               | hidden first release; no simulated filtering; later only when `resolution` ∈ `inputs_applied` |
+| Hero preview                    | skeleton of equal height                                 | text-only shell                                                                                              | text-only shell                                   | no fake price/score                                                                           |
+| Rest of the page                | n/a                                                      | n/a                                                                                                          | n/a                                               | server-rendered static                                                                        |
 
 Global conditions: **offline** (fetch TypeError → the query's one retry, then the error
 block with retry); **429** (`retryAfterSeconds` countdown, disabled submit); **503**
@@ -986,6 +998,11 @@ preset whose prices were invalidated).
 - French copy in §3–§11 is the **source** (taken from the frames). Arabic must be
   authored, not machine-copied: same keys, same placeholders, Arabic-Indic vs Latin digits
   as the existing dictionaries use (Latin digits, per `lib/format/price.ts`).
+- **Arabic is complete for the release (Q-15, approved).** Every `Homepage` key ships in
+  `ar.json` with the same placeholders as `fr.json` — no key is left French-only and no
+  machine text ships. The Arabic copy requires a **native-language review signed off
+  before production**, and the RTL layout plus Arabic typography are verified on that
+  reviewed copy (§16.6, §16.7).
 - Every visible string comes from the dictionary or a prop: no literal in a component
   (including "DH", which comes from the currency `formatPrice` is given: the rendered detail's when one exists, otherwise the `MAD` confirmed by `meta/options`).
 - Plurals/placeholders: `{minutes}`, `{count}`, `{score}`, `{amount}`, `{seconds}`,
@@ -1084,6 +1101,8 @@ item is reported as skipped.
 
 - [ ] `fr.json` and `ar.json` have identical `Homepage` key trees and identical
       placeholders (`npm test` passes the parity test).
+- [ ] Arabic copy for every `Homepage` key is reviewed, and the native-language sign-off
+      is recorded before production (Q-15).
 - [ ] No visible string is hard-coded in a component (grep for French copy outside
       `messages/`).
 - [ ] `/fr` and `/ar` render the complete page; switching locale keeps the page and
@@ -1170,25 +1189,25 @@ Nothing in step 1–8 touches `apps/api`, V1, the workflows or the tokens.
 
 Defaults are chosen so implementation can start; each answer may change the spec.
 
-| #    | Question                                                                                                                                        | Default taken                                                                                                                             | Impact if changed                              |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| Q-01 | The frames' saffron `#FFA51B` and canvas `#F9F9FF` differ from the token palette. Accept the token-mapped rendering, or change tokens?          | accept tokens (no token change allowed in Step 1)                                                                                         | visible brand delta on CTAs                    |
-| Q-02 | Desktop H1 is 48 px in the frame, `text-display-lg` is 40 px. Add a 48 px step or use 40?                                                       | use 40                                                                                                                                    | hero height, line breaks                       |
-| Q-03 | Build and guide photography is unavailable. Token placeholders acceptable for Step 1?                                                           | yes                                                                                                                                       | visual fidelity                                |
-| Q-04 | Desktop's "Catégories & usages" 4-tile section is not in the mobile section list. Ship it?                                                      | resolved: preserve desktop category grid; mobile resolution shortcuts deferred to a later release (Q-20)                                  | one responsive section with two frame variants |
-| Q-05 | Mobile header shows a saved-builds icon with a count and an unidentified circular icon.                                                         | omit both                                                                                                                                 | header parity                                  |
-| Q-06 | Hero preview card's "Détails specs →" has no destination until a product page exists.                                                           | render as text, no link                                                                                                                   | one dead-ish CTA                               |
-| Q-07 | `GET /v1/presets` has no `resolution` parameter, so 1080p/1440p "Dès X DH" cannot be derived.                                                   | resolved: the shortcut tiles are deferred (Q-20); no price is derived from a resolution                                                   | needs a resolution-scoped read                 |
-| Q-08 | The results route (`/[locale]/resultats/{id}`) is Step 2. Ship the POST-on-CTA now or gate it?                                                  | gated off (`NEXT_PUBLIC_HOMEPAGE_SUBMIT=off`); CTA scrolls to the best pre-generated preset within budget                                 | orphan passes vs. a non-functional CTA         |
-| Q-09 | Trust copy makes claims ("actualisation hebdomadaire", "vérification TDP"). Keep as static copy?                                                | resolved: remove freshness and absolute compatibility claims; describe API statuses only                                                  | misleading product claims                      |
-| Q-10 | Methodology link has no page.                                                                                                                   | self-anchor, `aria-disabled`                                                                                                              | one placeholder link                           |
-| Q-11 | Guides section shows "(14)" but only four guides exist and no endpoint serves them.                                                             | render "Tous les guides d'achat" without a count                                                                                          | copy                                           |
-| Q-12 | Guide cards have no routes until Step 4.                                                                                                        | `NEXT_PUBLIC_GUIDES_ENABLED=off`, non-navigating cards                                                                                    | four placeholder cards                         |
-| Q-13 | No analytics provider exists in V2.                                                                                                             | emit no events                                                                                                                            | measurement                                    |
-| Q-14 | Which budget determines the generic homepage configurations before finder selection?                                                            | resolved by owner: 12,000 MAD ceiling; choose the highest same-use-case preset at or below it; finder later uses the visitor's own budget | no backend write in homepage MVP               |
-| Q-15 | Arabic copy for the new namespace has no approved source.                                                                                       | author with review, keep key/placeholder parity                                                                                           | launch readiness                               |
-| Q-16 | `GET /v1/presets` carries no title and a build has no name field. What heads the card?                                                          | use the use-case label as the card heading, with the served budget on a `builds.budgetLabel` line; invent no build name                   | card hierarchy, copy, SEO                      |
-| Q-17 | Banner copy ("Tarifs et disponibilités vérifiés ce mois-ci", "Index MAD temps réel") asserts verification and a live index that nothing serves. | render the label and Arabic chip only; re-approve the claims before shipping them                                                         | header parity, trust                           |
-| Q-18 | The peer rule drops the approved frame's filter tabs and the "Le plus recommandé" badge. Accept the fidelity trade?                             | yes: three peers, no tabs, no ranking badge                                                                                               | visual fidelity to `19:172`                    |
-| Q-19 | With one card per use case, which preset backs the hero's "Sélection du moment" preview?                                                        | the Gaming card's preset already fetched for section 3 (highest at or below 12,000 MAD; no extra request)                                 | hero content, request count                    |
-| Q-20 | Resolution cannot be applied before the Step 2 results route: should the 1080p / 1440p shortcuts ship in the first release?                     | no — hide both variants until a selected resolution reaches a served card; the tiles stay the documented future enhancement               | discovery parity with the mobile frame         |
+| #    | Question                                                                                                                                        | Default taken                                                                                                                                                                             | Impact if changed                              |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Q-01 | The frames' saffron `#FFA51B` and canvas `#F9F9FF` differ from the token palette. Accept the token-mapped rendering, or change tokens?          | **approved**: retain the semantic token system — existing `accent` / `bg-background`; no new token and no hard-coded hex without design-owner approval                                    | visible brand delta on CTAs                    |
+| Q-02 | Desktop H1 is 48 px in the frame, `text-display-lg` is 40 px. Add a 48 px step or use 40?                                                       | **approved**: use the 40 px `text-display-lg`; no 48 px step is added                                                                                                                     | hero height, line breaks                       |
+| Q-03 | Build and guide photography is unavailable. Token placeholders acceptable for Step 1?                                                           | yes                                                                                                                                                                                       | visual fidelity                                |
+| Q-04 | Desktop's "Catégories & usages" 4-tile section is not in the mobile section list. Ship it?                                                      | resolved: preserve desktop category grid; mobile resolution shortcuts deferred to a later release (Q-20)                                                                                  | one responsive section with two frame variants |
+| Q-05 | Mobile header shows a saved-builds icon with a count and an unidentified circular icon.                                                         | omit both                                                                                                                                                                                 | header parity                                  |
+| Q-06 | Hero preview card's "Détails specs →" has no destination until a product page exists.                                                           | render as text, no link                                                                                                                                                                   | one dead-ish CTA                               |
+| Q-07 | `GET /v1/presets` has no `resolution` parameter, so 1080p/1440p "Dès X DH" cannot be derived.                                                   | resolved: the shortcut tiles are deferred (Q-20); no price is derived from a resolution                                                                                                   | needs a resolution-scoped read                 |
+| Q-08 | The results route (`/[locale]/resultats/{id}`) is Step 2. Ship the POST-on-CTA now or gate it?                                                  | gated off (`NEXT_PUBLIC_HOMEPAGE_SUBMIT=off`); CTA scrolls to the best pre-generated preset within budget                                                                                 | orphan passes vs. a non-functional CTA         |
+| Q-09 | Trust copy makes claims ("actualisation hebdomadaire", "vérification TDP"). Keep as static copy?                                                | resolved: remove freshness and absolute compatibility claims; describe API statuses only                                                                                                  | misleading product claims                      |
+| Q-10 | Methodology link has no page.                                                                                                                   | self-anchor, `aria-disabled`                                                                                                                                                              | one placeholder link                           |
+| Q-11 | Guides section shows "(14)" but only four guides exist and no endpoint serves them.                                                             | render "Tous les guides d'achat" without a count                                                                                                                                          | copy                                           |
+| Q-12 | Guide cards have no routes until Step 4.                                                                                                        | `NEXT_PUBLIC_GUIDES_ENABLED=off`, non-navigating cards                                                                                                                                    | four placeholder cards                         |
+| Q-13 | No analytics provider exists in V2.                                                                                                             | emit no events                                                                                                                                                                            | measurement                                    |
+| Q-14 | Which budget determines the generic homepage configurations before finder selection?                                                            | resolved by owner: 12,000 MAD ceiling; choose the highest same-use-case preset at or below it; finder later uses the visitor's own budget                                                 | no backend write in homepage MVP               |
+| Q-15 | Arabic copy for the new namespace has no approved source.                                                                                       | **approved**: ship a complete Arabic `Homepage` namespace with exact key/placeholder parity and verified RTL + typography; a native-language review is signed off before production       | launch readiness                               |
+| Q-16 | `GET /v1/presets` carries no title and a build has no name field. What heads the card?                                                          | **approved**: the localized use-case label — PC Gaming / PC Bureautique / PC Création & Professionnel; the served budget stays on `builds.budgetLabel`; no configuration name is invented | card hierarchy, copy, SEO                      |
+| Q-17 | Banner copy ("Tarifs et disponibilités vérifiés ce mois-ci", "Index MAD temps réel") asserts verification and a live index that nothing serves. | **approved**: remove both claims and their keys; render neutral copy only, plus the Arabic chip when the Arabic experience is live                                                        | header parity, trust                           |
+| Q-18 | The peer rule drops the approved frame's filter tabs and the "Le plus recommandé" badge. Accept the fidelity trade?                             | yes: three peers, no tabs, no ranking badge                                                                                                                                               | visual fidelity to `19:172`                    |
+| Q-19 | With one card per use case, which preset backs the hero's "Sélection du moment" preview?                                                        | the Gaming card's preset already fetched for section 3 (highest at or below 12,000 MAD; no extra request)                                                                                 | hero content, request count                    |
+| Q-20 | Resolution cannot be applied before the Step 2 results route: should the 1080p / 1440p shortcuts ship in the first release?                     | **approved**: hide both variants in the first release, implement no simulated resolution filtering, and restore them once a selected resolution reaches a served card                     | discovery parity with the mobile frame         |
