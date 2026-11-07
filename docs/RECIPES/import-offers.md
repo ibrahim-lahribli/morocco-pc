@@ -41,10 +41,16 @@ CSV (header row required) or JSON (array of objects). Auto-detected, or forced w
 | `title` | no | listing title, used for matching |
 | `sku` | no | retailer SKU, used for matching |
 | `mpn` | no | manufacturer part number, used for matching |
+| `product_slug` | no | curated catalogue slug (`product.slug`); states the product instead of inferring it |
+| `variant_sku` | no | curated variant sku (`product_variant.sku`); required when the slug's product has variants |
 | `source_note` | no | where/when the row was collected (stored as provenance) |
 
 An example file ships at `scripts/templates/manual-offers.example.csv`. Every row needs a
 `source_note` saying where and when the price was collected.
+
+**Quote any CSV field that contains a comma.** An unquoted `source_note` with commas shifts every
+later column, so the row arrives with the wrong `product_slug` and is rejected (measured
+2026-11-07, not hypothetical).
 
 ## Validation rules (invalid rows are reported, never dropped or fixed)
 
@@ -60,9 +66,58 @@ Each rejected row is reported with its line number and every failing `field:reas
 
 ## Matching
 
-`sku` exact -> `CONFIRMED`; `mpn` exact -> `HIGH`; normalized model-string containment -> `MEDIUM`.
+Tiers, highest first:
+
+1. `product_slug` (plus `variant_sku` when the product has variants) exact -> `CONFIRMED`, reason
+   `CATALOGUE_KEY`. The operator asserted the identity and nothing is inferred.
+2. `sku` exact -> `CONFIRMED` (`SKU_EXACT`).
+3. `mpn` exact -> `HIGH` (`MPN_EXACT`).
+4. normalized model-string containment -> `MEDIUM` (`NAME_CONTAINS`).
+
 Ambiguous or unmatched listings are written to `product_candidate` with status `REVIEW` — they
 **never** auto-create a product and never become offers.
+
+### Curated identity: what a refusal means
+
+A curated row that cannot be resolved is REJECTED — it never falls back to inference and never
+becomes an offer. Each reason names a different mistake:
+
+| Reason | What it means |
+|---|---|
+| `UNKNOWN_PRODUCT_SLUG` | no ACTIVE product carries that slug: a typo, or a product that is inactive (the two are indistinguishable here) |
+| `VARIANT_SKU_REQUIRED` | the slug's product HAS variants and no `variant_sku` was given; a product-keyed GPU offer can never be selected by the engine |
+| `UNKNOWN_VARIANT_SKU` | no variant with that sku under that product — a sku belonging to another product is refused too |
+| `VARIANT_SKU_AMBIGUOUS` | more than one variant matched inside that product: a catalogue defect, not a choice the importer may make |
+| `VARIANT_SKU_WITHOUT_SLUG` | a `variant_sku` was given with no `product_slug`; a variant sku only means something within its product |
+| `OFFER_IDENTITY_MISMATCH` | `(store_name, listing_identifier)` already has an offer on a DIFFERENT product or variant. The stored offer is left untouched, so correct the key or remove the old offer deliberately, then re-run |
+
+Whitespace and case: the listing's `product_slug` and `variant_sku` are trimmed at validation, and
+`variant_sku` is also trimmed against the catalogue value. Matching is otherwise exact and
+case-sensitive — slugs are lowercase kebab-case by the `chk_product_slug_format` CHECK, so an
+upper-case slug is refused as unknown rather than silently rewritten.
+
+### Curated rows need a second reviewer
+
+A curated key is trusted at `CONFIRMED`: a wrong-but-VALID slug associates a real price with the
+wrong product, and no gate catches that. Before `--commit`, every row carrying `product_slug` must
+be checked by a second person against the retailer page — the slug, the variant, the price and
+the `product_url` must all describe the same listing. Record who checked in `source_note`.
+
+### Worked examples
+
+Two rows of one file. The slugs are illustrative — take the real ones from the catalogue — and
+`example.test` is a placeholder, because a real `product_url` must be on that store's own host
+(the provenance gate checks it):
+
+```csv
+source,store_name,listing_identifier,product_url,raw_price,currency,availability,observed_at,title,sku,mpn,product_slug,variant_sku,source_note
+manual,Seed UltraPC,GPU-4060-1,https://example.test/gpu-4060-1,3299,MAD,IN_STOCK,2026-11-07T10:00:00Z,NVIDIA RTX 4060 8GB,GPU-4060-1,,seed-rtx-4060-8gb,SEED-GPU-4060,"collected 2026-11-07 by A, checked by B"
+manual,Seed UltraPC,MB-B550M-1,https://example.test/mb-b550m-1,899,MAD,IN_STOCK,2026-11-07T10:05:00Z,MSI B550M PRO-VDH,MB-B550M-1,,seed-b550m-pro-vdh,,"collected 2026-11-07 by A, checked by B"
+```
+
+The GPU row carries `variant_sku` because its product has variants; the board row leaves it empty
+because a product with no variants is product-keyed. The last field is quoted because it contains
+commas — that is the rule, not decoration.
 
 ## The refresh discipline
 

@@ -90,3 +90,15 @@ test('validateListings rejects a duplicate listing_identifier within the file', 
   assert.equal(invalid.length, 1);
   assert.equal(invalid[0].errors[0].reason, 'DUPLICATE_LISTING_IDENTIFIER');
 });
+
+test('a zero price row is REJECTED as PRICE_NOT_POSITIVE, never written as 0', () => {
+  // The pilot hit exactly this: a retailer publishing schema.org price 0 for an
+  // out-of-stock item. 0 is not a cheap price, it is no price.
+  const { valid, invalid } = validateListings([baseRow({ raw_price: '0' })], {
+    now: NOW,
+    knownStores: new Set(['Seed UltraPC']),
+  });
+  assert.equal(valid.length, 0);
+  assert.equal(invalid.length, 1);
+  assert.equal(invalid[0].errors[0].reason, 'PRICE_NOT_POSITIVE');
+});
