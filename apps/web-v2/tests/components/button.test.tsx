@@ -33,4 +33,12 @@ describe("Button", () => {
     expect(link).toHaveAttribute("href", "#lien");
     expect(link.className).toContain("bg-accent-soft");
   });
+
+  it("renders the saffron cta variant with readable on-accent text", () => {
+    render(<Button variant="cta">Trouver mon PC</Button>);
+    const button = screen.getByRole("button", { name: "Trouver mon PC" });
+
+    expect(button.className).toContain("bg-accent");
+    expect(button.className).toContain("text-on-accent");
+  });
 });

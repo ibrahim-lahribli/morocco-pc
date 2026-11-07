@@ -22,6 +22,7 @@ export const buttonVariants = cva(
           "border border-indicative-border bg-accent-soft text-accent-ink hover:bg-indicative-border",
         outline: "border border-outline bg-surface text-foreground hover:bg-surface-muted",
         ghost: "text-primary hover:bg-primary-soft",
+        cta: "bg-accent text-on-accent shadow-level-1 hover:bg-accent-strong",
       },
       size: {
         sm: "h-10 px-3 text-label-md",
