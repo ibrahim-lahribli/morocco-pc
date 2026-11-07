@@ -446,14 +446,16 @@ a POST runs and persists an engine pass).
   second line of defence.
 
 **Seam to the recommendation journey.** The finder writes
-`{ budgetAmount, useCase, resolution }` into the homepage store and the CTA posts that
-same object; Step 2's results page is addressed only by `id` from the API. No
-recommendation input is duplicated in the URL, so a shared link cannot disagree with the
-persisted pass. If Step 2 has not landed, the CTA is behind
-`NEXT_PUBLIC_HOMEPAGE_SUBMIT=off` (default **off** in Step 1) and instead performs a
-**no-write** action: it stores the answers and scrolls to the selected use case's best available
-pre-generated preset within budget. This is the only way Step 1 ships without
-creating orphan engine passes. Q-08 records the agreed gate until the results route exists.
+`{ budgetAmount, useCase, resolution }` into the homepage store, and since Step 3.3 its CTA
+hands the two answers to `/{locale}/configurateur` as query params — `use_case` and
+`budget` — through `buildConfiguratorHref` and next-intl's locale-aware `router.push`. It
+posts nothing: no `POST /v1/recommendations` is issued from the homepage, so no orphan
+engine pass can be created. The URL is the only carrier, and the configurator parses it
+back with the one module that also builds it, so a link cannot disagree with the route's
+own contract. **Q-08's scroll fallback is superseded** by this navigation: the CTA no
+longer scrolls to `#configurations`. The POST and a results route remain the future step,
+still behind `NEXT_PUBLIC_HOMEPAGE_SUBMIT` (default **off**), which now gates only that
+future write.
 
 ---
 

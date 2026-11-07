@@ -123,7 +123,8 @@ The supplied Stitch references stay untouched in
 ## Configurator
 
 `/{locale}/configurateur` asks two questions — use case and budget — and renders a
-build summary beside them. The URL is the only input:
+build summary beside them. The homepage finder's CTA hands its two answers to this route
+(`use_case`, `budget`) and posts nothing. The URL is the only input:
 
 | Query      | Accepted                          | Invalid value                    |
 | ---------- | --------------------------------- | -------------------------------- |
