@@ -476,7 +476,8 @@ Do not select the median of the entire ladder and do not fall back to a row abov
 This keeps the generic homepage examples relevant to the finder's 5,000 / 8,000 / 12,000 /
 15,000 DH choices. The selected preset's actual `budget_amount` is the displayed tier;
 it may be below 12,000 and must not be labelled as an exact 12,000 DH build. Keep a
-stable display order: Gaming, Studies & Office, Professional & Creation. Do not sort use
+stable display order: GAMING, OFFICE, WORKSTATION (titled PC Gaming / PC Bureautique /
+PC Création & Professionnel on the cards). Do not sort use
 cases by score, price, API response order, or strategy. Request detail only for the
 selected `recommendation_id` in each use-case slot. If a use case has no preset at or
 below 12,000, preserve its slot and show the no-configuration state.
@@ -515,7 +516,9 @@ Use equal visual weight across all three cards. The Figma centre-card ring may b
 retained as decoration only; it must not be paired with "Le plus recommandé" or any
 claim that ranks OFFICE above the other use cases.
 
-**Mobile composition.** Same three use-case examples in the same order: Gaming, Studies &
+**Mobile composition.** The same three cards in the same order — PC Gaming, PC Bureautique,
+PC Création & Professionnel (the approved `builds.category.*` titles, Q-16). Render PC
+Gaming first, followed by the other two as compact
 Office, Professional & Creation. Render Gaming first, followed by the other two as compact
 cards if required by the approved mobile frame. A compact/featured layout is a responsive
 density choice only; it must not imply that Gaming is objectively more recommended.
