@@ -114,3 +114,15 @@ Generated from `messages/ar.json`; regenerate after any copy change. Key and
 | `Homepage.footer.links.stores`               | المتاجر                                                                                                                              |
 | `Homepage.footer.links.methodology`          | المنهجية                                                                                                                             |
 | `Homepage.footer.links.contact`              | اتصل بنا                                                                                                                             |
+
+## Sign-off
+
+| Field    | Value                                                 |
+| -------- | ----------------------------------------------------- |
+| Reviewer | — (native Arabic speaker, not the implementing agent) |
+| Date     | —                                                     |
+| Scope    | every `Homepage` key in the table above               |
+| Status   | **PENDING — blocks the Arabic production release**    |
+
+This table is not approved by default and is never self-approved. The French homepage is
+unaffected by this gate: it is implemented and reviewed on `feature/v2-design`.
