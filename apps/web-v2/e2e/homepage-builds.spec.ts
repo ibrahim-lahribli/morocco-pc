@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { CARD_TITLES, stubHomepageApi } from "./support/homepage-api";
+import { waitForSettledCards } from "./support/homepage-ready";
 
 test.describe("recommended configurations", () => {
   test("renders one peer card per use case at the 12 000 ceiling", async ({ page }) => {
@@ -102,6 +103,10 @@ test.describe("recommended configurations", () => {
     // are a desktop affordance, so they must not survive at 390 px.
     await expect(office.locator("ul")).toHaveCount(1);
     await expect(office.locator("ul")).toBeHidden();
+
+    // A hidden pill row does not prove the card has its data: measure once the
+    // detail read has filled the cards in, not while they are still skeletons.
+    await waitForSettledCards(page);
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

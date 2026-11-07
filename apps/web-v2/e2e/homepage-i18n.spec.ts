@@ -4,6 +4,7 @@ import ar from "../messages/ar.json";
 import fr from "../messages/fr.json";
 
 import { stubHomepageApi } from "./support/homepage-api";
+import { horizontalOverflow, waitForSettledCards } from "./support/homepage-ready";
 
 /**
  * The Arabic homepage, asserted rather than eyeballed.
@@ -25,32 +26,6 @@ const BREAKPOINTS = [
   { width: 1280, height: 900 },
   { width: 1440, height: 900 },
 ] as const;
-
-/** Page-level horizontal overflow, in pixels; `<= 0` means none. */
-function horizontalOverflow(page: Page) {
-  return page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-}
-
-/**
- * The overflow assertion is about the finished page, and a card only reaches
- * its final width once the detail read has filled it in. Until then the grid's
- * implicit track is still clamped to its container and the page reads as
- * overflowing by nothing — measured: the track is 328 px while the cards are
- * skeletons and 350.7 px once a price lands. A price is the last thing a card
- * renders, so waiting for it measures the layout the visitor gets.
- */
-async function waitForSettledCards(page: Page) {
-  await page.evaluate(() => document.fonts.ready);
-  await expect(page.locator("#configurations article dd").last()).toBeVisible();
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      ),
-  );
-}
 
 /**
  * Where the price digits sit inside their own card.
