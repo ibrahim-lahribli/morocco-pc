@@ -247,6 +247,26 @@ test.describe("recommended configurations", () => {
     expect(new Set(heights).size, `card heights: ${heights.join(", ")}`).toBe(1);
   });
 
+  test("keeps the three cards one row at 1024 and stacked below lg", async ({ page }) => {
+    await stubHomepageApi(page);
+
+    const cardTops = async () => {
+      await waitForSettledCards(page);
+      return page
+        .locator("#configurations article")
+        .evaluateAll((cards) => cards.map((card) => Math.round(card.getBoundingClientRect().top)));
+    };
+
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page.goto("/fr");
+    expect(new Set(await cardTops()).size, "1024 is the `lg` grid boundary").toBe(1);
+
+    // One pixel under `lg` the same three cards stack, so the breakpoint is
+    // tested from both sides rather than only where it looks best.
+    await page.setViewportSize({ width: 1023, height: 900 });
+    await expect.poll(async () => new Set(await cardTops()).size).toBeGreaterThan(1);
+  });
+
   test("never writes on load", async ({ page }) => {
     const { posts } = await stubHomepageApi(page);
     await page.goto("/fr");

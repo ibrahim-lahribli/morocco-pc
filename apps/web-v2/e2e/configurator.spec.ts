@@ -266,6 +266,36 @@ test.describe("configurator", () => {
     expectNoApiViolations(stub);
   });
 
+  test("puts the summary beside the form at 1024 instead of over it", async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    const stub = await stubConfiguratorApi(page);
+    await page.goto(`/fr/configurateur?from=${FROM_ID}`);
+    await expect(page.getByText(TOTAL_PATTERN)).toBeVisible();
+
+    const panel = page.locator('[data-slot="build-summary"]');
+
+    // Below `lg` the panel is a fixed bar above the mobile nav; at the boundary
+    // it returns to the flow, so it can cover neither the form nor the nav.
+    expect(await panel.evaluate((element) => getComputedStyle(element).position)).not.toBe("fixed");
+
+    const bar = await panel.boundingBox();
+    const form = await page.locator("[data-slot=card]").first().boundingBox();
+
+    expect(bar).not.toBeNull();
+    expect(form).not.toBeNull();
+    if (bar === null || form === null) return;
+
+    // Beside, not stacked: the panel starts past the form's end edge.
+    expect(bar.x).toBeGreaterThanOrEqual(form.x + form.width - 1);
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+
+    expectNoApiViolations(stub);
+  });
+
   test("keeps one heading level, two labelled groups and 44 px targets", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     const stub = await stubConfiguratorApi(page);
