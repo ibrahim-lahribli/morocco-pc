@@ -136,11 +136,28 @@ They are plain functions with no hooks, so they render on the server.
 - Emits `aria-invalid` and `aria-describedby` for the hint and error.
 - `type="search"` is supported; the icon is decorative.
 
-Feature islands (`components/demo`) compose these and own client state:
+Feature islands (`components/home`) compose these and own client state:
 
-- `BudgetPicker` — Zustand preset selection, `aria-pressed`, status line.
-- `SearchDemo` — React Hook Form + Zod with dictionary-supplied messages.
-- `BuildCardPreview` — the build card used twice by the preview.
+- `BudgetUsageFinder` — the homepage form: native radios, synchronous Zod
+  validation and writes to the homepage store. It never POSTs.
+
+The rest of `components/home` is server-rendered and takes its copy as props:
+`AnnouncementBanner`, `PrimaryNav`, `HomepageHero`, `HeroRigPreview`,
+`TrustHighlights`, `FeaturedGuides` and `GuideCard`.
+
+### Layout components
+
+`components/layout` owns the shell. Only `LocaleSwitcher` is a client component.
+
+- `SiteHeader({ locale, brand, navLabel, languageLabel, labels, ariaLabels, navItems? })`
+  — 56 px on mobile, 64 px from `lg`. `navItems` renders the desktop anchor nav
+  (`PrimaryNav`), which CSS hides below `lg`; no JavaScript breakpoint logic.
+- `SiteFooter({ brand, tagline, copyright, location?, links? })` — `location`
+  and `links` are the mobile rows, and each `links` entry is `aria-disabled` text
+  because none of those pages exists yet. The `lg` row is unchanged.
+- `MobileNav({ label, items })` — `MobileNavItem.href` is optional; without it the
+  item keeps its geometry and label but renders a non-focusable
+  `aria-disabled="true"` span instead of a link.
 
 ## RTL and logical properties
 

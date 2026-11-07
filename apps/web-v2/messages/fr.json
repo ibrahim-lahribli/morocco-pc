@@ -1,7 +1,7 @@
 {
   "Metadata": {
-    "title": "Fondations V2",
-    "description": "Aperçu des fondations techniques et du design system de la V2 Morocco-PC."
+    "title": "Configurations PC pour le Maroc",
+    "description": "Gaming, études ou travail : trouvez une configuration selon votre budget et votre usage. Les prix affichés sont indicatifs et exprimés en dirhams marocains (MAD)."
   },
   "Price": {
     "currency": "DH"
@@ -35,127 +35,6 @@
     "title": "Page introuvable",
     "description": "Cette adresse n'existe pas dans la V2.",
     "back": "Revenir à la page principale"
-  },
-  "Home": {
-    "eyebrow": "V2 · Fondations",
-    "title": "Le design system Morocco-PC",
-    "intro": "Cette page de démonstration présente les jetons de design, la typographie, les composants et la mise en page bilingue de la V2. Elle remplace temporairement la future page d'accueil, sans en être une.",
-    "budget": {
-      "title": "Votre budget",
-      "groupLabel": "Sélectionnez votre budget",
-      "optionLabel": "Budget de {amount}",
-      "selected": "Budget sélectionné : {amount}",
-      "cta": "Voir mes configurations",
-      "note": "Gratuit · Sans compte"
-    },
-    "buttons": {
-      "title": "Boutons",
-      "description": "Actions principales, secondaires et discrètes, avec des cibles tactiles de 44 à 48 px.",
-      "primary": "Bouton principal",
-      "secondary": "Bouton secondaire",
-      "outline": "Bouton contour",
-      "ghost": "Bouton discret",
-      "disabled": "Désactivé",
-      "withIcon": "Continuer",
-      "iconLabel": "Ajouter au panier"
-    },
-    "inputs": {
-      "title": "Champs et recherche",
-      "description": "Champs accessibles : libellé, aide et message d'erreur sont reliés au contrôle.",
-      "search": {
-        "label": "Rechercher un composant",
-        "placeholder": "Ex. : RTX 4060",
-        "hint": "Nom du composant ou référence. Deux caractères minimum.",
-        "submit": "Rechercher",
-        "required": "Saisissez un terme à rechercher.",
-        "min": "Saisissez au moins deux caractères.",
-        "result": "Recherche simulée : « {query} »"
-      },
-      "text": {
-        "label": "Nom de la configuration",
-        "placeholder": "Mon PC gaming",
-        "hint": "Ce nom apparaîtra dans vos configurations enregistrées."
-      },
-      "error": {
-        "label": "Adresse e-mail",
-        "placeholder": "vous@exemple.ma",
-        "message": "Saisissez une adresse e-mail valide."
-      }
-    },
-    "status": {
-      "title": "Badges de statut",
-      "description": "Le vocabulaire de prix est commun à tout le produit : un badge ne se réécrit jamais localement.",
-      "verified": "Vérifié",
-      "verifiedText": "Prix relevé auprès d'une boutique partenaire, stock attesté.",
-      "indicative": "Indicatif",
-      "indicativeText": "Estimation basée sur les prix récents du marché marocain.",
-      "estimated": "Estimé",
-      "estimatedText": "Conversion ou estimation historique, sans relevé direct."
-    },
-    "cards": {
-      "title": "Cartes",
-      "description": "Cartes blanches sur fond bleu pâle, bordure fine et ombre ambiante.",
-      "buildCta": "Voir la configuration",
-      "builds": {
-        "gaming": {
-          "title": "PC Gaming 1080p Équilibré",
-          "specs": "Ryzen 5 5600 · RTX 4060 · 16 Go"
-        },
-        "creator": {
-          "title": "PC Création & 1440p",
-          "specs": "Core i5-13400F · RTX 4070 · 32 Go"
-        }
-      }
-    },
-    "saved": {
-      "title": "Configurations enregistrées",
-      "description": "Aperçu de la carte utilisée pour une configuration sauvegardée.",
-      "name": "Gaming 1080p — salon",
-      "meta": "Enregistrée le 2 novembre 2026",
-      "view": "Ouvrir"
-    },
-    "guides": {
-      "title": "Réutilisation des composants",
-      "description": "Les composants partagés sont sans état, typés et documentés.",
-      "rules": {
-        "tokens": "Aucune couleur ni espacement en dur : uniquement les jetons du thème.",
-        "logical": "Propriétés logiques uniquement (début/fin), pour un miroir RTL automatique.",
-        "strings": "Aucun texte visible en dur : les libellés arrivent en props ou via next-intl."
-      },
-      "docs": "La documentation détaillée se trouve dans docs/DESIGN_SYSTEM.md."
-    },
-    "tokens": {
-      "title": "Jetons de design",
-      "description": "La source unique des couleurs, de la typographie, des rayons et des ombres.",
-      "palette": "Palette",
-      "type": "Échelle typographique",
-      "radius": "Rayons",
-      "spacing": "Espacements",
-      "elevation": "Élévations",
-      "labels": {
-        "primary": "Indigo principal",
-        "primaryDeep": "Indigo profond",
-        "accent": "Safran",
-        "background": "Fond bleu pâle",
-        "surface": "Surface blanche",
-        "verified": "Vérifié",
-        "indicative": "Indicatif",
-        "text": "Texte",
-        "muted": "Texte secondaire"
-      },
-      "radiusLabels": {
-        "control": "Contrôle",
-        "field": "Champ",
-        "card": "Carte",
-        "sheet": "Panneau",
-        "pill": "Pilule"
-      },
-      "elevationLabels": {
-        "one": "Niveau 1",
-        "two": "Niveau 2",
-        "three": "Niveau 3"
-      }
-    }
   },
   "Homepage": {
     "banner": {

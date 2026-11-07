@@ -4,12 +4,12 @@ The V2 frontend foundation: a standalone Next.js App Router application with a
 bilingual (French / Arabic) design system. It runs independently of V1
 (`apps/web`) and shares no frontend code with it.
 
-> **Status: Step 0 + API foundation.** This branch contains the design tokens,
-> the shared component kit, internationalisation, the tooling, a
-> **design-system preview** page, and a typed API client with TanStack Query.
-> It is not the final homepage: no catalog, configurator, results or
-> saved-builds pages exist yet, and the shell makes no API request on load.
-> Do not build those on top of it until Step 0 is reviewed.
+> **Status: homepage shell (Step 1, in progress).** This branch contains the
+> design tokens, the shared component kit, internationalisation, the tooling, a
+> typed API client with TanStack Query, and the homepage shell: hero, finder,
+> trust, guides, footer and mobile navigation. The recommended-configuration
+> cards and the final CTA still follow, so the page issues no API request yet.
+> No catalog, configurator, results or saved-builds page exists.
 
 ## Requirements
 
@@ -87,13 +87,14 @@ and the live integration stays unverified until the separate smoke-test task.
 ## Structure
 
 ```
-app/[locale]/          locale-rooted layout, preview page, 404
+app/[locale]/          locale-rooted layout, homepage, 404
 components/ui/         shared kit: Button, Badge, Card, TextField (barrel index.ts)
-components/layout/     header, logo placeholder, locale switcher, footer, mobile nav
-components/demo/       preview-only islands: budget picker, search form, build card
+components/layout/     header, primary/mobile nav, logo, locale switcher, footer
+components/home/       homepage sections and the budget/usage finder island
 i18n/                  routing, request config, locale-aware navigation
 messages/              fr.json, ar.json
-lib/                   utils, price formatter, demo store, search schema
+lib/                   utils, price formatter, demo budget presets
+lib/homepage/          finder schema, store, guide metadata, build view-model, flags
 lib/api/               generated schema, client, config, errors, query defaults, derived types
 components/providers/  ApiProvider (TanStack Query, client component)
 scripts/               OpenAPI type generation and drift check, screenshot capture
@@ -214,7 +215,7 @@ Fastify API; V2 owns presentation only.
 - Prettier + Tailwind class sorting
 - Vitest: dictionaries, price formatting, validation schema, Zustand store, kit accessibility, API config/error/retry/client/provider
 - `npm run check:api-types`: generated API types match `apps/api`'s contract
-- Playwright: FR, AR/RTL mirroring, locale switch, budget selection, search validation, mobile nav, 360 px overflow
+- Playwright: homepage shell in FR, banner/primary-nav breakpoints, no API request on load, AR/RTL mirroring, locale switch, mobile nav, 360 px overflow
 
 ## Scope guard
 

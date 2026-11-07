@@ -4,6 +4,8 @@ import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 
+import { AnnouncementBanner } from "@/components/home/announcement-banner";
+import type { PrimaryNavItem } from "@/components/home/primary-nav";
 import { MobileNav, type MobileNavItem } from "@/components/layout/mobile-nav";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
@@ -67,16 +69,27 @@ export default async function LocaleLayout({
   if (!hasLocale(routing.locales, locale)) notFound();
 
   const t = await getTranslations({ locale, namespace: "Shell" });
+  const tBanner = await getTranslations({ locale, namespace: "Homepage.banner" });
+  const tFooter = await getTranslations({ locale, namespace: "Homepage.footer" });
   const messages = (await import(`../../messages/${locale}.json`)).default;
   const dir = locale === "ar" ? "rtl" : "ltr";
   const appLocale = locale as AppLocale;
 
-  const navItems: readonly MobileNavItem[] = [
+  // Anchors only: every destination is a section of this page, so the nav never
+  // points at a route that does not exist.
+  const primaryNavItems: readonly PrimaryNavItem[] = [
+    { href: "#top", label: t("nav.home"), current: true },
+    { href: "#simulateur", label: t("nav.configure") },
+    { href: "#guides", label: t("nav.guides") },
+  ];
+
+  const mobileNavItems: readonly MobileNavItem[] = [
     { key: "home", href: "#top", label: t("nav.home"), current: true },
-    { key: "components", href: "#composants", label: t("nav.components") },
-    { key: "configure", href: "#configurer", label: t("nav.configure") },
-    { key: "guides", href: "#guides", label: t("nav.guides") },
-    { key: "saved", href: "#enregistres", label: t("nav.saved") },
+    // No route yet: visibly disabled rather than pointed somewhere unrelated.
+    { key: "components", label: t("nav.components") },
+    { key: "configure", href: "#simulateur", label: t("nav.configure") },
+    { key: "guides", label: t("nav.guides") },
+    { key: "saved", label: t("nav.saved") },
   ];
 
   return (
@@ -91,6 +104,8 @@ export default async function LocaleLayout({
 
         <NextIntlClientProvider locale={locale} messages={messages}>
           <ApiProvider>
+            <AnnouncementBanner label={tBanner("label")} arabicBadge={tBanner("arabicBadge")} />
+
             <SiteHeader
               locale={appLocale}
               brand={t("brand")}
@@ -101,6 +116,7 @@ export default async function LocaleLayout({
                 fr: t("switchTo", { language: t("languages.fr") }),
                 ar: t("switchTo", { language: t("languages.ar") }),
               }}
+              navItems={primaryNavItems}
             />
 
             <main
@@ -115,10 +131,17 @@ export default async function LocaleLayout({
                 brand={t("brand")}
                 tagline={t("footerTagline")}
                 copyright={t("footerCopyright")}
+                location={tFooter("location")}
+                links={[
+                  tFooter("links.about"),
+                  tFooter("links.stores"),
+                  tFooter("links.methodology"),
+                  tFooter("links.contact"),
+                ]}
               />
             </div>
 
-            <MobileNav label={t("mobileNav")} items={navItems} />
+            <MobileNav label={t("mobileNav")} items={mobileNavItems} />
           </ApiProvider>
         </NextIntlClientProvider>
       </body>
