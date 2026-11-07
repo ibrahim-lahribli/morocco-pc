@@ -92,7 +92,7 @@ They are plain functions with no hooks, so they render on the server.
 <Button asChild variant="outline"><Link href="/">Lien</Link></Button>
 ```
 
-- `variant`: `primary` | `secondary` | `outline` | `ghost`
+- `variant`: `primary` | `secondary` | `outline` | `ghost` | `cta` (saffron `accent` fill with `text-on-accent`; the homepage's primary action)
 - `size`: `sm` (40) | `md` (48 mobile / 44 desktop) | `lg` (48) | `icon` (44)
 - Defaults to `type="button"`; pass `type="submit"` explicitly.
 - `asChild` puts the same geometry on a link (Radix Slot).
