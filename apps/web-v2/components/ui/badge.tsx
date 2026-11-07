@@ -7,10 +7,11 @@ import { cn } from "@/lib/utils";
  * Status pills. `verified` and `indicative` are the two price states the
  * supplied designs use; `estimated` is the third state the DESIGN.md palette
  * defines. The wording always comes from the caller, so a badge cannot invent
- * a fourth label locally.
+ * a fourth label locally. A pill is one line by construction (its height is
+ * fixed), so in a flex row it neither wraps nor shrinks below its label.
  */
 export const badgeVariants = cva(
-  "inline-flex h-[26px] items-center gap-1 rounded-pill border px-2.5 text-label-sm font-semibold [&_svg]:size-3 [&_svg]:shrink-0",
+  "inline-flex h-[26px] shrink-0 items-center gap-1 rounded-pill border px-2.5 text-label-sm font-semibold whitespace-nowrap [&_svg]:size-3 [&_svg]:shrink-0",
   {
     variants: {
       tone: {
