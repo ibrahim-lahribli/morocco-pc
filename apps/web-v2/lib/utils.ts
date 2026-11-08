@@ -26,6 +26,7 @@ const twMerge = extendTailwindMerge({
             "body-md",
             "label-lg",
             "label-md",
+            "label-sm",
             "price",
           ],
         },

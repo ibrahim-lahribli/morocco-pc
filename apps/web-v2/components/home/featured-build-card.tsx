@@ -82,7 +82,7 @@ export function FeaturedBuildCard({
         )}
       >
         <div className="flex items-start justify-between gap-2">
-          <h3 id={titleId} className="text-headline-sm text-balance text-foreground">
+          <h3 id={titleId} className="min-w-0 text-headline-sm text-balance text-foreground">
             {title}
           </h3>
           <PriceStatusBadge status={view.badge} />
