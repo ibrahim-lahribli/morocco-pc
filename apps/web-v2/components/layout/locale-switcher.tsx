@@ -52,7 +52,7 @@ export function LocaleSwitcher({ label, labels, ariaLabels, active }: LocaleSwit
             aria-label={ariaLabels[locale]}
             aria-current={isActive ? "true" : undefined}
             className={cn(
-              "inline-flex h-11 items-center rounded-pill px-3 text-label-md font-semibold transition-colors sm:h-9",
+              "inline-flex h-11 min-w-11 items-center justify-center rounded-pill px-3 text-label-md font-semibold transition-colors sm:h-9",
               isActive
                 ? "bg-primary text-on-primary"
                 : "text-muted hover:bg-primary-soft hover:text-primary",

@@ -1,0 +1,310 @@
+import { expect, test, type Page } from "@playwright/test";
+
+import { contrastRatio, parseCssColor } from "../lib/a11y/contrast";
+import { stubHomepageApi } from "./support/homepage-api";
+import { waitForSettledCards } from "./support/homepage-ready";
+
+/**
+ * Homepage accessibility evidence.
+ *
+ * Every assertion measures the rendered page, so it fails when a token, a class
+ * or a landmark changes — a unit test over class names would not. The thresholds
+ * are the standards themselves, not this page's current values:
+ *
+ * - heading order: one `h1`, no skipped level (WCAG 1.3.1);
+ * - landmarks: every `<section>` has a name (WCAG 1.3.1, 2.4.6);
+ * - focus: the skip link is the first stop (WCAG 2.4.1) and every control the
+ *   page owns paints a visible indicator (WCAG 2.4.7);
+ * - targets: 24 CSS px minimum at every width (WCAG 2.2 AA 2.5.8) and the
+ *   project's own 44 px floor (`--spacing-tap`) on phone widths;
+ * - contrast: 4.5:1 for the body copy and both calls to action (WCAG 1.4.3).
+ *
+ * The text colour is painted over the nearest opaque surface and read back from a
+ * canvas, so a `text-on-primary/80` line is measured as the colour the reader
+ * sees, whatever serialisation Chromium chose for it.
+ */
+
+const WIDTHS = [
+  { width: 360, height: 800 },
+  { width: 390, height: 844 },
+  { width: 1280, height: 900 },
+] as const;
+
+/** Below Tailwind's `sm` the design's 48 px control scale applies. */
+const PHONE_MAX = 640;
+
+const FINAL_CTA = "section[aria-labelledby='final-cta-title']";
+
+/** Every finger-operated control the homepage renders in its default state. */
+const CONTROLS = [
+  "header a",
+  "nav a",
+  "nav button",
+  "#finder-budget label:has(input[type='radio'])",
+  "#finder-usage label:has(input[type='radio'])",
+  "#homepage-custom-budget",
+  "#pathways button",
+  "#configurations a",
+  "#configurations button",
+  `${FINAL_CTA} a`,
+  `${FINAL_CTA} button`,
+].join(", ");
+
+interface Control {
+  tag: string;
+  text: string;
+  width: number;
+  height: number;
+}
+
+async function measureControls(page: Page): Promise<Control[]> {
+  return page.evaluate((selector) => {
+    const visible = (element: Element) => {
+      const style = getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden") {
+        return false;
+      }
+      return element.getClientRects().length > 0;
+    };
+
+    return [...document.querySelectorAll(selector)].filter(visible).map((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        tag: element.tagName.toLowerCase(),
+        text: (element.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    });
+  }, CONTROLS);
+}
+
+interface Pair {
+  selector: string;
+  color: string;
+  background: string;
+}
+
+/** Reads the painted text colour and the nearest opaque surface behind it. */
+async function readPairs(page: Page, selectors: string[]): Promise<Pair[]> {
+  return page.evaluate((list) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+
+    /**
+     * Paints the text colour over its surface and reads the pixel back. The
+     * browser resolves `oklab(...)`, `color-mix(...)` and alpha itself, so this
+     * never has to guess at a serialisation.
+     */
+    const paint = (color: string, background: string): string => {
+      if (context === null) return color;
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = background;
+      context.fillRect(0, 0, 1, 1);
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      const [red = 0, green = 0, blue = 0] = context.getImageData(0, 0, 1, 1).data;
+      return `rgb(${red}, ${green}, ${blue})`;
+    };
+
+    return list.flatMap((selector) => {
+      const element = document.querySelector(selector);
+      if (element === null) return [];
+
+      let background = "";
+      let node: Element | null = element;
+      while (node !== null) {
+        const candidate = getComputedStyle(node).backgroundColor;
+        if (candidate !== "" && candidate !== "transparent" && candidate !== "rgba(0, 0, 0, 0)") {
+          background = candidate;
+          break;
+        }
+        node = node.parentElement;
+      }
+
+      if (background === "") return [];
+
+      return [{ selector, color: paint(getComputedStyle(element).color, background), background }];
+    });
+  }, selectors);
+}
+
+test("keeps one h1 and never skips a heading level", async ({ page }) => {
+  await stubHomepageApi(page);
+
+  for (const { width, height } of WIDTHS) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/fr");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+    const levels = await page.evaluate(() =>
+      [...document.querySelectorAll("main h1, main h2, main h3, main h4")].map((element) =>
+        Number(element.tagName.slice(1)),
+      ),
+    );
+
+    expect(levels.length, `headings at ${width}px`).toBeGreaterThan(0);
+    expect(
+      levels.filter((level) => level === 1),
+      `h1 count at ${width}px`,
+    ).toHaveLength(1);
+
+    for (let index = 1; index < levels.length; index += 1) {
+      expect(
+        levels[index]! - levels[index - 1]!,
+        `h${levels[index - 1]} then h${levels[index]} at ${width}px`,
+      ).toBeLessThanOrEqual(1);
+    }
+  }
+});
+
+test("gives every section an accessible name", async ({ page }) => {
+  await stubHomepageApi(page);
+  await page.goto("/fr");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+  const sections = await page.evaluate(() =>
+    [...document.querySelectorAll("main section")].map((section) => {
+      const labelledBy = section.getAttribute("aria-labelledby");
+      const label =
+        labelledBy === null ? "" : (document.getElementById(labelledBy)?.textContent ?? "");
+      return {
+        literal: section.getAttribute("aria-label") ?? "",
+        label: label.replace(/\s+/g, " ").trim(),
+      };
+    }),
+  );
+
+  expect(sections.length).toBeGreaterThanOrEqual(6);
+
+  for (const section of sections) {
+    expect(
+      section.label !== "" || section.literal !== "",
+      `section ${JSON.stringify(section)}`,
+    ).toBe(true);
+  }
+});
+
+test("keeps a visible focus indicator from the first Tab", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await stubHomepageApi(page);
+  await page.goto("/fr");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  // Hydration replaces the tree: a Tab pressed mid-render can land on body.
+  await waitForSettledCards(page);
+
+  // Keyboard input follows the frontmost page: a page left in the background
+  // by a parallel worker can swallow Tab and report body as active.
+  await page.bringToFront();
+
+  const focused = () =>
+    page.evaluate(() => {
+      const element = document.activeElement;
+      if (element === null) return null;
+      const style = getComputedStyle(element);
+      return {
+        tag: element.tagName.toLowerCase(),
+        text: (element.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40),
+        outline: Number.parseFloat(style.outlineWidth) || 0,
+        shadow: style.boxShadow,
+      };
+    });
+
+  const stops: Array<{ tag: string; text: string; outline: number; shadow: string }> = [];
+
+  // Tab through the controls this page owns and stop at the browser chrome or
+  // the Next dev overlay (`nextjs-portal`, which is focusable). A native radio
+  // group is one stop, so the page has ten, not one per radio.
+  for (let press = 0; press < 24 && stops.length < 12; press += 1) {
+    await page.bringToFront();
+    await page.keyboard.press("Tab");
+
+    const stop = await focused();
+
+    if (stop === null || stop.tag === "body" || stop.tag === "nextjs-portal") {
+      break;
+    }
+
+    stops.push(stop);
+  }
+
+  expect(stops.length, `focus stops: ${JSON.stringify(stops)}`).toBeGreaterThanOrEqual(8);
+  expect(stops[0]?.tag, "the skip link is the first stop").toBe("a");
+  expect(stops[0]?.text.length ?? 0).toBeGreaterThan(0);
+  expect(stops[0]!.outline, "skip link outline").toBeGreaterThanOrEqual(2);
+
+  for (const stop of stops) {
+    expect(
+      stop.outline >= 2 || stop.shadow !== "none",
+      `${stop.tag} "${stop.text}" paints no focus indicator`,
+    ).toBe(true);
+  }
+});
+
+test("keeps every control at the WCAG minimum, and at 44 px on phones", async ({ page }) => {
+  await stubHomepageApi(page);
+
+  for (const { width, height } of WIDTHS) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/fr");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+    const controls = await measureControls(page);
+    expect(controls.length, `controls at ${width}px`).toBeGreaterThan(0);
+
+    const floor = width < PHONE_MAX ? 44 : 24;
+
+    for (const control of controls) {
+      expect(
+        Math.min(control.width, control.height),
+        `${control.tag} "${control.text}" at ${width}px`,
+      ).toBeGreaterThanOrEqual(floor);
+    }
+  }
+});
+
+test("keeps body copy and both calls to action above 4.5:1", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await stubHomepageApi(page);
+  await page.goto("/fr");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await waitForSettledCards(page);
+
+  const pairs = await readPairs(page, [
+    "#configurations article .text-muted",
+    `${FINAL_CTA} p.text-body-md`,
+    `${FINAL_CTA} button`,
+    "#final-cta-title",
+  ]);
+
+  expect(pairs, "measurable pairs").toHaveLength(4);
+
+  for (const pair of pairs) {
+    const ratio = contrastRatio(parseCssColor(pair.color), parseCssColor(pair.background));
+    expect(
+      Number(ratio.toFixed(2)),
+      `${pair.selector}: ${pair.color} on ${pair.background}`,
+    ).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
+test("renders the homepage without a console error", async ({ page }) => {
+  const errors: string[] = [];
+
+  page.on("console", (message) => {
+    if (message.type() !== "error") return;
+    // The dev server answers /favicon.ico with a 404, which the browser logs as a
+    // resource error that has nothing to do with this page.
+    if (message.location().url.includes("favicon")) return;
+    errors.push(`${message.text()} (${message.location().url})`);
+  });
+
+  await stubHomepageApi(page);
+  await page.goto("/fr");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.waitForLoadState("networkidle");
+
+  expect(errors).toEqual([]);
+});
