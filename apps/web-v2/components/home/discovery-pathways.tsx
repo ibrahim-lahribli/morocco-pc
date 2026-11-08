@@ -49,7 +49,10 @@ export function DiscoveryPathways() {
       aria-labelledby="pathways-title"
       className="hidden scroll-mt-24 lg:block"
     >
-      <h2 id="pathways-title" className="text-headline-md text-foreground">
+      <h2
+        id="pathways-title"
+        className="text-headline-md text-balance text-foreground lg:text-headline-lg"
+      >
         {t("eyebrow")}
       </h2>
 
