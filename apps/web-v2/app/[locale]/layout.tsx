@@ -85,10 +85,11 @@ export default async function LocaleLayout({
 
   const mobileNavItems: readonly MobileNavItem[] = [
     { key: "home", href: "#top", label: t("nav.home"), current: true },
-    // No route yet: visibly disabled rather than pointed somewhere unrelated.
+    // Components and Saved have no route yet: visibly disabled rather than
+    // pointed somewhere unrelated.
     { key: "components", label: t("nav.components") },
     { key: "configure", href: "#simulateur", label: t("nav.configure") },
-    { key: "guides", label: t("nav.guides") },
+    { key: "guides", href: "#guides", label: t("nav.guides") },
     { key: "saved", label: t("nav.saved") },
   ];
 

@@ -154,4 +154,38 @@ test.describe("homepage finder", () => {
     await expect(page.getByRole("spinbutton", { name: "Budget (DH)" })).toHaveValue("8000");
     expect(posts).toEqual([]);
   });
+  test("offers the same three tiles on a phone and keeps the focus move", async ({ page }) => {
+    const { posts } = await stubHomepageApi(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/fr");
+    await waitForSettledCards(page);
+
+    const section = page.locator("#pathways");
+    await expect(section).toBeVisible();
+    await expect(section.getByRole("button")).toHaveCount(3);
+    await expect(section.getByRole("button", { name: "Gaming 1080p" })).toHaveCount(0);
+
+    // One column on a phone: three different rows, not three squeezed cells.
+    const tops = await section
+      .getByRole("button")
+      .evaluateAll((buttons) =>
+        buttons.map((button) => Math.round(button.getBoundingClientRect().top)),
+      );
+    expect(new Set(tops).size).toBe(3);
+
+    await section.getByRole("button", { name: "Études & bureautique" }).click();
+    await expect(page.getByRole("radio", { name: USAGE_OFFICE })).toBeChecked();
+    await expect(page.locator("#finder-usage")).toBeFocused();
+    await expect(page.locator("#configurations article")).toHaveCount(1);
+    expect(posts).toEqual([]);
+
+    // From `sm` the three tiles share one row again.
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const wideTops = await section
+      .getByRole("button")
+      .evaluateAll((buttons) =>
+        buttons.map((button) => Math.round(button.getBoundingClientRect().top)),
+      );
+    expect(new Set(wideTops).size).toBe(1);
+  });
 });
