@@ -49,6 +49,11 @@ it is the only thing that proves the deploy actually changed the code.
 ### 1. Read-only pre-checks (all four must pass before anything is deployed)
 
 ```bash
+# Export the EU variables into THIS shell first (values are never printed). A bare
+# DATABASE_URL="$TARGET_DIRECT_URL" prefix without this export is the documented trap: the outer
+# shell has no such variable, so the prefix exports an empty value.
+set -a; . ./.env.eu; set +a
+
 # (a) EU's LEDGER — expect "no pending" and exit 0. Point DATABASE_URL at the EU direct host for a
 #     read-only check; --check writes nothing, so no restore point is needed.
 DATABASE_URL="$TARGET_DIRECT_URL" node scripts/run-migrations.js --check
@@ -171,12 +176,24 @@ preset id reads back through `GET /v1/recommendations/{id}` with builds.
 ### 6. Gates
 
 ```bash
+# These three take a variable NAME:
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-offer-provenance.js --target=env:TARGET_DATABASE_URL
-DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-offer-freshness.js --fail-days=14
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-catalog-identity.js --target=env:TARGET_DATABASE_URL
-node scripts/check-deferred-rules.js
-node scripts/check-assessment-age.js --target=env:TARGET_DATABASE_URL     # WARNING only, never a gate
-node scripts/check-og01-coverage.js --model=launch-v2@2.5.0
+DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-assessment-age.js --target=env:TARGET_DATABASE_URL  # WARNING only, never a gate
+
+# These three have NO --target flag: they read DATABASE_URL directly, so point that variable at the
+# EU database for the call. Without the prefix they measure the SHARED database from .env and report
+# a green result about the wrong catalogue.
+#
+# Export the EU variables into THIS shell first (values are never printed). A bare
+# DATABASE_URL="$TARGET_DATABASE_URL" prefix WITHOUT this export is the documented trap: the outer
+# shell has no such variable, so the prefix exports an empty value.
+# If .env.eu also defines DATABASE_URL, `unset DATABASE_URL` after sourcing, or the explicit prefix
+# below is the only thing keeping these three off the shared database.
+set -a; . ./.env.eu; set +a
+DATABASE_URL="$TARGET_DATABASE_URL" node scripts/check-offer-freshness.js --fail-days=14
+DATABASE_URL="$TARGET_DATABASE_URL" node scripts/check-deferred-rules.js
+DATABASE_URL="$TARGET_DATABASE_URL" node scripts/check-og01-coverage.js --model=launch-v2@2.5.0
 ```
 
 `check-offer-provenance` and `check-offer-freshness` answer **INCONCLUSIVE** while the catalogue is
