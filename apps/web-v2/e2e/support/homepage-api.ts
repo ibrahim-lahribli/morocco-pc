@@ -44,12 +44,28 @@ export interface StubHomepageApiResult {
   posts: string[];
   /** Every API call the page issued, as `METHOD pathname`. */
   calls: string[];
+  /**
+   * Every API call with its query string, as `METHOD pathname?query`.
+   * `calls` stays pathname-only for the specs that predate this field.
+   */
+  requests: string[];
 }
 
 const DEFAULT_BADGE: Record<string, "verified" | "indicative" | null> = {
   GAMING: "verified",
   OFFICE: "indicative",
   WORKSTATION: null,
+};
+
+/**
+ * One different score per use case, so a spec can prove the hero is not reading
+ * another slot's detail: GAMING is the value the hero must show, and OFFICE's
+ * 61.5 must never appear above the fold.
+ */
+export const STUB_SCORES: Record<string, number> = {
+  GAMING: 72.5,
+  OFFICE: 61.5,
+  WORKSTATION: 50,
 };
 
 const JSON_HEADERS = {
@@ -94,7 +110,7 @@ function detailBody(id: string, badge: "verified" | "indicative" | null) {
       {
         rank: 1,
         total_price: Number(budget) - 500,
-        build_score: 72.5,
+        build_score: STUB_SCORES[useCase] ?? 72.5,
         compatibility_status: "PASS",
         strategy_key: "BALANCED",
         explanation: `Trame ${useCase} servie par le moteur.`,
@@ -116,12 +132,14 @@ export async function stubHomepageApi(
 ): Promise<StubHomepageApiResult> {
   const posts: string[] = [];
   const calls: string[] = [];
+  const requests: string[] = [];
 
   await page.route("**/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();
     calls.push(`${method} ${url.pathname}`);
+    requests.push(`${method} ${url.pathname}${url.search}`);
 
     if (method !== "GET") {
       posts.push(`${method} ${url.pathname}`);
@@ -198,5 +216,5 @@ export async function stubHomepageApi(
     });
   });
 
-  return { posts, calls };
+  return { posts, calls, requests };
 }

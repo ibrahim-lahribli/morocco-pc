@@ -1,11 +1,15 @@
 "use client";
 
 import { ArrowRight } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui";
+import { Link } from "@/i18n/navigation";
+import type { AppLocale } from "@/i18n/routing";
+import { buildConfiguratorHref } from "@/lib/configurator/schema";
 import { formatPrice } from "@/lib/format/price";
-import type { BuildCardView } from "@/lib/homepage/builds";
+import { formatScore } from "@/lib/format/score";
+import type { BuildCardView, HomeUseCase } from "@/lib/homepage/builds";
 import { cn } from "@/lib/utils";
 
 import { BuildMediaPlaceholder } from "./build-media-placeholder";
@@ -15,6 +19,8 @@ import { SpecPill } from "./spec-pill";
 export interface FeaturedBuildCardProps {
   /** The localized use-case label; the API carries no configuration name. */
   title: string;
+  /** The card's own use case, carried into the configurator handoff. */
+  useCase: HomeUseCase;
   view: BuildCardView;
   /** Cap note when the visitor's budget exceeds the highest served tier. */
   capNote?: string | null;
@@ -39,6 +45,7 @@ export interface FeaturedBuildCardProps {
  */
 export function FeaturedBuildCard({
   title,
+  useCase,
   view,
   capNote,
   errorMessage,
@@ -47,8 +54,13 @@ export function FeaturedBuildCard({
 }: FeaturedBuildCardProps) {
   const t = useTranslations("Homepage.builds");
   const currency = useTranslations("Price")("currency");
+  const locale = useLocale() as AppLocale;
   const compact = variant === "compact";
   const titleId = `build-${view.recommendationId}`;
+  // The SERVED tier, never the visitor's typed amount: a capped 20 000 request
+  // opens the 15 000 build the card actually shows. Null only for an
+  // out-of-contract amount, which keeps the CTA as inert text.
+  const href = buildConfiguratorHref({ useCase, budgetAmount: view.budgetAmount });
 
   return (
     <article
@@ -111,7 +123,9 @@ export function FeaturedBuildCard({
           <div>
             <dt className="text-label-md text-muted">{t("scoreLabel")}</dt>
             <dd className="min-h-7 text-label-lg leading-7 font-semibold text-foreground tabular-nums">
-              {view.score === null ? "—" : t("scoreValue", { score: view.score })}
+              {view.score === null
+                ? "—"
+                : t("scoreValue", { score: formatScore(view.score, locale) })}
             </dd>
           </div>
           {view.totalPrice === null ? null : (
@@ -134,9 +148,20 @@ export function FeaturedBuildCard({
         ) : null}
 
         <div className="flex items-center justify-between gap-2">
-          <span aria-disabled="true" className="text-label-lg text-primary">
-            {t("cta")}
-          </span>
+          {href === null ? (
+            <span aria-disabled="true" className="text-label-lg text-primary">
+              {t("cta")}
+            </span>
+          ) : (
+            // `min-h-11` is what keeps the Task 6 target gate true on a phone: a
+            // bare text link is ~20 px tall and would fail it.
+            <Link
+              href={href}
+              className="inline-flex min-h-11 items-center text-label-lg text-primary underline-offset-4 hover:underline"
+            >
+              {t("cta")}
+            </Link>
+          )}
           <div className="flex items-center gap-1">
             {onRetry ? (
               <Button variant="ghost" size="sm" onClick={onRetry}>

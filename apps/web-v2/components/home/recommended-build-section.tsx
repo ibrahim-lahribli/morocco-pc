@@ -174,6 +174,7 @@ function BuildSlot({ useCase, currency, budgetAmount, variant }: BuildSlotProps)
   return (
     <FeaturedBuildCard
       title={category}
+      useCase={useCase}
       view={view}
       variant={variant}
       capNote={

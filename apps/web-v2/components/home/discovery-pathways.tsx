@@ -8,7 +8,10 @@ import { useHomepageStore } from "@/lib/homepage/store";
 import { cn } from "@/lib/utils";
 
 /**
- * The three use-case shortcuts, shown from `lg`.
+ * The three use-case shortcuts: one per row on a phone, three across from `sm`.
+ *
+ * They are the mobile discovery affordance, not the deferred resolution row:
+ * Q-20's Gaming/creation resolution tiles still render at no width.
  *
  * They are shortcuts into the finder, not a second way to choose: a tile writes
  * the use case through the same store the radios write, so the finder's own
@@ -44,16 +47,15 @@ export function DiscoveryPathways() {
   };
 
   return (
-    <section
-      id="pathways"
-      aria-labelledby="pathways-title"
-      className="hidden scroll-mt-24 lg:block"
-    >
-      <h2 id="pathways-title" className="text-headline-md text-foreground">
+    <section id="pathways" aria-labelledby="pathways-title" className="block scroll-mt-24">
+      <h2
+        id="pathways-title"
+        className="text-headline-md text-balance text-foreground lg:text-headline-lg"
+      >
         {t("eyebrow")}
       </h2>
 
-      <ul className="mt-4 grid grid-cols-3 gap-4">
+      <ul className="mt-4 grid gap-3 sm:grid-cols-3 lg:gap-4">
         {TILES.map((tile) => {
           const pressed = selected === tile.value;
 

@@ -275,4 +275,59 @@ test.describe("recommended configurations", () => {
 
     expect(posts).toEqual([]);
   });
+  test("opens the configurator from a card with the tier it serves", async ({ page }) => {
+    const { posts } = await stubHomepageApi(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/fr");
+    await waitForSettledCards(page);
+
+    const gaming = page.locator("#configurations article", {
+      has: page.getByRole("heading", { name: CARD_TITLES.GAMING }),
+    });
+    const cta = gaming.getByRole("link", { name: "Voir la configuration" });
+
+    await expect(cta).toHaveAttribute("href", "/fr/configurateur?use_case=GAMING&budget=12000");
+    await cta.click();
+
+    await expect(page).toHaveURL(/\/fr\/configurateur\?use_case=GAMING&budget=12000$/);
+    await expect(page.getByRole("radio", { name: /Jeux vidéo & Gaming/ })).toBeChecked();
+    await expect(page.getByRole("spinbutton", { name: "Budget (DH)" })).toHaveValue("12000");
+    expect(posts).toEqual([]);
+  });
+
+  test("links the capped tier, never the budget the visitor typed", async ({ page }) => {
+    await stubHomepageApi(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/fr");
+    await waitForSettledCards(page);
+
+    await page.getByRole("radio", { name: USAGE_GAMING }).check({ force: true });
+    await page.getByRole("spinbutton", { name: "Budget exact en dirhams" }).fill("20000");
+
+    const gaming = page.locator("#configurations article", {
+      has: page.getByRole("heading", { name: CARD_TITLES.GAMING }),
+    });
+
+    // The card serves the 15 000 tier and says so; the link must carry that tier,
+    // never the 20 000 the visitor typed.
+    await expect(gaming.getByText(/Configuration pré-générée la plus élevée/)).toBeVisible();
+    await expect(gaming.getByRole("link", { name: "Voir la configuration" })).toHaveAttribute(
+      "href",
+      "/fr/configurateur?use_case=GAMING&budget=15000",
+    );
+  });
+
+  test("keeps the card CTA a 44 px link on a phone", async ({ page }) => {
+    await stubHomepageApi(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/fr");
+    await waitForSettledCards(page);
+
+    const box = await page
+      .locator("#configurations article a[href*='/configurateur']")
+      .first()
+      .boundingBox();
+
+    expect(Math.round(box?.height ?? 0)).toBeGreaterThanOrEqual(44);
+  });
 });

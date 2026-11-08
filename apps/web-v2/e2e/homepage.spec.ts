@@ -70,7 +70,7 @@ test.describe("homepage shell", () => {
     expect(order).toBe(true);
   });
 
-  test("gives the three section headings one size per breakpoint", async ({ page }) => {
+  test("gives the four section headings one size per breakpoint", async ({ page }) => {
     await stubHomepageApi(page);
 
     for (const [width, expected] of [
@@ -82,13 +82,18 @@ test.describe("homepage shell", () => {
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
       const sizes = await page.evaluate(() =>
-        ["configurations-title", "confiance-title", "guides-title"].map((id) => {
+        ["configurations-title", "pathways-title", "confiance-title", "guides-title"].map((id) => {
           const element = document.getElementById(id);
           return element === null ? null : parseFloat(getComputedStyle(element).fontSize);
         }),
       );
 
-      expect(sizes, `section headings at ${width}px`).toEqual([expected, expected, expected]);
+      expect(sizes, `section headings at ${width}px`).toEqual([
+        expected,
+        expected,
+        expected,
+        expected,
+      ]);
     }
   });
 
@@ -133,5 +138,47 @@ test.describe("homepage shell", () => {
     await expect(
       page.locator("#configurations article [aria-hidden='true']").first(),
     ).toBeVisible();
+  });
+});
+
+test.describe("mobile navigation", () => {
+  test("points the Guides item at the guides section", async ({ page }) => {
+    await stubHomepageApi(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/fr");
+
+    const nav = page.locator("[data-slot='mobile-nav']");
+    const guides = nav.locator("a[href='#guides']");
+
+    await expect(guides).toHaveCount(1);
+    await expect(guides).toHaveAccessibleName("Guides");
+    await expect(page.locator("#guides")).toBeVisible();
+
+    // The two destinations without a route stay non-focusable text.
+    for (const label of ["Composants", "Enregistrés"]) {
+      await expect(nav.getByRole("link", { name: label })).toHaveCount(0);
+      await expect(nav.getByText(label, { exact: true })).toBeVisible();
+    }
+
+    await guides.click();
+    await expect(page).toHaveURL(/#guides$/);
+    await expect(
+      page.getByRole("heading", { name: "Bien choisir son PC au Maroc" }),
+    ).toBeInViewport();
+  });
+
+  test("keeps the Guides destination in the Arabic navigation", async ({ page }) => {
+    await stubHomepageApi(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/ar");
+
+    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+
+    const guides = page.locator("[data-slot='mobile-nav'] a[href='#guides']");
+    await expect(guides).toHaveCount(1);
+    await expect(guides).not.toHaveText("");
+
+    await guides.click();
+    await expect(page).toHaveURL(/#guides$/);
   });
 });
