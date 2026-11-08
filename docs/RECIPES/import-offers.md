@@ -144,6 +144,46 @@ A refresh is the same path as an import; what differs is the discipline around i
 8. **Shared or production:** `--commit` against `DATABASE_URL` is REFUSED unless `--confirm-shared`
    is passed, and should only run once the owner has approved the write. Show the dry-run diff first.
 
+## Release import: the EU database (a NAMED target, never an exported variable)
+
+The EU database is named, never exported. Overriding `DATABASE_URL` in a shell is the footgun: it is
+the variable every other tool in that shell reads, so one typo points the importer AND the next
+command at the wrong database with nothing checking either.
+
+1. **Dry-run against the named variable** (read-only is still the default):
+   `node -r dotenv/config scripts/ingest-offers.js --adapter=manual --file=<path> \
+     --target-env=TARGET_DATABASE_URL`
+   `.env.eu` is NOT loaded by a bare `node scripts/...`; preload it with `-r dotenv/config` and
+   `DOTENV_CONFIG_PATH=.env.eu`, or export the variable for that one command only.
+2. **Read the lines the run prints BEFORE it connects:** `target: TARGET_DATABASE_URL (db:<12 hex>)`
+   and `AUDIT TARGET: db:<12 hex>`. The digest must be the EU digest already recorded in
+   `database/migration-applies.jsonl`; a different digest means stop. No host is ever printed.
+3. **Commit with the rollback named:**
+   `... --commit --target-env=TARGET_DATABASE_URL --restore-point=<neon-restore-point>`
+   `--commit` against a named target is REFUSED without a restore point matching
+   `^[A-Za-z0-9_-]{8,}$`, and a target whose digest equals the shared database's is refused whatever
+   the variable is called. `--test-db` with `--target-env`, and `--confirm-shared` with
+   `--target-env`, are refused as CONFLICTS rather than resolved by precedence, and a
+   `--restore-point` with no named target is refused too: a restore point nothing reads is not a
+   rollback plan.
+4. **Regenerate the preset shelf on the SAME target,** or the API serves no presets for the new
+   catalog version:
+   `node scripts/generate-presets.js --target-env=TARGET_DATABASE_URL --restore-point=<id>`
+5. **Verify on the same target:** `check-offer-provenance.js --target=env:TARGET_DATABASE_URL`
+   (retailer evidence per offer) and `check-offer-coverage.js --target=env:TARGET_DATABASE_URL`
+   (per-role eligible VERIFIED offers and distinct stores), both read-only.
+   `check-offer-freshness.js` still reads `DATABASE_URL` only.
+
+### The expected empty-shelf window
+
+An import changes the catalog, so the next preset read computes a NEW `catalog_version`. Every stored
+preset carries the OLD one and `SELECT_PRESETS_SQL` matches on plain equality, so that use
+case/currency answers EMPTY from the import commit until `generate-presets` has written the new rows.
+The window is bounded by that one regeneration run, not by the import: on EU the last measured shelf
+regeneration spanned 161.5 s for 52 presets (2026-11-03T23:30:09Z -> 23:32:50Z). Do not fill it by
+serving old-version presets - a preset points at a committed pass whose prices are the old
+catalog's.
+
 ## What the write records
 
 `store_offer.fetched_at` and `last_checked_at` both become the row's `observed_at`;
