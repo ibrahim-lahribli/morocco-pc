@@ -54,7 +54,12 @@ export function HeroRigPreview({ eyebrow, caption, details }: HeroRigPreviewProp
 
   if (pending) {
     return (
-      <Card className="overflow-hidden" aria-busy="true">
+      <Card
+        data-testid="hero-preview"
+        data-hero-state="pending"
+        className="overflow-hidden"
+        aria-busy="true"
+      >
         <span role="status" className="sr-only">
           {tBuilds("loading")}
         </span>
@@ -73,7 +78,11 @@ export function HeroRigPreview({ eyebrow, caption, details }: HeroRigPreviewProp
   }
 
   return (
-    <Card className="overflow-hidden">
+    <Card
+      data-testid="hero-preview"
+      data-hero-state={view === null ? "empty" : "ready"}
+      className="overflow-hidden"
+    >
       <div
         aria-hidden="true"
         className="relative h-44 bg-linear-to-br from-surface-sunken via-surface-muted to-primary-soft"
@@ -89,16 +98,21 @@ export function HeroRigPreview({ eyebrow, caption, details }: HeroRigPreviewProp
       <CardContent className="flex flex-col gap-1.5">
         {view === null ? null : (
           <div className="flex flex-col gap-1">
-            <p className="text-headline-sm text-foreground">{tBuilds("category.gaming")}</p>
+            <p data-testid="hero-preview-title" className="text-headline-sm text-foreground">
+              {tBuilds("category.gaming")}
+            </p>
             {view.score === null ? null : (
-              <p className="text-body-sm text-muted">
+              <p data-testid="hero-preview-score" className="text-body-sm text-muted">
                 {tPreview("score", { score: formatScore(view.score, locale) })}
               </p>
             )}
             {view.totalPrice === null ? null : (
               <p className="flex items-baseline justify-between gap-2">
                 <span className="text-label-md text-muted">{tBuilds("priceLabel")}</span>
-                <span className="text-price text-foreground tabular-nums">
+                <span
+                  data-testid="hero-preview-price"
+                  className="text-price text-foreground tabular-nums"
+                >
                   {formatPrice(view.totalPrice, displayCurrency)}
                 </span>
               </p>
