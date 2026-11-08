@@ -33,6 +33,9 @@ const WIDTHS = [
 /** Below Tailwind's `sm` the design's 48 px control scale applies. */
 const PHONE_MAX = 640;
 
+/** The two locales every structural assertion runs in. */
+const LOCALES = ["fr", "ar"] as const;
+
 const FINAL_CTA = "section[aria-labelledby='final-cta-title']";
 
 /** Every finger-operated control the homepage renders in its default state. */
@@ -134,56 +137,61 @@ async function readPairs(page: Page, selectors: string[]): Promise<Pair[]> {
 test("keeps one h1 and never skips a heading level", async ({ page }) => {
   await stubHomepageApi(page);
 
-  for (const { width, height } of WIDTHS) {
-    await page.setViewportSize({ width, height });
-    await page.goto("/fr");
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  for (const locale of LOCALES) {
+    for (const { width, height } of WIDTHS) {
+      await page.setViewportSize({ width, height });
+      await page.goto(`/${locale}`);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
-    const levels = await page.evaluate(() =>
-      [...document.querySelectorAll("main h1, main h2, main h3, main h4")].map((element) =>
-        Number(element.tagName.slice(1)),
-      ),
-    );
+      const levels = await page.evaluate(() =>
+        [...document.querySelectorAll("main h1, main h2, main h3, main h4")].map((element) =>
+          Number(element.tagName.slice(1)),
+        ),
+      );
 
-    expect(levels.length, `headings at ${width}px`).toBeGreaterThan(0);
-    expect(
-      levels.filter((level) => level === 1),
-      `h1 count at ${width}px`,
-    ).toHaveLength(1);
-
-    for (let index = 1; index < levels.length; index += 1) {
+      expect(levels.length, `headings at ${width}px in ${locale}`).toBeGreaterThan(0);
       expect(
-        levels[index]! - levels[index - 1]!,
-        `h${levels[index - 1]} then h${levels[index]} at ${width}px`,
-      ).toBeLessThanOrEqual(1);
+        levels.filter((level) => level === 1),
+        `h1 count at ${width}px in ${locale}`,
+      ).toHaveLength(1);
+
+      for (let index = 1; index < levels.length; index += 1) {
+        expect(
+          levels[index]! - levels[index - 1]!,
+          `h${levels[index - 1]} then h${levels[index]} at ${width}px in ${locale}`,
+        ).toBeLessThanOrEqual(1);
+      }
     }
   }
 });
 
 test("gives every section an accessible name", async ({ page }) => {
   await stubHomepageApi(page);
-  await page.goto("/fr");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
-  const sections = await page.evaluate(() =>
-    [...document.querySelectorAll("main section")].map((section) => {
-      const labelledBy = section.getAttribute("aria-labelledby");
-      const label =
-        labelledBy === null ? "" : (document.getElementById(labelledBy)?.textContent ?? "");
-      return {
-        literal: section.getAttribute("aria-label") ?? "",
-        label: label.replace(/\s+/g, " ").trim(),
-      };
-    }),
-  );
+  for (const locale of LOCALES) {
+    await page.goto(`/${locale}`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
-  expect(sections.length).toBeGreaterThanOrEqual(6);
+    const sections = await page.evaluate(() =>
+      [...document.querySelectorAll("main section")].map((section) => {
+        const labelledBy = section.getAttribute("aria-labelledby");
+        const label =
+          labelledBy === null ? "" : (document.getElementById(labelledBy)?.textContent ?? "");
+        return {
+          literal: section.getAttribute("aria-label") ?? "",
+          label: label.replace(/\s+/g, " ").trim(),
+        };
+      }),
+    );
 
-  for (const section of sections) {
-    expect(
-      section.label !== "" || section.literal !== "",
-      `section ${JSON.stringify(section)}`,
-    ).toBe(true);
+    expect(sections.length, `sections in ${locale}`).toBeGreaterThanOrEqual(6);
+
+    for (const section of sections) {
+      expect(
+        section.label !== "" || section.literal !== "",
+        `section in ${locale}: ${JSON.stringify(section)}`,
+      ).toBe(true);
+    }
   }
 });
 
@@ -268,26 +276,58 @@ test("keeps every control at the WCAG minimum, and at 44 px on phones", async ({
 test("keeps body copy and both calls to action above 4.5:1", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await stubHomepageApi(page);
+
+  for (const locale of LOCALES) {
+    await page.goto(`/${locale}`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await waitForSettledCards(page);
+
+    const pairs = await readPairs(page, [
+      "#configurations article .text-muted",
+      `${FINAL_CTA} p.text-body-md`,
+      `${FINAL_CTA} button`,
+      "#final-cta-title",
+    ]);
+
+    expect(pairs, `measurable pairs in ${locale}`).toHaveLength(4);
+
+    for (const pair of pairs) {
+      const ratio = contrastRatio(parseCssColor(pair.color), parseCssColor(pair.background));
+      expect(
+        Number(ratio.toFixed(2)),
+        `${locale} ${pair.selector}: ${pair.color} on ${pair.background}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+});
+
+test("announces the finder's budget status and its range error", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await stubHomepageApi(page);
   await page.goto("/fr");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await waitForSettledCards(page);
 
-  const pairs = await readPairs(page, [
-    "#configurations article .text-muted",
-    `${FINAL_CTA} p.text-body-md`,
-    `${FINAL_CTA} button`,
-    "#final-cta-title",
-  ]);
+  const status = page.locator("#finder-budget p[role='status']");
+  await expect(status).toHaveCount(1);
+  await expect(status).toHaveText("À définir");
 
-  expect(pairs, "measurable pairs").toHaveLength(4);
+  await page.getByRole("radio", { name: /Budget de 12\s?000\s?DH/ }).check({ force: true });
+  await expect(status).toHaveText(/Budget de 12\s?000\s?DH/);
 
-  for (const pair of pairs) {
-    const ratio = contrastRatio(parseCssColor(pair.color), parseCssColor(pair.background));
-    expect(
-      Number(ratio.toFixed(2)),
-      `${pair.selector}: ${pair.color} on ${pair.background}`,
-    ).toBeGreaterThanOrEqual(4.5);
-  }
+  const amount = page.getByRole("spinbutton", { name: "Budget exact en dirhams" });
+  await amount.fill("1000");
+
+  const alert = page.locator("#homepage-custom-budget-error");
+  await expect(alert).toHaveAttribute("role", "alert");
+  await expect(alert).toHaveText(/Saisissez un budget entre 3\s?500 et 100\s?000\s?DH/);
+  await expect(amount).toHaveAttribute("aria-invalid", "true");
+  await expect(amount).toHaveAttribute("aria-describedby", /homepage-custom-budget-error/);
+  await expect(status).toHaveText("À définir");
+
+  await amount.fill("7000");
+  await expect(alert).toHaveCount(0);
+  await expect(amount).not.toHaveAttribute("aria-invalid", "true");
+  await expect(status).toHaveText(/Budget de 7\s?000\s?DH/);
 });
 
 test("renders the homepage without a console error", async ({ page }) => {
@@ -302,9 +342,13 @@ test("renders the homepage without a console error", async ({ page }) => {
   });
 
   await stubHomepageApi(page);
-  await page.goto("/fr");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await page.waitForLoadState("networkidle");
 
-  expect(errors).toEqual([]);
+  for (const locale of LOCALES) {
+    errors.length = 0;
+    await page.goto(`/${locale}`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+
+    expect(errors, `console on /${locale}`).toEqual([]);
+  }
 });
