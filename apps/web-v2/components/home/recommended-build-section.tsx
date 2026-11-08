@@ -1,8 +1,6 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useEffect } from "react";
-
 import { Button } from "@/components/ui";
 import { isApiError } from "@/lib/api/errors";
 import { formatPrice } from "@/lib/format/price";
@@ -133,15 +131,12 @@ function BuildSlot({ useCase, currency, budgetAmount, variant }: BuildSlotProps)
   const detailQuery = useRecommendationDetail(preset?.recommendation_id ?? null, catalogVersion);
   const view = preset === null ? null : toBuildCardView(preset, detailQuery.data);
 
+  // A 404 means the served preset has no detail yet: the card keeps its budget
+  // line and its empty state rather than claiming a network failure. Any other
+  // error is a real failure and offers a retry.
   const detailError = detailQuery.error;
   const detailMissing = isApiError(detailError) && detailError.status === 404;
   const detailFailed = detailError !== null && !detailMissing;
-
-  useEffect(() => {
-    if (detailMissing && preset !== null) {
-      console.warn(`[homepage] preset detail 404 for ${preset.recommendation_id}`);
-    }
-  }, [detailMissing, preset]);
 
   if (presetsQuery.isPending) {
     return <BuildSkeleton label={category} loadingLabel={t("loading")} />;
