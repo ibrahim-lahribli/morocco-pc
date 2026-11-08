@@ -1,14 +1,16 @@
 import { expect, test } from "@playwright/test";
 
-import { stubHomepageApi } from "./support/homepage-api";
+import { CARD_TITLES, stubHomepageApi } from "./support/homepage-api";
+import { waitForSettledCards } from "./support/homepage-ready";
 
 /**
  * The desktop hero preview, asserted rather than eyeballed.
  *
  * Q-19 fixed its content: the rank-1 Gaming preset the configurations section
  * already fetched at the 12,000 MAD ceiling. These specs prove it renders the
- * served numbers, adds no request, degrades to the text shell when the ladder is
- * empty, and stays out of the phone layout.
+ * served numbers in the reader's own number format, reuses the same cache
+ * identities as the cards (no second read, no stale value after a change), and
+ * degrades to the text shell when the ladder is empty.
  */
 test.describe("hero preview", () => {
   test("shows the served Gaming score and price without a second request", async ({ page }) => {
@@ -17,17 +19,38 @@ test.describe("hero preview", () => {
     await page.goto("/fr");
 
     const preview = page.locator("#top");
-    // `{score}` is ICU-formatted, so French may use a comma decimal separator.
-    await expect(
-      preview.getByText(/Score de configuration\s*:\s*72[,.]5\s*\/\s*100/),
-    ).toBeVisible();
+    await expect(preview.getByText("Score de configuration : 72,5/100")).toBeVisible();
     await expect(preview.getByText(/11\s?500\s?DH/)).toBeVisible();
 
-    // One ladder serves both the preview and the Gaming card: the hero must use
-    // the same query key rather than issuing its own read.
-    const gaming = requests.filter((request) => request.includes("/v1/presets?use_case=GAMING"));
-    expect(gaming, "the hero must reuse the builds section's query key").toHaveLength(1);
+    // One ladder and one detail serve both the preview and the Gaming card: the
+    // hero must be reading the same TanStack keys, not issuing its own reads.
+    const gamingLadder = requests.filter((request) =>
+      request.includes("/v1/presets?use_case=GAMING"),
+    );
+    const gamingDetail = requests.filter((request) =>
+      request.includes("/v1/recommendations/rec-GAMING-12000"),
+    );
+    expect(gamingLadder, "one Gaming ladder for the hero and the card").toHaveLength(1);
+    expect(gamingDetail, "one detail for the hero and the card").toHaveLength(1);
     expect(posts).toEqual([]);
+  });
+
+  test("formats the score with the comma in French and the point in Arabic", async ({ page }) => {
+    await stubHomepageApi(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+
+    await page.goto("/fr");
+    const french = page.locator("#top");
+    await expect(french.getByText("Score de configuration : 72,5/100")).toBeVisible();
+    await expect(french.getByText(/72\.5/)).toHaveCount(0);
+
+    await page.goto("/ar");
+    const arabic = page.locator("#top");
+    await expect(arabic.getByText("درجة التجميعة: 72.5/100")).toBeVisible();
+    await expect(arabic.getByText(/72,5/)).toHaveCount(0);
+
+    // Latin digits in both locales, matching the price rule.
+    await expect(page.locator("#top")).toContainText(/[0-9]/);
   });
 
   test("is absent from the phone layout", async ({ page }) => {
@@ -56,5 +79,37 @@ test.describe("hero preview", () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  test("keeps its own answer when the finder changes use case", async ({ page }) => {
+    const { requests, posts } = await stubHomepageApi(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/fr");
+    await waitForSettledCards(page);
+
+    const preview = page.locator("#top");
+    await expect(preview.getByText("Score de configuration : 72,5/100")).toBeVisible();
+
+    await page.getByRole("radio", { name: /Études et bureautique/ }).check({ force: true });
+
+    const section = page.locator("#configurations");
+    await expect(section.getByRole("heading", { name: CARD_TITLES.OFFICE })).toBeVisible();
+    // The office card's own score is 61,5; the hero must still be the Gaming build,
+    // so neither its score nor its price may be replaced by the office answer.
+    await expect(section.getByText(/61,5/)).toBeVisible();
+    await expect(preview.getByText("Score de configuration : 72,5/100")).toBeVisible();
+    await expect(preview.getByText(/11\s?500\s?DH/)).toBeVisible();
+    await expect(preview.getByText(/7\s?500\s?DH/)).toHaveCount(0);
+
+    // A changed use case is a changed query key: one ladder, one detail, once.
+    const officeLadder = requests.filter((request) =>
+      request.includes("/v1/presets?use_case=OFFICE"),
+    );
+    const officeDetail = requests.filter((request) =>
+      request.includes("/v1/recommendations/rec-OFFICE-12000"),
+    );
+    expect(officeLadder).toHaveLength(1);
+    expect(officeDetail).toHaveLength(1);
+    expect(posts).toEqual([]);
   });
 });

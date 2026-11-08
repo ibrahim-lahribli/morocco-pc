@@ -13,10 +13,12 @@ import { waitForSettledCards } from "./support/homepage-ready";
  *
  * - heading order: one `h1`, no skipped level (WCAG 1.3.1);
  * - landmarks: every `<section>` has a name (WCAG 1.3.1, 2.4.6);
- * - focus: the skip link is the first stop (WCAG 2.4.1) and every control the
- *   page owns paints a visible indicator (WCAG 2.4.7);
- * - targets: 24 CSS px minimum at every width (WCAG 2.2 AA 2.5.8) and the
- *   project's own 44 px floor (`--spacing-tap`) on phone widths;
+ * - focus: the skip link is the first stop (WCAG 2.4.1), the Tab order matches
+ *   the page's own focusable DOM exactly — no skipped control, no trapped focus
+ *   — and every stop paints a visible indicator (WCAG 2.4.7);
+ * - targets: 24 CSS px minimum at every width (WCAG 2.2 AA 2.5.8), the project's
+ *   own 44 px floor (`--spacing-tap`) on phone widths, and 44 px for the locale
+ *   switcher at EVERY width;
  * - contrast: 4.5:1 for the body copy and both calls to action (WCAG 1.4.3).
  *
  * The text colour is painted over the nearest opaque surface and read back from a
@@ -195,7 +197,110 @@ test("gives every section an accessible name", async ({ page }) => {
   }
 });
 
-test("keeps a visible focus indicator from the first Tab", async ({ page }) => {
+interface FocusStop {
+  role: string;
+  name: string;
+  outline: number;
+  shadow: string;
+}
+
+/**
+ * The focus stops the page's own DOM offers, in Tab order.
+ *
+ * Computed from the document rather than hard-coded, so adding or removing a
+ * control updates the expectation instead of breaking a count. A native radio
+ * group contributes one stop (its checked option) and no stop when nothing is
+ * checked, which is exactly how a browser tabs through it.
+ */
+async function expectedFocusOrder(page: Page): Promise<Array<{ role: string; name: string }>> {
+  return page.evaluate(() => {
+    const SELECTOR =
+      "a[href], button, input:not([type='hidden']), select, textarea, [tabindex]:not([tabindex='-1'])";
+
+    const visible = (element: Element) => {
+      const style = getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden") return false;
+      return element.getClientRects().length > 0;
+    };
+
+    const nameOf = (element: Element): string => {
+      const aria = element.getAttribute("aria-label");
+      if (aria !== null && aria.trim() !== "") return aria.replace(/\s+/g, " ").trim();
+      if (element instanceof HTMLInputElement) {
+        if (element.labels !== null && element.labels.length > 0) {
+          return [...element.labels]
+            .map((label) => label.textContent ?? "")
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim();
+        }
+        return element.value;
+      }
+      return (element.textContent ?? "").replace(/\s+/g, " ").trim();
+    };
+
+    const order: Array<{ role: string; name: string }> = [];
+    const groups = new Set<string>();
+
+    for (const element of document.querySelectorAll<HTMLElement>(SELECTOR)) {
+      if (!visible(element)) continue;
+      if (element.hasAttribute("disabled")) continue;
+      if (element.getAttribute("aria-disabled") === "true") continue;
+
+      if (element instanceof HTMLInputElement && element.type === "radio") {
+        if (groups.has(element.name)) continue;
+        groups.add(element.name);
+        const group = `input[type='radio'][name='${CSS.escape(element.name)}']`;
+        // A browser focuses the checked option, or the first one when the group
+        // has no answer yet: that is the single stop the group contributes.
+        const selected =
+          document.querySelector<HTMLInputElement>(`${group}:checked`) ??
+          document.querySelector<HTMLInputElement>(group);
+        if (selected === null) continue;
+        order.push({ role: "input", name: nameOf(selected) });
+        continue;
+      }
+
+      order.push({ role: element.tagName.toLowerCase(), name: nameOf(element) });
+    }
+
+    return order;
+  });
+}
+
+/** The focused element, named the same way as the expected list above. */
+async function activeStop(page: Page): Promise<FocusStop | null> {
+  return page.evaluate(() => {
+    const element = document.activeElement;
+    if (element === null) return null;
+
+    const nameOf = (node: Element): string => {
+      const aria = node.getAttribute("aria-label");
+      if (aria !== null && aria.trim() !== "") return aria.replace(/\s+/g, " ").trim();
+      if (node instanceof HTMLInputElement) {
+        if (node.labels !== null && node.labels.length > 0) {
+          return [...node.labels]
+            .map((label) => label.textContent ?? "")
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim();
+        }
+        return node.value;
+      }
+      return (node.textContent ?? "").replace(/\s+/g, " ").trim();
+    };
+
+    const style = getComputedStyle(element);
+    return {
+      role: element.tagName.toLowerCase(),
+      name: nameOf(element),
+      outline: Number.parseFloat(style.outlineWidth) || 0,
+      shadow: style.boxShadow,
+    };
+  });
+}
+
+test("walks exactly the page's own focusable elements, in order", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await stubHomepageApi(page);
   await page.goto("/fr");
@@ -203,55 +308,45 @@ test("keeps a visible focus indicator from the first Tab", async ({ page }) => {
   // Hydration replaces the tree: a Tab pressed mid-render can land on body.
   await waitForSettledCards(page);
 
-  // Keyboard input follows the frontmost page: a page left in the background
-  // by a parallel worker can swallow Tab and report body as active.
-  await page.bringToFront();
+  const expected = await expectedFocusOrder(page);
+  expect(expected.length, `expected stops: ${JSON.stringify(expected)}`).toBeGreaterThanOrEqual(8);
 
-  const focused = () =>
-    page.evaluate(() => {
-      const element = document.activeElement;
-      if (element === null) return null;
-      const style = getComputedStyle(element);
-      return {
-        tag: element.tagName.toLowerCase(),
-        text: (element.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 40),
-        outline: Number.parseFloat(style.outlineWidth) || 0,
-        shadow: style.boxShadow,
-      };
-    });
+  const visited: FocusStop[] = [];
 
-  const stops: Array<{ tag: string; text: string; outline: number; shadow: string }> = [];
-
-  // Tab through the controls this page owns and stop at the browser chrome or
-  // the Next dev overlay (`nextjs-portal`, which is focusable). A native radio
-  // group is one stop, so the page has ten, not one per radio.
-  for (let press = 0; press < 24 && stops.length < 12; press += 1) {
+  // Keyboard input follows the frontmost page: a page left in the background by
+  // a parallel worker can swallow Tab and report body as active.
+  for (let press = 0; press < expected.length + 3; press += 1) {
     await page.bringToFront();
     await page.keyboard.press("Tab");
 
-    const stop = await focused();
+    const stop = await activeStop(page);
+    // The browser chrome and the Next dev overlay (`nextjs-portal`) are the page's
+    // boundary: reaching either means every stop this page owns was visited.
+    if (stop === null || stop.role === "body" || stop.role === "nextjs-portal") break;
 
-    if (stop === null || stop.tag === "body" || stop.tag === "nextjs-portal") {
-      break;
-    }
-
-    stops.push(stop);
+    visited.push(stop);
   }
 
-  expect(stops.length, `focus stops: ${JSON.stringify(stops)}`).toBeGreaterThanOrEqual(8);
-  expect(stops[0]?.tag, "the skip link is the first stop").toBe("a");
-  expect(stops[0]?.text.length ?? 0).toBeGreaterThan(0);
-  expect(stops[0]!.outline, "skip link outline").toBeGreaterThanOrEqual(2);
+  expect(
+    visited.map(({ role, name }) => ({ role, name })),
+    `Tab order: ${JSON.stringify(visited)} expected: ${JSON.stringify(expected)}`,
+  ).toEqual(expected);
 
-  for (const stop of stops) {
+  expect(visited[0]?.role, "the skip link is the first stop").toBe("a");
+  expect(visited[0]?.name.length ?? 0).toBeGreaterThan(0);
+  expect(visited[0]!.outline, "skip link outline").toBeGreaterThanOrEqual(2);
+
+  for (const stop of visited) {
     expect(
       stop.outline >= 2 || stop.shadow !== "none",
-      `${stop.tag} "${stop.text}" paints no focus indicator`,
+      `${stop.role} "${stop.name}" paints no focus indicator`,
     ).toBe(true);
   }
 });
 
-test("keeps every control at the WCAG minimum, and at 44 px on phones", async ({ page }) => {
+test("keeps every control at the WCAG minimum and the locale switcher at 44 px", async ({
+  page,
+}) => {
   await stubHomepageApi(page);
 
   for (const { width, height } of WIDTHS) {
@@ -269,6 +364,29 @@ test("keeps every control at the WCAG minimum, and at 44 px on phones", async ({
         Math.min(control.width, control.height),
         `${control.tag} "${control.text}" at ${width}px`,
       ).toBeGreaterThanOrEqual(floor);
+    }
+
+    // The project's own 44 px floor, not the WCAG one: two language links are the
+    // smallest controls in the header, and a 36 px variant shipped once.
+    const languages = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>("a[hreflang]")]
+        .filter((element) => element.getClientRects().length > 0)
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            lang: element.getAttribute("hreflang") ?? "?",
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          };
+        }),
+    );
+
+    expect(languages.length, `locale links at ${width}px`).toBe(2);
+    for (const language of languages) {
+      expect(
+        Math.min(language.width, language.height),
+        `${language.lang} locale link at ${width}px`,
+      ).toBeGreaterThanOrEqual(44);
     }
   }
 });

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import fr from "@/messages/fr.json";
@@ -10,6 +11,12 @@ const get = vi.fn();
 
 vi.mock("@/lib/api/client", () => ({
   getBrowserApiClient: () => ({ GET: get }),
+}));
+
+vi.mock("@/i18n/navigation", () => ({
+  Link: ({ href, children }: { href: string; children: ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
 }));
 
 import { RecommendedBuildSection } from "@/components/home/recommended-build-section";

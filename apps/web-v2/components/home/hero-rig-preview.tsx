@@ -1,10 +1,12 @@
 "use client";
 
 import { Cpu } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { Card, CardContent } from "@/components/ui";
+import type { AppLocale } from "@/i18n/routing";
 import { formatPrice } from "@/lib/format/price";
+import { formatScore } from "@/lib/format/score";
 import {
   HOMEPAGE_BUDGET_CEILING,
   selectPresetAtOrBelow,
@@ -35,6 +37,7 @@ export function HeroRigPreview({ eyebrow, caption, details }: HeroRigPreviewProp
   const tPreview = useTranslations("Homepage.hero.preview");
   const tBuilds = useTranslations("Homepage.builds");
   const displayCurrency = useTranslations("Price")("currency");
+  const locale = useLocale() as AppLocale;
 
   const { currency } = useMetaOptions();
   const ladderQuery = usePresets("GAMING", currency);
@@ -88,7 +91,9 @@ export function HeroRigPreview({ eyebrow, caption, details }: HeroRigPreviewProp
           <div className="flex flex-col gap-1">
             <p className="text-headline-sm text-foreground">{tBuilds("category.gaming")}</p>
             {view.score === null ? null : (
-              <p className="text-body-sm text-muted">{tPreview("score", { score: view.score })}</p>
+              <p className="text-body-sm text-muted">
+                {tPreview("score", { score: formatScore(view.score, locale) })}
+              </p>
             )}
             {view.totalPrice === null ? null : (
               <p className="flex items-baseline justify-between gap-2">

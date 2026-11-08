@@ -57,6 +57,17 @@ const DEFAULT_BADGE: Record<string, "verified" | "indicative" | null> = {
   WORKSTATION: null,
 };
 
+/**
+ * One different score per use case, so a spec can prove the hero is not reading
+ * another slot's detail: GAMING is the value the hero must show, and OFFICE's
+ * 61.5 must never appear above the fold.
+ */
+export const STUB_SCORES: Record<string, number> = {
+  GAMING: 72.5,
+  OFFICE: 61.5,
+  WORKSTATION: 50,
+};
+
 const JSON_HEADERS = {
   "content-type": "application/json",
   "access-control-allow-origin": "*",
@@ -99,7 +110,7 @@ function detailBody(id: string, badge: "verified" | "indicative" | null) {
       {
         rank: 1,
         total_price: Number(budget) - 500,
-        build_score: 72.5,
+        build_score: STUB_SCORES[useCase] ?? 72.5,
         compatibility_status: "PASS",
         strategy_key: "BALANCED",
         explanation: `Trame ${useCase} servie par le moteur.`,
