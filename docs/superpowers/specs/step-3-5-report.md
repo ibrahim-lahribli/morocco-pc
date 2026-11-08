@@ -20,6 +20,7 @@
 | Reviewed implementation commit | `90bcda6` |
 | Tree identity | `39a3ee0^{tree}` = `90bcda6^{tree}` = `0d5ea442e79dcce67ec4fbbda4d0ea405ab43006` |
 | Post-merge fixes | `3066a0e` (label size + card title wrap), `075e302` (real-API verification + both evidence sets) |
+| Evidence tip | `ce46065` - the commit carrying this report and the full Step 3.5 evidence; CI green at this SHA (section 3) |
 | Package | `apps/web-v2` (own manifest, lockfile and workflow) |
 
 ## 2. Gate snapshot
@@ -55,12 +56,17 @@ Steps: `npm ci` → `typecheck` → `lint` → `format:check` → `check:api-typ
 
 | Run | Commit | Result | URL |
 | --- | --- | --- | --- |
+| 42464961357 | `ce46065` (tip) | success | https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/42464961357 |
+| 42464961287 | `ce46065` (tip, ci.yml unit-and-docs) | success | https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/42464961287 |
 | 42435132704 | `39a3ee0` | success | https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/42435132704 |
 | 42434617577 | `90bcda6` | success | https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/42434617577 |
 | 42434613699 | `90bcda6` | success | https://github.com/ibrahim-lahribli/morocco-pc/actions/runs/42434613699 |
 
-The workflow has 31 runs in total. **No CI run exists for `3066a0e` or `075e302`**: both are
-unpushed local commits, so their evidence is local only.
+GitHub runs one workflow per **push**, not per commit, so `3066a0e` and `075e302` have no run of
+their own: the push that published all five commits ran at the tip **`ce46065`** (run 42464961357)
+and covered every one of them. The engine ci.yml unit-and-docs job ran on the same push (run
+42464961287), which is where verify-docs and the decision-index gate live. A later commit on this
+branch re-runs both workflows over the identical gate set.
 
 **What CI does not cover.** The job has no secret, no database and no API. `npm run test:e2e`
 drives the committed stub, so nothing in CI proves the recommendation API. That is what
