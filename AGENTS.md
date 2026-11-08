@@ -15,7 +15,9 @@ HTTP surface is a separate, thin layer (`apps/api/`, Decision 36) that calls the
 barrels and owns no engine logic. The frontend is the second such layer: `apps/web/` (Next.js 16
 App Router + Tailwind v4, sprints S1-S19, merged on `master`) is a standalone package with its own
 manifest, lockfile and workflow; it consumes the API through generated contract types and owns no
-engine logic either. There is still no authentication anywhere in the tree. The entry points are
+engine logic either. `apps/web-v2/` is the Step 3.5 redesign of that layer (same Next.js 16 App
+Router, next-intl fr/ar, its own manifest, lockfile and workflow), presentation-only and not yet the
+deployed frontend. There is still no authentication anywhere in the tree. The entry points are
 the engine's public barrels (`src/recommendation/*/index.js`), the `scripts/` CLIs,
 `apps/api/src/server.js`, and `apps/web`'s own `npm run build` / `npm test`.
 
@@ -94,6 +96,7 @@ the detailed evidence behind those rows (a gate parses its shape, so keep the ro
 | `src/recommendation/` | ALL engine application code — the pipeline stages |
 | `apps/api/` | The HTTP API (Decision 36): Fastify routes, TypeBox contracts, the SQL repository, a Dockerfile. TEST DB only unless `API_ALLOW_SHARED=1`; no engine logic, no frontend |
 | `apps/web/` | The web app (Next.js 16 App Router, Tailwind v4 tokens, next-intl fr/ar): wizard, results, preset, component, guide and saved-builds (`/{locale}/enregistrements`, footer-linked on every page) routes, its own crawl surface (`sitemap.xml`, `robots.txt`, canonical + `fr`/`x-default` `hreflang`, per-preset OG cards, all off a configured `NEXT_PUBLIC_SITE_URL`), a zero-dependency fixture mock, and its own gates (`typecheck`, `lint`, `check:tokens`, `check:i18n`, `check:api-types`, Playwright at 360 px, Lighthouse budgets). Own `package.json`/lockfile and `.github/workflows/web.yml`; no secrets, no database, no engine logic |
+| `apps/web-v2/` | The Step 3.5 homepage redesign (Next.js 16 App Router, Tailwind v4 tokens, next-intl fr/ar, TanStack Query + Zustand): the `/` homepage at `/{locale}` and the configurator at `/{locale}/configurateur`, GET-only against `/v1/meta/options`, `/v1/presets` and `/v1/recommendations/{id}`. Own `package.json`/lockfile and `.github/workflows/web-v2.yml` (`typecheck`, `lint`, `format:check`, `check:api-types`, Vitest, `build`, Playwright); `scripts/fixture-api.mjs` / `measure-step35.mjs` / `verify-real-api.mjs` separate fixture from served evidence. No secrets, no database, no engine logic; not yet the deployed frontend |
 
 `src/recommendation/` has one directory per pipeline stage: `compatibility`, `candidates`,
 `offers`, `filtering`, `retention`, `assembly`, `scoring`, `query`, `ranking`, `persistence`,
@@ -173,6 +176,7 @@ deliberately not duplicated here.
 | `node scripts/measure-platform-cost.js [--budget N] [--use-case U] [--resolution R] [--model=<name@version>]` | Read-only **R-04 input**: replicates stages 4-11 (no writes, Decision 17-safe), computes per CPU the cheapest compatible board+RAM platform using `filter.js`'s own exported pair evaluators, then the full-build floor by adding the cheapest RETAINED price of every other role (Decision 27 role minima, partner pairs ignored). Measured 2026-11-04 at `launch-v2@2.4.0`, 12 000 GAMING/1440p: 0 of 10 retained CPUs above budget, highest floor 10 544, cheapest 7 677, platform-cheapest CPU already retained — the row it was built for does not reproduce (R-04 narrowed). It then runs the REAL Engine 3 walk (`assembleBuildsForRecommendation`) over the same retention output and counts builds per CPU — 25 builds covering all 10 retained CPUs at 12 000 GAMING/1440p (VRAM floor 12 GB) and 20 covering all 10 for OFFICE/1080p, so no retained CPU is build-free. Read-only, so no `TEST_DATABASE_URL` guard and no restore point |
 | `node scripts/measure-orchestrator.js` | Decision 20 measurement harness (test-scratch only) |
 | `git --no-pager log --oneline` / `diff` / `status --porcelain` | Repo inspection (use `--no-pager` in agent shells) |
+| `cd apps/web-v2 && npm run typecheck` / `lint` / `format:check` / `check:api-types` / `test` / `build` / `test:e2e` | The V2 gates, run from that package (not the repo root). `test` is Vitest (jsdom, no DB); `test:e2e` is Playwright on port 3220. `node scripts/verify-real-api.mjs` is the only real-API check and is deliberately NOT a CI gate; `node scripts/measure-step35.mjs` takes `MEASURE_SOURCE=fixture\|served` |
 
 Command gotchas (verified 2026-09-28):
 
@@ -252,6 +256,15 @@ Command gotchas (verified 2026-09-28):
 At the REPO ROOT (the engine) no build, lint, typecheck, format or browser command exists — do not
 invent one. `apps/web` is its own package and the exception: `npm run typecheck|lint|build|test` plus
 `check:tokens|check:i18n|check:api-types` live there (`apps/web/package.json`).
+
+**`apps/web-v2` has its OWN workflow** (`.github/workflows/web-v2.yml`, same rule as OD4): on
+`push`/`pull_request` touching `apps/web-v2/**`, the API snapshot `apps/api/test/unit/openapi-v1.10.json`
+or the workflow itself (and `workflow_dispatch`), one `web-v2` job runs in `apps/web-v2` on Node 22 —
+`npm ci`, `typecheck`, `lint`, `format:check`, `check:api-types`, `npm test`, `build`,
+`playwright install --with-deps chromium`, `npm run test:e2e`, uploading `apps/web-v2/test-results`
+on failure. No secrets, no database, and no API: nothing in it proves the recommendation API, which is
+why `verify-real-api.mjs` stays a manual check. Green on the Step 3.5 merge (`39a3ee0`, run
+42435132704) and on `90bcda6` (runs 42434617577 / 42434613699).
 
 **CI (`.github/workflows/ci.yml`)** has two jobs with disjoint triggers. `unit-and-docs` runs on
 `push`/`pull_request` (and `workflow_dispatch`) and skips `schedule`. `recurring-gates` runs only on
