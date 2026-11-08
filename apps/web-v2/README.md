@@ -243,6 +243,76 @@ There is no runtime response validation: TypeScript types are erased, so the
 contract is trusted as the API's tested surface. Backend logic stays in the
 Fastify API; V2 owns presentation only.
 
+## Step 3.5 validation and measurement tooling
+
+Three scripts answer three different questions. They are not interchangeable, and their evidence
+never is: a fixture-backed capture is a picture of the **app**, not of the **recommendation API**.
+
+| Script                        | Question it answers                                                                                                      | Needs                                               |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| `scripts/fixture-api.mjs`     | A deterministic stand-in API so the real production build can be captured over real HTTP when no API origin is reachable | nothing (Node only)                                 |
+| `scripts/measure-step35.mjs`  | Seven widths × two locales: overflow, hero values, tile/card rows, nav clearance, `dir`                                  | a running server, plus `MEASURE_SOURCE`             |
+| `scripts/verify-real-api.mjs` | Does the SERVED recommendation API render correctly end to end?                                                          | a real API **and** a production build pointed at it |
+
+### `scripts/fixture-api.mjs`
+
+Serves exactly the three reads the homepage makes — `GET /v1/meta/options`,
+`GET /v1/presets?use_case=…&currency=…`, `GET /v1/recommendations/{id}` — with fixed data
+(GAMING detail score `72.5`, total `11 500`, badges `verified` / `indicative` / `null`). It is a
+test double, never a substitute for a served pass.
+
+```bash
+FIXTURE_API_PORT=3200 node scripts/fixture-api.mjs
+```
+
+### `scripts/measure-step35.mjs`
+
+Reads the hero through its own hooks (`data-testid="hero-preview"`, `hero-preview-score`,
+`hero-preview-price`, `hero-preview-title`) rather than through a featured card, so a card can
+never supply the hero's number. Below 1024 px the preview is CSS-hidden and the script records
+`heroScore` / `heroPrice` as `null` instead of a value a reader could not see.
+
+```bash
+# a production build must be running; build it against the API it will talk to
+npm run build && npm run start -- -p 3230
+
+SCREENSHOT_BASE_URL=http://localhost:3230 \
+  MEASURE_SOURCE=served \
+  SCREENSHOT_OUTPUT_DIR=docs/screenshots/step-3-5/production \
+  node scripts/measure-step35.mjs
+```
+
+### `MEASURE_SOURCE=fixture` versus `MEASURE_SOURCE=served`
+
+| Value               | What the run assumes                            | What it asserts                                                                  |
+| ------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------- |
+| `fixture` (default) | the page is served by `scripts/fixture-api.mjs` | the fixture's own score and price, exactly                                       |
+| `served`            | a real API answered                             | drops the value pins; keeps structure, per-locale formatting, overflow and `dir` |
+
+`MEASURE_SOURCE=served` against the fixture server does **not** make the evidence production — the
+label describes the data source, and nothing in the script can detect a lie. Only
+`scripts/verify-real-api.mjs` reads the JSON the browser actually received and compares the
+rendered score, price, badge and component pills against it.
+
+### What the measurement output means
+
+Each row is one `<width>-<locale>.png` plus an entry in `measurements.json`: `overflow` (must be
+0), `heroRootCount` / `heroVisible` / `heroState`, `heroDomScore` and `heroDomPrice` (what the DOM
+says), `pathwayTiles` / `pathwayRows`, `cards` / `cardRows` / `cardPrices`, `navVisible`,
+`smallestLocaleControl` / `smallestTile` (px), `footerClearOfNav`, and `dir`. Any assertion failure
+lands in `failures` and the script exits 1 rather than skipping it.
+
+### Known limitations and prerequisites
+
+- Neither script starts an API or a web server for you, and neither installs a browser: run
+  `npx playwright install chromium` once.
+- `fixture` evidence proves layout, i18n and RTL. It cannot prove the API contract, a price, a
+  score, or that a component name is real.
+- `served` evidence proves what one API deployment answered on one date. It is not a contract
+  test and it is not a CI gate: the pull-request job has no API and no database.
+- `verify-real-api.mjs` prints paths, status codes and public response fields only. It never
+  prints a credential, cookie, request header or request body.
+
 ## Quality gates
 
 - TypeScript strict, including `noUncheckedIndexedAccess`
@@ -250,12 +320,13 @@ Fastify API; V2 owns presentation only.
 - Prettier + Tailwind class sorting
 - Vitest: dictionaries, price formatting, validation schema, Zustand store, kit accessibility, API config/error/retry/client/provider, and the configurator's URL contract, store, queries and form
 - `npm run check:api-types`: generated API types match `apps/api`'s contract
-- Playwright (62 specs): shell sections and breakpoints, finder answers/CTA/navigation, the cards'
+- Playwright (81 specs): shell sections and breakpoints, finder answers/CTA/navigation, the cards'
   badges and empty/error states, pathways and the closing CTA, the Arabic/RTL pass (direction,
-  typeface, mirroring, seven widths in both locales, 360 px nav clearance), the configurator (deep
-  links, form, loading/404/error/retry, ranked builds, locale switch, 360 px bars, no writes) and
-  the homepage → configurator journey (three handoffs, reload, back, both locale switches, the
-  `from` plus invalid-budget combination)
+  typeface, mirroring, seven widths in both locales, 360 px nav clearance), the hero preview and
+  its states, the homepage accessibility suite (heading order, derived focus walk, 44 px targets,
+  computed contrast, no console error), the configurator (deep links, form, loading/404/error/retry,
+  ranked builds, locale switch, 360 px bars, no writes) and the homepage → configurator journey
+  (three handoffs, reload, back, both locale switches, the `from` plus invalid-budget combination)
 
 ## Scope guard
 

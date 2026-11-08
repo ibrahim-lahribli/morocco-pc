@@ -1253,7 +1253,7 @@ proposal and is not part of this backlog.
 
 ---
 
-## 17. Step 3.5 amendments (2026-11-08, owner-approved A/A/A)
+## 20. Step 3.5 amendments (2026-11-08, owner-approved A/A/A)
 
 Four surfaces changed after the owner approved Tasks 2–4 and the Step 3.5 review findings. Each
 row states the behaviour the code now has and the test that pins it.
