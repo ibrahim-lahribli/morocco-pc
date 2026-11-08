@@ -1,0 +1,36 @@
+{
+  "heroText": "Configurateur PC pour le Maroc\nLe bon PC,\nau bon budget.\n\nGaming, études ou travail : trouvez une configuration selon votre budget et votre usage. Les prix affichés sont indicatifs et exprimés en dirhams marocains (MAD).\n\n1 minute chrono\n100 % Gratuit\nSans inscription requise\nVue Référence\n\nPC Gaming\n\nScore de configuration : 72.5/100\n\nPrix de la configuration\n11 500 DH\n\nSÉLECTION DU MOMENT\n\nDétails specs →\nSimulateur Express\nÉtape 1 sur 2\n1\nQuel est votre budget ?\n\nÀ définir\n\n5 000 DH\n8 000 DH\n12 000 DH\n15 000 DH\nBudget exact en dirhams\n\nEntre 3 500 et 100 000 DH\n\n2\nQue voulez-vous faire avec votre PC ?\nJeux vidéo & Gaming\nFortnite, Valorant, GTA V, EA FC 24, Cyberpunk 2077…\nÉtudes et bureautique\nCours, navigation 40+ onglets, Office, visioconférences HD\nCréation et travail pro\nMontage 4K Premiere / DaVinci, Blender 3D, code et virtualisation\nTrouver mon PC\n\n1 minute · 100 % Gratuit · Sans compte · Prix en dirhams",
+  "headingSizes": [28, 28, 28, 28],
+  "cards": 3,
+  "heroVisibleOnPhone": false,
+  "pills": [
+    {
+      "text": "Accueil",
+      "width": 0,
+      "height": 0
+    },
+    {
+      "text": "Configurer",
+      "width": 0,
+      "height": 0
+    },
+    {
+      "text": "Guides",
+      "width": 0,
+      "height": 0
+    },
+    {
+      "text": "FR",
+      "width": 44,
+      "height": 44
+    },
+    {
+      "text": "العربية",
+      "width": 52,
+      "height": 44
+    }
+  ],
+  "overflow": 0,
+  "dir": "rtl",
+  "errors": []
+}
