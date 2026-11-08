@@ -144,13 +144,13 @@ The kit already fixes the container: `mx-auto w-full max-w-page px-margin-mobile
 md:px-margin` (`max-w-page` = 1280 px, `margin-mobile` = 16 px, `margin` = 32 px). The
 locale layout owns it; sections do not re-declare horizontal padding.
 
-| Viewport           | Grid                      | Header                | Finder                             | Builds                     | Pathways               | Trust             | Guides         |
-| ------------------ | ------------------------- | --------------------- | ---------------------------------- | -------------------------- | ---------------------- | ----------------- | -------------- |
-| 360 px             | 1 col, 16 px margins      | 56 px sticky          | stacked, 2×2 presets               | 1 card + 2 compact rows    | 2 tiles, 1 per column  | stacked list card | 2 cards, 1 col |
-| 390 px             | same                      | same                  | same                               | same                       | same                   | same              | same           |
-| 430 px             | same (wider gutters only) | same                  | same                               | same                       | same                   | same              | same           |
-| 768–1023 px (`md`) | 1–2 col                   | 64 px, horizontal nav | presets in one row of 4            | 2 col, third spans         | 2 tiles inline         | 3 col             | 2 col          |
-| 1280 px (`lg`+)    | 12-col, 40 px gap         | 64 px, horizontal nav | 2 answers side by side in the card | 3 equal cards, fixed order | 4-tile categories grid | 3 col             | 4 col          |
+| Viewport           | Grid                      | Header                | Finder                             | Builds                     | Pathways           | Trust             | Guides         |
+| ------------------ | ------------------------- | --------------------- | ---------------------------------- | -------------------------- | ------------------ | ----------------- | -------------- |
+| 360 px             | 1 col, 16 px margins      | 56 px sticky          | stacked, 2×2 presets               | 1 card + 2 compact rows    | 3 tiles, 1 per row | stacked list card | 2 cards, 1 col |
+| 390 px             | same                      | same                  | same                               | same                       | same               | same              | same           |
+| 430 px             | same (wider gutters only) | same                  | same                               | same                       | same               | same              | same           |
+| 768–1023 px (`md`) | 1–2 col                   | 64 px, horizontal nav | presets in one row of 4            | 2 col, third spans         | 3 tiles in one row | 3 col             | 2 col          |
+| 1280 px (`lg`+)    | 12-col, 40 px gap         | 64 px, horizontal nav | 2 answers side by side in the card | 3 equal cards, fixed order | 3 tiles in one row | 3 col             | 4 col          |
 
 Tailwind's stock breakpoints (`sm` 640, `md` 768, `lg` 1024, `xl` 1280) are enough. No
 custom breakpoint token is added.
@@ -177,7 +177,7 @@ two files):
 | `RecommendedBuildSection` | —                             | grid switches from "1 card + 2 compact rows" to "3 equal cards in fixed use-case order"; the **same** three items drive both, the layout prop is CSS only |
 | `FeaturedGuides`          | —                             | renders 4 items; items 3–4 are `max-lg:hidden` (2 on mobile, 4 on desktop). Content stays in the DOM for one code path                                    |
 | `FinalRecommendationCTA`  | —                             | desktop gradient banner with a large button; mobile compact primary-variant card with a 48 px button. Same copy, same action                              |
-| `DiscoveryPathways`       | —                             | desktop shows the four-tile categories grid; mobile resolution shortcuts deferred (Q-20)                                                                  |
+| `DiscoveryPathways`       | —                             | one row of three use-case tiles at every width (one per row below `sm`); resolution shortcuts deferred (Q-20); owner-approved 2026-11-08                  |
 
 **Discovery pathways (responsive variants).** Keep the desktop frame's `Catégories &
 usages` grid (`19:426`) and the mobile frame's Gaming 1080p / 1440p shortcuts
@@ -628,7 +628,7 @@ implemented** (Q-20, approved): the tiles are hidden rather than wired to a clie
 approximation the served cards would ignore. When they are enabled, each tile sets
 `use_case=GAMING` plus its resolution and moves focus to the finder.
 
-**Components.** One `DiscoveryPathways` client component with desktop-category and
+**Components.** One `DiscoveryPathways` component rendering the three use-case tiles at every width, with
 mobile-resolution variants. It is one responsive component tree, not a desktop page and
 a mobile page.
 
@@ -646,13 +646,13 @@ a mobile page.
 `pathways.gaming1080` and `pathways.gaming1440` are authored with the deferred tiles
 (Q-20); the first release renders neither key.
 
-**Interactions.** Desktop tiles set their mapped use case in the finder and focus its
+**Interactions.** The tiles set their mapped use case in the finder and focus its
 usage group. No pathway makes a network write. The mobile resolution tiles ship hidden
 (Q-20); when enabled they set Gaming plus the selected resolution, focus the finder, and
 stay hidden unless `inputs_applied` includes `resolution` — an advertised resolution value
 alone does not prove the active model reads it.
 
-**Responsive behaviour.** Desktop category grid is shown from `lg`. The mobile resolution
+**Responsive behaviour.** One tile per row below `sm`, three across from `sm` (owner-approved 2026-11-08); the desktop row is unchanged. The mobile resolution
 tiles are deferred in the first release (Q-20); once enabled they are shown below `lg`.
 Use responsive placement to match the two approved frame sequences while retaining one
 component and one state owner. Verify keyboard and screen-reader reading order at both
@@ -850,7 +850,7 @@ and "Casablanca · Rabat · Maroc" on the end side, a wrapped link row (À propo
 Boutiques · Méthodologie · Contact), then a copyright row. Then the fixed bottom nav
 (`23:1489`): Accueil (current), a raised circular Configurer FAB, and only destinations
 that exist in Step 1. Composants and Enregistrés are hidden or visibly disabled without
-an `href` until their routes exist; Guides is likewise non-navigating until Step 4.
+an `href` until their routes exist; Guides is an in-page anchor to `#guides` (owner-approved 2026-11-08).
 Keep the 56 px + `env(safe-area-inset-bottom)` geometry.
 
 **Components.** `SiteFooter` (extend props: optional `location` and `links[]`),
@@ -867,7 +867,7 @@ Keep the 56 px + `env(safe-area-inset-bottom)` geometry.
 
 **Interactions.** Footer links are placeholders until their pages exist (same pattern as
 the methodology link: `aria-disabled`, no `href`). The mobile nav's centre action scrolls
-to `#simulateur`; unavailable Composants, Guides and Enregistrés destinations have no
+to `#simulateur`; unavailable Composants and Enregistrés destinations have no
 `href` and never point at an unrelated homepage anchor. Only actual homepage anchors
 such as Accueil and Configurer remain interactive.
 
@@ -1250,3 +1250,27 @@ Any fix belongs to a design-reviewed change that keeps the three cards at equal 
 not alter the token set, and must re-run `e2e/homepage-builds.spec.ts` plus
 `e2e/homepage.spec.ts`. A visible loading indicator or `aria-busy` redesign is a separate
 proposal and is not part of this backlog.
+
+---
+
+## 17. Step 3.5 amendments (2026-11-08, owner-approved A/A/A)
+
+Four surfaces changed after the owner approved Tasks 2–4 and the Step 3.5 review findings. Each
+row states the behaviour the code now has and the test that pins it.
+
+| Surface                       | Behaviour now                                                                                                                                                                                                                                                                                | Evidence                                                                                       |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Discovery pathways (§2.1, §7) | The three use-case tiles render at every width: one per row below `sm`, three across from `sm`, one row from `lg`. Same component, same store write, same focus move; the resolution tiles stay deferred (Q-20).                                                                             | `e2e/homepage-finder.spec.ts` "offers the same three tiles on a phone"                         |
+| Build-card CTA (§6)           | "Voir la configuration" is a real `Link` to `/{locale}/configurateur?use_case=…&budget=<served tier>`, carrying the tier the card shows — 15 000 for a capped 20 000 request, never the typed amount. It keeps a 44 px target (`min-h-11`). Out-of-contract amounts still render inert text. | `e2e/homepage-builds.spec.ts` "opens the configurator from a card" and "links the capped tier" |
+| Mobile Guides tab (§3, §11)   | The Guides item is an in-page anchor to `#guides` in both locales; Composants and Enregistrés remain non-focusable text.                                                                                                                                                                     | `e2e/homepage.spec.ts` "mobile navigation"                                                     |
+| Locale switcher (§3)          | Both language links keep the 44 px floor at every width; the 36 px desktop variant is gone.                                                                                                                                                                                                  | `e2e/homepage-a11y.spec.ts` target test                                                        |
+
+Two further pins are worth knowing:
+
+- **Scores are formatted, not interpolated.** `lib/format/score.ts` prints one decimal with the
+  French comma and the Arabic point, keeping Latin digits in both locales (the price rule). The
+  hero and the cards both use it, so `72,5` in French and `72.5` in Arabic are asserted exactly.
+- **Focus order is compared, not counted.** The a11y suite derives the page's own focusable DOM,
+  then asserts the Tab walk visits exactly that list in order, one stop per radio group (the
+  checked option, or the first when the group has no answer). A skipped or trapped control fails
+  the test with both lists printed.
