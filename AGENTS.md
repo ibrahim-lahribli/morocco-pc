@@ -321,7 +321,7 @@ that makes the shared database unreachable from it.
 runs 39119596060 and 39120485573). Both doubts that could only be settled by a real run are now
 measured, not assumed: both repository secrets exist under the right names, and the Neon instance
 accepts connections from a GitHub runner — `npm run test:api:db` answered `test:api:db: 9 passed,
-0 failed` IN CI. It was **RED, and only for the documented reason**: `verify-migrations-replay.js --test-db`
+0 failed` IN CI — 9 was the suite's size on 2026-10-18; it is **17** as of 2026-11-08 (re-measured `17 passed, 0 failed` on the TEST branch), so read that historical figure as a count of its day, not the suite's size. It was **RED, and only for the documented reason**: `verify-migrations-replay.js --test-db`
 reported 4 drift classes against shared (columns **377 vs 370**, checks **84 vs 79**, fks
 **61 vs 60**, indexes **102 vs 100**), exactly the objects 021 and 022 create, i.e. the
 branch-only state. **CLOSED 2026-10-19** by the owner-approved shared apply of 021/022
