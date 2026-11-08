@@ -65,8 +65,10 @@ Steps: `npm ci` → `typecheck` → `lint` → `format:check` → `check:api-typ
 GitHub runs one workflow per **push**, not per commit, so `3066a0e` and `075e302` have no run of
 their own: the push that published all five commits ran at the tip **`ce46065`** (run 42464961357)
 and covered every one of them. The engine ci.yml unit-and-docs job ran on the same push (run
-42464961287), which is where verify-docs and the decision-index gate live. A later commit on this
-branch re-runs both workflows over the identical gate set.
+42464961287), which is where verify-docs and the decision-index gate live. `web-v2` is path-filtered (`apps/web-v2/**`, the OpenAPI snapshot, its own file), so a docs-only
+commit re-runs `ci.yml` and correctly does NOT re-run `web-v2`: the `web-v2` evidence for this
+work stays run 42464961357 at `ce46065`. This report own docs-only commit behaved exactly that way
+(ci.yml run 42465334439, success; no `web-v2` run at all).
 
 **What CI does not cover.** The job has no secret, no database and no API. `npm run test:e2e`
 drives the committed stub, so nothing in CI proves the recommendation API. That is what
