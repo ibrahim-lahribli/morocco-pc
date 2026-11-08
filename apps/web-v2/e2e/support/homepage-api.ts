@@ -44,6 +44,11 @@ export interface StubHomepageApiResult {
   posts: string[];
   /** Every API call the page issued, as `METHOD pathname`. */
   calls: string[];
+  /**
+   * Every API call with its query string, as `METHOD pathname?query`.
+   * `calls` stays pathname-only for the specs that predate this field.
+   */
+  requests: string[];
 }
 
 const DEFAULT_BADGE: Record<string, "verified" | "indicative" | null> = {
@@ -116,12 +121,14 @@ export async function stubHomepageApi(
 ): Promise<StubHomepageApiResult> {
   const posts: string[] = [];
   const calls: string[] = [];
+  const requests: string[] = [];
 
   await page.route("**/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();
     calls.push(`${method} ${url.pathname}`);
+    requests.push(`${method} ${url.pathname}${url.search}`);
 
     if (method !== "GET") {
       posts.push(`${method} ${url.pathname}`);
@@ -198,5 +205,5 @@ export async function stubHomepageApi(
     });
   });
 
-  return { posts, calls };
+  return { posts, calls, requests };
 }
