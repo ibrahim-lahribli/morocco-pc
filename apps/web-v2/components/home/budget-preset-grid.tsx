@@ -14,7 +14,14 @@ import { cn } from "@/lib/utils";
  * announces "2 of 4" and arrow keys move within the group. The visible chip
  * shows the formatted amount and the input carries `finder.budget.presetLabel`
  * as its accessible name. Selection is never colour-only: the chosen chip also
- * gets a ring and a check icon.
+ * gets a check icon.
+ *
+ * The two states are the Stitch frame's own (`budget-preset-btn` in the mobile
+ * source): unselected is a light `surface-container-low` chip with a
+ * `surface-container-highest` border and the normal foreground, selected is the
+ * solid `primary-container` fill with `on-primary` type. The frame paints no
+ * ring, so neither state carries one — the only outline a chip can show is the
+ * keyboard focus ring, which is subtracted from the selected state.
  *
  * A preset is a budget, not a promise of a card — the builds section decides
  * what is served at or below it.
@@ -39,11 +46,13 @@ export function BudgetPresetGrid({ value, onChange }: BudgetPresetGridProps) {
           <label
             key={option}
             className={cn(
-              "flex h-12 cursor-pointer items-center justify-center gap-1.5 rounded-control px-2 text-label-lg transition-colors",
-              "focus-within:ring-2 focus-within:ring-primary/40 focus-within:ring-offset-2 focus-within:ring-offset-background",
+              "flex h-11 cursor-pointer items-center justify-center gap-1.5 rounded-field border px-2 text-label-lg transition-colors",
+              // Keyboard focus only: `focus-within` also matched a mouse click,
+              // which painted a second outline around the selected chip.
+              "has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-primary/40 has-[input:focus-visible]:ring-offset-2 has-[input:focus-visible]:ring-offset-background",
               selected
-                ? "bg-primary text-on-primary shadow-level-1 ring-2 ring-primary ring-offset-2 ring-offset-background"
-                : "bg-surface-sunken text-muted hover:bg-surface-muted hover:text-foreground",
+                ? "border-primary bg-primary text-on-primary"
+                : "border-surface-sunken bg-surface-muted text-foreground hover:border-primary",
             )}
           >
             <input

@@ -81,7 +81,9 @@ export function HomepageHero({
           </div>
         </div>
 
-        <div>{children}</div>
+        {/* `min-w-0` keeps the finder's truncated lines from widening the grid
+            track: a nowrap text's intrinsic width would otherwise overflow. */}
+        <div className="min-w-0">{children}</div>
       </div>
     </section>
   );
