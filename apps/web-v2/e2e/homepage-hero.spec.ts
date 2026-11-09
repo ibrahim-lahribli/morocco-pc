@@ -113,3 +113,54 @@ test.describe("hero preview", () => {
     expect(posts).toEqual([]);
   });
 });
+
+test.describe("hero composition", () => {
+  test("hides the trust chips on a phone and keeps all three on desktop", async ({ page }) => {
+    await stubHomepageApi(page);
+    await page.setViewportSize({ width: 393, height: 852 });
+    await page.goto("/fr");
+
+    const chips = page.locator("#top ul", { hasText: "1 minute chrono" });
+    await expect(chips).toBeHidden();
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    await expect(chips).toBeVisible();
+    await expect(chips.getByText("1 minute chrono")).toBeVisible();
+    await expect(chips.getByText("100 % Gratuit")).toBeVisible();
+    await expect(chips.getByText("Sans inscription requise")).toBeVisible();
+  });
+
+  test("sets the intro to 14 on 20 on a phone and keeps the desktop step", async ({ page }) => {
+    await stubHomepageApi(page);
+    await page.setViewportSize({ width: 393, height: 852 });
+    await page.goto("/fr");
+
+    const intro = page.locator("#top h1 + p");
+    await expect(intro).toHaveText(
+      "Gaming, études ou travail : trouvez un PC adapté à votre budget et à vos besoins. Prix indicatifs en dirhams marocains (MAD).",
+    );
+
+    const phone = await intro.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        fontSize: Number.parseFloat(style.fontSize),
+        lineHeight: Number.parseFloat(style.lineHeight),
+        height: element.getBoundingClientRect().height,
+      };
+    });
+
+    expect(phone.fontSize).toBe(14);
+    expect(phone.lineHeight).toBe(20);
+    // The approved copy reaches the frame's three-line composition at 361 px of
+    // text width, so 14/20 buys 60 px where the 16/24 step took 72 px.
+    expect(Math.round(phone.height / phone.lineHeight)).toBe(3);
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    const desktop = await intro.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).fontSize),
+    );
+    expect(desktop).toBe(16);
+  });
+});

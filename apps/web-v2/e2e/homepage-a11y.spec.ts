@@ -48,6 +48,7 @@ const CONTROLS = [
   "#finder-budget label:has(input[type='radio'])",
   "#finder-usage label:has(input[type='radio'])",
   "#homepage-custom-budget",
+  "#finder-budget button[aria-expanded]",
   "#pathways button",
   "#configurations a",
   "#configurations button",
@@ -425,13 +426,14 @@ test("announces the finder's budget status and its range error", async ({ page }
   await page.goto("/fr");
   await waitForSettledCards(page);
 
-  const status = page.locator("#finder-budget p[role='status']");
+  const status = page.locator("#finder-budget [role='status']");
   await expect(status).toHaveCount(1);
   await expect(status).toHaveText("À définir");
 
   await page.getByRole("radio", { name: /Budget de 12\s?000\s?DH/ }).check({ force: true });
-  await expect(status).toHaveText(/Budget de 12\s?000\s?DH/);
+  await expect(status).toHaveText(/12\s?000\s?DH/);
 
+  await page.getByRole("button", { name: "Autre budget personnalisé" }).click();
   const amount = page.getByRole("spinbutton", { name: "Budget exact en dirhams" });
   await amount.fill("1000");
 
@@ -445,7 +447,7 @@ test("announces the finder's budget status and its range error", async ({ page }
   await amount.fill("7000");
   await expect(alert).toHaveCount(0);
   await expect(amount).not.toHaveAttribute("aria-invalid", "true");
-  await expect(status).toHaveText(/Budget de 7\s?000\s?DH/);
+  await expect(status).toHaveText(/7\s?000\s?DH/);
 });
 
 test("renders the homepage without a console error", async ({ page }) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Pencil } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
@@ -40,7 +40,10 @@ const CUSTOM_BUDGET_ID = "homepage-custom-budget";
  * the CTA and its error text disagree with what is on screen.
  *
  * Both questions are `<fieldset>` + `<legend>` groups of native radios; the
- * visible numbered markers are decorative.
+ * visible numbered markers are decorative. The chosen amount sits at the end of
+ * the budget legend rather than on a line of its own, and the custom amount is
+ * behind a compact action (`finder.budget.customToggle`) — both match the phone
+ * frame, which has to show the whole finder without scrolling.
  */
 export function BudgetUsageFinder() {
   const router = useRouter();
@@ -51,6 +54,7 @@ export function BudgetUsageFinder() {
   const storedUseCase = useHomepageStore((state) => state.useCase);
 
   const [values, setValues] = useState<FinderValues>(EMPTY_FINDER_VALUES);
+  const [customOpen, setCustomOpen] = useState(false);
 
   const schema = useMemo(
     () =>
@@ -86,6 +90,13 @@ export function BudgetUsageFinder() {
     setBudgetAmount(budgetAmount);
   }, [budgetAmount, setBudgetAmount]);
 
+  // The field exists only once the visitor revealed it, so this is the reveal's
+  // focus move rather than a focus steal on load.
+  useEffect(() => {
+    if (!customOpen) return;
+    document.getElementById(CUSTOM_BUDGET_ID)?.focus();
+  }, [customOpen]);
+
   // One budget answer only: picking a preset drops a typed amount, and typing
   // drops the preset.
   const onPresetChange = (amount: number) =>
@@ -116,7 +127,11 @@ export function BudgetUsageFinder() {
   return (
     <section id="simulateur" aria-labelledby="simulateur-heading" className="scroll-mt-24">
       <Card variant="elevated" className="rounded-sheet p-4 sm:p-6">
-        <div className="flex items-center justify-between gap-2">
+        {/* Desktop frame only: the phone frame starts the card on the budget
+            question. The heading stays the section's accessible name — a
+            `display: none` element referenced by `aria-labelledby` is still
+            used to compute it. */}
+        <div className="hidden items-center justify-between gap-2 lg:flex">
           <h2
             id="simulateur-heading"
             className="inline-flex items-center gap-2 text-label-md font-semibold text-foreground"
@@ -129,35 +144,55 @@ export function BudgetUsageFinder() {
           </span>
         </div>
 
-        <form noValidate onSubmit={onSubmit} className="mt-5 flex flex-col gap-6">
-          <fieldset id="finder-budget" className="flex flex-col gap-3">
-            <legend className="mb-1 flex w-full items-center gap-2 text-headline-sm text-foreground">
+        <form noValidate onSubmit={onSubmit} className="mt-0 flex flex-col gap-4 lg:mt-5">
+          <fieldset id="finder-budget" className="flex flex-col gap-2.5">
+            <legend className="flex w-full items-center gap-2 text-headline-sm text-foreground">
               <span
                 aria-hidden="true"
                 className="inline-flex size-6 items-center justify-center rounded-full bg-primary-soft text-label-md text-primary"
               >
                 1
               </span>
-              {t("budget.question")}
+              <span>{t("budget.question")}</span>
+              <span
+                role="status"
+                className="ms-auto shrink-0 text-end text-label-md font-semibold text-primary"
+              >
+                {budgetAmount === null ? t("budget.unset") : formatPrice(budgetAmount, currency)}
+              </span>
             </legend>
 
-            <p role="status" className="text-end text-label-md font-normal text-muted">
-              {budgetAmount === null
-                ? t("budget.unset")
-                : t("budget.presetLabel", { amount: formatPrice(budgetAmount, currency) })}
-            </p>
-
             <BudgetPresetGrid value={values.budgetPreset} onChange={onPresetChange} />
-            <CustomBudgetField
-              id={CUSTOM_BUDGET_ID}
-              value={values.customBudget}
-              error={rangeError}
-              onChange={onCustomChange}
-            />
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-expanded={customOpen}
+              aria-controls={customOpen ? CUSTOM_BUDGET_ID : undefined}
+              onClick={() => setCustomOpen((open) => !open)}
+              className="min-h-11 w-fit justify-start px-0 text-label-md hover:bg-transparent hover:underline"
+            >
+              <Pencil aria-hidden="true" className="size-3.5" />
+              {t("budget.customToggle")}
+            </Button>
+
+            {/* Mounted only when revealed: a numeric field the visitor never
+                asked for is the vertical space this step reclaims. Once open it
+                keeps its value if the action is used again, so collapsing never
+                resets the answer. */}
+            {customOpen ? (
+              <CustomBudgetField
+                id={CUSTOM_BUDGET_ID}
+                value={values.customBudget}
+                error={rangeError}
+                onChange={onCustomChange}
+              />
+            ) : null}
           </fieldset>
 
-          <fieldset id="finder-usage" className="flex flex-col gap-3">
-            <legend className="mb-1 flex w-full items-center gap-2 text-headline-sm text-foreground">
+          <fieldset id="finder-usage" className="flex flex-col gap-2.5">
+            <legend className="flex w-full items-center gap-2 text-headline-sm text-foreground">
               <span
                 aria-hidden="true"
                 className="inline-flex size-6 items-center justify-center rounded-full bg-primary-soft text-label-md text-primary"
@@ -170,7 +205,7 @@ export function BudgetUsageFinder() {
             <UsageSelector value={storedUseCase} onChange={onUsageChange} />
           </fieldset>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5">
             <Button type="submit" variant="cta" size="lg" className="w-full" disabled={!canSubmit}>
               {t("cta")}
               <ArrowRight aria-hidden="true" className="size-5 rtl:-scale-x-100" />

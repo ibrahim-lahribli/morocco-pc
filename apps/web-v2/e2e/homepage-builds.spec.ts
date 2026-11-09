@@ -134,6 +134,7 @@ test.describe("recommended configurations", () => {
     await waitForSettledCards(page);
 
     await page.getByRole("radio", { name: USAGE_GAMING }).check({ force: true });
+    await page.getByRole("button", { name: "Autre budget personnalisé" }).click();
     await page.getByRole("spinbutton", { name: "Budget exact en dirhams" }).fill("3500");
 
     const section = page.locator("#configurations");
@@ -154,6 +155,7 @@ test.describe("recommended configurations", () => {
     await waitForSettledCards(page);
 
     await page.getByRole("radio", { name: USAGE_GAMING }).check({ force: true });
+    await page.getByRole("button", { name: "Autre budget personnalisé" }).click();
     await page.getByRole("spinbutton", { name: "Budget exact en dirhams" }).fill("20000");
 
     const section = page.locator("#configurations");
@@ -302,6 +304,7 @@ test.describe("recommended configurations", () => {
     await waitForSettledCards(page);
 
     await page.getByRole("radio", { name: USAGE_GAMING }).check({ force: true });
+    await page.getByRole("button", { name: "Autre budget personnalisé" }).click();
     await page.getByRole("spinbutton", { name: "Budget exact en dirhams" }).fill("20000");
 
     const gaming = page.locator("#configurations article", {
