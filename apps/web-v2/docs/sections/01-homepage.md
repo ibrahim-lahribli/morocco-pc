@@ -109,11 +109,12 @@ token; do not add a token, and do not hard-code the Figma hex.
 | `#FFDDB8` pill               | "Recommandé · Équilibré" | `accent-soft` (`#FEF3C7`) + `accent-ink`                   | small                                        |
 | `#E8EEFF` / `#DFE8FF`        | inset tiles, active pill | `surface-sunken` (`#E5EEFF`) / `surface-muted` (`#EFF4FF`) | small                                        |
 | 48 px / 800 hero heading     | desktop hero             | `text-display-lg` (40/48/700)                              | **visible**: 40 px, not 48 px                |
-| 24 px hero heading           | mobile hero              | `text-display` (30/38/700) or `text-headline-lg` (28)      | see Q-02                                     |
+| 24 px hero heading           | mobile hero              | `text-display-sm` (24/30/700)                              | matches the frame                            |
 
 These deltas are **approved by the owner for the first functional release** (Q-01, Q-02).
 Retain the existing semantic token system: the existing `accent` and `bg-background`
-tokens, and the 40 px `text-display-lg` heading. No new token and no hard-coded visual
+tokens, the 40 px `text-display-lg` desktop heading, and the phone's 24 px `text-display-sm`
+step approved for the mobile first-screen fit (Phase 3). No further token and no hard-coded visual
 exception is introduced without explicit design-owner approval, and this table is the
 record of the differences accepted from the approved frames. The authoritative fidelity
 target is "the approved frame's layout and hierarchy, rendered with the Step 0 token
@@ -297,39 +298,39 @@ otherwise.
 
 **Content keys.**
 
-| Key                                     | French source                                                                                                                 |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `hero.eyebrow`                          | Configurateur PC pour le Maroc                                                                                                |
-| `hero.titleLead`                        | Le bon PC,                                                                                                                    |
-| `hero.titleAccent`                      | au bon budget.                                                                                                                |
-| `hero.intro`                            | Gaming, études ou travail : trouvez un PC adapté à votre budget et à vos besoins. Prix indicatifs en dirhams marocains (MAD). |
-| `hero.chip.time`                        | 1 minute chrono                                                                                                               |
-| `hero.chip.free`                        | 100 % Gratuit                                                                                                                 |
-| `hero.chip.noAccount`                   | Sans inscription requise                                                                                                      |
-| `hero.preview.eyebrow`                  | Sélection du moment                                                                                                           |
-| `hero.preview.score`                    | Score de configuration : {score}/100                                                                                          |
-| `hero.preview.caption`                  | Vue Référence                                                                                                                 |
-| `hero.preview.details`                  | Détails specs →                                                                                                               |
-| `finder.badge`                          | Simulateur Express                                                                                                            |
-| `finder.step`                           | Étape {current} sur {total}                                                                                                   |
-| `finder.budget.question`                | Quel est votre budget ?                                                                                                       |
-| `finder.budget.hint`                    | Marché marocain (MAD)                                                                                                         |
-| `finder.budget.unset`                   | À définir                                                                                                                     |
-| `finder.budget.presetLabel`             | Budget de {amount}                                                                                                            |
-| `finder.budget.customToggle`            | Autre budget personnalisé                                                                                                     |
-| `finder.budget.customLabel`             | Budget exact en dirhams                                                                                                       |
-| `finder.budget.customHint`              | Entre {min} et {max} DH                                                                                                       |
-| `finder.usage.question`                 | Que voulez-vous faire avec votre PC ?                                                                                         |
-| `finder.usage.gaming.title` / `.body`   | Jeux vidéo & Gaming / Fortnite, Valorant, GTA V, EA FC 24, Cyberpunk 2077…                                                    |
-| `finder.usage.office.title` / `.body`   | Études et bureautique / Cours, navigation 40+ onglets, Office, visioconférences HD                                            |
-| `finder.usage.creation.title` / `.body` | Création et travail pro / Montage 4K Premiere / DaVinci, Blender 3D, code et virtualisation                                   |
-| `finder.cta`                            | Trouver mon PC                                                                                                                |
-| `finder.ctaPending`                     | Recherche en cours…                                                                                                           |
-| `finder.note`                           | 1 minute · 100 % Gratuit · Sans compte · Prix actualisés en DH                                                                |
-| `finder.error.required`                 | Choisissez un budget et un usage pour continuer.                                                                              |
-| `finder.error.budgetRange`              | Saisissez un budget entre {min} et {max} DH.                                                                                  |
-| `finder.error.submit`                   | La recherche a échoué. Réessayez.                                                                                             |
-| `finder.error.rateLimited`              | Trop de recherches. Réessayez dans {seconds} s.                                                                               |
+| Key                                     | French source                                                                                      |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `hero.eyebrow`                          | Configurateur PC pour le Maroc                                                                     |
+| `hero.titleLead`                        | Le bon PC,                                                                                         |
+| `hero.titleAccent`                      | au bon budget.                                                                                     |
+| `hero.intro`                            | Gaming, études ou travail : trouvez le PC adapté à votre budget. Prix indicatifs en dirhams (MAD). |
+| `hero.chip.time`                        | 1 minute chrono                                                                                    |
+| `hero.chip.free`                        | 100 % Gratuit                                                                                      |
+| `hero.chip.noAccount`                   | Sans inscription requise                                                                           |
+| `hero.preview.eyebrow`                  | Sélection du moment                                                                                |
+| `hero.preview.score`                    | Score de configuration : {score}/100                                                               |
+| `hero.preview.caption`                  | Vue Référence                                                                                      |
+| `hero.preview.details`                  | Détails specs →                                                                                    |
+| `finder.badge`                          | Simulateur Express                                                                                 |
+| `finder.step`                           | Étape {current} sur {total}                                                                        |
+| `finder.budget.question`                | Quel est votre budget ?                                                                            |
+| `finder.budget.hint`                    | Marché marocain (MAD)                                                                              |
+| `finder.budget.unset`                   | À définir                                                                                          |
+| `finder.budget.presetLabel`             | Budget de {amount}                                                                                 |
+| `finder.budget.customToggle`            | Autre budget personnalisé                                                                          |
+| `finder.budget.customLabel`             | Budget exact en dirhams                                                                            |
+| `finder.budget.customHint`              | Entre {min} et {max} DH                                                                            |
+| `finder.usage.question`                 | Que voulez-vous faire avec votre PC ?                                                              |
+| `finder.usage.gaming.title` / `.body`   | Jeux vidéo & Gaming / Fortnite, Valorant, GTA V, EA FC 24, Cyberpunk 2077…                         |
+| `finder.usage.office.title` / `.body`   | Études et bureautique / Cours, navigation 40+ onglets, Office, visioconférences HD                 |
+| `finder.usage.creation.title` / `.body` | Création et travail pro / Montage 4K Premiere / DaVinci, Blender 3D, code et virtualisation        |
+| `finder.cta`                            | Trouver mon PC                                                                                     |
+| `finder.ctaPending`                     | Recherche en cours…                                                                                |
+| `finder.note`                           | 1 minute · 100 % Gratuit · Sans compte · Prix actualisés en DH                                     |
+| `finder.error.required`                 | Choisissez un budget et un usage pour continuer.                                                   |
+| `finder.error.budgetRange`              | Saisissez un budget entre {min} et {max} DH.                                                       |
+| `finder.error.submit`                   | La recherche a échoué. Réessayez.                                                                  |
+| `finder.error.rateLimited`              | Trop de recherches. Réessayez dans {seconds} s.                                                    |
 
 **Interactions.** See §5 for the finder as a unit. Hero has no interaction except the
 preview card's "Détails specs" link, which is disabled in Step 1 (no product page yet —
@@ -337,7 +338,7 @@ Q-06) and rendered as text, not a dead link.
 
 **Responsive behaviour.** Hero copy is always start-aligned. The desktop preview card is
 `hidden lg:block` inside `HomepageHero`; nothing else changes. H1 uses
-`text-display lg:text-display-lg`, `max-w-3xl`, `text-balance`.
+`text-display-sm lg:text-display-lg`, `max-w-2xl`, `text-balance`.
 
 **States.** The finder's own states are specified in §5. The hero's preview card: when
 no preset data is available it renders the text-only shell (no price, no score) instead

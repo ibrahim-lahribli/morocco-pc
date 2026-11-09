@@ -26,6 +26,10 @@ export interface HomepageHeroProps {
  * are hidden below `lg`, matching the phone frame. The single
  * `<h1>` on the page lives here; its two lines are block spans, so the
  * composition does not depend on the browser's wrap.
+ *
+ * Phone spacing follows the frame: its `pt-1` sits under a fixed 56 px
+ * header, which is the same 8 px gap our in-flow header already provides, so
+ * the mobile step is `pt-2` (and `pt-16` from `lg`).
  */
 export function HomepageHero({
   eyebrow,
@@ -39,24 +43,28 @@ export function HomepageHero({
   children,
 }: HomepageHeroProps) {
   return (
-    <section id="top" aria-labelledby="hero-title" className="scroll-mt-24 pt-10 lg:pt-16">
-      <div className="grid gap-8 lg:grid-cols-2 lg:items-start lg:gap-10">
+    <section id="top" aria-labelledby="hero-title" className="scroll-mt-24 pt-2 lg:pt-16">
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-start lg:gap-10">
         <div>
           <Badge tone="primary">
             <Sparkles aria-hidden="true" />
             {eyebrow}
           </Badge>
 
-          <h1 id="hero-title" className="mt-3 text-display text-foreground lg:text-display-lg">
+          <h1
+            id="hero-title"
+            className="mt-2 text-display-sm text-foreground lg:mt-3 lg:text-display-lg"
+          >
             <span className="block">{titleLead}</span>
             <span className="block bg-linear-to-r from-primary-deep to-primary bg-clip-text text-transparent">
               {titleAccent}
             </span>
           </h1>
 
-          {/* 14/20 on a phone, where the Stitch frame sets the body step; the
-              larger desktop step is unchanged from `lg`. */}
-          <p className="mt-3 max-w-2xl text-body-md text-muted lg:text-body-lg">{intro}</p>
+          {/* 14/20 on a phone, where the Stitch frame sets the body step: the
+              approved copy reads in two lines at 361 px, and the larger
+              desktop step is unchanged from `lg`. */}
+          <p className="mt-2 max-w-2xl text-body-md text-muted lg:mt-3 lg:text-body-lg">{intro}</p>
 
           {/* The promises are a desktop affordance: the phone frame drops them
               because the finder's own note repeats the same three claims. */}

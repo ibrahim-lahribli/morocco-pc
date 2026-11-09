@@ -18,6 +18,7 @@ const twMerge = extendTailwindMerge({
           text: [
             "display-lg",
             "display",
+            "display-sm",
             "headline-lg",
             "headline-md",
             "headline-sm",

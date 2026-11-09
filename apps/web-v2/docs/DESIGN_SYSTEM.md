@@ -53,6 +53,7 @@ line-height (+10 % over the Latin scale) and is applied by
 | ------------------ | --------------------------------------- |
 | `text-display-lg`  | 40 / 48 / 700, -0.02em                  |
 | `text-display`     | 30 / 38 / 700, -0.01em (mobile display) |
+| `text-display-sm`  | 24 / 30 / 700, -0.01em (phone hero)     |
 | `text-headline-lg` | 28 / 36 / 600                           |
 | `text-headline-md` | 22 / 28 / 600                           |
 | `text-headline-sm` | 18 / 24 / 600                           |

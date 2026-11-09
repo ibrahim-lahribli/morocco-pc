@@ -20,7 +20,7 @@ Generated from `messages/ar.json`; regenerate after any copy change. Key and
 | `Homepage.hero.eyebrow`                      | مُهيّئ الحاسوب للمغرب                                                                                                    |
 | `Homepage.hero.titleLead`                    | الحاسوب المناسب،                                                                                                         |
 | `Homepage.hero.titleAccent`                  | بالميزانية المناسبة.                                                                                                     |
-| `Homepage.hero.intro`                        | للألعاب أو الدراسة أو العمل: اعثر على حاسوب يناسب ميزانيتك واحتياجاتك. الأسعار المعروضة إرشادية بالدرهم المغربي (MAD).   |
+| `Homepage.hero.intro`                        | للألعاب أو الدراسة أو العمل: اعثر على الحاسوب المناسب لميزانيتك. الأسعار المعروضة إرشادية بالدرهم المغربي (MAD).         |
 | `Homepage.hero.chip.time`                    | دقيقة واحدة                                                                                                              |
 | `Homepage.hero.chip.free`                    | مجاني 100 %                                                                                                              |
 | `Homepage.hero.chip.noAccount`               | دون تسجيل                                                                                                                |
