@@ -145,15 +145,15 @@ export function BudgetUsageFinder() {
         </div>
 
         <form noValidate onSubmit={onSubmit} className="mt-0 flex flex-col gap-4 lg:mt-5">
-          <fieldset id="finder-budget" className="flex flex-col gap-2.5">
-            <legend className="flex w-full items-center gap-2 text-headline-sm text-foreground">
+          <fieldset id="finder-budget" className="flex min-w-0 flex-col gap-2.5">
+            <legend className="flex w-full items-center gap-1.5 text-label-lg text-foreground">
               <span
                 aria-hidden="true"
-                className="inline-flex size-6 items-center justify-center rounded-full bg-primary-soft text-label-md text-primary"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-soft text-label-sm font-bold text-primary"
               >
                 1
               </span>
-              <span>{t("budget.question")}</span>
+              <span className="min-w-0">{t("budget.question")}</span>
               <span
                 role="status"
                 className="ms-auto shrink-0 text-end text-label-md font-semibold text-primary"
@@ -191,15 +191,15 @@ export function BudgetUsageFinder() {
             ) : null}
           </fieldset>
 
-          <fieldset id="finder-usage" className="flex flex-col gap-2.5">
-            <legend className="flex w-full items-center gap-2 text-headline-sm text-foreground">
+          <fieldset id="finder-usage" className="flex min-w-0 flex-col gap-2.5">
+            <legend className="flex w-full items-center gap-1.5 text-label-lg text-foreground">
               <span
                 aria-hidden="true"
-                className="inline-flex size-6 items-center justify-center rounded-full bg-primary-soft text-label-md text-primary"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-soft text-label-sm font-bold text-primary"
               >
                 2
               </span>
-              {t("usage.question")}
+              <span className="min-w-0">{t("usage.question")}</span>
             </legend>
 
             <UsageSelector value={storedUseCase} onChange={onUsageChange} />
