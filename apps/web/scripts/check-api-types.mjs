@@ -14,7 +14,7 @@
  * The generator is invoked exactly as `npm run gen:api-types` does, so "equal"
  * means byte-equal to the committed artifact, not merely semantically similar.
  *
- * Why the snapshot is the API's file: `apps/api/test/unit/openapi-v1.10.json` is
+ * Why the snapshot is the API's file: `contract/openapi.json` is
  * already the API team's gated artifact (its own snapshot test fails if the
  * served document drifts from it). Copying it into apps/web would create the
  * exact hazard this repo keeps closing elsewhere — two plausible contracts in
@@ -30,7 +30,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(HERE, "..");
-const SNAPSHOT = path.resolve(WEB_ROOT, "..", "api", "test", "unit", "openapi-v1.10.json");
+const SNAPSHOT = path.resolve(WEB_ROOT, "..", "..", "contract", "openapi.json");
 const TYPES = path.join(WEB_ROOT, "lib", "api", "schema.d.ts");
 
 const EXPECTED_VERSION = "1.10.0";

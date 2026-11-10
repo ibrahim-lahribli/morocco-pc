@@ -4,8 +4,8 @@ A standalone Next.js (App Router, TypeScript strict) package with its own
 manifest and lockfile (OD4). It is **mobile-first and SEO-first**, French by
 default with an Arabic RTL locale, and it reaches the API only through
 `lib/api/client.ts` — whose types are generated from the API's own committed
-OpenAPI snapshot (`apps/api/test/unit/openapi-v1.6.json`), so the tree holds one
-contract rather than two.
+OpenAPI snapshot (`contract/openapi.json`, contract 1.10.0), so the tree holds
+one contract rather than two.
 
 **Where the truth lives**
 
@@ -89,3 +89,6 @@ string), `/fr/config/[id]` and `/ar/config/[id]` (the results page and its share
 surface, S11–S15, `noindex` permanently), `/fr/format` and `/ar/format`
 (formatting proof sheet), `/fr/kit` (component kit proof sheet) and `/fr/tokens`
 (token proof sheet). The proof sheets are `noindex` and French-only by design.
+
+The `app/` directory is the source of truth for the route list; the paragraph
+above is the W0 snapshot of it.
