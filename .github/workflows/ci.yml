@@ -158,3 +158,26 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+      # Assessment age - nightly WARNING, never a gate. `per_day_decay` is 0 in
+      # launch-v2@2.5.0 (seed 029), so nothing in the engine degrades an ageing
+      # assessment any more; the catalogue's evidence staleness still needs to be
+      # VISIBLE, but nobody agreed to gate a nightly job on it (a red nightly for
+      # a data property is worse than no step).
+      #
+      # Warning-only by construction, three independent ways:
+      #   * `continue-on-error: true` - the job ignores this step's exit status;
+      #   * `set +e` plus `|| echo ::warning` - a non-zero exit becomes an
+      #     annotation instead of a failure;
+      #   * the script exits 0 unless `--strict` is passed, and this step never
+      #     passes it (that default is pinned by scripts/lib/assessment-age-cli.test.js).
+      # It lives in `recurring-gates` ONLY (schedule + workflow_dispatch), so a
+      # push/PR never runs it. scripts/lib/ci-workflow.test.js pins all of that.
+      - name: Assessment age (nightly warning, never a gate)
+        if: always() && steps.deps.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set +e
+          node scripts/check-assessment-age.js --target=env:DATABASE_URL \
+            || echo "::warning title=assessment age::the age report did not complete; this step never fails the job"
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

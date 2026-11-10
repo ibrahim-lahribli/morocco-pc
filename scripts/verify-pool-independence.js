@@ -12,6 +12,16 @@
 //
 // Usage:
 //   node scripts/verify-pool-independence.js [--model=<name@version>]
+//     [--allow-unverified-seed-offers]
+//
+// `--allow-unverified-seed-offers` mirrors the engine option the golden harness
+// passes. WITHOUT it the snapshot sees only VERIFIED offers, and a branch whose
+// catalogue is seed-only (TEST carries 2 verified offers at 2026-11-08) assembles
+// ZERO builds - which used to be reported as PASS. With it, the same run
+// compares real builds. A run in which ANY required profile assembled nothing is
+// INCONCLUSIVE (exit 0), never PASS, even when the other profile is clean:
+// Decision 23 criterion 3(a) measures GAMING and OFFICE, so half of that
+// comparison is not PI-1. See scripts/lib/pool-independence.js.
 //
 // Reads and writes the TEST branch only (TEST_DATABASE_URL via
 // scripts/lib/db-url.js). It never contacts the shared DATABASE_URL except to
@@ -39,6 +49,13 @@ const { runRecommendationSnapshot } = require('../src/recommendation/orchestrato
 const { rankBuilds } = require('../src/recommendation/ranking');
 const { captureScoreVector, scoreVectorDrift } = require('./lib/score-vector');
 const modelPin = require('./lib/model-pin');
+const { classifyRun, VERDICTS } = require('./lib/pool-independence');
+
+// The engine option that makes a seed catalogue visible to the snapshot. OFF by
+// default so the gate measures the same offer policy the API uses unless the
+// caller opts in explicitly.
+const ALLOW_SEED_OFFERS = process.argv.slice(2).includes('--allow-unverified-seed-offers');
+const ENGINE_OPTIONS = ALLOW_SEED_OFFERS ? Object.freeze({ allow_unverified_seed_offers: true }) : undefined;
 
 // The two measured profiles, matching Decision 23's acceptance pass.
 const QUERIES = [
@@ -195,7 +212,7 @@ async function deleteProbeProduct(client, productId) {
 
 /** Run one profile and return its signature-keyed score vector. */
 async function captureForProfile(client, queryId, label) {
-  const result = await runRecommendationSnapshot(client, queryId);
+  const result = await runRecommendationSnapshot(client, queryId, ENGINE_OPTIONS);
   const { ranked } = rankBuilds({ builds: result.builds });
   console.log(
     '  ' + label + ': ' + ranked.length + ' ranked build(s), '
@@ -222,6 +239,9 @@ async function main() {
 
     const pin = modelPin.modelPinValue(modelPin.readModelPinFlag(process.argv.slice(2)));
     console.log('scoring model pin: ' + pin);
+    console.log('offer policy: ' + (ALLOW_SEED_OFFERS
+      ? 'seed offers ALLOWED (--allow-unverified-seed-offers)'
+      : 'VERIFIED offers only (default; pass --allow-unverified-seed-offers on a seed catalogue)'));
     const scoringModelId = await readScoringModelId(client, pin);
     queryIds.push(...(await insertQueries(client, scoringModelId)));
     console.log('measurement queries inserted: ' + queryIds.length);
@@ -247,13 +267,13 @@ async function main() {
     }
 
     console.log('\nComparing:');
-    let drifted = false;
+    const profiles = [];
     for (let i = 0; i < QUERIES.length; i += 1) {
       const moved = scoreVectorDrift(before[i], after[i]);
+      profiles.push({ label: QUERIES[i].useCase, beforeSize: before[i].size, driftCount: moved.length });
       if (moved.length === 0) {
         console.log('  ' + QUERIES[i].useCase + ': 0 drifted of ' + before[i].size + ' pre-existing build(s) — MET');
       } else {
-        drifted = true;
         console.log('  ' + QUERIES[i].useCase + ': ' + moved.length + ' DRIFTED of ' + before[i].size);
         for (const signature of moved.slice(0, 5)) {
           const from = before[i].get(signature);
@@ -264,13 +284,29 @@ async function main() {
       }
     }
 
-    if (drifted) {
+    const verdict = classifyRun(profiles);
+    if (verdict.verdict === VERDICTS.FAIL) {
       console.log('\nRESULT: FAIL - an unrelated pool-only product moved existing build scores.');
       console.log('        This contradicts Decision 23 O2 (build-local unknown_pairwise_count).');
-      return 1;
+      return verdict.exitCode;
     }
-    console.log('\nRESULT: PASS - no pre-existing build_score moved when the pool grew.');
-    return 0;
+    if (verdict.verdict === VERDICTS.INCONCLUSIVE) {
+      // The whole point of the fix: an incomplete comparison may not be a pass -
+      // neither when BOTH profiles are empty nor when only one of them is.
+      console.log('\nRESULT: INCONCLUSIVE - the comparison is incomplete:');
+      console.log('        ' + verdict.inconclusive.join(', ') + ' assembled no pre-existing build(s),');
+      console.log('        so that half of PI-1 was not measured' +
+        (verdict.conclusive.length > 0
+          ? ' (' + verdict.conclusive.join(', ') + ' was measured with no drift).'
+          : '.'));
+      console.log('        This is NOT a pass and asserts nothing about Decision 23 O2.');
+      console.log('        On a seed-only catalogue re-run with --allow-unverified-seed-offers');
+      console.log('        (the engine option the golden harness uses).');
+      return verdict.exitCode;
+    }
+    console.log('\nRESULT: PASS - no pre-existing build_score moved when the pool grew');
+    console.log('        (' + verdict.conclusive.join(' + ') + ' both measured).');
+    return verdict.exitCode;
   } finally {
     // Order matters: remove the probe BEFORE the queries, so the branch is left
     // exactly as found even if one cleanup fails.
