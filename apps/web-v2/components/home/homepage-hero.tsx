@@ -22,7 +22,8 @@ export interface HomepageHeroProps {
  * The hero: one promise and the finder beside it.
  *
  * Server-rendered except the finder it receives as children, so the H1, the
- * chips and the preview shell are present with JavaScript disabled. The single
+ * chips and the preview shell are present with JavaScript disabled. The chips
+ * are hidden below `lg`, matching the phone frame. The single
  * `<h1>` on the page lives here; its two lines are block spans, so the
  * composition does not depend on the browser's wrap.
  */
@@ -53,9 +54,13 @@ export function HomepageHero({
             </span>
           </h1>
 
-          <p className="mt-3 max-w-2xl text-body-lg text-muted">{intro}</p>
+          {/* 14/20 on a phone, where the Stitch frame sets the body step; the
+              larger desktop step is unchanged from `lg`. */}
+          <p className="mt-3 max-w-2xl text-body-md text-muted lg:text-body-lg">{intro}</p>
 
-          <ul className="mt-5 flex flex-wrap items-center gap-2">
+          {/* The promises are a desktop affordance: the phone frame drops them
+              because the finder's own note repeats the same three claims. */}
+          <ul className="mt-5 hidden flex-wrap items-center gap-2 lg:flex">
             {chips.map((chip) => (
               <li
                 key={chip}

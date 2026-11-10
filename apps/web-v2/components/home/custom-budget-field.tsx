@@ -8,7 +8,8 @@ import { BUDGET_MAX, BUDGET_MIN, BUDGET_STEP } from "@/lib/homepage/finder-schem
 
 /**
  * The custom budget: a numeric field on every width, plus the desktop frame's
- * range control from `lg`.
+ * range control from `lg`. The finder mounts it only once the visitor reveals
+ * it with `finder.budget.customToggle`, so a first visit never shows it.
  *
  * Both share one value and only the raw text is held — parsing and range checks
  * live in `finder-schema.ts`, so a half-typed amount is a string here rather
@@ -37,7 +38,7 @@ export function CustomBudgetField({ id, value, error, onChange }: CustomBudgetFi
   const describedBy = error ? `${hintId} ${errorId}` : hintId;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       <TextField
         id={id}
         label={t("customLabel")}

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -36,7 +36,15 @@ const preset = (amount: number) =>
     name: fr.Homepage.finder.budget.presetLabel.replace("{amount}", formatPrice(amount, CURRENCY)),
   });
 const customField = () => screen.getByRole("spinbutton", { name: CUSTOM_LABEL });
+const customToggle = () =>
+  screen.getByRole("button", { name: fr.Homepage.finder.budget.customToggle });
+const budgetStatus = () => screen.getByRole("status");
 const cta = () => screen.getByRole("button", { name: fr.Homepage.finder.cta });
+
+/** The reveal every custom-budget test starts from. */
+function revealCustomBudget() {
+  fireEvent.click(customToggle());
+}
 
 beforeEach(() => {
   useHomepageStore.getState().reset();
@@ -44,12 +52,66 @@ beforeEach(() => {
 });
 
 describe("BudgetUsageFinder", () => {
-  it("starts empty: no checked radio, a disabled CTA and the unset status", () => {
+  it("starts empty with the custom field collapsed: no checked radio, a disabled CTA and the unset status", () => {
     renderFinder();
 
     expect(screen.queryAllByRole("radio", { checked: true })).toHaveLength(0);
     expect(cta()).toBeDisabled();
-    expect(screen.getByRole("status")).toHaveTextContent(fr.Homepage.finder.budget.unset);
+    expect(budgetStatus()).toHaveTextContent(fr.Homepage.finder.budget.unset);
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(customToggle()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("keeps the selected amount beside the Step 1 heading instead of on its own row", () => {
+    renderFinder();
+
+    const budgetGroup = within(screen.getByRole("group", { name: /Quel est votre budget/ }));
+    expect(budgetGroup.getByRole("status")).toBe(budgetStatus());
+
+    fireEvent.click(preset(8_000));
+
+    expect(plain(budgetStatus().textContent ?? "")).toBe(plain(formatPrice(8_000, CURRENCY)));
+  });
+
+  it("reveals a focused custom field from the compact action", () => {
+    renderFinder();
+
+    revealCustomBudget();
+
+    expect(customToggle()).toHaveAttribute("aria-expanded", "true");
+    expect(customField()).toHaveFocus();
+  });
+
+  it("collapses the field again without resetting the selected preset", () => {
+    renderFinder();
+
+    fireEvent.click(preset(8_000));
+    revealCustomBudget();
+    expect(customField()).toBeInTheDocument();
+
+    fireEvent.click(customToggle());
+
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(preset(8_000)).toBeChecked();
+    expect(plain(budgetStatus().textContent ?? "")).toBe(plain(formatPrice(8_000, CURRENCY)));
+  });
+
+  it("keeps an applied custom amount when the action is used again", () => {
+    renderFinder();
+
+    revealCustomBudget();
+    fireEvent.change(customField(), { target: { value: "6000" } });
+    fireEvent.click(screen.getByRole("radio", { name: /Jeux vidéo/ }));
+
+    expect(cta()).toBeEnabled();
+
+    fireEvent.click(customToggle());
+
+    expect(cta()).toBeEnabled();
+    expect(plain(budgetStatus().textContent ?? "")).toBe(plain(formatPrice(6_000, CURRENCY)));
+
+    fireEvent.click(customToggle());
+    expect(customField()).toHaveValue(6000);
   });
 
   it("renders no resolution shortcut and stores none", () => {
@@ -73,6 +135,7 @@ describe("BudgetUsageFinder", () => {
   it("rejects an out-of-range custom budget and keeps the CTA disabled", () => {
     renderFinder();
 
+    revealCustomBudget();
     fireEvent.change(customField(), { target: { value: "3000" } });
 
     expect(screen.getByText(plain(RANGE_MESSAGE))).toBeVisible();
@@ -86,15 +149,17 @@ describe("BudgetUsageFinder", () => {
     fireEvent.click(preset(8_000));
     expect(preset(8_000)).toBeChecked();
 
+    revealCustomBudget();
     fireEvent.change(customField(), { target: { value: "6000" } });
 
     expect(preset(8_000)).not.toBeChecked();
-    expect(screen.getByRole("status")).toHaveTextContent(plain(formatPrice(6_000, CURRENCY)));
+    expect(plain(budgetStatus().textContent ?? "")).toBe(plain(formatPrice(6_000, CURRENCY)));
   });
 
   it("accepts a custom amount inside the range", () => {
     renderFinder();
 
+    revealCustomBudget();
     fireEvent.change(customField(), { target: { value: "6000" } });
     fireEvent.click(screen.getByRole("radio", { name: /Jeux vidéo/ }));
 
