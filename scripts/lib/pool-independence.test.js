@@ -7,6 +7,11 @@
 // independence about an empty measurement. An empty comparison is INCONCLUSIVE
 // at exit 0 and must never be PASS; a single drifted build still FAILs at exit 1
 // even when another profile was empty.
+//
+// The second half of the same bug (2026-11-10 review): a run that measured ONE
+// profile and assembled nothing in the other printed PASS with a note. Decision
+// 23 criterion 3(a) measures GAMING and OFFICE, so a partial run is
+// INCONCLUSIVE in BOTH directions - see the two partial tests below.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -55,15 +60,28 @@ test('drift wins over an empty sibling profile', () => {
   assert.deepEqual(run.inconclusive, ['GAMING']);
 });
 
-test('a partial run is PASS and names the profile it could not measure', () => {
+test('a partial run is INCONCLUSIVE, never PASS: GAMING measured, OFFICE empty', () => {
   const run = classifyRun([
     { label: 'GAMING', beforeSize: 25, driftCount: 0 },
     { label: 'OFFICE', beforeSize: 0, driftCount: 0 },
   ]);
-  assert.equal(run.verdict, VERDICTS.PASS);
-  assert.equal(run.exitCode, 0);
+  assert.equal(run.verdict, VERDICTS.INCONCLUSIVE);
+  assert.notEqual(run.verdict, VERDICTS.PASS);
+  assert.equal(run.exitCode, 0, 'INCONCLUSIVE exits 0 by repo convention');
   assert.deepEqual(run.conclusive, ['GAMING']);
   assert.deepEqual(run.inconclusive, ['OFFICE']);
+  assert.deepEqual(run.failed, []);
+});
+
+test('a partial run is INCONCLUSIVE, never PASS: OFFICE measured, GAMING empty', () => {
+  const run = classifyRun([
+    { label: 'GAMING', beforeSize: 0, driftCount: 0 },
+    { label: 'OFFICE', beforeSize: 20, driftCount: 0 },
+  ]);
+  assert.equal(run.verdict, VERDICTS.INCONCLUSIVE);
+  assert.equal(run.exitCode, 0);
+  assert.deepEqual(run.conclusive, ['OFFICE']);
+  assert.deepEqual(run.inconclusive, ['GAMING']);
 });
 
 test('no profiles at all is INCONCLUSIVE, not a vacuous pass', () => {

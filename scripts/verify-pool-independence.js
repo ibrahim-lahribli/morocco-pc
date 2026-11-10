@@ -18,8 +18,10 @@
 // passes. WITHOUT it the snapshot sees only VERIFIED offers, and a branch whose
 // catalogue is seed-only (TEST carries 2 verified offers at 2026-11-08) assembles
 // ZERO builds - which used to be reported as PASS. With it, the same run
-// compares real builds. Either way an empty comparison is INCONCLUSIVE (exit 0),
-// never PASS: see scripts/lib/pool-independence.js.
+// compares real builds. A run in which ANY required profile assembled nothing is
+// INCONCLUSIVE (exit 0), never PASS, even when the other profile is clean:
+// Decision 23 criterion 3(a) measures GAMING and OFFICE, so half of that
+// comparison is not PI-1. See scripts/lib/pool-independence.js.
 //
 // Reads and writes the TEST branch only (TEST_DATABASE_URL via
 // scripts/lib/db-url.js). It never contacts the shared DATABASE_URL except to
@@ -289,19 +291,21 @@ async function main() {
       return verdict.exitCode;
     }
     if (verdict.verdict === VERDICTS.INCONCLUSIVE) {
-      // The whole point of the fix: an empty comparison may not be a pass.
-      console.log('\nRESULT: INCONCLUSIVE - no profile assembled a single pre-existing build,');
-      console.log('        so nothing could move. This is NOT a pass and asserts nothing about');
-      console.log('        Decision 23 O2. On a seed-only catalogue re-run with');
-      console.log('        --allow-unverified-seed-offers (the engine option the golden harness uses).');
+      // The whole point of the fix: an incomplete comparison may not be a pass -
+      // neither when BOTH profiles are empty nor when only one of them is.
+      console.log('\nRESULT: INCONCLUSIVE - the comparison is incomplete:');
+      console.log('        ' + verdict.inconclusive.join(', ') + ' assembled no pre-existing build(s),');
+      console.log('        so that half of PI-1 was not measured' +
+        (verdict.conclusive.length > 0
+          ? ' (' + verdict.conclusive.join(', ') + ' was measured with no drift).'
+          : '.'));
+      console.log('        This is NOT a pass and asserts nothing about Decision 23 O2.');
+      console.log('        On a seed-only catalogue re-run with --allow-unverified-seed-offers');
+      console.log('        (the engine option the golden harness uses).');
       return verdict.exitCode;
     }
-    console.log('\nRESULT: PASS - no pre-existing build_score moved when the pool grew.');
-    if (verdict.inconclusive.length > 0) {
-      console.log('        NOTE: ' + verdict.inconclusive.join(', ')
-        + ' assembled no pre-existing build(s) and was NOT measured; this PASS covers '
-        + verdict.conclusive.join(', ') + ' only.');
-    }
+    console.log('\nRESULT: PASS - no pre-existing build_score moved when the pool grew');
+    console.log('        (' + verdict.conclusive.join(' + ') + ' both measured).');
     return verdict.exitCode;
   } finally {
     // Order matters: remove the probe BEFORE the queries, so the branch is left

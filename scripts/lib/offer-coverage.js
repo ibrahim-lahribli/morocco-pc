@@ -13,12 +13,28 @@
  * catalog can hold 114 offers, 0 verified, and still assemble builds off seeds:
  * the shelf is warm and the evidence is not. This report separates the two.
  *
+ * THE IDENTITY IS THE ENGINE'S, NOT THE PRODUCT'S. A coverage count is only
+ * meaningful if it counts the things Stage 1 can select, and those are
+ * CANDIDATE identities: `candidates/loader.js` gives a GPU candidate
+ * `product_variant_id = pv.id` (a GPU candidate always carries a variant) and
+ * every other role a NULL variant, while `offers/select.js`
+ * `candidateMatchesOffer()` accepts an offer only on an exact
+ * `(product_id, product_variant_id)` match. So a GPU offer with a NULL variant,
+ * a GPU offer for a DIFFERENT variant, and a variant-keyed offer on a non-GPU
+ * product are all unselectable, and none of them may be counted.
+ *
+ * `buildCoverage()` therefore keys its counts on `(role, product_id,
+ * product_variant_id)` and ignores an offer whose identity is not in the ACTIVE
+ * catalog for that role - the same restriction the SQL join applies, so a
+ * caller that hands over unfiltered rows still gets the engine's answer.
+ *
  * The three per-role counts are deliberately NOT one number:
- *   - active_products  — the catalog's breadth in that role;
- *   - covered_products — products with >= 1 eligible VERIFIED offer (what a
+ *   - active_products  — the catalog's breadth in that role, in candidate
+ *                        identities (a GPU product with two variants is two);
+ *   - covered_products — identities with >= 1 eligible VERIFIED offer (what a
  *                        build can actually reach on evidence);
- *   - covered_stores   — distinct stores behind those products. One storefront
- *                        with five listings is one supply chain, not five.
+ *   - covered_stores   — distinct stores behind them. One storefront with five
+ *                        listings is one supply chain, not five.
  *
  * THE VERDICT VOCABULARY is the repo's, not a new one: PASS, FAIL, INCONCLUSIVE.
  * INCONCLUSIVE is reserved for "zero VERIFIED offers anywhere in the catalog" —
@@ -51,11 +67,12 @@ const DEFAULTS = Object.freeze({ minProducts: 5, minStores: 2, currency: 'MAD', 
 
 /**
  * @typedef {object} CoverageInput
- * @property {Array<{product_id: string, role: string}>} products ACTIVE products,
- *   one row per (product, role); a product in two roles is two rows on purpose.
- * @property {Array<{product_id: string, store_id: string}>} offers ELIGIBLE
- *   VERIFIED offers only (in stock, priced, in currency, inside the window), one
- *   row per offer.
+ * @property {Array<{product_id: string, product_variant_id?: string|null, role: string}>} products
+ *   ACTIVE candidates, one row per (product, variant, role): GPU rows carry the
+ *   variant that owns `gpu_board_spec`, the other seven roles carry NULL.
+ * @property {Array<{product_id: string, product_variant_id?: string|null, store_id: string, role: string}>} offers
+ *   ELIGIBLE VERIFIED offers only (in stock, priced, in currency, inside the
+ *   window), one row per offer, carrying the offer's own variant id.
  * @property {number} minProducts products with an eligible offer needed per role
  * @property {number} minStores distinct stores needed per role
  * @property {number} verifiedOffersAnywhere every VERIFIED offer in the catalog,
@@ -83,22 +100,31 @@ function buildCoverage(input) {
   const verifiedAnywhere = nonNegativeInt(input && input.verifiedOffersAnywhere, 0);
 
   const activeByRole = new Map();
+  const activeIdentitiesByRole = new Map();
   for (const row of products) {
     if (!row || !COVERAGE_ROLES.includes(row.role)) continue;
     activeByRole.set(row.role, (activeByRole.get(row.role) || 0) + 1);
+    const identities = activeIdentitiesByRole.get(row.role) || new Set();
+    identities.add(candidateIdentity(row.product_id, row.product_variant_id));
+    activeIdentitiesByRole.set(row.role, identities);
   }
 
-  // One pass: which products have an eligible offer, and which stores stand
-  // behind the role. A product that repeats an offer row must not count twice.
+  // One pass: which candidate identities have an eligible offer, and which
+  // stores stand behind the role. A repeated offer row must not count twice, and
+  // an offer the engine could never match (wrong or missing variant) is not
+  // counted at all - same rule as the SQL join in check-offer-coverage.js.
   const coveredByRole = new Map();
   const storesByRole = new Map();
   for (const offer of offers) {
     if (!offer || offer.product_id === undefined || offer.product_id === null) continue;
     const role = offer.role;
     if (!COVERAGE_ROLES.includes(role)) continue;
-    const productsInRole = coveredByRole.get(role) || new Set();
-    productsInRole.add(String(offer.product_id));
-    coveredByRole.set(role, productsInRole);
+    const identity = candidateIdentity(offer.product_id, offer.product_variant_id);
+    const selectable = (activeIdentitiesByRole.get(role) || new Set()).has(identity);
+    if (!selectable) continue;
+    const identitiesInRole = coveredByRole.get(role) || new Set();
+    identitiesInRole.add(identity);
+    coveredByRole.set(role, identitiesInRole);
     const stores = storesByRole.get(role) || new Set();
     if (offer.store_id !== undefined && offer.store_id !== null) stores.add(String(offer.store_id));
     storesByRole.set(role, stores);
@@ -151,6 +177,16 @@ function buildCoverage(input) {
   };
 }
 
+/**
+ * The engine's applicability key: a NULL variant is its own identity (a
+ * product-keyed candidate), never a wildcard.
+ */
+function candidateIdentity(productId, variantId) {
+  const product = String(productId);
+  const variant = variantId === null || variantId === undefined ? '' : String(variantId);
+  return product + '|' + variant;
+}
+
 function positiveInt(value, fallback, name) {
   if (value === undefined || value === null) return fallback;
   if (!Number.isInteger(value) || value < 0) {
@@ -184,7 +220,7 @@ function exitCodeFor(report, options) {
 function reasonOf(row) {
   const reasons = [];
   if (row.active_products === 0) reasons.push('no ACTIVE product in the catalog');
-  if (row.missing_products > 0) reasons.push('needs ' + row.missing_products + ' more product(s) with an eligible VERIFIED offer');
+  if (row.missing_products > 0) reasons.push('needs ' + row.missing_products + ' more candidate(s) with an eligible VERIFIED offer');
   if (row.missing_stores > 0) reasons.push('needs ' + row.missing_stores + ' more distinct store(s)');
   return reasons.join('; ');
 }
@@ -203,9 +239,10 @@ function formatReport(report, context) {
   const lines = [];
 
   lines.push('Per-role offer coverage (read-only; eligible VERIFIED, ' + currency + ', in stock, ' + windowDays + '-day window)');
+  lines.push('Counted identity: (product, variant) for GPU; product only (NULL variant) for the other roles');
   lines.push('Target: ' + context.label);
   lines.push('As of: ' + context.asOf.toISOString() + ' | window starts ' + boundary.toISOString());
-  lines.push('Thresholds: >= ' + report.minProducts + ' product(s) and >= ' + report.minStores + ' distinct store(s) per role');
+  lines.push('Thresholds: >= ' + report.minProducts + ' candidate(s) and >= ' + report.minStores + ' distinct store(s) per role');
   lines.push('');
   lines.push('  role          active  covered  stores  verdict');
   for (const row of report.roles) {

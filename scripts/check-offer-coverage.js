@@ -17,6 +17,9 @@
  *   availability != 'OUT_OF_STOCK'    -> NULL is UNKNOWN, never a waiver
  *   price > 0, currency = the report's currency (exact, no conversion)
  *   last_checked_at >= as_of - 30 days
+ *   (product_id, product_variant_id) equals the CANDIDATE's identity, exactly as
+ *   `offers/select.js` candidateMatchesOffer() requires: GPU candidates are
+ *   variant-keyed, the other seven roles are product-keyed with a NULL variant
  *
  * Because builds may still assemble off SEED offers (the API passes
  * `allow_unverified_seed_offers: true`), a warm shelf and an evidenced shelf are
@@ -64,8 +67,8 @@ const USAGE = [
   '',
   '  --target=env:NAME    environment variable holding the connection string',
   '                       (default env:' + DEFAULT_TARGET_ENV + ')',
-  '  --min-products=N     products with an eligible VERIFIED offer per role',
-  '                       (default ' + DEFAULTS.minProducts + ')',
+  '  --min-products=N     candidate identities with an eligible VERIFIED offer per',
+  '                       role (a GPU variant is its own identity) (default ' + DEFAULTS.minProducts + ')',
   '  --min-stores=N       distinct stores behind them per role',
   '                       (default ' + DEFAULTS.minStores + ')',
   '  --currency=CCC       offer currency to count, exact match',
@@ -88,20 +91,22 @@ const ROLE_SPEC_TABLES = Object.freeze([
 ]);
 
 /**
- * ACTIVE product -> role, derived from canonical spec-table presence exactly as
- * `candidates/loader.js` derives category (GPU is the one variant-keyed role).
+ * ACTIVE candidate -> role, derived from canonical spec-table presence exactly as
+ * `candidates/loader.js` derives category. GPU is the one variant-keyed role:
+ * one row per `gpu_board_spec` variant, because that is the identity a GPU
+ * candidate carries. Every other role is product-keyed with a NULL variant.
  * Role names, not `product_category` names: this report is scoped to the roles a
  * build expands into, so MEMORY reads as RAM and STORAGE as SSD_BOOT.
  */
 function roleProductsCte() {
   const parts = ROLE_SPEC_TABLES.map(([role, table]) => [
-    "  SELECT p.id AS product_id, '" + role + "' AS role",
+    "  SELECT p.id AS product_id, NULL::uuid AS product_variant_id, '" + role + "' AS role",
     '    FROM product p',
     '    JOIN ' + table + ' s ON s.product_id = p.id',
     "   WHERE p.lifecycle_status = 'ACTIVE'",
   ].join('\n'));
   parts.push([
-    "  SELECT p.id AS product_id, 'GPU' AS role",
+    "  SELECT p.id AS product_id, pv.id AS product_variant_id, 'GPU' AS role",
     '    FROM product p',
     '    JOIN product_variant pv ON pv.product_id = p.id',
     '    JOIN gpu_board_spec s ON s.product_variant_id = pv.id',
@@ -110,21 +115,29 @@ function roleProductsCte() {
   return 'WITH role_products AS (\n' + parts.join('\n  UNION ALL\n') + '\n)\n';
 }
 
-/** Every (product, role) pair in the ACTIVE catalog. */
+/** Every (product, variant, role) candidate in the ACTIVE catalog. */
 const PRODUCTS_SQL = roleProductsCte()
-  + 'SELECT DISTINCT product_id::text AS product_id, role\n'
+  + 'SELECT DISTINCT product_id::text AS product_id, product_variant_id::text AS product_variant_id, role\n'
   + '  FROM role_products\n'
-  + ' ORDER BY role ASC, product_id ASC;';
+  + ' ORDER BY role ASC, product_id ASC, product_variant_id ASC NULLS FIRST;';
 
 /**
- * Every ELIGIBLE VERIFIED offer, one row per (role, product, store).
+ * Every ELIGIBLE VERIFIED offer, one row per (role, candidate identity, store).
  * $1 currency, $2 as_of timestamptz. Stock/price/staleness predicates are the
  * Stage 1 contract, quoted in the header.
+ *
+ * The join is on the FULL identity the engine matches: `IS NOT DISTINCT FROM`
+ * keeps a NULL-variant offer on a product-keyed candidate and a variant offer on
+ * its own variant, while refusing a NULL-variant offer on a GPU candidate and an
+ * offer for a different variant. Joining on `product_id` alone would credit
+ * offers Stage 1 discards (seen 2026-11-10: 23 products vs 24 variant
+ * candidates on TEST, and a NULL-variant GPU offer counted as covered).
  */
 const ELIGIBLE_OFFERS_SQL = roleProductsCte()
-  + 'SELECT DISTINCT rp.role, o.product_id::text AS product_id, o.store_id::text AS store_id\n'
+  + 'SELECT DISTINCT rp.role, o.product_id::text AS product_id, o.product_variant_id::text AS product_variant_id, o.store_id::text AS store_id\n'
   + '  FROM store_offer o\n'
   + '  JOIN role_products rp ON rp.product_id = o.product_id\n'
+  + '                       AND rp.product_variant_id IS NOT DISTINCT FROM o.product_variant_id\n'
   + '  JOIN product p ON p.id = o.product_id\n'
   + " WHERE p.lifecycle_status = 'ACTIVE'\n"
   + '   AND o.ingestion_record_id IS NOT NULL\n'
@@ -134,7 +147,7 @@ const ELIGIBLE_OFFERS_SQL = roleProductsCte()
   + "   AND o.last_checked_at >= ($2::timestamptz - INTERVAL '" + DEFAULTS.windowDays + " days')\n"
   // Ordinal ordering: a DISTINCT select list cannot be ordered by an expression
   // that is not in it, and the qualified columns would collide with the aliases.
-  + ' ORDER BY 1 ASC, 2 ASC, 3 ASC;';
+  + ' ORDER BY 1 ASC, 2 ASC, 3 ASC, 4 ASC;';
 
 /** Gate on INCONCLUSIVE vs FAIL: does the ACTIVE catalog hold ANY evidence? */
 const VERIFIED_TOTAL_SQL = [

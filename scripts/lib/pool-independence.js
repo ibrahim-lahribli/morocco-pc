@@ -17,17 +17,20 @@
 // (`check-offer-provenance` / `check-catalog-identity` both print INCONCLUSIVE
 // rather than PASS over an empty scope).
 //
-// RULES
+// RULES (precedence: FAIL > INCONCLUSIVE > PASS)
 //   FAIL          - some profile saw at least one pre-existing build_score move
 //                   (or a build disappear). This is the real signal and it wins
 //                   over everything else, even if other profiles were empty.
-//   INCONCLUSIVE  - NO profile produced a single pre-existing build, so nothing
-//                   could have moved. Exit 0 (the repo's convention for
-//                   INCONCLUSIVE: `--fail-days`, provenance, catalogue
-//                   identity), but NEVER the string PASS.
-//   PASS          - at least one profile compared real builds and none drifted.
-//                   A profile that assembled nothing is reported as inconclusive
-//                   beside the PASS so a partial run is not read as a full one.
+//   INCONCLUSIVE  - no profile drifted, but at least ONE required profile
+//                   produced no pre-existing build, so that half of the
+//                   comparison never happened. Decision 23 criterion 3(a) runs
+//                   BOTH the GAMING and the OFFICE query, so a run that measured
+//                   one of them has not measured PI-1. Exit 0 (the repo's
+//                   convention for INCONCLUSIVE: `--fail-days`, provenance,
+//                   catalogue identity), but NEVER the string PASS - not even
+//                   when a sibling profile was measured cleanly.
+//   PASS          - EVERY required profile compared at least one pre-existing
+//                   build and none drifted. Only a complete comparison is a pass.
 
 const VERDICTS = Object.freeze({
   PASS: 'PASS',
@@ -77,7 +80,8 @@ function classifyProfile(profile) {
 }
 
 /**
- * Classify a whole run.
+ * Classify a whole run. PASS requires EVERY profile to be conclusive; a run
+ * that measured some profiles and not others is INCONCLUSIVE, never PASS.
  *
  * @param {Array<{ label: string, beforeSize: number, driftCount: number }>} profiles
  * @returns {{ verdict: string, exitCode: number, failed: string[],
@@ -104,7 +108,10 @@ function classifyRun(profiles) {
   if (failed.length > 0) {
     return { verdict: VERDICTS.FAIL, exitCode: EXIT_CODES.FAIL, failed, conclusive, inconclusive };
   }
-  if (conclusive.length === 0) {
+  // ANY unmeasured profile makes the comparison incomplete: a clean GAMING run
+  // beside an empty OFFICE run is half of PI-1, not PI-1. This deliberately
+  // covers the both-empty case too (conclusive.length === 0).
+  if (conclusive.length !== classified.length) {
     return {
       verdict: VERDICTS.INCONCLUSIVE,
       exitCode: EXIT_CODES.INCONCLUSIVE,

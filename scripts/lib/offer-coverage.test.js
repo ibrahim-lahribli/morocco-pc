@@ -80,7 +80,8 @@ test('a role below the product threshold FAILs and names the shortfall', () => {
   assert.equal(gpu.covered_products, 3);
   assert.equal(gpu.missing_products, 2);
   assert.equal(gpu.verdict, VERDICTS.FAIL);
-  assert.match(reasonOf(gpu), /needs 2 more product\(s\)/);
+  // 'candidate' not 'product': for GPU the counted unit is a variant identity.
+  assert.match(reasonOf(gpu), /needs 2 more candidate\(s\)/);
   assert.equal(report.verdict, VERDICTS.FAIL);
 });
 
@@ -143,6 +144,7 @@ test('a FAIL report lists the failing roles and the roles reachable only through
   assert.match(lines, /RESULT: FAIL/);
   assert.match(lines, /Roles below threshold: CASE/);
   assert.match(lines, /only come from a seed offer/);
+  assert.match(lines, /Counted identity: \(product, variant\) for GPU; product only \(NULL variant\)/);
   assert.match(lines, /30-day window/);
   assert.match(lines, /window starts 2026-10-09T12:00:00\.000Z/);
 });
@@ -193,6 +195,95 @@ test('unknown roles and malformed rows are ignored rather than counted', () => {
   assert.equal(cpu.active_products, 1);
   assert.equal(cpu.covered_products, 1);
   assert.equal(report.active_products, 1);
+});
+
+// --- Variant identity (2026-11-10 review) -------------------------------------
+//
+// Stage 1 matches an offer to a CANDIDATE: GPU candidates carry a non-NULL
+// variant and match an offer only on the exact (product, variant) pair, while the
+// other seven roles carry a NULL variant and match product-keyed offers only.
+// These five cases pin that a coverage count can never credit an unselectable
+// offer, which is what "coverage" is supposed to mean (R-30).
+
+/** A GPU candidate: variant-keyed, because gpu_board_spec lives on the variant. */
+function gpuProduct(productId, variantId) {
+  return { product_id: productId, product_variant_id: variantId, role: 'GPU' };
+}
+
+function variantOffer(productId, variantId, role, storeId) {
+  return { product_id: productId, product_variant_id: variantId, role, store_id: storeId };
+}
+
+function gpuReport(offers, products) {
+  return buildCoverage({
+    products: products || [gpuProduct('gpu-1', 'v1')],
+    offers,
+    minProducts: 1,
+    minStores: 1,
+    verifiedOffersAnywhere: offers.length,
+  }).roles.find((row) => row.role === 'GPU');
+}
+
+test('a GPU offer with a NULL variant is never counted as coverage', () => {
+  const gpu = gpuReport([variantOffer('gpu-1', null, 'GPU', 's1')]);
+  assert.equal(gpu.active_products, 1);
+  assert.equal(gpu.covered_products, 0);
+  assert.equal(gpu.verdict, VERDICTS.FAIL);
+});
+
+test('a GPU offer for a different variant is never counted as coverage', () => {
+  const gpu = gpuReport([variantOffer('gpu-1', 'v-other', 'GPU', 's1')]);
+  assert.equal(gpu.covered_products, 0);
+  assert.equal(gpu.verdict, VERDICTS.FAIL);
+});
+
+test('a GPU offer on the candidate\'s own variant counts', () => {
+  const gpu = gpuReport([variantOffer('gpu-1', 'v1', 'GPU', 's1')]);
+  assert.equal(gpu.covered_products, 1);
+  assert.equal(gpu.covered_stores, 1);
+  assert.equal(gpu.verdict, VERDICTS.PASS);
+});
+
+test('two GPU variants are two candidate identities, each counted on its own offer', () => {
+  const products = [gpuProduct('gpu-1', 'v1'), gpuProduct('gpu-1', 'v2')];
+  const both = gpuReport([variantOffer('gpu-1', 'v1', 'GPU', 's1')], products);
+  assert.equal(both.active_products, 2, 'a two-variant GPU product is two candidates');
+  assert.equal(both.covered_products, 1, 'only the variant with an offer is covered');
+
+  const all = gpuReport([
+    variantOffer('gpu-1', 'v1', 'GPU', 's1'),
+    variantOffer('gpu-1', 'v2', 'GPU', 's2'),
+  ], products);
+  assert.equal(all.covered_products, 2);
+  assert.equal(all.covered_stores, 2);
+  assert.equal(all.verdict, VERDICTS.PASS);
+});
+
+test('a variant-keyed offer on a non-GPU product is never counted as coverage', () => {
+  const report = buildCoverage({
+    products: [{ product_id: 'cpu-1', product_variant_id: null, role: 'CPU' }],
+    offers: [variantOffer('cpu-1', 'v1', 'CPU', 's1')],
+    minProducts: 1,
+    minStores: 1,
+    verifiedOffersAnywhere: 1,
+  });
+  const cpu = report.roles.find((row) => row.role === 'CPU');
+  assert.equal(cpu.active_products, 1);
+  assert.equal(cpu.covered_products, 0, 'a product-keyed candidate needs a NULL-variant offer');
+  assert.equal(cpu.verdict, VERDICTS.FAIL);
+});
+
+test('a product-keyed offer on a non-GPU product counts', () => {
+  const report = buildCoverage({
+    products: [{ product_id: 'cpu-1', product_variant_id: null, role: 'CPU' }],
+    offers: [variantOffer('cpu-1', null, 'CPU', 's1')],
+    minProducts: 1,
+    minStores: 1,
+    verifiedOffersAnywhere: 1,
+  });
+  const cpu = report.roles.find((row) => row.role === 'CPU');
+  assert.equal(cpu.covered_products, 1);
+  assert.equal(cpu.verdict, VERDICTS.PASS);
 });
 
 test('a non-integer threshold is refused instead of silently coerced', () => {

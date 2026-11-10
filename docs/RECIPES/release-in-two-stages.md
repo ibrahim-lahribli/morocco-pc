@@ -116,7 +116,22 @@ suspect, not the code (`docs/RECIPES/provision-the-api-role.md`, `deploy-eu-colo
 ## Release 2 — the scoring model
 
 Order: **restore point → seed → import → pin + deploy → regenerate presets → gates → accept.**
-Steps 1–3 write to the EU database, so each needs `--target-env` and a restore point.
+Step 1 creates the restore point; steps 2, 3 and 5 WRITE to the EU database, so each of those takes
+`--target-env=TARGET_DATABASE_URL` and that restore point.
+
+How the EU variable reaches a command: load `.env.eu` for that ONE command and leave `DATABASE_URL`
+alone. `DATABASE_URL` must keep naming the **shared** database, because that is the baseline the
+named-target guard compares against — a command that cannot prove its target differs from shared
+REFUSES. `.env.eu` defines `TARGET_DATABASE_URL` (and `TARGET_DIRECT_URL`) and no `DATABASE_URL`, so
+preloading it is enough; the script's own dotenv pass then supplies the shared baseline from `.env`.
+
+```bash
+DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/<tool>.js ...
+```
+
+Do **not** copy the variable out with `export TARGET_DATABASE_URL="$(sed ... .env.eu)"`: `.env.eu` is
+CRLF, so the captured value keeps a trailing `\r` and the guard rejects it as "not a usable
+connection string" (verified 2026-11-10).
 
 ### 1. Restore point (owner)
 
@@ -125,10 +140,36 @@ Create a Neon branch of the EU database and keep its id. This is the rollback fo
 
 ### 2. Seed the model — *the window opens here*
 
+Rehearse first (`--dry-run` connects to nothing, so it needs no restore point):
+
 ```bash
-node scripts/apply-seed.js database/seeds/029_scoring_model_launch_v2_decay_off.sql \
+DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/apply-seed.js \
+  database/seeds/029_scoring_model_launch_v2_decay_off.sql \
+  --target-env=TARGET_DATABASE_URL --dry-run
+```
+
+Then apply it with the rollback named:
+
+```bash
+DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/apply-seed.js \
+  database/seeds/029_scoring_model_launch_v2_decay_off.sql \
   --target-env=TARGET_DATABASE_URL --restore-point=<id>
 ```
+
+Read the two lines printed **before** it connects and stop if either is wrong:
+
+```
+target: TARGET_DATABASE_URL (db:<12 hex>)
+AUDIT TARGET: db:<12 hex> restore-point=<id>
+```
+
+The `db:` digest must be the EU digest already recorded in `database/migration-applies.jsonl`, and the
+restore point must be the branch id from step 1 — not a placeholder. The guard refuses, before
+touching a socket: a target whose digest equals `DATABASE_URL`'s under ANY variable name (its
+`-pooler` host included), a target variable that is unset, `--target-env` naming `DATABASE_URL` or
+`TEST_DATABASE_URL`, a write with no `--restore-point`, and a restore point that does not match
+`^[A-Za-z0-9_-]{8,}$` (so `<id>` is refused on purpose). It never prints a host, a URL or a
+credential.
 
 Expected: one transaction, one row, `launch-v2@2.5.0` inactive-then-active as the seed states,
 `APPLIED`. `scoring_model` is in the digest, so **the shelf is now empty** (see the rule above) even
@@ -136,9 +177,26 @@ though the pin still names 2.4.0. That is expected, not a regression — steps 3
 
 ### 3. Import offers
 
+The importer is a **dry run by default** and needs the adapter and the file explicitly; the full
+procedure and the file format are `docs/RECIPES/import-offers.md`. Same shape as step 2 — export
+`TARGET_DATABASE_URL`, keep `DATABASE_URL` on shared.
+
 ```bash
-node scripts/ingest-offers.js --target-env=TARGET_DATABASE_URL --restore-point=<id>
+# 1. dry run: prints `target:` and `AUDIT TARGET:` before connecting, writes nothing
+DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/ingest-offers.js \
+  --adapter=manual --file=<approved-import.csv> \
+  --target-env=TARGET_DATABASE_URL
+
+# 2. commit, with the rollback named
+DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/ingest-offers.js \
+  --adapter=manual --file=<approved-import.csv> --commit \
+  --target-env=TARGET_DATABASE_URL --restore-point=<id>
 ```
+
+`<approved-import.csv>` and `<id>` are the operator's to supply: there is no committed import file for
+the EU catalogue (a sample would be an invented price source) and the restore point is the branch from
+step 1. `--commit` against a named target is refused without it, and the shared-vs-target digest
+check is the same one step 2 uses.
 
 Run it **before** the presets: presets bake the prices that exist at generation time, so generating
 first would publish seed prices into a freshly stamped shelf. The import moves `catalog_version`
