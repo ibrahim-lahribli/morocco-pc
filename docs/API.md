@@ -910,7 +910,7 @@ observation MOMENT, oldest first.
   "may this offer be recommended now", and pruning history by it would rewrite the past.
 - **Nothing else changed.** v1.6 adds this one path - no field on the existing paths gained,
   lost or changed type - and the served document is pinned byte-for-byte by
-  `apps/api/test/unit/openapi-v1.10.json` (the one snapshot in the tree).
+  `contract/openapi.json` (the one snapshot in the tree).
 
 ## Response shape
 

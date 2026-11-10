@@ -93,6 +93,7 @@ the detailed evidence behind those rows (a gate parses its shape, so keep the ro
 | `scripts/lib/db-url.js` | `TEST_DATABASE_URL` guard for write-capable tests |
 | `src/recommendation/` | ALL engine application code — the pipeline stages |
 | `apps/api/` | The HTTP API (Decision 36): Fastify routes, TypeBox contracts, the SQL repository, a Dockerfile. TEST DB only unless `API_ALLOW_SHARED=1`; no engine logic, no frontend |
+| `contract/` | The OpenAPI snapshot, owned by `apps/api`, consumed by web apps |
 | `apps/web/` | The web app (Next.js 16 App Router, Tailwind v4 tokens, next-intl fr/ar): wizard, results, preset, component, guide and saved-builds (`/{locale}/enregistrements`, footer-linked on every page) routes, its own crawl surface (`sitemap.xml`, `robots.txt`, canonical + `fr`/`x-default` `hreflang`, per-preset OG cards, all off a configured `NEXT_PUBLIC_SITE_URL`), a zero-dependency fixture mock, and its own gates (`typecheck`, `lint`, `check:tokens`, `check:i18n`, `check:api-types`, Playwright at 360 px, Lighthouse budgets). Own `package.json`/lockfile and `.github/workflows/web.yml`; no secrets, no database, no engine logic |
 
 `src/recommendation/` has one directory per pipeline stage: `compatibility`, `candidates`,
@@ -269,13 +270,13 @@ remote already stores (`ref` = the branch to run on) — keep that token out of 
 untouched). On `push`/`pull_request` touching `apps/web/**` (and `workflow_dispatch`; never
 `schedule`), a `web` job runs in `apps/web`: `npm ci`, then `typecheck`, `lint`, `check:tokens`,
 `check:i18n`, `check:api-types` (the S4 contract-drift gate, so the triggers also include
-`apps/api/test/unit/openapi-v1.10.json`), `build`, `playwright install --with-deps chromium`,
+`contract/**`), `build`, `playwright install --with-deps chromium`,
 `npm test` and `test:lighthouse` (the ENFORCED budgets on a fixture result page — `error` level,
 median of three, since S19) on Node 22
 — uploading `apps/web/test-results` when a run fails and `apps/web/.lighthouseci` always. It
 replaces the scaffold-era `web-ci.yml`, deleted in the same change, so a web push runs one job, not
 two. It needs NO secrets and NO database: `playwright.config.ts` starts the app on 3210 and the fixture mock on
-3211 itself, and `scripts/lighthouse-ci.mjs` starts and stops both for the budget run (refusing to
+3211 itself, and `apps/web/scripts/lighthouse-ci.mjs` starts and stops both for the budget run (refusing to
 measure a server already on 3210, or a result route that does not answer 200 as itself). Verified locally 2026-10-21 from a fresh `npm ci` under Node 22.23.3 with `CI=true` (168/168 specs,
 LCP 2.32–2.34 s / CLS 0 / 145 981 B of script) and then on GitHub itself: runs 39618370244 (push)
 and 39618455093 (dispatch) green, then 39619019100 green after the artifact fix — 168/168 specs in

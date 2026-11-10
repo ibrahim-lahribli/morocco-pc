@@ -28,7 +28,7 @@ Unchanged from `PLAN_PLATFORM_CONSTRAINTS.md`, and the same rules `AGENTS.md` §
 | Thing | State |
 |---|---|
 | Schema | 23 migrations, ledger **23** on shared, TEST and EU; `run-migrations.js --check` reports no pending file |
-| API | Fastify, contract **v1.10.0**, ten paths, snapshot `apps/api/test/unit/openapi-v1.10.json` |
+| API | Fastify, contract **v1.10.0**, ten paths, snapshot `contract/openapi.json` |
 | Deployed origins | **one**: `https://morocco-pc-api-eu.onrender.com` (Render Free, Frankfurt, created from `render.yaml`), the private-beta host on the EU database, answering `engine_version: "d2de4fb"`; it scales to zero after 15 idle minutes. The second Render service — the demo origin on the shared database — was **suspended 2026-11-06** (deletion pending, R-05) and is no longer a target. |
 | DB roles | `morocco_pc_api` is provisioned on shared and EU (self-check 21/21) and the EU host **uses it**: `check-deployed-role.js --target=env:TARGET_DATABASE_URL` answers PASS (every tagged `morocco-pc-api` session authenticated as `morocco_pc_api`). The retired demo origin authenticated as `neondb_owner` (FAIL, session started 2026-11-06T18:12Z) until it was suspended that day |
 | Served scoring model | shared serves the newest ACTIVE row, `launch-v2@2.4.0` (six ACTIVE `launch-v2` versions, `seed-minimal-v1` INACTIVE). The EU host is **pinned at deploy**: `render.yaml` sets `SCORING_MODEL_PIN: launch-v2@2.4.0` (Decision 63), and 52 persisted passes record that model |
@@ -77,7 +77,7 @@ Each item's current state, evidence and severity live in `OPEN_POINTS.md`; this 
 
 S1–S27 of `docs/archive/plans/agent3-web-sprints.md`: 26 done, S26 blocked on a deployment. Its own
 package, lockfile and workflow (`web.yml`), consuming this API through types generated from
-`apps/api/test/unit/openapi-v1.10.json` with `check:api-types` as the drift gate. Measured 2026-10-26:
+`contract/openapi.json` with `check:api-types` as the drift gate. Measured 2026-10-26:
 378 Playwright specs, 376 passed / 2 skipped on a fresh build.
 
 The host is DECIDED — Cloudflare Workers via the OpenNext adapter (`apps/web/wrangler.jsonc`,
