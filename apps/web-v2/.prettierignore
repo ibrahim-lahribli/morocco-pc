@@ -7,3 +7,6 @@ package-lock.json
 lib/api/schema.d.ts
 stitch_morocco_pc_builder_app
 docs/screenshots
+
+# Imported Stitch designs — reference files, not application source
+design/
