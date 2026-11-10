@@ -69,6 +69,11 @@
   --text-display--line-height: 2.375rem;
   --text-display--letter-spacing: -0.01em;
   --text-display--font-weight: 700;
+  /* the phone hero: the frame's `headline-lg-mobile` */
+  --text-display-sm: 1.5rem; /* 24px */
+  --text-display-sm--line-height: 1.875rem;
+  --text-display-sm--letter-spacing: -0.01em;
+  --text-display-sm--font-weight: 700;
 
   --text-headline-lg: 1.75rem; /* 28px */
   --text-headline-lg--line-height: 2.25rem;

@@ -138,7 +138,7 @@ test.describe("hero composition", () => {
 
     const intro = page.locator("#top h1 + p");
     await expect(intro).toHaveText(
-      "Gaming, études ou travail : trouvez un PC adapté à votre budget et à vos besoins. Prix indicatifs en dirhams marocains (MAD).",
+      "Gaming, études ou travail : trouvez le PC adapté à votre budget. Prix indicatifs en dirhams (MAD).",
     );
 
     const phone = await intro.evaluate((element) => {
@@ -152,9 +152,9 @@ test.describe("hero composition", () => {
 
     expect(phone.fontSize).toBe(14);
     expect(phone.lineHeight).toBe(20);
-    // The approved copy reaches the frame's three-line composition at 361 px of
-    // text width, so 14/20 buys 60 px where the 16/24 step took 72 px.
-    expect(Math.round(phone.height / phone.lineHeight)).toBe(3);
+    // The approved copy reads in two lines at 361 px of text width: 14/20 buys
+    // 40 px here, where the 16/24 step took 72 px.
+    expect(Math.round(phone.height / phone.lineHeight)).toBe(2);
 
     await page.setViewportSize({ width: 1440, height: 900 });
 
