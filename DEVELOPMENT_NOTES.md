@@ -1992,7 +1992,7 @@ check what is listening on 3210 and which env it was started with.
 PR #8 merged as `e559fe6` (14 files, `apps/web` only) with `web` and `unit-and-docs` green.
 The Render demo origin (`https://morocco-pc.onrender.com`, first deployed 2026-10-28) answered every
 READ — `/v1/health` `db:"ok"`, `/v1/meta/options`, `/v1/catalog/products`, and a `/v1/docs/json` that
-is byte-identical to the committed `openapi-v1.10.json` — but `POST /v1/recommendations` answered 500
+is byte-identical to the committed `contract/openapi.json` — but `POST /v1/recommendations` answered 500
 in 4.6 s and its read-back 500'd too. Cause, measured rather than assumed: the service points at the
 SHARED database (asking it for a TEST-branch pass id answers `404 NOT_FOUND` while shared held zero
 passes), shared sat at ledger 022, and `repository.js` LEFT JOINs `recommendation_swap` (Decision 56),

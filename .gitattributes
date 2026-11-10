@@ -16,3 +16,7 @@ AGENTS.md text eol=lf
 *.json text eol=lf
 # A GENERATED artifact compared byte-for-byte by apps/web/scripts/check-api-types.mjs.
 apps/web/lib/api/schema.d.ts text eol=lf
+# The API contract snapshot (owned by apps/api): compared byte-for-byte by the
+# API snapshot test and by apps/web/scripts/check-api-types.mjs, and the source
+# of the generated apps/web/lib/api/schema.d.ts.
+contract/** text eol=lf

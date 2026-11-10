@@ -122,7 +122,7 @@ POST/GET pair, the swap preview and the append-only swap commit. POST and GET sh
 they cannot disagree about a persisted field. Rate limits are per-IP and `TRUST_PROXY` names the
 trusted proxy (default off). Writes are deduped by a catalog-aware key. See `docs/API.md`.
 
-The `apps/web` Next.js app is a separate package consuming the pinned OpenAPI snapshot; it owns no
+The `apps/web` Next.js app is a separate package consuming the pinned OpenAPI snapshot (`contract/openapi.json`); it owns no
 engine logic and is out of scope for this file.
 
 ## 7. Commands
