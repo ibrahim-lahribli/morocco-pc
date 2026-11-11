@@ -307,7 +307,7 @@ own manifest          own manifest
 | Edge | Allowed? | Meaning |
 |---|---|---|
 | API → runtime | yes | the API composes passes, previews and commits through runtime entry points |
-| API → core | yes, vocabulary only | frozen constants and pure helpers the HTTP layer must not restate (`EXPANSION_ORDER`, `COMPONENT_ROLES`, `listUseCases`, `resolutionMultiplier`, error vocabulary) |
+| API → core | yes, frozen vocabulary only (§9.2, §11.4) | immutable contracts the HTTP layer must not restate (`EXPANSION_ORDER`, `COMPONENT_ROLES`, `listUseCases`, `resolutionMultiplier`, error vocabulary); never a calculation |
 | runtime → core | yes | runtime prepares inputs for core and translates rows into core contracts |
 | core → runtime | **no** | would make the pure domain depend on SQL |
 | core → API / ingestion / database tooling / `pg` | **no** | nothing infrastructure-shaped |
@@ -460,9 +460,9 @@ The first revision grouped `orchestrator/{snapshot,run,full-run,commit,swap-prev
 ```
 morocco-pc/                        ← system, not a project: navigation + registers
 ├── packages/
-│   ├── recommendation-core/       ← NEW. Pure domain. Zero dependencies.
+│   ├── recommendation-core/       ← NEW. Pure domain. Zero third-party deps.
 │   ├── recommendation-runtime/    ← NEW. SQL loaders, orchestration, persistence.
-│   └── database-guard/            ← NEW. Installable target-safety guard (§9.4).
+│   └── database-guard/            ← NEW. Support package (owned with P2). §9.4.
 ├── apps/
 │   ├── api/                       ← P4  HTTP contract owner, Fastify, repository, pool
 │   ├── offer-ingestion/           ← P3  operator import, adapters, identity, offer gates
@@ -487,7 +487,20 @@ The tree is deliberately **not** a workspace layout (§17.5). Each project's man
 
 Option B's cost is real and stated in §11.2: **33 files move to core, 24 to runtime, 8 barrels are split or re-pointed, and 2 import lines narrow.** No behaviour changes; no SQL changes; no contract changes.
 
-### 7.3 The six projects
+### 7.3 The six ownership areas, their packages and their applications
+
+**Terminology.** "Six projects" is an ownership shorthand, not a package count. There are **six top-level ownership areas**, more than six installable units, and one area with no installable project package at all:
+
+| Ownership area | Installable units inside it |
+|---|---|
+| P1 — Recommendation engine | `packages/recommendation-core/` and `packages/recommendation-runtime/`: **two separately packaged components of one ownership area**, answering to one accountable owner |
+| P2 — Database / data platform | `database/` is a **schema + tooling area with no package manifest** (by design, §10.4), plus the shared support package `packages/database-guard/`, owned by the database/security responsibility (§9.4) |
+| P3 — Offer ingestion | `apps/offer-ingestion/` (application) |
+| P4 — Backend API | `apps/api/` (application) |
+| P5 — Frontend V1 | `apps/web/` (application, manifest exists) |
+| P6 — Frontend V2 | `apps/web-v2/` (application, manifest exists on its branch) |
+
+Ownership boundaries are **not** renumbered or merged to preserve the number six. Core and runtime are independent packages inside one area; `database-guard` is a package that is not a project; the database area is a project that is not a package.
 
 #### P1a — Recommendation core (`packages/recommendation-core/`)
 
@@ -598,7 +611,8 @@ This is the **only** ownership matrix in the document. Every other section refer
 | Request validation, status codes, rate limiting, CORS | – | – | – | – | ● | – | – |
 | Connection pool lifecycle | – | – | – | – | ● | – | – |
 | Catalogue read model (API SQL) | – | – | ○ | – | ● | ○ | ○ |
-| Preset generation | ○ (`selectArchetypes` reachable) | ● (`runRecommendationFullRun` callable) | ○ | – | ● (`generate-presets`) | ○ (renders) | ○ (renders) |
+| Recommendation pass execution and archetype selection | ○ (calculation and selection functions) | ● (DB-backed execution via `runRecommendationFullRun`) | ○ (schema) | – | ○ (invokes runtime) | – | – |
+| Preset generation job, CLI and operational publishing | ○ (selection functions only) | ○ (provides the execution interface) | ○ (schema, integrity) | – | ● (`generate-presets`, `apps/api/bin/`) | ○ (renders) | ○ (renders) |
 | Design system / tokens / locale content | – | – | – | – | – | ● | ● (own) |
 | Frontend SEO / crawl surface | – | – | – | – | ○ (catalog routes) | ● | ○ (planned) |
 | API deployment | – | – | – | – | ● | – | – |
@@ -629,7 +643,7 @@ The first revision assigned the golden harness "jointly to P1 + P2", which is a 
 | `verify:replay` / `run-migrations` / `run-seeds` / `cleanup-layer4` / `gen-schema-reference` | **database** | databases | lifetime and schema authority |
 | `apply-/rehearse-/smoke-api-role.js`, `check-deployed-role.js` | **database** | DB roles, `pg_stat_activity` | role and credential verification |
 | `ingest-offers.js` | **ingestion** | Layer 1/3 | the import itself |
-| `generate-presets.js` | **api** | runtime, repository, Layer 4 | it writes Layer 4 through the API's own entry point |
+| `generate-presets.js` | **api** | runtime (execution interface), repository, Layer 4 | the API owns the job; runtime only executes the pass it requests |
 | `eval:scenarios` + baselines | **runtime** | all three (contributors above) | §8.2 |
 | `measure-*.js` harnesses | **runtime** | database, runtime | read-only pipeline replication |
 
@@ -650,7 +664,7 @@ The first revision assigned the golden harness "jointly to P1 + P2", which is a 
 | **guard** | – | – | — | – | – | – | – | – | – |
 | **database tooling** | – | – | ● | ○ owns it | – | – | – | – | – |
 | **ingestion** | – (hard) | – (hard) | ● | ○ schema | — | – | – | – | – |
-| **api** | ● vocabulary only | ● orchestration | ● start-up guard | ○ schema | – | — | ● owns | – | – |
+| **api** | ● frozen vocabulary only (§9.2) | ● orchestration | ● start-up guard | ○ schema | – | — | ● owns | – | – |
 | **web-v1** | – | – | – | – | – | ○ HTTP | ○ types | — | – |
 | **web-v2** | – | – | – | – | – | ○ HTTP | ○ types | – | — |
 
@@ -658,7 +672,8 @@ The first revision assigned the golden harness "jointly to P1 + P2", which is a 
 
 | Edge | Interface | What makes it an interface rather than a convention |
 |---|---|---|
-| core ← runtime | core's subpath exports and frozen input/output contracts (§11.4) | core's own boundary test: no `.query(`, no `pg`, no `fs`, no `process.env`; runtime is core's only in-repo consumer |
+| core ← runtime | core's subpath exports and frozen input/output contracts (§11.4) | core's own boundary test: no `.query(`, no `pg`, no `fs`, no `process.env`. Runtime is core's primary in-repo consumer, **not its only one** (next row) |
+| core ← api | **frozen vocabulary only**: `COMPONENT_ROLES`, `EXPANSION_ORDER`, `listUseCases`, `resolutionMultiplier`, the error vocabulary (`ERROR_CODES`, `CandidateSelectionError`), and immutable domain contracts the HTTP layer must not restate (`GPU_POLICIES`, `STRATEGIES`, `REASON_CODES`/`REASON_ORDER` where a response names a reason) | an API-side boundary test asserting every API→core import names a symbol on the approved list. The API may **not** import core calculation entry points (`computeBuildScore`, `assembleBuilds`, `retainTopKPerRole`, `rankBuilds`, `selectArchetypes`, `filterCandidates`, `explainSelection`) to reproduce business logic: passes, previews, commits and the catalog digest are reached through runtime. Runtime does **not** become the owner of vocabulary the API consumes; the symbols stay core's |
 | runtime ← api | `./orchestrator` and `./persistence` entry points, with the single-dedicated-connection contract | `import-boundary.test.js` extended to runtime internals; the connection contract is stated in the module headers |
 | guard ← api / ingestion / database tooling | `resolveTestDbUrl`, `getWriteTestDbUrl`, `describeTarget`, `normalizeTarget`, `toDirectUrl` | its own package manifest + its existing unit tests (`scripts/lib/db-url.test.js`, `apps/api/test/unit/db-guard.test.js`) move with it |
 | schema ← runtime / api / ingestion | tables, columns, enums, constraints | numbered migrations are the only DDL source; `verify:replay` diffs by definition |
@@ -693,14 +708,24 @@ The first revision assigned the golden harness "jointly to P1 + P2", which is a 
 | Aspect | Design |
 |---|---|
 | Contents | the current `db-url.js` implementation, moved verbatim; its two test suites move with it |
-| Manifest | `package.json`: `name`, `version` (repo-tracked, not published), `main: src/index.js`, **zero dependencies** |
+| Manifest | `package.json`: `name`, `version` (repo-tracked, not published), `main: src/index.js`, **zero dependencies — no `dotenv`, no `pg`** |
 | Authoritative implementation | this package, and only this package. No copy in the database project, the API image or a Docker layer |
 | Consumers | `apps/api` (`file:` dep), `apps/offer-ingestion`, `database/tooling`, runtime/its tests |
 | Versioning | consumed by commit like every other package in the repo (§17.4); adding a registry or a semver release is out of scope |
 | Why not "a package inside `database/`" | a `file:` dependency must resolve to a directory with a manifest; putting one inside `database/` would make the database project installable-by-accident, which is exactly what P2's "not a package" rule forbids in spirit |
 | Why not inline it in the API | the guard is a security control shared by five consumers; an inline copy would be a second authoritative implementation |
 
-**One deliberate exception to the zero-dependency rule:** `getWriteTestDbUrl()` calls `require('dotenv').config()`. The package therefore declares `dotenv` as a dependency (or the wrapper is split so the pure functions stay dependency-free — either is acceptable; the choice must be recorded when implemented). What must **not** happen is a copy of the guard inside the API image while the package also exists.
+**Environment loading is not the guard's job (selected design).** The current `getWriteTestDbUrl()` calls `require('dotenv').config()`; that call is the only reason a dependency would be needed, and it moves to the caller:
+
+| Function | Package contract |
+|---|---|
+| `resolveTestDbUrl(env)` | pure; takes an explicit env object (already true today) |
+| `getWriteTestDbUrl(env)` | takes an explicit env object; **never** loads `.env` itself |
+| `describeTarget`, `normalizeTarget`, `normalizeHost`, `toDirectUrl`, restore-point predicate | pure; explicit inputs only |
+
+Every consumer calls `getWriteTestDbUrl(loadedEnv)` with an environment its own bootstrap loaded: `apps/api/src/db.js` already receives an explicit `env` argument, and each CLI already initialises `dotenv` at its entry point (`scripts/generate-presets.js:86` is the pattern). Safety semantics are unchanged: same host comparison, same refusal messages, same digest, same restore-point rule. `dotenv` stays a dependency of the **applications**, where it is already installed.
+
+**Documented fallback, if implementation finds a caller that depends on the guard loading `.env`** (for example a script whose argument parsing assumes it): declare `dotenv` in the guard's manifest, **delete the zero-dependency claim from this section and from §17.5**, and keep the Docker design unchanged — the dependency then resolves from `apps/api/node_modules` like any other. The RFC does not permit both: a package cannot be zero-dependency and silently load `.env`.
 
 ### 9.5 The dependency the first revision hid: schema and client protocol
 
@@ -862,6 +887,8 @@ Every non-test module is classified by **its own imports and behaviour**, not by
 | `./errors` | `CandidateSelectionError`, `ERROR_CODES` (so runtime does not import a deep path) |
 
 **No infrastructure export exists on any of these paths** — that is an assertion the package's boundary test enforces, not a promise.
+
+**API-consumable subset (frozen vocabulary).** Core has **two** in-repo consumers: runtime and the API. The API may import only vocabulary and immutable contracts — `COMPONENT_ROLES`, `EXPANSION_ORDER`, `listUseCases`, `resolutionMultiplier`, `ERROR_CODES`, `CandidateSelectionError`, `GPU_POLICIES`, `STRATEGIES`, `REASON_CODES`/`REASON_ORDER` — as recorded in §9.2 and enforced by an API-side test. It may not import a calculation entry point: a score, a rank, a verdict, an assembled build or a catalog digest is obtained through runtime. This is what keeps runtime from becoming the de-facto owner of domain vocabulary.
 
 ### 11.5 Runtime public entry points (PROPOSED)
 
@@ -1028,7 +1055,7 @@ apps/offer-ingestion/
 }
 ```
 
-`apps/api/src/engine.js` becomes the API's boundary to **both** packages: `orchestrator`/`query` loaders from runtime, `assembly`/`candidates`/`scoring`/`retention` vocabulary from core. The pool stays in `db.js` (pool ownership does not move, §6.2).
+`apps/api/src/engine.js` becomes the API's boundary to **both** packages: orchestration and loaders from runtime, frozen vocabulary and immutable contracts from core. Its core imports are limited to the approved list in §9.2/§11.4 and enforced by an API-side boundary test; every calculation and every compiled response still arrives through runtime. The pool stays in `db.js` (pool ownership does not move, §6.2).
 
 **Acceptance for "independent" (restated, because the first revision's command was unbuildable):** `cd apps/api && npm ci && npm test` succeeds with no root `node_modules`, **and** `docker build -f apps/api/Dockerfile .` (repository-root context) produces an image that starts and answers `/v1/health`. The first revision wrote `docker build -f apps/api/Dockerfile apps/api`, which cannot work once `file:` dependencies point at `packages/` (§13.4).
 
@@ -1323,7 +1350,7 @@ Every project's docs must answer: what it is, who consumes it, how to install/ru
 
 | | **Option 1 — modular monorepo** | **Option 2 — multiple repositories** | **Option 3 — hybrid** |
 |---|---|---|---|
-| Means | one repository, six projects, per-project manifests, one CI entry with per-project jobs | one repository per project with published artifacts | platform in one repo + separate frontend repos |
+| Means | one repository, six ownership areas, per-project manifests, one CI entry with per-project jobs | one repository per project with published artifacts | platform in one repo + separate frontend repos |
 
 ### 17.2 Comparison on the axes that matter here
 
@@ -1349,7 +1376,7 @@ Option B sharpens this: core and runtime will change **together** far more often
 
 **PROPOSED — Option 1 (modular monorepo).** Concretely:
 
-1. **One repository**, six projects, per-project manifests, docs, tests and CI jobs.
+1. **One repository**, six ownership areas and seven installable units (core, runtime, database-guard, ingestion, API, V1, V2 — the database area stays package-less), each with its own manifest, docs, tests and CI job.
 2. **Extraction to separate repositories is DEFERRED** behind all three triggers: the contract published as a versioned artifact (O3); a tagged schema release; at least two people owning different projects.
 3. **The frontends are the first candidates** if a split happens.
 4. **The database never leaves**: it is the schema authority for every other project.
@@ -1361,7 +1388,7 @@ Option B sharpens this: core and runtime will change **together** far more often
 | Question | Answer |
 |---|---|
 | Would workspaces fix the API's missing manifest? | **No.** They hoist convenience; they do not give a project an independent dependency set. |
-| Would they help core/runtime? | **No.** Both are dependency-free libraries; `file:` deps need no workspace. |
+| Would they help core/runtime? | **No.** Core has **zero third-party** runtime dependencies; runtime's only dependency is `recommendation-core`, a local `file:` package. Neither needs a workspace, and a workspace would not change how a `file:` dependency resolves. |
 | Would they help the frontends? | **No, and it would hurt.** V1 pins next 16.4.2 and V2 16.4.5; one hoisted `node_modules` would have to resolve one version, and their Node floors differ. |
 | Cost to adopt later | Low once every project has a manifest: add `workspaces` + a root lockfile. |
 
@@ -1427,7 +1454,7 @@ Option B sharpens this: core and runtime will change **together** far more often
 | New requirement | Why |
 |---|---|
 | a boundary test per package | module boundaries exist today only for API→engine |
-| a hermetic core run (no `node_modules`) | proves zero dependencies rather than asserting it |
+| a hermetic core run (no `node_modules`) | proves **zero third-party dependencies** rather than asserting it |
 | a per-project install check in CI | proves `apps/api` is independent once it has a manifest |
 | a contract compatibility gate + cross-copy drift check | §15.4 |
 | a named owner per project | §8, §21 A5 |
@@ -1482,7 +1509,7 @@ The first revision said no step writes and no step deploys, while later steps re
 
 1. **Nothing before step 10 deploys anything.** No step implies a deployment.
 2. **A guarded test is not an authorization.** Passing `TEST_DATABASE_URL` permits TEST; it never permits a shared, EU or production write.
-3. **No production/shared write is authorized by this RFC at all.** Step 10 authorizes it only after 1-9 and only through reviewed migrations/seeds with a restore point.
+3. **The RFC itself never authorizes any database write or deployment.** Step 10 is the earliest planned phase at which a separate, reviewed release PR may **request** explicit owner authorization. Such approval requires a verified target, a restore point, audit evidence and the existing database safeguards — and RFC approval does not grant it in advance.
 4. **Steps 11-12 never write to a database.**
 5. **Rollback** stays a single `git revert` per step because no step mixes a move with a behaviour change (§20.2).
 
@@ -1538,20 +1565,22 @@ The first revision mixed architecture blockers with product questions, which mad
 
 ### 21.1 Architecture decisions (block RFC approval)
 
-| ID | Question | Owner (role) | Blocks | Evidence / consequence that makes it necessary |
-|---|---|---|---|---|
-| **A1** | One repository with six projects (modular monorepo), or multi-repo? | platform owner | **approval** — it decides whether packages are directories in one repo | §17.2; the shared evidence (decision log, register, migration+loader PRs) lives in one place today |
-| **A2** | Approve core's and runtime's public entry points and the barrel split (§11.4, §11.5) | architecture owner | **approval of the split**, then step 4 | 5 mixed barrels (§6.4); without an approved surface, extraction has no acceptance test |
-| **A3** | Is the guard an installable `packages/database-guard` package? | platform owner + database owner | **approval**; step 3a | the API requires it as code (`db.js:26`) and `scripts/` has no manifest (§9.4) |
-| **A4** | Where does the contract live, and is it published? | API owner + platform owner | **approval** of contract ownership; step 3b | §15.2; two per-branch copies today |
-| **A5** | Who is accountable for each project? | platform owner | **approval** of §8's matrix; step 1 acceptance | a boundary nobody owns is a suggestion |
-| **A6** | Accept and document runtime's schema/client-protocol dependency (no `pg` npm dep, pool owned by the API) | architecture owner | **approval** | §9.5; the first revision denied a dependency that exists |
+Each row records a **recommended resolution**, not an approval. `Status` is `AWAITING OWNER APPROVAL` on every row: this RFC cannot mark its own recommendation as decided.
+
+| ID | Question | Recommended decision | Status | Owner (role) | Blocks |
+|---|---|---|---|---|---|
+| **A1** | One repository with six ownership areas (modular monorepo), or multi-repo? | Modular monorepo; multi-repo deferred behind §17.4's triggers | AWAITING OWNER APPROVAL — DECISION REQUIRED | platform owner | **approval** — it decides whether packages are directories in one repo (§17.2) |
+| **A2** | Approve core's and runtime's public entry points, the barrel split, and the API→core vocabulary subset | §11.4/§11.5 as written; the API is restricted to the frozen vocabulary in §9.2, and runtime is not the owner of vocabulary the API consumes | AWAITING OWNER APPROVAL (recommended resolution recorded) | architecture owner | **approval of the split**, then step 4 |
+| **A3** | Is the guard an installable `packages/database-guard` package, and who loads `.env`? | Yes; zero-dependency package, with environment loading left to the consuming API/CLI bootstrap (§9.4) | AWAITING OWNER APPROVAL | platform owner + database owner | **approval**; step 3a |
+| **A4** | Where does the contract live, and is it published? | One versioned `contract/openapi-<version>.json` owned by the API; publication as a release artifact later (O3) | AWAITING OWNER APPROVAL | API owner + platform owner | **approval** of contract ownership; step 3b (§15.2) |
+| **A5** | Who is accountable for each responsibility? | §8's matrix **after** the preset-generation split: exactly one accountable owner per row | AWAITING OWNER APPROVAL | platform owner | **approval** of the matrix; step 1 acceptance |
+| **A6** | Accept and document runtime's real schema + client-protocol dependency, with the API owning the pool | Accepted and documented (§9.5); runtime declares no `pg` dependency, and the pool stays in `apps/api/src/db.js` | AWAITING OWNER APPROVAL | architecture owner | **approval** |
 
 ### 21.2 Product and operations decisions (do **not** block approval)
 
 | ID | Question | Owner (role) | Blocks (which phase / deployment) | Not an architecture blocker because |
 |---|---|---|---|---|
-| **B1** | Do the beta's prices stay unverified, and does the seed-offer waiver stay on? | product owner | **deployment** and the waiver-off date; not approval | The architectural half is already settled: the default lives in `apps/api/src/engine.js` (`API_ENGINE_OPTIONS`), an API-owned policy that runtime accepts as a caller option. Whether it *should* be on is a data-honesty/product choice with no boundary consequence. Evidence for the choice: §11A.2. |
+| **B1** | Do the beta's prices stay unverified, and does the seed-offer waiver stay on? | product owner | **deployment** and the waiver-off date; not approval | The architectural half is recommended as settled (A2): the default lives in `apps/api/src/engine.js` (`API_ENGINE_OPTIONS`), an API-owned policy that runtime accepts as a caller option. Whether it *should* be on is a data-honesty/product choice with no boundary consequence. Evidence for the choice: §11A.2. |
 | **B2** | Is V2 the single future frontend? | product owner | steps 7-11 (parity, retirement) | V1 and V2 already have independent manifests; the boundary does not change either way. Evidence: §14.2. |
 | **B3** | Which V1 capabilities must be retained? | product owner | step 8's definition of done, step 11 | It defines scope, not boundaries. Evidence: §14.7. |
 | **B4** | Does ingestion become a scheduled service or stay an operator job? | operations owner | nothing architectural; later ingestion work | It changes how ingestion runs, not what it may import. Evidence: §12. |
@@ -1586,6 +1615,10 @@ The first revision mixed architecture blockers with product questions, which mad
 | A14 | Every count names environment, date, source and kind | met (§11A.2) |
 | A15 | Decisions are split into approval blockers and product/ops decisions | met (§21) |
 | A16 | No application, database, test, workflow, manifest, Dockerfile or lockfile changed in this PR | met — see §23.5 and `git diff --stat` |
+| A17 | The API→core interface is a named, enforced vocabulary; runtime is never described as core's only consumer | met (§9.2, §11.4, §13.3) |
+| A18 | Every responsibility has exactly one accountable owner, including preset generation | met (§8.1, §8.3) |
+| A19 | Recommendations are distinguished from owner approvals; no decision is marked approved by this RFC | met (§21.1) |
+| A20 | Terminology separates six ownership areas from installable packages and applications | met (§7.3) |
 
 ### 22.2 For the programme (definition of done per project, PROPOSED)
 
