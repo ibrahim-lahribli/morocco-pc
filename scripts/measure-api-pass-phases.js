@@ -46,10 +46,11 @@
 // Expect this on today's databases: the default pin is INACTIVE on the TEST
 // branch (launch-v2@1.0.0 is the active one there), so a run MUST pass
 // `--model=launch-v2@1.0.0` or the pin refuses before it writes anything.
-// The 2026-10-07 figures in docs/API.md predate launch-v2 and are therefore
-// seed-minimal-v1 numbers — which cannot be re-measured on the TEST branch:
-// that model is inactive there and a pin never activates one. Measure what is
-// active and label the number with it, rather than comparing across two pins.
+// The 2026-10-07 figures in docs/api/CONTRACT.md predate launch-v2 and are
+// therefore seed-minimal-v1 numbers — which cannot be re-measured on the TEST
+// branch: that model is inactive there and a pin never activates one. Measure
+// what is active and label the number with it, rather than comparing across
+// two pins.
 
 require('dotenv').config();
 

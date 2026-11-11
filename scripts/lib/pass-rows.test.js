@@ -12,8 +12,8 @@
 // otherwise undeletable, and a swapped pass is exactly what a crashed API probe
 // leaves behind. A fake client pins the order, the scoping and the round-trip
 // count without a database; the live proof is the twice-green rehearsal in
-// `docs/API.md` and `apps/api/test/db/swap-commit.db.test.js`, which deletes a
-// REAL swapped pass through `deletePassRows`.
+// `docs/api/CONTRACT.md` and `apps/api/test/db/swap-commit.db.test.js`, which
+// deletes a REAL swapped pass through `deletePassRows`.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');

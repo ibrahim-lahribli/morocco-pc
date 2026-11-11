@@ -108,7 +108,7 @@ test('the usage names the guard, the restore point and the runbook', () => {
   const usage = usageText();
   assert.match(usage, /--restore-point=<id>/);
   assert.match(usage, new RegExp(API_ROLE_NAME));
-  assert.match(usage, /docs\/RECIPES\/provision-the-api-role\.md/, 'the operator is pointed at the procedure');
+  assert.match(usage, /docs\/database\/recipes\/provision-the-api-role\.md/, 'the operator is pointed at the procedure');
   assert.match(usage, /SHARED/, 'the target is named in the usage, not left implicit');
 });
 
