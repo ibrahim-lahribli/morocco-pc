@@ -18,8 +18,8 @@ opens with a one-line header naming the file that replaced it and the date. Noth
 | `OG-39_ACTIVATION_PLAN.md` | `docs/OPEN_POINTS.md` | model activation is now R-06 plus `docs/engine/recipes/add-a-scoring-model-version.md` |
 | `HANDOFF_2026-11-01_catalogue_identity.md` | `docs/OPEN_POINTS.md` | its open half is R-07; the repair itself is in seed 028 |
 | `STATUS_REVIEW.md` | `docs/OPEN_POINTS.md` | the 2026-11-02 review; its section 7 became the register |
-| `HANDOFF_2026-11-04.md` | `docs/OPEN_POINTS.md`, `docs/CONTEXT.md` | dated handoff for the EU private-beta hardening; its open items are register rows |
-| `HANDOFF_2026-11-07.md` | `docs/OPEN_POINTS.md`, `docs/CONTEXT.md` | dated handoff after PR #16; its measurements are evidence, its open items are register rows |
+| `HANDOFF_2026-11-04.md` | `docs/OPEN_POINTS.md`, `CONTEXT.md` | dated handoff for the EU private-beta hardening; its open items are register rows |
+| `HANDOFF_2026-11-07.md` | `docs/OPEN_POINTS.md`, `CONTEXT.md` | dated handoff after PR #16; its measurements are evidence, its open items are register rows |
 | `pr8-fix-saved-spec.patch` | not applied, archived as history | a stale saved-builds spec patch; the tree has since moved past it (recorded, never applied) |
 | `IMPORT_OFFERS.md` | `docs/ingestion/recipes/import-offers.md` | merged with the two offer recipes below |
 | `import-offers-manually.md` | `docs/ingestion/recipes/import-offers.md` | merged into one recipe |
