@@ -9,7 +9,7 @@
  *
  * READ-ONLY. Two SELECT-only snapshots are compared; nothing is created, written
  * or dropped, and no URL, host, user or password is printed - a target is named
- * by its endpoint id (scripts/lib/db-url.js `describeTarget`), which is what the
+ * by its endpoint id (packages/database-guard/src/index.js `describeTarget`), which is what the
  * harness lines already print.
  *
  * Exit codes:
@@ -43,7 +43,7 @@
 require('dotenv').config();
 
 const { Client } = require('pg');
-const { describeTarget } = require('./lib/db-url');
+const { describeTarget } = require('../packages/database-guard/src');
 const { PARITY_TABLES, shortDigest, compareSnapshots } = require('./lib/target-parity');
 
 const USAGE = 'usage: node scripts/check-target-parity.js --a=<url|env:NAME> --b=<url|env:NAME> [--help]';

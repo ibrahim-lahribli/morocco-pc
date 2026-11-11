@@ -25,6 +25,10 @@ jobs:
       - run: npm ci
       - run: npm run test:unit
       - run: npm run test:scripts
+      # The extracted database guard's own suite. It left scripts/lib/ in step 3a,
+      # so `test:scripts` no longer covers it: a run without this step would drop
+      # coverage silently instead of moving it.
+      - run: npm run test:database-guard
       # DB-free API contract/route tests (fastify.inject + stubs; no database).
       - run: npm run test:api
       - run: node scripts/gen-decision-index.js --check

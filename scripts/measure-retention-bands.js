@@ -37,7 +37,7 @@ require('dotenv').config();
 const path = require('path');
 const { Client } = require('pg');
 
-const { getWriteTestDbUrl, describeTarget } = require('./lib/db-url');
+const { getWriteTestDbUrl, describeTarget } = require('../packages/database-guard/src');
 const modelPin = require('./lib/model-pin');
 
 const candidates = require(path.join(__dirname, '..', 'src', 'recommendation', 'candidates'));

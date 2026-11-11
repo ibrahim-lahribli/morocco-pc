@@ -2,7 +2,7 @@
 #
 # BUILD CONTEXT IS THE REPOSITORY ROOT, not apps/api: the API imports the engine
 # from src/recommendation/ (a sibling of apps/) and the write-target guard from
-# scripts/lib/. Build it with:
+# packages/database-guard/. Build it with:
 #
 #   docker build -f apps/api/Dockerfile -t morocco-pc-api .
 #
@@ -32,11 +32,13 @@ RUN npm ci --omit=dev
 COPY src ./src
 COPY apps/api ./apps/api
 
-# The one script module the API reuses at runtime: db-url.js owns the
+# The one package the API reuses at runtime: database-guard owns the
 # "TEST_DATABASE_URL must not target the shared database" guard. Copied
-# explicitly rather than as the whole scripts/ tree so the runtime dependency
-# stays visible and the image stays small.
-COPY scripts/lib/db-url.js ./scripts/lib/db-url.js
+# explicitly rather than as the whole packages/ tree so the runtime dependency
+# stays visible and the image stays small. Path-only correction (owner decision
+# 1, 2026-11-11): the install, the user and the CMD are unchanged.
+COPY packages/database-guard/package.json ./packages/database-guard/package.json
+COPY packages/database-guard/src ./packages/database-guard/src
 
 # node:22-alpine ships an unprivileged `node` user; never run as root.
 USER node

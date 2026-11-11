@@ -1,0 +1,10 @@
+{
+  "name": "@morocco-pc/recommendation-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Database-backed recommendation execution: loaders, persistence and orchestration over an injected client. Manifest only at step 3a: the existing docs/ directory is extended, no module has moved yet.",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=22"
+  }
+}

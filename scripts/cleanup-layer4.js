@@ -48,7 +48,7 @@ require('dotenv').config();
 const { Client } = require('pg');
 
 const { applyLogTarget } = require('./lib/migrations');
-const { normalizeTarget } = require('./lib/db-url');
+const { normalizeTarget } = require('../packages/database-guard/src');
 const {
   DEMO_PROFILE_NAME_PATTERN,
   DEMO_PROFILE_DESCRIPTION,

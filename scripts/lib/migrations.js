@@ -2,7 +2,7 @@
 
 const crypto = require('node:crypto');
 
-const { normalizeTarget } = require('./db-url');
+const { normalizeTarget } = require('../../packages/database-guard/src');
 
 // scripts/lib/migrations.js — pure helpers for the applied-migrations ledger
 // (gap OG-14, `docs/OPEN_GAPS.md`).
@@ -20,7 +20,7 @@ const { normalizeTarget } = require('./db-url');
 // filenames on disk and the set already recorded in the ledger, which files
 // still need to run? No I/O, no clock, no database — the caller supplies both
 // inputs, so the decision is unit-testable without a DB (same shape as
-// `scripts/lib/db-url.js` and `scripts/lib/gap-register.js`).
+// `packages/database-guard/src/index.js` and `scripts/lib/gap-register.js`).
 //
 // Ledger table shape (created by the runner, not by a numbered migration, so a
 // fresh 001->NNN replay stays clean):

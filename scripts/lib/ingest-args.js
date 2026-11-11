@@ -38,7 +38,7 @@
  * (exit 2, nothing dialled); anything else is a failed run (exit 1).
  */
 
-const { CONNECTION_TIMEOUT_MILLIS, resolveTestDbUrl } = require('./db-url');
+const { CONNECTION_TIMEOUT_MILLIS, resolveTestDbUrl } = require('../../packages/database-guard/src');
 const { applyLogTarget, isValidRestorePointId } = require('./migrations');
 
 const ADAPTERS = new Set(['manual']);

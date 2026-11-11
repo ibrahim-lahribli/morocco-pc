@@ -28,7 +28,7 @@
 // pool independence) is a standing regression with its own procedure and is NOT
 // measured here; the acceptance section says so explicitly.
 //
-// Safety contract (mirrors scripts/lib/db-url.js):
+// Safety contract (mirrors packages/database-guard/src/index.js):
 //   * Target is TEST_DATABASE_URL only. getWriteTestDbUrl() throws unless
 //     TEST_DATABASE_URL is set, DATABASE_URL is set, and the two hosts differ
 //     (pooled vs direct counts as the same endpoint). The shared DATABASE_URL
@@ -61,7 +61,7 @@
 require('dotenv').config();
 const { Client } = require('pg');
 
-const { getWriteTestDbUrl } = require('./lib/db-url');
+const { getWriteTestDbUrl } = require('../packages/database-guard/src');
 const { runRecommendationSnapshot } = require('../src/recommendation/orchestrator');
 const { rankBuilds, TOP_N_PERSISTED } = require('../src/recommendation/ranking');
 const { EXPANSION_ORDER } = require('../src/recommendation/assembly');

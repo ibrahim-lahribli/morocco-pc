@@ -24,7 +24,7 @@
 // comparison is not PI-1. See scripts/lib/pool-independence.js.
 //
 // Reads and writes the TEST branch only (TEST_DATABASE_URL via
-// scripts/lib/db-url.js). It never contacts the shared DATABASE_URL except to
+// packages/database-guard/src/index.js). It never contacts the shared DATABASE_URL except to
 // resolve the scoring model row the queries must reference — the run itself is
 // executed entirely on the test branch. Exits non-zero on any drift.
 //
@@ -44,7 +44,7 @@
 
 require('dotenv').config();
 const { Client } = require('pg');
-const { getWriteTestDbUrl } = require('./lib/db-url');
+const { getWriteTestDbUrl } = require('../packages/database-guard/src');
 const { runRecommendationSnapshot } = require('../src/recommendation/orchestrator');
 const { rankBuilds } = require('../src/recommendation/ranking');
 const { captureScoreVector, scoreVectorDrift } = require('./lib/score-vector');

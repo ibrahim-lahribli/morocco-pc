@@ -35,7 +35,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { Pool } = require('pg');
 
-const { resolveTestDbUrl } = require('../../../../scripts/lib/db-url');
+const { resolveTestDbUrl } = require('../../../../packages/database-guard/src');
 const repository = require('../../src/repository');
 
 const ENGINE_VERSION = 'db-test-sha';

@@ -41,7 +41,7 @@
 // SAFETY
 //
 // --test-db is required. The scratch database is created on the TEST_DATABASE_URL
-// instance via scripts/lib/db-url.js, which throws unless TEST_DATABASE_URL is
+// instance via packages/database-guard/src/index.js, which throws unless TEST_DATABASE_URL is
 // set, parseable, and a DIFFERENT host from DATABASE_URL. The shared database
 // is only ever read, to supply the live snapshot.
 //
@@ -62,7 +62,7 @@ const path = require('path');
 const { Client } = require('pg');
 
 const { compareSchemaSnapshot } = require('./lib/schema-diff');
-const { resolveTestDbUrl } = require('./lib/db-url');
+const { resolveTestDbUrl } = require('../packages/database-guard/src');
 
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'database', 'migrations');
 

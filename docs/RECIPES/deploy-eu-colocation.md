@@ -145,7 +145,7 @@ one, the apply stops before writing.
 DATABASE_URL="$TARGET_DIRECT_URL" node scripts/run-migrations.js --dry-run
 
 # 2) Apply. Direct host on purpose: Neon's pooler runs PgBouncer in transaction mode, and
-#    schema DDL is safer on a direct session (scripts/lib/db-url.js `toDirectUrl` states the
+#    schema DDL is safer on a direct session (packages/database-guard/src/index.js `toDirectUrl` states the
 #    same rule for migrations and for session-level SET).
 DATABASE_URL="$TARGET_DIRECT_URL" \
   node scripts/run-migrations.js \
@@ -224,7 +224,7 @@ app = "morocco-pc-api"
 primary_region = "fra"
 
 [build]
-  # Context is the repository root; the image copies src/, apps/api/ and scripts/lib/db-url.js.
+  # Context is the repository root; the image copies src/, apps/api/ and packages/database-guard/src/index.js.
   dockerfile = "apps/api/Dockerfile"
 
 [env]
@@ -808,7 +808,7 @@ Blueprint only applies to the resources it names. That demo service was suspende
 so `morocco-pc-api-eu` is the only Render resource this file describes.
 
 - **`dockerContext: .` is load-bearing, not a default worth omitting.** `apps/api/Dockerfile` copies
-  `src/` (the engine) and `scripts/lib/db-url.js` relative to the repository root, so a context of
+  `src/` (the engine) and `packages/database-guard/src/index.js` relative to the repository root, so a context of
   `apps/api` builds an image with no engine in it.
 - **`plan: free` is the committed default**, because it costs nothing and is enough for the part that
   matters first: rotating the credential, setting a real `ENGINE_VERSION`, and wiring CORS and the

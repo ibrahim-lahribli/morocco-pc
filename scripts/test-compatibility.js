@@ -2,7 +2,7 @@
 
 // scripts/test-compatibility.js - Layer 1 compatibility and provenance fixtures.
 //
-// Safety contract (OG-51; the same shape as scripts/lib/db-url.js and
+// Safety contract (OG-51; the same shape as packages/database-guard/src/index.js and
 // scripts/test-orchestrator-commit.js):
 //   * Target is TEST_DATABASE_URL ONLY. getWriteTestDbUrl() throws unless
 //     TEST_DATABASE_URL is set, DATABASE_URL is set, and the two name different
@@ -26,7 +26,7 @@
 require('dotenv').config();
 const { Client } = require('pg');
 
-const { getWriteTestDbUrl, describeTarget } = require('./lib/db-url');
+const { getWriteTestDbUrl, describeTarget } = require('../packages/database-guard/src');
 
 const FIXTURE_PRODUCT = "name LIKE 'TestCompat%'";
 const FIXTURE_FAMILIES = "('TestCPUFamily', 'TestMBBFamily', 'TestCaseFamily', 'TestCoolerFamily')";

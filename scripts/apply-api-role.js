@@ -50,7 +50,7 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 const { Client } = require('pg');
 
-const { toDirectUrl, describeTarget } = require('./lib/db-url');
+const { toDirectUrl, describeTarget } = require('../packages/database-guard/src');
 const { applyLogTarget, isValidRestorePointId } = require('./lib/migrations');
 const apiRole = require('./lib/api-role');
 

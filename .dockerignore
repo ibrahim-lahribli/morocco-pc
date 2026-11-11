@@ -1,5 +1,5 @@
 # Build context is the repository ROOT (see apps/api/Dockerfile).
-# Everything here is excluded from the image; keep `scripts/lib/db-url.js` and
+# Everything here is excluded from the image; keep `packages/database-guard/` and
 # `src/recommendation/` available, since the API imports both.
 
 node_modules

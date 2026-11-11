@@ -7,7 +7,7 @@
 // committed pass is really visible on ANOTHER session, a writer error really
 // persists nothing, and the re-run guard really refuses a second attempt.
 //
-// Safety contract (mirrors scripts/lib/db-url.js and
+// Safety contract (mirrors packages/database-guard/src/index.js and
 // scripts/measure-orchestrator.js):
 //   * Target is TEST_DATABASE_URL only. getWriteTestDbUrl() throws unless
 //     TEST_DATABASE_URL is set, DATABASE_URL is set, and the two hosts differ
@@ -37,7 +37,7 @@ require('dotenv').config();
 const { randomUUID } = require('node:crypto');
 const { Client } = require('pg');
 
-const { getWriteTestDbUrl } = require('./lib/db-url');
+const { getWriteTestDbUrl } = require('../packages/database-guard/src');
 const passRows = require('./lib/pass-rows');
 const { runRecommendationCommit } = require('../src/recommendation/orchestrator/commit');
 const { ERROR_CODES, CandidateSelectionError } = require('../src/recommendation/candidates/errors');

@@ -2,7 +2,7 @@ app = "morocco-pc-api"
 primary_region = "fra"
 
 [build]
-  # Context is the repository root; the image copies src/, apps/api/ and scripts/lib/db-url.js.
+  # Context is the repository root; the image copies src/, apps/api/ and packages/database-guard/src/index.js.
   dockerfile = "apps/api/Dockerfile"
 
 [env]

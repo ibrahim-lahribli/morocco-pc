@@ -30,7 +30,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { resolveTestDbUrl } = require('../../../scripts/lib/db-url');
+const { resolveTestDbUrl } = require('../../../packages/database-guard/src');
 
 const DB_DIR = path.join(__dirname, 'db');
 

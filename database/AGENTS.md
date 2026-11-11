@@ -59,7 +59,7 @@ node scripts/check-catalog-identity.js                  # every ACTIVE product h
 npm run gen:schema                                      # regenerate the schema reference
 ```
 
-Write-capable checks route through `scripts/lib/db-url.js` and `TEST_DATABASE_URL`; `getWriteTestDbUrl()`
+Write-capable checks route through `packages/database-guard/src/index.js` and `TEST_DATABASE_URL`; `getWriteTestDbUrl()`
 returns a connection **config object** (`{ connectionString, connectionTimeoutMillis }`), not a URL.
 
 ## Recipes

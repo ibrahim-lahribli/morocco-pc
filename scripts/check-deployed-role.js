@@ -32,7 +32,7 @@
  * connection the app used and RELABEL it: on 2026-10-23 a pooled run of this
  * script turned the app-tagged probe session into `morocco-pc-deployed-role-check`
  * and then reported INCONCLUSIVE, hiding the evidence it had just overwritten.
- * `toDirectUrl` (scripts/lib/db-url.js) gives the read its own backend, so the
+ * `toDirectUrl` (packages/database-guard/src/index.js) gives the read its own backend, so the
  * observation cannot change what it is observing.
  *
  * Usage:
@@ -55,7 +55,7 @@
 require('dotenv').config();
 const { Client } = require('pg');
 
-const { toDirectUrl } = require('./lib/db-url');
+const { toDirectUrl } = require('../packages/database-guard/src');
 const apiRole = require('./lib/api-role');
 const {
   APPLICATION_NAME_MAX_LENGTH,
