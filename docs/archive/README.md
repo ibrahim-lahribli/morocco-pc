@@ -15,12 +15,15 @@ opens with a one-line header naming the file that replaced it and the date. Noth
 | `OG-01_BATCH2_EXECUTION_PLAN.md` | `docs/OPEN_POINTS.md` | same closure; the executable companion to the above |
 | `OG01_BATCH2_RESEARCH_CHECKLIST.md` | `docs/OPEN_POINTS.md` | committed output of `scripts/og01-research-checklist.js` for a closed gap |
 | `OG01_BATCH2_RESEARCH_CHECKLIST.csv` | `docs/OPEN_POINTS.md` | same worksheet, machine-readable form |
-| `OG-39_ACTIVATION_PLAN.md` | `docs/OPEN_POINTS.md` | model activation is now R-06 plus `docs/RECIPES/add-a-scoring-model-version.md` |
+| `OG-39_ACTIVATION_PLAN.md` | `docs/OPEN_POINTS.md` | model activation is now R-06 plus `docs/engine/recipes/add-a-scoring-model-version.md` |
 | `HANDOFF_2026-11-01_catalogue_identity.md` | `docs/OPEN_POINTS.md` | its open half is R-07; the repair itself is in seed 028 |
 | `STATUS_REVIEW.md` | `docs/OPEN_POINTS.md` | the 2026-11-02 review; its section 7 became the register |
-| `IMPORT_OFFERS.md` | `docs/RECIPES/import-offers.md` | merged with the two offer recipes below |
-| `import-offers-manually.md` | `docs/RECIPES/import-offers.md` | merged into one recipe |
-| `refresh-offers.md` | `docs/RECIPES/import-offers.md` | merged into one recipe |
+| `HANDOFF_2026-11-04.md` | `docs/OPEN_POINTS.md`, `CONTEXT.md` | dated handoff for the EU private-beta hardening; its open items are register rows |
+| `HANDOFF_2026-11-07.md` | `docs/OPEN_POINTS.md`, `CONTEXT.md` | dated handoff after PR #16; its measurements are evidence, its open items are register rows |
+| `pr8-fix-saved-spec.patch` | not applied, archived as history | a stale saved-builds spec patch; the tree has since moved past it (recorded, never applied) |
+| `IMPORT_OFFERS.md` | `docs/ingestion/recipes/import-offers.md` | merged with the two offer recipes below |
+| `import-offers-manually.md` | `docs/ingestion/recipes/import-offers.md` | merged into one recipe |
+| `refresh-offers.md` | `docs/ingestion/recipes/import-offers.md` | merged into one recipe |
 | `PLAN_PLATFORM_CONSTRAINTS.md` | `docs/ROADMAP.md` | rules section of the merged roadmap |
 | `PLAN_PLATFORM_P0.md` | `docs/ROADMAP.md` | sprint ledger section |
 | `PLAN_PLATFORM_P1.md` | `docs/ROADMAP.md` | sprint ledger section |
@@ -54,11 +57,12 @@ answer to a question:
 | `docs/RECOMMENDATION_ENGINE_DECISIONS.md` | the immutable decision log; off-limits by policy |
 | `docs/OPEN_GAPS.md` | `verify-docs.js` parses its rows (`gap-register-shape`); now the evidence trail behind `OPEN_POINTS.md` |
 | `docs/GLOSSARY.md`, `docs/TEST_MAP.md` | `verify-docs.js` requires both to exist |
-| `docs/ARCHITECTURE.md` | gate check 9 scans it for deferral claims that a shipped module contradicts |
+| `docs/RECIPES/` | `verify-docs.js` requires the directory to exist and be non-empty; deploy and first-launch recipes stay here |
+| `docs/engine/ARCHITECTURE.md` | gate check 9 scans it for deferral claims that a shipped module contradicts |
 | `docs/SCHEMA_REFERENCE.md`, `docs/DATA_STATE.md`, `docs/DECISION_INDEX.md` | generated; only their generators may write them |
 | `DEVELOPMENT_NOTES.md` | the operational-command reference; archiving it would lose the verified commands |
 | `docs/briefs/engine.md` | the E0-E8 epic spine that `test/golden/scenarios.json` cites by name |
-| `docs/PIPELINE_DESIGN.md` | the ingestion design behind R-01, still unbuilt |
+| `docs/ingestion/PIPELINE_DESIGN.md` | the ingestion design behind R-01, still unbuilt |
 | `docs/ENGINE_HYPOTHESIS_REVIEW_2026-10-24.md` | the review record the golden approvals cite as evidence |
 | `docs/decisions/TEMPLATE.md`, `docs/RECIPES/` | live procedure |
 

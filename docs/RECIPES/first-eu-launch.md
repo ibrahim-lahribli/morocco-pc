@@ -143,7 +143,7 @@ the apply, because both are behaviour changes, not cosmetics:
   `seed-minimal-v1@1.0.0`. The pin FAILS CLOSED on an INACTIVE model, so after the apply every run
   against shared must pass `--model=launch-v2@1.0.0`. Seed 013's own header calls itself "a
   coordinated step, not a routine seed run" for exactly this reason.
-- **The API pointed at shared starts serving launch-v2** and advertising `OFFICE` (`docs/API.md`,
+- **The API pointed at shared starts serving launch-v2** and advertising `OFFICE` (`docs/api/CONTRACT.md`,
   Option vocabulary). Anything that pins the old vocabulary there is now wrong.
 
 If the answer is **"align shared"**:
@@ -172,7 +172,7 @@ not comparable to a branch figure), and close item (2) as a decision. Do not clo
 ## 5. OG-54 item (3): retailer provenance
 
 - [ ] Obtain a real retailer export (the hard part, and the reason this item is last), then follow
-      `docs/RECIPES/import-offers.md` "Refresh the catalog".
+      `docs/ingestion/recipes/import-offers.md` "Refresh the catalog".
 - [ ] `node scripts/check-offer-provenance.js` → `RESULT: PASS`. The path was exercised end to end
       on 2026-10-23 on a temporary fixture: `SKU_EXACT` match, `PASS` with 1 verified offer, then
       the fixture deleted in FK order with residue asserted 0.

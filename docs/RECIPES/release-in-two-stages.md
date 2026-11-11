@@ -111,7 +111,7 @@ DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-deployed-role.js 
 Redeploy the **previous** sha and set `ENGINE_VERSION` back to it. No migration ran, no seed ran and
 `catalog_version` was never touched, so there is nothing to reverse in the database — and no Neon
 reset is ever part of this release. If the role check failed after the deploy, the credential is the
-suspect, not the code (`docs/RECIPES/provision-the-api-role.md`, `deploy-eu-colocation.md` §8.5).
+suspect, not the code (`docs/database/recipes/provision-the-api-role.md`, `deploy-eu-colocation.md` §8.5).
 
 ## Release 2 — the scoring model
 
@@ -178,7 +178,7 @@ though the pin still names 2.4.0. That is expected, not a regression — steps 3
 ### 3. Import offers
 
 The importer is a **dry run by default** and needs the adapter and the file explicitly; the full
-procedure and the file format are `docs/RECIPES/import-offers.md`. Same shape as step 2 — export
+procedure and the file format are `docs/ingestion/recipes/import-offers.md`. Same shape as step 2 — export
 `TARGET_DATABASE_URL`, keep `DATABASE_URL` on shared.
 
 ```bash
