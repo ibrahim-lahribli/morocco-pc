@@ -1,6 +1,7 @@
 # Recommendation runtime - loaders and transaction contract
 
-Status: CURRENT. This document owns the **database-facing half** of the engine contract. It was split
+Status: CURRENT for sections 1, 14 and 15 (moved verbatim); the ownership section below describes the
+TARGET boundary (RFC section 11.5) and is not yet extracted. This document owns the **database-facing half** of the engine contract. It was split
 out of `docs/engine/ARCHITECTURE.md` on 2026-11-11 (Roadmap Step 2, RFC §16.5). The moved text is
 verbatim; section numbers are those of the original document so that existing "section 1/14/15"
 citations in decisions and code comments keep resolving.
@@ -9,9 +10,9 @@ The engine half stays in [`../../../docs/engine/ARCHITECTURE.md`](../../../docs/
 It remains a design baseline: the decisions in `docs/RECOMMENDATION_ENGINE_DECISIONS.md` and the code
 are authoritative where they disagree.
 
-## Transaction and loader ownership (CURRENT)
+## Transaction and loader ownership (TARGET boundary)
 
-The pure stages never touch the database. Everything below is owned by this project:
+The pure stages never touch the database. Everything below is the responsibility of the future `recommendation-runtime` project. Today every module named here lives under `src/recommendation/` (for example `src/recommendation/orchestrator/run.js`):
 
 - **Loaders** read the tables listed in section 1 and hand plain rows/objects to the stages:
   `candidates/loader`, `filtering/context-loader`, `scoring/load-*`, `offers/`, `query/`.
@@ -93,8 +94,6 @@ Write safety (unchanged): write-capable tests run against `TEST_DATABASE_URL` th
 * `recommendation_result` (query FK, candidate FK, `rank` NULL-or->0,
   UNIQUE non-NULL rank per query, `explanation TEXT`)
 * Enum `compatibility_status` = PASS | FAIL | UNKNOWN | CONDITIONAL.
-
----
 
 ---
 

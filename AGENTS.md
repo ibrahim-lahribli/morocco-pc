@@ -10,7 +10,9 @@ working instructions live in its own `AGENTS.md` (section 6).
 query (budget, currency, use case, resolution), the engine selects compatible components, assembles
 builds, scores them, ranks them, picks a diverse top set, explains them and persists the pass.
 
-The engine is a pure Node.js library plus a PostgreSQL schema. Two thin layers sit on it and own no
+The engine is a Node.js library plus a PostgreSQL schema. Its stages are separable into pure logic
+and SQL-executing loaders/persistence (the architecture RFC §6.2 records that 15 non-ingestion
+modules execute SQL). Two thin layers sit on it and own no
 engine logic: `apps/api/` (Fastify, the HTTP contract, the connection pool) and `apps/web/`
 (Next.js App Router, its own package and lockfile). There is no authentication anywhere in the tree.
 `apps/offer-ingestion` does not exist yet; offer ingestion today runs through `scripts/` and
