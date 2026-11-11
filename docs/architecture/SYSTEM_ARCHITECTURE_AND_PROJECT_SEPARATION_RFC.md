@@ -2,7 +2,7 @@
 
 **Repository:** `ibrahim-lahribli/morocco-pc`
 **Status:** PROPOSED — revised 2026-11-11. **A1-A6 APPROVED by the repository owner on 2026-11-11** (§21.1); **Option B (separate `recommendation-core` and `recommendation-runtime` packages) is the selected direction** (owner decision, recorded in §1.5). **B1-B8 remain open.** The decision record is approved; **nothing is implemented**, and PR #23 is neither approved nor merged by it.
-**Date:** 2026-11-11 (first revision: 2026-11-10)
+**Date:** 2026-11-11 (first revision: 2026-11-10). **Revision 3 (2026-11-11):** §21.3 records four owner-confirmed implementation decisions (D1-D4), and §9.2, §9.4, §10.1, §13.4, §15.4 and §19 carry the corrections they exposed: the guard's seven-export interface, the API pool test's ownership, the absent restore-point predicate, the four named manifests, path-only Docker/hosting updates, the Step 7 V2 deferral and the Git-ref compatibility baseline.
 **Baseline:** `master` = `a413f25` ("Merge pull request #18 from ibrahim-lahribli/freebuff/launch-v2-2.5.0-decay-off")
 **Secondary input:** `feature/v2-design` = `3bc0605` (read, never merged or rebased for this RFC)
 **RFC branch:** `architecture/system-separation-rfc`, previous commit `9297034`
@@ -61,7 +61,7 @@ Two of the six candidate projects are therefore **already independently packaged
 | F7 | **There is one contract document pattern, but two physical copies across branches.** `apps/api/test/unit/openapi-v1.10.json` is read by V1's generators and gates on `master`; V2 carries its own copy of the same file on `feature/v2-design`, and each frontend's `check:api-types` compares generated types against its own copy. Identical content today; no gate would detect divergence tomorrow. | `apps/web/package.json`, `apps/web-v2/package.json`, both workflows; §15.2 |
 | F8 | **V2 is a foundation, and one manual read-only staging smoke exists.** V2 has 3 route files and performs only GETs; it has no catalogue route, results route, swap, saved builds, and **no deployment configuration**. Its `docs/staging-smoke.md` records a **manual, ordinary-browser, read-only** smoke on 2026-11-07 (7 reads per locale, all HTTP 200, 0 POST) against the EU staging API. That is not a deployed V2 frontend and not an automated E2E test. | §14.4; `feature/v2-design:apps/web-v2/docs/staging-smoke.md` |
 | F9 | **The programme is single-tenant and unauthenticated by decision, not by omission.** No auth library, no session, no account; the API contract documents "No authentication or accounts" as a deliberate property (R-16 ACCEPTED). | `docs/API.md`; `docs/OPEN_POINTS.md` R-16 |
-| F10 | **The shared operational machinery is the real coupling.** `scripts/lib/` holds the DB write guard, the target digests, the restore-point predicates, the model pin and the generated-doc check — every one consumed by more than one layer. | `apps/api/src/db.js:26`, `scripts/*.js`, `npm run test:scripts` |
+| F10 | **The shared operational machinery is the real coupling.** `scripts/lib/` holds the DB write guard, the target digests, the restore-point argument validation, the model pin and the generated-doc check — every one consumed by more than one layer. | `apps/api/src/db.js:26`, `scripts/*.js`, `npm run test:scripts` |
 
 ### 1.3 Principal recommendations
 
@@ -676,7 +676,7 @@ The first revision assigned the golden harness "jointly to P1 + P2", which is a 
 | core ← runtime | core's subpath exports and frozen input/output contracts (§11.4) | core's own boundary test: no `.query(`, no `pg`, no `fs`, no `process.env`. Runtime is core's primary in-repo consumer, **not its only one** (next row) |
 | core ← api | **frozen vocabulary only**: `COMPONENT_ROLES`, `EXPANSION_ORDER`, `listUseCases`, `resolutionMultiplier`, the error vocabulary (`ERROR_CODES`, `CandidateSelectionError`), and immutable domain contracts the HTTP layer must not restate (`GPU_POLICIES`, `STRATEGIES`, `REASON_CODES`/`REASON_ORDER` where a response names a reason) | an API-side boundary test asserting every API→core import names a symbol on the approved list. The API may **not** import core calculation entry points (`computeBuildScore`, `assembleBuilds`, `retainTopKPerRole`, `rankBuilds`, `selectArchetypes`, `filterCandidates`, `explainSelection`) to reproduce business logic: passes, previews, commits and the catalog digest are reached through runtime. Runtime does **not** become the owner of vocabulary the API consumes; the symbols stay core's |
 | runtime ← api | `./orchestrator` and `./persistence` entry points, with the single-dedicated-connection contract | `import-boundary.test.js` extended to runtime internals; the connection contract is stated in the module headers |
-| guard ← api / ingestion / database tooling | `resolveTestDbUrl`, `getWriteTestDbUrl`, `describeTarget`, `normalizeTarget`, `toDirectUrl` | its own package manifest + its existing unit tests (`scripts/lib/db-url.test.js`, `apps/api/test/unit/db-guard.test.js`) move with it |
+| guard ← api / ingestion / database tooling | its **seven** exports: `CONNECTION_TIMEOUT_MILLIS`, `normalizeHost`, `resolveTestDbUrl(env)`, `getWriteTestDbUrl(env)`, `describeTarget`, `toDirectUrl`, `normalizeTarget` | its own package manifest (`packages/database-guard/package.json`) and its own unit test (`packages/database-guard/test/db-url.test.js`, moved from `scripts/lib/db-url.test.js`). `apps/api/test/unit/db-guard.test.js` does **not** move: its filename is misleading, and it tests API pool configuration (`resolvePoolConfig`, `STATEMENT_TIMEOUT_MS`, `APPLICATION_NAME`), not the guard |
 | schema ← runtime / api / ingestion | tables, columns, enums, constraints | numbered migrations are the only DDL source; `verify:replay` diffs by definition |
 | api → frontends | `contract/openapi-<version>.json` | both frontends' `check:api-types`; `openapi-snapshot.test.js` byte-compares the served document |
 | api ↔ frontends at runtime | `/v1/**` JSON over HTTPS | contract version + committed snapshot |
@@ -702,16 +702,28 @@ The first revision assigned the golden harness "jointly to P1 + P2", which is a 
 
 ### 9.4 The guard: an installable package, not a directory
 
-**CURRENT.** `scripts/lib/db-url.js` (150 lines, zero third-party deps) exports `resolveTestDbUrl`, `getWriteTestDbUrl`, `describeTarget`, `toDirectUrl`, `normalizeTarget`, `normalizeHost`, `CONNECTION_TIMEOUT_MILLIS`. It is required by `apps/api/src/db.js:26` and by at least six scripts (`apply-api-role.js`, `apply-seed.js`, `check-deployed-role.js`, `check-target-parity.js`, `cleanup-layer4.js`, the replay harnesses). `scripts/` has **no `package.json`**, so `"db-guard": "file:../../scripts/lib"` would fail to install.
+**CURRENT (master, measured 2026-11-11).** `scripts/lib/db-url.js` (zero third-party deps) exports **exactly seven** public symbols, and the package contract is those seven and no others:
+
+| # | Export | Contract |
+|---|---|---|
+| 1 | `CONNECTION_TIMEOUT_MILLIS` | constant `15000`, the scripts convention |
+| 2 | `normalizeHost(urlString)` | pure: lowercased host, a `-pooler` first label stripped |
+| 3 | `resolveTestDbUrl(env)` | pure: throws on unset/empty/unparseable `TEST_DATABASE_URL`, unset `DATABASE_URL`, or equal normalised hosts |
+| 4 | `getWriteTestDbUrl(env)` | thin wrapper over `resolveTestDbUrl`; takes an explicit env object and loads no `.env` |
+| 5 | `describeTarget(urlString)` | pure: `{ endpointId, pooled, database }` |
+| 6 | `toDirectUrl(urlString)` | pure: the same string pointed at the direct (non-pooler) host, credentials preserved verbatim |
+| 7 | `normalizeTarget(urlString)` | pure: credential-free `{ host, database }` identity |
+
+There is **no restore-point predicate export**: the restore-point rule is argument validation in `scripts/lib/apply-seed-args.js` and `scripts/apply-api-role.js`, not part of this package. The guard is required by `apps/api/src/db.js:26`, by seven DB-backed API test files plus `apps/api/test/run-db-tests.js`, and by eighteen scripts (sixteen `require` it, two cite it only in comments). `scripts/` has **no `package.json`**, so `"db-guard": "file:../../scripts/lib"` could not install.
 
 **PROPOSED:** create `packages/database-guard/`:
 
 | Aspect | Design |
 |---|---|
-| Contents | the current `db-url.js` implementation, moved verbatim; its two test suites move with it |
+| Contents | the current `db-url.js` implementation, moved to `packages/database-guard/src/index.js`; its own test (`scripts/lib/db-url.test.js`) moves to `packages/database-guard/test/db-url.test.js`. `apps/api/test/unit/db-guard.test.js` **stays in the API**: despite its filename it validates the API's pool configuration (`resolvePoolConfig`, `STATEMENT_TIMEOUT_MS`, `APPLICATION_NAME`), and moving it would move API ownership into a package that must stay independent of `pg` |
 | Manifest | `package.json`: `name`, `version` (repo-tracked, not published), `main: src/index.js`, **zero dependencies — no `dotenv`, no `pg`** |
 | Authoritative implementation | this package, and only this package. No copy in the database project, the API image or a Docker layer |
-| Consumers | `apps/api` (`file:` dep), `apps/offer-ingestion`, `database/tooling`, runtime/its tests |
+| Consumers | `apps/api`, `apps/offer-ingestion` (not yet created), `database/tooling`, runtime/its tests. Until npm workspaces exist (out of scope, R3) consumers import it by **relative path** from the repository root; the `file:` dependency is step 6's change, not step 3a's |
 | Versioning | consumed by commit like every other package in the repo (§17.4); adding a registry or a semver release is out of scope |
 | Why not "a package inside `database/`" | a `file:` dependency must resolve to a directory with a manifest; putting one inside `database/` would make the database project installable-by-accident, which is exactly what P2's "not a package" rule forbids in spirit |
 | Why not inline it in the API | the guard is a security control shared by five consumers; an inline copy would be a second authoritative implementation |
@@ -722,7 +734,7 @@ The first revision assigned the golden harness "jointly to P1 + P2", which is a 
 |---|---|
 | `resolveTestDbUrl(env)` | pure; takes an explicit env object (already true today) |
 | `getWriteTestDbUrl(env)` | takes an explicit env object; **never** loads `.env` itself |
-| `describeTarget`, `normalizeTarget`, `normalizeHost`, `toDirectUrl`, restore-point predicate | pure; explicit inputs only |
+| `describeTarget`, `normalizeTarget`, `normalizeHost`, `toDirectUrl` | pure; explicit inputs only |
 
 Every consumer calls `getWriteTestDbUrl(loadedEnv)` with an environment its own bootstrap loaded: `apps/api/src/db.js` already receives an explicit `env` argument, and each CLI already initialises `dotenv` at its entry point (`scripts/generate-presets.js:86` is the pattern). Safety semantics are unchanged: same host comparison, same refusal messages, same digest, same restore-point rule. `dotenv` stays a dependency of the **applications**, where it is already installed.
 
@@ -752,7 +764,7 @@ Runtime executes SQL. Saying "it has no database dependency because the client i
 | Schema authority | numbered migrations applied in filename order through a ledger | `database/migrations/001…023`, `scripts/run-migrations.js`, `schema_migrations` |
 | Re-applicability | ledger-driven pending tail; `--baseline` adopts a pre-ledger database | `scripts/run-migrations.js --check/--baseline` |
 | Shared-database safety | a real apply against `DATABASE_URL` refuses without `--restore-point=<id>`; `--baseline` needs one too; one audit line per applied file | `scripts/lib/run-migrations-cli.test.js`, `database/migration-applies.jsonl` |
-| Write-test isolation | `TEST_DATABASE_URL` guard comparing normalised hosts (pooler label stripped) | `scripts/lib/db-url.js`; `apps/api/test/unit/db-guard.test.js` |
+| Write-test isolation | `TEST_DATABASE_URL` guard comparing normalised hosts (pooler label stripped) | `packages/database-guard/src/index.js`; its test `packages/database-guard/test/db-url.test.js`. The API's own start-up refusal is pinned separately by `apps/api/test/unit/db-guard.test.js` (pool configuration, not the guard) |
 | Drift detection | replay every migration into an EMPTY scratch database, diff by definition | `scripts/verify-migrations-replay.js`, `npm run verify:replay` |
 | Target parity | ledger + tables + columns + enums + row counts between two targets | `scripts/check-target-parity.js` |
 | Least privilege | `morocco_pc_api` role with a column-scoped grant and a 20-answer self-check | `scripts/apply-api-role.js`, `rehearse-api-role.js`, `smoke-api-role.js` |
@@ -1124,6 +1136,8 @@ CMD ["node", "apps/api/src/server.js"]
 
 **Not implemented in this PR.** No Dockerfile, `.dockerignore`, manifest or lockfile is changed here.
 
+**Owner decision 1 (2026-11-11): step 3a may make path-only updates to `apps/api/Dockerfile`, `.dockerignore`, `fly.toml` and `render.yaml`.** Moving the guard changes the path the image copies, so the existing files must name `packages/database-guard/src/` instead of `scripts/lib/db-url.js`. That approval is **filesystem-path correction only**: no Docker architecture change, no hosting or infrastructure change, no new deployment configuration, no environment-variable change, and **no deployment**. The four-file `file:` build above remains the step-6 design.
+
 ---
 
 ## 14. Web V1 and V2 architecture
@@ -1248,8 +1262,10 @@ Saved builds (local-only), compare view, price history, preset landing pages, le
 1. **O2 now**: one authoritative document at `contract/openapi-<major>.<minor>.<patch>.json`, owned by the API project, byte-compared by `openapi-snapshot.test.js` (same assertion, new path). **No second copy anywhere** — both frontends' generators point at it, and `check:api-types` stays each frontend's gate.
 2. **A cross-copy drift gate while V2 is branch-based**: a check that fails when a second `openapi-*.json` exists in the tree. This is the mechanism the current arrangement lacks.
 3. **O3 later**: attach the file to the API release so a frontend can pin without a checkout.
-4. **A compatibility gate**: schema diff between the committed contract and the generated document, classified ADDITIVE / BREAKING, failing on BREAKING unless the minor is bumped and a note added. This does not exist today.
+4. **A compatibility gate with a Git-ref baseline** (owner decision 4, 2026-11-11): `node scripts/check-openapi-compatibility.js --base=origin/master` retrieves the baseline contract **from the explicitly supplied Git ref**, compares it with the candidate, classifies every change ADDITIVE / BREAKING and fails on an unauthorized breaking change. There is **no second, hand-maintained baseline file**, and committed-versus-served is **not** a substitute: the snapshot test keeps that separate responsibility. An approved breaking change needs a documented review and approval note; the gate does not infer one.
 5. **Reject O4**: generated types belong to each frontend.
+
+5. **Step 3b scope = API + V1 + the shared contract location.** **V2 integration is deferred to Step 7** (owner decision 3, 2026-11-11): `apps/web-v2` stays on `feature/v2-design`, no V2 history is modified or merged in step 3b, and V2's type generation, contract wiring and compatibility verification happen in its dedicated roadmap step. This is a deliberate deferral, not abandonment.
 
 **Hard rule:** never a hand-maintained second copy of a request or response shape.
 
@@ -1473,12 +1489,12 @@ Every step is independently reviewable as its own PR. "Parallel" marks work with
 |---|---|---|---|---|---|
 | **1. Architecture approval** | A1-A6 in §21 **approved 2026-11-11** (§21.1); one accountable owner role defined per responsibility (§8); human names are assigned by the owner, not in this RFC (§21.1, A5) | — | — | none | no |
 | **2. Documentation cleanup** | §16.5 disposition; root becomes navigation | 1 | — | none (read-only `--offline` gates only) | no |
-| **3a. Package boundary preparation** | create `packages/{recommendation-core,recommendation-runtime,database-guard}` manifests and empty `src/` skeletons; move the guard into its package; no module moves; boundary tests written | 1, 2 | **3b** | none | no |
-| **3b. Contract & shared-interface preparation** | §15.4 O2: `contract/openapi-<version>.json`; both generators point at it; compatibility-diff gate; guard interface documented | 1, 2 | **3a** | none | no |
+| **3a. Package boundary preparation** | create `packages/{recommendation-core,recommendation-runtime,database-guard}` manifests and empty `src/` skeletons; move the guard into `packages/database-guard/` and update its consumers; path-only Docker/hosting corrections permitted (owner decision 1); no recommendation module moves; boundary tests written | 1, 2 | **3b** | none | no |
+| **3b. Contract & shared-interface preparation** | §15.4 O2: `contract/openapi-<version>.json`; the API snapshot test and V1's generator point at it; contract-copy drift gate; Git-ref compatibility gate. **V2 is not touched here** - its integration is step 7 | 1, 2 | **3a** | none | no |
 | **4. Core extraction** | the 33 core modules + split barrels + narrowed imports + hermetic suite (§11.2, §11.6) | 3a, 3b | — | none (`test:unit` is DB-free) | no |
 | **5. Runtime extraction** | the 24 runtime modules; orchestrator/transaction docs; DB-free fake-client suites | 4 | — | **TEST only** for DB-backed suites (§19.2 T2) | no |
 | **6. API migration** | `apps/api` manifest, `file:` deps, imports to the two packages + guard, pool unchanged, Dockerfile root-context build | 5, 3a, 3b | **7** | **TEST only** for `test:api:db` | no |
-| **7. V2 lands on `master`** | application-only port; discard the branch's platform copy; regenerate types from the merged contract path | 3b | **6** | none | no |
+| **7. V2 lands on `master`** | application-only port; **this is where V2 is connected to the shared contract**: discard the branch's platform copy, point V2's generator at `contract/openapi-<version>.json`, regenerate its API types, verify API compatibility, and prove V1 and V2 consume the same contract while preserving existing V2 functionality. Deferred from 3b by owner decision 3 (2026-11-11) | 3b | **6** | none | no |
 | **8. V2 parity** | the retained capability set (B3) implemented and tested | 7, B3 | — | none (fixture mock / read-only calls) | no |
 | **9. Final operational validation & release prep** | full gate sweep, `verify:replay`, role rehearsal, image build, `check-deployed-role` warm-up plan, release notes | 6, 8 | — | **TEST only**, plus read-only gates on shared/EU | no |
 | **10. Deployment** | API image + V2 descriptor; migrations/seeds to the target with restore point + audit line; `ALLOWED_ORIGINS` set | 9, **B6** | — | **production/EU writes permitted here only** | **yes — first deployment** |
@@ -1518,7 +1534,8 @@ The first revision said no step writes and no step deploys, while later steps re
 
 | Step | Acceptance |
 |---|---|
-| 3a | four manifests exist; `packages/database-guard` passes the guard's existing tests; no module has moved; `test:unit`, `test:scripts`, `test:api` unchanged and green |
+| 3a | **the four manifests exist**: root `package.json`, `packages/recommendation-core/package.json`, `packages/recommendation-runtime/package.json`, `packages/database-guard/package.json` (`apps/api` deliberately still has none until step 6); `packages/database-guard` passes the guard's own tests; no recommendation module has moved; `test:unit` and `test:api` are unchanged, `test:scripts` drops exactly the moved guard test, and all are green |
+| 3b | one `contract/openapi-<major>.<minor>.<patch>.json` exists and no other `openapi-*.json` remains outside it; the snapshot test, V1's generator and the CI path filters point at it; the Git-ref compatibility gate passes on an additive change and fails on a breaking one; V2 untouched |
 | 4 | core's suite passes with `node_modules` absent; boundary scan clean; `test:unit` count unchanged except for moved paths; `git diff` shows no logic change in a moved file |
 | 5 | runtime's DB-free suite green; a DB-backed suite on TEST passes with residue 0; every orchestrator entry point documents its transaction ownership |
 | 6 | `cd apps/api && npm ci && npm test` with no root `node_modules`; `docker build -f apps/api/Dockerfile .` starts and answers `/v1/health`; `import-boundary.test.js` green against the new packages |
@@ -1601,6 +1618,17 @@ Each row records a **recommended resolution**. **A1-A6 were approved by the repo
 | **B6** | Which provider hosts the API and the frontend? | operations owner | **step 10 only** | Deployment choice, not code boundaries. Evidence: §2.4 (`fly.toml` vs `render.yaml` both claim the API). |
 | **B7** | Same-origin gateway/BFF, or per-frontend proxy? | operations owner | V2 deployment (step 10) | A runtime/deploy decision; CORS already stays closed. |
 | **B8** | Do the two frontends share a design system? | product owner | nothing now | Current state (unshared) is the recommended state. |
+
+### 21.3 Owner-confirmed implementation decisions (2026-11-11)
+
+Four implementation questions were confirmed by the repository owner. They **clarify how approved work is carried out**; none changes an architecture decision, a package boundary, a dependency direction, an API semantic or a recommendation behaviour.
+
+| # | Decision | Status | Effect on this document |
+|---|---|---|---|
+| **D1** | Docker and hosting updates are **path-only**: `apps/api/Dockerfile`, `.dockerignore`, `fly.toml` and `render.yaml` may be edited to point at the moved database guard | **APPROVED** | Recorded in §13.4. Authorizes path corrections only - no Docker architecture, hosting, infrastructure, environment-variable or deployment change |
+| **D2** | The API pool test **stays in the API** (`apps/api/test/unit/db-guard.test.js`); only the guard's own test moves, to `packages/database-guard/test/db-url.test.js`; the package stays independent of `pg` | **APPROVED** | Corrects §9.2, §9.4 and §10.1. The guard contract has seven exports (§9.4) and no restore-point predicate |
+| **D3** | **V2 contract integration is deferred to step 7.** Step 3b covers the API, V1 and the shared `contract/` location only; V2 stays on `feature/v2-design` | **APPROVED** | Recorded in §15.4 and in the §19.1 rows for 3b and 7. Deliberate deferral, not abandonment |
+| **D4** | The OpenAPI compatibility gate uses a **Git-ref baseline** (`--base=<ref>`), never a second committed baseline and never committed-versus-served | **APPROVED** | Recorded in §15.4 item 4. The snapshot test keeps its separate responsibility: committed contract versus served contract |
 
 **Consequence:** A1-A6 were the only approval blockers, and they were approved on 2026-11-11. **B1-B8 remain open**: they are recorded so they are not lost, and each names the phase it blocks. In particular **B1 and B3 were never approval blockers**: neither changes a package boundary, a dependency direction, a contract, an ownership row, or the migration sequence.
 
