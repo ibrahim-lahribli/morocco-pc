@@ -61,7 +61,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { Client } = require('pg');
 
-const { getWriteTestDbUrl, describeTarget } = require('./lib/db-url');
+const { getWriteTestDbUrl, describeTarget } = require('../packages/database-guard/src');
 const orchestrator = require('../src/recommendation/orchestrator');
 const ranking = require('../src/recommendation/ranking');
 const scenarioEval = require('./lib/scenario-eval');

@@ -66,7 +66,7 @@
  * and `--commit` are mutually exclusive rather than last-wins, so a command
  * line carrying both can never be read as a committed ribbon.
  *
- * Every write goes through `getWriteTestDbUrl()` (scripts/lib/db-url.js), which
+ * Every write goes through `getWriteTestDbUrl()` (packages/database-guard/src/index.js), which
  * refuses to run against the shared database - the branch is the DEFAULT target a
  * pass may be written to. `--target-env=<NAME>` is the one way to write somewhere
  * else, and it exists because a release environment's presets cannot be copied
@@ -87,7 +87,7 @@ require('dotenv').config();
 
 const { Client } = require('pg');
 
-const { CONNECTION_TIMEOUT_MILLIS, resolveTestDbUrl } = require('./lib/db-url');
+const { CONNECTION_TIMEOUT_MILLIS, resolveTestDbUrl } = require('../packages/database-guard/src');
 const { applyLogTarget, isValidRestorePointId } = require('./lib/migrations');
 const modelPin = require('./lib/model-pin');
 const passRows = require('./lib/pass-rows');

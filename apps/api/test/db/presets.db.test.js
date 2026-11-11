@@ -55,7 +55,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { Pool, Client } = require('pg');
 
-const { resolveTestDbUrl, getWriteTestDbUrl } = require('../../../../scripts/lib/db-url');
+const { resolveTestDbUrl, getWriteTestDbUrl } = require('../../../../packages/database-guard/src');
 const { buildApp } = require('../../src/app');
 const repository = require('../../src/repository');
 const engine = require('../../src/engine');

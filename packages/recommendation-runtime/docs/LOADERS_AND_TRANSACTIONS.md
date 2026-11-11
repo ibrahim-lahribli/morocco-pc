@@ -27,7 +27,7 @@ The pure stages never touch the database. Everything below is the responsibility
   runtime receives a connected client and never reads `process.env`.
 
 Write safety (unchanged): write-capable tests run against `TEST_DATABASE_URL` through
-`scripts/lib/db-url.js`; a real-database write needs a recorded restore point. See
+`packages/database-guard/src/index.js`; a real-database write needs a recorded restore point. See
 `docs/database/recipes/` and the root `AGENTS.md` hard rules.
 
 ---

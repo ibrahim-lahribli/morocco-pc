@@ -55,7 +55,7 @@ UNKNOWN is never treated as PASS or FAIL. Determinism is enforced: ties break on
 | `TARGET_DATABASE_URL` (EU) | `morocco-pc-eu`, `aws-eu-central-1` — 113 products, 84 families, 24 variants, 114 offers, 319 assessments, 7 `scoring_model` rows (6 ACTIVE) | `launch-v2@2.4.0`, pinned by `SCORING_MODEL_PIN` in `render.yaml` (Decision 63, PROVISIONAL) and measured ACTIVE on the branch | the release target; served by the live beta host `morocco-pc-api-eu` (free plan, sleeps when idle) |
 
 The shared database is never reset, dropped or truncated. Write-capable scripts route through
-`scripts/lib/db-url.js`; the API refuses to start against anything but the TEST branch unless
+`packages/database-guard/src/index.js`; the API refuses to start against anything but the TEST branch unless
 `API_ALLOW_SHARED=1`. Real-database writes need a recorded restore point and leave an audit line in
 `database/migration-applies.jsonl`.
 

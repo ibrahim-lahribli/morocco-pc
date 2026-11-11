@@ -75,7 +75,7 @@ Assertions (all evaluated per scenario unless a cross-scenario pair is named)
 
 - **The brief file was absent from the tree** when E0 started; this file is the brief as supplied, captured verbatim except for this section.
 - **A7 corrected to the code.** The brief asks for `within_budget = false` at S01 (5 000 MAD), but `computeBudgetFloor` measures `cheapest_total = 4 477`, so `within_budget` is TRUE and the zero-build result is a compatibility limit (cheapest assemblable build 7 677 MAD). S01 now asserts `true`; a new S01b (4 000 MAD, below the floor) asserts `false`. Recorded in `test/golden/CHANGELOG.md`. The brief's "report conflicts instead of silently deviating" rule is how this was handled.
-- **Neon branch.** The brief names `test-engine`; the operator chose to reuse the existing `TEST_DATABASE_URL` branch for E0. The harness only ever writes there via `scripts/lib/db-url.js`; the shared `DATABASE_URL` is never contacted.
+- **Neon branch.** The brief names `test-engine`; the operator chose to reuse the existing `TEST_DATABASE_URL` branch for E0. The harness only ever writes there via `packages/database-guard/src/index.js`; the shared `DATABASE_URL` is never contacted.
 
 ## E0 fixes — recorded deviations (2026-10-08, Step 1)
 

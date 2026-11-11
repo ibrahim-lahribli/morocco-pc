@@ -38,7 +38,7 @@
  *     npx playwright test e2e/wizard-engine.spec.ts
  *
  * IT CLEANS UP AFTER ITSELF, and the cleanup is part of the proof. The database
- * half resolves `pg`, `dotenv` and `scripts/lib/db-url.js` from the REPO ROOT via
+ * half resolves `pg`, `dotenv` and `packages/database-guard/src/index.js` from the REPO ROOT via
  * `createRequire` — this package does not depend on them and no app code imports
  * them, so nothing ships from here — and `getWriteTestDbUrl()` is the same guard
  * every write test in the repo uses: it refuses before connecting unless

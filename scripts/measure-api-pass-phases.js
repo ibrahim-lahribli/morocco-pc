@@ -55,7 +55,7 @@
 require('dotenv').config();
 
 const { Client } = require('pg');
-const { getWriteTestDbUrl } = require('./lib/db-url');
+const { getWriteTestDbUrl } = require('../packages/database-guard/src');
 const modelPin = require('./lib/model-pin');
 const passRows = require('./lib/pass-rows');
 

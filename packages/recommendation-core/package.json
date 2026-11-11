@@ -1,0 +1,10 @@
+{
+  "name": "@morocco-pc/recommendation-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pure recommendation logic (selection, filtering, assembly, scoring, retention, ranking, explanation). Manifest only at step 3a: no module has moved yet.",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -25,7 +25,7 @@ const modelPin = require('./model-pin');
  *
  * Read-only: SELECT-only. Callers pass in a pg-compatible client exposing
  * query(sql) (single-statement; no parameters needed). No dotenv here — the
- * caller loads env, same convention as scripts/lib/db-url.js.
+ * caller loads env, same convention as packages/database-guard/src/index.js.
  *
  * Exit-code policy lives with the consumers; this module only throws on
  * derivation errors (no/ambiguous active model, no role_weights).

@@ -52,7 +52,7 @@ the impure edges, owned by `packages/recommendation-runtime/docs/LOADERS_AND_TRA
 ## Guard rails
 
 - **Never reset, drop or truncate the shared Neon database.** It is the only dev database.
-- **Write tests only against `TEST_DATABASE_URL`.** Scripts route through `scripts/lib/db-url.js`; the
+- **Write tests only against `TEST_DATABASE_URL`.** Scripts route through `packages/database-guard/src/index.js`; the
   API refuses to start against anything else unless `API_ALLOW_SHARED=1` is explicit.
 - **Never rewrite a committed migration.** Schema changes are a new sequential `NNN_*.sql` applied
   through the `schema_migrations` ledger; a shared apply needs a recorded restore point.

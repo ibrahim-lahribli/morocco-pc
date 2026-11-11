@@ -148,7 +148,7 @@ It therefore:
 
 1. starts against the **isolated TEST branch** (`TEST_DATABASE_URL`), and
 2. **refuses to start at all** otherwise — `resolveTestDbUrl` in
-   `scripts/lib/db-url.js` is reused, not re-implemented, so
+   `packages/database-guard/src/index.js` is reused, not re-implemented, so
    "`TEST_DATABASE_URL` must not target the shared database" has one owner.
 
 Reaching the shared dev database requires an explicit `API_ALLOW_SHARED=1`.

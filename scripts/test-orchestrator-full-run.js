@@ -19,7 +19,7 @@
 require('dotenv').config();
 const { Client } = require('pg');
 
-const { getWriteTestDbUrl } = require('./lib/db-url');
+const { getWriteTestDbUrl } = require('../packages/database-guard/src');
 const { runRecommendationFullRun } = require('../src/recommendation/orchestrator/full-run');
 const { ERROR_CODES, CandidateSelectionError } = require('../src/recommendation/candidates/errors');
 const modelPin = require('./lib/model-pin');

@@ -47,7 +47,7 @@ require('dotenv').config();
 const fs = require('fs');
 const { Client } = require('pg');
 
-const { describeTarget, toDirectUrl } = require('./lib/db-url');
+const { describeTarget, toDirectUrl } = require('../packages/database-guard/src');
 const {
   UsageError,
   parseApplySeedArgs,

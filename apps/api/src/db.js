@@ -10,7 +10,7 @@
  * disposable, and every POST writes Layer 4 rows, so the API is write-capable
  * by construction. It therefore starts against the isolated TEST branch and
  * REFUSES to start at all unless the operator explicitly opts in with
- * API_ALLOW_SHARED=1. The check reuses `scripts/lib/db-url.js` `resolveTestDbUrl`
+ * API_ALLOW_SHARED=1. The check reuses `packages/database-guard/src/index.js` `resolveTestDbUrl`
  * - the same guard every write-capable script uses - rather than re-implementing
  * host comparison, so "TEST_DATABASE_URL must not target the shared database"
  * has exactly one owner.
@@ -23,7 +23,7 @@
  */
 
 const { Pool } = require('pg');
-const { resolveTestDbUrl } = require('../../../scripts/lib/db-url');
+const { resolveTestDbUrl } = require('../../../packages/database-guard/src');
 
 /** Server-side cap on any single statement this API issues. */
 const STATEMENT_TIMEOUT_MS = 10000;

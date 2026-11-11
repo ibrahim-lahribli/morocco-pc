@@ -78,7 +78,7 @@ require('dotenv').config();
 const crypto = require('crypto');
 const { Client } = require('pg');
 
-const { getWriteTestDbUrl, describeTarget, toDirectUrl } = require('./lib/db-url');
+const { getWriteTestDbUrl, describeTarget, toDirectUrl } = require('../packages/database-guard/src');
 const apiRole = require('./lib/api-role');
 const passRows = require('./lib/pass-rows');
 const repository = require('../apps/api/src/repository');

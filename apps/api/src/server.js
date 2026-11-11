@@ -12,7 +12,7 @@
  * because `createPool` is where the write-target guard lives: starting against
  * a target that is not provably the isolated TEST branch must fail before a
  * single connection is opened. Its message never contains a URL or a host
- * (see scripts/lib/db-url.js), which is what makes it safe to print.
+ * (see packages/database-guard/src/index.js), which is what makes it safe to print.
  *
  * Logging: JSON to stdout via pino by default; `LOG_PRETTY=1` switches to
  * pino-pretty, which is a devDependency - the require is wrapped so a

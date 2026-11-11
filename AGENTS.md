@@ -93,7 +93,7 @@ picking a side.
 ## 5. Hard rules (global)
 
 - **Never reset, drop, truncate or restore the shared Neon database.** It is the only dev database.
-- **Write-capable tests and scripts go through `scripts/lib/db-url.js` / `TEST_DATABASE_URL`.** Never
+- **Write-capable tests and scripts go through `packages/database-guard/src/index.js` / `TEST_DATABASE_URL`.** Never
   run a write test against `DATABASE_URL`. A real-database apply needs a recorded restore point and
   leaves an audit line in `database/migration-applies.jsonl`.
 - **Never rewrite or renumber a committed migration**, and never bypass the ledger: apply through

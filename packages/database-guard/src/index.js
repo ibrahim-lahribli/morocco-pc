@@ -1,13 +1,23 @@
 'use strict';
 
-// scripts/lib/db-url.js — isolated write-test DB guard (config only, no I/O).
+// packages/database-guard/src/index.js — the isolated write-test DB guard
+// (config only, no I/O).
 //
-// Purpose: Engine 5 will be the first code that writes to Layer 4. The shared
-// Neon database is not disposable, so write-capable tests must target an
-// isolated Neon branch via TEST_DATABASE_URL — never the shared DATABASE_URL.
+// Purpose: Engine 5 was the first code that writes to Layer 4. The shared Neon
+// database is not disposable, so write-capable tests must target an isolated
+// Neon branch via TEST_DATABASE_URL — never the shared DATABASE_URL.
 //
-// Convention: callers pass their env object in (pure function, no dotenv here).
-// dotenv loading happens only in the thin getWriteTestDbUrl() wrapper below.
+// Dependency boundary: this package has ZERO third-party runtime dependencies.
+// It requires nothing at all: no `pg`, no `dotenv`, no API module. Environment
+// loading belongs to the consuming API/CLI bootstrap (`apps/api/src/server.js`
+// and each script's entry point call `require('dotenv').config()`); the
+// functions here take the env object they are given and never read `.env`.
+// `apps/api` keeps its own pool configuration and its own pool test.
+//
+// Seven public exports, and no others (see packages/AGENTS.md):
+//   CONNECTION_TIMEOUT_MILLIS, normalizeHost, resolveTestDbUrl,
+//   getWriteTestDbUrl, describeTarget, toDirectUrl, normalizeTarget.
+//
 // CONNECTION_TIMEOUT_MILLIS (15000) matches the existing scripts convention
 // (scripts/test-layer3.js, scripts/test-layer4.js).
 //
@@ -63,9 +73,20 @@ function resolveTestDbUrl(env) {
   };
 }
 
-function getWriteTestDbUrl() {
-  require('dotenv').config();
-  return resolveTestDbUrl(process.env);
+/**
+ * The same resolution, for a caller that has not built its env object.
+ *
+ * Takes an explicit environment argument. It does NOT load `.env`: the
+ * bootstrap that owns the process (`apps/api/src/server.js`, each CLI's entry
+ * point) decides what a missing variable means, and a library that silently
+ * loaded a file would make the guard's target depend on the caller's cwd.
+ *
+ * @param {object} [env] environment-like object; defaults to process.env
+ * @returns {{connectionString: string, connectionTimeoutMillis: number}}
+ * @throws {Error} when the target is not provably an isolated branch
+ */
+function getWriteTestDbUrl(env) {
+  return resolveTestDbUrl(env || process.env);
 }
 
 // --- target descriptor + direct host (E0e / Step-2 C) -----------------------

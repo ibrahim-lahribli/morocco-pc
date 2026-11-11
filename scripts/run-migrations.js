@@ -46,7 +46,7 @@
 //                      011). Never runs a migration file, but it IS a ledger
 //                      write: on the SHARED target it needs --restore-point=<id>
 //                      like an apply does, and names each file it records.
-//   --test-db          target TEST_DATABASE_URL (guarded by scripts/lib/db-url.js)
+//   --test-db          target TEST_DATABASE_URL (guarded by packages/database-guard/src/index.js)
 //                      instead of DATABASE_URL  for the empty-DB replay.
 //
 // Never re-runs a committed migration and never touches `002_enums.sql` twice.
@@ -123,7 +123,7 @@ function resolveConnection(flags) {
   if (flags.has('--offline')) return null;
   require('dotenv').config();
   if (flags.has('--test-db')) {
-    const { getWriteTestDbUrl } = require('./lib/db-url');
+    const { getWriteTestDbUrl } = require('../packages/database-guard/src');
     try {
       return getWriteTestDbUrl();
     } catch (err) {
