@@ -149,6 +149,51 @@ and a reviewed `--approval-note="<who approved it and why>"`, which is printed w
 the verdict. V2 (`apps/web-v2`) is NOT connected here: its contract integration is
 step 7 of the separation roadmap.
 
+### Compatibility is directional
+
+The classifier does not ask "did the document change?". It asks two different
+questions, because a request and a response have opposite obligations:
+
+| Direction | Rule | Consequence |
+|---|---|---|
+| `request` | `Accepted(base) ⊆ Accepted(candidate)` — every request the base accepted must still be accepted | widening types, dropping a `required` entry or relaxing a bound is ADDITIVE; the reverse is BREAKING |
+| `response` | the guaranteed **value domain** of every field must not change, and the candidate must stay consumable by a client written against the base | a response enum/type/bound that changes in EITHER direction is BREAKING; only presence guarantees may strengthen (ADDITIVE) |
+
+The direction is propagated through nested object properties, array items,
+`allOf`/`anyOf`/`oneOf` branches, enums, types, nullability, `required`,
+`additionalProperties`, validation constraints and resolved `$ref` targets.
+Deliberate consequences worth knowing before editing the contract:
+
+- **A response field that becomes optional or nullable is BREAKING.** A client
+  written against the base may read it as missing or `null`.
+- **A response type or enum that narrows OR widens is BREAKING.** Narrowing is
+  rule A6 of the review that introduced this gate: a client may rely on
+  receiving the values the base allowed. Nullability is part of the type set, so
+  `null` appearing or disappearing is BREAKING in a response.
+- **A response validation bound that changes in either direction is
+  BREAKING** — the guaranteed value domain changed. Making a response field
+  `required` only strengthens its presence guarantee and stays ADDITIVE.
+- **A closed response enum that gains a value is BREAKING** (a client with
+  exhaustive handling never saw it) and so is one that loses a value (a
+  documented value disappears). An enum is closed unless the schema declares
+  `x-extensible-enum` or `x-enum-open: true`.
+- **A response `anyOf`/`oneOf` that gains a variant is BREAKING**, because the
+  server may now return a shape the client has never seen. For a request the
+  same addition is ADDITIVE.
+- **A response object that opens (`additionalProperties: false → true`) or
+  gains a property while it was closed is BREAKING.** Adding an optional
+  property to an OPEN response object stays ADDITIVE: a new key is a new field,
+  not a new value of an existing field, and an open-object client must already
+  tolerate unknown keys.
+- **A schema keyword the classifier does not model** (`not`, `if`/`then`/`else`,
+  `contains`, `prefixItems`, `discriminator`, `readOnly`, …) is reported as
+  `UNCOMPARABLE` when it changes, and `UNCOMPARABLE` fails the gate. An
+  unexamined keyword is never an implicit pass.
+
+Known limitation: operation-level `security`, `servers` and `callbacks` are not
+compared. A change there is neither reported as ADDITIVE nor silently accepted
+as safe — it is simply outside this gate's scope; review it by hand.
+
 Environment variables (see `apps/api/.env.example` for the full list):
 
 | Variable | Purpose |

@@ -85,16 +85,19 @@ test('an added optional property is ADDITIVE', () => {
   assert.ok(codes(result).includes('PROPERTY_ADDED'));
 });
 
-test('a new path, a new method, an added enum member and an optional parameter are all ADDITIVE', () => {
+test('a new path, a new method, an added request enum member and an optional parameter are all ADDITIVE', () => {
+  const base = baseDocument();
   const candidate = baseDocument();
   candidate.paths['/v1/other'] = { get: { responses: { 200: response({ type: 'object' }) } } };
   candidate.paths['/v1/things'].get = { responses: { 200: response({ type: 'object' }) } };
-  candidate.paths['/v1/things'].post.responses['201'].content['application/json'].schema
-    .properties.status.enum.push('UNKNOWN');
+  // A REQUEST enum gains a value: the caller may now send one more thing.
+  const requestSchema = (doc) => doc.paths['/v1/things'].post.requestBody.content['application/json'].schema;
+  requestSchema(base).properties.budget.properties.amount = { type: 'string', enum: ['MAD'] };
+  requestSchema(candidate).properties.budget.properties.amount = { type: 'string', enum: ['MAD', 'EUR'] };
   candidate.paths['/v1/things'].post.parameters.push({
     in: 'query', name: 'cursor', required: false, schema: { type: 'string' },
   });
-  const result = compareContracts(baseDocument(), candidate);
+  const result = compareContracts(base, candidate);
   assert.equal(result.verdict, ADDITIVE);
   assert.deepEqual(result.breaking, []);
   assert.deepEqual(
@@ -103,16 +106,21 @@ test('a new path, a new method, an added enum member and an optional parameter a
   );
 });
 
-test('a property that stops being required is ADDITIVE, and nullability added too', () => {
-  const candidate = baseDocument();
-  const schema = candidate.paths['/v1/things'].post.responses['201'].content['application/json'].schema;
-  schema.required = schema.required.filter((name) => name !== 'status');
-  schema.properties.id.nullable = true;
-  const result = compareContracts(baseDocument(), candidate);
-  assert.equal(result.verdict, ADDITIVE);
-  assert.deepEqual(breakingCodes(result), []);
-  assert.ok(codes(result).includes('PROPERTY_BECAME_OPTIONAL'));
-  assert.ok(codes(result).includes('NULLABILITY_ADDED'));
+test('a response that stops guaranteeing a required property or a non-null value is BREAKING', () => {
+  // Direction matters: these two are ADDITIVE for a request and BREAKING for a
+  // response, because a client written against the base may read a missing or
+  // null field where the base promised one.
+  const optional = baseDocument();
+  const optionalSchema = optional.paths['/v1/things'].post.responses['201'].content['application/json'].schema;
+  optionalSchema.required = optionalSchema.required.filter((name) => name !== 'status');
+  const optionalResult = compareContracts(baseDocument(), optional);
+  assert.deepEqual(breakingCodes(optionalResult), ['PROPERTY_BECAME_OPTIONAL']);
+
+  const nullable = baseDocument();
+  nullable.paths['/v1/things'].post.responses['201'].content['application/json'].schema
+    .properties.id.nullable = true;
+  const nullableResult = compareContracts(baseDocument(), nullable);
+  assert.deepEqual(breakingCodes(nullableResult), ['NULLABILITY_ADDED']);
 });
 
 // --- breaking ---------------------------------------------------------------
@@ -147,10 +155,11 @@ test('a changed type is BREAKING', () => {
   assert.deepEqual(breakingCodes(compareContracts(baseDocument(), candidate)), ['TYPE_CHANGED']);
 });
 
-test('a newly required property is BREAKING', () => {
+test('a newly required property is BREAKING for a request', () => {
   const candidate = baseDocument();
-  candidate.paths['/v1/things'].post.responses['201'].content['application/json'].schema.required.push('hint');
-  candidate.paths['/v1/things'].post.responses['201'].content['application/json'].schema.properties.hint = { type: 'string' };
+  const schema = candidate.paths['/v1/things'].post.requestBody.content['application/json'].schema;
+  schema.required.push('currency');
+  schema.properties.currency = { type: 'string' };
   const result = compareContracts(baseDocument(), candidate);
   assert.deepEqual(breakingCodes(result), ['PROPERTY_BECAME_REQUIRED']);
 });
@@ -182,11 +191,13 @@ test('an optional parameter that becomes required is BREAKING', () => {
   assert.deepEqual(breakingCodes(compareContracts(baseDocument(), candidate)), ['PARAMETER_BECAME_REQUIRED']);
 });
 
-test('nullability removed and a closed object are both BREAKING', () => {
+test('a response value domain may not narrow by dropping null, and a closed request object is BREAKING', () => {
   const nullableRemoved = baseDocument();
   nullableRemoved.paths['/v1/things'].post.responses['201'].content['application/json'].schema
     .properties.note.nullable = false;
-  assert.deepEqual(breakingCodes(compareContracts(baseDocument(), nullableRemoved)), ['NULLABILITY_REMOVED']);
+  const nullableResult = compareContracts(baseDocument(), nullableRemoved);
+  // Rule A6: removing null narrows the guaranteed value domain.
+  assert.deepEqual(breakingCodes(nullableResult), ['NULLABILITY_REMOVED']);
 
   // A tightening is only a tightening where the base explicitly ALLOWED extra
   // keys: an object that never said either way stays neutral when it says
@@ -312,19 +323,26 @@ test('a removed allOf conjunct widens a request but breaks a response', () => {
   assert.deepEqual(breakingCodes(responseResult), ['COMPOSITION_CONSTRAINT_REMOVED']);
 });
 
-test('an anyOf variant added is ADDITIVE and a removed variant is BREAKING', () => {
-  const base = baseDocument();
-  setResponseSchema(base, { anyOf: [{ type: 'string' }, { type: 'number' }] });
+test('an anyOf variant added widens a request but breaks a response', () => {
+  const requestBase = baseDocument();
+  const requestCandidate = baseDocument();
+  setRequestSchema(requestBase, { anyOf: [{ type: 'string' }, { type: 'number' }] });
+  setRequestSchema(requestCandidate, { anyOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }] });
+  const requestResult = compareContracts(requestBase, requestCandidate);
+  assert.deepEqual(requestResult.breaking, []);
+  assert.deepEqual(codes(requestResult), ['COMPOSITION_VARIANT_ADDED']);
 
-  const added = baseDocument();
-  setResponseSchema(added, { anyOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }] });
-  const addedResult = compareContracts(base, added);
-  assert.deepEqual(addedResult.breaking, []);
-  assert.deepEqual(codes(addedResult), ['COMPOSITION_VARIANT_ADDED']);
+  // A response may now serve a variant a client has never seen: BREAKING.
+  const responseBase = baseDocument();
+  const responseCandidate = baseDocument();
+  setResponseSchema(responseBase, { anyOf: [{ type: 'string' }, { type: 'number' }] });
+  setResponseSchema(responseCandidate, { anyOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }] });
+  const responseResult = compareContracts(responseBase, responseCandidate);
+  assert.deepEqual(breakingCodes(responseResult), ['COMPOSITION_VARIANT_ADDED']);
 
   const removed = baseDocument();
   setResponseSchema(removed, { anyOf: [{ type: 'string' }] });
-  const removedResult = compareContracts(base, removed);
+  const removedResult = compareContracts(responseBase, removed);
   assert.deepEqual(breakingCodes(removedResult), ['COMPOSITION_VARIANT_REMOVED']);
 });
 
@@ -363,5 +381,433 @@ test('composition changes are ordered deterministically', () => {
   const candidate = baseDocument();
   setResponseSchema(base, { anyOf: [{ type: 'string', enum: ['A', 'B'] }, { type: 'number' }] });
   setResponseSchema(candidate, { anyOf: [{ type: 'string', enum: ['A'] }, { type: 'boolean' }] });
+  assert.deepEqual(compareContracts(base, candidate), compareContracts(base, candidate));
+});
+
+// --- direction-aware regression suite --------------------------------------
+//
+// Every case below is a change that used to be classified by its structure
+// alone. The expected verdict follows the direction: a request must keep
+// accepting what it accepted, a response must keep guaranteeing what it
+// guaranteed. `docs/api/CONTRACT.md` documents the policy these tests pin.
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+const operation = (doc) => doc.paths['/v1/things'].post;
+const requestSchema = (doc) => operation(doc).requestBody.content['application/json'].schema;
+const okSchema = (doc) => operation(doc).responses['201'].content['application/json'].schema;
+
+test('a closed response enum that gains a value is BREAKING', () => {
+  const candidate = baseDocument();
+  okSchema(candidate).properties.status.enum.push('PENDING');
+  const result = compareContracts(baseDocument(), candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['ENUM_MEMBER_ADDED']);
+});
+
+test('an extensible response enum that gains a value is ADDITIVE', () => {
+  const base = baseDocument();
+  const candidate = baseDocument();
+  const baseStatus = okSchema(base).properties.status;
+  const candidateStatus = okSchema(candidate).properties.status;
+  baseStatus['x-extensible-enum'] = ['PASS', 'FAIL'];
+  candidateStatus['x-extensible-enum'] = ['PASS', 'FAIL', 'PENDING'];
+  candidateStatus.enum.push('PENDING');
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, ADDITIVE);
+  assert.deepEqual(result.breaking, []);
+  assert.deepEqual(codes(result), ['ENUM_MEMBER_ADDED']);
+});
+
+test('a response that drops its enum constraint is BREAKING', () => {
+  const candidate = baseDocument();
+  delete okSchema(candidate).properties.status.enum;
+  assert.deepEqual(breakingCodes(compareContracts(baseDocument(), candidate)), ['ENUM_REMOVED']);
+});
+
+test('a request that drops an accepted enum value is BREAKING, one that gains one is ADDITIVE', () => {
+  const narrowed = baseDocument();
+  requestSchema(narrowed).properties.budget.properties.currency = { type: 'string', enum: ['MAD'] };
+  const base = clone(narrowed);
+  requestSchema(base).properties.budget.properties.currency.enum = ['MAD', 'EUR'];
+  assert.deepEqual(breakingCodes(compareContracts(base, narrowed)), ['ENUM_MEMBER_REMOVED']);
+
+  const widened = clone(base);
+  requestSchema(widened).properties.budget.properties.currency.enum = ['MAD', 'EUR', 'USD'];
+  const widenedResult = compareContracts(base, widened);
+  assert.deepEqual(widenedResult.breaking, []);
+  assert.deepEqual(codes(widenedResult), ['ENUM_MEMBER_ADDED']);
+});
+
+test('a request type may widen but not narrow; a response type domain is exact', () => {
+  const requestBase = baseDocument();
+  const requestWide = baseDocument();
+  requestSchema(requestBase).properties.budget.properties.amount = { type: 'string' };
+  requestSchema(requestWide).properties.budget.properties.amount = { type: ['string', 'number'] };
+  const widenedRequest = compareContracts(requestBase, requestWide);
+  assert.deepEqual(widenedRequest.breaking, []);
+  assert.deepEqual(codes(widenedRequest), ['TYPE_WIDENED']);
+
+  const narrowedRequest = compareContracts(requestWide, requestBase);
+  assert.deepEqual(breakingCodes(narrowedRequest), ['TYPE_CHANGED']);
+
+  const responseBase = baseDocument();
+  const responseNarrow = baseDocument();
+  okSchema(responseBase).properties.id = { type: ['string', 'number'] };
+  okSchema(responseNarrow).properties.id = { type: 'string' };
+  // Rule A6: a narrowed response type is BREAKING, because a client may rely on
+  // receiving the values the base allowed.
+  assert.deepEqual(breakingCodes(compareContracts(responseBase, responseNarrow)), ['TYPE_CHANGED']);
+
+  const widenedResponse = compareContracts(responseNarrow, responseBase);
+  assert.deepEqual(breakingCodes(widenedResponse), ['TYPE_CHANGED']);
+});
+
+test('a response schema replaced by an incompatible one is BREAKING', () => {
+  const candidate = baseDocument();
+  setResponseSchema(candidate, { type: 'array', items: { type: 'string' } });
+  const result = compareContracts(baseDocument(), candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.ok(breakingCodes(result).includes('TYPE_CHANGED'));
+  // The replaced object's properties are gone too, and every one is reported.
+  assert.ok(breakingCodes(result).includes('PROPERTY_REMOVED'));
+});
+
+test('a removed response media type is BREAKING and an added one is ADDITIVE', () => {
+  const removed = baseDocument();
+  delete operation(removed).responses['201'].content['application/json'];
+  assert.deepEqual(breakingCodes(compareContracts(baseDocument(), removed)), ['MEDIA_TYPE_REMOVED']);
+
+  const added = baseDocument();
+  operation(added).responses['201'].content['text/plain'] = { schema: { type: 'string' } };
+  const addedResult = compareContracts(baseDocument(), added);
+  assert.deepEqual(addedResult.breaking, []);
+  assert.ok(codes(addedResult).includes('MEDIA_TYPE_ADDED'));
+});
+
+test('a removed response header is BREAKING, an added one is ADDITIVE, and required -> optional is BREAKING', () => {
+  const base = baseDocument();
+  operation(base).responses['201'].headers = {
+    'X-Request-Id': { required: true, schema: { type: 'string' } },
+    'X-Trace': { schema: { type: 'string' } },
+  };
+
+  const removed = clone(base);
+  delete operation(removed).responses['201'].headers['X-Request-Id'];
+  assert.deepEqual(breakingCodes(compareContracts(base, removed)), ['RESPONSE_HEADER_REMOVED']);
+
+  const optional = clone(base);
+  operation(optional).responses['201'].headers['X-Request-Id'].required = false;
+  assert.deepEqual(breakingCodes(compareContracts(base, optional)), ['RESPONSE_HEADER_BECAME_OPTIONAL']);
+
+  const added = clone(base);
+  operation(added).responses['201'].headers['X-Rate-Limit'] = { schema: { type: 'integer' } };
+  const addedResult = compareContracts(base, added);
+  assert.deepEqual(addedResult.breaking, []);
+  assert.deepEqual(codes(addedResult), ['RESPONSE_HEADER_ADDED']);
+});
+
+test('a response object that was closed rejects a new property and opening it is BREAKING', () => {
+  const closedBase = baseDocument();
+  okSchema(closedBase).additionalProperties = false;
+
+  const addedProperty = clone(closedBase);
+  okSchema(addedProperty).properties.hint = { type: 'string' };
+  assert.deepEqual(breakingCodes(compareContracts(closedBase, addedProperty)), ['PROPERTY_ADDED']);
+
+  const opened = clone(closedBase);
+  okSchema(opened).additionalProperties = true;
+  assert.deepEqual(breakingCodes(compareContracts(closedBase, opened)), ['OBJECT_OPENED']);
+
+  // The reverse direction only strengthens the guarantee.
+  const closed = compareContracts(opened, closedBase);
+  assert.deepEqual(closed.breaking, []);
+  assert.ok(codes(closed).includes('OBJECT_CLOSED'));
+});
+
+test('a new response status code is ADDITIVE', () => {
+  const candidate = baseDocument();
+  operation(candidate).responses['202'] = response({ type: 'object' });
+  const result = compareContracts(baseDocument(), candidate);
+  assert.deepEqual(result.breaking, []);
+  assert.deepEqual(codes(result), ['RESPONSE_ADDED']);
+});
+
+test('request validation that becomes stricter is BREAKING, looser is ADDITIVE', () => {
+  const base = baseDocument();
+  requestSchema(base).properties.budget.properties.currency = { type: 'string', minLength: 2 };
+
+  const stricter = clone(base);
+  requestSchema(stricter).properties.budget.properties.currency.minLength = 5;
+  assert.deepEqual(breakingCodes(compareContracts(base, stricter)), ['VALIDATION_RESTRICTED']);
+
+  const looser = clone(base);
+  requestSchema(looser).properties.budget.properties.currency.minLength = 1;
+  const looserResult = compareContracts(base, looser);
+  assert.deepEqual(looserResult.breaking, []);
+  assert.deepEqual(codes(looserResult), ['VALIDATION_RELAXED']);
+
+  const patterned = clone(base);
+  requestSchema(patterned).properties.budget.properties.currency.pattern = '^[A-Z]{3}$';
+  assert.deepEqual(breakingCodes(compareContracts(base, patterned)), ['VALIDATION_RESTRICTED']);
+});
+
+test('any response validation change is BREAKING: the guaranteed value domain changed', () => {
+  const base = baseDocument();
+  okSchema(base).properties.id = { type: 'string', minLength: 3 };
+
+  const looser = clone(base);
+  delete okSchema(looser).properties.id.minLength;
+  assert.deepEqual(breakingCodes(compareContracts(base, looser)), ['VALIDATION_RELAXED']);
+
+  const stricter = clone(base);
+  okSchema(stricter).properties.id.minLength = 8;
+  assert.deepEqual(breakingCodes(compareContracts(base, stricter)), ['VALIDATION_RESTRICTED']);
+});
+
+test('a request enum constraint added is BREAKING and dropped is ADDITIVE', () => {
+  const plain = baseDocument();
+  requestSchema(plain).properties.budget.properties.currency = { type: 'string' };
+  const restricted = clone(plain);
+  requestSchema(restricted).properties.budget.properties.currency.enum = ['MAD', 'EUR'];
+  assert.deepEqual(breakingCodes(compareContracts(plain, restricted)), ['ENUM_RESTRICTED']);
+
+  const opened = compareContracts(restricted, plain);
+  assert.deepEqual(opened.breaking, []);
+  assert.deepEqual(codes(opened), ['ENUM_OPENED']);
+});
+
+test('a response enum constraint added is BREAKING: values the base allowed disappear', () => {
+  const plain = baseDocument();
+  okSchema(plain).properties.status = { type: 'string' };
+  const restricted = clone(plain);
+  okSchema(restricted).properties.status = { type: 'string', enum: ['PASS', 'FAIL'] };
+  assert.deepEqual(breakingCodes(compareContracts(plain, restricted)), ['ENUM_RESTRICTED']);
+});
+
+test('a request property removed is BREAKING even when extra properties were allowed', () => {
+  const base = baseDocument();
+  requestSchema(base).properties.budget.properties.currency = { type: 'string' };
+  const candidate = clone(base);
+  delete requestSchema(candidate).properties.budget.properties.currency;
+  assert.deepEqual(breakingCodes(compareContracts(base, candidate)), ['PROPERTY_REMOVED']);
+});
+
+test('an optional request property becoming required is BREAKING', () => {
+  const base = baseDocument();
+  requestSchema(base).properties.budget.properties.currency = { type: 'string' };
+  const candidate = clone(base);
+  requestSchema(candidate).required.push('currency');
+  assert.deepEqual(breakingCodes(compareContracts(base, candidate)), ['PROPERTY_BECAME_REQUIRED']);
+});
+
+test('an added optional request property is ADDITIVE', () => {
+  const candidate = baseDocument();
+  requestSchema(candidate).properties.budget.properties.currency = { type: 'string' };
+  const result = compareContracts(baseDocument(), candidate);
+  assert.deepEqual(result.breaking, []);
+  assert.deepEqual(codes(result), ['PROPERTY_ADDED']);
+});
+
+test('a nullable request property that becomes non-nullable rejects a previously accepted null', () => {
+  const base = baseDocument();
+  requestSchema(base).properties.budget.properties.currency = { type: 'string', nullable: true };
+  const candidate = clone(base);
+  requestSchema(candidate).properties.budget.properties.currency.nullable = false;
+  assert.deepEqual(breakingCodes(compareContracts(base, candidate)), ['NULLABILITY_REMOVED']);
+});
+
+test('a request object that closes additionalProperties is BREAKING, opening it is ADDITIVE', () => {
+  const open = baseDocument();
+  requestSchema(open).additionalProperties = true;
+  const closed = clone(open);
+  requestSchema(closed).additionalProperties = false;
+  assert.deepEqual(breakingCodes(compareContracts(open, closed)), ['OBJECT_CLOSED']);
+
+  const opened = compareContracts(closed, open);
+  assert.deepEqual(opened.breaking, []);
+  assert.deepEqual(codes(opened), ['OBJECT_OPENED']);
+});
+
+test('a removed request parameter is BREAKING', () => {
+  const candidate = baseDocument();
+  operation(candidate).parameters = [];
+  assert.deepEqual(breakingCodes(compareContracts(baseDocument(), candidate)), ['PARAMETER_REMOVED']);
+});
+
+test('nested object properties keep their direction', () => {
+  const base = baseDocument();
+  const nested = { type: 'object', required: ['a'], properties: { a: { type: 'string' }, b: { type: 'string' } } };
+  okSchema(base).properties.meta = clone(nested);
+  requestSchema(base).properties.meta = clone(nested);
+
+  const responseOptional = clone(base);
+  okSchema(responseOptional).properties.meta.required = [];
+  assert.deepEqual(breakingCodes(compareContracts(base, responseOptional)), ['PROPERTY_BECAME_OPTIONAL']);
+
+  const requestOptional = clone(base);
+  requestSchema(requestOptional).properties.meta.required = [];
+  const requestResult = compareContracts(base, requestOptional);
+  assert.deepEqual(requestResult.breaking, []);
+  assert.deepEqual(codes(requestResult), ['PROPERTY_BECAME_OPTIONAL']);
+
+  const responseNullable = clone(base);
+  okSchema(responseNullable).properties.meta.properties.a.nullable = true;
+  assert.deepEqual(breakingCodes(compareContracts(base, responseNullable)), ['NULLABILITY_ADDED']);
+});
+
+test('array item schemas are compared, not skipped', () => {
+  const base = baseDocument();
+  const items = { type: 'object', required: ['id'], properties: { id: { type: 'string' } } };
+  okSchema(base).properties.builds = { type: 'array', items: clone(items) };
+
+  const response = clone(base);
+  okSchema(response).properties.builds.items.properties.id.type = 'number';
+  assert.deepEqual(breakingCodes(compareContracts(base, response)), ['TYPE_CHANGED']);
+
+  const optional = clone(base);
+  okSchema(optional).properties.builds.items.required = [];
+  assert.deepEqual(breakingCodes(compareContracts(base, optional)), ['PROPERTY_BECAME_OPTIONAL']);
+
+  const nestedRequest = baseDocument();
+  requestSchema(nestedRequest).properties.builds = { type: 'array', items: clone(items) };
+  const tightened = clone(nestedRequest);
+  requestSchema(tightened).properties.builds.items.required.push('name');
+  requestSchema(tightened).properties.builds.items.properties.name = { type: 'string' };
+  assert.deepEqual(breakingCodes(compareContracts(nestedRequest, tightened)), ['PROPERTY_BECAME_REQUIRED']);
+});
+
+test('oneOf follows the same direction rules as anyOf', () => {
+  const base = baseDocument();
+  const added = baseDocument();
+  setRequestSchema(base, { oneOf: [{ type: 'string' }, { type: 'number' }] });
+  setRequestSchema(added, { oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }] });
+  const requestResult = compareContracts(base, added);
+  assert.deepEqual(requestResult.breaking, []);
+  assert.deepEqual(codes(requestResult), ['COMPOSITION_VARIANT_ADDED']);
+
+  const responseBase = baseDocument();
+  const responseAdded = baseDocument();
+  setResponseSchema(responseBase, { oneOf: [{ type: 'string' }, { type: 'number' }] });
+  setResponseSchema(responseAdded, { oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }] });
+  assert.deepEqual(breakingCodes(compareContracts(responseBase, responseAdded)), ['COMPOSITION_VARIANT_ADDED']);
+});
+
+// --- $ref resolution -------------------------------------------------------
+
+function refDocument() {
+  const doc = baseDocument();
+  doc.components = {
+    schemas: {
+      Thing: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+    },
+  };
+  setResponseSchema(doc, { $ref: '#/components/schemas/Thing' });
+  setRequestSchema(doc, { $ref: '#/components/schemas/Thing' });
+  return doc;
+}
+
+test('a $ref is resolved, so an unchanged reference is NEUTRAL', () => {
+  const result = compareContracts(refDocument(), refDocument());
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('a change inside a referenced component is detected in both directions', () => {
+  const base = refDocument();
+  const candidate = clone(base);
+  candidate.components.schemas.Thing.properties.id.type = 'number';
+  const result = compareContracts(base, candidate);
+  assert.equal(result.breaking.length, 2); // the request and the response both see it
+  assert.ok(result.breaking.every((item) => item.code === 'TYPE_CHANGED'));
+});
+
+test('an inline schema equivalent to a $ref target is NEUTRAL, not a diff', () => {
+  const inlined = baseDocument();
+  setResponseSchema(inlined, { type: 'object', required: ['id'], properties: { id: { type: 'string' } } });
+  const refCandidate = baseDocument();
+  const components = { schemas: { Thing: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } } };
+  refCandidate.components = components;
+  setResponseSchema(refCandidate, { $ref: '#/components/schemas/Thing' });
+  const result = compareContracts(inlined, refCandidate);
+  assert.deepEqual(result.changes, []);
+});
+
+test('a recursive $ref terminates instead of looping', () => {
+  const doc = baseDocument();
+  doc.components = {
+    schemas: {
+      Node: {
+        type: 'object',
+        properties: { value: { type: 'string' }, next: { $ref: '#/components/schemas/Node' } },
+      },
+    },
+  };
+  setResponseSchema(doc, { $ref: '#/components/schemas/Node' });
+  const result = compareContracts(doc, clone(doc));
+  assert.deepEqual(result.changes, []);
+});
+
+test('an unresolvable $ref is UNCOMPARABLE, never ADDITIVE', () => {
+  const candidate = baseDocument();
+  candidate.components = { schemas: {} };
+  setResponseSchema(candidate, { $ref: '#/components/schemas/Missing' });
+  const result = compareContracts(baseDocument(), candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+});
+
+// --- unsupported constructs -------------------------------------------------
+
+test('an unmodelled schema keyword that changes is UNCOMPARABLE and BREAKING', () => {
+  const candidate = baseDocument();
+  okSchema(candidate).properties.id.not = { type: 'number' };
+  const result = compareContracts(baseDocument(), candidate);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.match(result.breaking[0].detail, /"not"/);
+});
+
+test('a tuple-style items change is reported conservatively, not ignored', () => {
+  const base = baseDocument();
+  okSchema(base).properties.pair = { type: 'array', items: [{ type: 'string' }, { type: 'number' }] };
+  const candidate = clone(base);
+  okSchema(candidate).properties.pair.items = [{ type: 'string' }, { type: 'string' }];
+  assert.deepEqual(breakingCodes(compareContracts(base, candidate)), ['UNCOMPARABLE']);
+});
+
+test('a readOnly change is UNCOMPARABLE rather than silently additive', () => {
+  const candidate = baseDocument();
+  okSchema(candidate).properties.id.readOnly = true;
+  assert.deepEqual(breakingCodes(compareContracts(baseDocument(), candidate)), ['UNCOMPARABLE']);
+});
+
+// --- rendering equivalence --------------------------------------------------
+
+test('nullable and a type array are the same guarantee, not a type change', () => {
+  const nullable = baseDocument();
+  const typeArray = baseDocument();
+  okSchema(nullable).properties.id = { type: 'string', nullable: true };
+  okSchema(typeArray).properties.id = { type: ['string', 'null'] };
+  const result = compareContracts(nullable, typeArray);
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('an identical type array is not reported as a type change', () => {
+  const base = baseDocument();
+  const candidate = baseDocument();
+  okSchema(base).properties.id.type = ['string', 'null'];
+  okSchema(candidate).properties.id.type = ['string', 'null'];
+  assert.deepEqual(compareContracts(base, candidate).changes, []);
+});
+
+test('the direction-aware classifier is deterministic across repeated runs', () => {
+  const base = baseDocument();
+  const candidate = baseDocument();
+  okSchema(candidate).properties.status.enum.push('PENDING');
+  okSchema(candidate).properties.id.nullable = true;
+  candidate.paths['/v1/extra'] = { get: { responses: { 200: response({ type: 'object' }) } } };
   assert.deepEqual(compareContracts(base, candidate), compareContracts(base, candidate));
 });

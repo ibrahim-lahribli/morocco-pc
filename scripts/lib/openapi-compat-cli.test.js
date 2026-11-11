@@ -162,6 +162,44 @@ test('a ref that predates the move is read from the legacy test directory, from 
   assert.match(result.output, /pre-3b location, read from history only/);
 });
 
+test('a response that weakens its guarantee fails the gate', () => {
+  const dir = repoWithBaseline('contract/openapi-1.0.0.json', document('1.0.0'));
+  fs.rmSync(path.join(dir, 'contract/openapi-1.0.0.json'));
+  const candidate = document('1.1.0');
+  // `id` was required; the candidate only promises it sometimes.
+  candidate.paths['/v1/things'].post.responses['201'].content['application/json'].schema.required = [];
+  writeContract(dir, 'contract/openapi-1.1.0.json', candidate);
+
+  const result = run(dir, ['--base=HEAD']);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /PROPERTY_BECAME_OPTIONAL/);
+  assert.match(result.output, /FAIL openapi-compatibility/);
+});
+
+test('a request relaxation passes the gate as ADDITIVE', () => {
+  const requestBody = (minLength) => ({
+    required: true,
+    content: {
+      'application/json': {
+        schema: { type: 'object', required: ['a'], properties: { a: { type: 'string', minLength } } },
+      },
+    },
+  });
+  const baseline = document('1.0.0');
+  baseline.paths['/v1/things'].post.requestBody = requestBody(2);
+  const dir = repoWithBaseline('contract/openapi-1.0.0.json', baseline);
+  fs.rmSync(path.join(dir, 'contract/openapi-1.0.0.json'));
+
+  // The candidate accepts every string of length 1 and longer.
+  const candidate = document('1.1.0');
+  candidate.paths['/v1/things'].post.requestBody = requestBody(1);
+  writeContract(dir, 'contract/openapi-1.1.0.json', candidate);
+
+  const result = run(dir, ['--base=HEAD']);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /VALIDATION_RELAXED/);
+});
+
 test('the candidate must satisfy the one-contract rule, whatever the baseline says', () => {
   const dir = repoWithBaseline('contract/openapi-1.0.0.json', document('1.0.0'));
   // A second copy in the working tree: drift the location gate would refuse.
