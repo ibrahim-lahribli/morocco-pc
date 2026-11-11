@@ -1,7 +1,7 @@
 # System Architecture & Project Separation RFC
 
 **Repository:** `ibrahim-lahribli/morocco-pc`
-**Status:** PROPOSED — revised 2026-11-11. **Option B (separate `recommendation-core` and `recommendation-runtime` packages) is the selected direction** (owner decision, recorded in §1.5). Not approved, not implemented.
+**Status:** PROPOSED — revised 2026-11-11. **A1-A6 APPROVED by the repository owner on 2026-11-11** (§21.1); **Option B (separate `recommendation-core` and `recommendation-runtime` packages) is the selected direction** (owner decision, recorded in §1.5). **B1-B8 remain open.** The decision record is approved; **nothing is implemented**, and PR #23 is neither approved nor merged by it.
 **Date:** 2026-11-11 (first revision: 2026-11-10)
 **Baseline:** `master` = `a413f25` ("Merge pull request #18 from ibrahim-lahribli/freebuff/launch-v2-2.5.0-decay-off")
 **Secondary input:** `feature/v2-design` = `3bc0605` (read, never merged or rebased for this RFC)
@@ -103,6 +103,7 @@ The decision to adopt Option B invalidated several arguments in the first revisi
 | 13 | "114 offers, 0 verified" presented as a universal current fact. | Environment-qualified measurements (§11A.2): shared/EU 0 VERIFIED (recorded 2026-11-10); TEST has 2 VERIFIED offers and 1 eligible CPU identity in the same recording. | `docs/OPEN_POINTS.md` R-01/R-30. |
 | 14 | Six implicit projects all lacking manifests. | Two of six already have independent manifests and lockfiles; the packaging work is engine, API, ingestion, database tooling (§3.1). | `git ls-files`, `feature/v2-design` tree. |
 | 15 | `generate-presets.js` assigned to the API while living in `scripts/`. | Physical home proposed as `apps/api/bin/generate-presets.js`; until moved, the file is a root script with an API-shaped dependency (§3.3). | `scripts/generate-presets.js:86-97`. |
+| 16 | A1-A6 recorded as `AWAITING OWNER APPROVAL`. | **A1-A6 approved by the repository owner on 2026-11-11**; the approval record, its scope and its exclusions are in §21.1. B1-B8 remain open, and PR #23 is neither approved nor merged by this record. | Owner approval recorded; not implemented. |
 
 ---
 
@@ -1470,7 +1471,7 @@ Every step is independently reviewable as its own PR. "Parallel" marks work with
 
 | Step | Scope | Depends on | Genuinely parallel with | DB contact allowed | Deploys? |
 |---|---|---|---|---|---|
-| **1. Architecture approval** | A1-A6 in §21 resolved or explicitly deferred; owners named | — | — | none | no |
+| **1. Architecture approval** | A1-A6 in §21 **approved 2026-11-11** (§21.1); one accountable owner named per responsibility | — | — | none | no |
 | **2. Documentation cleanup** | §16.5 disposition; root becomes navigation | 1 | — | none (read-only `--offline` gates only) | no |
 | **3a. Package boundary preparation** | create `packages/{recommendation-core,recommendation-runtime,database-guard}` manifests and empty `src/` skeletons; move the guard into its package; no module moves; boundary tests written | 1, 2 | **3b** | none | no |
 | **3b. Contract & shared-interface preparation** | §15.4 O2: `contract/openapi-<version>.json`; both generators point at it; compatibility-diff gate; guard interface documented | 1, 2 | **3a** | none | no |
@@ -1509,7 +1510,7 @@ The first revision said no step writes and no step deploys, while later steps re
 
 1. **Nothing before step 10 deploys anything.** No step implies a deployment.
 2. **A guarded test is not an authorization.** Passing `TEST_DATABASE_URL` permits TEST; it never permits a shared, EU or production write.
-3. **The RFC itself never authorizes any database write or deployment.** Step 10 is the earliest planned phase at which a separate, reviewed release PR may **request** explicit owner authorization. Such approval requires a verified target, a restore point, audit evidence and the existing database safeguards — and RFC approval does not grant it in advance.
+3. **The RFC itself never authorizes any database write or deployment.** Step 10 is the earliest planned phase at which a separate, reviewed release PR may **request** explicit owner authorization. Such approval requires a verified target, a restore point, audit evidence and the existing database safeguards — and RFC approval does not grant it in advance: the A1-A6 approval recorded on 2026-11-11 authorizes no write and no deployment.
 4. **Steps 11-12 never write to a database.**
 5. **Rollback** stays a single `git revert` per step because no step mixes a move with a behaviour change (§20.2).
 
@@ -1565,16 +1566,28 @@ The first revision mixed architecture blockers with product questions, which mad
 
 ### 21.1 Architecture decisions (block RFC approval)
 
-Each row records a **recommended resolution**, not an approval. `Status` is `AWAITING OWNER APPROVAL` on every row: this RFC cannot mark its own recommendation as decided.
+Each row records a **recommended resolution**. **A1-A6 were approved by the repository owner on 2026-11-11** — see the approval record immediately after the table. The `Status` column records that owner approval, which is not a self-certification by this RFC. The product and operations decisions in §21.2 remain open.
 
 | ID | Question | Recommended decision | Status | Owner (role) | Blocks |
 |---|---|---|---|---|---|
-| **A1** | One repository with six ownership areas (modular monorepo), or multi-repo? | Modular monorepo; multi-repo deferred behind §17.4's triggers | AWAITING OWNER APPROVAL — DECISION REQUIRED | platform owner | **approval** — it decides whether packages are directories in one repo (§17.2) |
-| **A2** | Approve core's and runtime's public entry points, the barrel split, and the API→core vocabulary subset | §11.4/§11.5 as written; the API is restricted to the frozen vocabulary in §9.2, and runtime is not the owner of vocabulary the API consumes | AWAITING OWNER APPROVAL (recommended resolution recorded) | architecture owner | **approval of the split**, then step 4 |
-| **A3** | Is the guard an installable `packages/database-guard` package, and who loads `.env`? | Yes; zero-dependency package, with environment loading left to the consuming API/CLI bootstrap (§9.4) | AWAITING OWNER APPROVAL | platform owner + database owner | **approval**; step 3a |
-| **A4** | Where does the contract live, and is it published? | One versioned `contract/openapi-<version>.json` owned by the API; publication as a release artifact later (O3) | AWAITING OWNER APPROVAL | API owner + platform owner | **approval** of contract ownership; step 3b (§15.2) |
-| **A5** | Who is accountable for each responsibility? | §8's matrix **after** the preset-generation split: exactly one accountable owner per row | AWAITING OWNER APPROVAL | platform owner | **approval** of the matrix; step 1 acceptance |
-| **A6** | Accept and document runtime's real schema + client-protocol dependency, with the API owning the pool | Accepted and documented (§9.5); runtime declares no `pg` dependency, and the pool stays in `apps/api/src/db.js` | AWAITING OWNER APPROVAL | architecture owner | **approval** |
+| **A1** | One repository with six ownership areas (modular monorepo), or multi-repo? | Modular monorepo; multi-repo deferred behind §17.4's triggers | **APPROVED 2026-11-11** — modular monorepo; multi-repository extraction deferred until §17.4's triggers are met | platform owner | **approved** — packages stay directories in one repo (§17.2) |
+| **A2** | Approve core's and runtime's public entry points, the barrel split, and the API→core vocabulary subset | §11.4/§11.5 as written; the API is restricted to the frozen vocabulary in §9.2, and runtime is not the owner of vocabulary the API consumes | **APPROVED 2026-11-11** — §11.4/§11.5 public interfaces and dependency boundaries adopted as written | architecture owner | **approved**; step 4 may proceed |
+| **A3** | Is the guard an installable `packages/database-guard` package, and who loads `.env`? | Yes; zero-dependency package, with environment loading left to the consuming API/CLI bootstrap (§9.4) | **APPROVED 2026-11-11** — zero-dependency `packages/database-guard`; `.env` loading stays with the consuming API/CLI bootstrap | platform owner + database owner | **approved**; step 3a |
+| **A4** | Where does the contract live, and is it published? | One versioned `contract/openapi-<version>.json` owned by the API; publication as a release artifact later (O3) | **APPROVED 2026-11-11** — one authoritative versioned OpenAPI contract owned by the API; publication as a release artifact **deferred** (O3) | API owner + platform owner | **approved**; step 3b (§15.2) |
+| **A5** | Who is accountable for each responsibility? | §8's matrix **after** the preset-generation split: exactly one accountable owner per row | **APPROVED WITH OWNERSHIP SAFEGUARDS 2026-11-11** — §8 matrix adopted; one accountable **human** owner per responsibility, names deliberately unassigned here (see the approval record) | platform owner | **approved**; step 1 acceptance |
+| **A6** | Accept and document runtime's real schema + client-protocol dependency, with the API owning the pool | Accepted and documented (§9.5); runtime declares no `pg` dependency, and the pool stays in `apps/api/src/db.js` | **APPROVED 2026-11-11** — explicit client protocol; the API keeps the pool (`apps/api/src/db.js`); runtime declares no `pg` dependency | architecture owner | **approved** |
+
+**Approval record (A1-A6).**
+
+| Field | Value |
+|---|---|
+| Decisions approved | A1, A2, A3, A4, A6 as recorded above; **A5 approved with ownership safeguards** |
+| Decided by | The repository owner — the accountable human owner of this repository. No personal name, signature or account handle is recorded, because none was supplied with the approval and none may be invented. |
+| Date | 2026-11-11 |
+| Basis | The owner's review of the six architecture decisions against the primary objective: a maintainable, modular, production-ready architecture without changing existing business behaviour or adding unnecessary complexity |
+| Scope | Architecture decisions only. **B1-B8 (§21.2) are not approved** and remain open. |
+| Exclusions | Recording an approval authorizes **no implementation**: no package extraction, no behaviour or recommendation-logic change, no database connection or write, no migration or seed, no deployment — and **PR #23 is not approved or merged by this record**. |
+| A5 safeguard | §8 requires exactly one accountable human owner per responsibility. Names stay unassigned in this RFC: assigning organizational accountability is the owner's act, never an AI agent's, and no name is invented to fill a row. |
 
 ### 21.2 Product and operations decisions (do **not** block approval)
 
@@ -1589,7 +1602,7 @@ Each row records a **recommended resolution**, not an approval. `Status` is `AWA
 | **B7** | Same-origin gateway/BFF, or per-frontend proxy? | operations owner | V2 deployment (step 10) | A runtime/deploy decision; CORS already stays closed. |
 | **B8** | Do the two frontends share a design system? | product owner | nothing now | Current state (unshared) is the recommended state. |
 
-**Consequence:** approval needs A1-A6 only. B1-B8 are recorded so they are not lost, and each names the phase it blocks. In particular **B1 and B3 are explicitly not approval blockers**: neither changes a package boundary, a dependency direction, a contract, an ownership row, or the migration sequence.
+**Consequence:** A1-A6 were the only approval blockers, and they were approved on 2026-11-11. **B1-B8 remain open**: they are recorded so they are not lost, and each names the phase it blocks. In particular **B1 and B3 were never approval blockers**: neither changes a package boundary, a dependency direction, a contract, an ownership row, or the migration sequence.
 
 ---
 
@@ -1617,7 +1630,7 @@ Each row records a **recommended resolution**, not an approval. `Status` is `AWA
 | A16 | No application, database, test, workflow, manifest, Dockerfile or lockfile changed in this PR | met — see §23.5 and `git diff --stat` |
 | A17 | The API→core interface is a named, enforced vocabulary; runtime is never described as core's only consumer | met (§9.2, §11.4, §13.3) |
 | A18 | Every responsibility has exactly one accountable owner, including preset generation | met (§8.1, §8.3) |
-| A19 | Recommendations are distinguished from owner approvals; no decision is marked approved by this RFC | met (§21.1) |
+| A19 | Recommendations are distinguished from owner approvals; no decision is marked approved by this RFC | met (§21.1) — the RFC records recommendations; A1-A6 carry the **owner's** approval of 2026-11-11, recorded with its scope and exclusions, never a self-approval |
 | A20 | Terminology separates six ownership areas from installable packages and applications | met (§7.3) |
 
 ### 22.2 For the programme (definition of done per project, PROPOSED)
@@ -1732,4 +1745,4 @@ This revision changes exactly one file: `docs/architecture/SYSTEM_ARCHITECTURE_A
 
 ---
 
-*This RFC is a proposal awaiting owner approval and independent review. Option B is the selected direction; nothing in the document is implemented. No application, database, test, workflow, manifest or deployment artefact was changed by this revision.*
+*This RFC records the owner's approval of A1-A6 (2026-11-11) and stays PROPOSED for everything else: B1-B8 are open and independent review remains welcome. Option B is the selected direction; nothing in the document is implemented, and PR #23 is not approved or merged by this record. No application, database, test, workflow, manifest or deployment artefact was changed by this revision.*
