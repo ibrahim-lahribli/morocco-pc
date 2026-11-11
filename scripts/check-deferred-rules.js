@@ -32,7 +32,7 @@
  * Decision 26 item 11 makes the re-check BINDING: "Any future seed that
  * adds or edits a CPU, cooler, case, motherboard or RAM row MUST re-run
  * the four violation queries before merge" — repeated as step 3 of
- * `docs/RECIPES/add-a-seed.md`. Until now those queries existed only as a
+ * `docs/database/recipes/add-a-seed.md`. Until now those queries existed only as a
  * one-off paste. This script makes the trigger re-runnable, in the same
  * spirit as `scripts/check-og01-coverage.js` becoming the OG-01 gate, so
  * a seed author runs one command instead of reconstructing four SQL

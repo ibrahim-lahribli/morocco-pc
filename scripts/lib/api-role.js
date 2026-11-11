@@ -5,7 +5,7 @@
 //
 // WHY THIS MODULE OWNS IT
 // The role `morocco_pc_api` is described by the operator-facing block in
-// `docs/API.md` § "Production mode" and is exercised by three scripts, so the
+// `docs/api/CONTRACT.md` § "Production mode" and is exercised by three scripts, so the
 // contract has exactly ONE owner rather than a copy per consumer:
 //
 //   * `scripts/rehearse-api-role.js` — creates the role on the TEST branch,
@@ -206,7 +206,7 @@ function comparePrivilegeAnswers(rows, roleName = API_ROLE_NAME) {
 }
 
 /**
- * The operator-facing CREATE ROLE + GRANT block from docs/API.md, one statement
+ * The operator-facing CREATE ROLE + GRANT block from docs/api/CONTRACT.md, one statement
  * per element so a failure names the statement it came from.
  */
 function buildGrantStatements(roleName, password) {

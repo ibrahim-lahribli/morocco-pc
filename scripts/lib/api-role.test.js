@@ -10,7 +10,7 @@
 // pinned in `rehearse-api-role-cli.test.js`.
 //
 // The pins, in order: the fixture is WELL-FORMED and its composition is the one
-// docs/API.md documents (21 answers: the SEVEN INSERT targets, two row-wide UPDATEs
+// docs/api/CONTRACT.md documents (21 answers: the SEVEN INSERT targets, two row-wide UPDATEs
 // false, three column-scoped UPDATEs true) with a golden id set, so dropping one
 // is a failure rather than a smaller rehearsal; every `true` answer is
 // SATISFIABLE by the statements the grant builder emits; an expectation with no
@@ -73,7 +73,7 @@ function correctAnswers() {
 }
 
 test('the fixture is well-formed: 21 uniquely-identified answers, each with a known kind', () => {
-  assert.equal(PRIVILEGE_EXPECTATIONS.length, 21, 'the plan and docs/API.md both say 21');
+  assert.equal(PRIVILEGE_EXPECTATIONS.length, 21, 'the plan and docs/api/CONTRACT.md both say 21');
   const ids = PRIVILEGE_EXPECTATIONS.map((entry) => entry.id);
   assert.equal(new Set(ids).size, ids.length, 'ids must be unique — an id is the join key to an answer');
   assert.deepEqual(ids.slice().sort(), GOLDEN_IDS, 'the id set is golden: dropping one must fail, not shrink the rehearsal');
@@ -91,7 +91,7 @@ test('the fixture is well-formed: 21 uniquely-identified answers, each with a kn
   }
 });
 
-test('the composition is the one docs/API.md documents, not merely 21 entries', () => {
+test('the composition is the one docs/api/CONTRACT.md documents, not merely 21 entries', () => {
   for (const table of WRITE_TARGET_TABLES) {
     assert.equal(expectedOf(table + '_insert'), true, table + ' must be INSERTable by the role');
   }
