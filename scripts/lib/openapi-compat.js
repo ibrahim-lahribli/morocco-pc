@@ -23,6 +23,15 @@
  * UNKNOWN is not a classification here: anything this module cannot compare is
  * reported as UNCOMPARABLE and treated as BREAKING by the CLI. Silence would
  * turn an unexamined change into an implicit pass.
+ *
+ * Composition is compared structurally, not only through its flattened enum.
+ * `allOf`, `anyOf` and `oneOf` branches are visited recursively, because a
+ * property, a type or a required list can change entirely inside a branch.
+ * Branches are compared in document order: a pure reordering reports nothing,
+ * while an added or removed branch is classified by what it means (a union
+ * variant or an `allOf` conjunct, and whether the schema governs a request or
+ * a response). A branch enum is reported once, by `enumMembers()` on the
+ * composed parent, never twice.
  */
 
 const BREAKING = 'BREAKING';
@@ -42,6 +51,97 @@ function enumMembers(schema) {
   return members;
 }
 
+/**
+ * Canonical JSON for one schema branch: object keys sorted, so the signature
+ * depends on the shape and not on key insertion order. Used to tell "the
+ * branches were reordered" (no client-visible change) from "a branch changed".
+ */
+function stableSignature(value) {
+  if (Array.isArray(value)) return '[' + value.map(stableSignature).join(',') + ']';
+  if (value && typeof value === 'object') {
+    return '{' + Object.keys(value).sort()
+      .map((key) => JSON.stringify(key) + ':' + stableSignature(value[key]))
+      .join(',') + '}';
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * Compare one composition keyword (`allOf`, `anyOf`, `oneOf`) branch by branch.
+ *
+ * `allOf` branches are conjuncts: adding one narrows the accepted input, and
+ * removing one widens it. `anyOf`/`oneOf` branches are alternatives: adding one
+ * accepts/serves more, removing one takes a variant away. The request/response
+ * direction decides which side of each pair is safe.
+ */
+function compareComposition(base, candidate, location, direction) {
+  const changes = [];
+  for (const keyword of ['allOf', 'anyOf', 'oneOf']) {
+    const baseBranches = Array.isArray(base[keyword]) ? base[keyword] : null;
+    const candidateBranches = Array.isArray(candidate[keyword]) ? candidate[keyword] : null;
+    if (baseBranches === null && candidateBranches === null) continue;
+
+    const at = location + ' ' + keyword;
+    const union = keyword !== 'allOf';
+
+    if (baseBranches === null || candidateBranches === null) {
+      changes.push(change(
+        BREAKING,
+        'COMPOSITION_CHANGED',
+        at,
+        'the schema is ' + keyword + '-composed in ' + (baseBranches ? 'the base only' : 'the candidate only')
+          + '; equivalence cannot be proven'
+      ));
+      continue;
+    }
+
+    const baseSignatures = baseBranches.map(stableSignature);
+    const candidateSignatures = candidateBranches.map(stableSignature);
+    if (baseSignatures.length === candidateSignatures.length
+      && baseSignatures.slice().sort().join('\u0000') === candidateSignatures.slice().sort().join('\u0000')) {
+      continue; // reordered branches only
+    }
+
+    const delta = candidateBranches.length - baseBranches.length;
+    if (delta < 0) {
+      const removed = -delta;
+      const breaking = union || direction === 'response';
+      changes.push(change(
+        breaking ? BREAKING : ADDITIVE,
+        union ? 'COMPOSITION_VARIANT_REMOVED' : 'COMPOSITION_CONSTRAINT_REMOVED',
+        at,
+        'the candidate declares ' + removed + ' fewer ' + keyword + ' branch(es)'
+      ));
+    } else if (delta > 0) {
+      const breaking = !union && direction === 'request';
+      changes.push(change(
+        breaking ? BREAKING : ADDITIVE,
+        union ? 'COMPOSITION_VARIANT_ADDED' : 'COMPOSITION_CONSTRAINT_ADDED',
+        at,
+        'the candidate declares ' + delta + ' more ' + keyword + ' branch(es)'
+      ));
+    }
+
+    const pairs = Math.min(baseBranches.length, candidateBranches.length);
+    // enumMembers() flattens the parent's anyOf first, then oneOf. Suppress a
+    // branch-level enum comparison only for the keyword it actually flattened on
+    // BOTH sides; a second keyword's branch enums are compared normally.
+    const flattenedWith = (schema) => (Array.isArray(schema.anyOf)
+      ? 'anyOf'
+      : (Array.isArray(schema.oneOf) ? 'oneOf' : null));
+    const enumCovered = union && flattenedWith(base) === keyword && flattenedWith(candidate) === keyword;
+    for (let index = 0; index < pairs; index += 1) {
+      changes.push(...compareSchema(
+        baseBranches[index],
+        candidateBranches[index],
+        at + '[' + index + ']',
+        { direction, enumCovered }
+      ));
+    }
+  }
+  return changes;
+}
+
 function change(classification, code, location, detail) {
   return { classification, code, location, detail };
 }
@@ -50,9 +150,13 @@ function change(classification, code, location, detail) {
  * Compare two schemas. `location` is a human path such as
  * `/v1/recommendations 201.properties.builds`.
  *
+ * `options.direction` is `'request'` or `'response'` and only affects how a
+ * composition branch count change is classified. `options.enumCovered` says the
+ * caller already compared this schema's own enum through a composed parent.
+ *
  * @returns {Array<{classification: string, code: string, location: string, detail: string}>}
  */
-function compareSchema(base, candidate, location) {
+function compareSchema(base, candidate, location, options) {
   if (base === undefined && candidate === undefined) return [];
   if (base === undefined) return [change(ADDITIVE, 'SCHEMA_ADDED', location, 'a schema appeared where the base declared none')];
   if (candidate === undefined) {
@@ -64,6 +168,8 @@ function compareSchema(base, candidate, location) {
       : [change(BREAKING, 'UNCOMPARABLE', location, 'the two schemas are not comparable objects')];
   }
 
+  const direction = options && options.direction === 'request' ? 'request' : 'response';
+  const enumCovered = Boolean(options && options.enumCovered);
   const changes = [];
 
   if (base.type !== candidate.type) {
@@ -81,14 +187,16 @@ function compareSchema(base, candidate, location) {
 
   const baseEnum = enumMembers(base);
   const candidateEnum = enumMembers(candidate);
-  for (const member of baseEnum) {
-    if (!candidateEnum.includes(member)) {
-      changes.push(change(BREAKING, 'ENUM_MEMBER_REMOVED', location, 'removed enum member ' + JSON.stringify(member)));
+  if (!enumCovered) {
+    for (const member of baseEnum) {
+      if (!candidateEnum.includes(member)) {
+        changes.push(change(BREAKING, 'ENUM_MEMBER_REMOVED', location, 'removed enum member ' + JSON.stringify(member)));
+      }
     }
-  }
-  for (const member of candidateEnum) {
-    if (!baseEnum.includes(member)) {
-      changes.push(change(ADDITIVE, 'ENUM_MEMBER_ADDED', location, 'added enum member ' + JSON.stringify(member)));
+    for (const member of candidateEnum) {
+      if (!baseEnum.includes(member)) {
+        changes.push(change(ADDITIVE, 'ENUM_MEMBER_ADDED', location, 'added enum member ' + JSON.stringify(member)));
+      }
     }
   }
 
@@ -131,18 +239,20 @@ function compareSchema(base, candidate, location) {
   }
   for (const key of Object.keys(baseProperties)) {
     if (!Object.prototype.hasOwnProperty.call(candidateProperties, key)) continue;
-    changes.push(...compareSchema(baseProperties[key], candidateProperties[key], location + '.' + key));
+    changes.push(...compareSchema(baseProperties[key], candidateProperties[key], location + '.' + key, { direction }));
   }
 
   if (base.items !== undefined || candidate.items !== undefined) {
-    changes.push(...compareSchema(base.items, candidate.items, location + '[]'));
+    changes.push(...compareSchema(base.items, candidate.items, location + '[]', { direction }));
   }
+
+  changes.push(...compareComposition(base, candidate, location, direction));
 
   return changes;
 }
 
 /** Compare every media type a response declares a schema for. */
-function compareContent(baseContent, candidateContent, location) {
+function compareContent(baseContent, candidateContent, location, direction) {
   const changes = [];
   const baseTypes = baseContent && typeof baseContent === 'object' ? Object.keys(baseContent) : [];
   const candidateTypes = candidateContent && typeof candidateContent === 'object' ? Object.keys(candidateContent) : [];
@@ -156,7 +266,7 @@ function compareContent(baseContent, candidateContent, location) {
       changes.push(change(BREAKING, 'MEDIA_TYPE_REMOVED', location, 'removed ' + mediaType));
       continue;
     }
-    changes.push(...compareSchema(baseSchema, candidateSchema, location + ' ' + mediaType));
+    changes.push(...compareSchema(baseSchema, candidateSchema, location + ' ' + mediaType, { direction }));
   }
   for (const mediaType of candidateTypes) {
     if (!baseTypes.includes(mediaType)) {
@@ -188,7 +298,7 @@ function compareParameters(baseParameters, candidateParameters, location) {
     } else if (parameter.required !== true && candidate.required === true) {
       changes.push(change(BREAKING, 'PARAMETER_BECAME_REQUIRED', location, key + ' became required'));
     }
-    changes.push(...compareSchema(parameter.schema, candidate.schema, location + ' parameter ' + key));
+    changes.push(...compareSchema(parameter.schema, candidate.schema, location + ' parameter ' + key, { direction: 'request' }));
   }
   for (const key of candidateByKey.keys()) {
     if (baseByKey.has(key)) continue;
@@ -217,7 +327,7 @@ function compareOperation(baseOperation, candidateOperation, location) {
       if (baseRequest.required !== true && candidateRequest.required === true) {
         changes.push(change(BREAKING, 'REQUEST_BODY_BECAME_REQUIRED', location, 'the request body became required'));
       }
-      changes.push(...compareContent(baseRequest.content, candidateRequest.content, location + ' request'));
+      changes.push(...compareContent(baseRequest.content, candidateRequest.content, location + ' request', 'request'));
     }
   }
 
@@ -236,7 +346,8 @@ function compareOperation(baseOperation, candidateOperation, location) {
     changes.push(...compareContent(
       baseResponses[status].content,
       candidateResponses[status].content,
-      location + ' ' + status
+      location + ' ' + status,
+      'response'
     ));
   }
   for (const status of Object.keys(candidateResponses)) {

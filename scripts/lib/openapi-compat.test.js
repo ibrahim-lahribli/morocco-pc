@@ -241,3 +241,127 @@ test('the same pair always yields the same ordered change list', () => {
   candidate.paths['/v1/extra'] = { get: { responses: { 200: response({ type: 'object' }) } } };
   assert.deepEqual(compareContracts(baseDocument(), candidate), compareContracts(baseDocument(), candidate));
 });
+
+// --- composition (allOf / anyOf / oneOf) -----------------------------------
+//
+// A change inside a composed branch is invisible to a comparison that only
+// reads the parent's `type`/`properties`, so these cases pin the recursion and
+// the request/response semantics of an added or removed branch.
+
+/** Replace the 201 response schema of the single test route. */
+function setResponseSchema(doc, schema) {
+  doc.paths['/v1/things'].post.responses['201'].content['application/json'].schema = schema;
+}
+
+/** Replace the request body schema of the single test route. */
+function setRequestSchema(doc, schema) {
+  doc.paths['/v1/things'].post.requestBody.content['application/json'].schema = schema;
+}
+
+test('a property removed inside an allOf branch is BREAKING in a response', () => {
+  const base = baseDocument();
+  const candidate = baseDocument();
+  setResponseSchema(base, {
+    allOf: [{ type: 'object', properties: { id: { type: 'string' }, note: { type: 'string' } } }],
+  });
+  setResponseSchema(candidate, {
+    allOf: [{ type: 'object', properties: { id: { type: 'string' } } }],
+  });
+  const result = compareContracts(base, candidate);
+  assert.deepEqual(breakingCodes(result), ['PROPERTY_REMOVED']);
+  assert.match(result.breaking[0].location, /allOf\[0\]/);
+});
+
+test('an added allOf constraint is BREAKING for a request and ADDITIVE for a response', () => {
+  const baseBranch = { type: 'object', properties: { budget: { type: 'number' } } };
+  const addedBranch = { type: 'object', required: ['currency'], properties: { currency: { type: 'string' } } };
+
+  const requestBase = baseDocument();
+  const requestCandidate = baseDocument();
+  setRequestSchema(requestBase, { allOf: [baseBranch] });
+  setRequestSchema(requestCandidate, { allOf: [baseBranch, addedBranch] });
+  const requestResult = compareContracts(requestBase, requestCandidate);
+  assert.deepEqual(breakingCodes(requestResult), ['COMPOSITION_CONSTRAINT_ADDED']);
+
+  const responseBase = baseDocument();
+  const responseCandidate = baseDocument();
+  setResponseSchema(responseBase, { allOf: [baseBranch] });
+  setResponseSchema(responseCandidate, { allOf: [baseBranch, addedBranch] });
+  const responseResult = compareContracts(responseBase, responseCandidate);
+  assert.deepEqual(responseResult.breaking, []);
+  assert.equal(responseResult.verdict, ADDITIVE);
+});
+
+test('a removed allOf conjunct widens a request but breaks a response', () => {
+  const kept = { type: 'object', properties: { budget: { type: 'number' } } };
+  const dropped = { type: 'object', required: ['currency'], properties: { currency: { type: 'string' } } };
+
+  const requestBase = baseDocument();
+  const requestCandidate = baseDocument();
+  setRequestSchema(requestBase, { allOf: [kept, dropped] });
+  setRequestSchema(requestCandidate, { allOf: [kept] });
+  const requestResult = compareContracts(requestBase, requestCandidate);
+  assert.deepEqual(breakingCodes(requestResult), []);
+  assert.equal(requestResult.verdict, ADDITIVE);
+
+  const responseBase = baseDocument();
+  const responseCandidate = baseDocument();
+  setResponseSchema(responseBase, { allOf: [kept, dropped] });
+  setResponseSchema(responseCandidate, { allOf: [kept] });
+  const responseResult = compareContracts(responseBase, responseCandidate);
+  assert.deepEqual(breakingCodes(responseResult), ['COMPOSITION_CONSTRAINT_REMOVED']);
+});
+
+test('an anyOf variant added is ADDITIVE and a removed variant is BREAKING', () => {
+  const base = baseDocument();
+  setResponseSchema(base, { anyOf: [{ type: 'string' }, { type: 'number' }] });
+
+  const added = baseDocument();
+  setResponseSchema(added, { anyOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }] });
+  const addedResult = compareContracts(base, added);
+  assert.deepEqual(addedResult.breaking, []);
+  assert.deepEqual(codes(addedResult), ['COMPOSITION_VARIANT_ADDED']);
+
+  const removed = baseDocument();
+  setResponseSchema(removed, { anyOf: [{ type: 'string' }] });
+  const removedResult = compareContracts(base, removed);
+  assert.deepEqual(breakingCodes(removedResult), ['COMPOSITION_VARIANT_REMOVED']);
+});
+
+test('an enum inside an anyOf branch is reported once, not once per branch', () => {
+  const base = baseDocument();
+  const candidate = baseDocument();
+  setResponseSchema(base, { anyOf: [{ type: 'string', enum: ['PASS', 'FAIL'] }, { type: 'null' }] });
+  setResponseSchema(candidate, { anyOf: [{ type: 'string', enum: ['PASS'] }, { type: 'null' }] });
+  const result = compareContracts(base, candidate);
+  assert.deepEqual(breakingCodes(result), ['ENUM_MEMBER_REMOVED']);
+  assert.equal(result.changes.length, 1);
+});
+
+test('reordering composition branches alone is NEUTRAL', () => {
+  const base = baseDocument();
+  const candidate = baseDocument();
+  setResponseSchema(base, { anyOf: [{ type: 'string' }, { type: 'number' }] });
+  setResponseSchema(candidate, { anyOf: [{ type: 'number' }, { type: 'string' }] });
+  const result = compareContracts(base, candidate);
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('a composition keyword that appears or disappears is BREAKING', () => {
+  const base = baseDocument();
+  const candidate = baseDocument();
+  setResponseSchema(base, { anyOf: [{ type: 'string' }, { type: 'null' }] });
+  setResponseSchema(candidate, { type: 'string' });
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.ok(breakingCodes(result).includes('COMPOSITION_CHANGED'));
+});
+
+test('composition changes are ordered deterministically', () => {
+  const base = baseDocument();
+  const candidate = baseDocument();
+  setResponseSchema(base, { anyOf: [{ type: 'string', enum: ['A', 'B'] }, { type: 'number' }] });
+  setResponseSchema(candidate, { anyOf: [{ type: 'string', enum: ['A'] }, { type: 'boolean' }] });
+  assert.deepEqual(compareContracts(base, candidate), compareContracts(base, candidate));
+});
