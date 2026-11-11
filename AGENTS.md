@@ -20,9 +20,12 @@ engine logic: `apps/api/` (Fastify, the HTTP contract, the connection pool) and 
 
 The repository's layout follows the architecture RFC
 ([`docs/architecture/SYSTEM_ARCHITECTURE_AND_PROJECT_SEPARATION_RFC.md`](docs/architecture/SYSTEM_ARCHITECTURE_AND_PROJECT_SEPARATION_RFC.md)):
-architecture decisions A1-A6 are approved and **nothing from the package extraction is implemented**.
-The RFC remains PROPOSED for everything else; B1-B8 are open. Do not start the extraction from a
-documentation task.
+architecture decisions A1-A6 are approved. **The database-guard package boundary is implemented** — the
+write-target guard lives in `packages/database-guard/` (PR #27, merged 2026-11-11) — but **nothing else
+from the package extraction is implemented**: `packages/recommendation-core/` and
+`packages/recommendation-runtime/` contain scaffolding only (their manifests, an empty source placeholder
+and planning documentation); no recommendation module has moved, and the RFC remains PROPOSED for the
+remaining work. B1-B8 are open. Do not start the extraction from a documentation task.
 
 ## 2. Read order
 
