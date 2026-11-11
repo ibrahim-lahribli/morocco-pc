@@ -1,12 +1,12 @@
 # System Architecture & Project Separation RFC
 
 **Repository:** `ibrahim-lahribli/morocco-pc`
-**Status:** PROPOSED — revised 2026-11-11. **A1-A6 APPROVED by the repository owner on 2026-11-11** (§21.1); **Option B (separate `recommendation-core` and `recommendation-runtime` packages) is the selected direction** (owner decision, recorded in §1.5). **B1-B8 remain open.** The decision record is approved; **nothing is implemented**, and PR #23 is neither approved nor merged by it.
-**Date:** 2026-11-11 (first revision: 2026-11-10). **Revision 3 (2026-11-11):** §21.3 records four owner-confirmed implementation decisions (D1-D4), and §9.2, §9.4, §10.1, §13.4, §15.4 and §19 carry the corrections they exposed: the guard's seven-export interface, the API pool test's ownership, the absent restore-point predicate, the four named manifests, path-only Docker/hosting updates, the Step 7 V2 deferral and the Git-ref compatibility baseline.
-**Baseline:** `master` = `a413f25` ("Merge pull request #18 from ibrahim-lahribli/freebuff/launch-v2-2.5.0-decay-off")
+**Status:** PROPOSED — revised 2026-11-11 (Revision 4). **A1-A6 APPROVED by the repository owner on 2026-11-11** (§21.1); **Option B (separate `recommendation-core` and `recommendation-runtime` packages) is the selected direction** (owner decision, recorded in §1.5). **B1-B8 remain open.** The decision record is approved; **nothing from the package extraction is implemented**. PR #23 — the proposal itself — **was merged on 2026-11-11** (`0bcb6e3`); merging it published the record as a document and implemented none of it.
+**Date:** 2026-11-11 (first revision: 2026-11-10). **Revision 3 (2026-11-11):** §21.3 records four owner-confirmed implementation decisions (D1-D4), and §9.2, §9.4, §10.1, §13.4, §15.4 and §19 carry the corrections they exposed: the guard's seven-export interface, the API pool test's ownership, the absent restore-point predicate, the four named manifests, path-only Docker/hosting updates, the Step 7 V2 deferral and the Git-ref compatibility baseline. **Revision 4 (2026-11-11):** current-state corrections only — the script-consumer count in §9.4, the duplicate §15.4 numbering, the since-merged state of PR #23, the documentation paths moved by PR #24 (§16.7), and the §23.4 contradictions register. No recommendation behaviour, contract, schema or approved decision changed.
+**Measurement baseline (Revisions 1-3):** `master` = `a413f25` ("Merge pull request #18 from ibrahim-lahribli/freebuff/launch-v2-2.5.0-decay-off") — **historical**; it is not the current head.
 **Secondary input:** `feature/v2-design` = `3bc0605` (read, never merged or rebased for this RFC)
-**RFC branch:** `architecture/system-separation-rfc`, previous commit `9297034`
-**Deliverable:** documentation and analysis only. No source, manifest, lockfile, workflow, migration, seed, Dockerfile or test file was modified by this revision.
+**RFC branch:** `architecture/system-separation-rfc` at `9297034` (merged as PR #23 on 2026-11-11; the branch was deleted after merge). Revision 4 corrections are on `docs/rfc-accuracy-corrections`.
+**Deliverable:** documentation and analysis only. No source, manifest, lockfile, workflow, migration, seed, Dockerfile or test file was modified by this revision. Revision 4 re-measured its corrected claims read-only on `master` = `e62c816`; it made no database contact.
 
 ---
 
@@ -16,7 +16,7 @@ Every material assertion carries one of six labels. They are not decoration: the
 
 | Label | Meaning |
 |---|---|
-| **CURRENT** | Verified in the tree at `a413f25` (or on `feature/v2-design` at `3bc0605` where stated) by reading the file, running a read-only command, or reading git history. The evidence is cited. |
+| **CURRENT** | Verified in the tree at `a413f25` (or on `feature/v2-design` at `3bc0605` where stated) by reading the file, running a read-only command, or reading git history. The evidence is cited. Revision 4 re-verifies only the claims it corrects, on `master` = `e62c816`. |
 | **RECORDED** | Written down in a committed document at a stated date, and **not** re-measured by this RFC. The document is named, and its limits are stated. |
 | **PROPOSED** | This RFC's recommendation. Not implemented. |
 | **DECISION REQUIRED** | An owner-level choice that code inspection cannot settle. Split into architecture and product/operations decisions in §21. |
@@ -60,7 +60,7 @@ Two of the six candidate projects are therefore **already independently packaged
 | F6 | **Ingestion is already a separate application wearing an engine directory's clothes.** 8 non-test modules, its own barrel, its own CLI, and **zero inbound edges** from any stage (measured, §6.3). Its own header says it "is NOT an engine stage". | `src/recommendation/ingestion/index.js:1-13`; Tarjan edge scan |
 | F7 | **There is one contract document pattern, but two physical copies across branches.** `apps/api/test/unit/openapi-v1.10.json` is read by V1's generators and gates on `master`; V2 carries its own copy of the same file on `feature/v2-design`, and each frontend's `check:api-types` compares generated types against its own copy. Identical content today; no gate would detect divergence tomorrow. | `apps/web/package.json`, `apps/web-v2/package.json`, both workflows; §15.2 |
 | F8 | **V2 is a foundation, and one manual read-only staging smoke exists.** V2 has 3 route files and performs only GETs; it has no catalogue route, results route, swap, saved builds, and **no deployment configuration**. Its `docs/staging-smoke.md` records a **manual, ordinary-browser, read-only** smoke on 2026-11-07 (7 reads per locale, all HTTP 200, 0 POST) against the EU staging API. That is not a deployed V2 frontend and not an automated E2E test. | §14.4; `feature/v2-design:apps/web-v2/docs/staging-smoke.md` |
-| F9 | **The programme is single-tenant and unauthenticated by decision, not by omission.** No auth library, no session, no account; the API contract documents "No authentication or accounts" as a deliberate property (R-16 ACCEPTED). | `docs/API.md`; `docs/OPEN_POINTS.md` R-16 |
+| F9 | **The programme is single-tenant and unauthenticated by decision, not by omission.** No auth library, no session, no account; the API contract documents "No authentication or accounts" as a deliberate property (R-16 ACCEPTED). | `docs/api/CONTRACT.md`; `docs/OPEN_POINTS.md` R-16 |
 | F10 | **The shared operational machinery is the real coupling.** `scripts/lib/` holds the DB write guard, the target digests, the restore-point argument validation, the model pin and the generated-doc check — every one consumed by more than one layer. | `apps/api/src/db.js:26`, `scripts/*.js`, `npm run test:scripts` |
 
 ### 1.3 Principal recommendations
@@ -80,7 +80,7 @@ Two of the six candidate projects are therefore **already independently packaged
 
 ### 1.4 What this RFC does not do
 
-It does not move a file, rename a package, add a manifest, change a workflow, alter the API, touch either frontend, apply a migration, connect to a database, or start the documentation-cleanup PR. The roadmap in §19 is a plan, and §19.2 states the safety policy that governs it. **No step of this RFC implements the Option B split.**
+It does not move a file, rename a package, add a manifest, change a workflow, alter the API, touch either frontend, apply a migration, connect to a database, or perform any roadmap step. (The documentation cleanup landed separately as PR #24; §16.7 records what it changed.) The roadmap in §19 remains a plan, and §19.2 states the safety policy that governs it. **No step of this RFC implements the Option B split.**
 
 ### 1.5 What changed in this revision
 
@@ -103,7 +103,7 @@ The decision to adopt Option B invalidated several arguments in the first revisi
 | 13 | "114 offers, 0 verified" presented as a universal current fact. | Environment-qualified measurements (§11A.2): shared/EU 0 VERIFIED (recorded 2026-11-10); TEST has 2 VERIFIED offers and 1 eligible CPU identity in the same recording. | `docs/OPEN_POINTS.md` R-01/R-30. |
 | 14 | Six implicit projects all lacking manifests. | Two of six already have independent manifests and lockfiles; the packaging work is engine, API, ingestion, database tooling (§3.1). | `git ls-files`, `feature/v2-design` tree. |
 | 15 | `generate-presets.js` assigned to the API while living in `scripts/`. | Physical home proposed as `apps/api/bin/generate-presets.js`; until moved, the file is a root script with an API-shaped dependency (§3.3). | `scripts/generate-presets.js:86-97`. |
-| 16 | A1-A6 recorded as `AWAITING OWNER APPROVAL`. | **A1-A6 approved by the repository owner on 2026-11-11**; the approval record, its scope and its exclusions are in §21.1. B1-B8 remain open, and PR #23 is neither approved nor merged by this record. | Owner approval recorded; not implemented. |
+| 16 | A1-A6 recorded as `AWAITING OWNER APPROVAL`. | **A1-A6 approved by the repository owner on 2026-11-11**; the approval record, its scope and its exclusions are in §21.1. B1-B8 remain open. The approval did not merge PR #23; that PR was merged separately on 2026-11-11 (`0bcb6e3`) to publish the record. | Owner approval recorded; not implemented. |
 
 ---
 
@@ -111,7 +111,7 @@ The decision to adopt Option B invalidated several arguments in the first revisi
 
 ### 2.1 The four layers, as implemented
 
-**CURRENT.** The schema is the contract that everything else obeys. Its four logical layers are documented in `README.md`, `CONTEXT.md` and `docs/ARCHITECTURE.md`, and are physical tables in one PostgreSQL database.
+**CURRENT.** The schema is the contract that everything else obeys. Its four logical layers are documented in `README.md`, `CONTEXT.md` and `docs/engine/ARCHITECTURE.md`, and are physical tables in one PostgreSQL database.
 
 | Layer | Tables (current) | Written by | Read by |
 |---|---|---|---|
@@ -714,7 +714,7 @@ The first revision assigned the golden harness "jointly to P1 + P2", which is a 
 | 6 | `toDirectUrl(urlString)` | pure: the same string pointed at the direct (non-pooler) host, credentials preserved verbatim |
 | 7 | `normalizeTarget(urlString)` | pure: credential-free `{ host, database }` identity |
 
-There is **no restore-point predicate export**: the restore-point rule is argument validation in `scripts/lib/apply-seed-args.js` and `scripts/apply-api-role.js`, not part of this package. The guard is required by `apps/api/src/db.js:26`, by seven DB-backed API test files plus `apps/api/test/run-db-tests.js`, and by eighteen scripts (sixteen `require` it, two cite it only in comments). `scripts/` has **no `package.json`**, so `"db-guard": "file:../../scripts/lib"` could not install.
+There is **no restore-point predicate export**: the restore-point rule is argument validation in `scripts/lib/apply-seed-args.js` and `scripts/apply-api-role.js`, not part of this package. The guard is required by `apps/api/src/db.js:26`, by seven DB-backed API test files plus `apps/api/test/run-db-tests.js`, and by **18 top-level scripts, every one of which `require`s it directly** (re-measured 2026-11-11 on `master` = `e62c816`). Three further `scripts/lib/` modules also `require` it (`apply-seed-args.js`, `ingest-args.js`, `migrations.js`), and one `scripts/lib/` module cites it only in a comment (`og01-catalog.js:28`). `scripts/` has **no `package.json`**, so `"db-guard": "file:../../scripts/lib"` could not install.
 
 **PROPOSED:** create `packages/database-guard/`:
 
@@ -970,7 +970,7 @@ A count in this document names **environment + date + source + kind** (live meas
 | Classification | **not an engine stage** — its own header says so | `ingestion/index.js:1-13` |
 | Dependency direction | inbound: **zero** (measured, §6.3); outbound: none to other stages | Tarjan scan |
 | Third-party deps | none (`crypto` + Node builtins only) | `require` scan |
-| Network | **none by design** — the seam is a file | `docs/PIPELINE_DESIGN.md` |
+| Network | **none by design** — the seam is a file | `docs/ingestion/PIPELINE_DESIGN.md` |
 | DB writes | only `apply.js`, inside a caller-owned transaction | `apply.js`, `run.js` headers |
 | CLI | `scripts/ingest-offers.js` (dry-run default, `--commit`, `--test-db`, `--target-env`, `--restore-point`) | script header |
 | Guards | refuses `--target-env` naming `DATABASE_URL`/`TEST_DATABASE_URL`; compares targets by `db:<12 hex>` digest; requires a restore point for a write; prints `AUDIT TARGET:` before connecting | `scripts/lib/ingest-args.js` |
@@ -1265,7 +1265,7 @@ Saved builds (local-only), compare view, price history, preset landing pages, le
 4. **A compatibility gate with a Git-ref baseline** (owner decision 4, 2026-11-11): `node scripts/check-openapi-compatibility.js --base=origin/master` retrieves the baseline contract **from the explicitly supplied Git ref**, compares it with the candidate, classifies every change ADDITIVE / BREAKING and fails on an unauthorized breaking change. There is **no second, hand-maintained baseline file**, and committed-versus-served is **not** a substitute: the snapshot test keeps that separate responsibility. An approved breaking change needs a documented review and approval note; the gate does not infer one.
 5. **Reject O4**: generated types belong to each frontend.
 
-5. **Step 3b scope = API + V1 + the shared contract location.** **V2 integration is deferred to Step 7** (owner decision 3, 2026-11-11): `apps/web-v2` stays on `feature/v2-design`, no V2 history is modified or merged in step 3b, and V2's type generation, contract wiring and compatibility verification happen in its dedicated roadmap step. This is a deliberate deferral, not abandonment.
+6. **Step 3b scope = API + V1 + the shared contract location.** **V2 integration is deferred to Step 7** (owner decision 3, 2026-11-11): `apps/web-v2` stays on `feature/v2-design`, no V2 history is modified or merged in step 3b, and V2's type generation, contract wiring and compatibility verification happen in its dedicated roadmap step. This is a deliberate deferral, not abandonment.
 
 **Hard rule:** never a hand-maintained second copy of a request or response shape.
 
@@ -1284,7 +1284,9 @@ Saved builds (local-only), compare view, price history, preset landing pages, le
 
 ## 16. Documentation ownership
 
-### 16.1 Current inventory (CURRENT, top-level)
+### 16.1 Inventory at the measurement baseline (CURRENT at `a413f25`, top-level)
+
+This is the pre-cleanup inventory Revisions 1-3 measured. PR #24 executed the §16.5 disposition; §16.7 records where each document lives on `master` now.
 
 | Document | Nature | Owner today |
 |---|---|---|
@@ -1301,7 +1303,7 @@ Saved builds (local-only), compare view, price history, preset landing pages, le
 | `docs/GLOSSARY.md`, `TEST_MAP.md`, `docs/RECIPES/`, `docs/archive/` | lookup + recipes + history | mixed |
 | `apps/web/README.md`, `apps/web-v2/README.md` + their `docs/` | frontend onboarding | V1 / V2 |
 
-### 16.2 Diagnosed problems (CURRENT)
+### 16.2 Diagnosed problems (CURRENT at `a413f25`)
 
 | Problem | Evidence |
 |---|---|
@@ -1338,7 +1340,7 @@ database/README.md                          + docs/{LIFECYCLE,ROLES,RESTORE}.md
 
 Every project's docs must answer: what it is, who consumes it, how to install/run it, its boundary (what it may not import), its module map and public interface, which suites need a database, the exact environment variables and guard rules, operations (build/deploy/rollback/health), security (credentials held, what must never be logged), release/versioning, owned decisions, and known limitations (linked into the register, not restated).
 
-### 16.5 Disposition of existing documents (PROPOSED — not executed here)
+### 16.5 Disposition of existing documents (PROPOSED at `a413f25`; executed by PR #24, §16.7)
 
 | Document | Disposition |
 |---|---|
@@ -1355,9 +1357,26 @@ Every project's docs must answer: what it is, who consumes it, how to install/ru
 | dated handoffs | **archive** with a `Superseded by:` header |
 | `pr8-fix-saved-spec.patch` | **delete or archive** |
 
-### 16.6 What the documentation-cleanup PR may not do
+### 16.6 Constraint on any documentation-cleanup PR
 
 **PROPOSED:** it may move, split and re-link, but it may not change a test count, a decision count, a migration range or a measured figure without re-running the measurement.
+
+### 16.7 Execution record: Roadmap Step 2 (2026-11-11)
+
+**CURRENT on `master`.** PR #24 (`docs/documentation-cleanup`, merged `ffd336c`) executed the §16.5 disposition; PR #25 (`fix/stale-recipe-paths`, merged `e62c816`) then corrected the script comments and generated-index citations that still named moved documents.
+
+| §16.5 disposition item | Result on `master` |
+|---|---|
+| `docs/ARCHITECTURE.md` | **split**: design contract → `docs/engine/ARCHITECTURE.md`; loader/snapshot/transaction contract → `packages/recommendation-runtime/docs/LOADERS_AND_TRANSACTIONS.md` |
+| `docs/API.md` | **moved** to `docs/api/CONTRACT.md` |
+| `docs/PIPELINE_DESIGN.md` | **moved** to `docs/ingestion/PIPELINE_DESIGN.md` |
+| `docs/RECIPES/*` | **split** under `docs/database/recipes/`, `docs/engine/recipes/` and `docs/ingestion/recipes/`; deploy, first-launch, release and status-claim recipes stay in `docs/RECIPES/` |
+| `AGENTS.md` | **rewritten as an index**; per-layer `AGENTS.md` added for `apps/api/`, `apps/web/`, `database/`, `docs/engine/` and `docs/ingestion/` |
+| dated handoffs | **archived** under `docs/archive/` with `Superseded by:` headers |
+| `pr8-fix-saved-spec.patch` | **archived**, not deleted (`docs/archive/`) |
+| `DEVELOPMENT_NOTES.md`, `CONTEXT.md`, `README.md`, registers, generated mirrors, `docs/archive/**` | kept at their previous owners |
+
+Step 2 changed no recommendation behaviour, schema, contract, migration or deployment: it changed 31 files (documentation, recipes, per-layer agent instructions and one documentation-gate path). `packages/` now exists only because it holds `recommendation-runtime/docs/LOADERS_AND_TRANSACTIONS.md`; it has **no manifest and no code**, and the extraction remains step 3a (§23.1).
 
 ---
 
@@ -1488,7 +1507,7 @@ Every step is independently reviewable as its own PR. "Parallel" marks work with
 | Step | Scope | Depends on | Genuinely parallel with | DB contact allowed | Deploys? |
 |---|---|---|---|---|---|
 | **1. Architecture approval** | A1-A6 in §21 **approved 2026-11-11** (§21.1); one accountable owner role defined per responsibility (§8); human names are assigned by the owner, not in this RFC (§21.1, A5) | — | — | none | no |
-| **2. Documentation cleanup** | §16.5 disposition; root becomes navigation | 1 | — | none (read-only `--offline` gates only) | no |
+| **2. Documentation cleanup** | §16.5 disposition; root becomes navigation — **executed 2026-11-11 by PR #24** (`ffd336c`), recorded in §16.7 | 1 | — | none (read-only `--offline` gates only) | no |
 | **3a. Package boundary preparation** | create `packages/{recommendation-core,recommendation-runtime,database-guard}` manifests and empty `src/` skeletons; move the guard into `packages/database-guard/` and update its consumers; path-only Docker/hosting corrections permitted (owner decision 1); no recommendation module moves; boundary tests written | 1, 2 | **3b** | none | no |
 | **3b. Contract & shared-interface preparation** | §15.4 O2: `contract/openapi-<version>.json`; the API snapshot test and V1's generator point at it; contract-copy drift gate; Git-ref compatibility gate. **V2 is not touched here** - its integration is step 7 | 1, 2 | **3a** | none | no |
 | **4. Core extraction** | the 33 core modules + split barrels + narrowed imports + hermetic suite (§11.2, §11.6) | 3a, 3b | — | none (`test:unit` is DB-free) | no |
@@ -1603,7 +1622,7 @@ Each row records a **recommended resolution**. **A1-A6 were approved by the repo
 | Date | 2026-11-11 |
 | Basis | The owner's review of the six architecture decisions against the primary objective: a maintainable, modular, production-ready architecture without changing existing business behaviour or adding unnecessary complexity |
 | Scope | Architecture decisions only. **B1-B8 (§21.2) are not approved** and remain open. |
-| Exclusions | Recording an approval authorizes **no implementation**: no package extraction, no behaviour or recommendation-logic change, no database connection or write, no migration or seed, no deployment — and **PR #23 is not approved or merged by this record**. |
+| Exclusions | Recording an approval authorizes **no implementation**: no package extraction, no behaviour or recommendation-logic change, no database connection or write, no migration or seed, no deployment — and recording it merged nothing: **PR #23 was merged separately on 2026-11-11 (`0bcb6e3`) and implements none of it**. |
 | A5 safeguard | §8 requires exactly one accountable human owner per responsibility. Names stay unassigned in this RFC: assigning organizational accountability is the owner's act, never an AI agent's, and no name is invented to fill a row. |
 
 ### 21.2 Product and operations decisions (do **not** block approval)
@@ -1673,15 +1692,17 @@ A project is "separated" when: (1) it has a `README.md` stating responsibility a
 
 | Item | Value | How |
 |---|---|---|
-| `master` | `a413f25` | `git log --oneline` |
+| `master` (measured for Revisions 1-3) | `a413f25` | `git log --oneline` |
+| `master` (current, Revision 4) | `e62c816` | `git rev-parse origin/master` |
 | `feature/v2-design` | `3bc0605` | `git log --oneline origin/feature/v2-design` |
-| RFC branch | `architecture/system-separation-rfc`, previous commit `9297034` | `git branch --show-current`, `git log` |
+| RFC branch | `architecture/system-separation-rfc` at `9297034`, **merged as PR #23 (`0bcb6e3`) and deleted**; Revision 4 corrections are on `docs/rfc-accuracy-corrections` | `git log`, `git branch -a` |
 | Manifests on `master` | root `package.json` + `apps/web/package.json` (and their lockfiles) | `git ls-files \| grep -i package.json` |
 | Manifests on `feature/v2-design` | the above + `apps/web-v2/package.json` + `apps/web-v2/package-lock.json` | `git ls-tree origin/feature/v2-design apps/web-v2/` |
-| `packages/`, `contract/` | do not exist | `ls -d packages contract` → both absent |
+| `contract/` | does not exist on `master`; until step 3b the contract is `apps/api/test/unit/openapi-v1.10.json` | `ls -d contract` → absent |
+| `packages/` | exists on `master` only as `packages/recommendation-runtime/docs/LOADERS_AND_TRANSACTIONS.md`; **no manifest, no code** | `git ls-tree -r --name-only origin/master -- packages` |
 | V2 staging record | exists on `feature/v2-design`, **not** on `master` | `git show origin/feature/v2-design:apps/web-v2/docs/staging-smoke.md`; `git cat-file -e origin/master:…` → fatal |
 
-### 23.2 Commands run for this revision (all read-only; no database contact)
+### 23.2 Commands run (Revisions 1-3 and Revision 4; all read-only, no database contact)
 
 | Command | Result used in |
 |---|---|
@@ -1703,6 +1724,8 @@ A project is "separated" when: (1) it has a `README.md` stating responsibility a
 | `ls -1 scripts/check-*.js` | §8.3 gate inventory |
 
 **Not run, and therefore not claimed:** `npm run test:unit`, `test:scripts`, `test:api`, `test:api:db`, `verify:replay`, `eval:scenarios`, any `check-*` gate, and any database connection. Suite counts from earlier documents are **not** restated as current fact.
+
+**Revision 4 re-measurements (2026-11-11, `master` = `e62c816`, read-only):** `git grep -l "require(.*lib/db-url" -- "scripts/*.js"` → **18** top-level scripts, all `require` it; `git grep -n "require(.*db-url" -- "scripts/lib/*.js"` → 3 modules (plus `db-url.test.js`) and one comment-only citation (`og01-catalog.js:28`); `git show --stat ffd336c` → **31** files; `git ls-tree -r --name-only origin/master -- packages` → one document, no manifest; `Test-Path` on `docs/API.md`, `docs/ARCHITECTURE.md` and `docs/PIPELINE_DESIGN.md` → all absent, while `docs/api/CONTRACT.md`, `docs/engine/ARCHITECTURE.md`, `docs/ingestion/PIPELINE_DESIGN.md` and `packages/recommendation-runtime/docs/LOADERS_AND_TRANSACTIONS.md` → all present. Gates run: `node scripts/gen-decision-index.js --check` → OK; `node scripts/verify-docs.js --offline` → OK (9 checks PASS, live checks skipped); `git diff --check` → clean.
 
 ### 23.3 Key file references
 
@@ -1726,8 +1749,8 @@ A project is "separated" when: (1) it has a `README.md` stating responsibility a
 
 | # | Document says | Tree says | Handling |
 |---|---|---|---|
-| C1 | `README.md` / `CONTEXT.md` report `test:scripts` "479" | `AGENTS.md` §6 says 571; this revision re-ran neither | recorded; the cleanup PR re-measures |
-| C2 | `README.md` "62 decisions" | 63 `## Decision` headings per `AGENTS.md` | recorded; cleanup PR re-measures |
+| C1 | `README.md` / `CONTEXT.md` report `test:scripts` "479" | no other current document states a figure after PR #24 rewrote `AGENTS.md`; this revision re-ran neither | recorded; **UNKNOWN** until a real run re-measures it — never edited to a new number without one |
+| C2 | `README.md` "62 decisions" (at `a413f25`) | PR #24 removed the count from `README.md`; the log parses to 63 top-level `## Decision` headings + 5 nested = 65 global decisions, with 69 `Status:` lines (`verify:docs`), and the generated index is the lookup | **resolved by measurement** — the README states no count; `AGENTS.md` states the pinned range "Decisions 1-65" |
 | C3 | `apps/web/README.md` and `lib/api/client.ts` name `openapi-v1.6.json` | no such file; `package.json` uses `v1.10` | recorded; V1 doc drift (§16.5) |
 | C4 | `CONTEXT.md` §2 / `AGENTS.md` §5: "Engine stages are pure" | true of stage functions; mixed barrels export SQL-executing modules; 15 non-ingestion modules execute SQL | **resolved by §6.2** — the claim is about functions, not packages |
 | C5 | `fly.toml` declares an always-on API service | `CONTEXT.md`/`ROADMAP.md` describe one Render origin | **UNKNOWN** which descriptor is authoritative (B6) |
@@ -1739,7 +1762,7 @@ A project is "separated" when: (1) it has a `README.md` stating responsibility a
 
 ### 23.5 No-code-change confirmation
 
-This revision changes exactly one file: `docs/architecture/SYSTEM_ARCHITECTURE_AND_PROJECT_SEPARATION_RFC.md`. It:
+Every revision of this document, Revision 4 included, changes exactly one file: `docs/architecture/SYSTEM_ARCHITECTURE_AND_PROJECT_SEPARATION_RFC.md`. It:
 
 - does not modify any source file under `src/`, `apps/api/`, `apps/web/` or `apps/web-v2/`;
 - does not add, remove or change any `package.json` or lockfile;
@@ -1773,4 +1796,4 @@ This revision changes exactly one file: `docs/architecture/SYSTEM_ARCHITECTURE_A
 
 ---
 
-*This RFC records the owner's approval of A1-A6 (2026-11-11) and stays PROPOSED for everything else: B1-B8 are open and independent review remains welcome. Option B is the selected direction; nothing in the document is implemented, and PR #23 is not approved or merged by this record. No application, database, test, workflow, manifest or deployment artefact was changed by this revision.*
+*This RFC records the owner's approval of A1-A6 (2026-11-11) and stays PROPOSED for everything else: B1-B8 are open and independent review remains welcome. Option B is the selected direction; nothing in the document is implemented, and PR #23 was merged on 2026-11-11 (`0bcb6e3`) as the record's publication, which implements none of it. No application, database, test, workflow, manifest or deployment artefact was changed by this revision.*
