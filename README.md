@@ -3,7 +3,7 @@
 PC build recommendation platform for the Moroccan market. Given a budget, a use case, an optional
 resolution and a priority, it selects compatible components, assembles whole builds, scores and ranks
 them, explains the choice, and stores the pass. Node.js, CommonJS, no build step; PostgreSQL on Neon;
-raw parameterized SQL; the Fastify API and the Next.js app are thin layers over a pure engine.
+raw parameterized SQL; the Fastify API and the Next.js app are thin layers over the engine.
 
 **Status:** the engine and the API are implemented and tested; the catalogue is seed data, so no price
 is verified and no offer carries retailer provenance. One Render origin exists: the private-beta host
