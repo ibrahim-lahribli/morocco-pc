@@ -417,7 +417,7 @@ modules requiring anything outside src/recommendation: 0
 **Reading, and what the first revision got wrong:**
 
 1. **There is no cycle, at module level or at stage level.** The edge set above has no path from a consumer back to its dependency: `assembly` borrows from `filtering`, `retention`/`scoring`/`ranking` borrow from `assembly`, `explanation` borrows from `ranking` and `assembly`, and `orchestrator` borrows from everyone. The earlier claim of "one strongly-connected graph" is **withdrawn**. A per-stage diagram with arrows into a stage is a list of who consumes whom, not a proof of strong connectivity.
-2. **Orchestration dependencies are distinct from reverse dependencies.** All 30 edges out of `orchestrator` are composition (`orchestrator → X`). There is not one `X → orchestrator` edge. The graph therefore already has the shape Option B wants: one top layer composing everything, one middle layer of infrastructure (loaders/persistence), one bottom layer of pure computation.
+2. **Orchestration dependencies are distinct from reverse dependencies.** All 35 edges out of `orchestrator` modules are composition: 25 cross-stage (`orchestrator → X`) and 10 intra-stage. There is not one `X → orchestrator` edge. *(Measured 2026-11-11: 7 `orchestrator` files, 35 outgoing edges — 25 cross-stage plus 10 intra-stage; the cross-stage column above sums to the same 25.)* The graph therefore already has the shape Option B wants: one top layer composing everything, one middle layer of infrastructure (loaders/persistence), one bottom layer of pure computation.
 3. **The shared kernel is small and pure:** `candidates/{roles,errors,select,candidate,input}` (10 inbound edges from `scoring` alone), `assembly/{prices,assemble}`, `filtering/filter`. Every one is a pure module, which is why the split does not need to break a cycle — it needs to place files.
 4. **Barrel imports inflate the appearance of coupling.** Three consumers import a *barrel* to obtain one constant (`ranking/rank.js:3`, `explanation/build-facts.js:46`, `explanation/reasons.js:107`); the underlying modules are still pure. §11.3 narrows those three lines, which makes every core→core edge file-precise.
 
@@ -513,7 +513,7 @@ Ownership boundaries are **not** renumbered or merged to preserve the number six
 | Must not | execute SQL, require `pg`/`dotenv`/`fs`/`http`, read `process.env`, read the clock, use randomness, import runtime/API/ingestion, mutate inputs |
 | Exposes | subpath entries per domain area (§11.4) |
 | Deploy | none — a library |
-| Tests | `node --test` from its own directory, fixture-driven, no DB, no network, no env (§11.7) |
+| Tests | `node --test` from its own directory, fixture-driven, no DB, no network, no env (§11.6) |
 
 #### P1b — Recommendation runtime (`packages/recommendation-runtime/`)
 
@@ -797,7 +797,7 @@ These are the platform's most valuable existing properties and no step of §19 m
 
 ### 11.1 What the split is not
 
-It is **not** a directory move. It is not justified, or opposed, by counting files. It is required because §6.2 P3 is true: 15 non-ingestion modules execute SQL, and three barrels currently export those modules beside pure ones (`offers/index.js` and `query/index.js` are runtime-only, and the pure `offers/as-of.js` sits beside the `offers` barrel, not inside it). The purpose of this section is to estimate and explain the correct extraction, not to argue for or against it.
+It is **not** a directory move. It is not justified, or opposed, by counting files. It is required because §6.2 P3 is true: 15 non-ingestion modules execute SQL, and three barrels (`candidates`, `filtering`, `scoring`) currently export those modules beside pure ones. Separately, `offers/index.js` and `query/index.js` are runtime-only, and the pure `offers/as-of.js` sits beside the `offers` barrel, not inside it. The purpose of this section is to estimate and explain the correct extraction, not to argue for or against it.
 
 ### 11.2 Module-level migration mapping
 
@@ -1471,7 +1471,7 @@ Every step is independently reviewable as its own PR. "Parallel" marks work with
 
 | Step | Scope | Depends on | Genuinely parallel with | DB contact allowed | Deploys? |
 |---|---|---|---|---|---|
-| **1. Architecture approval** | A1-A6 in §21 **approved 2026-11-11** (§21.1); one accountable owner named per responsibility | — | — | none | no |
+| **1. Architecture approval** | A1-A6 in §21 **approved 2026-11-11** (§21.1); one accountable owner role defined per responsibility (§8); human names are assigned by the owner, not in this RFC (§21.1, A5) | — | — | none | no |
 | **2. Documentation cleanup** | §16.5 disposition; root becomes navigation | 1 | — | none (read-only `--offline` gates only) | no |
 | **3a. Package boundary preparation** | create `packages/{recommendation-core,recommendation-runtime,database-guard}` manifests and empty `src/` skeletons; move the guard into its package; no module moves; boundary tests written | 1, 2 | **3b** | none | no |
 | **3b. Contract & shared-interface preparation** | §15.4 O2: `contract/openapi-<version>.json`; both generators point at it; compatibility-diff gate; guard interface documented | 1, 2 | **3a** | none | no |
@@ -1612,26 +1612,26 @@ Each row records a **recommended resolution**. **A1-A6 were approved by the repo
 
 | # | Criterion | State |
 |---|---|---|
-| A1 | Every material claim is labelled CURRENT / RECORDED / PROPOSED / DECISION REQUIRED / DEFERRED / UNKNOWN | met |
-| A2 | Every CURRENT claim cites a path, a command result or git history | met (§23.3) |
-| A3 | The purity claim is split into four separately evidenced properties | met (§6.2) |
-| A4 | The dependency-graph claim is backed by reproducible analysis, or withdrawn | met: SCC analysis, 80/80 singleton (§6.3, §23.2) |
-| A5 | Transaction ownership is stated per module, not per directory | met (§6.5) |
-| A6 | Option B is the selected direction, with the rejected options documented | met (§7.2) |
-| A7 | A file-level migration mapping covers every module and names mixed files | met (§11.2) |
-| A8 | Core and runtime entry points, allowed directions and forbidden imports are explicit | met (§9.1, §11.4, §11.5) |
-| A9 | One authoritative ownership matrix; every gate has exactly one owner | met (§8) |
-| A10 | The guard and Docker designs are implementable as written | met (§9.4, §13.4) |
-| A11 | The roadmap has one dependency table with only genuine parallelism | met (§19.1) |
-| A12 | Safety policy distinguishes shared/EU/production writes from guarded TEST writes, and names the deployment step | met (§19.2) |
-| A13 | V2 staging evidence is cited, dated, and its limits stated | met (§14.4) |
-| A14 | Every count names environment, date, source and kind | met (§11A.2) |
-| A15 | Decisions are split into approval blockers and product/ops decisions | met (§21) |
-| A16 | No application, database, test, workflow, manifest, Dockerfile or lockfile changed in this PR | met — see §23.5 and `git diff --stat` |
-| A17 | The API→core interface is a named, enforced vocabulary; runtime is never described as core's only consumer | met (§9.2, §11.4, §13.3) |
-| A18 | Every responsibility has exactly one accountable owner, including preset generation | met (§8.1, §8.3) |
-| A19 | Recommendations are distinguished from owner approvals; no decision is marked approved by this RFC | met (§21.1) — the RFC records recommendations; A1-A6 carry the **owner's** approval of 2026-11-11, recorded with its scope and exclusions, never a self-approval |
-| A20 | Terminology separates six ownership areas from installable packages and applications | met (§7.3) |
+| AC-1 | Every material claim is labelled CURRENT / RECORDED / PROPOSED / DECISION REQUIRED / DEFERRED / UNKNOWN | met |
+| AC-2 | Every CURRENT claim cites a path, a command result or git history | met (§23.3) |
+| AC-3 | The purity claim is split into four separately evidenced properties | met (§6.2) |
+| AC-4 | The dependency-graph claim is backed by reproducible analysis, or withdrawn | met: SCC analysis, 80/80 singleton (§6.3, §23.2) |
+| AC-5 | Transaction ownership is stated per module, not per directory | met (§6.5) |
+| AC-6 | Option B is the selected direction, with the rejected options documented | met (§7.2) |
+| AC-7 | A file-level migration mapping covers every module and names mixed files | met (§11.2) |
+| AC-8 | Core and runtime entry points, allowed directions and forbidden imports are explicit | met (§9.1, §11.4, §11.5) |
+| AC-9 | One authoritative ownership matrix; every gate has exactly one owner | met (§8) |
+| AC-10 | The guard and Docker designs are implementable as written | met (§9.4, §13.4) |
+| AC-11 | The roadmap has one dependency table with only genuine parallelism | met (§19.1) |
+| AC-12 | Safety policy distinguishes shared/EU/production writes from guarded TEST writes, and names the deployment step | met (§19.2) |
+| AC-13 | V2 staging evidence is cited, dated, and its limits stated | met (§14.4) |
+| AC-14 | Every count names environment, date, source and kind | met (§11A.2) |
+| AC-15 | Decisions are split into approval blockers and product/ops decisions | met (§21) |
+| AC-16 | No application, database, test, workflow, manifest, Dockerfile or lockfile changed in this PR | met — see §23.5 and `git diff --stat` |
+| AC-17 | The API→core interface is a named, enforced vocabulary; runtime is never described as core's only consumer | met (§9.2, §11.4, §13.3) |
+| AC-18 | Every responsibility has exactly one accountable owner, including preset generation | met (§8.1, §8.3) |
+| AC-19 | Recommendations are distinguished from owner approvals; no decision is marked approved by this RFC | met (§21.1) — the RFC records recommendations; A1-A6 carry the **owner's** approval of 2026-11-11, recorded with its scope and exclusions, never a self-approval |
+| AC-20 | Terminology separates six ownership areas from installable packages and applications | met (§7.3) |
 
 ### 22.2 For the programme (definition of done per project, PROPOSED)
 
