@@ -102,7 +102,7 @@ this side is one deployed origin, the catalogue's public-but-unlisted posture (t
 The launch-v2 activation run completed on 2026-10-09: seed 013 applied to the TEST branch, both models
 active, and the pinned v1 golden run byte-identical to its baseline except the model-identity header. The
 reversal steps are historical and are kept only in `docs/archive/briefs/step2-launch-v2-runbook.md`; the
-live procedure for a model activation is `docs/RECIPES/add-a-scoring-model-version.md`.
+live procedure for a model activation is `docs/engine/recipes/add-a-scoring-model-version.md`.
 
 ## 8. Where things live
 
@@ -111,8 +111,8 @@ live procedure for a model activation is `docs/RECIPES/add-a-scoring-model-versi
 | What is implemented, and which environment is which | [`../CONTEXT.md`](../CONTEXT.md) |
 | What is still open | [`OPEN_POINTS.md`](OPEN_POINTS.md) |
 | Why a rule exists | [`RECOMMENDATION_ENGINE_DECISIONS.md`](RECOMMENDATION_ENGINE_DECISIONS.md) |
-| How the pipeline fits together | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
-| What the HTTP surface promises | [`API.md`](API.md) |
+| How the pipeline fits together | [`engine/ARCHITECTURE.md`](engine/ARCHITECTURE.md) |
+| What the HTTP surface promises | [`api/CONTRACT.md`](api/CONTRACT.md) |
 | How to run one operation | [`RECIPES/`](RECIPES/) |
 | How to add a decision / migration / seed / model | [`RECIPES/`](RECIPES/) and [`decisions/TEMPLATE.md`](decisions/TEMPLATE.md) |
 | Operational lessons and measured numbers | [`../DEVELOPMENT_NOTES.md`](../DEVELOPMENT_NOTES.md) |

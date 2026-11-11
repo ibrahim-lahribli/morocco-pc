@@ -3,7 +3,7 @@
 Stages are pure modules under `src/recommendation/`; composition lives in the orchestrator.
 
 1. Read `AGENTS.md` §4–§5 (stage layout, purity rule) and
-   `docs/ARCHITECTURE.md` §2 (pipeline order) first.
+   `docs/engine/ARCHITECTURE.md` §2 (pipeline order) first.
 2. Create `src/recommendation/<stage>/` with:
    - the pure implementation module(s) — no DB access, no clock, no randomness, no input
      mutation; deepFreeze outputs (children before container);

@@ -79,7 +79,7 @@ from restore points `br-silent-cake-ax5q21at` and `br-bitter-sky-b96jh91p`, and
 `db:"ok"`, POST 201 with 1 build, 52 statements, no `42501`, and the Layer 4 counts back to their
 pre-run values. Note for the next one: `scripts/apply-api-role.js` REFUSES an existing role, so a
 privilege for a NEW table is an additive `GRANT`, never a re-apply — the procedure is
-`docs/RECIPES/provision-the-api-role.md` "Re-granting after a new Layer 4 table".
+`docs/database/recipes/provision-the-api-role.md` "Re-granting after a new Layer 4 table".
 The deployed origin still works only because it runs on WIDER credentials:
 `scripts/check-deployed-role.js --target=env:DATABASE_URL` answers **FAIL** against it (1 of 1
 `morocco-pc-api` session authenticated as `neondb_owner`, measured 2026-10-29) — OG-54 item 1, open
@@ -108,7 +108,7 @@ production database (applied 2026-10-23, audit target `db:2d66f26d7ddc`), each f
 restore point with a 20/20 self-check, so the column-scoped GRANTs in *Production mode* are live on both. Step 5 is no longer improvised: `node
 scripts/apply-api-role.js` applies the block under a restore-point guard that refuses without
 one, and `node scripts/smoke-api-role.js --confirm-shared` proves the API itself runs as the
-role; the owner procedure is `docs/RECIPES/provision-the-api-role.md`.
+role; the owner procedure is `docs/database/recipes/provision-the-api-role.md`.
 
 ## What it is not
 

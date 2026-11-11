@@ -2,7 +2,7 @@
 
 The repository's load-bearing vocabulary. Terms are defined by the decision log
 (`docs/RECOMMENDATION_ENGINE_DECISIONS.md`) and the architecture contract
-(`docs/ARCHITECTURE.md`); this file is a lookup, not a
+(`docs/engine/ARCHITECTURE.md`); this file is a lookup, not a
 source of truth. When a term here and a decision entry disagree, the decision wins.
 
 ## Compatibility vocabulary

@@ -120,7 +120,7 @@ module allowed to require `src/recommendation/**`, and a test enforces it. It se
 presets, the read-only catalog (keyset paginated, provenance-labelled prices), the recommendation
 POST/GET pair, the swap preview and the append-only swap commit. POST and GET share one read path, so
 they cannot disagree about a persisted field. Rate limits are per-IP and `TRUST_PROXY` names the
-trusted proxy (default off). Writes are deduped by a catalog-aware key. See `docs/API.md`.
+trusted proxy (default off). Writes are deduped by a catalog-aware key. See `docs/api/CONTRACT.md`.
 
 The `apps/web` Next.js app is a separate package consuming the pinned OpenAPI snapshot; it owns no
 engine logic and is out of scope for this file.
@@ -147,8 +147,8 @@ Operational detail, gotchas and dated measurements live in `DEVELOPMENT_NOTES.md
 |---|---|
 | What is still open, with class/status/owner | `docs/OPEN_POINTS.md` |
 | Why a rule exists | `docs/RECOMMENDATION_ENGINE_DECISIONS.md` |
-| How the pipeline fits together | `docs/ARCHITECTURE.md` |
-| What the HTTP surface promises | `docs/API.md` |
+| How the pipeline fits together | `docs/engine/ARCHITECTURE.md` |
+| What the HTTP surface promises | `docs/api/CONTRACT.md` |
 | Programme and sprint history | `docs/ROADMAP.md` |
 | How to run one operation | `docs/RECIPES/` |
 | Column-level schema truth | `database/migrations/` then `docs/SCHEMA_REFERENCE.md` |

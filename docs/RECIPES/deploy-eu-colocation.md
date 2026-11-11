@@ -512,7 +512,7 @@ status codes, and the two step-5 `x-ratelimit-remaining` values with their times
 values and the gap between them, and the preflight's printed addresses and `PREFLIGHT OK`. Then:
 
 - tick **P2 Sprint 2 Step 4** in `docs/ROADMAP.md` and paste the evidence beside it;
-- replace `docs/API.md`'s "not yet recorded because no host is chosen" sentence with the pinned
+- replace `docs/api/CONTRACT.md`'s "not yet recorded because no host is chosen" sentence with the pinned
   value and the date;
 - move P2 Sprint 2 from PARTIAL to DONE in `docs/ROADMAP.md` (Step 4 is its only open step).
 
@@ -752,7 +752,7 @@ model pin, statements per phase, ms per phase, ms per round trip, and the four H
 
 1. `DEVELOPMENT_NOTES.md`: the dated entry, the before/after table, every command that was
    actually run (including the ones that failed), and the project id + region.
-2. `docs/API.md`: replace the placeholder in the *Deployment* area with the real origin, the
+2. `docs/api/CONTRACT.md`: replace the placeholder in the *Deployment* area with the real origin, the
    region pair, the env-var set from §1 and the health-check path. (The owner's host is a
    fact; do not write a host into the doc before it exists.)
 3. `docs/ROADMAP.md` Steps 4–9: tick the boxes and record the measured outcome.
@@ -765,7 +765,7 @@ model pin, statements per phase, ms per phase, ms per round trip, and the four H
         scripts/lib/target-parity.test.js scripts/check-origin-readiness.js \
         scripts/lib/origin-readiness.js scripts/lib/origin-readiness.test.js \
         scripts/lib/origin-readiness-cli.test.js database/migration-applies.jsonl \
-        docs/API.md docs/RECIPES/deploy-eu-colocation.md \
+        docs/api/CONTRACT.md docs/RECIPES/deploy-eu-colocation.md \
         DEVELOPMENT_NOTES.md docs/ROADMAP.md docs/ROADMAP.md docs/ROADMAP.md
    ```
 

@@ -2,7 +2,7 @@
 
 The **topology is declared twice** today — this is the recipe's main hazard (W3/K6).
 
-1. Read `docs/ARCHITECTURE.md` §3/§5/§6 (HARD/SOFT policy) and check
+1. Read `docs/engine/ARCHITECTURE.md` §3/§5/§6 (HARD/SOFT policy) and check
    whether a decision entry already covers the relationship.
 2. Write the evaluator as a pure module in `src/recommendation/compatibility/`:
    - return `PASS | FAIL | UNKNOWN | CONDITIONAL` (Decision 1 asymmetric-UNKNOWN policy);

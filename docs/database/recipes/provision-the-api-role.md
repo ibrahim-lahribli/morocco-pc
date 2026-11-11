@@ -88,7 +88,7 @@ such a target up front and names the pending migrations. That refusal exists bec
 a `42703` / `42P01` produces at the edge is a generic `500 INTERNAL_ERROR`, which reads exactly
 like a privilege fault and sends the operator hunting through grants for a pending migration. The
 order is therefore: apply 021+022 to shared through the migration runner with its own recorded
-restore point (see `docs/RECIPES/add-a-migration.md`), then this recipe.
+restore point (see `docs/database/recipes/add-a-migration.md`), then this recipe.
 
 ## Steps
 
@@ -182,7 +182,7 @@ restore point (see `docs/RECIPES/add-a-migration.md`), then this recipe.
    * `DEVELOPMENT_NOTES.md`: a dated entry with the restore point, the git sha, the digest, the
      self-check result (21/21) and the smoke test's line. The apply's
      `record_for_development_notes` field is written to be pasted here.
-   * `docs/API.md` § Production mode: retitle the section (it read "designed 2026-10-07, not yet
+   * `docs/api/CONTRACT.md` § Production mode: retitle the section (it read "designed 2026-10-07, not yet
      applied"), state the apply date and the digest, and drop the claim that the
      `morocco_pc_api` role does not exist on the shared database. **Done 2026-10-19** for the
      shared apply; the same four files must be updated again for the EU project.
