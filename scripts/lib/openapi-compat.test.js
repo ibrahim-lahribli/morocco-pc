@@ -191,6 +191,16 @@ test('an optional parameter that becomes required is BREAKING', () => {
   assert.deepEqual(breakingCodes(compareContracts(baseDocument(), candidate)), ['PARAMETER_BECAME_REQUIRED']);
 });
 
+test('a required parameter that becomes optional is ADDITIVE', () => {
+  const base = baseDocument();
+  base.paths['/v1/things'].post.parameters[0].required = true;
+  const candidate = baseDocument();
+  candidate.paths['/v1/things'].post.parameters[0].required = false;
+  const result = compareContracts(base, candidate);
+  assert.deepEqual(result.breaking, []);
+  assert.deepEqual(codes(result), ['PARAMETER_BECAME_OPTIONAL']);
+});
+
 test('a response value domain may not narrow by dropping null, and a closed request object is BREAKING', () => {
   const nullableRemoved = baseDocument();
   nullableRemoved.paths['/v1/things'].post.responses['201'].content['application/json'].schema
@@ -222,6 +232,32 @@ test('a removed request body and a request body that becomes required are BREAKI
   candidate.paths['/v1/things'].post.requestBody.required = true;
   // The nested schema is identical, so exactly one change is reported.
   assert.deepEqual(breakingCodes(compareContracts(base, candidate)), ['REQUEST_BODY_BECAME_REQUIRED']);
+});
+
+test('an optional request body added or a required body made optional is ADDITIVE, and dropping a request schema relaxes it', () => {
+  const withoutBody = baseDocument();
+  delete withoutBody.paths['/v1/things'].post.requestBody;
+
+  const optionalBody = baseDocument();
+  optionalBody.paths['/v1/things'].post.requestBody.required = false;
+
+  const added = compareContracts(withoutBody, optionalBody);
+  assert.deepEqual(added.breaking, []);
+  assert.deepEqual(codes(added), ['REQUEST_BODY_ADDED']);
+
+  const madeOptional = compareContracts(baseDocument(), optionalBody);
+  assert.deepEqual(madeOptional.breaking, []);
+  assert.deepEqual(codes(madeOptional), ['REQUEST_BODY_BECAME_OPTIONAL']);
+
+  const withoutSchema = baseDocument();
+  delete withoutSchema.paths['/v1/things'].post.requestBody.content['application/json'].schema;
+
+  const relaxed = compareContracts(baseDocument(), withoutSchema);
+  assert.deepEqual(relaxed.breaking, []);
+  assert.deepEqual(codes(relaxed), ['SCHEMA_RELAXED']);
+
+  // Re-declaring the schema on a request narrows what callers may send.
+  assert.deepEqual(breakingCodes(compareContracts(withoutSchema, baseDocument())), ['SCHEMA_RESTRICTED']);
 });
 
 test('a required request property added is BREAKING, inside the request schema', () => {
@@ -441,6 +477,13 @@ test('a request that drops an accepted enum value is BREAKING, one that gains on
   assert.deepEqual(codes(widenedResult), ['ENUM_MEMBER_ADDED']);
 });
 
+test('a request that declares a type where the base accepted any type is BREAKING', () => {
+  const base = baseDocument();
+  delete requestSchema(base).properties.budget.properties.amount.type;
+  const result = compareContracts(base, baseDocument());
+  assert.deepEqual(breakingCodes(result), ['TYPE_RESTRICTED']);
+});
+
 test('a request type may widen but not narrow; a response type domain is exact', () => {
   const requestBase = baseDocument();
   const requestWide = baseDocument();
@@ -475,6 +518,17 @@ test('a response schema replaced by an incompatible one is BREAKING', () => {
   assert.ok(breakingCodes(result).includes('PROPERTY_REMOVED'));
 });
 
+test('a response that gains a schema where it guaranteed none is ADDITIVE, and dropping one is BREAKING', () => {
+  const undeclared = baseDocument();
+  delete operation(undeclared).responses['201'].content['application/json'].schema;
+
+  const added = compareContracts(undeclared, baseDocument());
+  assert.deepEqual(added.breaking, []);
+  assert.deepEqual(codes(added), ['SCHEMA_ADDED']);
+
+  assert.deepEqual(breakingCodes(compareContracts(baseDocument(), undeclared)), ['SCHEMA_REMOVED']);
+});
+
 test('a removed response media type is BREAKING and an added one is ADDITIVE', () => {
   const removed = baseDocument();
   delete operation(removed).responses['201'].content['application/json'];
@@ -507,6 +561,18 @@ test('a removed response header is BREAKING, an added one is ADDITIVE, and requi
   const addedResult = compareContracts(base, added);
   assert.deepEqual(addedResult.breaking, []);
   assert.deepEqual(codes(addedResult), ['RESPONSE_HEADER_ADDED']);
+});
+
+test('a response header that becomes guaranteed present is ADDITIVE', () => {
+  const base = baseDocument();
+  operation(base).responses['201'].headers = { 'X-Request-Id': { schema: { type: 'string' } } };
+
+  const candidate = clone(base);
+  operation(candidate).responses['201'].headers['X-Request-Id'].required = true;
+
+  const result = compareContracts(base, candidate);
+  assert.deepEqual(result.breaking, []);
+  assert.deepEqual(codes(result), ['RESPONSE_HEADER_BECAME_REQUIRED']);
 });
 
 test('a response object that was closed rejects a new property and opening it is BREAKING', () => {
@@ -565,6 +631,16 @@ test('any response validation change is BREAKING: the guaranteed value domain ch
   const stricter = clone(base);
   okSchema(stricter).properties.id.minLength = 8;
   assert.deepEqual(breakingCodes(compareContracts(base, stricter)), ['VALIDATION_RESTRICTED']);
+});
+
+test('a constraint that changes without a comparable ordering is BREAKING', () => {
+  const base = baseDocument();
+  okSchema(base).properties.id.format = 'uuid';
+
+  const candidate = clone(base);
+  okSchema(candidate).properties.id.format = 'email';
+
+  assert.deepEqual(breakingCodes(compareContracts(base, candidate)), ['VALIDATION_CHANGED']);
 });
 
 test('a request enum constraint added is BREAKING and dropped is ADDITIVE', () => {
