@@ -23,9 +23,9 @@ The repository's layout follows the architecture RFC
 architecture decisions A1-A6 are approved. **The database-guard package boundary is implemented** — the
 write-target guard lives in `packages/database-guard/` (PR #27, merged 2026-11-11) — but **nothing else
 from the package extraction is implemented**: `packages/recommendation-core/` and
-`packages/recommendation-runtime/` hold manifests only, no recommendation module has moved, and the RFC
-remains PROPOSED for the remaining work. B1-B8 are open. Do not start the extraction from a
-documentation task.
+`packages/recommendation-runtime/` contain scaffolding only (their manifests, an empty source placeholder
+and planning documentation); no recommendation module has moved, and the RFC remains PROPOSED for the
+remaining work. B1-B8 are open. Do not start the extraction from a documentation task.
 
 ## 2. Read order
 
