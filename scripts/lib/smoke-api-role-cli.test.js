@@ -54,7 +54,7 @@ test('the usage names the role, the confirmation and the runbook', () => {
   assert.match(usage, /--confirm-shared/);
   assert.match(usage, new RegExp(API_ROLE_NAME));
   assert.match(usage, /SHARED/);
-  assert.match(usage, /docs\/RECIPES\/provision-the-api-role\.md/);
+  assert.match(usage, /docs\/database\/recipes\/provision-the-api-role\.md/);
 });
 
 test('CLI: defaults, the `=` forms, and the engine version it stamps on its rows', () => {

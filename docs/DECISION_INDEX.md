@@ -3,7 +3,7 @@
 **GENERATED FILE — do not edit by hand.** Regenerate with `node scripts/gen-decision-index.js`
 (or `npm run gen:decisions`) after any change to `docs/RECOMMENDATION_ENGINE_DECISIONS.md`.
 `node scripts/gen-decision-index.js --check` exits non-zero when this file is stale.
-Generated 2026-11-07 from RECOMMENDATION_ENGINE_DECISIONS.md (6350 lines).
+Generated 2026-11-11 from RECOMMENDATION_ENGINE_DECISIONS.md (6350 lines).
 
 Generated for audit finding **D5** (decision-log navigability): one row per decision with number,
 title, status, date and line anchor. Every status comes from the normalized `Status:` line at the
@@ -12,7 +12,7 @@ top of its entry — nothing here is inferred — so
 
 Numbering: there are no `## Decision 4` / `## Decision 5` headings. Global Decisions 4 and 5 exist
 only as the nested `### Decision 4` / `### Decision 5` under "Engine 3 contract decisions"
-(Engine-3-local 4/5 double as global 4/5; `docs/ARCHITECTURE.md` §11 cites that
+(Engine-3-local 4/5 double as global 4/5; `docs/engine/ARCHITECTURE.md` §11 cites that
 section's Decision 5 for the budget rule). Engine-3-local `### Decision 1–3` are NOT global 1–3.
 
 ## Open decisions

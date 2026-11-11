@@ -3,7 +3,7 @@
 // scripts/smoke-api-role.js — prove the API itself RUNS as the production role.
 //
 // Platform P3 Sprint 2 Step 5, the step after `scripts/apply-api-role.js`. The
-// procedure is `docs/RECIPES/provision-the-api-role.md`; this file is its smoke
+// procedure is `docs/database/recipes/provision-the-api-role.md`; this file is its smoke
 // test, and what it adds over the apply's self-check is the API's OWN code path:
 // the self-check answers what the role MAY do, this answers what the API really
 // does with it — its pool guard, its routes, its repository statements and the
@@ -101,7 +101,7 @@ function usageText() {
     + 'Runs the API against the database named by --target-env (default DATABASE_URL, the SHARED database)\n'
     + 'as ' + apiRole.API_ROLE_NAME + ': health, then one real POST, then removes the rows it wrote and\n'
     + 'asserts the six Layer 4 counts returned. Writes to a real database, which is why --confirm-shared\n'
-    + 'is required. Read docs/RECIPES/provision-the-api-role.md first.';
+    + 'is required. Read docs/database/recipes/provision-the-api-role.md first.';
 }
 
 function parseArgs(argv) {
@@ -417,7 +417,7 @@ async function main() {
     // 0. The target's schema must carry what the API's code requires. Checked FIRST, before
     // the role and before anything is written: the refusal a behind-schema target produces
     // later looks exactly like a privilege fault, and it is the earlier item in the recipe's
-    // order (`docs/RECIPES/provision-the-api-role.md`).
+    // order (`docs/database/recipes/provision-the-api-role.md`).
     const preflight = await owner.query(buildSchemaPreflightSql());
     const missingSchema = missingSchemaPrerequisites(preflight.rows);
     report.schema_preflight = {
@@ -438,7 +438,7 @@ async function main() {
     const roleRow = await owner.query('SELECT rolname FROM pg_roles WHERE rolname = $1', [roleName]);
     if (roleRow.rows.length === 0) {
       throw new Error('role ' + roleName + ' does not exist on ' + target.digest
-        + '; run scripts/apply-api-role.js first (docs/RECIPES/provision-the-api-role.md)');
+        + '; run scripts/apply-api-role.js first (docs/database/recipes/provision-the-api-role.md)');
     }
     report.assertions.role_exists_on_target = true;
 

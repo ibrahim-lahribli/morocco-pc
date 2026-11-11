@@ -5,7 +5,7 @@
 //
 // Platform P3 Sprint 2 Step 5. The procedure that surrounds this command — the
 // restore point, the smoke test, the rollback and where to record the outcome —
-// is `docs/RECIPES/provision-the-api-role.md`; read it first. This file is the
+// is `docs/database/recipes/provision-the-api-role.md`; read it first. This file is the
 // apply half, and it is deliberately shaped like `scripts/run-migrations.js`
 // because the plan says Step 5 needs a restore point "for the same reason an
 // apply does":
@@ -101,7 +101,7 @@ function usageText() {
     + 'A real apply requires --restore-point=<id> (a Neon restore point / branch id, ^[A-Za-z0-9_-]{8,}$);\n'
     + 'the password comes from ' + PASSWORD_ENV + ' or --password-file=<path>, never from this command line.\n'
     + '--dry-run contacts nothing and prints the statements with the password redacted.\n'
-    + 'Read docs/RECIPES/provision-the-api-role.md first.';
+    + 'Read docs/database/recipes/provision-the-api-role.md first.';
 }
 
 function parseArgs(argv) {
@@ -376,7 +376,7 @@ async function main() {
     report.rollback_failures = teardownFailures;
     if (teardownFailures.length > 0 || report.role_exists_after === true) {
       exitCode = 1;
-      report.cleanup_verdict = 'ROLLBACK INCOMPLETE - remove ' + roleName + ' by hand (see docs/RECIPES/provision-the-api-role.md)';
+      report.cleanup_verdict = 'ROLLBACK INCOMPLETE - remove ' + roleName + ' by hand (see docs/database/recipes/provision-the-api-role.md)';
     } else {
       report.cleanup_verdict = 'the role this run created was REMOVED; the database is as it was before';
     }
@@ -392,7 +392,7 @@ async function main() {
   if (ok) {
     console.log('APPLIED: ' + roleName + ' on ' + target.digest + ', self-check '
       + report.self_check.matched + '/' + report.self_check.assertions
-      + '. Next: the smoke test (docs/RECIPES/provision-the-api-role.md).');
+      + '. Next: the smoke test (docs/database/recipes/provision-the-api-role.md).');
   } else {
     console.error('FAILED: ' + (report.failure || 'unknown') + ' - see the report above.');
   }
