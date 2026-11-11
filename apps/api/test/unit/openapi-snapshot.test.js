@@ -11,8 +11,15 @@
  * A committed snapshot is the only thing that makes a published contract a
  * CLAIM rather than a description: without it, the document can lose a field,
  * change a type or gain a path and every test still passes, because the tests
- * assert against the same code that generates the document. `openapi-v1.10.json`
+ * assert against the same code that generates the document. `contract/openapi-1.10.0.json`
  * is the served bytes, not a hand-written file - regenerate it, never edit it.
+ *
+ * WHERE it lives is step 3b's change: the contract moved out of the API's test
+ * directory into the shared, versioned `contract/` location, because the file is
+ * the API's published interface rather than a test fixture. The assertion below
+ * is unchanged in kind: it still byte-compares the SERVED document with the
+ * COMMITTED one. It does not compare revisions - that is the compatibility
+ * gate's separate job (`scripts/check-openapi-compatibility.js`).
  * There is exactly ONE snapshot on purpose: each superseded file (v1.1 through
  * v1.7) was DELETED when the next landed, because two plausible contracts in the
  * tree is worse than none - a reader cannot tell which one the service serves.
@@ -21,7 +28,7 @@
  *
  *   node -e "const fs=require('fs');const stub=require('./apps/api/test/helpers/stub');\
  *   stub.createTestApp().inject({method:'GET',url:'/v1/docs/json'})\
- *   .then(r=>fs.writeFileSync('apps/api/test/unit/openapi-v1.10.json',r.body+'\n'))"
+ *   .then(r=>fs.writeFileSync('contract/openapi-1.10.0.json',r.body+'\n'))"
  *
  * v1.7 (Decision 52) adds TWO fields and no path: `inputs_applied` on
  * GET /v1/meta/options and `input_effects` on both recommendation verbs. Both
@@ -63,7 +70,7 @@ const path = require('node:path');
 
 const stub = require('../helpers/stub');
 
-const SNAPSHOT_PATH = path.join(__dirname, 'openapi-v1.10.json');
+const SNAPSHOT_PATH = path.resolve(__dirname, '..', '..', '..', '..', 'contract', 'openapi-1.10.0.json');
 
 async function servedDocument() {
   const response = await stub.createTestApp().inject({ method: 'GET', url: '/v1/docs/json' });
@@ -86,7 +93,7 @@ test('the served OpenAPI document is byte-identical to the committed v1.10 snaps
   assert.equal(
     raw,
     committed.replace(/\n$/, ''),
-    'the served document differs from openapi-v1.10.json. If the change is deliberate, regenerate the '
+    'the served document differs from contract/openapi-1.10.0.json. If the change is deliberate, regenerate the '
       + 'snapshot with the command in this file\'s header and commit it together with the schema change; '
       + 'if it is not, the contract has drifted and this is the gate that noticed.'
   );

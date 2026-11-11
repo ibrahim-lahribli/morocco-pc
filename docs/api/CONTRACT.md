@@ -125,7 +125,29 @@ role; the owner procedure is `docs/database/recipes/provision-the-api-role.md`.
 npm run start:api        # node apps/api/src/server.js
 npm run test:api         # DB-free (fastify.inject + stubs)
 npm run test:api:db      # end-to-end against TEST_DATABASE_URL
+npm run check:contract   # exactly one versioned contract, no copies
+node scripts/check-openapi-compatibility.js --base=origin/master   # ADDITIVE passes, unapproved BREAKING fails
 ```
+
+### Where the committed contract lives
+
+The authoritative document is **`contract/openapi-1.10.0.json`**, named
+`openapi-<major>.<minor>.<patch>.json` after its own `info.version`. Step 3b moved
+it out of `apps/api/test/unit/`: it is the API's published interface, not a test
+fixture, and both the API snapshot test and V1's type generator read this one
+path. Two gates hold it in place, with separate jobs:
+
+| Gate | Question it answers |
+|---|---|
+| `apps/api/test/unit/openapi-snapshot.test.js` | is the committed document byte-identical to what the API SERVES? |
+| `scripts/check-openapi-contract.js` | is there exactly ONE contract, at the versioned path, with no second copy? |
+| `scripts/check-openapi-compatibility.js --base=<ref>` | can a client built against that Git revision still work (ADDITIVE vs BREAKING)? |
+
+The compatibility baseline is a **Git ref**, never a second committed file. An
+unapproved breaking change fails CI; an approved one needs both `--allow-breaking`
+and a reviewed `--approval-note="<who approved it and why>"`, which is printed with
+the verdict. V2 (`apps/web-v2`) is NOT connected here: its contract integration is
+step 7 of the separation roadmap.
 
 Environment variables (see `apps/api/.env.example` for the full list):
 
@@ -175,7 +197,7 @@ points the API at the main branch instead (measured 2026-10-18).
 ### Docker
 
 The build context is the **repository root**, because the API imports the engine
-from `src/recommendation/` and the guard from `scripts/lib/`:
+from `src/recommendation/` and the guard from `packages/database-guard/src/`:
 
 ```
 docker build -f apps/api/Dockerfile -t morocco-pc-api .
@@ -910,7 +932,7 @@ observation MOMENT, oldest first.
   "may this offer be recommended now", and pruning history by it would rewrite the past.
 - **Nothing else changed.** v1.6 adds this one path - no field on the existing paths gained,
   lost or changed type - and the served document is pinned byte-for-byte by
-  `apps/api/test/unit/openapi-v1.10.json` (the one snapshot in the tree).
+  `contract/openapi-1.10.0.json` (the one contract in the tree).
 
 ## Response shape
 

@@ -295,7 +295,7 @@ function buildApp(options) {
         // ascending order with their provenance, and a summary whose change
         // fields are null until there are two points (Decision 51). No existing
         // field or path changed. Pinned byte-for-byte by
-        // apps/api/test/unit/openapi-v1.7.json.
+        // contract/openapi-1.10.0.json.
         // 1.7.0 (2026-10-24): input effects (Decision 52) - two ADDITIVE fields,
         // no path or existing field changed: `inputs_applied` on
         // GET /v1/meta/options names the inputs the ACTIVE model reads at all

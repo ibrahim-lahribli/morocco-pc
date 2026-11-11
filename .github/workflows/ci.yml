@@ -16,7 +16,12 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
+      # Full history: the compatibility gate diffs the candidate contract against
+      # `origin/master` from Git, so a shallow clone would make the baseline
+      # unreadable and the gate would have to fail (or, worse, skip).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -31,6 +36,16 @@ jobs:
       - run: npm run test:database-guard
       # DB-free API contract/route tests (fastify.inject + stubs; no database).
       - run: npm run test:api
+      # Contract ownership: exactly ONE versioned contract in contract/, and no
+      # second copy anywhere in the tree. This is not the snapshot test — that
+      # one proves the committed document is what the API serves.
+      - run: npm run check:contract
+      # Backward compatibility against a NAMED Git ref, never a second committed
+      # baseline: `origin/master` is the revision clients were built against. An
+      # additive change passes; a breaking one fails unless it carries an
+      # explicit `--allow-breaking --approval-note="..."`.
+      - name: OpenAPI compatibility (Git-ref baseline)
+        run: node scripts/check-openapi-compatibility.js --base=origin/master
       - run: node scripts/gen-decision-index.js --check
       - run: node scripts/verify-docs.js --offline
       # R-21 (2026-11-03): the catalogue-identity gate ran nightly only, which is

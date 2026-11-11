@@ -262,7 +262,7 @@ are the only evidence the path works end to end:
   SQL runs against the deployed schema — not merely `SELECT 1`. `/v1/presets` without `use_case`
   correctly answers `422 VALIDATION_ERROR`.
 - The deployed OpenAPI document is byte-identical to the committed
-  `apps/api/test/unit/openapi-v1.10.json` (OpenAPI 3.0.3, API version 1.10.0, 10 paths), so the
+  `contract/openapi-1.10.0.json` (OpenAPI 3.0.3, API version 1.10.0, 10 paths), so the
   published contract is the one in the repo.
 - **Latency floor ≈ 270 ms per request**, measured two ways: `/v1/health` (one `SELECT 1`) median
   **272 ms**, and a catalog read median **276 ms**. A floor that does not move with payload size points
