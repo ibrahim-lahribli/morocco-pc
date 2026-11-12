@@ -213,6 +213,20 @@ Deliberate consequences worth knowing before editing the contract:
   or `GET /<path> callbacks "<name>" expression "<expr>"`). `security`
   alternatives and scopes are compared as sets, so reordering them is not a
   change; server order is significant.
+- **A Path Item `$ref` is resolved before the paths are compared.** OpenAPI
+  3.0.3 §4.7.9 lets a Path Item Object — an entry under `paths`, or a callback
+  expression value — carry `$ref` to another Path Item Object. The classifier
+  compares the RESOLVED Path Item, so a change inside the target (an operation,
+  a path-level parameter, `servers`, a request/response schema) is detected
+  even when the literal `$ref` string is unchanged, and pointing a `$ref` at
+  equivalent content produces no finding. A referring Path Item is **not** a
+  Reference Object: its other fields are declarations, so a sibling operation,
+  parameter list or server list is combined with the target and compared, never
+  discarded. OpenAPI 3.0.3 leaves a field declared by BOTH the referring Path
+  Item and its target undefined, so that overlap is `UNCOMPARABLE` rather than
+  the classifier choosing a winner. A reference that is external, unresolved,
+  malformed, cyclic, or does not point at a Path Item Object is `UNCOMPARABLE`
+  too, reported at the affected path (or callback expression).
 - **A schema keyword the classifier does not model** (`not`, `if`/`then`/`else`,
   `contains`, `prefixItems`, `discriminator`, `readOnly`, …) is reported as
   `UNCOMPARABLE` when it changes, and `UNCOMPARABLE` fails the gate. An
@@ -232,6 +246,16 @@ Remaining limitations, stated precisely:
 - `components.securitySchemes` is compared as a whole map: adding an
   unreferenced scheme is still reported, because the map is not modelled
   scheme by scheme.
+- Path Item references are resolved only as internal JSON pointers (`#/…`)
+  against the same document. An external file or URL reference is
+  `UNCOMPARABLE`, not fetched. OpenAPI 3.0.3 defines no `components.pathItems`,
+  so there is no special-case component location: a `$ref` is followed wherever
+  its internal pointer leads, and the target's vocabulary must be a Path Item's.
+- A Path Item reached through a chain of references is resolved through the
+  whole chain; a repeat in that chain is `UNCOMPARABLE`. A referred Path Item is
+  never compared operation by operation to a different referred Path Item — the
+  classifier compares the two RESOLVED Path Items, so equivalent targets are
+  equal and different targets are reported normally.
 - `components.callbacks` entries that no operation references are not compared;
   a referenced callback is compared at the referencing operation.
 - Media-type `example`/`examples`, `links`, `tags`, `externalDocs`, and

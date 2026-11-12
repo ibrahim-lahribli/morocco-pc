@@ -85,6 +85,17 @@
  *    BREAKING. An unchanged declaration is not reported.
  *  * Recursive `$ref` cycles are compared once; the repeated visit is assumed
  *    equal because any difference is reported at the first visit.
+ *  * A Path Item Object may carry `$ref` (§4.7.9), and then it is still a Path
+ *    Item, not a Reference Object. Path Items are resolved before comparison
+ *    at every location OpenAPI 3.0.3 allows one: an entry under `paths`, and a
+ *    callback expression value. A field declared by BOTH the referring Path
+ *    Item and its target has UNDEFINED behavior in the specification, so the
+ *    classifier fails closed as UNCOMPARABLE instead of picking a winner;
+ *    non-overlapping referring fields are combined with the target. An
+ *    external, unresolvable, malformed or non-Path-Item reference, and a
+ *    reference cycle, also fail closed. Resolution is stateless, so a target
+ *    reached from two places is resolved twice rather than assumed equal
+ *    because it was already visited.
  */
 
 const BREAKING = 'BREAKING';
@@ -278,6 +289,119 @@ function dereference(schema, root) {
     chain.push(ref);
   }
   return { schema: current, chain, problem: null };
+}
+
+/* ------------------------------------------------------------------------- *
+ * Path Item $ref resolution
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The fields an OpenAPI 3.0.3 Path Item Object may declare (§4.7.9). `$ref` is
+ * one of them, which is why a referring Path Item is not a Reference Object and
+ * why its other fields are additional declarations, not ignored siblings.
+ */
+const PATH_ITEM_KEYS = new Set([
+  '$ref', 'summary', 'description',
+  'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace',
+  'servers', 'parameters',
+]);
+
+/** Does this object use only Path Item vocabulary? */
+function isPathItemObject(node) {
+  if (!isPlainObject(node)) return false;
+  return Object.keys(node).every((key) => PATH_ITEM_KEYS.has(key));
+}
+
+/** The only reference form this classifier can follow: an internal pointer. */
+function isInternalRef(ref) {
+  return typeof ref === 'string' && ref.startsWith('#/');
+}
+
+/**
+ * Resolve a Path Item Object's `$ref`, if it has one.
+ *
+ * Deliberately NOT `dereference()`: that helper applies Reference Object
+ * semantics, where the referring object's siblings override the target. That is
+ * right for schemas and wrong for a Path Item, where the specification says
+ * nothing about a field declared on both sides. So this resolver
+ *
+ *   * fails closed on any field a referring Path Item and its target both
+ *     declare, instead of choosing one;
+ *   * combines non-overlapping referring fields with the target, so a sibling
+ *     operation, parameter list or server list is never dropped;
+ *   * requires an internal pointer to another Path Item Object, so an external,
+ *     unresolvable, malformed or non-Path-Item target fails closed;
+ *   * follows a chain of Path Item references and fails closed on a repeat.
+ *
+ * Each Path Item is resolved against its own document root from scratch; no
+ * state is carried between call sites.
+ *
+ * @returns {{node: object|null, chain: string[], problem: string|null}}
+ */
+function resolvePathItem(node, root) {
+  if (!isPlainObject(node)) {
+    return { node: null, chain: [], problem: 'the Path Item is not an object' };
+  }
+  if (!Object.prototype.hasOwnProperty.call(node, '$ref')) {
+    return { node: node, chain: [], problem: null };
+  }
+
+  const chain = [];
+  const overlay = {};
+  let current = node;
+
+  while (isPlainObject(current) && Object.prototype.hasOwnProperty.call(current, '$ref')) {
+    const ref = current.$ref;
+    if (!isInternalRef(ref)) {
+      return {
+        node: null,
+        chain: chain,
+        problem: typeof ref === 'string'
+          ? 'unsupported non-internal Path Item $ref ' + JSON.stringify(ref)
+          : 'malformed Path Item $ref ' + JSON.stringify(ref),
+      };
+    }
+    if (chain.includes(ref)) {
+      return { node: null, chain: chain, problem: 'circular Path Item $ref ' + JSON.stringify(ref) };
+    }
+    if (chain.length >= 64) {
+      return { node: null, chain: chain, problem: 'Path Item $ref chain too deep at ' + JSON.stringify(ref) };
+    }
+
+    const siblings = {};
+    for (const [key, value] of Object.entries(current)) if (key !== '$ref') siblings[key] = value;
+
+    const target = lookupPointer(root, ref);
+    if (!isPlainObject(target)) {
+      return { node: null, chain: chain, problem: 'unresolvable Path Item $ref ' + JSON.stringify(ref) };
+    }
+    if (!isPathItemObject(target)) {
+      return {
+        node: null,
+        chain: chain,
+        problem: '$ref ' + JSON.stringify(ref) + ' does not point at a Path Item Object',
+      };
+    }
+
+    for (const key of Object.keys(siblings)) {
+      if (Object.prototype.hasOwnProperty.call(overlay, key)
+        || Object.prototype.hasOwnProperty.call(target, key)) {
+        return {
+          node: null,
+          chain: chain,
+          problem: 'the field ' + JSON.stringify(key)
+            + ' is declared both by a referring Path Item and by ' + JSON.stringify(ref)
+            + '; OpenAPI 3.0.3 leaves this undefined',
+        };
+      }
+    }
+
+    Object.assign(overlay, siblings);
+    chain.push(ref);
+    current = target;
+  }
+
+  return { node: Object.assign({}, current, overlay), chain: chain, problem: null };
 }
 
 /* ------------------------------------------------------------------------- *
@@ -1388,7 +1512,21 @@ function compareCallbacks(baseCallbacks, candidateCallbacks, location, context) 
         changes.push(change(BREAKING, 'UNCOMPARABLE', expressionAt, 'removed callback expression ' + JSON.stringify(expression)));
         continue;
       }
-      if (stableSignature(baseExpressions[expression]) === stableSignature(candidateExpressions[expression])) continue;
+      // A callback expression value is a Path Item Object and may itself be a
+      // `$ref` (§4.7.9). Compare what it RESOLVES to, so a changed target is
+      // detected even when the literal `$ref` string is unchanged.
+      const baseExpression = resolvePathItem(baseExpressions[expression], context.baseRoot);
+      const candidateExpression = resolvePathItem(candidateExpressions[expression], context.candidateRoot);
+      if (baseExpression.problem || candidateExpression.problem) {
+        changes.push(change(
+          BREAKING,
+          'UNCOMPARABLE',
+          expressionAt,
+          'cannot resolve ' + (baseExpression.problem || candidateExpression.problem)
+        ));
+        continue;
+      }
+      if (stableSignature(baseExpression.node) === stableSignature(candidateExpression.node)) continue;
       changes.push(change(
         BREAKING,
         'UNCOMPARABLE',
@@ -1540,8 +1678,19 @@ function compareContracts(base, candidate) {
       changes.push(change(BREAKING, 'PATH_REMOVED', route, 'the whole path is gone'));
       continue;
     }
-    const baseItem = basePaths[route] || {};
-    const candidateItem = candidatePaths[route] || {};
+    const baseResolution = resolvePathItem(basePaths[route], base);
+    const candidateResolution = resolvePathItem(candidatePaths[route], candidate);
+    if (baseResolution.problem || candidateResolution.problem) {
+      changes.push(change(
+        BREAKING,
+        'UNCOMPARABLE',
+        route,
+        'cannot resolve ' + (baseResolution.problem || candidateResolution.problem)
+      ));
+      continue;
+    }
+    const baseItem = baseResolution.node;
+    const candidateItem = candidateResolution.node;
     changes.push(...compareUnmodelledConstruct(
       baseItem.servers,
       candidateItem.servers,

@@ -1567,6 +1567,320 @@ test('a changed callback reached through $ref is detected at the operation', () 
   assert.match(result.breaking[0].location, /callbacks "onEvent" expression/);
 });
 
+// --- Path Item $ref resolution ----------------------------------------------
+//
+// §4.7.9: a Path Item Object may carry `$ref`, and then it is STILL a Path Item
+// — its other fields are declarations, not the ignored siblings of a Reference
+// Object. These cases pin that the REFERENCED content is compared wherever
+// OpenAPI 3.0.3 allows a Path Item, and that nothing unsafe is guessed.
+//
+// The shared Path Items live under a root extension key on purpose: a Path Item
+// under `paths` would be compared as a route of its own and blur the locations
+// these tests assert. OpenAPI 3.0.3 has no `components.pathItems`.
+
+function referencedPathItem(overrides) {
+  return Object.assign({
+    parameters: [{ in: 'header', name: 'X-Locale', required: false, schema: { type: 'string' } }],
+    servers: [{ url: 'https://api.example.test' }],
+    get: {
+      requestBody: {
+        required: false,
+        content: {
+          'application/json': { schema: { type: 'object', properties: { filter: { type: 'string' } } } },
+        },
+      },
+      responses: {
+        200: response({ type: 'object', required: ['id'], properties: { id: { type: 'string' } } }),
+      },
+    },
+  }, overrides || {});
+}
+
+/** A document whose `/v1/things` Path Item is a `$ref` to `#/x-path-items/Things`. */
+function pathItemRefDocument(pathItem) {
+  const doc = baseDocument();
+  doc['x-path-items'] = { Things: clone(pathItem) };
+  doc.paths['/v1/things'] = { $ref: '#/x-path-items/Things' };
+  return doc;
+}
+
+/** The same effective Path Item, written inline. */
+function inlinePathItemDocument(pathItem) {
+  const doc = baseDocument();
+  doc.paths['/v1/things'] = clone(pathItem);
+  return doc;
+}
+
+test('an inline Path Item and a $ref to equivalent contents are NEUTRAL', () => {
+  const result = compareContracts(
+    inlinePathItemDocument(referencedPathItem()),
+    pathItemRefDocument(referencedPathItem())
+  );
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('an unchanged referenced Path Item produces no finding', () => {
+  const doc = pathItemRefDocument(referencedPathItem());
+  const result = compareContracts(doc, clone(doc));
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('a request schema change inside a referenced operation is detected', () => {
+  const base = pathItemRefDocument(referencedPathItem());
+  const candidate = clone(base);
+  candidate['x-path-items'].Things.get.requestBody.content['application/json']
+    .schema.properties.filter.type = 'number';
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['TYPE_CHANGED']);
+  assert.equal(result.breaking[0].location, 'GET /v1/things request application/json.filter');
+});
+
+test('a response schema change inside a referenced operation is detected', () => {
+  const base = pathItemRefDocument(referencedPathItem());
+  const candidate = clone(base);
+  candidate['x-path-items'].Things.get.responses['200'].content['application/json']
+    .schema.properties.id.type = 'number';
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['TYPE_CHANGED']);
+  assert.equal(result.breaking[0].location, 'GET /v1/things 200 application/json.id');
+});
+
+test('an operation added to or removed from a referenced Path Item is detected', () => {
+  const base = pathItemRefDocument(referencedPathItem());
+
+  const added = clone(base);
+  added['x-path-items'].Things.patch = { responses: { 204: { description: 'ok' } } };
+  const addedResult = compareContracts(base, added);
+  assert.equal(addedResult.verdict, ADDITIVE);
+  assert.deepEqual(codes(addedResult), ['METHOD_ADDED']);
+  assert.equal(addedResult.additive[0].location, '/v1/things');
+
+  const removed = clone(base);
+  delete removed['x-path-items'].Things.get;
+  const removedResult = compareContracts(base, removed);
+  assert.equal(removedResult.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(removedResult), ['METHOD_REMOVED']);
+  assert.equal(removedResult.breaking[0].location, '/v1/things');
+});
+
+test('a path-level parameter change inside a referenced Path Item is detected', () => {
+  const base = pathItemRefDocument(referencedPathItem());
+  const candidate = clone(base);
+  candidate['x-path-items'].Things.parameters[0].required = true;
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['PARAMETER_BECAME_REQUIRED']);
+  assert.equal(result.breaking[0].location, 'GET /v1/things');
+});
+
+test('a server change inside a referenced Path Item is detected', () => {
+  const base = pathItemRefDocument(referencedPathItem());
+  const candidate = clone(base);
+  candidate['x-path-items'].Things.servers = [{ url: 'https://other.example.test' }];
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, '/v1/things servers');
+  assert.match(result.breaking[0].detail, /path item servers/);
+});
+
+test('an unchanged $ref string with a changed target is detected', () => {
+  const base = pathItemRefDocument(referencedPathItem());
+  const candidate = clone(base);
+  candidate['x-path-items'].Things.get.responses['200'].content['application/json']
+    .schema.properties.id.type = 'number';
+  assert.equal(candidate.paths['/v1/things'].$ref, base.paths['/v1/things'].$ref);
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['TYPE_CHANGED']);
+  assert.equal(result.breaking[0].location, 'GET /v1/things 200 application/json.id');
+});
+
+test('repointing a $ref at equivalent content produces no finding', () => {
+  const base = pathItemRefDocument(referencedPathItem());
+  base['x-path-items'].Copy = clone(base['x-path-items'].Things);
+  const candidate = clone(base);
+  candidate.paths['/v1/things'] = { $ref: '#/x-path-items/Copy' };
+  assert.notEqual(candidate.paths['/v1/things'].$ref, base.paths['/v1/things'].$ref);
+
+  const result = compareContracts(base, candidate);
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('a chain of Path Item references is followed to its target', () => {
+  const base = pathItemRefDocument(referencedPathItem());
+  base['x-path-items'].Bridge = { $ref: '#/x-path-items/Things' };
+  base.paths['/v1/things'] = { $ref: '#/x-path-items/Bridge' };
+
+  const result = compareContracts(base, clone(base));
+  assert.deepEqual(result.changes, []);
+
+  const candidate = clone(base);
+  candidate['x-path-items'].Things.get.responses['200'].content['application/json']
+    .schema.properties.id.type = 'number';
+  const changed = compareContracts(base, candidate);
+  assert.equal(changed.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(changed), ['TYPE_CHANGED']);
+  assert.equal(changed.breaking[0].location, 'GET /v1/things 200 application/json.id');
+});
+
+test('the same target reached from two paths is compared at both', () => {
+  const base = pathItemRefDocument(referencedPathItem());
+  base.paths['/v1/other'] = { $ref: '#/x-path-items/Things' };
+  const candidate = clone(base);
+  candidate['x-path-items'].Things.get.responses['200'].content['application/json']
+    .schema.properties.id.type = 'number';
+
+  const result = compareContracts(base, candidate);
+  const locations = result.breaking.map((item) => item.location).sort();
+  assert.deepEqual(breakingCodes(result), ['TYPE_CHANGED', 'TYPE_CHANGED']);
+  assert.deepEqual(locations, [
+    'GET /v1/other 200 application/json.id',
+    'GET /v1/things 200 application/json.id',
+  ]);
+});
+
+test('an unresolved Path Item $ref fails closed', () => {
+  const base = pathItemRefDocument(referencedPathItem());
+  const candidate = clone(base);
+  candidate.paths['/v1/things'] = { $ref: '#/x-path-items/Missing' };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, '/v1/things');
+  assert.match(result.breaking[0].detail, /unresolvable Path Item \$ref/);
+});
+
+test('an external Path Item $ref fails closed instead of being fetched', () => {
+  const base = pathItemRefDocument(referencedPathItem());
+  const candidate = clone(base);
+  candidate.paths['/v1/things'] = { $ref: './shared-path-items.yaml#/Things' };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, '/v1/things');
+  assert.match(result.breaking[0].detail, /non-internal Path Item \$ref/);
+});
+
+test('a $ref to something that is not a Path Item Object fails closed', () => {
+  const base = pathItemRefDocument(referencedPathItem());
+  base.components = { schemas: { Thing: { type: 'object', properties: { id: { type: 'string' } } } } };
+  const candidate = clone(base);
+  candidate.paths['/v1/things'] = { $ref: '#/components/schemas/Thing' };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, '/v1/things');
+  assert.match(result.breaking[0].detail, /does not point at a Path Item Object/);
+});
+
+test('a direct or indirect Path Item $ref cycle fails closed', () => {
+  const direct = pathItemRefDocument(referencedPathItem());
+  direct['x-path-items'].Loop = { $ref: '#/x-path-items/Loop' };
+  direct.paths['/v1/things'] = { $ref: '#/x-path-items/Loop' };
+  const directResult = compareContracts(direct, clone(direct));
+  assert.equal(directResult.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(directResult), ['UNCOMPARABLE']);
+  assert.equal(directResult.breaking[0].location, '/v1/things');
+  assert.match(directResult.breaking[0].detail, /circular Path Item \$ref/);
+
+  const indirect = pathItemRefDocument(referencedPathItem());
+  indirect['x-path-items'].A = { $ref: '#/x-path-items/B' };
+  indirect['x-path-items'].B = { $ref: '#/x-path-items/A' };
+  indirect.paths['/v1/things'] = { $ref: '#/x-path-items/A' };
+  const indirectResult = compareContracts(indirect, clone(indirect));
+  assert.equal(indirectResult.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(indirectResult), ['UNCOMPARABLE']);
+  assert.match(indirectResult.breaking[0].detail, /circular Path Item \$ref/);
+});
+
+test('a field declared by both the referring Path Item and its target fails closed', () => {
+  const base = pathItemRefDocument(referencedPathItem());
+  base.paths['/v1/things'] = {
+    $ref: '#/x-path-items/Things',
+    get: clone(referencedPathItem().get),
+  };
+
+  // Even byte-identical documents: §4.7.9 leaves the overlap undefined, so the
+  // classifier may not claim equivalence by picking a side.
+  const result = compareContracts(base, clone(base));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, '/v1/things');
+  assert.match(result.breaking[0].detail, /OpenAPI 3.0.3 leaves this undefined/);
+});
+
+test('non-overlapping sibling fields are combined, never discarded', () => {
+  const pathItem = referencedPathItem();
+  const post = baseDocument().paths['/v1/things'].post;
+
+  const base = baseDocument();
+  base.paths['/v1/things'] = clone(pathItem);
+  base.paths['/v1/things'].post = clone(post);
+
+  const candidate = baseDocument();
+  candidate['x-path-items'] = { Things: clone(pathItem) };
+  candidate.paths['/v1/things'] = { $ref: '#/x-path-items/Things', post: clone(post) };
+
+  const result = compareContracts(base, candidate);
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+
+  // The sibling operation is compared, not silently dropped with the $ref.
+  const withoutSibling = clone(candidate);
+  delete withoutSibling.paths['/v1/things'].post;
+  const dropped = compareContracts(candidate, withoutSibling);
+  assert.equal(dropped.verdict, BREAKING);
+  assert.ok(breakingCodes(dropped).includes('METHOD_REMOVED'));
+  assert.ok(dropped.breaking.some((item) => item.location === '/v1/things'));
+});
+
+test('a callback expression holding a referenced Path Item detects a target change', () => {
+  function callbackRefDocument(pathItem) {
+    const doc = baseDocument();
+    doc['x-path-items'] = { Event: clone(pathItem) };
+    operation(doc).callbacks = {
+      onEvent: { '$request.body#/callbackUrl': { $ref: '#/x-path-items/Event' } },
+    };
+    return doc;
+  }
+
+  const base = callbackRefDocument(callbackPathItem());
+  const unchanged = compareContracts(base, clone(base));
+  assert.deepEqual(unchanged.changes, []);
+  assert.equal(unchanged.verdict, NEUTRAL);
+
+  const candidate = clone(base);
+  candidate['x-path-items'].Event.post.responses['200'].content['application/json']
+    .schema.properties = { id: { type: 'string' } };
+  assert.equal(
+    candidate.paths['/v1/things'].post.callbacks.onEvent['$request.body#/callbackUrl'].$ref,
+    base.paths['/v1/things'].post.callbacks.onEvent['$request.body#/callbackUrl'].$ref
+  );
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(
+    result.breaking[0].location,
+    'POST /v1/things callbacks "onEvent" expression "$request.body#/callbackUrl"'
+  );
+  assert.match(result.breaking[0].detail, /callback configuration changed/);
+});
+
 // --- rendering equivalence --------------------------------------------------
 
 test('nullable and a type array are the same guarantee, not a type change', () => {
