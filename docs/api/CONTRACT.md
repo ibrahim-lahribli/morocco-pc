@@ -238,6 +238,18 @@ Deliberate consequences worth knowing before editing the contract:
   Path Items are the deliberate exception above — a Path Item that carries
   `$ref` is still a Path Item Object (§4.7.9), so its other fields are
   declarations, not ignored siblings.
+- **A composition branch may only reference a Schema Object.** A branch whose
+  `$ref` reaches a scalar, an array, `null` or another object kind (a Parameter,
+  Response, Request Body or Media Type Object) is `UNCOMPARABLE` at that branch,
+  whether the two documents spell it identically or not. Branches are matched on
+  what they resolve to, so an identical pointer over an invalid target would
+  otherwise be accepted without ever being compared as a schema. A branch whose
+  references all reach Schema Objects stays comparable, and reordering
+  equivalent referenced branches is still not a change.
+- **A callback payload with an unresolvable reference is `UNCOMPARABLE`.**
+  Callback payloads are not modelled, so an external, malformed or dangling
+  `$ref` inside one is not evidence of equality even when both documents spell it
+  the same way — the payload's real shape is unknown.
 - **A schema keyword the classifier does not model** (`not`, `if`/`then`/`else`,
   `contains`, `prefixItems`, `discriminator`, `readOnly`, …) is reported as
   `UNCOMPARABLE` when it changes, and `UNCOMPARABLE` fails the gate. An

@@ -2419,3 +2419,134 @@ test('adding, removing or renaming an operationId is UNCOMPARABLE', () => {
 
   assert.deepEqual(compareContracts(named, clone(named)).changes, []);
 });
+// --- composition references must name a Schema Object ------------------------
+//
+// A JSON pointer that EXISTS is not yet a schema: a composition branch can point
+// at a scalar, an array, null, or another object kind. Two identical signatures
+// computed over such a target used to match, so the branch was accepted without
+// ever reaching `compareSchema()`. Every one of these is UNCOMPARABLE now.
+
+/** A response `anyOf` whose only branch is a `$ref` to `components.schemas.Thing`. */
+function compositionRefDocument(target) {
+  const doc = baseDocument();
+  doc.components = { schemas: { Thing: target } };
+  setResponseSchema(doc, { anyOf: [{ $ref: '#/components/schemas/Thing' }] });
+  return doc;
+}
+
+test('a composition branch that references a scalar is UNCOMPARABLE, never NEUTRAL', () => {
+  const doc = compositionRefDocument('string');
+  const result = compareContracts(doc, clone(doc));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things 201 application/json anyOf[0]');
+  assert.match(result.breaking[0].detail, /not a Schema Object/);
+});
+
+test('a composition branch that references an array is UNCOMPARABLE, never NEUTRAL', () => {
+  const doc = compositionRefDocument(['string', 'number']);
+  const result = compareContracts(doc, clone(doc));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things 201 application/json anyOf[0]');
+  assert.match(result.breaking[0].detail, /an array, not a Schema Object/);
+});
+
+test('a composition branch that references null is UNCOMPARABLE, never NEUTRAL', () => {
+  const doc = compositionRefDocument(null);
+  const result = compareContracts(doc, clone(doc));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things 201 application/json anyOf[0]');
+  assert.match(result.breaking[0].detail, /null, not a Schema Object/);
+});
+
+test('a composition branch that references another object kind is UNCOMPARABLE', () => {
+  const doc = compositionRefDocument({ in: 'query', name: 'limit', schema: { type: 'string' } });
+  const result = compareContracts(doc, clone(doc));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things 201 application/json anyOf[0]');
+  assert.match(result.breaking[0].detail, /not a Schema Object/);
+  assert.match(result.breaking[0].detail, /"in"/);
+});
+
+test('a composition branch with a valid Schema Object target stays comparable', () => {
+  const doc = compositionRefDocument({ type: 'string' });
+  assert.deepEqual(compareContracts(doc, clone(doc)).changes, []);
+});
+
+// --- unresolved references inside callback payloads -------------------------
+//
+// Callback payloads are not modelled, so a payload that cannot be fully
+// resolved is not evidence of equality - even when both documents spell the
+// same external or malformed `$ref`.
+
+/** A callback whose single expression carries the given Path Item. */
+function callbackOperationDocument(pathItem) {
+  const doc = baseDocument();
+  operation(doc).callbacks = operationCallbacks('$request.body#/callbackUrl', pathItem);
+  return doc;
+}
+
+function callbackWithSchema(slot, schema) {
+  const pathItem = {
+    post: {
+      responses: { 200: { description: 'ok', content: { 'application/json': { schema: { type: 'object' } } } } },
+    },
+  };
+  if (slot === 'request') {
+    pathItem.post.requestBody = { required: true, content: { 'application/json': { schema } } };
+  } else {
+    pathItem.post.responses['200'].content['application/json'].schema = schema;
+  }
+  return pathItem;
+}
+
+test('an identical external $ref in a callback request schema is UNCOMPARABLE', () => {
+  const doc = callbackOperationDocument(callbackWithSchema('request', { $ref: './shared.yaml#/Event' }));
+  const result = compareContracts(doc, clone(doc));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(
+    result.breaking[0].location,
+    'POST /v1/things callbacks "onEvent" expression "$request.body#/callbackUrl"'
+  );
+  assert.match(result.breaking[0].detail, /cannot be resolved/);
+});
+
+test('an identical external $ref in a callback response schema is UNCOMPARABLE', () => {
+  const doc = callbackOperationDocument(callbackWithSchema('response', { $ref: 'https://example.test/event.json' }));
+  const result = compareContracts(doc, clone(doc));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(
+    result.breaking[0].location,
+    'POST /v1/things callbacks "onEvent" expression "$request.body#/callbackUrl"'
+  );
+});
+
+test('a malformed nested $ref in a callback payload is UNCOMPARABLE', () => {
+  const doc = callbackOperationDocument(callbackWithSchema('request', {
+    type: 'object',
+    properties: { id: { $ref: 42 } },
+  }));
+  const result = compareContracts(doc, clone(doc));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(
+    result.breaking[0].location,
+    'POST /v1/things callbacks "onEvent" expression "$request.body#/callbackUrl"'
+  );
+});
+
+test('a callback payload whose references all resolve is still NEUTRAL when unchanged', () => {
+  const doc = callbackOperationDocument(callbackWithSchema('request', {
+    type: 'object',
+    properties: { id: { $ref: '#/components/schemas/Event' } },
+  }));
+  doc.components = { schemas: { Event: { type: 'string' } } };
+  const result = compareContracts(doc, clone(doc));
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});

@@ -70,7 +70,11 @@
  *    text alone. A literal match is only proof of equality for a branch that
  *    carries no reference; a branch that reaches a `$ref` is matched on what
  *    it resolves to, so an unchanged `$ref` string over a changed target is
- *    still compared (and reports the property-level change inside it).
+ *    still compared (and reports the property-level change inside it). Such a
+ *    branch is NEVER matched while a reference in it is malformed, external,
+ *    dangling, or names something that is not a Schema Object: two identical
+ *    signatures computed over invalid content would be a fail-open pass, so the
+ *    branch is UNCOMPARABLE instead.
  *  * A `$ref` that is present but not a string is a malformed Reference Object.
  *    It is UNCOMPARABLE everywhere it can appear (schema, parameter, request
  *    body, response, header, callback), never ignored because the surrounding
@@ -267,6 +271,90 @@ function semanticSignature(value, root, seen) {
       .join(',') + '}';
   }
   return JSON.stringify(value);
+}
+
+/**
+ * Keywords an OpenAPI 3.0.3 Schema Object may declare, unmodelled ones
+ * included. Used ONLY to reject a reference whose target is plainly another
+ * object kind (a Parameter, Response, Request Body or Media Type Object), never
+ * to decide that a schema is complete.
+ */
+const SCHEMA_OBJECT_KEYS = new Set([
+  ...HANDLED_KEYS, ...ANNOTATION_KEYS,
+  '$ref', 'not', 'if', 'then', 'else', 'contains', 'prefixItems', 'propertyNames',
+  'discriminator', 'readOnly', 'writeOnly', 'xml', 'const',
+  'dependentRequired', 'dependentSchemas', 'unevaluatedProperties',
+  'minContains', 'maxContains', '$schema', '$id', '$anchor', '$defs', 'definitions',
+  'contentMediaType', 'contentEncoding',
+]);
+
+/** How to name a JSON value that is not a Schema Object. */
+function describeJsonKind(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'an array';
+  if (typeof value === 'string') return 'a string';
+  if (typeof value === 'number') return 'a number';
+  if (typeof value === 'boolean') return 'a boolean';
+  return 'a ' + typeof value;
+}
+
+/**
+ * Is this object a Schema Object at all? A composition branch may only refer to
+ * one, and `{ in, name }` or `{ description, content }` is a Parameter or
+ * Response Object wearing a schema's `$ref`.
+ */
+function isSchemaObjectTarget(node) {
+  if (!isPlainObject(node)) return false;
+  return Object.keys(node).every((key) => key.startsWith('x-') || SCHEMA_OBJECT_KEYS.has(key));
+}
+
+/**
+ * The first reference in this tree that cannot be compared as a schema: a
+ * malformed one, an external one, a dangling pointer, or a target that is not a
+ * Schema Object (a scalar, an array, `null`, or another object kind).
+ *
+ * A composition branch that reaches such a target has no comparable meaning, so
+ * matching it on a signature computed from invalid content would be a fail-open
+ * pass. Returns a message, or `null` when every reference is a schema.
+ */
+function findInvalidSchemaReference(value, root, seen) {
+  const stack = Array.isArray(seen) ? seen : [];
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const problem = findInvalidSchemaReference(item, root, stack);
+      if (problem) return problem;
+    }
+    return null;
+  }
+  if (!isPlainObject(value)) return null;
+  if (Object.prototype.hasOwnProperty.call(value, '$ref')) {
+    const ref = value.$ref;
+    if (typeof ref !== 'string') return 'a malformed $ref ' + JSON.stringify(ref);
+    if (stack.includes(ref)) return null;
+    const target = lookupPointer(root, ref);
+    if (target === undefined) {
+      return ref.startsWith('#/')
+        ? '$ref ' + JSON.stringify(ref) + ' does not resolve'
+        : 'the non-internal $ref ' + JSON.stringify(ref) + ' cannot be resolved';
+    }
+    if (!isPlainObject(target)) {
+      return '$ref ' + JSON.stringify(ref) + ' points at ' + describeJsonKind(target)
+        + ', not a Schema Object';
+    }
+    if (!isSchemaObjectTarget(target)) {
+      const foreign = Object.keys(target)
+        .filter((key) => !key.startsWith('x-') && !SCHEMA_OBJECT_KEYS.has(key))
+        .sort();
+      return '$ref ' + JSON.stringify(ref) + ' points at an object that is not a Schema Object'
+        + ' (it declares ' + foreign.map((key) => JSON.stringify(key)).join(', ') + ')';
+    }
+    return findInvalidSchemaReference(target, root, stack.concat(ref));
+  }
+  for (const key of Object.keys(value)) {
+    const problem = findInvalidSchemaReference(value[key], root, stack);
+    if (problem) return problem;
+  }
+  return null;
 }
 
 /** Does any `$ref` in this tree fail to resolve against `root`? */
@@ -891,8 +979,10 @@ function compareObjectProperties(base, candidate, location, context) {
  *      branch is a reference, so a reordering of plain branches reports nothing;
  *   2. branches that reach a reference are matched on their SEMANTIC signature
  *      (every `$ref` replaced by its target), so reordering referenced variants
- *      with equal targets is still neutral, and an unresolvable reference never
- *      matches;
+ *      with equal targets is still neutral. A branch never matches this way when
+ *      a reference in it is malformed, external, dangling, or points at
+ *      something that is not a Schema Object: equal signatures over invalid
+ *      content would be a fail-open pass;
  *   3. whatever is left is paired in order and compared with `compareSchema()`,
  *      which resolves the references and reports the change inside the target
  *      at its own property-level location.
@@ -942,20 +1032,21 @@ function compareComposition(base, candidate, location, context) {
       else unmatchedBase.push(branch);
     }
 
-    // Second pass: what a referencing branch RESOLVES to. A branch whose
-    // reference cannot be followed stays unmatched so the third pass reports it.
-    const unresolvedBase = [];
+    // Second pass: what a referencing branch RESOLVES to. A branch that reaches
+    // an invalid reference target stays unmatched, so the third pass reports it
+    // instead of accepting two identical signatures computed over it.
+    const pendingBase = [];
     for (const branch of unmatchedBase) {
-      if (hasUnresolvableReference(branch, context.baseRoot)) {
-        unresolvedBase.push(branch);
+      if (findInvalidSchemaReference(branch, context.baseRoot) !== null) {
+        pendingBase.push(branch);
         continue;
       }
       const signature = semanticSignature(branch, context.baseRoot);
       const match = unmatched.find((entry) => !entry.used
-        && !hasUnresolvableReference(entry.branch, context.candidateRoot)
+        && findInvalidSchemaReference(entry.branch, context.candidateRoot) === null
         && semanticSignature(entry.branch, context.candidateRoot) === signature);
       if (match) match.used = true;
-      else unresolvedBase.push(branch);
+      else pendingBase.push(branch);
     }
     const unmatchedCandidate = unmatched.filter((entry) => !entry.used).map((entry) => entry.branch);
 
@@ -967,9 +1058,26 @@ function compareComposition(base, candidate, location, context) {
       : (Array.isArray(schema.oneOf) ? 'oneOf' : null));
     const enumCovered = union && flattenedWith(base) === keyword && flattenedWith(candidate) === keyword;
 
-    const pairs = Math.min(unresolvedBase.length, unmatchedCandidate.length);
+    const pairs = Math.min(pendingBase.length, unmatchedCandidate.length);
     for (let index = 0; index < pairs; index += 1) {
-      changes.push(...compareSchema(unresolvedBase[index], unmatchedCandidate[index], at + '[' + index + ']', {
+      const branchAt = at + '[' + index + ']';
+      // A branch is only comparable once every reference in it resolves to a
+      // Schema Object. Anything else is UNCOMPARABLE here, at the branch, rather
+      // than a silent NEUTRAL from keywords that happen to match.
+      const baseProblem = findInvalidSchemaReference(pendingBase[index], context.baseRoot);
+      const candidateProblem = findInvalidSchemaReference(unmatchedCandidate[index], context.candidateRoot);
+      if (baseProblem || candidateProblem) {
+        changes.push(change(
+          BREAKING,
+          'UNCOMPARABLE',
+          branchAt,
+          'the composition branch references something that is not a Schema Object: '
+            + (baseProblem || candidateProblem)
+            + '; this classifier cannot compare what it names'
+        ));
+        continue;
+      }
+      changes.push(...compareSchema(pendingBase[index], unmatchedCandidate[index], branchAt, {
         direction,
         baseRoot: context.baseRoot,
         candidateRoot: context.candidateRoot,
@@ -978,7 +1086,7 @@ function compareComposition(base, candidate, location, context) {
       }));
     }
 
-    const removedCount = unresolvedBase.length - pairs;
+    const removedCount = pendingBase.length - pairs;
     const addedCount = unmatchedCandidate.length - pairs;
 
     if (removedCount > 0) {
@@ -1668,6 +1776,11 @@ function compareUnmodelledConstruct(baseValue, candidateValue, location, label, 
  * string while the component it names changes, and comparing only the text
  * would report NEUTRAL for a payload that actually moved. Because callback
  * payloads are deliberately not modelled, such a change is UNCOMPARABLE.
+ *
+ * The same rule covers a reference that cannot be followed at all: an external,
+ * malformed or dangling `$ref` spells identically in both documents and would
+ * otherwise match its own signature. A payload with any unresolvable reference
+ * is never accepted as equal.
  */
 function compareCallbacks(baseCallbacks, candidateCallbacks, location, context) {
   if (baseCallbacks === undefined && candidateCallbacks === undefined) return [];
@@ -1734,6 +1847,21 @@ function compareCallbacks(baseCallbacks, candidateCallbacks, location, context) 
           'UNCOMPARABLE',
           expressionAt,
           'cannot resolve ' + (baseExpression.problem || candidateExpression.problem)
+        ));
+        continue;
+      }
+      // Equality is only accepted for a payload whose references can ALL be
+      // followed. An identical external or malformed `$ref` produces the same
+      // signature on both sides while the payload's real shape stays unknown,
+      // so it is accepted as equality only by mistake.
+      if (hasUnresolvableReference(baseExpression.node, context.baseRoot)
+        || hasUnresolvableReference(candidateExpression.node, context.candidateRoot)) {
+        changes.push(change(
+          BREAKING,
+          'UNCOMPARABLE',
+          expressionAt,
+          'a reference inside the callback payload cannot be resolved; this classifier does not'
+            + ' model callback payloads and cannot prove the change compatible'
         ));
         continue;
       }
