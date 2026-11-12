@@ -185,6 +185,16 @@ Deliberate consequences worth knowing before editing the contract:
   property to an OPEN response object stays ADDITIVE: a new key is a new field,
   not a new value of an existing field, and an open-object client must already
   tolerate unknown keys.
+- **Path Item parameters are inherited by every operation.** An operation-level
+  parameter with the same `name`+`in` overrides the inherited one; the
+  classifier compares each operation's effective parameters. Removing,
+  tightening or narrowing a path-level parameter is therefore BREAKING for
+  every operation that inherits it.
+- **A Media Type Object `encoding` change is BREAKING.** Adding, removing or
+  reserializing an entry (its `contentType`, `style`, `explode`,
+  `allowReserved` or headers) changes the request wire format even when the
+  schema is unchanged. An encoding field the classifier does not model is
+  `UNCOMPARABLE`.
 - **A schema keyword the classifier does not model** (`not`, `if`/`then`/`else`,
   `contains`, `prefixItems`, `discriminator`, `readOnly`, …) is reported as
   `UNCOMPARABLE` when it changes, and `UNCOMPARABLE` fails the gate. An

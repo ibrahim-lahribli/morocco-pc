@@ -508,6 +508,90 @@ test('a request type may widen but not narrow; a response type domain is exact',
   assert.deepEqual(breakingCodes(widenedResponse), ['TYPE_CHANGED']);
 });
 
+test('a response property with no declared type that becomes string is BREAKING', () => {
+  const base = baseDocument();
+  delete okSchema(base).properties.id.type;
+  const candidate = clone(base);
+  okSchema(candidate).properties.id = { type: 'string' };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(
+    result.changes.map((item) => [item.classification, item.code]),
+    [[BREAKING, 'TYPE_CHANGED']]
+  );
+});
+
+test('a response property with no declared type that becomes integer is BREAKING', () => {
+  const base = baseDocument();
+  delete okSchema(base).properties.id.type;
+  const candidate = clone(base);
+  okSchema(candidate).properties.id = { type: 'integer' };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(
+    result.changes.map((item) => [item.classification, item.code]),
+    [[BREAKING, 'TYPE_CHANGED']]
+  );
+});
+
+test('a response property that drops its declared type is BREAKING', () => {
+  const candidate = baseDocument();
+  delete okSchema(candidate).properties.id.type;
+
+  const result = compareContracts(baseDocument(), candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(
+    result.changes.map((item) => [item.classification, item.code]),
+    [[BREAKING, 'TYPE_CHANGED']]
+  );
+});
+
+test('a response property that changes to an incompatible declared type is BREAKING', () => {
+  const candidate = baseDocument();
+  okSchema(candidate).properties.id = { type: 'integer' };
+
+  const result = compareContracts(baseDocument(), candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(
+    result.changes.map((item) => [item.classification, item.code]),
+    [[BREAKING, 'TYPE_CHANGED']]
+  );
+});
+
+test('request type classification still widens safely and restricts conservatively', () => {
+  const unconstrained = baseDocument();
+  delete requestSchema(unconstrained).properties.budget.properties.amount.type;
+
+  const declared = clone(unconstrained);
+  requestSchema(declared).properties.budget.properties.amount = { type: 'integer' };
+  const restricted = compareContracts(unconstrained, declared);
+  assert.equal(restricted.verdict, BREAKING);
+  assert.deepEqual(
+    restricted.changes.map((item) => [item.classification, item.code]),
+    [[BREAKING, 'TYPE_RESTRICTED']]
+  );
+
+  const relaxed = compareContracts(declared, unconstrained);
+  assert.equal(relaxed.verdict, ADDITIVE);
+  assert.deepEqual(
+    relaxed.changes.map((item) => [item.classification, item.code]),
+    [[ADDITIVE, 'TYPE_WIDENED']]
+  );
+
+  const stringRequest = baseDocument();
+  requestSchema(stringRequest).properties.budget.properties.amount = { type: 'string' };
+  const integerRequest = clone(stringRequest);
+  requestSchema(integerRequest).properties.budget.properties.amount = { type: 'integer' };
+  const incompatible = compareContracts(stringRequest, integerRequest);
+  assert.equal(incompatible.verdict, BREAKING);
+  assert.deepEqual(
+    incompatible.changes.map((item) => [item.classification, item.code]),
+    [[BREAKING, 'TYPE_CHANGED']]
+  );
+});
+
 test('a response schema replaced by an incompatible one is BREAKING', () => {
   const candidate = baseDocument();
   setResponseSchema(candidate, { type: 'array', items: { type: 'string' } });
@@ -539,6 +623,124 @@ test('a removed response media type is BREAKING and an added one is ADDITIVE', (
   const addedResult = compareContracts(baseDocument(), added);
   assert.deepEqual(addedResult.breaking, []);
   assert.ok(codes(addedResult).includes('MEDIA_TYPE_ADDED'));
+});
+
+// --- Media Type Object encoding --------------------------------------------
+//
+// `encoding` changes the request wire format without changing the schema, so
+// every entry or serialization change is BREAKING. An unsupported field is
+// UNCOMPARABLE (which also fails the gate), never silently accepted.
+
+function setMultipartBody(doc, encoding) {
+  const mediaType = {
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string' }, meta: { type: 'object' } },
+    },
+  };
+  if (encoding !== undefined) mediaType.encoding = encoding;
+  operation(doc).requestBody.content = { 'multipart/form-data': mediaType };
+}
+
+function multipartEncoding(doc) {
+  return operation(doc).requestBody.content['multipart/form-data'].encoding;
+}
+
+test('adding a media-type encoding entry is BREAKING', () => {
+  const base = baseDocument();
+  setMultipartBody(base);
+  const candidate = clone(base);
+  setMultipartBody(candidate, { file: { contentType: 'application/octet-stream' } });
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['ENCODING_ADDED']);
+});
+
+test('removing a media-type encoding entry is BREAKING', () => {
+  const base = baseDocument();
+  setMultipartBody(base, {
+    file: { contentType: 'text/plain' },
+    meta: { style: 'form' },
+  });
+  const candidate = clone(base);
+  delete multipartEncoding(candidate).meta;
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['ENCODING_REMOVED']);
+});
+
+test('changing an encoding contentType is BREAKING', () => {
+  const base = baseDocument();
+  setMultipartBody(base, { file: { contentType: 'text/plain' } });
+  const candidate = clone(base);
+  multipartEncoding(candidate).file.contentType = 'application/octet-stream';
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['ENCODING_CHANGED']);
+});
+
+test('changing an encoding style or explode flag is BREAKING', () => {
+  const base = baseDocument();
+  setMultipartBody(base, { meta: { style: 'form', explode: true } });
+
+  const style = clone(base);
+  multipartEncoding(style).meta.style = 'spaceDelimited';
+  const styleResult = compareContracts(base, style);
+  assert.equal(styleResult.breaking.length, 1);
+  assert.deepEqual(breakingCodes(styleResult), ['ENCODING_CHANGED']);
+
+  const explode = clone(base);
+  multipartEncoding(explode).meta.explode = false;
+  const explodeResult = compareContracts(base, explode);
+  assert.equal(explodeResult.breaking.length, 1);
+  assert.deepEqual(breakingCodes(explodeResult), ['ENCODING_CHANGED']);
+});
+
+test('changing an encoding header is BREAKING', () => {
+  const base = baseDocument();
+  setMultipartBody(base, {
+    file: { headers: { 'X-Part': { schema: { type: 'string' } } } },
+  });
+
+  const narrowed = clone(base);
+  multipartEncoding(narrowed).file.headers['X-Part'].schema.type = 'integer';
+  const narrowedResult = compareContracts(base, narrowed);
+  assert.deepEqual(breakingCodes(narrowedResult), ['TYPE_CHANGED']);
+  assert.match(narrowedResult.breaking[0].location, /encoding.*header "X-Part"/);
+
+  const removed = clone(base);
+  delete multipartEncoding(removed).file.headers['X-Part'];
+  assert.deepEqual(breakingCodes(compareContracts(base, removed)), ['ENCODING_HEADER_REMOVED']);
+});
+
+test('an unchanged encoding object produces no difference', () => {
+  const doc = baseDocument();
+  setMultipartBody(doc, {
+    file: {
+      contentType: 'application/octet-stream',
+      headers: { 'X-Part': { schema: { type: 'string' } } },
+    },
+    meta: { style: 'form', explode: true, allowReserved: false },
+  });
+
+  const result = compareContracts(doc, clone(doc));
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('an unsupported encoding field change fails closed as UNCOMPARABLE', () => {
+  const base = baseDocument();
+  setMultipartBody(base, { file: { contentType: 'text/plain' } });
+  const candidate = clone(base);
+  multipartEncoding(candidate).file.contentEncoding = 'base64';
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.match(result.breaking[0].detail, /"contentEncoding"/);
 });
 
 test('a removed response header is BREAKING, an added one is ADDITIVE, and required -> optional is BREAKING', () => {
@@ -711,6 +913,102 @@ test('a removed request parameter is BREAKING', () => {
   const candidate = baseDocument();
   operation(candidate).parameters = [];
   assert.deepEqual(breakingCodes(compareContracts(baseDocument(), candidate)), ['PARAMETER_REMOVED']);
+});
+
+// --- Path Item parameters --------------------------------------------------
+//
+// Path-level parameters are inherited by every operation. These cases pin the
+// inheritance, the operation-level override, and the fact that a path-level
+// change is judged by the request rules for every operation that inherits it.
+
+function setPathParameters(doc, parameters) {
+  doc.paths['/v1/things'].parameters = parameters;
+}
+
+function tenant(schema, required = false) {
+  return { in: 'query', name: 'tenant', required, schema };
+}
+
+test('removing a required path-level parameter is BREAKING', () => {
+  const base = baseDocument();
+  setPathParameters(base, [tenant({ type: 'string' }, true)]);
+  const candidate = clone(base);
+  delete candidate.paths['/v1/things'].parameters;
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['PARAMETER_REMOVED']);
+});
+
+test('a path-level parameter that becomes required is BREAKING', () => {
+  const base = baseDocument();
+  setPathParameters(base, [tenant({ type: 'string' }, false)]);
+  const candidate = clone(base);
+  candidate.paths['/v1/things'].parameters[0].required = true;
+
+  assert.deepEqual(breakingCodes(compareContracts(base, candidate)), ['PARAMETER_BECAME_REQUIRED']);
+});
+
+test('narrowing a path-level parameter schema is BREAKING', () => {
+  const base = baseDocument();
+  setPathParameters(base, [tenant({ type: 'string', enum: ['A', 'B'] }, false)]);
+  const candidate = clone(base);
+  candidate.paths['/v1/things'].parameters[0].schema.enum = ['A'];
+
+  assert.deepEqual(breakingCodes(compareContracts(base, candidate)), ['ENUM_MEMBER_REMOVED']);
+});
+
+test('adding an optional path-level parameter is ADDITIVE and a required one is BREAKING', () => {
+  const optional = baseDocument();
+  setPathParameters(optional, [tenant({ type: 'string' }, false)]);
+  const optionalResult = compareContracts(baseDocument(), optional);
+  assert.deepEqual(optionalResult.breaking, []);
+  assert.deepEqual(codes(optionalResult), ['PARAMETER_ADDED']);
+
+  const required = baseDocument();
+  setPathParameters(required, [tenant({ type: 'string' }, true)]);
+  assert.deepEqual(breakingCodes(compareContracts(baseDocument(), required)), ['REQUIRED_PARAMETER_ADDED']);
+});
+
+test('an operation-level parameter overrides the inherited path-level parameter', () => {
+  const base = baseDocument();
+  setPathParameters(base, [tenant({ type: 'string' }, false)]);
+  // The operation restates the same name+in, so it owns the effective contract.
+  operation(base).parameters.push(tenant({ type: 'string' }, false));
+
+  const candidate = clone(base);
+  // Tightening the inherited declaration must not leak through the override.
+  candidate.paths['/v1/things'].parameters[0].required = true;
+  candidate.paths['/v1/things'].parameters[0].schema = { type: 'integer' };
+
+  const result = compareContracts(base, candidate);
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('an unchanged inherited path-level parameter is not a false positive', () => {
+  const base = baseDocument();
+  setPathParameters(base, [tenant({ type: 'string' }, true)]);
+
+  const result = compareContracts(base, clone(base));
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('a path-level parameter change is detected for every operation that inherits it', () => {
+  const base = baseDocument();
+  base.paths['/v1/things'].get = { responses: { 200: response({ type: 'object' }) } };
+  setPathParameters(base, [tenant({ type: 'string' }, true)]);
+
+  const candidate = clone(base);
+  candidate.paths['/v1/things'].parameters[0].schema = { type: 'integer' };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.equal(result.breaking.length, 2);
+  assert.deepEqual(breakingCodes(result), ['TYPE_CHANGED', 'TYPE_CHANGED']);
+  assert.ok(result.breaking.some((item) => item.location.startsWith('GET ')));
+  assert.ok(result.breaking.some((item) => item.location.startsWith('POST ')));
 });
 
 test('nested object properties keep their direction', () => {

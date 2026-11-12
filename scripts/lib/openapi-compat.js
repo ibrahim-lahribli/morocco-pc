@@ -66,6 +66,14 @@
  *    BREAKING; the same removal widens a request and is ADDITIVE.
  *  * A composition keyword that appears or disappears cannot be proven
  *    equivalent and is BREAKING in both directions.
+ *  * Path Item parameters are inherited by every operation; an operation-level
+ *    parameter with the same name+`in` overrides the inherited one. The
+ *    classifier compares the effective request contract for each operation,
+ *    so a path-level removal, addition or tightening cannot escape detection.
+ *  * Media Type Object `encoding` changes request serialization even when the
+ *    schema is unchanged. Adding, removing or reserializing an encoding entry
+ *    is BREAKING; an encoding field this module does not model is
+ *    UNCOMPARABLE, never an implicit pass.
  *  * Recursive `$ref` cycles are compared once; the repeated visit is assumed
  *    equal because any difference is reported at the first visit.
  *
@@ -327,8 +335,11 @@ function compareTypes(base, candidate, location, direction) {
   const named = showTypes(baseTypes) + ' -> ' + showTypes(candidateTypes);
 
   if (baseTypes.size === 0) {
+    // Rule A6: a response that starts declaring a type changes the guaranteed
+    // value domain just as much as one that drops a type. Both directions are
+    // BREAKING; only a request can widen safely.
     return [change(
-      direction === REQUEST ? BREAKING : ADDITIVE,
+      BREAKING,
       direction === REQUEST ? 'TYPE_RESTRICTED' : 'TYPE_CHANGED',
       location,
       'the base accepted any type and the candidate declares ' + showTypes(candidateTypes)
@@ -838,6 +849,204 @@ function compareSchema(baseInput, candidateInput, location, options) {
  * Operations, parameters, content and responses
  * ------------------------------------------------------------------------- */
 
+/** Encoding fields that change how a request part is serialized. */
+const ENCODING_KEYS = new Set(['contentType', 'headers', 'style', 'explode', 'allowReserved']);
+
+/**
+ * Encoding headers are Header Objects, not Parameter Objects. A removed,
+ * added or reserialized header changes the representation of the part, so the
+ * request rules apply to its schema and any change to presence/serialization
+ * is BREAKING.
+ */
+function compareEncodingHeaders(baseHeaders, candidateHeaders, location, context) {
+  const changes = [];
+  if (baseHeaders === undefined && candidateHeaders === undefined) return changes;
+
+  const baseIsObject = isPlainObject(baseHeaders);
+  const candidateIsObject = isPlainObject(candidateHeaders);
+  if ((baseHeaders !== undefined && !baseIsObject) || (candidateHeaders !== undefined && !candidateIsObject)) {
+    if (stableSignature(baseHeaders) !== stableSignature(candidateHeaders)) {
+      changes.push(change(
+        BREAKING,
+        'UNCOMPARABLE',
+        location,
+        'the encoding headers are not comparable; this classifier cannot prove the change compatible'
+      ));
+    }
+    return changes;
+  }
+
+  const base = baseIsObject ? baseHeaders : {};
+  const candidate = candidateIsObject ? candidateHeaders : {};
+
+  for (const name of Object.keys(base)) {
+    if (!Object.prototype.hasOwnProperty.call(candidate, name)) {
+      changes.push(change(
+        BREAKING,
+        'ENCODING_HEADER_REMOVED',
+        location,
+        'removed encoding header ' + JSON.stringify(name) + '; the request representation changed'
+      ));
+      continue;
+    }
+    const baseResolved = resolveNode(base[name], context.baseRoot);
+    const candidateResolved = resolveNode(candidate[name], context.candidateRoot);
+    if (baseResolved.node === null || candidateResolved.node === null) {
+      changes.push(change(
+        BREAKING,
+        'UNCOMPARABLE',
+        location + ' header ' + JSON.stringify(name),
+        'cannot resolve ' + (baseResolved.problem || candidateResolved.problem || 'an encoding header reference')
+      ));
+      continue;
+    }
+    const before = baseResolved.node;
+    const after = candidateResolved.node;
+    const at = location + ' header ' + JSON.stringify(name);
+
+    if ((before.required === true) !== (after.required === true)) {
+      changes.push(change(
+        BREAKING,
+        'ENCODING_HEADER_CHANGED',
+        at,
+        'required ' + JSON.stringify(before.required === true) + ' -> ' + JSON.stringify(after.required === true)
+          + '; the request representation changed'
+      ));
+    }
+    if (before.schema !== undefined || after.schema !== undefined) {
+      changes.push(...compareSchema(before.schema, after.schema, at, {
+        direction: REQUEST,
+        baseRoot: context.baseRoot,
+        candidateRoot: context.candidateRoot,
+      }));
+    } else if (before.content !== undefined || after.content !== undefined) {
+      changes.push(...compareContent(before.content, after.content, at, REQUEST, context));
+    }
+    for (const field of ['style', 'explode', 'allowReserved']) {
+      if (stableSignature(before[field]) === stableSignature(after[field])) continue;
+      changes.push(change(
+        BREAKING,
+        'ENCODING_HEADER_CHANGED',
+        at,
+        'the serialization of header ' + JSON.stringify(name) + ' changed (' + field + ')'
+      ));
+    }
+  }
+
+  for (const name of Object.keys(candidate)) {
+    if (Object.prototype.hasOwnProperty.call(base, name)) continue;
+    changes.push(change(
+      BREAKING,
+      'ENCODING_HEADER_ADDED',
+      location,
+      'added encoding header ' + JSON.stringify(name) + '; the request representation changed'
+    ));
+  }
+  return changes;
+}
+
+/** Compare one Encoding Object's wire-format fields. */
+function compareEncodingEntry(baseEntry, candidateEntry, location, context) {
+  const changes = [];
+  if (!isPlainObject(baseEntry) || !isPlainObject(candidateEntry)) {
+    if (stableSignature(baseEntry) !== stableSignature(candidateEntry)) {
+      changes.push(change(
+        BREAKING,
+        'UNCOMPARABLE',
+        location,
+        'the encoding entry is not a comparable object; this classifier cannot prove the change compatible'
+      ));
+    }
+    return changes;
+  }
+
+  for (const field of ['contentType', 'style', 'explode', 'allowReserved']) {
+    if (stableSignature(baseEntry[field]) === stableSignature(candidateEntry[field])) continue;
+    changes.push(change(
+      BREAKING,
+      'ENCODING_CHANGED',
+      location,
+      field + ' ' + JSON.stringify(baseEntry[field]) + ' -> ' + JSON.stringify(candidateEntry[field])
+        + '; the request wire format changed'
+    ));
+  }
+
+  if (baseEntry.headers !== undefined || candidateEntry.headers !== undefined) {
+    changes.push(...compareEncodingHeaders(baseEntry.headers, candidateEntry.headers, location, context));
+  }
+
+  const keys = new Set(Object.keys(baseEntry).concat(Object.keys(candidateEntry)));
+  for (const key of [...keys].sort()) {
+    if (key.startsWith('x-') || ENCODING_KEYS.has(key)) continue;
+    if (stableSignature(baseEntry[key]) === stableSignature(candidateEntry[key])) continue;
+    changes.push(change(
+      BREAKING,
+      'UNCOMPARABLE',
+      location,
+      'unsupported encoding field ' + JSON.stringify(key)
+        + ' changed; this classifier cannot prove the change compatible'
+    ));
+  }
+  return changes;
+}
+
+/**
+ * Compare Media Type Object `encoding`. Encoding changes the wire format of a
+ * request part even when the schema is unchanged, so adding, removing or
+ * reserializing an entry is BREAKING. An encoding field this module does not
+ * model is reported as UNCOMPARABLE (which fails the gate), never ignored.
+ */
+function compareMediaTypeEncoding(baseEncoding, candidateEncoding, location, context) {
+  const changes = [];
+  if (baseEncoding === undefined && candidateEncoding === undefined) return changes;
+
+  const baseIsObject = isPlainObject(baseEncoding);
+  const candidateIsObject = isPlainObject(candidateEncoding);
+  if ((baseEncoding !== undefined && !baseIsObject) || (candidateEncoding !== undefined && !candidateIsObject)) {
+    if (stableSignature(baseEncoding) !== stableSignature(candidateEncoding)) {
+      changes.push(change(
+        BREAKING,
+        'UNCOMPARABLE',
+        location,
+        'the encoding object is not comparable; this classifier cannot prove the change compatible'
+      ));
+    }
+    return changes;
+  }
+
+  const base = baseIsObject ? baseEncoding : {};
+  const candidate = candidateIsObject ? candidateEncoding : {};
+
+  for (const property of Object.keys(base)) {
+    if (!Object.prototype.hasOwnProperty.call(candidate, property)) {
+      changes.push(change(
+        BREAKING,
+        'ENCODING_REMOVED',
+        location + ' property ' + JSON.stringify(property),
+        'removed the encoding for ' + JSON.stringify(property) + '; the request representation changed'
+      ));
+      continue;
+    }
+    changes.push(...compareEncodingEntry(
+      base[property],
+      candidate[property],
+      location + ' property ' + JSON.stringify(property),
+      context
+    ));
+  }
+
+  for (const property of Object.keys(candidate)) {
+    if (Object.prototype.hasOwnProperty.call(base, property)) continue;
+    changes.push(change(
+      BREAKING,
+      'ENCODING_ADDED',
+      location + ' property ' + JSON.stringify(property),
+      'added an encoding for ' + JSON.stringify(property) + '; the request representation changed'
+    ));
+  }
+  return changes;
+}
+
 /** Compare every media type the operation declares a schema for. */
 function compareContent(baseContent, candidateContent, location, direction, context) {
   const changes = [];
@@ -856,6 +1065,12 @@ function compareContent(baseContent, candidateContent, location, direction, cont
       baseRoot: context.baseRoot,
       candidateRoot: context.candidateRoot,
     }));
+    changes.push(...compareMediaTypeEncoding(
+      baseContent[mediaType] && baseContent[mediaType].encoding,
+      candidateContent[mediaType] && candidateContent[mediaType].encoding,
+      location + ' ' + mediaType + ' encoding',
+      context
+    ));
   }
   for (const mediaType of candidateTypes) {
     if (baseTypes.includes(mediaType)) continue;
@@ -864,9 +1079,47 @@ function compareContent(baseContent, candidateContent, location, direction, cont
   return changes;
 }
 
-function parameterKey(parameter) {
+/**
+ * OpenAPI parameter identity is the combination of `name` and `in`, even when
+ * one side renders the parameter as a `$ref`. Resolving first is what makes an
+ * operation-level parameter override the inherited path-level one.
+ */
+function parameterKey(parameter, root) {
+  if (!isPlainObject(parameter)) return '$invalid:' + stableSignature(parameter);
+  const resolved = resolveNode(parameter, root);
+  if (resolved.node !== null && isPlainObject(resolved.node)) {
+    return String(resolved.node.in || 'query') + ':' + String(resolved.node.name || '');
+  }
   if (typeof parameter.$ref === 'string') return '$ref:' + parameter.$ref;
   return String(parameter.in || 'query') + ':' + String(parameter.name || '');
+}
+
+/**
+ * The parameters an operation actually accepts: Path Item parameters are
+ * inherited, but an operation-level parameter with the same name+`in` replaces
+ * the inherited one. Concatenating both arrays would compare a parameter with
+ * itself and miss the override.
+ */
+function effectiveParameters(pathItem, operation, root) {
+  const pathParameters = isPlainObject(pathItem) && Array.isArray(pathItem.parameters)
+    ? pathItem.parameters
+    : [];
+  const operationParameters = isPlainObject(operation) && Array.isArray(operation.parameters)
+    ? operation.parameters
+    : [];
+  const merged = [];
+  const positions = new Map();
+
+  for (const parameter of pathParameters.concat(operationParameters)) {
+    const key = parameterKey(parameter, root);
+    if (positions.has(key)) {
+      merged[positions.get(key)] = parameter;
+    } else {
+      positions.set(key, merged.length);
+      merged.push(parameter);
+    }
+  }
+  return merged;
 }
 
 /**
@@ -886,8 +1139,8 @@ function compareParameters(baseParameters, candidateParameters, location, contex
   const changes = [];
   const baseList = Array.isArray(baseParameters) ? baseParameters : [];
   const candidateList = Array.isArray(candidateParameters) ? candidateParameters : [];
-  const baseByKey = new Map(baseList.map((parameter) => [parameterKey(parameter), parameter]));
-  const candidateByKey = new Map(candidateList.map((parameter) => [parameterKey(parameter), parameter]));
+  const baseByKey = new Map(baseList.map((parameter) => [parameterKey(parameter, context.baseRoot), parameter]));
+  const candidateByKey = new Map(candidateList.map((parameter) => [parameterKey(parameter, context.candidateRoot), parameter]));
 
   for (const [key, parameter] of baseByKey) {
     if (!candidateByKey.has(key)) {
@@ -934,7 +1187,17 @@ function compareParameters(baseParameters, candidateParameters, location, contex
   }
   for (const [key, parameter] of candidateByKey) {
     if (baseByKey.has(key)) continue;
-    changes.push(parameter.required === true
+    const resolved = resolveNode(parameter, context.candidateRoot);
+    if (resolved.node === null) {
+      changes.push(change(
+        BREAKING,
+        'UNCOMPARABLE',
+        location + ' parameter ' + key,
+        'cannot resolve ' + (resolved.problem || 'an added parameter reference')
+      ));
+      continue;
+    }
+    changes.push(resolved.node.required === true
       ? change(BREAKING, 'REQUIRED_PARAMETER_ADDED', location, 'added required parameter ' + key)
       : change(ADDITIVE, 'PARAMETER_ADDED', location, 'added optional parameter ' + key));
   }
@@ -979,7 +1242,9 @@ function compareResponseHeaders(baseHeaders, candidateHeaders, location, context
 
 function compareOperation(baseOperation, candidateOperation, location, context) {
   const changes = [];
-  changes.push(...compareParameters(baseOperation.parameters, candidateOperation.parameters, location, context));
+  const baseParameters = effectiveParameters(context.basePathItem, baseOperation, context.baseRoot);
+  const candidateParameters = effectiveParameters(context.candidatePathItem, candidateOperation, context.candidateRoot);
+  changes.push(...compareParameters(baseParameters, candidateParameters, location, context));
 
   const baseRequest = resolveNode(baseOperation.requestBody, context.baseRoot);
   const candidateRequest = resolveNode(candidateOperation.requestBody, context.candidateRoot);
@@ -1088,6 +1353,8 @@ function compareContracts(base, candidate) {
       changes.push(...compareOperation(baseItem[method], candidateItem[method], method.toUpperCase() + ' ' + route, {
         baseRoot: base,
         candidateRoot: candidate,
+        basePathItem: baseItem,
+        candidatePathItem: candidateItem,
       }));
     }
     for (const method of METHODS) {
