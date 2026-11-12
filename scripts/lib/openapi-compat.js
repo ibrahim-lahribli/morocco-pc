@@ -1718,9 +1718,21 @@ function compareContracts(base, candidate) {
   }
 
   for (const route of Object.keys(candidatePaths)) {
-    if (!Object.prototype.hasOwnProperty.call(basePaths, route)) {
-      changes.push(change(ADDITIVE, 'PATH_ADDED', route, 'new path'));
+    if (Object.prototype.hasOwnProperty.call(basePaths, route)) continue;
+    // A new path is only ADDITIVE if its Path Item is a Path Item this
+    // classifier can actually read. A `$ref` beside it is resolved the same way
+    // as a shared path, so an invalid new path cannot slip in as PATH_ADDED.
+    const resolution = resolvePathItem(candidatePaths[route], candidate);
+    if (resolution.problem) {
+      changes.push(change(
+        BREAKING,
+        'UNCOMPARABLE',
+        route,
+        'cannot resolve ' + resolution.problem + ' on a new path'
+      ));
+      continue;
     }
+    changes.push(change(ADDITIVE, 'PATH_ADDED', route, 'new path'));
   }
 
   // Deterministic output: the same pair always reports the same list.

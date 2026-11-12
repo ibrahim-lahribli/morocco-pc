@@ -1881,6 +1881,96 @@ test('a callback expression holding a referenced Path Item detects a target chan
   assert.match(result.breaking[0].detail, /callback configuration changed/);
 });
 
+// --- Path Item $ref on a newly added path -----------------------------------
+//
+// A path that exists only in the candidate is ADDITIVE, but only once its Path
+// Item has been resolved. A new path carrying a bad `$ref` must not be reported
+// as PATH_ADDED: it is exactly the reference class handled above.
+
+/** The single breaking finding of a candidate-only path, asserted field by field. */
+function assertNewPathRefused(result, route) {
+  assert.equal(result.verdict, BREAKING);
+  assert.equal(result.breaking.length, 1);
+  const finding = result.breaking[0];
+  assert.equal(finding.classification, 'BREAKING');
+  assert.equal(finding.code, 'UNCOMPARABLE');
+  assert.equal(finding.location, route);
+  assert.ok(!codes(result).includes('PATH_ADDED'), 'an invalid new path is never PATH_ADDED');
+  return finding;
+}
+
+test('a new path that is a valid referenced Path Item is ADDITIVE', () => {
+  const base = baseDocument();
+  const candidate = baseDocument();
+  candidate['x-path-items'] = { Shared: referencedPathItem() };
+  candidate.paths['/v1/new'] = { $ref: '#/x-path-items/Shared' };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, ADDITIVE);
+  assert.deepEqual(result.breaking, []);
+  assert.deepEqual(codes(result), ['PATH_ADDED']);
+  assert.deepEqual(result.additive, [{
+    classification: 'ADDITIVE',
+    code: 'PATH_ADDED',
+    location: '/v1/new',
+    detail: 'new path',
+  }]);
+});
+
+test('a new inline path is still ADDITIVE', () => {
+  const base = baseDocument();
+  const candidate = baseDocument();
+  candidate.paths['/v1/inline'] = { get: { responses: { 200: response({ type: 'object' }) } } };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, ADDITIVE);
+  assert.deepEqual(codes(result), ['PATH_ADDED']);
+  assert.equal(result.additive[0].location, '/v1/inline');
+});
+
+test('a new path with an unresolved Path Item $ref fails closed', () => {
+  const candidate = baseDocument();
+  candidate.paths['/v1/new'] = { $ref: '#/x-path-items/Missing' };
+
+  const finding = assertNewPathRefused(compareContracts(baseDocument(), candidate), '/v1/new');
+  assert.match(finding.detail, /unresolvable Path Item \$ref/);
+  assert.match(finding.detail, /new path/);
+});
+
+test('a new path with an external Path Item $ref fails closed', () => {
+  const candidate = baseDocument();
+  candidate.paths['/v1/new'] = { $ref: 'https://example.test/path-items.yaml#/Thing' };
+
+  const finding = assertNewPathRefused(compareContracts(baseDocument(), candidate), '/v1/new');
+  assert.match(finding.detail, /non-internal Path Item \$ref/);
+});
+
+test('a new path whose $ref is not a Path Item Object fails closed', () => {
+  const candidate = baseDocument();
+  candidate.components = { schemas: { Thing: { type: 'object', properties: { id: { type: 'string' } } } } };
+  candidate.paths['/v1/new'] = { $ref: '#/components/schemas/Thing' };
+
+  const finding = assertNewPathRefused(compareContracts(baseDocument(), candidate), '/v1/new');
+  assert.match(finding.detail, /does not point at a Path Item Object/);
+});
+
+test('a new path with a cyclic Path Item $ref fails closed', () => {
+  const direct = baseDocument();
+  direct['x-path-items'] = { Loop: { $ref: '#/x-path-items/Loop' } };
+  direct.paths['/v1/new'] = { $ref: '#/x-path-items/Loop' };
+  const directFinding = assertNewPathRefused(compareContracts(baseDocument(), direct), '/v1/new');
+  assert.match(directFinding.detail, /circular Path Item \$ref/);
+
+  const indirect = baseDocument();
+  indirect['x-path-items'] = {
+    A: { $ref: '#/x-path-items/B' },
+    B: { $ref: '#/x-path-items/A' },
+  };
+  indirect.paths['/v1/new'] = { $ref: '#/x-path-items/A' };
+  const indirectFinding = assertNewPathRefused(compareContracts(baseDocument(), indirect), '/v1/new');
+  assert.match(indirectFinding.detail, /circular Path Item \$ref/);
+});
+
 // --- rendering equivalence --------------------------------------------------
 
 test('nullable and a type array are the same guarantee, not a type change', () => {

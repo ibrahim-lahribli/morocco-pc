@@ -226,7 +226,10 @@ Deliberate consequences worth knowing before editing the contract:
   Item and its target undefined, so that overlap is `UNCOMPARABLE` rather than
   the classifier choosing a winner. A reference that is external, unresolved,
   malformed, cyclic, or does not point at a Path Item Object is `UNCOMPARABLE`
-  too, reported at the affected path (or callback expression).
+  too, reported at the affected path (or callback expression). The policy is
+  the same for a path present in both documents and for one that exists only in
+  the candidate: a new path is `ADDITIVE`/`PATH_ADDED` only once its Path Item
+  resolves, so an invalid new path fails the gate instead of widening it.
 - **A schema keyword the classifier does not model** (`not`, `if`/`then`/`else`,
   `contains`, `prefixItems`, `discriminator`, `readOnly`, …) is reported as
   `UNCOMPARABLE` when it changes, and `UNCOMPARABLE` fails the gate. An
