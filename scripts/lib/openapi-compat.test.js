@@ -2550,3 +2550,90 @@ test('a callback payload whose references all resolve is still NEUTRAL when unch
   assert.deepEqual(result.changes, []);
   assert.equal(result.verdict, NEUTRAL);
 });
+// --- discriminator.mapping targets ------------------------------------------
+//
+// `discriminator.mapping` names schemas with STRINGS, so no `$ref` walk ever
+// reaches a mapped target: a mapping that stays textually identical over a
+// changed target used to be NEUTRAL. Each entry declared on both sides is now
+// followed and compared as a schema.
+
+/** A response schema whose only route to `components.schemas.Dog` is the mapping. */
+function discriminatorDocument(target, mapping = { dog: '#/components/schemas/Dog' }) {
+  const doc = baseDocument();
+  doc.components = { schemas: { Dog: target } };
+  setResponseSchema(doc, {
+    type: 'object',
+    properties: { kind: { type: 'string' } },
+    discriminator: { propertyName: 'kind', mapping: clone(mapping) },
+  });
+  return doc;
+}
+
+test('a schema reachable only through discriminator.mapping is compared', () => {
+  const base = discriminatorDocument({ type: 'object', properties: { id: { type: 'string' } } });
+  const candidate = clone(base);
+  candidate.components.schemas.Dog.properties.id.type = 'number';
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['TYPE_CHANGED']);
+  assert.equal(
+    result.breaking[0].location,
+    'POST /v1/things 201 application/json discriminator.mapping "dog".id'
+  );
+});
+
+test('a bare-name discriminator mapping is followed to components/schemas', () => {
+  const base = discriminatorDocument(
+    { type: 'object', properties: { id: { type: 'string' } } },
+    { dog: 'Dog' }
+  );
+  const candidate = clone(base);
+  delete candidate.components.schemas.Dog.properties.id;
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['PROPERTY_REMOVED']);
+  assert.equal(
+    result.breaking[0].location,
+    'POST /v1/things 201 application/json discriminator.mapping "dog"'
+  );
+});
+
+test('an unchanged discriminator mapping over an unchanged target is NEUTRAL', () => {
+  const doc = discriminatorDocument({ type: 'object', properties: { id: { type: 'string' } } });
+  const result = compareContracts(doc, clone(doc));
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('a discriminator mapping that names nothing is UNCOMPARABLE', () => {
+  const doc = discriminatorDocument({ type: 'string' }, { dog: 'Missing' });
+  const result = compareContracts(doc, clone(doc));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(
+    result.breaking[0].location,
+    'POST /v1/things 201 application/json discriminator.mapping "dog"'
+  );
+  assert.match(result.breaking[0].detail, /does not resolve/);
+});
+
+test('an external discriminator mapping value fails closed', () => {
+  const doc = discriminatorDocument({ type: 'string' }, { dog: './shared.yaml#/Dog' });
+  const result = compareContracts(doc, clone(doc));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.match(result.breaking[0].detail, /not a schema reference this classifier can follow/);
+});
+
+test('a recursive discriminator mapping terminates instead of looping', () => {
+  const doc = discriminatorDocument({
+    type: 'object',
+    properties: { id: { type: 'string' } },
+    discriminator: { propertyName: 'kind', mapping: { dog: 'Dog' } },
+  });
+  const result = compareContracts(doc, clone(doc));
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});

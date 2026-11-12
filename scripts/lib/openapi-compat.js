@@ -49,6 +49,12 @@
  *    `contains`, `prefixItems`, `discriminator`, `readOnly`, …) is reported as
  *    UNCOMPARABLE when it changes, and the CLI treats UNCOMPARABLE as BREAKING.
  *    An unexamined keyword must never be an implicit pass.
+ *  * `discriminator.mapping` names other schemas with STRINGS, not Reference
+ *    Objects, so its targets are invisible to the `$ref` walk. Each entry
+ *    declared on both sides is therefore followed and compared as a schema at
+ *    `<location> discriminator.mapping "<name>"`: a mapped schema that changes
+ *    while its name stays put would otherwise be NEUTRAL. An external,
+ *    malformed, dangling or non-schema target is UNCOMPARABLE at that entry.
  *  * Removing a request property is BREAKING even when `additionalProperties`
  *    allowed it: the property carried a documented contract that disappears
  *    with it. Removing a response property is BREAKING for the same reason.
@@ -1127,6 +1133,87 @@ function compareComposition(base, candidate, location, context) {
 }
 
 /**
+ * The `discriminator.mapping` object of a schema, or `null` when it declares
+ * none. Values are schema NAMES (strings), never Reference Objects.
+ */
+function discriminatorMappingOf(schema) {
+  if (!isPlainObject(schema) || !isPlainObject(schema.discriminator)) return null;
+  return isPlainObject(schema.discriminator.mapping) ? schema.discriminator.mapping : null;
+}
+
+/**
+ * The internal JSON pointer a `discriminator.mapping` value names, or `null`
+ * when this classifier cannot follow it.
+ *
+ * OpenAPI 3.0.3 allows two spellings: a reference (`#/components/...`) and a
+ * bare schema name (`Dog`), which means `components/schemas/Dog`. A value that
+ * looks like an external file or URL is not followed — it fails closed.
+ */
+function mappingPointer(value) {
+  if (typeof value !== 'string' || value === '') return null;
+  if (value.startsWith('#/')) return value;
+  if (value.includes('#') || value.startsWith('.') || value.startsWith('/')) return null;
+  return '#/components/schemas/' + value.replace(/~/g, '~0').replace(/\//g, '~1');
+}
+
+/**
+ * Compare the schemas reachable only through `discriminator.mapping`.
+ *
+ * The mapping's own text is compared by `compareUnmodelledKeywords()`, so an
+ * added, removed or repointed entry already fails closed there. What that rule
+ * cannot see is a target that changes while its name stays identical, because a
+ * mapping value is a STRING rather than a `$ref` object and no composition
+ * branch, property or item ever walks through it. Each entry declared on both
+ * sides is therefore resolved and compared as a schema, at its own location.
+ */
+function compareDiscriminatorMappings(base, candidate, location, context) {
+  const baseMapping = discriminatorMappingOf(base);
+  const candidateMapping = discriminatorMappingOf(candidate);
+  if (baseMapping === null || candidateMapping === null) return [];
+
+  const changes = [];
+  for (const name of Object.keys(baseMapping)) {
+    if (!Object.prototype.hasOwnProperty.call(candidateMapping, name)) continue;
+    const at = location + ' discriminator.mapping ' + JSON.stringify(name);
+
+    const describe = (value, root, side) => {
+      const pointer = mappingPointer(value);
+      if (pointer === null) {
+        return 'the ' + side + ' mapping value ' + JSON.stringify(value)
+          + ' is not a schema reference this classifier can follow';
+      }
+      const problem = findInvalidSchemaReference({ $ref: pointer }, root);
+      return problem === null ? null : 'the ' + side + ' maps to ' + problem;
+    };
+
+    const problem = describe(baseMapping[name], context.baseRoot, 'baseline')
+      || describe(candidateMapping[name], context.candidateRoot, 'candidate');
+    if (problem) {
+      changes.push(change(
+        BREAKING,
+        'UNCOMPARABLE',
+        at,
+        problem + '; this classifier cannot compare the schema a discriminator maps to'
+      ));
+      continue;
+    }
+
+    changes.push(...compareSchema(
+      { $ref: mappingPointer(baseMapping[name]) },
+      { $ref: mappingPointer(candidateMapping[name]) },
+      at,
+      {
+        direction: context.direction,
+        baseRoot: context.baseRoot,
+        candidateRoot: context.candidateRoot,
+        visited: context.visited,
+      }
+    ));
+  }
+  return changes;
+}
+
+/**
  * Any schema keyword this module does not model: a change is UNCOMPARABLE, and
  * the CLI treats UNCOMPARABLE as BREAKING. Silence would be an implicit pass.
  */
@@ -1268,6 +1355,7 @@ function compareSchema(baseInput, candidateInput, location, options) {
   }
 
   changes.push(...compareComposition(base, candidate, location, childContext));
+  changes.push(...compareDiscriminatorMappings(base, candidate, location, childContext));
   changes.push(...compareUnmodelledKeywords(base, candidate, location));
 
   return changes;

@@ -250,6 +250,14 @@ Deliberate consequences worth knowing before editing the contract:
   Callback payloads are not modelled, so an external, malformed or dangling
   `$ref` inside one is not evidence of equality even when both documents spell it
   the same way — the payload's real shape is unknown.
+- **A `discriminator.mapping` target is compared.** Mapping values are schema
+  names, not `$ref` objects, so nothing else in the classifier reaches them: a
+  mapped schema that changes while its name stays identical would otherwise be
+  `NEUTRAL`. Each entry present on both sides is resolved and compared at
+  `<location> discriminator.mapping "<name>"`, in both legal spellings (an
+  internal pointer, or a bare name meaning `components/schemas/<name>`). An
+  external, malformed, dangling or non-schema target is `UNCOMPARABLE` at that
+  entry, and the mapping's own text is still covered by the rule below.
 - **A schema keyword the classifier does not model** (`not`, `if`/`then`/`else`,
   `contains`, `prefixItems`, `discriminator`, `readOnly`, …) is reported as
   `UNCOMPARABLE` when it changes, and `UNCOMPARABLE` fails the gate. An
