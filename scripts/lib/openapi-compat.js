@@ -85,6 +85,12 @@
  *    BREAKING. An unchanged declaration is not reported.
  *  * Recursive `$ref` cycles are compared once; the repeated visit is assumed
  *    equal because any difference is reported at the first visit.
+ *  * A Reference Object's siblings are IGNORED, as OpenAPI 3.0.3 §4.7.2
+ *    requires: only `$ref` has meaning there, so `{ $ref, type: 'string' }`
+ *    describes the target, not the target narrowed by `type`. Merging the
+ *    siblings into the target is fail-open — a sibling can then override a
+ *    changed target and turn BREAKING into NEUTRAL. A Path Item that carries
+ *    `$ref` is NOT a Reference Object and is handled separately (§4.7.9).
  *  * A Path Item Object may carry `$ref` (§4.7.9), and then it is still a Path
  *    Item, not a Reference Object. Path Items are resolved before comparison
  *    at every location OpenAPI 3.0.3 allows one: an entry under `paths`, and a
@@ -96,6 +102,27 @@
  *    reference cycle, also fail closed. Resolution is stateless, so a target
  *    reached from two places is resolved twice rather than assumed equal
  *    because it was already visited.
+ *
+ * SUPPORTED DIALECT AND FAIL-CLOSED VERSION POLICY
+ * ------------------------------------------------
+ * Every schema rule above is OpenAPI 3.0.3 Schema Object semantics — this
+ * repository's contract leans on `nullable`, which 3.1 replaced. 3.1 also
+ * moves to JSON Schema 2020-12 (`type` arrays, `jsonSchemaDialect`,
+ * `prefixItems`, `webhooks`, …), so comparing a 3.1 document with 3.0.3 rules
+ * could report a meaning change as NEUTRAL. The classifier therefore accepts
+ * exactly `openapi: "3.0.3"` and fails closed otherwise:
+ *
+ *   * a missing, unsupported or differing root `openapi` version is reported
+ *     at `openapi` as UNCOMPARABLE (BREAKING), never compared silently;
+ *   * a declared `jsonSchemaDialect` (a 3.1 field) is UNCOMPARABLE, whether it
+ *     appeared, changed or is identical on both sides — no JSON Schema dialect
+ *     is applied here;
+ *   * a root field this module does not model (`webhooks` is the 3.1 example)
+ *     that appears or changes is UNCOMPARABLE, so a construct it cannot read
+ *     cannot be ignored.
+ *
+ * Version-aware comparison is future work: until it exists, an unsupported
+ * dialect is a failed gate, not an implicit pass.
  */
 
 const BREAKING = 'BREAKING';
@@ -106,6 +133,23 @@ const REQUEST = 'request';
 const RESPONSE = 'response';
 
 const METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'];
+
+/**
+ * The only root `openapi` version whose Schema Object semantics this module
+ * implements. See "Supported dialect and fail-closed version policy" above.
+ */
+const SUPPORTED_OPENAPI_VERSION = '3.0.3';
+
+/**
+ * Root fields this classifier models, plus root-level annotations. `openapi`
+ * and `jsonSchemaDialect` have dedicated checks; every other root field is a
+ * construct this module cannot read (`webhooks` is the OpenAPI 3.1 example) and
+ * a change to it fails closed instead of being ignored.
+ */
+const MODELLED_ROOT_KEYS = new Set([
+  'openapi', 'info', 'paths', 'components', 'security', 'servers',
+  'tags', 'externalDocs', 'jsonSchemaDialect',
+]);
 
 /** Schema keywords compared by a dedicated rule below. */
 const HANDLED_KEYS = new Set([
@@ -265,7 +309,15 @@ function lookupPointer(root, pointer) {
 }
 
 /**
- * Follow `$ref` until a non-reference schema is reached.
+ * Follow `$ref` until the referenced object is reached.
+ *
+ * This is generic Reference Object semantics (OpenAPI 3.0.3 §4.7.2): every
+ * field except `$ref` is IGNORED, so the resolved node is the target exactly as
+ * written. Siblings are deliberately not merged into the target — doing that
+ * lets `{ $ref, type: 'string' }` override a target that changed to `integer`
+ * and report the change as neutral. Used for schemas, parameters, request
+ * bodies, responses, headers and callbacks. Path Items are NOT Reference
+ * Objects; `resolvePathItem()` owns their different `$ref` semantics.
  *
  * @returns {{schema: object|null, chain: string[], problem: string|null}}
  */
@@ -283,9 +335,9 @@ function dereference(schema, root) {
     if (!isPlainObject(target)) {
       return { schema: null, chain, problem: 'unresolvable $ref ' + JSON.stringify(ref) };
     }
-    const siblings = {};
-    for (const [key, value] of Object.entries(current)) if (key !== '$ref') siblings[key] = value;
-    current = Object.keys(siblings).length > 0 ? Object.assign({}, target, siblings) : target;
+    // §4.7.2: a Reference Object's siblings are ignored, not overlaid. The
+    // target is the whole description.
+    current = target;
     chain.push(ref);
   }
   return { schema: current, chain, problem: null };
@@ -321,9 +373,10 @@ function isInternalRef(ref) {
  * Resolve a Path Item Object's `$ref`, if it has one.
  *
  * Deliberately NOT `dereference()`: that helper applies Reference Object
- * semantics, where the referring object's siblings override the target. That is
- * right for schemas and wrong for a Path Item, where the specification says
- * nothing about a field declared on both sides. So this resolver
+ * semantics, where the referring object's siblings are ignored. That is right
+ * for schemas and wrong for a Path Item, which is still a Path Item when it
+ * carries `$ref`, and where the specification says nothing about a field
+ * declared on both sides. So this resolver
  *
  *   * fails closed on any field a referring Path Item and its target both
  *     declare, instead of choosing one;
@@ -1634,6 +1687,89 @@ function compareOperation(baseOperation, candidateOperation, location, context) 
 }
 
 /**
+ * Compare the root `openapi` version. Fail closed: only
+ * `SUPPORTED_OPENAPI_VERSION` is understood, a missing/unsupported version on
+ * either side is UNCOMPARABLE, and a version that differs between the two
+ * documents is reported as a change that cannot be compared at all.
+ */
+function compareOpenapiVersion(base, candidate) {
+  const changes = [];
+  const baseVersion = typeof base.openapi === 'string' ? base.openapi : null;
+  const candidateVersion = typeof candidate.openapi === 'string' ? candidate.openapi : null;
+
+  for (const [side, version] of [['baseline', baseVersion], ['candidate', candidateVersion]]) {
+    if (version === SUPPORTED_OPENAPI_VERSION) continue;
+    changes.push(change(
+      BREAKING,
+      'UNCOMPARABLE',
+      'openapi',
+      version === null
+        ? 'the ' + side + ' document declares no root `openapi` version; only OpenAPI '
+          + SUPPORTED_OPENAPI_VERSION + ' semantics are implemented'
+        : 'the ' + side + ' document declares OpenAPI ' + JSON.stringify(version)
+          + '; this classifier implements only ' + SUPPORTED_OPENAPI_VERSION
+          + ' Schema Object semantics and cannot apply another dialect'
+    ));
+  }
+
+  if (baseVersion !== candidateVersion) {
+    changes.push(change(
+      BREAKING,
+      'UNCOMPARABLE',
+      'openapi',
+      JSON.stringify(baseVersion) + ' -> ' + JSON.stringify(candidateVersion)
+        + '; the documents are written against different OpenAPI versions, so no schema'
+        + ' comparison between them is sound'
+    ));
+  }
+  return changes;
+}
+
+/**
+ * `jsonSchemaDialect` is an OpenAPI 3.1 field. This classifier applies 3.0.3
+ * semantics only, so a declared dialect is never trusted: appearing, changing
+ * or even matching on both sides is UNCOMPARABLE rather than an implicit pass.
+ */
+function compareJsonSchemaDialect(base, candidate) {
+  const baseDialect = base.jsonSchemaDialect;
+  const candidateDialect = candidate.jsonSchemaDialect;
+  if (baseDialect === undefined && candidateDialect === undefined) return [];
+
+  return [change(
+    BREAKING,
+    'UNCOMPARABLE',
+    'jsonSchemaDialect',
+    (baseDialect === undefined ? '(none)' : JSON.stringify(baseDialect))
+      + ' -> ' + (candidateDialect === undefined ? '(none)' : JSON.stringify(candidateDialect))
+      + '; this classifier implements only OpenAPI ' + SUPPORTED_OPENAPI_VERSION
+      + ' Schema Object semantics and does not apply a JSON Schema dialect'
+  )];
+}
+
+/**
+ * Any root field this module does not model: a change is UNCOMPARABLE. That is
+ * what keeps a newer construct (OpenAPI 3.1's `webhooks`, for example) from
+ * entering a contract unexamined. Identical unsupported fields report nothing,
+ * so an unchanged document stays NEUTRAL.
+ */
+function compareUnmodelledRootFields(base, candidate) {
+  const changes = [];
+  const keys = new Set(Object.keys(base).concat(Object.keys(candidate)));
+  for (const key of [...keys].sort()) {
+    if (key.startsWith('x-') || MODELLED_ROOT_KEYS.has(key)) continue;
+    if (stableSignature(base[key]) === stableSignature(candidate[key])) continue;
+    changes.push(change(
+      BREAKING,
+      'UNCOMPARABLE',
+      key,
+      'unsupported root field ' + JSON.stringify(key) + ' changed or appeared;'
+        + ' this classifier does not model it and cannot prove the change compatible'
+    ));
+  }
+  return changes;
+}
+
+/**
  * Compare a baseline document with a candidate.
  *
  * @param {object} base the contract at the baseline Git ref
@@ -1646,6 +1782,10 @@ function compareContracts(base, candidate) {
   }
 
   const changes = [];
+  changes.push(...compareOpenapiVersion(base, candidate));
+  changes.push(...compareJsonSchemaDialect(base, candidate));
+  changes.push(...compareUnmodelledRootFields(base, candidate));
+
   const baseVersion = base.info && base.info.version ? base.info.version : null;
   const candidateVersion = candidate.info && candidate.info.version ? candidate.info.version : null;
   if (baseVersion !== candidateVersion) {

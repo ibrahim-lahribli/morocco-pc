@@ -12,8 +12,11 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { compareContracts, BREAKING, ADDITIVE, NEUTRAL } = require('./openapi-compat');
+const { inspectContract } = require('./openapi-contract');
 
 /** A response object carrying one JSON schema. */
 function response(schema) {
@@ -276,6 +279,75 @@ test('a version change is reported but does not by itself fail', () => {
   const result = compareContracts(baseDocument(), candidate);
   assert.deepEqual(codes(result), ['VERSION_CHANGED']);
   assert.deepEqual(result.breaking, []);
+});
+
+// --- OpenAPI version and dialect -------------------------------------------
+//
+// The schema rules in the classifier are OpenAPI 3.0.3 semantics (`nullable`,
+// for one). A document written against another dialect must fail closed, not be
+// compared as though it were 3.0.3.
+
+test('a candidate whose only change is openapi 3.1.0 fails closed, not NEUTRAL', () => {
+  const root = path.resolve(__dirname, '..', '..');
+  const contract = inspectContract(root);
+  assert.ok(contract.ok, 'the committed contract must be locatable: ' + (contract.problems || []).join('; '));
+  const base = JSON.parse(fs.readFileSync(path.join(root, contract.file), 'utf8'));
+  const candidate = clone(base);
+  candidate.openapi = '3.1.0';
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.ok(result.breaking.length > 0);
+  assert.ok(result.breaking.every((item) => item.location === 'openapi'));
+  assert.deepEqual([...new Set(breakingCodes(result))], ['UNCOMPARABLE']);
+  assert.deepEqual(result.additive, []);
+});
+
+test('a missing or unsupported openapi version is UNCOMPARABLE at the root', () => {
+  const base = baseDocument();
+  for (const version of ['3.1.0', '3.0.2', '2.0', 'not-a-version', undefined]) {
+    const candidate = clone(base);
+    if (version === undefined) delete candidate.openapi;
+    else candidate.openapi = version;
+
+    const result = compareContracts(base, candidate);
+    assert.equal(result.verdict, BREAKING, JSON.stringify(version) + ' must fail closed');
+    assert.deepEqual([...new Set(breakingCodes(result))], ['UNCOMPARABLE']);
+    assert.ok(result.breaking.every((item) => item.location === 'openapi'));
+  }
+});
+
+test('a declared or changed jsonSchemaDialect fails closed', () => {
+  const base = baseDocument();
+  const added = clone(base);
+  added.jsonSchemaDialect = 'https://json-schema.org/draft/2020-12/schema';
+
+  const addedResult = compareContracts(base, added);
+  assert.equal(addedResult.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(addedResult), ['UNCOMPARABLE']);
+  assert.equal(addedResult.breaking[0].location, 'jsonSchemaDialect');
+
+  const other = clone(added);
+  other.jsonSchemaDialect = 'https://json-schema.org/draft/2019-09/schema';
+  const changed = compareContracts(added, other);
+  assert.equal(changed.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(changed), ['UNCOMPARABLE']);
+
+  // Even identical on both sides: no dialect is applied, so it is not a pass.
+  const identical = compareContracts(added, clone(added));
+  assert.equal(identical.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(identical), ['UNCOMPARABLE']);
+});
+
+test('a newer root-level construct that changes is UNCOMPARABLE, not ignored', () => {
+  const base = baseDocument();
+  const candidate = clone(base);
+  candidate.webhooks = { newThing: { post: { responses: { 200: response({ type: 'object' }) } } } };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, 'webhooks');
 });
 
 test('the classifier refuses a non-document instead of reporting a clean diff', () => {
@@ -1307,6 +1379,115 @@ test('an unresolvable $ref is UNCOMPARABLE, never ADDITIVE', () => {
   const result = compareContracts(baseDocument(), candidate);
   assert.equal(result.verdict, BREAKING);
   assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+});
+
+// --- generic Reference Object semantics ------------------------------------
+//
+// OpenAPI 3.0.3 §4.7.2: only `$ref` has meaning in a Reference Object and every
+// sibling is IGNORED. Merging siblings into the target let a sibling override a
+// changed target, so a real change could compare equal. These cases pin the
+// target as the whole description at every generic Reference Object position.
+
+function requestRefDocument(schema) {
+  const doc = baseDocument();
+  doc.components = { schemas: { Payload: schema } };
+  setRequestSchema(doc, { $ref: '#/components/schemas/Payload' });
+  return doc;
+}
+
+function referencedResponseDocument(schema) {
+  const doc = baseDocument();
+  doc.components = { responses: { Ok: response(schema) } };
+  operation(doc).responses['201'] = { $ref: '#/components/responses/Ok' };
+  return doc;
+}
+
+function referencedRequestBodyDocument(schema) {
+  const doc = baseDocument();
+  doc.components = {
+    requestBodies: { Payload: { required: true, content: { 'application/json': { schema } } } },
+  };
+  operation(doc).requestBody = { $ref: '#/components/requestBodies/Payload' };
+  return doc;
+}
+
+function referencedParameterDocument(schema) {
+  const doc = baseDocument();
+  doc.components = { parameters: { Filter: { in: 'query', name: 'filter', schema } } };
+  setQueryParameters(doc, [{ $ref: '#/components/parameters/Filter' }]);
+  return doc;
+}
+
+test('a sibling on a request schema reference cannot mask a changed target', () => {
+  const base = requestRefDocument({ type: 'string' });
+  const candidate = clone(base);
+  candidate.components.schemas.Payload = { type: 'integer' };
+  setRequestSchema(candidate, { $ref: '#/components/schemas/Payload', type: 'string' });
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['TYPE_CHANGED']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things request application/json');
+});
+
+test('a sibling on a response reference cannot mask a changed target', () => {
+  const base = referencedResponseDocument({ type: 'string' });
+  const candidate = clone(base);
+  candidate.components.responses.Ok.content['application/json'].schema = { type: 'integer' };
+  operation(candidate).responses['201'] = {
+    $ref: '#/components/responses/Ok',
+    content: { 'application/json': { schema: { type: 'string' } } },
+  };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['TYPE_CHANGED']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things 201 application/json');
+});
+
+test('a sibling on a request body reference cannot mask a changed target', () => {
+  const base = referencedRequestBodyDocument({ type: 'string' });
+  const candidate = clone(base);
+  candidate.components.requestBodies.Payload.content['application/json'].schema = { type: 'integer' };
+  operation(candidate).requestBody = {
+    $ref: '#/components/requestBodies/Payload',
+    required: false,
+    content: { 'application/json': { schema: { type: 'string' } } },
+  };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['TYPE_CHANGED']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things request application/json');
+});
+
+test('a sibling on a parameter reference cannot mask a changed target', () => {
+  const base = referencedParameterDocument({ type: 'string' });
+  const candidate = clone(base);
+  candidate.components.parameters.Filter.schema = { type: 'integer' };
+  setQueryParameters(candidate, [{
+    $ref: '#/components/parameters/Filter',
+    schema: { type: 'string' },
+  }]);
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['TYPE_CHANGED']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things parameter query:filter');
+});
+
+test('a sibling alone is ignored, exactly as the Reference Object says', () => {
+  const base = requestRefDocument({ type: 'string' });
+  const candidate = clone(base);
+  setRequestSchema(candidate, {
+    $ref: '#/components/schemas/Payload',
+    type: 'integer',
+    description: 'an ignored sibling',
+  });
+
+  const result = compareContracts(base, candidate);
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
 });
 
 // --- unsupported constructs -------------------------------------------------

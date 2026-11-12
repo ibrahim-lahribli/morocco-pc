@@ -230,12 +230,41 @@ Deliberate consequences worth knowing before editing the contract:
   the same for a path present in both documents and for one that exists only in
   the candidate: a new path is `ADDITIVE`/`PATH_ADDED` only once its Path Item
   resolves, so an invalid new path fails the gate instead of widening it.
+- **A Reference Object's fields other than `$ref` are ignored** (OpenAPI 3.0.3
+  §4.7.2). A referenced Schema, Parameter, Request Body, Response, Header or
+  Callback is therefore compared as its TARGET, never as target-plus-siblings.
+  `{ "$ref": "…#/Thing", "type": "string" }` describes the `Thing` target: the
+  sibling `type` carries no meaning and cannot mask a change inside `Thing`.
+  Path Items are the deliberate exception above — a Path Item that carries
+  `$ref` is still a Path Item Object (§4.7.9), so its other fields are
+  declarations, not ignored siblings.
 - **A schema keyword the classifier does not model** (`not`, `if`/`then`/`else`,
   `contains`, `prefixItems`, `discriminator`, `readOnly`, …) is reported as
   `UNCOMPARABLE` when it changes, and `UNCOMPARABLE` fails the gate. An
   unexamined keyword is never an implicit pass.
 - **`UNCOMPARABLE` is BREAKING.** The gate fails on it; it is never reported
   as `ADDITIVE` and never treated as an implicit pass.
+
+### Supported OpenAPI dialect (fail closed)
+
+The classifier implements **OpenAPI 3.0.3** Schema Object semantics only — the
+dialect the committed contract is written in, `nullable` included. The root
+`openapi` field is therefore checked, not assumed:
+
+| Situation | Result |
+|---|---|
+| both documents declare `openapi: "3.0.3"` | compared normally |
+| either side declares any other version, or none | `UNCOMPARABLE` (BREAKING) at `openapi` |
+| the two versions differ | `UNCOMPARABLE` (BREAKING) at `openapi` |
+| `jsonSchemaDialect` declared: added, changed, or identical on both sides | `UNCOMPARABLE` (BREAKING) at `jsonSchemaDialect` |
+| a root field the classifier does not model (`webhooks`, …) appears or changes | `UNCOMPARABLE` (BREAKING) at that field |
+
+OpenAPI 3.1 moves to JSON Schema 2020-12: `nullable` gives way to type arrays,
+`jsonSchemaDialect` selects a schema dialect, and `webhooks` becomes a root
+construct. Comparing such a document with 3.0.3 rules could report a real
+change as `NEUTRAL`, so an unsupported dialect fails the gate until
+version-aware comparison exists. A 3.1 contract needs that comparison first,
+not a waiver.
 
 Remaining limitations, stated precisely:
 
@@ -264,6 +293,9 @@ Remaining limitations, stated precisely:
 - Media-type `example`/`examples`, `links`, `tags`, `externalDocs`, and
   extension (`x-…`) objects are outside the gate. The classifier does not claim
   full OpenAPI compatibility.
+- Version-aware comparison is not implemented: only OpenAPI 3.0.3 is applied,
+  and any other declared version or `jsonSchemaDialect` fails closed (see
+  *Supported OpenAPI dialect* above).
 
 Environment variables (see `apps/api/.env.example` for the full list):
 
