@@ -58,7 +58,7 @@ Two of the six candidate projects are therefore **already independently packaged
 | F4 | **`apps/api` cannot be installed, built or deployed on its own.** It has no `package.json`; its Dockerfile requires the repository root as build context and copies `src/` and the write-target guard beside it. | `apps/api/Dockerfile`; `render.yaml` `dockerContext: .` |
 | F5 | **`apps/api` depends on code outside every application and outside the engine**: the write-target guard. Until PR #27 that guard was a file in a directory with **no `package.json`**, so the previously proposed `"db-guard": "file:../../database/tooling"` dependency could not be installed at all. PR #27 gave it a manifest in `packages/database-guard/` (§9.4), but the API still consumes it by relative path, so the API has no installable dependency edge until step 6. | `apps/api/src/db.js:26`; `packages/database-guard/package.json` |
 | F6 | **Ingestion is already a separate application wearing an engine directory's clothes.** 8 non-test modules, its own barrel, its own CLI, and **zero inbound edges** from any stage (measured, §6.3). Its own header says it "is NOT an engine stage". | `src/recommendation/ingestion/index.js:1-13`; Tarjan edge scan |
-| F7 | **There is one contract document pattern, but two physical copies across branches.** `apps/api/test/unit/openapi-v1.10.json` is read by V1's generators and gates on `master`; V2 carries its own copy of the same file on `feature/v2-design`, and each frontend's `check:api-types` compares generated types against its own copy. Identical content today; no gate would detect divergence tomorrow. | `apps/web/package.json`, `apps/web-v2/package.json`, both workflows; §15.2 |
+| F7 | **There is one contract document pattern, but two physical copies across branches.** `contract/openapi-1.10.0.json` is read by V1's generators and gates on `master` (updated 2026-11-12: the file moved out of `apps/api/test/unit/`; it was `apps/api/test/unit/openapi-v1.10.json` when this row was measured); V2 carries its own copy of the same file on `feature/v2-design`, and each frontend's `check:api-types` compares generated types against its own copy. Identical content today; no gate would detect divergence tomorrow. | `apps/web/package.json`, `apps/web-v2/package.json`, both workflows; §15.2 |
 | F8 | **V2 is a foundation, and one manual read-only staging smoke exists.** V2 has 3 route files and performs only GETs; it has no catalogue route, results route, swap, saved builds, and **no deployment configuration**. Its `docs/staging-smoke.md` records a **manual, ordinary-browser, read-only** smoke on 2026-11-07 (7 reads per locale, all HTTP 200, 0 POST) against the EU staging API. That is not a deployed V2 frontend and not an automated E2E test. | §14.4; `feature/v2-design:apps/web-v2/docs/staging-smoke.md` |
 | F9 | **The programme is single-tenant and unauthenticated by decision, not by omission.** No auth library, no session, no account; the API contract documents "No authentication or accounts" as a deliberate property (R-16 ACCEPTED). | `docs/api/CONTRACT.md`; `docs/OPEN_POINTS.md` R-16 |
 | F10 | **The shared operational machinery is the real coupling.** `scripts/lib/` holds the target digests, the restore-point argument validation, the model pin and the generated-doc check — every one consumed by more than one layer; the DB write guard it used to hold now lives in `packages/database-guard/` (§9.4). | `apps/api/src/db.js:26`, `scripts/*.js`, `packages/database-guard/src/index.js`, `npm run test:scripts` |
@@ -1036,7 +1036,7 @@ apps/offer-ingestion/
 | Manifest | **none** — dependencies resolve from the root `package.json` |
 | Entry | `apps/api/src/server.js` → `app.js` (Fastify construction) |
 | Routes (11 registrations) | `GET /v1/health`, `GET /v1/meta/options`, `GET /v1/presets`, `GET /v1/catalog/products`, `GET /v1/catalog/products/:slug`, `GET /v1/catalog/products/:slug/price-history`, `GET /v1/docs/json`, `POST /v1/recommendations`, `GET /v1/recommendations/:id`, `GET /v1/recommendations/:id/builds/:rank/swap-preview`, `POST /v1/recommendations/:id/builds/:rank/swap` |
-| Contract | v1.10.0, snapshot `apps/api/test/unit/openapi-v1.10.json`, served at `/v1/docs/json`, byte-compared by `openapi-snapshot.test.js` |
+| Contract | v1.10.0, `contract/openapi-1.10.0.json` (published there 2026-11-12; it was `apps/api/test/unit/openapi-v1.10.json` before), served at `/v1/docs/json`, byte-compared by `openapi-snapshot.test.js` and compatibility-gated by `scripts/check-openapi-compatibility.js` |
 | Engine reach | `engine.js` only, six barrels, one frozen option (`allow_unverified_seed_offers: true`) |
 | SQL | `repository.js` (API-owned SQL) + `db.js` (the only `pg` importer; pool tagged `application_name = 'morocco-pc-api'`) |
 | Guards | refuses to start unless the target is provably the TEST branch or `API_ALLOW_SHARED=1`; imports `packages/database-guard/src` (line 26) — since PR #27; before that it imported `scripts/lib/db-url.js` |
@@ -1050,7 +1050,7 @@ apps/offer-ingestion/
 | root build context | `apps/api/Dockerfile` copies `src/`, `apps/api` and `packages/database-guard/{package.json,src}` | the image is a slice of the repository, not a build of the API |
 | relative engine path | `engine.js:28-33` requires `../../../src/recommendation/*` | the API's source layout encodes the engine's location |
 | guard path | `db.js:26` requires `../../../packages/database-guard/src` | the guard is still reached by a relative path across project boundaries: there is no `file:` dependency and no install until step 6, so the API cannot build outside this repository layout |
-| contract inside a test directory | `apps/api/test/unit/openapi-v1.10.json` | a test tree is the publication point for two other applications |
+| ~~contract inside a test directory~~ **CLOSED 2026-11-12** | `contract/openapi-1.10.0.json` — the publication point is a top-level `contract/` directory, and `check:contract` fails if a second `openapi-*.json` appears | the test tree no longer publishes another application's contract (per §15.4 O2 / A4) |
 
 ### 13.3 Target shape (PROPOSED)
 
@@ -1236,16 +1236,16 @@ Saved builds (local-only), compare view, price history, preset landing pages, le
 | Property | Fact |
 |---|---|
 | Authoritative document | generated by the API at run time (`/v1/docs/json`) from TypeBox schemas |
-| Committed snapshot | `apps/api/test/unit/openapi-v1.10.json` |
+| Committed snapshot | `contract/openapi-1.10.0.json` |
 | Pinning | `openapi-snapshot.test.js` byte-compares the served document and asserts `info.version = 1.10.0`, plus per-minor schema facts |
 | Coverage | `openapi-coverage.test.js` asserts every registered route is documented |
 | Consumers | V1 `gen:api-types`/`check:api-types`; V2 `gen:api-types`/`check:api-types`; both CI workflows filter on the snapshot's path |
 | Compatibility discipline | every minor so far has been additive |
-| Breaking-change detection | **none** — `check:api-types` is a *drift* gate, not a *compatibility* gate |
+| Breaking-change detection | `npm run check:contract` (one versioned contract, no second copy) and `node scripts/check-openapi-compatibility.js --base=origin/master` (direction-aware compatibility diff, wired into `ci.yml` since 2026-11-12) |
 
 ### 15.2 The problem, including the cross-branch duplication
 
-1. The authoritative document is stored in a **test directory of the API application**, and its location is hard-coded in four places outside that application (two `package.json` scripts, two workflow path filters) plus a stale pair of V1 references that still name `openapi-v1.6.json` (§23.4).
+1. ~~The authoritative document is stored in a **test directory of the API application**, and its location is hard-coded in four places outside that application (two `package.json` scripts, two workflow path filters) plus a stale pair of V1 references that still name `openapi-v1.6.json` (§23.4).~~ **CLOSED 2026-11-12:** the document is `contract/openapi-1.10.0.json`, both frontend generators and the gates read that one path, the stale V1 references are corrected, and `check:contract` fails when a second `openapi-*.json` exists in the tree.
 2. **Each branch carries its own copy.** `apps/web-v2/package.json` and `check:api-types` read the copy present on `feature/v2-design`; V1 reads the copy on `master`. **The two files are identical today**, and that is precisely the risk: identity today does not create a mechanism that keeps them identical. Neither frontend's gate would detect divergence, because each compares generated types against *its own* copy. Duplicated platform copies decay silently; the only durable fix is one address that both consume (§15.4).
 3. A prior attempt to give it a top-level home (`contract/openapi.json`, PR #22, `90dc99b`) was removed from `master` on 2026-11-10 by a force-push back to `a413f25`; the commits survive at `backup/master-before-contract-revert`. This RFC treats that as evidence the question was raised, not as a decision.
 
@@ -1311,7 +1311,7 @@ This is the pre-cleanup inventory Revisions 1-3 measured. PR #24 executed the §
 |---|---|
 | **The root describes every implementation.** `AGENTS.md` carries engine gotchas, migration rules, API notes and web sprint figures side by side. | file contents |
 | **Project docs live outside the projects.** The engine contract, the API contract and ingestion's design are three root files. | paths |
-| **Stale cross-references exist.** V1's `README.md` and `lib/api/client.ts` name `openapi-v1.6.json`, which does not exist. | §23.4 |
+| **Stale cross-references exist.** ~~V1's `README.md` and `lib/api/client.ts` name `openapi-v1.6.json`, which does not exist.~~ **CLOSED 2026-11-12:** both name `contract/openapi-1.10.0.json`, the file both generators read. | §23.4 |
 | **Generated and authored docs interleave** with no marker in the index saying which must never be hand-edited. | `docs/` listing |
 | **No per-project operations doc.** Deployment knowledge is spread across a recipe, `render.yaml`, `fly.toml`, the Dockerfile and `CONTEXT.md`. | files |
 | **The archive is well-managed** — every superseded file carries `Superseded by:`. This is the pattern to keep. | `docs/archive/` |
@@ -1747,7 +1747,7 @@ A project is "separated" when: (1) it has a `README.md` stating responsibility a
 | `selectArchetypes` replaced `selectDiverseTop` in the full run | `orchestrator/full-run.js:1-11,78-95`; `ranking/index.js` |
 | Guard exports and behaviour | `packages/database-guard/src/index.js`; the contract is asserted by `packages/database-guard/test/db-url.test.js` (seven exports, zero `require` calls) |
 | Ingestion is not a stage | `src/recommendation/ingestion/index.js:1-13` |
-| Contract snapshot and gates | `apps/api/test/unit/openapi-v1.10.json`; `openapi-snapshot.test.js`; `openapi-coverage.test.js` |
+| Contract snapshot and gates | `contract/openapi-1.10.0.json`; `openapi-snapshot.test.js`; `openapi-coverage.test.js` |
 | Offer counts and coverage | `docs/OPEN_POINTS.md` R-01, R-30; `docs/DATA_STATE.md` |
 | V2 staging smoke | `feature/v2-design:apps/web-v2/docs/staging-smoke.md` |
 
@@ -1757,7 +1757,7 @@ A project is "separated" when: (1) it has a `README.md` stating responsibility a
 |---|---|---|---|
 | C1 | `README.md` / `CONTEXT.md` report `test:scripts` "479" | **571** tests pass on this tree (`node --test "scripts/lib/*.test.js"`, 2026-11-11, Node 22.23.4); no other current document states a figure after PR #24 rewrote `AGENTS.md` | **resolved by measurement** — `479` is stale; the two documents are left for their own count correction, not silently rewritten here |
 | C2 | `README.md` "62 decisions" (at `a413f25`) | PR #24 removed the count from `README.md`; the log parses to 63 top-level `## Decision` headings + 5 nested = 65 global decisions, with 69 `Status:` lines (`verify:docs`), and the generated index is the lookup | **resolved by measurement** — the README states no count; `AGENTS.md` states the pinned range "Decisions 1-65" |
-| C3 | `apps/web/README.md` and `lib/api/client.ts` name `openapi-v1.6.json` | no such file; `package.json` uses `v1.10` | recorded; V1 doc drift (§16.5) |
+| C3 | `apps/web/README.md` and `lib/api/client.ts` name `openapi-v1.6.json` | no such file; `package.json` uses `v1.10` | recorded; V1 doc drift (§16.5). **CLOSED 2026-11-12:** both now name `contract/openapi-1.10.0.json` |
 | C4 | `CONTEXT.md` §2 / `AGENTS.md` §5: "Engine stages are pure" | true of stage functions; mixed barrels export SQL-executing modules; 15 non-ingestion modules execute SQL | **resolved by §6.2** — the claim is about functions, not packages |
 | C5 | `fly.toml` declares an always-on API service | `CONTEXT.md`/`ROADMAP.md` describe one Render origin | **UNKNOWN** which descriptor is authoritative (B6) |
 | C6 | First revision: "18 production engine modules call `db.query`" | measured **17** (15 outside ingestion) | corrected in §6.2; the earlier number may have counted `ingestion/` differently |

@@ -125,7 +125,197 @@ role; the owner procedure is `docs/database/recipes/provision-the-api-role.md`.
 npm run start:api        # node apps/api/src/server.js
 npm run test:api         # DB-free (fastify.inject + stubs)
 npm run test:api:db      # end-to-end against TEST_DATABASE_URL
+npm run check:contract   # exactly one versioned contract, no copies
+node scripts/check-openapi-compatibility.js --base=origin/master   # ADDITIVE passes, unapproved BREAKING fails
 ```
+
+### Where the committed contract lives
+
+The authoritative document is **`contract/openapi-1.10.0.json`**, named
+`openapi-<major>.<minor>.<patch>.json` after its own `info.version`. Step 3b moved
+it out of `apps/api/test/unit/`: it is the API's published interface, not a test
+fixture, and both the API snapshot test and V1's type generator read this one
+path. Two gates hold it in place, with separate jobs:
+
+| Gate | Question it answers |
+|---|---|
+| `apps/api/test/unit/openapi-snapshot.test.js` | is the committed document byte-identical to what the API SERVES? |
+| `scripts/check-openapi-contract.js` | is there exactly ONE contract, at the versioned path, with no second copy? |
+| `scripts/check-openapi-compatibility.js --base=<ref>` | can a client built against that Git revision still work (ADDITIVE vs BREAKING)? |
+
+The compatibility baseline is a **Git ref**, never a second committed file. An
+unapproved breaking change fails CI; an approved one needs both `--allow-breaking`
+and a reviewed `--approval-note="<who approved it and why>"`, which is printed with
+the verdict. V2 (`apps/web-v2`) is NOT connected here: its contract integration is
+step 7 of the separation roadmap.
+
+### Compatibility is directional
+
+The classifier does not ask "did the document change?". It asks two different
+questions, because a request and a response have opposite obligations:
+
+| Direction | Rule | Consequence |
+|---|---|---|
+| `request` | `Accepted(base) ⊆ Accepted(candidate)` — every request the base accepted must still be accepted | widening types, dropping a `required` entry or relaxing a bound is ADDITIVE; the reverse is BREAKING |
+| `response` | the guaranteed **value domain** of every field must not change, and the candidate must stay consumable by a client written against the base | a response enum/type/bound that changes in EITHER direction is BREAKING; only presence guarantees may strengthen (ADDITIVE) |
+
+The direction is propagated through nested object properties, array items,
+`allOf`/`anyOf`/`oneOf` branches, enums, types, nullability, `required`,
+`additionalProperties`, validation constraints and resolved `$ref` targets.
+Deliberate consequences worth knowing before editing the contract:
+
+- **A response field that becomes optional or nullable is BREAKING.** A client
+  written against the base may read it as missing or `null`.
+- **A response type or enum that narrows OR widens is BREAKING.** Narrowing is
+  rule A6 of the review that introduced this gate: a client may rely on
+  receiving the values the base allowed. Nullability is part of the type set, so
+  `null` appearing or disappearing is BREAKING in a response.
+- **A response validation bound that changes in either direction is
+  BREAKING** — the guaranteed value domain changed. Making a response field
+  `required` only strengthens its presence guarantee and stays ADDITIVE.
+- **A closed response enum that gains a value is BREAKING** (a client with
+  exhaustive handling never saw it) and so is one that loses a value (a
+  documented value disappears). An enum is closed unless the schema declares
+  `x-extensible-enum` or `x-enum-open: true`.
+- **A response `anyOf`/`oneOf` that gains a variant is BREAKING**, because the
+  server may now return a shape the client has never seen. For a request the
+  same addition is ADDITIVE.
+- **A response object that opens (`additionalProperties: false → true`) or
+  gains a property while it was closed is BREAKING.** Adding an optional
+  property to an OPEN response object stays ADDITIVE: a new key is a new field,
+  not a new value of an existing field, and an open-object client must already
+  tolerate unknown keys.
+- **Path Item parameters are inherited by every operation.** An operation-level
+  parameter with the same `name`+`in` overrides the inherited one; the
+  classifier compares each operation's effective parameters. Removing,
+  tightening or narrowing a path-level parameter is therefore BREAKING for
+  every operation that inherits it.
+- **A Media Type Object `encoding` change is BREAKING.** Adding, removing or
+  reserializing an entry (its `contentType`, `style`, `explode`,
+  `allowReserved` or headers) changes the request wire format even when the
+  schema is unchanged. An encoding field the classifier does not model is
+  `UNCOMPARABLE`.
+- **A Parameter or Header Object that moves between `schema` and `content` is
+  `UNCOMPARABLE`.** OpenAPI allows exactly one of the two, and they describe
+  different wire shapes: a client serializing by `schema` is not proven to send
+  the `content` shape. The same rule applies when either declaration
+  disappears. Normal `schema`-to-`schema` and `content`-to-`content`
+  comparisons are unaffected. This covers operation/path parameters, encoding
+  headers, and response headers.
+- **`security`, `servers` and `callbacks` are compared by stable
+  representation** wherever OpenAPI 3.0.3 declares them: root `security` and
+  `servers`, Path Item `servers`, Operation `security`/`servers`/`callbacks`,
+  and the `components.securitySchemes` map holding the schemes `security`
+  references.
+  Callback maps reached through `$ref` are resolved. An unchanged declaration
+  produces no finding; any change is `UNCOMPARABLE`, with the declaration's
+  location included in the finding (for example `security`, `/<path> servers`,
+  or `GET /<path> callbacks "<name>" expression "<expr>"`). `security`
+  alternatives and scopes are compared as sets, so reordering them is not a
+  change; server order is significant.
+- **A Path Item `$ref` is resolved before the paths are compared.** OpenAPI
+  3.0.3 §4.7.9 lets a Path Item Object — an entry under `paths`, or a callback
+  expression value — carry `$ref` to another Path Item Object. The classifier
+  compares the RESOLVED Path Item, so a change inside the target (an operation,
+  a path-level parameter, `servers`, a request/response schema) is detected
+  even when the literal `$ref` string is unchanged, and pointing a `$ref` at
+  equivalent content produces no finding. A referring Path Item is **not** a
+  Reference Object: its other fields are declarations, so a sibling operation,
+  parameter list or server list is combined with the target and compared, never
+  discarded. OpenAPI 3.0.3 leaves a field declared by BOTH the referring Path
+  Item and its target undefined, so that overlap is `UNCOMPARABLE` rather than
+  the classifier choosing a winner. A reference that is external, unresolved,
+  malformed, cyclic, or does not point at a Path Item Object is `UNCOMPARABLE`
+  too, reported at the affected path (or callback expression). The policy is
+  the same for a path present in both documents and for one that exists only in
+  the candidate: a new path is `ADDITIVE`/`PATH_ADDED` only once its Path Item
+  resolves, so an invalid new path fails the gate instead of widening it.
+- **A Reference Object's fields other than `$ref` are ignored** (OpenAPI 3.0.3
+  §4.7.2). A referenced Schema, Parameter, Request Body, Response, Header or
+  Callback is therefore compared as its TARGET, never as target-plus-siblings.
+  `{ "$ref": "…#/Thing", "type": "string" }` describes the `Thing` target: the
+  sibling `type` carries no meaning and cannot mask a change inside `Thing`.
+  Path Items are the deliberate exception above — a Path Item that carries
+  `$ref` is still a Path Item Object (§4.7.9), so its other fields are
+  declarations, not ignored siblings.
+- **A composition branch may only reference a Schema Object.** A branch whose
+  `$ref` reaches a scalar, an array, `null` or another object kind (a Parameter,
+  Response, Request Body or Media Type Object) is `UNCOMPARABLE` at that branch,
+  whether the two documents spell it identically or not. Branches are matched on
+  what they resolve to, so an identical pointer over an invalid target would
+  otherwise be accepted without ever being compared as a schema. A branch whose
+  references all reach Schema Objects stays comparable, and reordering
+  equivalent referenced branches is still not a change.
+- **A callback payload with an unresolvable reference is `UNCOMPARABLE`.**
+  Callback payloads are not modelled, so an external, malformed or dangling
+  `$ref` inside one is not evidence of equality even when both documents spell it
+  the same way — the payload's real shape is unknown.
+- **A `discriminator.mapping` target is compared.** Mapping values are schema
+  names, not `$ref` objects, so nothing else in the classifier reaches them: a
+  mapped schema that changes while its name stays identical would otherwise be
+  `NEUTRAL`. Each entry present on both sides is resolved and compared at
+  `<location> discriminator.mapping "<name>"`, in both legal spellings (an
+  internal pointer, or a bare name meaning `components/schemas/<name>`). An
+  external, malformed, dangling or non-schema target is `UNCOMPARABLE` at that
+  entry, and the mapping's own text is still covered by the rule below.
+- **A schema keyword the classifier does not model** (`not`, `if`/`then`/`else`,
+  `contains`, `prefixItems`, `discriminator`, `readOnly`, …) is reported as
+  `UNCOMPARABLE` when it changes, and `UNCOMPARABLE` fails the gate. An
+  unexamined keyword is never an implicit pass.
+- **`UNCOMPARABLE` is BREAKING.** The gate fails on it; it is never reported
+  as `ADDITIVE` and never treated as an implicit pass.
+
+### Supported OpenAPI dialect (fail closed)
+
+The classifier implements **OpenAPI 3.0.3** Schema Object semantics only — the
+dialect the committed contract is written in, `nullable` included. The root
+`openapi` field is therefore checked, not assumed:
+
+| Situation | Result |
+|---|---|
+| both documents declare `openapi: "3.0.3"` | compared normally |
+| either side declares any other version, or none | `UNCOMPARABLE` (BREAKING) at `openapi` |
+| the two versions differ | `UNCOMPARABLE` (BREAKING) at `openapi` |
+| `jsonSchemaDialect` declared: added, changed, or identical on both sides | `UNCOMPARABLE` (BREAKING) at `jsonSchemaDialect` |
+| a root field the classifier does not model (`webhooks`, …) appears or changes | `UNCOMPARABLE` (BREAKING) at that field |
+
+OpenAPI 3.1 moves to JSON Schema 2020-12: `nullable` gives way to type arrays,
+`jsonSchemaDialect` selects a schema dialect, and `webhooks` becomes a root
+construct. Comparing such a document with 3.0.3 rules could report a real
+change as `NEUTRAL`, so an unsupported dialect fails the gate until
+version-aware comparison exists. A 3.1 contract needs that comparison first,
+not a waiver.
+
+Remaining limitations, stated precisely:
+
+- Callback payloads, `servers` and `security` (including
+  `components.securitySchemes`) are not modelled value by value. That is why a
+  change to them is `UNCOMPARABLE` rather than a precise ADDITIVE/BREAKING
+  classification.
+- Root `security` is compared where it is declared, not as each operation's
+  effective inherited requirement. A root change is therefore reported even
+  when every operation overrides it.
+- `components.securitySchemes` is compared as a whole map: adding an
+  unreferenced scheme is still reported, because the map is not modelled
+  scheme by scheme.
+- Path Item references are resolved only as internal JSON pointers (`#/…`)
+  against the same document. An external file or URL reference is
+  `UNCOMPARABLE`, not fetched. OpenAPI 3.0.3 defines no `components.pathItems`,
+  so there is no special-case component location: a `$ref` is followed wherever
+  its internal pointer leads, and the target's vocabulary must be a Path Item's.
+- A Path Item reached through a chain of references is resolved through the
+  whole chain; a repeat in that chain is `UNCOMPARABLE`. A referred Path Item is
+  never compared operation by operation to a different referred Path Item — the
+  classifier compares the two RESOLVED Path Items, so equivalent targets are
+  equal and different targets are reported normally.
+- `components.callbacks` entries that no operation references are not compared;
+  a referenced callback is compared at the referencing operation.
+- Media-type `example`/`examples`, `links`, `tags`, `externalDocs`, and
+  extension (`x-…`) objects are outside the gate. The classifier does not claim
+  full OpenAPI compatibility.
+- Version-aware comparison is not implemented: only OpenAPI 3.0.3 is applied,
+  and any other declared version or `jsonSchemaDialect` fails closed (see
+  *Supported OpenAPI dialect* above).
 
 Environment variables (see `apps/api/.env.example` for the full list):
 
@@ -175,7 +365,7 @@ points the API at the main branch instead (measured 2026-10-18).
 ### Docker
 
 The build context is the **repository root**, because the API imports the engine
-from `src/recommendation/` and the guard from `scripts/lib/`:
+from `src/recommendation/` and the guard from `packages/database-guard/src/`:
 
 ```
 docker build -f apps/api/Dockerfile -t morocco-pc-api .
@@ -910,7 +1100,7 @@ observation MOMENT, oldest first.
   "may this offer be recommended now", and pruning history by it would rewrite the past.
 - **Nothing else changed.** v1.6 adds this one path - no field on the existing paths gained,
   lost or changed type - and the served document is pinned byte-for-byte by
-  `apps/api/test/unit/openapi-v1.10.json` (the one snapshot in the tree).
+  `contract/openapi-1.10.0.json` (the one contract in the tree).
 
 ## Response shape
 

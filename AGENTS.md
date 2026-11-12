@@ -56,6 +56,7 @@ remaining work. B1-B8 are open. Do not start the extraction from a documentation
 | Why engine behavior is the way it is | `docs/RECOMMENDATION_ENGINE_DECISIONS.md` |
 | Engine design and policy | `docs/engine/ARCHITECTURE.md` |
 | Loader, snapshot and transaction contract | `packages/recommendation-runtime/docs/LOADERS_AND_TRANSACTIONS.md` |
+| The published HTTP contract | `contract/openapi-<major>.<minor>.<patch>.json` |
 | The HTTP surface | `docs/api/CONTRACT.md` + `apps/api/src/` module headers |
 | Ingestion design | `docs/ingestion/PIPELINE_DESIGN.md` |
 | What exists / current status | `CONTEXT.md` |
@@ -132,7 +133,10 @@ Read the owning file before changing that layer:
 |---|---|
 | `npm run test:unit` | engine unit tests (`src/**/*.test.js`, no DB) |
 | `npm run test:scripts` | every `scripts/lib/*.test.js` suite (run after touching `scripts/`) |
+| `npm run test:database-guard` | the extracted guard's own suite (`packages/database-guard/test/*.test.js`) |
 | `npm run test:api` | HTTP API unit tests (DB-free, `fastify.inject`) |
+| `npm run check:contract` | one versioned `contract/openapi-*.json`; fails on any second copy |
+| `node scripts/check-openapi-compatibility.js --base=origin/master` | contract compatibility against a Git ref (ADDITIVE passes, unapproved BREAKING fails) |
 | `npm run test:api:db` | HTTP end-to-end against the TEST branch (nightly; writes) |
 | `npm run verify:docs` | doc-claim gates; `--offline` for a DB-free run, `--live` adds read-only DB checks |
 | `node scripts/gen-decision-index.js --check` | decision index freshness |

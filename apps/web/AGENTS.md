@@ -19,8 +19,9 @@ Authoritative onboarding is `apps/web/README.md`; commands live in `apps/web/pac
 ## Non-negotiables
 
 - **No secrets, no database.** The app is static/SSR over the API; it never holds a credential.
-- **Contract drift is a gate, not a review note.** `check:api-types` compares against the committed
-  OpenAPI snapshot; a contract change must update the snapshot and both consumers deliberately.
+- **Contract drift is a gate, not a review note.** `check:api-types` compares against the shared
+  authoritative `contract/openapi-1.10.0.json`; a contract change must update that document and both
+  consumers deliberately. Never copy the contract into `apps/web`.
 - **Design tokens, not ad-hoc values.** `check:tokens` fails raw values that bypass the token layer.
 - **Locales stay in parity.** `check:i18n` enforces key and placeholder parity across `fr`/`ar`.
 - **Accessibility and budgets are enforced** by the Playwright/axe suite and the Lighthouse budgets

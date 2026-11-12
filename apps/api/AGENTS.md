@@ -1,7 +1,8 @@
 # AGENTS.md — HTTP API
 
-Scope: `apps/api/**`. The contract is `docs/api/CONTRACT.md` (v1.10.0); the served OpenAPI snapshot
-lives in `apps/api/test/unit/`. This layer owns the HTTP surface and nothing else: `engine.js` is the
+Scope: `apps/api/**`. The contract is `docs/api/CONTRACT.md` (v1.10.0); the authoritative OpenAPI
+document is `contract/openapi-1.10.0.json` (byte-compared by the snapshot test since step 3b moved it
+out of this app's test directory). This layer owns the HTTP surface and nothing else: `engine.js` is the
 only module allowed to require `src/recommendation/**`, and a test enforces it.
 
 ## Non-negotiables
@@ -9,9 +10,10 @@ only module allowed to require `src/recommendation/**`, and a test enforces it.
 - **No engine logic here.** Selection, scoring, ranking and explanation belong to the engine; the API
   validates input, calls the engine, persists through it, and presents persisted rows.
 - **POST and GET share one read path**, so they cannot disagree about a persisted field.
-- **Own the contract.** One authoritative OpenAPI document, byte-compared by the snapshot test. Never
-  hand-maintain a second copy of a request or response shape; generated frontend types belong to each
-  frontend.
+- **Own the contract.** One authoritative OpenAPI document at `contract/openapi-<version>.json`,
+  byte-compared by the snapshot test; `npm run check:contract` fails if a copy appears elsewhere.
+  Never hand-maintain a second copy of a request or response shape; generated frontend types belong to
+  each frontend. Backward compatibility is a separate gate against a Git ref, not a second file.
 - **Write safety.** `npm run start:api` refuses to start unless the target is provably the TEST branch,
   or `API_ALLOW_SHARED=1` is set explicitly. Never set that flag to make a local run work.
 - **Production credentials.** The deployed service connects as `morocco_pc_api` (column-scoped
