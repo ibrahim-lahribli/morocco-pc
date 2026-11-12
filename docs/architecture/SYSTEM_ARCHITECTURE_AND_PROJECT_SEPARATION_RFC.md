@@ -1,12 +1,12 @@
 # System Architecture & Project Separation RFC
 
 **Repository:** `ibrahim-lahribli/morocco-pc`
-**Status:** PROPOSED — revised 2026-11-11. **A1-A6 APPROVED by the repository owner on 2026-11-11** (§21.1); **Option B (separate `recommendation-core` and `recommendation-runtime` packages) is the selected direction** (owner decision, recorded in §1.5). **B1-B8 remain open.** The decision record is approved; **nothing is implemented**, and PR #23 is neither approved nor merged by it.
-**Date:** 2026-11-11 (first revision: 2026-11-10)
-**Baseline:** `master` = `a413f25` ("Merge pull request #18 from ibrahim-lahribli/freebuff/launch-v2-2.5.0-decay-off")
+**Status:** PROPOSED — revised 2026-11-11 (Revision 5). **A1-A6 APPROVED by the repository owner on 2026-11-11** (§21.1); **Option B (separate `recommendation-core` and `recommendation-runtime` packages) is the selected direction** (owner decision, recorded in §1.5). **B1-B8 remain open.** The decision record is approved. **One extraction step is implemented: the write-target guard now lives in `packages/database-guard/` as a real package (PR #27, merged 2026-11-11 as `3e2f13e`; §9.4).** **Everything else in the package extraction remains PROPOSED and unimplemented**: `packages/recommendation-core/` and `packages/recommendation-runtime/` contain scaffolding only (their manifests, an empty source placeholder and planning documentation), **no recommendation module has moved** (steps 4-5), and steps 3b and 6-12 have not started. PR #23 — the proposal itself — **was merged on 2026-11-11** (`0bcb6e3`); merging it published the record as a document and, at that date, implemented none of it.
+**Date:** 2026-11-11 (first revision: 2026-11-10). **Revision 3 (2026-11-11):** §21.3 records four owner-confirmed implementation decisions (D1-D4), and §9.2, §9.4, §10.1, §13.4, §15.4 and §19 carry the corrections they exposed: the guard's seven-export interface, the API pool test's ownership, the absent restore-point predicate, the four named manifests, path-only Docker/hosting updates, the Step 7 V2 deferral and the Git-ref compatibility baseline. **Revision 4 (2026-11-11):** current-state corrections only — the script-consumer count in §9.4, the duplicate §15.4 numbering, the since-merged state of PR #23, the documentation paths moved by PR #24 (§16.7), and the §23.4 contradictions register. **Revision 5 (2026-11-11):** implementation-status correction only — PR #27 (`7691b4f`, merged as `3e2f13e`) extracted the guard into `packages/database-guard/` and made the path-only Docker/hosting corrections, so the status line, §3.3, §9.3, §9.4, §13.1-13.2, §13.4, §16.7, §19.1, §19.3, §21.1 (A3) and §23 separate that one implemented step from the still-proposed core/runtime extraction. It also completes the §23.1 `packages/` inventory and corrects the stale package-status sentence in `AGENTS.md` (§23.4 C11). No recommendation behaviour, contract, schema or approved decision changed.
+**Measurement baseline (Revisions 1-3):** `master` = `a413f25` ("Merge pull request #18 from ibrahim-lahribli/freebuff/launch-v2-2.5.0-decay-off") — **historical**; it is not the current head.
 **Secondary input:** `feature/v2-design` = `3bc0605` (read, never merged or rebased for this RFC)
-**RFC branch:** `architecture/system-separation-rfc`, previous commit `9297034`
-**Deliverable:** documentation and analysis only. No source, manifest, lockfile, workflow, migration, seed, Dockerfile or test file was modified by this revision.
+**RFC branch:** `architecture/system-separation-rfc` at `9297034` (merged as PR #23 on 2026-11-11; the branch was deleted after merge). Revision 4 and Revision 5 corrections are on `docs/rfc-accuracy-corrections`.
+**Deliverable:** documentation and analysis only. No source, manifest, lockfile, workflow, migration, seed, Dockerfile or test file was modified by this revision. Revision 4 re-measured its corrected claims read-only on `master` = `e62c816`, and Revision 5 on `master` = `3e2f13e`; neither made any database contact.
 
 ---
 
@@ -16,7 +16,7 @@ Every material assertion carries one of six labels. They are not decoration: the
 
 | Label | Meaning |
 |---|---|
-| **CURRENT** | Verified in the tree at `a413f25` (or on `feature/v2-design` at `3bc0605` where stated) by reading the file, running a read-only command, or reading git history. The evidence is cited. |
+| **CURRENT** | Verified in the tree at `a413f25` (or on `feature/v2-design` at `3bc0605` where stated) by reading the file, running a read-only command, or reading git history. The evidence is cited. Revision 4 re-verifies only the claims it corrects, on `master` = `e62c816`; Revision 5 re-verifies the guard's implementation status on `master` = `3e2f13e`. |
 | **RECORDED** | Written down in a committed document at a stated date, and **not** re-measured by this RFC. The document is named, and its limits are stated. |
 | **PROPOSED** | This RFC's recommendation. Not implemented. |
 | **DECISION REQUIRED** | An owner-level choice that code inspection cannot settle. Split into architecture and product/operations decisions in §21. |
@@ -55,13 +55,13 @@ Two of the six candidate projects are therefore **already independently packaged
 | F1 | **The engine has no third-party runtime dependency and does not own connections — but it is not I/O-free.** Zero non-test files under `src/` require `pg` or `dotenv` (23 *test* files do). 17 non-test engine modules contain `.query(`, 15 of them outside `ingestion/`: every loader, the persistence writers, the orchestrator and the swap modules dispatch SQL on a caller-supplied handle. §6.2 keeps the four properties apart. | `grep -rn "require('pg')\|require('dotenv')" src/` → 0 non-test hits; `.query(` inventory (§6.1); §6.2 |
 | F2 | **The engine's module graph is a DAG, not a strongly connected graph.** Tarjan over the 80 production modules and 220 resolved intra-tree `require` edges yields **80 components, none larger than one module**. Cross-stage edges all run in one direction (`assembly → filtering → compatibility`, `retention/scoring/ranking → assembly`, `explanation → ranking → assembly`). The earlier "strongly-connected graph" claim was never backed by a graph analysis and is withdrawn. | §6.3, reproducible command in §23.2 |
 | F3 | **Three barrels mix pure functions with SQL-executing exports** — `candidates/index.js`, `filtering/index.js` and `scoring/index.js` — **while `offers/index.js` and `query/index.js` are runtime-only.** `candidates/index.js` exports `loadCandidates` beside `createCandidate`; `filtering/index.js` exports `loadFilteringContext` beside `filterCandidates`; `scoring/index.js` exports `loadScoringModel`/`loadComponentAssessments` beside `computeBuildScore`. The runtime-only barrels export nothing pure: `offers/index.js` exports only the SQL-executing `selectOfferPrices`, and both `query/` modules issue SQL. Separately, the pure `offers/as-of.js` module (`parseAsOf`) is extracted to core on its own — it is not part of the `offers` barrel and must not be confused with it. A pure core therefore requires **file-precise extraction rather than blindly moving directories**. | `src/recommendation/*/index.js`, read in full; §6.4 |
-| F4 | **`apps/api` cannot be installed, built or deployed on its own.** It has no `package.json`; its Dockerfile requires the repository root as build context and copies `src/` and `scripts/lib/db-url.js` beside it. | `apps/api/Dockerfile:1-12,33-40`; `render.yaml` `dockerContext: .` |
-| F5 | **`apps/api` depends on a file outside every application and outside the engine**: the write-target guard. That file lives in a directory with **no `package.json`**, so the previously proposed `"db-guard": "file:../../database/tooling"` dependency could not be installed at all. | `apps/api/src/db.js:26`; `git ls-files \| grep package.json` → root + `apps/web` only (master) |
+| F4 | **`apps/api` cannot be installed, built or deployed on its own.** It has no `package.json`; its Dockerfile requires the repository root as build context and copies `src/` and the write-target guard beside it. | `apps/api/Dockerfile`; `render.yaml` `dockerContext: .` |
+| F5 | **`apps/api` depends on code outside every application and outside the engine**: the write-target guard. Until PR #27 that guard was a file in a directory with **no `package.json`**, so the previously proposed `"db-guard": "file:../../database/tooling"` dependency could not be installed at all. PR #27 gave it a manifest in `packages/database-guard/` (§9.4), but the API still consumes it by relative path, so the API has no installable dependency edge until step 6. | `apps/api/src/db.js:26`; `packages/database-guard/package.json` |
 | F6 | **Ingestion is already a separate application wearing an engine directory's clothes.** 8 non-test modules, its own barrel, its own CLI, and **zero inbound edges** from any stage (measured, §6.3). Its own header says it "is NOT an engine stage". | `src/recommendation/ingestion/index.js:1-13`; Tarjan edge scan |
 | F7 | **There is one contract document pattern, but two physical copies across branches.** `contract/openapi-1.10.0.json` is read by V1's generators and gates on `master` (updated 2026-11-12: the file moved out of `apps/api/test/unit/`; it was `apps/api/test/unit/openapi-v1.10.json` when this row was measured); V2 carries its own copy of the same file on `feature/v2-design`, and each frontend's `check:api-types` compares generated types against its own copy. Identical content today; no gate would detect divergence tomorrow. | `apps/web/package.json`, `apps/web-v2/package.json`, both workflows; §15.2 |
 | F8 | **V2 is a foundation, and one manual read-only staging smoke exists.** V2 has 3 route files and performs only GETs; it has no catalogue route, results route, swap, saved builds, and **no deployment configuration**. Its `docs/staging-smoke.md` records a **manual, ordinary-browser, read-only** smoke on 2026-11-07 (7 reads per locale, all HTTP 200, 0 POST) against the EU staging API. That is not a deployed V2 frontend and not an automated E2E test. | §14.4; `feature/v2-design:apps/web-v2/docs/staging-smoke.md` |
-| F9 | **The programme is single-tenant and unauthenticated by decision, not by omission.** No auth library, no session, no account; the API contract documents "No authentication or accounts" as a deliberate property (R-16 ACCEPTED). | `docs/API.md`; `docs/OPEN_POINTS.md` R-16 |
-| F10 | **The shared operational machinery is the real coupling.** `scripts/lib/` holds the DB write guard, the target digests, the restore-point predicates, the model pin and the generated-doc check — every one consumed by more than one layer. | `apps/api/src/db.js:26`, `scripts/*.js`, `npm run test:scripts` |
+| F9 | **The programme is single-tenant and unauthenticated by decision, not by omission.** No auth library, no session, no account; the API contract documents "No authentication or accounts" as a deliberate property (R-16 ACCEPTED). | `docs/api/CONTRACT.md`; `docs/OPEN_POINTS.md` R-16 |
+| F10 | **The shared operational machinery is the real coupling.** `scripts/lib/` holds the target digests, the restore-point argument validation, the model pin and the generated-doc check — every one consumed by more than one layer; the DB write guard it used to hold now lives in `packages/database-guard/` (§9.4). | `apps/api/src/db.js:26`, `scripts/*.js`, `packages/database-guard/src/index.js`, `npm run test:scripts` |
 
 ### 1.3 Principal recommendations
 
@@ -80,7 +80,7 @@ Two of the six candidate projects are therefore **already independently packaged
 
 ### 1.4 What this RFC does not do
 
-It does not move a file, rename a package, add a manifest, change a workflow, alter the API, touch either frontend, apply a migration, connect to a database, or start the documentation-cleanup PR. The roadmap in §19 is a plan, and §19.2 states the safety policy that governs it. **No step of this RFC implements the Option B split.**
+It does not move a file, rename a package, add a manifest, change a workflow, alter the API, touch either frontend, apply a migration, connect to a database, or perform any roadmap step. (The documentation cleanup landed separately as PR #24; §16.7 records what it changed.) The roadmap in §19 remains a plan, and §19.2 states the safety policy that governs it. **No step of this RFC implements the Option B split.**
 
 ### 1.5 What changed in this revision
 
@@ -103,7 +103,7 @@ The decision to adopt Option B invalidated several arguments in the first revisi
 | 13 | "114 offers, 0 verified" presented as a universal current fact. | Environment-qualified measurements (§11A.2): shared/EU 0 VERIFIED (recorded 2026-11-10); TEST has 2 VERIFIED offers and 1 eligible CPU identity in the same recording. | `docs/OPEN_POINTS.md` R-01/R-30. |
 | 14 | Six implicit projects all lacking manifests. | Two of six already have independent manifests and lockfiles; the packaging work is engine, API, ingestion, database tooling (§3.1). | `git ls-files`, `feature/v2-design` tree. |
 | 15 | `generate-presets.js` assigned to the API while living in `scripts/`. | Physical home proposed as `apps/api/bin/generate-presets.js`; until moved, the file is a root script with an API-shaped dependency (§3.3). | `scripts/generate-presets.js:86-97`. |
-| 16 | A1-A6 recorded as `AWAITING OWNER APPROVAL`. | **A1-A6 approved by the repository owner on 2026-11-11**; the approval record, its scope and its exclusions are in §21.1. B1-B8 remain open, and PR #23 is neither approved nor merged by this record. | Owner approval recorded; not implemented. |
+| 16 | A1-A6 recorded as `AWAITING OWNER APPROVAL`. | **A1-A6 approved by the repository owner on 2026-11-11**; the approval record, its scope and its exclusions are in §21.1. B1-B8 remain open. The approval did not merge PR #23; that PR was merged separately on 2026-11-11 (`0bcb6e3`) to publish the record. | Owner approval recorded; no extraction step was implemented at that time — the guard followed in PR #27 (§9.4), the recommendation extraction has not started. |
 
 ---
 
@@ -111,7 +111,7 @@ The decision to adopt Option B invalidated several arguments in the first revisi
 
 ### 2.1 The four layers, as implemented
 
-**CURRENT.** The schema is the contract that everything else obeys. Its four logical layers are documented in `README.md`, `CONTEXT.md` and `docs/ARCHITECTURE.md`, and are physical tables in one PostgreSQL database.
+**CURRENT.** The schema is the contract that everything else obeys. Its four logical layers are documented in `README.md`, `CONTEXT.md` and `docs/engine/ARCHITECTURE.md`, and are physical tables in one PostgreSQL database.
 
 | Layer | Tables (current) | Written by | Read by |
 |---|---|---|---|
@@ -155,7 +155,7 @@ Suite sizes are deliberately not restated here as fact: this revision did **not*
 
 | Artifact | File | State |
 |---|---|---|
-| API container | `apps/api/Dockerfile` (build context = repository root) | builds `src/` + `apps/api/` + `scripts/lib/db-url.js` |
+| API container | `apps/api/Dockerfile` (build context = repository root) | builds `src/` + `apps/api/` + `packages/database-guard/{package.json,src}` |
 | API hosting | `render.yaml` (`morocco-pc-api-eu`, Frankfurt, `runtime: docker`, `healthCheckPath: /v1/health`, `autoDeployTrigger: off`) | one recorded origin: `https://morocco-pc-api-eu.onrender.com` |
 | API alternative | `fly.toml` (`morocco-pc-api`, `fra`, always-on) | present in the tree; **UNKNOWN** whether it is used — no measured evidence of a Fly origin in `CONTEXT.md` or `docs/OPEN_POINTS.md`. This is a decision in §21 (B6). |
 | Web V1 hosting | `apps/web/wrangler.jsonc`, `apps/web/open-next.config.ts` | configured, **never deployed** |
@@ -167,14 +167,14 @@ Suite sizes are deliberately not restated here as fact: this revision did **not*
 
 ### 3.1 Inventory
 
-**CURRENT.** "Manifest" means a `package.json` in that directory with its own dependency list. Verified with `git ls-files | grep -i package.json` on `master` (root + `apps/web`) and `git ls-tree origin/feature/v2-design apps/web-v2/` (adds `apps/web-v2/package.json` + `package-lock.json`).
+**CURRENT.** "Manifest" means a `package.json` in that directory with its own dependency list. Verified with `git ls-files | grep -i package.json` on `master` (root + `apps/web`, plus the three `packages/*/package.json` added by PR #27) and `git ls-tree origin/feature/v2-design apps/web-v2/` (adds `apps/web-v2/package.json` + `package-lock.json`).
 
 | Path | Manifest | Independently installable today? | Runtime dependencies | Tests | CI | Deploy artifact |
 |---|---|---|---|---|---|---|
 | repository root | `package.json` (private, no `workspaces`) | yes (it is the only install) | fastify, @fastify/*, @sentry/node, @sinclair/typebox, pg, dotenv, pino-pretty (dev) | `test:unit`, `test:scripts`, `test:api` | `ci.yml` | `Dockerfile` (root context), `render.yaml`, `fly.toml` |
 | `src/recommendation/` | **none** | no — resolved through the root install | **none** (zero non-relative non-test requires) | 63 test files inside the stages | via root `test:unit` | shipped inside the API image |
 | `database/` | **none** | n/a — data, not code | none | via `test:scripts` + `verify:replay` | `ci.yml` recurring job | none |
-| `scripts/` | **none** | no | pg, dotenv | `test:scripts` | `test:scripts` | `scripts/lib/db-url.js` is copied into the image |
+| `scripts/` | **none** | no | pg, dotenv | `test:scripts` | `test:scripts` | none — the API image copies `packages/database-guard/`, not `scripts/` |
 | `apps/api/` | **none** | **no** | resolves from the root `node_modules` | unit + DB-backed files | `ci.yml` | `Dockerfile`, `render.yaml` |
 | `apps/web/` (V1) | **own `package.json` + own lockfile** | **yes** | next 16.4.2, react, next-intl, MDX; openapi-typescript, Playwright, LHCI (dev) | Playwright suites | `.github/workflows/web.yml` | `wrangler.jsonc` (undeployed) |
 | `apps/web-v2/` (V2, branch only) | **own `package.json` + own lockfile** | **yes** | next 16.4.5, react, next-intl, @tanstack/react-query, openapi-fetch, zod, zustand, react-hook-form, radix; vitest, Playwright, prettier (dev) | Vitest + Playwright suites | `.github/workflows/web-v2.yml` | **none** |
@@ -193,7 +193,7 @@ Suite sizes are deliberately not restated here as fact: this revision did **not*
 | Tool | Where it actually is | What the first revision called it | Resolution proposed here |
 |---|---|---|---|
 | `generate-presets.js` | `scripts/generate-presets.js`, and it requires `../apps/api/src/repository`, `../apps/api/src/engine` and `../apps/api/src/meta` plus `pg`/`dotenv` (`scripts/generate-presets.js:86-97`) | "API project (logical owner)" | **PROPOSED:** physical home `apps/api/bin/generate-presets.js`, owned by the API project, because it writes Layer 4 and calls the API's own engine entry point. Until it moves, no document may describe it as already living under `apps/api`. |
-| `scripts/lib/db-url.js` | `scripts/lib/`, a directory with no `package.json` | "Database project exposes the guard" | **PROPOSED:** `packages/database-guard/`, a real package (§9.4), because `apps/api/src/db.js:26` requires it as code. |
+| Guard (`db-url`) | `packages/database-guard/` (manifest, `src/index.js`, its own test) on `master` since PR #27; before that, `scripts/lib/db-url.js`, a directory with no `package.json` | "Database project exposes the guard" | **IMPLEMENTED 2026-11-11 (§9.4):** the guard is `packages/database-guard/`, a real package, because `apps/api/src/db.js:26` requires it as code. The proposal was to create exactly that package; PR #27 did. |
 
 ### 3.4 Repository hygiene (CURRENT)
 
@@ -266,7 +266,7 @@ own manifest          own manifest
 **CURRENT path-level truth the diagram hides:**
 
 - `apps/api/src/engine.js` is the *only* file that requires `src/recommendation/**`, and it requires exactly six barrels: `orchestrator`, `assembly`, `candidates`, `scoring`, `query`, `retention` (`apps/api/src/engine.js:28-33`; pinned by `apps/api/test/unit/import-boundary.test.js`).
-- `apps/api/src/db.js` is the *only* file that requires `pg`, and it also requires `scripts/lib/db-url.js` (line 26).
+- `apps/api/src/db.js` is the *only* file that requires `pg`, and it also requires `../../../packages/database-guard/src` (line 26).
 - `apps/api/src/repository.js` is the only file with API-owned SQL.
 - The engine is reached by `../../../src/recommendation/...`, a relative path that escapes the application directory.
 
@@ -676,7 +676,7 @@ The first revision assigned the golden harness "jointly to P1 + P2", which is a 
 | core ← runtime | core's subpath exports and frozen input/output contracts (§11.4) | core's own boundary test: no `.query(`, no `pg`, no `fs`, no `process.env`. Runtime is core's primary in-repo consumer, **not its only one** (next row) |
 | core ← api | **frozen vocabulary only**: `COMPONENT_ROLES`, `EXPANSION_ORDER`, `listUseCases`, `resolutionMultiplier`, the error vocabulary (`ERROR_CODES`, `CandidateSelectionError`), and immutable domain contracts the HTTP layer must not restate (`GPU_POLICIES`, `STRATEGIES`, `REASON_CODES`/`REASON_ORDER` where a response names a reason) | an API-side boundary test asserting every API→core import names a symbol on the approved list. The API may **not** import core calculation entry points (`computeBuildScore`, `assembleBuilds`, `retainTopKPerRole`, `rankBuilds`, `selectArchetypes`, `filterCandidates`, `explainSelection`) to reproduce business logic: passes, previews, commits and the catalog digest are reached through runtime. Runtime does **not** become the owner of vocabulary the API consumes; the symbols stay core's |
 | runtime ← api | `./orchestrator` and `./persistence` entry points, with the single-dedicated-connection contract | `import-boundary.test.js` extended to runtime internals; the connection contract is stated in the module headers |
-| guard ← api / ingestion / database tooling | `resolveTestDbUrl`, `getWriteTestDbUrl`, `describeTarget`, `normalizeTarget`, `toDirectUrl` | its own package manifest + its existing unit tests (`scripts/lib/db-url.test.js`, `apps/api/test/unit/db-guard.test.js`) move with it |
+| guard ← api / ingestion / database tooling | its **seven** exports: `CONNECTION_TIMEOUT_MILLIS`, `normalizeHost`, `resolveTestDbUrl(env)`, `getWriteTestDbUrl(env)`, `describeTarget`, `toDirectUrl`, `normalizeTarget` | its own package manifest (`packages/database-guard/package.json`) and its own unit test (`packages/database-guard/test/db-url.test.js`, moved from `scripts/lib/db-url.test.js`). `apps/api/test/unit/db-guard.test.js` does **not** move: its filename is misleading, and it tests API pool configuration (`resolvePoolConfig`, `STATEMENT_TIMEOUT_MS`, `APPLICATION_NAME`), not the guard |
 | schema ← runtime / api / ingestion | tables, columns, enums, constraints | numbered migrations are the only DDL source; `verify:replay` diffs by definition |
 | api → frontends | `contract/openapi-<version>.json` | both frontends' `check:api-types`; `openapi-snapshot.test.js` byte-compares the served document |
 | api ↔ frontends at runtime | `/v1/**` JSON over HTTPS | contract version + committed snapshot |
@@ -685,7 +685,7 @@ The first revision assigned the golden harness "jointly to P1 + P2", which is a 
 
 ### 9.3 Forbidden imports and how each is caught
 
-**PROPOSED gate set.** Today only the API→engine edge is enforced by a test; the rest are conventions.
+**PROPOSED gate set.** Of the edges listed below, only the API→engine edge is enforced by a test today; the only other enforced boundary in the tree is the extracted guard's own zero-`require` scan (PR #27). The rest are conventions.
 
 | Forbidden | Today | Proposed gate |
 |---|---|---|
@@ -702,16 +702,30 @@ The first revision assigned the golden harness "jointly to P1 + P2", which is a 
 
 ### 9.4 The guard: an installable package, not a directory
 
-**CURRENT.** `scripts/lib/db-url.js` (150 lines, zero third-party deps) exports `resolveTestDbUrl`, `getWriteTestDbUrl`, `describeTarget`, `toDirectUrl`, `normalizeTarget`, `normalizeHost`, `CONNECTION_TIMEOUT_MILLIS`. It is required by `apps/api/src/db.js:26` and by at least six scripts (`apply-api-role.js`, `apply-seed.js`, `check-deployed-role.js`, `check-target-parity.js`, `cleanup-layer4.js`, the replay harnesses). `scripts/` has **no `package.json`**, so `"db-guard": "file:../../scripts/lib"` would fail to install.
+**IMPLEMENTED (PR #27, merged 2026-11-11 as `3e2f13e`).** The guard is now `packages/database-guard/`: a manifest (`@morocco-pc/database-guard`, `private`, `version` `0.1.0`, `main: src/index.js`, **no dependencies**), the implementation at `src/index.js`, and its own test at `test/db-url.test.js` with its own runner (`npm run test:database-guard`, wired into `ci.yml`). The seven exports and their contracts are exactly the design below. `apps/api/src/db.js:26` and every write-capable script now require `packages/database-guard/src` by relative path, and `scripts/lib/db-url.js` plus `scripts/lib/db-url.test.js` no longer exist. `.env` loading moved to the consumers, so the zero-dependency contract held without the documented fallback. Docker and hosting files were changed **by path only** (owner decision 1, §13.4): `.dockerignore` keeps `packages/database-guard/` in the build context, `apps/api/Dockerfile` copies `packages/database-guard/package.json` and `packages/database-guard/src`, and the `fly.toml`/`render.yaml` comments cite the same path. The four-manifest `file:` image build remains the step-6 design. Nothing else moved: `packages/recommendation-core/` and `packages/recommendation-runtime/` carry a manifest (runtime also keeps its `docs/LOADERS_AND_TRANSACTIONS.md`), but **no recommendation module has been extracted** — that is steps 4 and 5 (§19.1).
 
-**PROPOSED:** create `packages/database-guard/`:
+**Baseline before PR #27 (CURRENT then; `master` = `e62c816`, measured 2026-11-11).** `scripts/lib/db-url.js` (zero third-party deps) exported **exactly seven** public symbols, and the package contract is those seven and no others:
+
+| # | Export | Contract |
+|---|---|---|
+| 1 | `CONNECTION_TIMEOUT_MILLIS` | constant `15000`, the scripts convention |
+| 2 | `normalizeHost(urlString)` | pure: lowercased host, a `-pooler` first label stripped |
+| 3 | `resolveTestDbUrl(env)` | pure: throws on unset/empty/unparseable `TEST_DATABASE_URL`, unset `DATABASE_URL`, or equal normalised hosts |
+| 4 | `getWriteTestDbUrl(env)` | thin wrapper over `resolveTestDbUrl`; takes an explicit env object and loads no `.env` |
+| 5 | `describeTarget(urlString)` | pure: `{ endpointId, pooled, database }` |
+| 6 | `toDirectUrl(urlString)` | pure: the same string pointed at the direct (non-pooler) host, credentials preserved verbatim |
+| 7 | `normalizeTarget(urlString)` | pure: credential-free `{ host, database }` identity |
+
+At that baseline there was **no restore-point predicate export**: the restore-point rule is argument validation in `scripts/lib/apply-seed-args.js` and `scripts/apply-api-role.js`, not part of this package. The guard was required by `apps/api/src/db.js:26`, by seven DB-backed API test files plus `apps/api/test/run-db-tests.js`, and by **18 top-level scripts, every one of which required it directly** (re-measured 2026-11-11 on `master` = `e62c816`). Three further `scripts/lib/` modules also required it (`apply-seed-args.js`, `ingest-args.js`, `migrations.js`), and one `scripts/lib/` module cited it only in a comment (`og01-catalog.js:28`). `scripts/` has **no `package.json`**, so `"db-guard": "file:../../scripts/lib"` could not install — the reason the package exists.
+
+**Design as proposed (PR #27 shipped it as described above).**
 
 | Aspect | Design |
 |---|---|
-| Contents | the current `db-url.js` implementation, moved verbatim; its two test suites move with it |
+| Contents | the pre-PR-#27 `db-url.js` implementation, moved to `packages/database-guard/src/index.js`; its own test (`scripts/lib/db-url.test.js`) moves to `packages/database-guard/test/db-url.test.js`. `apps/api/test/unit/db-guard.test.js` **stays in the API**: despite its filename it validates the API's pool configuration (`resolvePoolConfig`, `STATEMENT_TIMEOUT_MS`, `APPLICATION_NAME`), and moving it would move API ownership into a package that must stay independent of `pg` |
 | Manifest | `package.json`: `name`, `version` (repo-tracked, not published), `main: src/index.js`, **zero dependencies — no `dotenv`, no `pg`** |
 | Authoritative implementation | this package, and only this package. No copy in the database project, the API image or a Docker layer |
-| Consumers | `apps/api` (`file:` dep), `apps/offer-ingestion`, `database/tooling`, runtime/its tests |
+| Consumers | `apps/api`, `apps/offer-ingestion` (not yet created), `database/tooling`, runtime/its tests. Until npm workspaces exist (out of scope, R3) consumers import it by **relative path** from the repository root; the `file:` dependency is step 6's change, not step 3a's |
 | Versioning | consumed by commit like every other package in the repo (§17.4); adding a registry or a semver release is out of scope |
 | Why not "a package inside `database/`" | a `file:` dependency must resolve to a directory with a manifest; putting one inside `database/` would make the database project installable-by-accident, which is exactly what P2's "not a package" rule forbids in spirit |
 | Why not inline it in the API | the guard is a security control shared by five consumers; an inline copy would be a second authoritative implementation |
@@ -722,7 +736,7 @@ The first revision assigned the golden harness "jointly to P1 + P2", which is a 
 |---|---|
 | `resolveTestDbUrl(env)` | pure; takes an explicit env object (already true today) |
 | `getWriteTestDbUrl(env)` | takes an explicit env object; **never** loads `.env` itself |
-| `describeTarget`, `normalizeTarget`, `normalizeHost`, `toDirectUrl`, restore-point predicate | pure; explicit inputs only |
+| `describeTarget`, `normalizeTarget`, `normalizeHost`, `toDirectUrl` | pure; explicit inputs only |
 
 Every consumer calls `getWriteTestDbUrl(loadedEnv)` with an environment its own bootstrap loaded: `apps/api/src/db.js` already receives an explicit `env` argument, and each CLI already initialises `dotenv` at its entry point (`scripts/generate-presets.js:86` is the pattern). Safety semantics are unchanged: same host comparison, same refusal messages, same digest, same restore-point rule. `dotenv` stays a dependency of the **applications**, where it is already installed.
 
@@ -752,7 +766,7 @@ Runtime executes SQL. Saying "it has no database dependency because the client i
 | Schema authority | numbered migrations applied in filename order through a ledger | `database/migrations/001…023`, `scripts/run-migrations.js`, `schema_migrations` |
 | Re-applicability | ledger-driven pending tail; `--baseline` adopts a pre-ledger database | `scripts/run-migrations.js --check/--baseline` |
 | Shared-database safety | a real apply against `DATABASE_URL` refuses without `--restore-point=<id>`; `--baseline` needs one too; one audit line per applied file | `scripts/lib/run-migrations-cli.test.js`, `database/migration-applies.jsonl` |
-| Write-test isolation | `TEST_DATABASE_URL` guard comparing normalised hosts (pooler label stripped) | `scripts/lib/db-url.js`; `apps/api/test/unit/db-guard.test.js` |
+| Write-test isolation | `TEST_DATABASE_URL` guard comparing normalised hosts (pooler label stripped) | `packages/database-guard/src/index.js`; its test `packages/database-guard/test/db-url.test.js`. The API's own start-up refusal is pinned separately by `apps/api/test/unit/db-guard.test.js` (pool configuration, not the guard) |
 | Drift detection | replay every migration into an EMPTY scratch database, diff by definition | `scripts/verify-migrations-replay.js`, `npm run verify:replay` |
 | Target parity | ledger + tables + columns + enums + row counts between two targets | `scripts/check-target-parity.js` |
 | Least privilege | `morocco_pc_api` role with a column-scoped grant and a 20-answer self-check | `scripts/apply-api-role.js`, `rehearse-api-role.js`, `smoke-api-role.js` |
@@ -958,7 +972,7 @@ A count in this document names **environment + date + source + kind** (live meas
 | Classification | **not an engine stage** — its own header says so | `ingestion/index.js:1-13` |
 | Dependency direction | inbound: **zero** (measured, §6.3); outbound: none to other stages | Tarjan scan |
 | Third-party deps | none (`crypto` + Node builtins only) | `require` scan |
-| Network | **none by design** — the seam is a file | `docs/PIPELINE_DESIGN.md` |
+| Network | **none by design** — the seam is a file | `docs/ingestion/PIPELINE_DESIGN.md` |
 | DB writes | only `apply.js`, inside a caller-owned transaction | `apply.js`, `run.js` headers |
 | CLI | `scripts/ingest-offers.js` (dry-run default, `--commit`, `--test-db`, `--target-env`, `--restore-point`) | script header |
 | Guards | refuses `--target-env` naming `DATABASE_URL`/`TEST_DATABASE_URL`; compares targets by `db:<12 hex>` digest; requires a restore point for a write; prints `AUDIT TARGET:` before connecting | `scripts/lib/ingest-args.js` |
@@ -1025,7 +1039,7 @@ apps/offer-ingestion/
 | Contract | v1.10.0, `contract/openapi-1.10.0.json` (published there 2026-11-12; it was `apps/api/test/unit/openapi-v1.10.json` before), served at `/v1/docs/json`, byte-compared by `openapi-snapshot.test.js` and compatibility-gated by `scripts/check-openapi-compatibility.js` |
 | Engine reach | `engine.js` only, six barrels, one frozen option (`allow_unverified_seed_offers: true`) |
 | SQL | `repository.js` (API-owned SQL) + `db.js` (the only `pg` importer; pool tagged `application_name = 'morocco-pc-api'`) |
-| Guards | refuses to start unless the target is provably the TEST branch or `API_ALLOW_SHARED=1`; imports `scripts/lib/db-url.js` (line 26) |
+| Guards | refuses to start unless the target is provably the TEST branch or `API_ALLOW_SHARED=1`; imports `packages/database-guard/src` (line 26) — since PR #27; before that it imported `scripts/lib/db-url.js` |
 | Deploy | `apps/api/Dockerfile` (context = repo root), `render.yaml`, `fly.toml` |
 
 ### 13.2 Why it cannot be independent today (CURRENT → consequence)
@@ -1033,9 +1047,9 @@ apps/offer-ingestion/
 | Blocker | Evidence | Effect |
 |---|---|---|
 | no manifest | `apps/api/` contains no `package.json` | no own dependency set, no own `npm ci`, no version |
-| root build context | `Dockerfile:33-40` copies `src/`, `apps/api`, `scripts/lib/db-url.js` | the image is a slice of the repository, not a build of the API |
+| root build context | `apps/api/Dockerfile` copies `src/`, `apps/api` and `packages/database-guard/{package.json,src}` | the image is a slice of the repository, not a build of the API |
 | relative engine path | `engine.js:28-33` requires `../../../src/recommendation/*` | the API's source layout encodes the engine's location |
-| script dependency | `db.js:26` requires `../../../scripts/lib/db-url` | the start-up guard lives in a directory with no manifest |
+| guard path | `db.js:26` requires `../../../packages/database-guard/src` | the guard is still reached by a relative path across project boundaries: there is no `file:` dependency and no install until step 6, so the API cannot build outside this repository layout |
 | ~~contract inside a test directory~~ **CLOSED 2026-11-12** | `contract/openapi-1.10.0.json` — the publication point is a top-level `contract/` directory, and `check:contract` fails if a second `openapi-*.json` appears | the test tree no longer publishes another application's contract (per §15.4 O2 / A4) |
 
 ### 13.3 Target shape (PROPOSED)
@@ -1122,7 +1136,9 @@ CMD ["node", "apps/api/src/server.js"]
 | Why the old justification disappears | the image no longer needs the root `node_modules` for the engine's `require('pg')`, because runtime has no `pg` dependency and `pg` is installed into `apps/api/node_modules` |
 | Pitfall to verify during implementation | npm may create **relative** symlinks for `file:` deps; the final stage must place `packages/` at the same relative path (`/app/packages/…`), which it does. Verify with `node -e "require.resolve('recommendation-runtime')"` inside the image. |
 
-**Not implemented in this PR.** No Dockerfile, `.dockerignore`, manifest or lockfile is changed here.
+**Not implemented by this RFC.** No Dockerfile, `.dockerignore`, manifest or lockfile is changed by this document.
+
+**Owner decision 1 (2026-11-11): step 3a may make path-only updates to `apps/api/Dockerfile`, `.dockerignore`, `fly.toml` and `render.yaml`.** Moving the guard changes the path the image copies, so the existing files must name `packages/database-guard/src/` instead of `scripts/lib/db-url.js`. That approval is **filesystem-path correction only**: no Docker architecture change, no hosting or infrastructure change, no new deployment configuration, no environment-variable change, and **no deployment**. The four-file `file:` build above remains the step-6 design. **Executed by PR #27 (`7691b4f`):** those four files were updated by path only, and the PR recorded that install, environment and deployment behaviour were unchanged. That PR did **not** build the image, and no workflow in the repository runs `docker build` (`.github/workflows/` has only `ci.yml` and `web.yml`), so the image-build proof remains step 9 work (§19.1), not a completed check.
 
 ---
 
@@ -1248,8 +1264,10 @@ Saved builds (local-only), compare view, price history, preset landing pages, le
 1. **O2 now**: one authoritative document at `contract/openapi-<major>.<minor>.<patch>.json`, owned by the API project, byte-compared by `openapi-snapshot.test.js` (same assertion, new path). **No second copy anywhere** — both frontends' generators point at it, and `check:api-types` stays each frontend's gate.
 2. **A cross-copy drift gate while V2 is branch-based**: a check that fails when a second `openapi-*.json` exists in the tree. This is the mechanism the current arrangement lacks.
 3. **O3 later**: attach the file to the API release so a frontend can pin without a checkout.
-4. **A compatibility gate**: schema diff between the committed contract and the generated document, classified ADDITIVE / BREAKING, failing on BREAKING unless the minor is bumped and a note added. This does not exist today.
+4. **A compatibility gate with a Git-ref baseline** (owner decision 4, 2026-11-11): `node scripts/check-openapi-compatibility.js --base=origin/master` retrieves the baseline contract **from the explicitly supplied Git ref**, compares it with the candidate, classifies every change ADDITIVE / BREAKING and fails on an unauthorized breaking change. There is **no second, hand-maintained baseline file**, and committed-versus-served is **not** a substitute: the snapshot test keeps that separate responsibility. An approved breaking change needs a documented review and approval note; the gate does not infer one.
 5. **Reject O4**: generated types belong to each frontend.
+
+6. **Step 3b scope = API + V1 + the shared contract location.** **V2 integration is deferred to Step 7** (owner decision 3, 2026-11-11): `apps/web-v2` stays on `feature/v2-design`, no V2 history is modified or merged in step 3b, and V2's type generation, contract wiring and compatibility verification happen in its dedicated roadmap step. This is a deliberate deferral, not abandonment.
 
 **Hard rule:** never a hand-maintained second copy of a request or response shape.
 
@@ -1268,7 +1286,9 @@ Saved builds (local-only), compare view, price history, preset landing pages, le
 
 ## 16. Documentation ownership
 
-### 16.1 Current inventory (CURRENT, top-level)
+### 16.1 Inventory at the measurement baseline (CURRENT at `a413f25`, top-level)
+
+This is the pre-cleanup inventory Revisions 1-3 measured. PR #24 executed the §16.5 disposition; §16.7 records where each document lives on `master` now.
 
 | Document | Nature | Owner today |
 |---|---|---|
@@ -1285,7 +1305,7 @@ Saved builds (local-only), compare view, price history, preset landing pages, le
 | `docs/GLOSSARY.md`, `TEST_MAP.md`, `docs/RECIPES/`, `docs/archive/` | lookup + recipes + history | mixed |
 | `apps/web/README.md`, `apps/web-v2/README.md` + their `docs/` | frontend onboarding | V1 / V2 |
 
-### 16.2 Diagnosed problems (CURRENT)
+### 16.2 Diagnosed problems (CURRENT at `a413f25`)
 
 | Problem | Evidence |
 |---|---|
@@ -1322,7 +1342,7 @@ database/README.md                          + docs/{LIFECYCLE,ROLES,RESTORE}.md
 
 Every project's docs must answer: what it is, who consumes it, how to install/run it, its boundary (what it may not import), its module map and public interface, which suites need a database, the exact environment variables and guard rules, operations (build/deploy/rollback/health), security (credentials held, what must never be logged), release/versioning, owned decisions, and known limitations (linked into the register, not restated).
 
-### 16.5 Disposition of existing documents (PROPOSED — not executed here)
+### 16.5 Disposition of existing documents (PROPOSED at `a413f25`; executed by PR #24, §16.7)
 
 | Document | Disposition |
 |---|---|
@@ -1339,9 +1359,26 @@ Every project's docs must answer: what it is, who consumes it, how to install/ru
 | dated handoffs | **archive** with a `Superseded by:` header |
 | `pr8-fix-saved-spec.patch` | **delete or archive** |
 
-### 16.6 What the documentation-cleanup PR may not do
+### 16.6 Constraint on any documentation-cleanup PR
 
 **PROPOSED:** it may move, split and re-link, but it may not change a test count, a decision count, a migration range or a measured figure without re-running the measurement.
+
+### 16.7 Execution record: Roadmap Step 2 (2026-11-11)
+
+**CURRENT on `master`.** PR #24 (`docs/documentation-cleanup`, merged `ffd336c`) executed the §16.5 disposition; PR #25 (`fix/stale-recipe-paths`, merged `e62c816`) then corrected the script comments and generated-index citations that still named moved documents.
+
+| §16.5 disposition item | Result on `master` |
+|---|---|
+| `docs/ARCHITECTURE.md` | **split**: design contract → `docs/engine/ARCHITECTURE.md`; loader/snapshot/transaction contract → `packages/recommendation-runtime/docs/LOADERS_AND_TRANSACTIONS.md` |
+| `docs/API.md` | **moved** to `docs/api/CONTRACT.md` |
+| `docs/PIPELINE_DESIGN.md` | **moved** to `docs/ingestion/PIPELINE_DESIGN.md` |
+| `docs/RECIPES/*` | **split** under `docs/database/recipes/`, `docs/engine/recipes/` and `docs/ingestion/recipes/`; deploy, first-launch, release and status-claim recipes stay in `docs/RECIPES/` |
+| `AGENTS.md` | **rewritten as an index**; per-layer `AGENTS.md` added for `apps/api/`, `apps/web/`, `database/`, `docs/engine/` and `docs/ingestion/` |
+| dated handoffs | **archived** under `docs/archive/` with `Superseded by:` headers |
+| `pr8-fix-saved-spec.patch` | **archived**, not deleted (`docs/archive/`) |
+| `DEVELOPMENT_NOTES.md`, `CONTEXT.md`, `README.md`, registers, generated mirrors, `docs/archive/**` | kept at their previous owners |
+
+Step 2 changed no recommendation behaviour, schema, contract, migration or deployment: it changed 31 files (documentation, recipes, per-layer agent instructions and one documentation-gate path). **At the date of Step 2**, `packages/` existed only because it held `recommendation-runtime/docs/LOADERS_AND_TRANSACTIONS.md`; it had **no manifest and no code**, and the extraction remained step 3a. That changed on 2026-11-11: PR #27 added `packages/database-guard/` and the two recommendation manifests (§9.4), while **no recommendation module has moved** (§23.1).
 
 ---
 
@@ -1472,13 +1509,13 @@ Every step is independently reviewable as its own PR. "Parallel" marks work with
 | Step | Scope | Depends on | Genuinely parallel with | DB contact allowed | Deploys? |
 |---|---|---|---|---|---|
 | **1. Architecture approval** | A1-A6 in §21 **approved 2026-11-11** (§21.1); one accountable owner role defined per responsibility (§8); human names are assigned by the owner, not in this RFC (§21.1, A5) | — | — | none | no |
-| **2. Documentation cleanup** | §16.5 disposition; root becomes navigation | 1 | — | none (read-only `--offline` gates only) | no |
-| **3a. Package boundary preparation** | create `packages/{recommendation-core,recommendation-runtime,database-guard}` manifests and empty `src/` skeletons; move the guard into its package; no module moves; boundary tests written | 1, 2 | **3b** | none | no |
-| **3b. Contract & shared-interface preparation** | §15.4 O2: `contract/openapi-<version>.json`; both generators point at it; compatibility-diff gate; guard interface documented | 1, 2 | **3a** | none | no |
+| **2. Documentation cleanup** | §16.5 disposition; root becomes navigation — **executed 2026-11-11 by PR #24** (`ffd336c`), recorded in §16.7 | 1 | — | none (read-only `--offline` gates only) | no |
+| **3a. Package boundary preparation** | create `packages/{recommendation-core,recommendation-runtime,database-guard}` manifests and empty `src/` skeletons; move the guard into `packages/database-guard/` and update its consumers; path-only Docker/hosting corrections permitted (owner decision 1); no recommendation module moves; boundary tests written — **executed in part 2026-11-11 by PR #27** (`7691b4f`): the three manifests, the core `src/.gitkeep`, the guard package with its own suite and CI step, the consumer path updates and the four path-only Docker/hosting corrections are done; no boundary test was added for the two recommendation packages (nothing in them is movable yet), and no recommendation module moved | 1, 2 | **3b** | none | no |
+| **3b. Contract & shared-interface preparation** | §15.4 O2: `contract/openapi-<version>.json`; the API snapshot test and V1's generator point at it; contract-copy drift gate; Git-ref compatibility gate. **V2 is not touched here** - its integration is step 7 | 1, 2 | **3a** | none | no |
 | **4. Core extraction** | the 33 core modules + split barrels + narrowed imports + hermetic suite (§11.2, §11.6) | 3a, 3b | — | none (`test:unit` is DB-free) | no |
 | **5. Runtime extraction** | the 24 runtime modules; orchestrator/transaction docs; DB-free fake-client suites | 4 | — | **TEST only** for DB-backed suites (§19.2 T2) | no |
 | **6. API migration** | `apps/api` manifest, `file:` deps, imports to the two packages + guard, pool unchanged, Dockerfile root-context build | 5, 3a, 3b | **7** | **TEST only** for `test:api:db` | no |
-| **7. V2 lands on `master`** | application-only port; discard the branch's platform copy; regenerate types from the merged contract path | 3b | **6** | none | no |
+| **7. V2 lands on `master`** | application-only port; **this is where V2 is connected to the shared contract**: discard the branch's platform copy, point V2's generator at `contract/openapi-<version>.json`, regenerate its API types, verify API compatibility, and prove V1 and V2 consume the same contract while preserving existing V2 functionality. Deferred from 3b by owner decision 3 (2026-11-11) | 3b | **6** | none | no |
 | **8. V2 parity** | the retained capability set (B3) implemented and tested | 7, B3 | — | none (fixture mock / read-only calls) | no |
 | **9. Final operational validation & release prep** | full gate sweep, `verify:replay`, role rehearsal, image build, `check-deployed-role` warm-up plan, release notes | 6, 8 | — | **TEST only**, plus read-only gates on shared/EU | no |
 | **10. Deployment** | API image + V2 descriptor; migrations/seeds to the target with restore point + audit line; `ALLOWED_ORIGINS` set | 9, **B6** | — | **production/EU writes permitted here only** | **yes — first deployment** |
@@ -1518,7 +1555,8 @@ The first revision said no step writes and no step deploys, while later steps re
 
 | Step | Acceptance |
 |---|---|
-| 3a | four manifests exist; `packages/database-guard` passes the guard's existing tests; no module has moved; `test:unit`, `test:scripts`, `test:api` unchanged and green |
+| 3a | **the four manifests exist**: root `package.json`, `packages/recommendation-core/package.json`, `packages/recommendation-runtime/package.json`, `packages/database-guard/package.json` (`apps/api` deliberately still has none until step 6); `packages/database-guard` passes the guard's own tests; no recommendation module has moved; `test:unit` and `test:api` are unchanged, `test:scripts` drops exactly the moved guard test, and all are green. **Status after PR #27 (`3e2f13e`, 2026-11-11):** the four manifests exist, `npm run test:database-guard` is wired into `ci.yml`, `test:scripts` no longer includes the moved guard test, and no recommendation module has moved |
+| 3b | one `contract/openapi-<major>.<minor>.<patch>.json` exists and no other `openapi-*.json` remains outside it; the snapshot test, V1's generator and the CI path filters point at it; the Git-ref compatibility gate passes on an additive change and fails on a breaking one; V2 untouched |
 | 4 | core's suite passes with `node_modules` absent; boundary scan clean; `test:unit` count unchanged except for moved paths; `git diff` shows no logic change in a moved file |
 | 5 | runtime's DB-free suite green; a DB-backed suite on TEST passes with residue 0; every orchestrator entry point documents its transaction ownership |
 | 6 | `cd apps/api && npm ci && npm test` with no root `node_modules`; `docker build -f apps/api/Dockerfile .` starts and answers `/v1/health`; `import-boundary.test.js` green against the new packages |
@@ -1572,7 +1610,7 @@ Each row records a **recommended resolution**. **A1-A6 were approved by the repo
 |---|---|---|---|---|---|
 | **A1** | One repository with six ownership areas (modular monorepo), or multi-repo? | Modular monorepo; multi-repo deferred behind §17.4's triggers | **APPROVED 2026-11-11** — modular monorepo; multi-repository extraction deferred until §17.4's triggers are met | platform owner | **approved** — packages stay directories in one repo (§17.2) |
 | **A2** | Approve core's and runtime's public entry points, the barrel split, and the API→core vocabulary subset | §11.4/§11.5 as written; the API is restricted to the frozen vocabulary in §9.2, and runtime is not the owner of vocabulary the API consumes | **APPROVED 2026-11-11** — §11.4/§11.5 public interfaces and dependency boundaries adopted as written | architecture owner | **approved**; step 4 may proceed |
-| **A3** | Is the guard an installable `packages/database-guard` package, and who loads `.env`? | Yes; zero-dependency package, with environment loading left to the consuming API/CLI bootstrap (§9.4) | **APPROVED 2026-11-11** — zero-dependency `packages/database-guard`; `.env` loading stays with the consuming API/CLI bootstrap | platform owner + database owner | **approved**; step 3a |
+| **A3** | Is the guard an installable `packages/database-guard` package, and who loads `.env`? | Yes; zero-dependency package, with environment loading left to the consuming API/CLI bootstrap (§9.4) | **APPROVED 2026-11-11** — zero-dependency `packages/database-guard`; `.env` loading stays with the consuming API/CLI bootstrap. **Implemented by PR #27 (merged as `3e2f13e`).** | platform owner + database owner | **approved and executed**; step 3a |
 | **A4** | Where does the contract live, and is it published? | One versioned `contract/openapi-<version>.json` owned by the API; publication as a release artifact later (O3) | **APPROVED 2026-11-11** — one authoritative versioned OpenAPI contract owned by the API; publication as a release artifact **deferred** (O3) | API owner + platform owner | **approved**; step 3b (§15.2) |
 | **A5** | Who is accountable for each responsibility? | §8's matrix **after** the preset-generation split: exactly one accountable owner per row | **APPROVED WITH OWNERSHIP SAFEGUARDS 2026-11-11** — §8 matrix adopted; one accountable **human** owner per responsibility, names deliberately unassigned here (see the approval record) | platform owner | **approved**; step 1 acceptance |
 | **A6** | Accept and document runtime's real schema + client-protocol dependency, with the API owning the pool | Accepted and documented (§9.5); runtime declares no `pg` dependency, and the pool stays in `apps/api/src/db.js` | **APPROVED 2026-11-11** — explicit client protocol; the API keeps the pool (`apps/api/src/db.js`); runtime declares no `pg` dependency | architecture owner | **approved** |
@@ -1586,7 +1624,7 @@ Each row records a **recommended resolution**. **A1-A6 were approved by the repo
 | Date | 2026-11-11 |
 | Basis | The owner's review of the six architecture decisions against the primary objective: a maintainable, modular, production-ready architecture without changing existing business behaviour or adding unnecessary complexity |
 | Scope | Architecture decisions only. **B1-B8 (§21.2) are not approved** and remain open. |
-| Exclusions | Recording an approval authorizes **no implementation**: no package extraction, no behaviour or recommendation-logic change, no database connection or write, no migration or seed, no deployment — and **PR #23 is not approved or merged by this record**. |
+| Exclusions | Recording an approval authorizes **no implementation**: no package extraction, no behaviour or recommendation-logic change, no database connection or write, no migration or seed, no deployment — and recording it merged nothing: **PR #23 was merged separately on 2026-11-11 (`0bcb6e3`) and implements none of it**. |
 | A5 safeguard | §8 requires exactly one accountable human owner per responsibility. Names stay unassigned in this RFC: assigning organizational accountability is the owner's act, never an AI agent's, and no name is invented to fill a row. |
 
 ### 21.2 Product and operations decisions (do **not** block approval)
@@ -1601,6 +1639,17 @@ Each row records a **recommended resolution**. **A1-A6 were approved by the repo
 | **B6** | Which provider hosts the API and the frontend? | operations owner | **step 10 only** | Deployment choice, not code boundaries. Evidence: §2.4 (`fly.toml` vs `render.yaml` both claim the API). |
 | **B7** | Same-origin gateway/BFF, or per-frontend proxy? | operations owner | V2 deployment (step 10) | A runtime/deploy decision; CORS already stays closed. |
 | **B8** | Do the two frontends share a design system? | product owner | nothing now | Current state (unshared) is the recommended state. |
+
+### 21.3 Owner-confirmed implementation decisions (2026-11-11)
+
+Four implementation questions were confirmed by the repository owner. They **clarify how approved work is carried out**; none changes an architecture decision, a package boundary, a dependency direction, an API semantic or a recommendation behaviour.
+
+| # | Decision | Status | Effect on this document |
+|---|---|---|---|
+| **D1** | Docker and hosting updates are **path-only**: `apps/api/Dockerfile`, `.dockerignore`, `fly.toml` and `render.yaml` may be edited to point at the moved database guard | **APPROVED** | Recorded in §13.4. Authorizes path corrections only - no Docker architecture, hosting, infrastructure, environment-variable or deployment change |
+| **D2** | The API pool test **stays in the API** (`apps/api/test/unit/db-guard.test.js`); only the guard's own test moves, to `packages/database-guard/test/db-url.test.js`; the package stays independent of `pg` | **APPROVED** | Corrects §9.2, §9.4 and §10.1. The guard contract has seven exports (§9.4) and no restore-point predicate |
+| **D3** | **V2 contract integration is deferred to step 7.** Step 3b covers the API, V1 and the shared `contract/` location only; V2 stays on `feature/v2-design` | **APPROVED** | Recorded in §15.4 and in the §19.1 rows for 3b and 7. Deliberate deferral, not abandonment |
+| **D4** | The OpenAPI compatibility gate uses a **Git-ref baseline** (`--base=<ref>`), never a second committed baseline and never committed-versus-served | **APPROVED** | Recorded in §15.4 item 4. The snapshot test keeps its separate responsibility: committed contract versus served contract |
 
 **Consequence:** A1-A6 were the only approval blockers, and they were approved on 2026-11-11. **B1-B8 remain open**: they are recorded so they are not lost, and each names the phase it blocks. In particular **B1 and B3 were never approval blockers**: neither changes a package boundary, a dependency direction, a contract, an ownership row, or the migration sequence.
 
@@ -1645,15 +1694,19 @@ A project is "separated" when: (1) it has a `README.md` stating responsibility a
 
 | Item | Value | How |
 |---|---|---|
-| `master` | `a413f25` | `git log --oneline` |
+| `master` (measured for Revisions 1-3) | `a413f25` | `git log --oneline` |
+| `master` (Revision 4) | `e62c816` | `git rev-parse origin/master` |
+| `master` (current, Revision 5) | `3e2f13e` — "Merge pull request #27 from ibrahim-lahribli/refactor/database-guard-package" | `git rev-parse origin/master` |
+| PR #27 head | `7691b4f` ("refactor: extract the database guard into packages/database-guard"), merged as `3e2f13e`; the source branch was then deleted on `origin` | `git ls-remote origin refs/pull/27/head`; `git show --stat 7691b4f` |
 | `feature/v2-design` | `3bc0605` | `git log --oneline origin/feature/v2-design` |
-| RFC branch | `architecture/system-separation-rfc`, previous commit `9297034` | `git branch --show-current`, `git log` |
-| Manifests on `master` | root `package.json` + `apps/web/package.json` (and their lockfiles) | `git ls-files \| grep -i package.json` |
-| Manifests on `feature/v2-design` | the above + `apps/web-v2/package.json` + `apps/web-v2/package-lock.json` | `git ls-tree origin/feature/v2-design apps/web-v2/` |
-| `packages/`, `contract/` | do not exist | `ls -d packages contract` → both absent |
+| RFC branch | `architecture/system-separation-rfc` at `9297034`, **merged as PR #23 (`0bcb6e3`) and deleted**; Revision 4 and Revision 5 corrections are on `docs/rfc-accuracy-corrections` | `git log`, `git branch -a` |
+| Manifests on `master` | root `package.json` + `apps/web/package.json` (and their lockfiles), plus `packages/recommendation-core/package.json`, `packages/recommendation-runtime/package.json` and `packages/database-guard/package.json` (added by PR #27; no package lockfiles) | `git ls-files \| grep -i package.json` |
+| Manifests on `feature/v2-design` | the pre-PR-#27 set + `apps/web-v2/package.json` + `apps/web-v2/package-lock.json` | `git ls-tree origin/feature/v2-design apps/web-v2/` |
+| `contract/` | does not exist on `master`; until step 3b the contract is `apps/api/test/unit/openapi-v1.10.json` | `ls -d contract` → absent |
+| `packages/` | **eight files**: `AGENTS.md` (package rules; added by PR #27), `database-guard/{package.json,src/index.js,test/db-url.test.js}`, `recommendation-core/{package.json,src/.gitkeep}`, `recommendation-runtime/{package.json,docs/LOADERS_AND_TRANSACTIONS.md}`. Only the guard has code; **no recommendation module has moved**; `recommendation-runtime/src/` and `database-guard/README.md` do not exist yet | `git ls-tree -r --name-only origin/master -- packages` |
 | V2 staging record | exists on `feature/v2-design`, **not** on `master` | `git show origin/feature/v2-design:apps/web-v2/docs/staging-smoke.md`; `git cat-file -e origin/master:…` → fatal |
 
-### 23.2 Commands run for this revision (all read-only; no database contact)
+### 23.2 Commands run (Revisions 1-5; all read-only, no database contact)
 
 | Command | Result used in |
 |---|---|
@@ -1674,7 +1727,11 @@ A project is "separated" when: (1) it has a `README.md` stating responsibility a
 | `sed -n '1,80p' apps/api/test/unit/import-boundary.test.js` | §9.3, §13 |
 | `ls -1 scripts/check-*.js` | §8.3 gate inventory |
 
-**Not run, and therefore not claimed:** `npm run test:unit`, `test:scripts`, `test:api`, `test:api:db`, `verify:replay`, `eval:scenarios`, any `check-*` gate, and any database connection. Suite counts from earlier documents are **not** restated as current fact.
+**Not run for Revisions 1-3, and therefore not claimed there:** `npm run test:unit`, `test:scripts`, `test:api`, `test:api:db`, `verify:replay`, `eval:scenarios`, any `check-*` gate, and any database connection. Suite counts from earlier documents are **not** restated as current fact.
+
+**Revision 4 re-measurements (2026-11-11, `master` = `e62c816`, read-only):** `git grep -l "require(.*lib/db-url" -- "scripts/*.js"` → **18** top-level scripts, all `require` it; `git grep -n "require(.*db-url" -- "scripts/lib/*.js"` → 3 modules (plus `db-url.test.js`) and one comment-only citation (`og01-catalog.js:28`); `git show --stat ffd336c` → **31** files; `git ls-tree -r --name-only origin/master -- packages` → one document, no manifest; `Test-Path` on `docs/API.md`, `docs/ARCHITECTURE.md` and `docs/PIPELINE_DESIGN.md` → all absent, while `docs/api/CONTRACT.md`, `docs/engine/ARCHITECTURE.md`, `docs/ingestion/PIPELINE_DESIGN.md` and `packages/recommendation-runtime/docs/LOADERS_AND_TRANSACTIONS.md` → all present. Gates run: `node scripts/gen-decision-index.js --check` → OK; `node scripts/verify-docs.js --offline` → OK (9 checks PASS, live checks skipped); `git diff --check` → clean. `node --test "scripts/lib/*.test.js"` → **571** pass on this tree (Node 22.23.4), the measurement that resolves §23.4 C1.
+
+**Revision 5 re-measurements (2026-11-11, `master` = `3e2f13e`, read-only):** `git show --name-only --format="" 7691b4f` → **55** files changed by PR #27; `git show --stat 7691b4f` → one new package directory with source and its own test, two manifest-only package directories, and path-only updates to consumers, Docker and hosting files; `git show origin/master:packages/database-guard/package.json` → `@morocco-pc/database-guard` `0.1.0`, `private`, `main: src/index.js`, no `dependencies`; `git ls-tree -r --name-only origin/master -- packages` → the eight files listed in §23.1; `git show origin/master:apps/api/Dockerfile` → copies `packages/database-guard/package.json` and `packages/database-guard/src`; `git grep -n "database-guard" -- apps/api/src scripts` → relative requires only (`../../../packages/database-guard/src` from the API, `../packages/database-guard/src` from scripts); `git grep -n "db-url" -- scripts/lib` → three comment-only mentions and no module; `git ls-tree -r --name-only origin/master -- .github/workflows` → `ci.yml` and `web.yml`, and neither runs `docker build`. Gates run on the documentation branch: `node scripts/gen-decision-index.js --check` → OK; `node scripts/verify-docs.js --offline` → OK; `git diff --check` → clean. **Not run:** any Docker image build — Docker is not installed in this environment, so the image-build proof is UNKNOWN, not PASS (§13.4).
 
 ### 23.3 Key file references
 
@@ -1688,7 +1745,7 @@ A project is "separated" when: (1) it has a `README.md` stating responsibility a
 | Runtime-only barrels (not mixed) | `offers/index.js`, `query/index.js`; the pure `offers/as-of.js` is extracted separately (§6.4) |
 | Transaction ownership | `orchestrator/{run,snapshot,full-run,commit,swap-preview,swap-commit}.js` headers (§6.5) |
 | `selectArchetypes` replaced `selectDiverseTop` in the full run | `orchestrator/full-run.js:1-11,78-95`; `ranking/index.js` |
-| Guard exports and behaviour | `scripts/lib/db-url.js` |
+| Guard exports and behaviour | `packages/database-guard/src/index.js`; the contract is asserted by `packages/database-guard/test/db-url.test.js` (seven exports, zero `require` calls) |
 | Ingestion is not a stage | `src/recommendation/ingestion/index.js:1-13` |
 | Contract snapshot and gates | `contract/openapi-1.10.0.json`; `openapi-snapshot.test.js`; `openapi-coverage.test.js` |
 | Offer counts and coverage | `docs/OPEN_POINTS.md` R-01, R-30; `docs/DATA_STATE.md` |
@@ -1698,8 +1755,8 @@ A project is "separated" when: (1) it has a `README.md` stating responsibility a
 
 | # | Document says | Tree says | Handling |
 |---|---|---|---|
-| C1 | `README.md` / `CONTEXT.md` report `test:scripts` "479" | `AGENTS.md` §6 says 571; this revision re-ran neither | recorded; the cleanup PR re-measures |
-| C2 | `README.md` "62 decisions" | 63 `## Decision` headings per `AGENTS.md` | recorded; cleanup PR re-measures |
+| C1 | `README.md` / `CONTEXT.md` report `test:scripts` "479" | **571** tests pass on this tree (`node --test "scripts/lib/*.test.js"`, 2026-11-11, Node 22.23.4); no other current document states a figure after PR #24 rewrote `AGENTS.md` | **resolved by measurement** — `479` is stale; the two documents are left for their own count correction, not silently rewritten here |
+| C2 | `README.md` "62 decisions" (at `a413f25`) | PR #24 removed the count from `README.md`; the log parses to 63 top-level `## Decision` headings + 5 nested = 65 global decisions, with 69 `Status:` lines (`verify:docs`), and the generated index is the lookup | **resolved by measurement** — the README states no count; `AGENTS.md` states the pinned range "Decisions 1-65" |
 | C3 | `apps/web/README.md` and `lib/api/client.ts` name `openapi-v1.6.json` | no such file; `package.json` uses `v1.10` | recorded; V1 doc drift (§16.5). **CLOSED 2026-11-12:** both now name `contract/openapi-1.10.0.json` |
 | C4 | `CONTEXT.md` §2 / `AGENTS.md` §5: "Engine stages are pure" | true of stage functions; mixed barrels export SQL-executing modules; 15 non-ingestion modules execute SQL | **resolved by §6.2** — the claim is about functions, not packages |
 | C5 | `fly.toml` declares an always-on API service | `CONTEXT.md`/`ROADMAP.md` describe one Render origin | **UNKNOWN** which descriptor is authoritative (B6) |
@@ -1708,10 +1765,11 @@ A project is "separated" when: (1) it has a `README.md` stating responsibility a
 | C8 | First revision: "strongly connected graph" | 80/80 singleton SCCs | withdrawn (§6.3) |
 | C9 | First revision: "V2 has never called a deployed API" | `staging-smoke.md` records a 2026-11-07 read-only smoke against the EU staging API | corrected (§14.4) |
 | C10 | First revision: contract snapshot identical across branches "is one contract" | two physical copies, each gated against itself | corrected (§15.2) |
+| C11 | `AGENTS.md` §1 (on `master` at `3e2f13e`) said "nothing from the package extraction is implemented" | the guard package exists, is consumed by the API and 18 scripts, and has its own CI step (PR #27) | **resolved in Revision 5** — `AGENTS.md` now states that the guard package boundary is implemented by PR #27 and that the recommendation extraction is not; the statement's intent is preserved, not deleted |
 
 ### 23.5 No-code-change confirmation
 
-This revision changes exactly one file: `docs/architecture/SYSTEM_ARCHITECTURE_AND_PROJECT_SEPARATION_RFC.md`. It:
+Revisions 1-4 changed exactly one file each: `docs/architecture/SYSTEM_ARCHITECTURE_AND_PROJECT_SEPARATION_RFC.md`. Revision 5 changes that file and one sentence of `AGENTS.md` (§23.4 C11) — documentation only. It:
 
 - does not modify any source file under `src/`, `apps/api/`, `apps/web/` or `apps/web-v2/`;
 - does not add, remove or change any `package.json` or lockfile;
@@ -1721,7 +1779,7 @@ This revision changes exactly one file: `docs/architecture/SYSTEM_ARCHITECTURE_A
 - does not modify any test;
 - does not merge, rebase or cherry-pick `feature/v2-design`;
 - does not connect to a database, run a database script, or deploy anything;
-- does not implement any part of the Option B split, and begins no roadmap step.
+- does not implement any part of the Option B split itself and begins no roadmap step; the guard package (step 3a) was implemented separately in PR #27, not by this revision.
 
 ---
 
@@ -1745,4 +1803,4 @@ This revision changes exactly one file: `docs/architecture/SYSTEM_ARCHITECTURE_A
 
 ---
 
-*This RFC records the owner's approval of A1-A6 (2026-11-11) and stays PROPOSED for everything else: B1-B8 are open and independent review remains welcome. Option B is the selected direction; nothing in the document is implemented, and PR #23 is not approved or merged by this record. No application, database, test, workflow, manifest or deployment artefact was changed by this revision.*
+*This RFC records the owner's approval of A1-A6 (2026-11-11) and stays PROPOSED for everything else: B1-B8 are open and independent review remains welcome. Option B is the selected direction. **The database-guard package boundary (step 3a) is implemented** — PR #27 (`7691b4f`) moved the guard to `packages/database-guard/` and merged as `3e2f13e` (§9.4) — while the `recommendation-core` and `recommendation-runtime` module extractions (steps 4-5) and the remaining roadmap work (steps 3b, 6-12) remain unimplemented. PR #23 was merged on 2026-11-11 (`0bcb6e3`) as the record's publication and implemented none of the proposed extraction. No application, database, test, workflow, manifest or deployment artefact was changed by this revision.*
