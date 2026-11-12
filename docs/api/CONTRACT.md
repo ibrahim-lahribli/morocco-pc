@@ -195,14 +195,48 @@ Deliberate consequences worth knowing before editing the contract:
   `allowReserved` or headers) changes the request wire format even when the
   schema is unchanged. An encoding field the classifier does not model is
   `UNCOMPARABLE`.
+- **A Parameter or Header Object that moves between `schema` and `content` is
+  `UNCOMPARABLE`.** OpenAPI allows exactly one of the two, and they describe
+  different wire shapes: a client serializing by `schema` is not proven to send
+  the `content` shape. The same rule applies when either declaration
+  disappears. Normal `schema`-to-`schema` and `content`-to-`content`
+  comparisons are unaffected. This covers operation/path parameters, encoding
+  headers, and response headers.
+- **`security`, `servers` and `callbacks` are compared by stable
+  representation** wherever OpenAPI 3.0.3 declares them: root `security` and
+  `servers`, Path Item `servers`, Operation `security`/`servers`/`callbacks`,
+  and the `components.securitySchemes` map holding the schemes `security`
+  references.
+  Callback maps reached through `$ref` are resolved. An unchanged declaration
+  produces no finding; any change is `UNCOMPARABLE`, with the declaration's
+  location included in the finding (for example `security`, `/<path> servers`,
+  or `GET /<path> callbacks "<name>" expression "<expr>"`). `security`
+  alternatives and scopes are compared as sets, so reordering them is not a
+  change; server order is significant.
 - **A schema keyword the classifier does not model** (`not`, `if`/`then`/`else`,
   `contains`, `prefixItems`, `discriminator`, `readOnly`, …) is reported as
   `UNCOMPARABLE` when it changes, and `UNCOMPARABLE` fails the gate. An
   unexamined keyword is never an implicit pass.
+- **`UNCOMPARABLE` is BREAKING.** The gate fails on it; it is never reported
+  as `ADDITIVE` and never treated as an implicit pass.
 
-Known limitation: operation-level `security`, `servers` and `callbacks` are not
-compared. A change there is neither reported as ADDITIVE nor silently accepted
-as safe — it is simply outside this gate's scope; review it by hand.
+Remaining limitations, stated precisely:
+
+- Callback payloads, `servers` and `security` (including
+  `components.securitySchemes`) are not modelled value by value. That is why a
+  change to them is `UNCOMPARABLE` rather than a precise ADDITIVE/BREAKING
+  classification.
+- Root `security` is compared where it is declared, not as each operation's
+  effective inherited requirement. A root change is therefore reported even
+  when every operation overrides it.
+- `components.securitySchemes` is compared as a whole map: adding an
+  unreferenced scheme is still reported, because the map is not modelled
+  scheme by scheme.
+- `components.callbacks` entries that no operation references are not compared;
+  a referenced callback is compared at the referencing operation.
+- Media-type `example`/`examples`, `links`, `tags`, `externalDocs`, and
+  extension (`x-…`) objects are outside the gate. The classifier does not claim
+  full OpenAPI compatibility.
 
 Environment variables (see `apps/api/.env.example` for the full list):
 

@@ -716,6 +716,67 @@ test('changing an encoding header is BREAKING', () => {
   assert.deepEqual(breakingCodes(compareContracts(base, removed)), ['ENCODING_HEADER_REMOVED']);
 });
 
+test('an encoding header that moves between schema and content fails closed', () => {
+  const base = baseDocument();
+  setMultipartBody(base, {
+    file: { headers: { 'X-Part': { schema: { type: 'string' } } } },
+  });
+  const toContent = clone(base);
+  multipartEncoding(toContent).file.headers['X-Part'] = {
+    content: { 'application/json': { schema: { type: 'object' } } },
+  };
+
+  const toContentResult = compareContracts(base, toContent);
+  assert.equal(toContentResult.verdict, BREAKING);
+  assert.equal(toContentResult.breaking[0].classification, BREAKING);
+  assert.deepEqual(breakingCodes(toContentResult), ['UNCOMPARABLE']);
+  assert.match(toContentResult.breaking[0].location, /encoding.*header "X-Part"/);
+  assert.match(toContentResult.breaking[0].detail, /schema to content/);
+
+  const toSchemaResult = compareContracts(toContent, base);
+  assert.equal(toSchemaResult.verdict, BREAKING);
+  assert.equal(toSchemaResult.breaking[0].classification, BREAKING);
+  assert.deepEqual(breakingCodes(toSchemaResult), ['UNCOMPARABLE']);
+  assert.match(toSchemaResult.breaking[0].detail, /content to schema/);
+});
+
+test('unchanged schema-based and content-based encoding headers produce no difference', () => {
+  const doc = baseDocument();
+  setMultipartBody(doc, {
+    file: {
+      headers: {
+        'X-Schema': { schema: { type: 'string' } },
+        'X-Content': { content: { 'application/json': { schema: { type: 'object' } } } },
+      },
+    },
+  });
+
+  const result = compareContracts(doc, clone(doc));
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('an encoding header content media type or schema change is compared, not skipped', () => {
+  const base = baseDocument();
+  setMultipartBody(base, {
+    file: {
+      headers: {
+        'X-Content': { content: { 'application/json': { schema: { type: 'string' } } } },
+      },
+    },
+  });
+
+  const mediaType = clone(base);
+  multipartEncoding(mediaType).file.headers['X-Content'].content = {
+    'application/xml': { schema: { type: 'string' } },
+  };
+  assert.deepEqual(breakingCodes(compareContracts(base, mediaType)), ['MEDIA_TYPE_REMOVED']);
+
+  const schema = clone(base);
+  multipartEncoding(schema).file.headers['X-Content'].content['application/json'].schema = { type: 'integer' };
+  assert.deepEqual(breakingCodes(compareContracts(base, schema)), ['TYPE_CHANGED']);
+});
+
 test('an unchanged encoding object produces no difference', () => {
   const doc = baseDocument();
   setMultipartBody(doc, {
@@ -775,6 +836,30 @@ test('a response header that becomes guaranteed present is ADDITIVE', () => {
   const result = compareContracts(base, candidate);
   assert.deepEqual(result.breaking, []);
   assert.deepEqual(codes(result), ['RESPONSE_HEADER_BECAME_REQUIRED']);
+});
+
+test('a response header content change is compared, not skipped', () => {
+  const base = baseDocument();
+  operation(base).responses['201'].headers = {
+    'X-Detail': { content: { 'application/json': { schema: { type: 'string' } } } },
+  };
+
+  const schemaChanged = clone(base);
+  operation(schemaChanged).responses['201'].headers['X-Detail']
+    .content['application/json'].schema = { type: 'integer' };
+  assert.deepEqual(breakingCodes(compareContracts(base, schemaChanged)), ['TYPE_CHANGED']);
+
+  const mediaTypeChanged = clone(base);
+  operation(mediaTypeChanged).responses['201'].headers['X-Detail'].content = {
+    'application/xml': { schema: { type: 'string' } },
+  };
+  assert.deepEqual(breakingCodes(compareContracts(base, mediaTypeChanged)), ['MEDIA_TYPE_REMOVED']);
+
+  const representationChanged = clone(base);
+  operation(representationChanged).responses['201'].headers['X-Detail'] = { schema: { type: 'string' } };
+  const result = compareContracts(base, representationChanged);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
 });
 
 test('a response object that was closed rejects a new property and opening it is BREAKING', () => {
@@ -1011,6 +1096,97 @@ test('a path-level parameter change is detected for every operation that inherit
   assert.ok(result.breaking.some((item) => item.location.startsWith('POST ')));
 });
 
+// --- Parameter representations ---------------------------------------------
+//
+// OpenAPI allows a Parameter Object to declare its value with EITHER `schema`
+// OR `content`, never both. Comparing only the branch both sides happen to
+// share made a schema -> content move look additive: the old schema "went
+// away" and the new content was never inspected. These cases pin the
+// fail-closed transition.
+
+function setQueryParameters(doc, parameters) {
+  operation(doc).parameters = parameters;
+}
+
+function schemaParameter(schema) {
+  return { in: 'query', name: 'filter', schema };
+}
+
+function contentParameter(mediaType, schema) {
+  return { in: 'query', name: 'filter', content: { [mediaType]: { schema } } };
+}
+
+test('a parameter that moves between schema and content is UNCOMPARABLE, not additive', () => {
+  const base = baseDocument();
+  setQueryParameters(base, [schemaParameter({ type: 'string' })]);
+  const toContent = clone(base);
+  setQueryParameters(toContent, [contentParameter('application/json', { type: 'object' })]);
+
+  const toContentResult = compareContracts(base, toContent);
+  assert.equal(toContentResult.verdict, BREAKING);
+  assert.equal(toContentResult.breaking[0].classification, BREAKING);
+  assert.deepEqual(breakingCodes(toContentResult), ['UNCOMPARABLE']);
+  assert.match(toContentResult.breaking[0].detail, /schema to content/);
+  assert.match(toContentResult.breaking[0].location, /parameter query:filter/);
+
+  const toSchemaResult = compareContracts(toContent, base);
+  assert.equal(toSchemaResult.verdict, BREAKING);
+  assert.equal(toSchemaResult.breaking[0].classification, BREAKING);
+  assert.deepEqual(breakingCodes(toSchemaResult), ['UNCOMPARABLE']);
+  assert.match(toSchemaResult.breaking[0].detail, /content to schema/);
+  assert.match(toSchemaResult.breaking[0].location, /parameter query:filter/);
+});
+
+test('unchanged schema-based and content-based parameters produce no finding', () => {
+  const doc = baseDocument();
+  setQueryParameters(doc, [
+    schemaParameter({ type: 'string' }),
+    contentParameter('application/json', { type: 'object' }),
+  ]);
+
+  const result = compareContracts(doc, clone(doc));
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('a parameter content media type or schema change is compared, not skipped', () => {
+  const base = baseDocument();
+  setQueryParameters(base, [contentParameter('application/json', { type: 'string' })]);
+
+  const mediaType = clone(base);
+  setQueryParameters(mediaType, [contentParameter('application/xml', { type: 'string' })]);
+  assert.deepEqual(breakingCodes(compareContracts(base, mediaType)), ['MEDIA_TYPE_REMOVED']);
+
+  const schema = clone(base);
+  setQueryParameters(schema, [contentParameter('application/json', { type: 'integer' })]);
+  assert.deepEqual(breakingCodes(compareContracts(base, schema)), ['TYPE_CHANGED']);
+});
+
+test('a parameter that drops its representation fails closed instead of reading as additive', () => {
+  const base = baseDocument();
+  setQueryParameters(base, [schemaParameter({ type: 'string' })]);
+  const candidate = clone(base);
+  setQueryParameters(candidate, [{ in: 'query', name: 'filter' }]);
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.match(result.breaking[0].detail, /schema to none/);
+});
+
+test('an unresolvable parameter $ref is UNCOMPARABLE, never an implicit pass', () => {
+  const base = baseDocument();
+  setQueryParameters(base, [{
+    in: 'query',
+    name: 'filter',
+    $ref: '#/components/parameters/Missing',
+  }]);
+
+  const result = compareContracts(base, clone(base));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+});
+
 test('nested object properties keep their direction', () => {
   const base = baseDocument();
   const nested = { type: 'object', required: ['a'], properties: { a: { type: 'string' }, b: { type: 'string' } } };
@@ -1155,6 +1331,240 @@ test('a readOnly change is UNCOMPARABLE rather than silently additive', () => {
   const candidate = baseDocument();
   okSchema(candidate).properties.id.readOnly = true;
   assert.deepEqual(breakingCodes(compareContracts(baseDocument(), candidate)), ['UNCOMPARABLE']);
+});
+
+// --- security, servers and callbacks ---------------------------------------
+//
+// These constructs change authentication, routing and server-initiated
+// traffic, but the classifier does not model them value by value. Their stable
+// representation is compared where they are declared: unchanged values stay
+// NEUTRAL, and a real change fails closed as UNCOMPARABLE (BREAKING).
+
+const securityRequirement = (scheme = 'bearerAuth', scopes = []) => [{ [scheme]: scopes }];
+
+function callbackPathItem() {
+  return {
+    post: {
+      responses: { 200: { description: 'ok', content: { 'application/json': { schema: { type: 'object' } } } } },
+    },
+  };
+}
+
+function operationCallbacks(expression = '$request.body#/callbackUrl', pathItem = callbackPathItem()) {
+  return { onEvent: { [expression]: pathItem } };
+}
+
+test('a root security requirement added or removed is UNCOMPARABLE and BREAKING', () => {
+  const base = baseDocument();
+  const withSecurity = clone(base);
+  withSecurity.security = securityRequirement();
+
+  const added = compareContracts(base, withSecurity);
+  assert.equal(added.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(added), ['UNCOMPARABLE']);
+  assert.equal(added.breaking[0].location, 'security');
+
+  const removed = compareContracts(withSecurity, base);
+  assert.equal(removed.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(removed), ['UNCOMPARABLE']);
+  assert.equal(removed.breaking[0].location, 'security');
+});
+
+test('an operation security requirement added, removed or overridden is UNCOMPARABLE', () => {
+  const base = baseDocument();
+  const withSecurity = clone(base);
+  operation(withSecurity).security = securityRequirement();
+
+  const added = compareContracts(base, withSecurity);
+  assert.deepEqual(breakingCodes(added), ['UNCOMPARABLE']);
+  assert.equal(added.breaking[0].location, 'POST /v1/things security');
+
+  const removed = compareContracts(withSecurity, base);
+  assert.equal(removed.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(removed), ['UNCOMPARABLE']);
+
+  const overridden = clone(withSecurity);
+  operation(overridden).security = securityRequirement('apiKeyAuth');
+  const changed = compareContracts(withSecurity, overridden);
+  assert.deepEqual(breakingCodes(changed), ['UNCOMPARABLE']);
+  assert.equal(changed.breaking[0].location, 'POST /v1/things security');
+
+  const scoped = clone(base);
+  operation(scoped).security = [{ oauth: ['read'] }];
+  const rescoped = clone(scoped);
+  operation(rescoped).security = [{ oauth: ['write'] }];
+  assert.deepEqual(breakingCodes(compareContracts(scoped, rescoped)), ['UNCOMPARABLE']);
+});
+
+test('an unchanged security requirement produces no finding', () => {
+  const doc = baseDocument();
+  doc.security = securityRequirement('oauth', ['read']);
+  operation(doc).security = securityRequirement('oauth', ['read']);
+  doc.components = {
+    securitySchemes: { oauth: { type: 'oauth2', flows: { clientCredentials: { tokenUrl: 'https://auth.example.test/token', scopes: { read: 'read' } } } } },
+  };
+
+  const result = compareContracts(doc, clone(doc));
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('a changed security scheme definition is UNCOMPARABLE', () => {
+  const base = baseDocument();
+  base.components = { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } };
+  const candidate = clone(base);
+  candidate.components.securitySchemes.bearerAuth.scheme = 'basic';
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, 'components.securitySchemes');
+});
+
+test('reordering security alternatives or scopes is not a client-visible change', () => {
+  const base = baseDocument();
+  base.security = [{ oauth: ['read', 'write'] }, { apiKeyAuth: [] }];
+  const candidate = clone(base);
+  candidate.security = [{ apiKeyAuth: [] }, { oauth: ['write', 'read'] }];
+
+  assert.deepEqual(compareContracts(base, candidate).changes, []);
+});
+
+test('a root server URL change, addition or removal is UNCOMPARABLE and BREAKING', () => {
+  const base = baseDocument();
+  base.servers = [{ url: 'https://api.example.test' }];
+
+  const changed = clone(base);
+  changed.servers = [{ url: 'https://api-v2.example.test' }];
+  const changedResult = compareContracts(base, changed);
+  assert.equal(changedResult.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(changedResult), ['UNCOMPARABLE']);
+  assert.equal(changedResult.breaking[0].location, 'servers');
+
+  const removed = clone(base);
+  delete removed.servers;
+  assert.deepEqual(breakingCodes(compareContracts(base, removed)), ['UNCOMPARABLE']);
+
+  const added = compareContracts(baseDocument(), base);
+  assert.deepEqual(breakingCodes(added), ['UNCOMPARABLE']);
+  assert.equal(added.breaking[0].location, 'servers');
+});
+
+test('an operation server change is UNCOMPARABLE', () => {
+  const base = baseDocument();
+  operation(base).servers = [{ url: 'https://api.example.test' }];
+  const candidate = clone(base);
+  operation(candidate).servers = [{ url: 'https://other.example.test' }];
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things servers');
+});
+
+test('a path item server change is UNCOMPARABLE', () => {
+  const base = baseDocument();
+  base.paths['/v1/things'].servers = [{ url: 'https://api.example.test' }];
+  const candidate = clone(base);
+  candidate.paths['/v1/things'].servers = [{ url: 'https://other.example.test' }];
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, '/v1/things servers');
+});
+
+test('an unchanged server configuration produces no finding', () => {
+  const doc = baseDocument();
+  doc.servers = [{ url: 'https://api.example.test', variables: { region: { default: 'eu' } } }];
+  doc.paths['/v1/things'].servers = [{ url: 'https://{region}.example.test' }];
+  operation(doc).servers = [{ url: 'https://api.example.test' }];
+
+  const result = compareContracts(doc, clone(doc));
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('a callback added to or removed from an operation is UNCOMPARABLE', () => {
+  const base = baseDocument();
+  const withCallback = clone(base);
+  operation(withCallback).callbacks = operationCallbacks();
+
+  const added = compareContracts(base, withCallback);
+  assert.equal(added.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(added), ['UNCOMPARABLE']);
+  assert.equal(added.breaking[0].location, 'POST /v1/things callbacks "onEvent"');
+
+  const removed = compareContracts(withCallback, base);
+  assert.equal(removed.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(removed), ['UNCOMPARABLE']);
+  assert.equal(removed.breaking[0].location, 'POST /v1/things callbacks "onEvent"');
+});
+
+test('a changed callback expression is UNCOMPARABLE at the expression', () => {
+  const base = baseDocument();
+  operation(base).callbacks = operationCallbacks('$request.body#/first');
+  const candidate = clone(base);
+  operation(candidate).callbacks = operationCallbacks('$request.body#/second');
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE', 'UNCOMPARABLE']);
+  const locations = result.breaking.map((item) => item.location).sort();
+  assert.match(locations[0], /callbacks "onEvent" expression "\$request\.body#\/first"$/);
+  assert.match(locations[1], /callbacks "onEvent" expression "\$request\.body#\/second"$/);
+});
+
+test('a changed callback configuration is UNCOMPARABLE', () => {
+  const base = baseDocument();
+  operation(base).callbacks = operationCallbacks();
+  const candidate = clone(base);
+  operation(candidate).callbacks.onEvent['$request.body#/callbackUrl'].post.responses['201'] = {
+    description: 'changed',
+  };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(
+    result.breaking[0].location,
+    'POST /v1/things callbacks "onEvent" expression "$request.body#/callbackUrl"'
+  );
+});
+
+test('an unchanged callback produces no finding', () => {
+  const doc = baseDocument();
+  operation(doc).callbacks = operationCallbacks();
+
+  const result = compareContracts(doc, clone(doc));
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('an unresolvable callback $ref is UNCOMPARABLE, never an implicit pass', () => {
+  const doc = baseDocument();
+  operation(doc).callbacks = { onEvent: { $ref: '#/components/callbacks/Missing' } };
+
+  const result = compareContracts(doc, clone(doc));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+});
+
+test('a changed callback reached through $ref is detected at the operation', () => {
+  const base = baseDocument();
+  base.components = {
+    callbacks: { Event: { '$request.body#/callbackUrl': callbackPathItem() } },
+  };
+  operation(base).callbacks = { onEvent: { $ref: '#/components/callbacks/Event' } };
+
+  const candidate = clone(base);
+  candidate.components.callbacks.Event['$request.body#/callbackUrl']
+    .post.responses['200'].description = 'changed';
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.match(result.breaking[0].location, /callbacks "onEvent" expression/);
 });
 
 // --- rendering equivalence --------------------------------------------------

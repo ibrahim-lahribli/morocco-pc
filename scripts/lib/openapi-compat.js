@@ -74,13 +74,17 @@
  *    schema is unchanged. Adding, removing or reserializing an encoding entry
  *    is BREAKING; an encoding field this module does not model is
  *    UNCOMPARABLE, never an implicit pass.
+ *  * Parameter and Header Objects declare their value with EITHER a `schema` OR
+ *    a `content`, never both. A document that moves from one representation to
+ *    the other describes a different wire shape; the transition is
+ *    UNCOMPARABLE and therefore BREAKING, even though neither keyword is
+ *    "removed" in a way a schema-only comparison would notice.
+ *  * `security`, `servers` and `callbacks` are not modelled value by value.
+ *    Their stable representation is compared where they are declared (root,
+ *    Path Item and Operation), and a change is UNCOMPARABLE and therefore
+ *    BREAKING. An unchanged declaration is not reported.
  *  * Recursive `$ref` cycles are compared once; the repeated visit is assumed
  *    equal because any difference is reported at the first visit.
- *
- * Not modelled (documented limitation, not silently accepted): `security`
- * requirements, `servers`, `callbacks`, and media-type parameters on operation
- * level objects. Changes there are outside this classifier's scope; they are
- * not reported as ADDITIVE.
  */
 
 const BREAKING = 'BREAKING';
@@ -852,6 +856,69 @@ function compareSchema(baseInput, candidateInput, location, options) {
 /** Encoding fields that change how a request part is serialized. */
 const ENCODING_KEYS = new Set(['contentType', 'headers', 'style', 'explode', 'allowReserved']);
 
+const REPRESENTATION_SCHEMA = 'schema';
+const REPRESENTATION_CONTENT = 'content';
+const REPRESENTATION_NONE = 'none';
+const REPRESENTATION_BOTH = 'schema+content';
+
+/**
+ * Which representation a Parameter or Header Object uses. OpenAPI 3.0 allows
+ * exactly one of `schema` and `content`; both is invalid, but is still made
+ * explicit here so the comparison cannot fall through a branch.
+ */
+function representationKind(node) {
+  if (!isPlainObject(node)) return REPRESENTATION_NONE;
+  const hasSchema = node.schema !== undefined;
+  const hasContent = node.content !== undefined;
+  if (hasSchema && hasContent) return REPRESENTATION_BOTH;
+  if (hasSchema) return REPRESENTATION_SCHEMA;
+  if (hasContent) return REPRESENTATION_CONTENT;
+  return REPRESENTATION_NONE;
+}
+
+/**
+ * Compare the `schema`/`content` representation shared by Parameter and Header
+ * Objects.
+ *
+ * The two are alternative encodings of the same slot, not layered keywords: a
+ * client that sent a query parameter according to `schema: string` does not
+ * automatically send the `content: application/json` object. Comparing only
+ * the branch present on both sides silently drops the representation that
+ * disappeared, so ANY transition (schema <-> content, or a side that declares
+ * neither) fails closed as UNCOMPARABLE (BREAKING) instead.
+ */
+function compareRepresentation(baseNode, candidateNode, location, direction, context) {
+  const before = isPlainObject(baseNode) ? baseNode : {};
+  const after = isPlainObject(candidateNode) ? candidateNode : {};
+  const baseKind = representationKind(before);
+  const candidateKind = representationKind(after);
+
+  if (baseKind === REPRESENTATION_NONE && candidateKind === REPRESENTATION_NONE) return [];
+
+  if (baseKind === candidateKind) {
+    const changes = [];
+    if (baseKind !== REPRESENTATION_CONTENT) {
+      changes.push(...compareSchema(before.schema, after.schema, location, {
+        direction,
+        baseRoot: context.baseRoot,
+        candidateRoot: context.candidateRoot,
+      }));
+    }
+    if (baseKind !== REPRESENTATION_SCHEMA) {
+      changes.push(...compareContent(before.content, after.content, location, direction, context));
+    }
+    return changes;
+  }
+
+  return [change(
+    BREAKING,
+    'UNCOMPARABLE',
+    location,
+    'the representation changed from ' + baseKind + ' to ' + candidateKind
+      + '; schema and content describe different wire shapes and cannot be compared'
+  )];
+}
+
 /**
  * Encoding headers are Header Objects, not Parameter Objects. A removed,
  * added or reserialized header changes the representation of the part, so the
@@ -913,15 +980,7 @@ function compareEncodingHeaders(baseHeaders, candidateHeaders, location, context
           + '; the request representation changed'
       ));
     }
-    if (before.schema !== undefined || after.schema !== undefined) {
-      changes.push(...compareSchema(before.schema, after.schema, at, {
-        direction: REQUEST,
-        baseRoot: context.baseRoot,
-        candidateRoot: context.candidateRoot,
-      }));
-    } else if (before.content !== undefined || after.content !== undefined) {
-      changes.push(...compareContent(before.content, after.content, at, REQUEST, context));
-    }
+    changes.push(...compareRepresentation(before, after, at, REQUEST, context));
     for (const field of ['style', 'explode', 'allowReserved']) {
       if (stableSignature(before[field]) === stableSignature(after[field])) continue;
       changes.push(change(
@@ -1166,15 +1225,7 @@ function compareParameters(baseParameters, candidateParameters, location, contex
     } else if (before.required !== true && after.required === true) {
       changes.push(change(BREAKING, 'PARAMETER_BECAME_REQUIRED', location, key + ' became required'));
     }
-    if (before.schema !== undefined || after.schema !== undefined) {
-      changes.push(...compareSchema(before.schema, after.schema, location + ' parameter ' + key, {
-        direction: REQUEST,
-        baseRoot: context.baseRoot,
-        candidateRoot: context.candidateRoot,
-      }));
-    } else if (before.content !== undefined || after.content !== undefined) {
-      changes.push(...compareContent(before.content, after.content, location + ' parameter ' + key, REQUEST, context));
-    }
+    changes.push(...compareRepresentation(before, after, location + ' parameter ' + key, REQUEST, context));
     for (const field of ['style', 'explode', 'allowEmptyValue', 'allowReserved']) {
       if (stableSignature(before[field]) === stableSignature(after[field])) continue;
       changes.push(change(
@@ -1226,16 +1277,134 @@ function compareResponseHeaders(baseHeaders, candidateHeaders, location, context
     } else if (before.required !== true && after.required === true) {
       changes.push(change(ADDITIVE, 'RESPONSE_HEADER_BECAME_REQUIRED', location, name + ' is now always present'));
     }
-    changes.push(...compareSchema(
-      before.schema,
-      after.schema,
-      location + ' header ' + name,
-      { direction: RESPONSE, baseRoot: context.baseRoot, candidateRoot: context.candidateRoot }
-    ));
+    changes.push(...compareRepresentation(before, after, location + ' header ' + name, RESPONSE, context));
   }
   for (const name of Object.keys(candidate)) {
     if (Object.prototype.hasOwnProperty.call(base, name)) continue;
     changes.push(change(ADDITIVE, 'RESPONSE_HEADER_ADDED', location, 'added response header ' + JSON.stringify(name)));
+  }
+  return changes;
+}
+
+/**
+ * The stable signature of a `security` requirement list. OpenAPI treats the
+ * alternatives and the scopes inside one requirement as sets: reordering them
+ * is not a client-visible change, but a different scheme, scope or alternative
+ * is. Canonicalizing both makes that distinction explicit instead of reporting
+ * a harmless reorder as breaking.
+ */
+function securitySignature(security) {
+  if (!Array.isArray(security)) return String(stableSignature(security));
+  return security.map((requirement) => {
+    if (!isPlainObject(requirement)) return stableSignature(requirement);
+    return Object.keys(requirement).sort().map((scheme) => {
+      const scopes = Array.isArray(requirement[scheme])
+        ? requirement[scheme].slice().sort()
+        : requirement[scheme];
+      return JSON.stringify(scheme) + ':' + stableSignature(scopes);
+    }).join(',');
+  }).sort().join('|');
+}
+
+/**
+ * A construct this classifier does not model semantically (security
+ * requirements, servers) is compared by its stable representation. Equal
+ * values produce no finding; a real change fails closed as UNCOMPARABLE, which
+ * the gate treats as BREAKING. Only changed declarations are reported.
+ */
+function compareUnmodelledConstruct(baseValue, candidateValue, location, label, signature) {
+  if (baseValue === undefined && candidateValue === undefined) return [];
+  if (signature(baseValue) === signature(candidateValue)) return [];
+
+  const transition = baseValue === undefined
+    ? 'added'
+    : (candidateValue === undefined ? 'removed' : 'changed');
+  return [change(
+    BREAKING,
+    'UNCOMPARABLE',
+    location,
+    label + ' ' + transition + '; this classifier does not model ' + label
+      + ' and cannot prove the change compatible'
+  )];
+}
+
+/**
+ * Callbacks make the server call the consumer, so their expressions and
+ * payloads are part of the contract. The classifier does not model callback
+ * payloads; it walks to the changed callback/expression and fails closed
+ * there, which keeps an unchanged callback from becoming a false positive.
+ */
+function compareCallbacks(baseCallbacks, candidateCallbacks, location, context) {
+  if (baseCallbacks === undefined && candidateCallbacks === undefined) return [];
+  const baseIsObject = isPlainObject(baseCallbacks);
+  const candidateIsObject = isPlainObject(candidateCallbacks);
+  if ((baseCallbacks !== undefined && !baseIsObject) || (candidateCallbacks !== undefined && !candidateIsObject)) {
+    if (stableSignature(baseCallbacks) === stableSignature(candidateCallbacks)) return [];
+    return [change(
+      BREAKING,
+      'UNCOMPARABLE',
+      location + ' callbacks',
+      'callbacks are not a comparable map; this classifier cannot prove the change compatible'
+    )];
+  }
+
+  const base = baseIsObject ? baseCallbacks : {};
+  const candidate = candidateIsObject ? candidateCallbacks : {};
+  const changes = [];
+  for (const name of Object.keys(base)) {
+    const at = location + ' callbacks ' + JSON.stringify(name);
+    if (!Object.prototype.hasOwnProperty.call(candidate, name)) {
+      changes.push(change(BREAKING, 'UNCOMPARABLE', at, 'removed callback ' + JSON.stringify(name)));
+      continue;
+    }
+    const baseResolved = resolveNode(base[name], context.baseRoot);
+    const candidateResolved = resolveNode(candidate[name], context.candidateRoot);
+    if (baseResolved.node === null || candidateResolved.node === null) {
+      changes.push(change(
+        BREAKING,
+        'UNCOMPARABLE',
+        at,
+        'cannot resolve ' + (baseResolved.problem || candidateResolved.problem || 'a callback reference')
+      ));
+      continue;
+    }
+    if (!isPlainObject(baseResolved.node) || !isPlainObject(candidateResolved.node)) {
+      if (stableSignature(baseResolved.node) !== stableSignature(candidateResolved.node)) {
+        changes.push(change(
+          BREAKING,
+          'UNCOMPARABLE',
+          at,
+          'the callback is not a comparable expression map; this classifier cannot prove the change compatible'
+        ));
+      }
+      continue;
+    }
+
+    const baseExpressions = baseResolved.node;
+    const candidateExpressions = candidateResolved.node;
+    for (const expression of Object.keys(baseExpressions)) {
+      const expressionAt = at + ' expression ' + JSON.stringify(expression);
+      if (!Object.prototype.hasOwnProperty.call(candidateExpressions, expression)) {
+        changes.push(change(BREAKING, 'UNCOMPARABLE', expressionAt, 'removed callback expression ' + JSON.stringify(expression)));
+        continue;
+      }
+      if (stableSignature(baseExpressions[expression]) === stableSignature(candidateExpressions[expression])) continue;
+      changes.push(change(
+        BREAKING,
+        'UNCOMPARABLE',
+        expressionAt,
+        'the callback configuration changed; this classifier does not model callback payloads'
+          + ' and cannot prove the change compatible'
+      ));
+    }
+    for (const expression of Object.keys(candidateExpressions)) {
+      if (Object.prototype.hasOwnProperty.call(baseExpressions, expression)) continue;
+      changes.push(change(BREAKING, 'UNCOMPARABLE', at + ' expression ' + JSON.stringify(expression), 'added callback expression ' + JSON.stringify(expression)));
+    }
+  }
+  for (const name of Object.keys(candidate)) {
+    if (Object.prototype.hasOwnProperty.call(base, name)) continue;
+    changes.push(change(BREAKING, 'UNCOMPARABLE', location + ' callbacks ' + JSON.stringify(name), 'added callback ' + JSON.stringify(name)));
   }
   return changes;
 }
@@ -1307,6 +1476,22 @@ function compareOperation(baseOperation, candidateOperation, location, context) 
     changes.push(change(ADDITIVE, 'RESPONSE_ADDED', location, 'added response ' + status));
   }
 
+  changes.push(...compareUnmodelledConstruct(
+    baseOperation.security,
+    candidateOperation.security,
+    location + ' security',
+    'operation security requirements',
+    securitySignature
+  ));
+  changes.push(...compareUnmodelledConstruct(
+    baseOperation.servers,
+    candidateOperation.servers,
+    location + ' servers',
+    'operation servers',
+    stableSignature
+  ));
+  changes.push(...compareCallbacks(baseOperation.callbacks, candidateOperation.callbacks, location, context));
+
   return changes;
 }
 
@@ -1337,6 +1522,19 @@ function compareContracts(base, candidate) {
   const basePaths = isPlainObject(base.paths) ? base.paths : {};
   const candidatePaths = isPlainObject(candidate.paths) ? candidate.paths : {};
 
+  changes.push(...compareUnmodelledConstruct(base.security, candidate.security, 'security', 'root security requirements', securitySignature));
+  changes.push(...compareUnmodelledConstruct(base.servers, candidate.servers, 'servers', 'root servers', stableSignature));
+
+  const baseComponents = isPlainObject(base.components) ? base.components : {};
+  const candidateComponents = isPlainObject(candidate.components) ? candidate.components : {};
+  changes.push(...compareUnmodelledConstruct(
+    baseComponents.securitySchemes,
+    candidateComponents.securitySchemes,
+    'components.securitySchemes',
+    'security scheme definitions',
+    stableSignature
+  ));
+
   for (const route of Object.keys(basePaths)) {
     if (!Object.prototype.hasOwnProperty.call(candidatePaths, route)) {
       changes.push(change(BREAKING, 'PATH_REMOVED', route, 'the whole path is gone'));
@@ -1344,6 +1542,13 @@ function compareContracts(base, candidate) {
     }
     const baseItem = basePaths[route] || {};
     const candidateItem = candidatePaths[route] || {};
+    changes.push(...compareUnmodelledConstruct(
+      baseItem.servers,
+      candidateItem.servers,
+      route + ' servers',
+      'path item servers',
+      stableSignature
+    ));
     for (const method of METHODS) {
       if (!baseItem[method]) continue;
       if (!candidateItem[method]) {
