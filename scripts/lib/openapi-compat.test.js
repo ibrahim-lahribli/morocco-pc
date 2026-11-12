@@ -2180,3 +2180,242 @@ test('the direction-aware classifier is deterministic across repeated runs', () 
   candidate.paths['/v1/extra'] = { get: { responses: { 200: response({ type: 'object' }) } } };
   assert.deepEqual(compareContracts(base, candidate), compareContracts(base, candidate));
 });
+// --- composition branches that reach a reference -----------------------------
+//
+// A branch matched on its literal `$ref` string hides a semantic change inside
+// the target. These cases pin the COMPLETE `compareContracts()` traversal: the
+// `$ref` text is identical on both sides and only the component moved.
+
+test('an anyOf branch that is a $ref follows its target, so a changed response type is BREAKING', () => {
+  const base = baseDocument();
+  base.components = { schemas: { Value: { type: 'string' }, Other: { type: 'number' } } };
+  setResponseSchema(base, {
+    anyOf: [{ $ref: '#/components/schemas/Value' }, { $ref: '#/components/schemas/Other' }],
+  });
+  const candidate = clone(base);
+  candidate.components.schemas.Value.type = 'integer';
+
+  assert.equal(
+    candidate.paths['/v1/things'].post.responses['201'].content['application/json'].schema.anyOf[0].$ref,
+    base.paths['/v1/things'].post.responses['201'].content['application/json'].schema.anyOf[0].$ref
+  );
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['TYPE_CHANGED']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things 201 application/json anyOf[0]');
+});
+
+test('an allOf branch whose property is a $ref follows that target', () => {
+  const base = baseDocument();
+  base.components = { schemas: { Id: { type: 'string' } } };
+  setResponseSchema(base, {
+    allOf: [
+      { type: 'object', required: ['id'], properties: { id: { $ref: '#/components/schemas/Id' } } },
+    ],
+  });
+  const candidate = clone(base);
+  candidate.components.schemas.Id.type = 'number';
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['TYPE_CHANGED']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things 201 application/json allOf[0].id');
+});
+
+test('a oneOf branch that is a $ref reports a property its request target no longer accepts', () => {
+  const base = baseDocument();
+  base.components = {
+    schemas: {
+      Filter: { type: 'object', properties: { a: { type: 'string' }, b: { type: 'string' } } },
+      Alt: { type: 'string' },
+    },
+  };
+  setRequestSchema(base, {
+    oneOf: [{ $ref: '#/components/schemas/Filter' }, { $ref: '#/components/schemas/Alt' }],
+  });
+  const candidate = clone(base);
+  delete candidate.components.schemas.Filter.properties.b;
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['PROPERTY_REMOVED']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things request application/json oneOf[0]');
+  assert.match(result.breaking[0].detail, /"b"/);
+});
+
+test('reordering composition branches that reach equivalent targets is still NEUTRAL', () => {
+  const base = baseDocument();
+  base.components = { schemas: { A: { type: 'string' }, B: { type: 'number' } } };
+  setResponseSchema(base, {
+    anyOf: [{ $ref: '#/components/schemas/A' }, { $ref: '#/components/schemas/B' }],
+  });
+  const candidate = clone(base);
+  setResponseSchema(candidate, {
+    anyOf: [{ $ref: '#/components/schemas/B' }, { $ref: '#/components/schemas/A' }],
+  });
+
+  const result = compareContracts(base, candidate);
+  assert.deepEqual(result.changes, []);
+  assert.equal(result.verdict, NEUTRAL);
+});
+
+test('a composition branch whose $ref no longer resolves is UNCOMPARABLE', () => {
+  const base = baseDocument();
+  base.components = { schemas: { A: { type: 'string' } } };
+  setResponseSchema(base, { anyOf: [{ $ref: '#/components/schemas/A' }] });
+  const candidate = clone(base);
+  candidate.components = { schemas: {} };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things 201 application/json anyOf[0]');
+});
+
+// --- malformed Reference Objects --------------------------------------------
+//
+// A `$ref` that is present but not a string cannot be followed. Previously it
+// was compared as an ordinary keyword and skipped by the unsupported-keyword
+// pass, so two documents that matched on everything else came out NEUTRAL.
+
+test('a malformed $ref in a schema is UNCOMPARABLE even when every other keyword matches', () => {
+  const doc = baseDocument();
+  okSchema(doc).properties.id = { $ref: 42, type: 'string' };
+
+  const result = compareContracts(doc, clone(doc));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things 201 application/json.id');
+  assert.match(result.breaking[0].detail, /malformed \$ref/);
+});
+
+test('a malformed $ref object is UNCOMPARABLE rather than an unexamined keyword', () => {
+  const base = baseDocument();
+  const candidate = clone(base);
+  okSchema(candidate).properties.id = { $ref: { $ref: '#/components/schemas/Thing' } };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things 201 application/json.id');
+});
+
+test('a malformed $ref in a parameter is UNCOMPARABLE even when its other fields match', () => {
+  const doc = baseDocument();
+  setQueryParameters(doc, [{
+    in: 'query',
+    name: 'filter',
+    required: false,
+    $ref: 42,
+    schema: { type: 'string' },
+  }]);
+
+  const result = compareContracts(doc, clone(doc));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.match(result.breaking[0].location, /^POST \/v1\/things parameter /);
+  assert.match(result.breaking[0].detail, /malformed \$ref/);
+});
+
+test('a malformed $ref on a request body is UNCOMPARABLE', () => {
+  const base = baseDocument();
+  const candidate = clone(base);
+  operation(candidate).requestBody = { $ref: 7 };
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.ok(breakingCodes(result).includes('UNCOMPARABLE'));
+  assert.match(result.breaking[0].detail, /malformed \$ref/);
+});
+
+// --- callback payloads reached through a $ref --------------------------------
+//
+// Callback payloads are explicitly not modelled, so a change to a target they
+// reference must fail closed: the expression and the `$ref` string stay
+// identical, which is exactly what a literal comparison used to accept.
+
+test('a referenced schema inside a callback body that changes is UNCOMPARABLE', () => {
+  const base = baseDocument();
+  base.components = {
+    schemas: { Event: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  };
+  const callbackItem = {
+    post: {
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: { $ref: '#/components/schemas/Event' } } },
+      },
+      responses: { 200: { description: 'ok' } },
+    },
+  };
+  operation(base).callbacks = operationCallbacks('$request.body#/callbackUrl', clone(callbackItem));
+
+  const candidate = clone(base);
+  candidate.components.schemas.Event.properties.id.type = 'number';
+
+  const expression = '$request.body#/callbackUrl';
+  assert.deepEqual(
+    operation(candidate).callbacks.onEvent[expression],
+    operation(base).callbacks.onEvent[expression]
+  );
+
+  const result = compareContracts(base, candidate);
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(
+    result.breaking[0].location,
+    'POST /v1/things callbacks "onEvent" expression "$request.body#/callbackUrl"'
+  );
+});
+
+// --- unsupported tuple-style items ------------------------------------------
+//
+// An array-valued `items` is not an OpenAPI 3.0.3 Schema Object. Comparing it
+// literally accepted an unchanged array whose referenced targets had changed,
+// so it is UNCOMPARABLE on sight.
+
+test('an unchanged tuple-style items array is UNCOMPARABLE, not accepted silently', () => {
+  const doc = baseDocument();
+  okSchema(doc).properties.pair = {
+    type: 'array',
+    items: [{ $ref: '#/components/schemas/Pair' }, { type: 'number' }],
+  };
+  doc.components = { schemas: { Pair: { type: 'string' } } };
+
+  const result = compareContracts(doc, clone(doc));
+  assert.equal(result.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(result), ['UNCOMPARABLE']);
+  assert.equal(result.breaking[0].location, 'POST /v1/things 201 application/json.pair[]');
+});
+
+// --- operationId -------------------------------------------------------------
+//
+// Generated clients turn `operationId` into a method name, so an addition,
+// removal or rename of one renames a method an SDK caller already compiled
+// against.
+
+test('adding, removing or renaming an operationId is UNCOMPARABLE', () => {
+  const base = baseDocument();
+
+  const named = clone(base);
+  operation(named).operationId = 'createThing';
+  const added = compareContracts(base, named);
+  assert.equal(added.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(added), ['UNCOMPARABLE']);
+  assert.equal(added.breaking[0].location, 'POST /v1/things operationId');
+
+  const removed = compareContracts(named, base);
+  assert.equal(removed.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(removed), ['UNCOMPARABLE']);
+  assert.equal(removed.breaking[0].location, 'POST /v1/things operationId');
+
+  const renamed = clone(named);
+  operation(renamed).operationId = 'replaceThing';
+  const renameResult = compareContracts(named, renamed);
+  assert.equal(renameResult.verdict, BREAKING);
+  assert.deepEqual(breakingCodes(renameResult), ['UNCOMPARABLE']);
+  assert.equal(renameResult.breaking[0].location, 'POST /v1/things operationId');
+
+  assert.deepEqual(compareContracts(named, clone(named)).changes, []);
+});

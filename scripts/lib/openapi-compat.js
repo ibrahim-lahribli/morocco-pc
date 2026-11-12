@@ -66,6 +66,23 @@
  *    BREAKING; the same removal widens a request and is ADDITIVE.
  *  * A composition keyword that appears or disappears cannot be proven
  *    equivalent and is BREAKING in both directions.
+ *  * Composition branches are matched on their CONTENT, not on their literal
+ *    text alone. A literal match is only proof of equality for a branch that
+ *    carries no reference; a branch that reaches a `$ref` is matched on what
+ *    it resolves to, so an unchanged `$ref` string over a changed target is
+ *    still compared (and reports the property-level change inside it).
+ *  * A `$ref` that is present but not a string is a malformed Reference Object.
+ *    It is UNCOMPARABLE everywhere it can appear (schema, parameter, request
+ *    body, response, header, callback), never ignored because the surrounding
+ *    keywords happen to match.
+ *  * A tuple-style `items` array is not modelled by this classifier (OpenAPI
+ *    3.0.3 Schema Objects describe one item schema). It is UNCOMPARABLE on
+ *    sight, even when both sides carry the same array, because the referenced
+ *    targets inside an unchanged array are not inspected.
+ *  * `operationId` is compared: generated clients derive their method names
+ *    from it, so adding, removing or renaming one renames a method an SDK
+ *    caller already compiled against. That is UNCOMPARABLE and therefore
+ *    BREAKING.
  *  * Path Item parameters are inherited by every operation; an operation-level
  *    parameter with the same name+`in` overrides the inherited one. The
  *    classifier compares the effective request contract for each operation,
@@ -219,6 +236,63 @@ function stableSignature(value) {
   return JSON.stringify(value);
 }
 
+/**
+ * Canonical JSON for a value with every `$ref` replaced by its target.
+ *
+ * `stableSignature()` answers "is this the same text?". That is the wrong
+ * question for a branch, an expression or a callback payload, where the text
+ * of a `$ref` stays identical while the component it names changes. This
+ * answers "does this MEAN the same thing?", with Reference Object semantics
+ * (§4.7.2): a target replaces the referring object and its siblings are
+ * ignored.
+ *
+ * The markers for a malformed, unresolvable or circular reference are only
+ * used for equality; a caller that must fail closed checks
+ * `hasUnresolvableReference()` instead of trusting a marker match.
+ */
+function semanticSignature(value, root, seen) {
+  const stack = Array.isArray(seen) ? seen : [];
+  if (Array.isArray(value)) return '[' + value.map((item) => semanticSignature(item, root, stack)).join(',') + ']';
+  if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, '$ref')) {
+      const ref = value.$ref;
+      if (typeof ref !== 'string') return '{"$malformed-ref":' + stableSignature(ref) + '}';
+      if (stack.includes(ref)) return '{"$circular-ref":' + JSON.stringify(ref) + '}';
+      const target = lookupPointer(root, ref);
+      if (target === undefined) return '{"$unresolvable-ref":' + JSON.stringify(ref) + '}';
+      return semanticSignature(target, root, stack.concat(ref));
+    }
+    return '{' + Object.keys(value).sort()
+      .map((key) => JSON.stringify(key) + ':' + semanticSignature(value[key], root, stack))
+      .join(',') + '}';
+  }
+  return JSON.stringify(value);
+}
+
+/** Does any `$ref` in this tree fail to resolve against `root`? */
+function hasUnresolvableReference(value, root, seen) {
+  const stack = Array.isArray(seen) ? seen : [];
+  if (Array.isArray(value)) return value.some((item) => hasUnresolvableReference(item, root, stack));
+  if (!isPlainObject(value)) return false;
+  if (Object.prototype.hasOwnProperty.call(value, '$ref')) {
+    const ref = value.$ref;
+    if (typeof ref !== 'string') return true;
+    if (stack.includes(ref)) return false;
+    const target = lookupPointer(root, ref);
+    if (target === undefined) return true;
+    return hasUnresolvableReference(target, root, stack.concat(ref));
+  }
+  return Object.keys(value).some((key) => hasUnresolvableReference(value[key], root, stack));
+}
+
+/** Does this value reach a `$ref` anywhere, at any depth? */
+function containsReference(value) {
+  if (Array.isArray(value)) return value.some(containsReference);
+  if (!isPlainObject(value)) return false;
+  if (Object.prototype.hasOwnProperty.call(value, '$ref')) return true;
+  return Object.keys(value).some((key) => containsReference(value[key]));
+}
+
 /** The members of a closed vocabulary, however the generator rendered the union. */
 function enumMembers(schema) {
   if (!schema || typeof schema !== 'object') return [];
@@ -325,8 +399,20 @@ function dereference(schema, root) {
   let current = schema;
   const chain = [];
   let guard = 0;
-  while (current && typeof current === 'object' && typeof current.$ref === 'string') {
+  while (current && typeof current === 'object'
+    && Object.prototype.hasOwnProperty.call(current, '$ref')) {
     const ref = current.$ref;
+    // A Reference Object whose `$ref` is not a string cannot be followed and
+    // cannot be compared as an ordinary object either: its `$ref` would be the
+    // only thing that differs and `compareUnmodelledKeywords()` would skip the
+    // key. Fail closed instead.
+    if (typeof ref !== 'string') {
+      return {
+        schema: null,
+        chain,
+        problem: 'malformed $ref ' + JSON.stringify(ref) + '; a Reference Object $ref must be a string',
+      };
+    }
     if (guard > 64 || chain.includes(ref)) {
       return { schema: null, chain, problem: 'circular $ref ' + JSON.stringify(ref) };
     }
@@ -798,9 +884,21 @@ function compareObjectProperties(base, candidate, location, context) {
 /**
  * Compare one composition keyword (`allOf`, `anyOf`, `oneOf`) branch by branch.
  *
- * Identical branches are matched by signature first, so a reordering reports
- * nothing and an added or removed branch is not confused with an edited one.
- * The remaining branches are paired in order to recover property-level detail.
+ * Branch matching happens in three passes, and each pass answers a different
+ * question:
+ *
+ *   1. a literal signature match proves equality only when NOTHING in the
+ *      branch is a reference, so a reordering of plain branches reports nothing;
+ *   2. branches that reach a reference are matched on their SEMANTIC signature
+ *      (every `$ref` replaced by its target), so reordering referenced variants
+ *      with equal targets is still neutral, and an unresolvable reference never
+ *      matches;
+ *   3. whatever is left is paired in order and compared with `compareSchema()`,
+ *      which resolves the references and reports the change inside the target
+ *      at its own property-level location.
+ *
+ * The third pass is the fix for the fail-open case: an unchanged `$ref` string
+ * over a target that changed used to be swallowed by the first pass.
  *
  * `allOf` branches are conjuncts: adding one narrows the accepted input and
  * removing one widens it. `anyOf`/`oneOf` branches are alternatives: adding one
@@ -832,10 +930,32 @@ function compareComposition(base, candidate, location, context) {
     const unmatched = candidateBranches.map((branch) => ({ branch, used: false }));
     const unmatchedBase = [];
     for (const branch of baseBranches) {
+      if (containsReference(branch)) {
+        unmatchedBase.push(branch);
+        continue;
+      }
       const signature = stableSignature(branch);
-      const match = unmatched.find((entry) => !entry.used && stableSignature(entry.branch) === signature);
+      const match = unmatched.find((entry) => !entry.used
+        && !containsReference(entry.branch)
+        && stableSignature(entry.branch) === signature);
       if (match) match.used = true;
       else unmatchedBase.push(branch);
+    }
+
+    // Second pass: what a referencing branch RESOLVES to. A branch whose
+    // reference cannot be followed stays unmatched so the third pass reports it.
+    const unresolvedBase = [];
+    for (const branch of unmatchedBase) {
+      if (hasUnresolvableReference(branch, context.baseRoot)) {
+        unresolvedBase.push(branch);
+        continue;
+      }
+      const signature = semanticSignature(branch, context.baseRoot);
+      const match = unmatched.find((entry) => !entry.used
+        && !hasUnresolvableReference(entry.branch, context.candidateRoot)
+        && semanticSignature(entry.branch, context.candidateRoot) === signature);
+      if (match) match.used = true;
+      else unresolvedBase.push(branch);
     }
     const unmatchedCandidate = unmatched.filter((entry) => !entry.used).map((entry) => entry.branch);
 
@@ -847,9 +967,9 @@ function compareComposition(base, candidate, location, context) {
       : (Array.isArray(schema.oneOf) ? 'oneOf' : null));
     const enumCovered = union && flattenedWith(base) === keyword && flattenedWith(candidate) === keyword;
 
-    const pairs = Math.min(unmatchedBase.length, unmatchedCandidate.length);
+    const pairs = Math.min(unresolvedBase.length, unmatchedCandidate.length);
     for (let index = 0; index < pairs; index += 1) {
-      changes.push(...compareSchema(unmatchedBase[index], unmatchedCandidate[index], at + '[' + index + ']', {
+      changes.push(...compareSchema(unresolvedBase[index], unmatchedCandidate[index], at + '[' + index + ']', {
         direction,
         baseRoot: context.baseRoot,
         candidateRoot: context.candidateRoot,
@@ -858,7 +978,7 @@ function compareComposition(base, candidate, location, context) {
       }));
     }
 
-    const removedCount = unmatchedBase.length - pairs;
+    const removedCount = unresolvedBase.length - pairs;
     const addedCount = unmatchedCandidate.length - pairs;
 
     if (removedCount > 0) {
@@ -906,7 +1026,24 @@ function compareUnmodelledKeywords(base, candidate, location) {
   const changes = [];
   const keys = new Set(Object.keys(base).concat(Object.keys(candidate)));
   for (const key of [...keys].sort()) {
-    if (key === '$ref' || key.startsWith('x-')) continue;
+    if (key === '$ref') {
+      // A Reference Object this classifier CAN follow was already replaced by
+      // its target before this comparison ran. A `$ref` that is not a string is
+      // malformed, and one that is not an internal pointer cannot be followed:
+      // both fail closed here rather than being skipped as an unmodelled key.
+      const followable = (value) => typeof value === 'string' && value.startsWith('#/');
+      if ((base.$ref === undefined || followable(base.$ref))
+        && (candidate.$ref === undefined || followable(candidate.$ref))) continue;
+      changes.push(change(
+        BREAKING,
+        'UNCOMPARABLE',
+        location,
+        'malformed $ref ' + stableSignature(base.$ref) + ' vs ' + stableSignature(candidate.$ref)
+          + '; a Reference Object $ref must be an internal pointer string'
+      ));
+      continue;
+    }
+    if (key.startsWith('x-')) continue;
     if (HANDLED_KEYS.has(key) || ANNOTATION_KEYS.has(key)) continue;
     if (stableSignature(base[key]) === stableSignature(candidate[key])) continue;
     changes.push(change(
@@ -1007,14 +1144,16 @@ function compareSchema(baseInput, candidateInput, location, options) {
 
   if (base.items !== undefined || candidate.items !== undefined) {
     if (Array.isArray(base.items) || Array.isArray(candidate.items)) {
-      if (stableSignature(base.items) !== stableSignature(candidate.items)) {
-        changes.push(change(
-          BREAKING,
-          'UNCOMPARABLE',
-          location + '[]',
-          'a tuple-style items array changed; this classifier only models a single item schema'
-        ));
-      }
+      // A tuple-style `items` array has no OpenAPI 3.0.3 Schema Object meaning,
+      // and comparing it literally misses a target changed inside an array that
+      // is identical on both sides. UNCOMPARABLE whatever it looks like.
+      changes.push(change(
+        BREAKING,
+        'UNCOMPARABLE',
+        location + '[]',
+        'a tuple-style items array is not an OpenAPI 3.0.3 Schema Object; this classifier only'
+          + ' models a single item schema and cannot inspect the targets inside an array'
+      ));
     } else {
       changes.push(...compareSchema(base.items, candidate.items, location + '[]', childContext));
     }
@@ -1322,6 +1461,11 @@ function compareContent(baseContent, candidateContent, location, direction, cont
  */
 function parameterKey(parameter, root) {
   if (!isPlainObject(parameter)) return '$invalid:' + stableSignature(parameter);
+  if (Object.prototype.hasOwnProperty.call(parameter, '$ref') && typeof parameter.$ref !== 'string') {
+    // Malformed Reference Object: give it a key of its own so it can never pair
+    // with a well-formed parameter that happens to share a name.
+    return '$malformed:' + stableSignature(parameter);
+  }
   const resolved = resolveNode(parameter, root);
   if (resolved.node !== null && isPlainObject(resolved.node)) {
     return String(resolved.node.in || 'query') + ':' + String(resolved.node.name || '');
@@ -1364,7 +1508,15 @@ function effectiveParameters(pathItem, operation, root) {
  * cannot follow is reported, never treated as unchanged.
  */
 function resolveNode(node, root) {
-  if (!isPlainObject(node) || typeof node.$ref !== 'string') return { node, problem: null };
+  if (!isPlainObject(node)) return { node, problem: null };
+  if (!Object.prototype.hasOwnProperty.call(node, '$ref')) return { node, problem: null };
+  if (typeof node.$ref !== 'string') {
+    return {
+      node: null,
+      problem: 'malformed $ref ' + JSON.stringify(node.$ref)
+        + '; a Reference Object $ref must be a string',
+    };
+  }
   const resolution = dereference(node, root);
   return resolution.schema === null
     ? { node: null, problem: resolution.problem }
@@ -1510,6 +1662,12 @@ function compareUnmodelledConstruct(baseValue, candidateValue, location, label, 
  * payloads are part of the contract. The classifier does not model callback
  * payloads; it walks to the changed callback/expression and fails closed
  * there, which keeps an unchanged callback from becoming a false positive.
+ *
+ * "Unchanged" is decided on the RESOLVED structure, not on the literal text: a
+ * callback Path Item whose request body is a `$ref` keeps the same `$ref`
+ * string while the component it names changes, and comparing only the text
+ * would report NEUTRAL for a payload that actually moved. Because callback
+ * payloads are deliberately not modelled, such a change is UNCOMPARABLE.
  */
 function compareCallbacks(baseCallbacks, candidateCallbacks, location, context) {
   if (baseCallbacks === undefined && candidateCallbacks === undefined) return [];
@@ -1579,12 +1737,19 @@ function compareCallbacks(baseCallbacks, candidateCallbacks, location, context) 
         ));
         continue;
       }
-      if (stableSignature(baseExpression.node) === stableSignature(candidateExpression.node)) continue;
+      if (stableSignature(baseExpression.node) === stableSignature(candidateExpression.node)
+        && semanticSignature(baseExpression.node, context.baseRoot)
+          === semanticSignature(candidateExpression.node, context.candidateRoot)) continue;
+      const literalChanged = stableSignature(baseExpression.node) !== stableSignature(candidateExpression.node);
       changes.push(change(
         BREAKING,
         'UNCOMPARABLE',
         expressionAt,
-        'the callback configuration changed; this classifier does not model callback payloads'
+        (literalChanged
+          ? 'the callback configuration changed'
+          : 'a target referenced by the callback payload changed while the literal callback expression'
+            + ' and $ref string stayed identical')
+          + '; this classifier does not model callback payloads'
           + ' and cannot prove the change compatible'
       ));
     }
@@ -1602,12 +1767,35 @@ function compareCallbacks(baseCallbacks, candidateCallbacks, location, context) 
 
 function compareOperation(baseOperation, candidateOperation, location, context) {
   const changes = [];
-  const baseParameters = effectiveParameters(context.basePathItem, baseOperation, context.baseRoot);
-  const candidateParameters = effectiveParameters(context.candidatePathItem, candidateOperation, context.candidateRoot);
+  const baseOperationNode = isPlainObject(baseOperation) ? baseOperation : {};
+  const candidateOperationNode = isPlainObject(candidateOperation) ? candidateOperation : {};
+
+  // `operationId` is the identifier a generated client turns into its method
+  // name. Adding, removing or renaming one renames a method an SDK caller
+  // already compiled against, which this classifier cannot prove compatible.
+  const baseOperationId = typeof baseOperationNode.operationId === 'string'
+    ? baseOperationNode.operationId
+    : null;
+  const candidateOperationId = typeof candidateOperationNode.operationId === 'string'
+    ? candidateOperationNode.operationId
+    : null;
+  if (baseOperationId !== candidateOperationId) {
+    changes.push(change(
+      BREAKING,
+      'UNCOMPARABLE',
+      location + ' operationId',
+      JSON.stringify(baseOperationId) + ' -> ' + JSON.stringify(candidateOperationId)
+        + '; generated SDK clients derive their method names from `operationId`, so this'
+        + ' renames or removes a method an existing client calls'
+    ));
+  }
+
+  const baseParameters = effectiveParameters(context.basePathItem, baseOperationNode, context.baseRoot);
+  const candidateParameters = effectiveParameters(context.candidatePathItem, candidateOperationNode, context.candidateRoot);
   changes.push(...compareParameters(baseParameters, candidateParameters, location, context));
 
-  const baseRequest = resolveNode(baseOperation.requestBody, context.baseRoot);
-  const candidateRequest = resolveNode(candidateOperation.requestBody, context.candidateRoot);
+  const baseRequest = resolveNode(baseOperationNode.requestBody, context.baseRoot);
+  const candidateRequest = resolveNode(candidateOperationNode.requestBody, context.candidateRoot);
   if (baseRequest.problem || candidateRequest.problem) {
     changes.push(change(
       BREAKING,
@@ -1638,8 +1826,8 @@ function compareOperation(baseOperation, candidateOperation, location, context) 
     }
   }
 
-  const baseResponses = isPlainObject(baseOperation.responses) ? baseOperation.responses : {};
-  const candidateResponses = isPlainObject(candidateOperation.responses) ? candidateOperation.responses : {};
+  const baseResponses = isPlainObject(baseOperationNode.responses) ? baseOperationNode.responses : {};
+  const candidateResponses = isPlainObject(candidateOperationNode.responses) ? candidateOperationNode.responses : {};
 
   for (const status of Object.keys(baseResponses)) {
     if (!Object.prototype.hasOwnProperty.call(candidateResponses, status)) {
@@ -1668,20 +1856,20 @@ function compareOperation(baseOperation, candidateOperation, location, context) 
   }
 
   changes.push(...compareUnmodelledConstruct(
-    baseOperation.security,
-    candidateOperation.security,
+    baseOperationNode.security,
+    candidateOperationNode.security,
     location + ' security',
     'operation security requirements',
     securitySignature
   ));
   changes.push(...compareUnmodelledConstruct(
-    baseOperation.servers,
-    candidateOperation.servers,
+    baseOperationNode.servers,
+    candidateOperationNode.servers,
     location + ' servers',
     'operation servers',
     stableSignature
   ));
-  changes.push(...compareCallbacks(baseOperation.callbacks, candidateOperation.callbacks, location, context));
+  changes.push(...compareCallbacks(baseOperationNode.callbacks, candidateOperationNode.callbacks, location, context));
 
   return changes;
 }
