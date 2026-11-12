@@ -1,9 +1,9 @@
 /**
  * apps/web/lib/api/client.ts — the ONE place the web app talks HTTP.
  *
- * Types come from the committed OpenAPI snapshot (`lib/api/schema.d.ts`,
- * generated from `apps/api/test/unit/openapi-v1.6.json` — the API's own gated
- * file, so the tree holds one contract rather than two). Nothing here is
+ * Types come from the committed OpenAPI contract (`lib/api/schema.d.ts`,
+ * generated from `contract/openapi-1.10.0.json` — the API's own gated file, so
+ * the tree holds one contract rather than two). Nothing here is
  * hand-typed per field: a field that leaves the contract disappears from these
  * types at regeneration, and `npm run check:api-types` fails the build when the
  * generated file is stale.

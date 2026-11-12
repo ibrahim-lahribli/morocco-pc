@@ -77,7 +77,7 @@ Each item's current state, evidence and severity live in `OPEN_POINTS.md`; this 
 
 S1–S27 of `docs/archive/plans/agent3-web-sprints.md`: 26 done, S26 blocked on a deployment. Its own
 package, lockfile and workflow (`web.yml`), consuming this API through types generated from
-`apps/api/test/unit/openapi-v1.10.json` with `check:api-types` as the drift gate. Measured 2026-10-26:
+`contract/openapi-1.10.0.json` with `check:api-types` as the drift gate. Measured 2026-10-26:
 378 Playwright specs, 376 passed / 2 skipped on a fresh build.
 
 The host is DECIDED — Cloudflare Workers via the OpenNext adapter (`apps/web/wrangler.jsonc`,
