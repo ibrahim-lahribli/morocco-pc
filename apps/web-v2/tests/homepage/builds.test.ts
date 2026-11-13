@@ -134,6 +134,33 @@ describe("toBuildCardView", () => {
     expect(names).toEqual(["Ryzen 5 5600", "RTX 4060", "32 Go", "NVMe 1TB"]);
   });
 
+  it("joins the spec pills into a plain-text component summary", () => {
+    const view = toBuildCardView(preset(12_000), {
+      currency: "MAD",
+      builds: [
+        {
+          total_price: 11_500,
+          build_score: 70,
+          price_status: "indicative",
+          components: [
+            { role: "CPU", name: "Ryzen 5 5600" },
+            { role: "GPU", name: "RTX 4060" },
+            { role: "RAM", name: "32 Go DDR4" },
+            { role: "SSD_BOOT", name: "NVMe 1 To" },
+          ],
+          explanation: null,
+        },
+      ],
+    } as never);
+
+    expect(view.componentSummary).toBe("Ryzen 5 5600 · RTX 4060 · 32 Go DDR4 · NVMe 1 To");
+  });
+
+  it("reports an empty component summary when there is no build", () => {
+    expect(toBuildCardView(verifiedPreset, undefined).componentSummary).toBe("");
+    expect(toBuildCardView(verifiedPreset, { builds: [] } as never).componentSummary).toBe("");
+  });
+
   it("reports an empty build list as no complete build", () => {
     expect(toBuildCardView(verifiedPreset, { builds: [] } as never).hasCompleteBuild).toBe(false);
   });

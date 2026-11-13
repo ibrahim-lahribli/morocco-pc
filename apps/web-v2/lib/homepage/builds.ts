@@ -87,6 +87,8 @@ export interface BuildCardView {
   totalPrice: number | null;
   badge: PriceBadgeStatus | null;
   pills: string[];
+  /** Joined pills as a single plain-text line, e.g. "Ryzen 5 5600 · RTX 4060 · 32 Go DDR4 · NVMe 1 To". */
+  componentSummary: string;
   rationale: string | null;
   hasCompleteBuild: boolean;
 }
@@ -100,6 +102,7 @@ export interface BuildCardView {
  */
 export function toBuildCardView(preset: Preset, detail: PresetDetail | undefined): BuildCardView {
   const build = detail?.builds[0];
+  const pills = build === undefined ? [] : specPillNames(build.components);
 
   return {
     recommendationId: preset.recommendation_id,
@@ -107,7 +110,8 @@ export function toBuildCardView(preset: Preset, detail: PresetDetail | undefined
     score: build?.build_score ?? null,
     totalPrice: build?.total_price ?? null,
     badge: detail === undefined ? null : resolvePriceBadge(detail.builds),
-    pills: build === undefined ? [] : specPillNames(build.components),
+    pills,
+    componentSummary: pills.join(" · "),
     rationale: build?.explanation ?? null,
     hasCompleteBuild: build !== undefined,
   };

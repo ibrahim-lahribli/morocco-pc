@@ -97,8 +97,8 @@
     },
     "builds": {
       "eyebrow": "Configurations prêtes à monter",
-      "title": "Trois usages, trois configurations",
-      "intro": "Découvrez un exemple de configuration pour le jeu, les études et le travail.",
+      "title": "Des PC adaptés à votre budget",
+      "intro": "Configurations équilibrées et testées pour le marché marocain.",
       "category": {
         "gaming": "PC Gaming",
         "office": "PC Bureautique",
@@ -109,6 +109,8 @@
         "indicative": "Prix indicatif"
       },
       "priceLabel": "Prix de la configuration",
+      "priceLabelIndicative": "Prix indicatif boutiques",
+      "compactCta": "Détails",
       "budgetLabel": "Budget visé",
       "scoreLabel": "Score de configuration",
       "scoreValue": "{score}/100",

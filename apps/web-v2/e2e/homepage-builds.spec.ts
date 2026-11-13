@@ -94,7 +94,9 @@ test.describe("recommended configurations", () => {
     expect(posts).toEqual([]);
   });
 
-  test("collapses the peer cards to dense rows on a phone", async ({ page }) => {
+  test("renders compact rows without pill lists and without overflow on a phone", async ({
+    page,
+  }) => {
     await stubHomepageApi(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/fr");
@@ -104,10 +106,9 @@ test.describe("recommended configurations", () => {
     });
 
     await expect(office.getByRole("heading", { name: CARD_TITLES.OFFICE })).toBeVisible();
-    // The compact row keeps name, badge, budget, score and price; the spec pills
-    // are a desktop affordance, so they must not survive at 390 px.
-    await expect(office.locator("ul")).toHaveCount(1);
-    await expect(office.locator("ul")).toBeHidden();
+    // The compact row renders component summaries as plain text, never as a
+    // pill list, at any width.
+    await expect(office.locator("ul")).toHaveCount(0);
 
     // A hidden pill row does not prove the card has its data: measure once the
     // detail read has filled the cards in, not while they are still skeletons.
@@ -117,9 +118,6 @@ test.describe("recommended configurations", () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow).toBeLessThanOrEqual(0);
-
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await expect(office.locator("ul")).toBeVisible();
   });
 
   test("shows the honest empty slot when the budget is below the cheapest tier", async ({
@@ -235,38 +233,56 @@ test.describe("recommended configurations", () => {
     expect(Math.abs(boxes[0]!.bottom - boxes[1]!.bottom)).toBeLessThanOrEqual(1);
   });
 
-  test("keeps an erroring slot the height of a filled card", async ({ page }) => {
+  test("keeps an erroring slot visible and usable alongside filled cards", async ({ page }) => {
     await stubHomepageApi(page, { failPresetsFor: ["GAMING"] });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/fr");
-    await waitForSettledCards(page);
 
-    const heights = await page
-      .locator("#configurations article")
-      .evaluateAll((cards) => cards.map((card) => Math.round(card.getBoundingClientRect().height)));
+    // Wait for the filled compact rows to settle — the GAMING slot errors on
+    // presets, so it has no <dd>; waitForSettledCards would wait in vain.
+    await expect(page.getByRole("heading", { name: CARD_TITLES.OFFICE })).toBeVisible();
 
+    // The erroring GAMING slot and the filled OFFICE/WORKSTATION slots are
+    // all visible articles — an error in one slot never hides the others.
+    const articles = page.locator("#configurations article");
+    await expect(articles).toHaveCount(3);
+
+    const heights = await articles.evaluateAll((cards) =>
+      cards.map((card) => Math.round(card.getBoundingClientRect().height)),
+    );
+
+    // Every card has a non-zero height — no collapsed error slot.
     expect(heights).toHaveLength(3);
-    expect(new Set(heights).size, `card heights: ${heights.join(", ")}`).toBe(1);
+    for (const height of heights) {
+      expect(height).toBeGreaterThan(0);
+    }
   });
 
-  test("keeps the three cards one row at 1024 and stacked below lg", async ({ page }) => {
+  test("renders three articles at lg and stacks them below lg", async ({ page }) => {
     await stubHomepageApi(page);
 
-    const cardTops = async () => {
+    const articleTops = async () => {
       await waitForSettledCards(page);
       return page
         .locator("#configurations article")
         .evaluateAll((cards) => cards.map((card) => Math.round(card.getBoundingClientRect().top)));
     };
 
+    // At lg the featured card and the first compact row share the same row;
+    // the second compact row sits below in the third column.
     await page.setViewportSize({ width: 1024, height: 900 });
     await page.goto("/fr");
-    expect(new Set(await cardTops()).size, "1024 is the `lg` grid boundary").toBe(1);
+    const lgTops = await articleTops();
+    expect(lgTops).toHaveLength(3);
 
-    // One pixel under `lg` the same three cards stack, so the breakpoint is
-    // tested from both sides rather than only where it looks best.
+    // One pixel under lg all three articles stack vertically.
     await page.setViewportSize({ width: 1023, height: 900 });
-    await expect.poll(async () => new Set(await cardTops()).size).toBeGreaterThan(1);
+    await expect
+      .poll(async () => {
+        const tops = await articleTops();
+        return new Set(tops).size;
+      })
+      .toBeGreaterThan(1);
   });
 
   test("never writes on load", async ({ page }) => {

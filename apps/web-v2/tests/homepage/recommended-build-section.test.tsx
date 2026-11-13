@@ -158,4 +158,34 @@ describe("RecommendedBuildSection", () => {
       expect(screen.getByText(/Configuration pré-générée la plus élevée/)).toBeVisible(),
     );
   });
+
+  it("renders one featured card and two compact rows with plain-text summaries", async () => {
+    get.mockImplementation(async (path: string, init?: Init) => {
+      if (path === "/v1/meta/options") return meta;
+      if (path === "/v1/presets") {
+        const useCase = init?.params?.query?.use_case ?? "GAMING";
+        return presets([[12_000, `rec-${useCase}-12`]]);
+      }
+      if (path === "/v1/recommendations/{id}") {
+        const id = init?.params?.path?.id;
+        return detail(`CPU-${id ?? "x"}`, "verified");
+      }
+      throw new Error(`unexpected path ${path}`);
+    });
+
+    renderSection();
+
+    await waitFor(() => expect(screen.getByText("PC Gaming")).toBeInTheDocument());
+
+    // Three headings: one featured + two compact rows.
+    const headings = screen.getAllByRole("heading", { level: 3 });
+    expect(headings).toHaveLength(3);
+
+    // The component summary is plain text, not a pill list.
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+
+    // Each card's component summary starts with "CPU-".
+    const summaries = screen.getAllByText(/^CPU-/);
+    expect(summaries).toHaveLength(3);
+  });
 });
