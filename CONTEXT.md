@@ -80,11 +80,13 @@ adopted for the private beta as an explicit PROVISIONAL OVERRIDE of Decision 57 
 satisfaction of it — A1/A3/A4 are still `hypothesis` and OG-43 is open.
 
 ## 5. Measured numbers (2026-11-02; the offer-freshness date, the EU pass count and the R-14 parity
-DIFFs re-measured 2026-11-06)
+DIFFs re-measured 2026-11-06; the test counts re-measured 2026-11-13)
 
-- `npm run test:unit` **1284 pass / 0 fail / 0 cancelled** (Node 24.21.0 and Node 22);
-  `npm run test:scripts` **479 / 0**; `npm run test:api` **193 / 0**; `npm run test:api:db` **17 / 0**
-  (nightly only — it writes to the TEST branch).
+- `npm run test:unit` **1284 pass / 0 fail / 0 cancelled**; `npm run test:scripts` **750 / 0 / 0**;
+  `npm run test:api` **193 / 0 / 0**; `npm run test:database-guard` **15 / 0 / 0**; `npm run test:core`
+  **32 / 0 / 0** — all five re-measured 2026-11-13 on Node 24.21.0 with 0 cancelled, and green on CI's
+  Node 22 leg. `npm run test:api:db` **17 / 0** (nightly only — it writes to the TEST branch, and was
+  not re-measured here).
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of
