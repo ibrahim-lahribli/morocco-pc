@@ -9,13 +9,15 @@ all of them.
 
 | Package | Responsibility | May import |
 |---|---|---|
-| `recommendation-core/` (step 4) | pure recommendation logic: selection, filtering, assembly, scoring, retention, ranking, explanation | relative paths inside itself, and nothing else |
+| `recommendation-core/` (boundary harness implemented, step 4B PR 1; module moves not started) | pure recommendation logic: selection, filtering, assembly, scoring, retention, ranking, explanation | relative paths inside itself, and nothing else |
 | `recommendation-runtime/` (step 5) | SQL, loaders, persistence and orchestration over an injected `pg`-compatible handle | core's public entry points, and `database-guard` in tests |
 | `database-guard/` (implemented, step 3a) | the write-target guard: normalised-host comparison, target descriptors, direct-host derivation | nothing at all |
 
-At step 3a only `database-guard` has source. `recommendation-core` and `recommendation-runtime` carry
-manifests and empty `src/` trees so the four-manifest acceptance criterion is satisfiable; moving
-recommendation modules into them is **not** authorized by that step.
+`database-guard` is implemented (step 3a) and `recommendation-core` carries its boundary harness (step 4B
+PR 1): `src/index.js` exports nothing on purpose, `test/purity.test.js` gates every file under `src/` and
+`test/index.test.js` pins the surface to `test/export-surface.json`. `recommendation-runtime` still has no
+`src/` at all. **No recommendation module has moved**: the harness exists so the moves that follow are
+checked against a boundary that is already enforced — it is not authorization to move code.
 
 ## database-guard: non-negotiables
 
@@ -41,6 +43,8 @@ recommendation modules into them is **not** authorized by that step.
 npm run test:database-guard                                    # this package's suite (from the repo root)
 cd packages/database-guard && npm test                         # the same suite, from the package
 npm run test:scripts                                           # every scripts/lib suite (does not include this one)
+npm run test:core                                              # the core boundary harness (no DB, no deps)
+cd packages/recommendation-core && npm test                    # the same suite, from the package
 ```
 
 `test:scripts` no longer covers the guard: its test moved out of `scripts/lib/`. If you touch
