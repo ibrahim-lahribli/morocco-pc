@@ -20,12 +20,14 @@ engine logic: `apps/api/` (Fastify, the HTTP contract, the connection pool) and 
 
 The repository's layout follows the architecture RFC
 ([`docs/architecture/SYSTEM_ARCHITECTURE_AND_PROJECT_SEPARATION_RFC.md`](docs/architecture/SYSTEM_ARCHITECTURE_AND_PROJECT_SEPARATION_RFC.md)):
-architecture decisions A1-A6 are approved. **The database-guard package boundary is implemented** — the
-write-target guard lives in `packages/database-guard/` (PR #27, merged 2026-11-11) — but **nothing else
-from the package extraction is implemented**: `packages/recommendation-core/` and
-`packages/recommendation-runtime/` contain scaffolding only (their manifests, an empty source placeholder
-and planning documentation); no recommendation module has moved, and the RFC remains PROPOSED for the
-remaining work. B1-B8 are open. Do not start the extraction from a documentation task.
+architecture decisions A1-A6 are approved. **Two steps are implemented.** The database-guard package
+boundary: the write-target guard lives in `packages/database-guard/` (PR #27, merged 2026-11-11). The
+`recommendation-core` boundary harness (step 4B PR 1, PR #29): a loadable `src/index.js` that exports
+nothing, a purity gate over every file under `src/` (`npm run test:core`), and a committed export snapshot
+at `test/export-surface.json`. **The extraction itself has not started**: no recommendation module has
+moved, the core entry point is deliberately empty, `packages/recommendation-runtime/` still carries only
+its manifest and planning documentation, and the RFC remains PROPOSED for the remaining work. B1-B8 are
+open. Do not start the extraction from a documentation task.
 
 ## 2. Read order
 
@@ -134,6 +136,7 @@ Read the owning file before changing that layer:
 | `npm run test:unit` | engine unit tests (`src/**/*.test.js`, no DB) |
 | `npm run test:scripts` | every `scripts/lib/*.test.js` suite (run after touching `scripts/`) |
 | `npm run test:database-guard` | the extracted guard's own suite (`packages/database-guard/test/*.test.js`) |
+| `npm run test:core` | the pure core's boundary harness (`packages/recommendation-core/test/*.test.js`): loader, export snapshot, purity scan |
 | `npm run test:api` | HTTP API unit tests (DB-free, `fastify.inject`) |
 | `npm run check:contract` | one versioned `contract/openapi-*.json`; fails on any second copy |
 | `node scripts/check-openapi-compatibility.js --base=origin/master` | contract compatibility against a Git ref (ADDITIVE passes, unapproved BREAKING fails) |
