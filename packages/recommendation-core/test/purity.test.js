@@ -5,19 +5,24 @@
 //
 // What it proves:
 //   1. every JavaScript source file under packages/recommendation-core/src/ is
-//      free of third-party or outward imports, database clients, SQL,
-//      `.query()` calls, filesystem/HTTP access, `process.env`, clock reads and
-//      randomness;
+//      free of third-party or outward imports, dynamic (unverifiable)
+//      specifiers, database clients, SQL (including SQL spanning template
+//      interpolations), `.query()` calls, filesystem/HTTP access, `process.env`,
+//      clock reads and randomness — however the global object is reached;
 //   2. the package declares no dependencies at all;
 //   3. the scanner that proves (1) actually reports deliberate violations, and
 //      does not report the permitted forms — `new Date(value)` above all.
 //
 // Point (3) is why the scanner lives in ./purity-scanner.js and is exercised
 // against synthetic sources here: proving the gate works must not mean writing
-// impurity into the package's real source. The gate is still approximate (see
-// the limitation list in the scanner header); import resolution runs against
-// the real filesystem, so a relative import that leaves the package fails even
-// when its text looks local.
+// impurity into the package's real source. Import resolution runs against the
+// real filesystem and through `realpath`, so a relative import that leaves
+// `src/` — by `..`, by a symbolic link, or by naming an unscanned package area
+// such as `test/` — fails even when its text looks local.
+//
+// The hermetic counterpart (RFC §11.6 "Hermetic run") is ./hermetic-run.js:
+// it copies this package outside the repository, proves no node_modules is
+// reachable, and runs this suite with NODE_PATH emptied.
 //
 // DB-free, dependency-free: node:test + node:assert only, no database, no
 // environment read.
@@ -27,9 +32,10 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
-const { scanSource, scanFile, listSourceFiles } = require('./purity-scanner');
+const { lex, scanSource, scanFile, listSourceFiles, formatViolation } = require('./purity-scanner');
 
 const CORE_ROOT = path.resolve(__dirname, '..');
 const SRC_ROOT = path.join(CORE_ROOT, 'src');
@@ -64,6 +70,69 @@ function assertReports(source, expectedRule, haystack) {
     );
   }
   return match;
+}
+
+// --- temporary fixtures -----------------------------------------------------
+
+function makeTempTree() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'core-boundary-'));
+  const srcRoot = path.join(root, 'src');
+  fs.mkdirSync(srcRoot);
+  fs.writeFileSync(path.join(srcRoot, 'index.js'), 'module.exports = {};\n');
+  return {
+    root,
+    srcRoot,
+    probe: path.join(srcRoot, 'probe-fixture.js'),
+    dispose() {
+      fs.rmSync(root, { recursive: true, force: true });
+    },
+  };
+}
+
+function makeOutsideTree() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'core-outside-'));
+  fs.writeFileSync(path.join(root, 'outside.js'), 'module.exports = () => Date.now();\n');
+  return {
+    root,
+    dispose() {
+      fs.rmSync(root, { recursive: true, force: true });
+    },
+  };
+}
+
+/**
+ * Create a symbolic link, or skip when the platform refuses one (Windows
+ * without Developer Mode returns EPERM). The CI runner is Linux, where the
+ * assertion always executes; nothing here is skipped to make it pass.
+ *
+ * On Windows a junction stands in where it can: Node reports it through
+ * `lstat().isSymbolicLink()` and resolves it through `realpath`, which is the
+ * shape the scanner sees. A junction cannot point at an existing FILE, so the
+ * file-link case is the one that still skips locally.
+ */
+function trySymlink(t, target, linkPath, type) {
+  const attempts = [{ target, type }];
+  if (process.platform === 'win32' && (type === 'dir' || !fs.existsSync(target))) {
+    attempts.push({ target, type: 'junction' });
+  }
+  let lastError = null;
+  for (const attempt of attempts) {
+    try {
+      fs.symlinkSync(attempt.target, linkPath, attempt.type);
+      return true;
+    } catch (err) {
+      lastError = err;
+      if (err.code !== 'EPERM' && err.code !== 'EACCES' && err.code !== 'ENOTSUP' && err.code !== 'EUNKNOWN') {
+        throw err;
+      }
+    }
+  }
+  t.skip('symbolic links are not permitted on this platform (' + (lastError && lastError.code) + ')');
+  return false;
+}
+
+function scanIn(temp, source) {
+  return scanSource(source, { file: temp.probe, coreRoot: temp.root });
 }
 
 // --- the package's own source ----------------------------------------------
@@ -124,12 +193,25 @@ describe('purity scanner: representative violations are caught', () => {
   });
 
   it('reports a relative import that resolves outside the package', () => {
-    const violation = assertReports(
-      "const server = require('../../../apps/api/src/server');",
-      'import-outside-package',
-      'apps/api/src/server.js'
-    );
-    assert.equal(typeof violation.line, 'number');
+    // A real outside file, not a path into this checkout: the assertion is the
+    // same (escaping imports are reported, with a line), but the fixture works
+    // in the isolated copy too, which RFC §11.6 requires.
+    const tree = makeTempTree();
+    const outside = makeOutsideTree();
+    try {
+      const specifier = path
+        .relative(path.dirname(tree.probe), path.join(outside.root, 'outside.js'))
+        .split(path.sep)
+        .join('/');
+      const violations = scanIn(tree, "const outside = require('" + specifier + "');");
+      const violation = violations.find((item) => item.rule === 'import-outside-package');
+      assert.ok(violation, 'expected an escaping import to be reported, got ' + JSON.stringify(violations));
+      assert.ok(violation.detail.includes('outside.js'), violation.detail);
+      assert.equal(typeof violation.line, 'number');
+    } finally {
+      tree.dispose();
+      outside.dispose();
+    }
   });
 
   it('reports a relative import that does not resolve at all', () => {
@@ -286,5 +368,277 @@ describe('purity scanner: legitimate code stays clean', () => {
       ],
       'a rule stopped firing (or a new one appeared) on the mixed fixture'
     );
+  });
+});
+
+// --- A. a specifier must be statically verifiable ---------------------------
+
+describe('purity scanner: an import specifier must be statically verifiable', () => {
+  it('reports require(moduleName)', () => {
+    const violation = assertReports('const mod = require(moduleName);', 'dynamic-import', 'statically verifiable');
+    assert.equal(typeof violation.line, 'number');
+  });
+
+  it('reports import(moduleName)', () => {
+    assertReports('const mod = await import(moduleName);', 'dynamic-import', 'statically verifiable');
+  });
+
+  it('reports a call result as the specifier', () => {
+    assertReports('const mod = require(getModuleName());', 'dynamic-import');
+  });
+
+  it('reports a concatenated specifier', () => {
+    assertReports('const mod = require(prefix + moduleName);', 'dynamic-import');
+    assertReports('const mod = await import(prefix + moduleName);', 'dynamic-import');
+  });
+
+  it('reports optional-chaining call forms', () => {
+    assertReports('const mod = require?.(moduleName);', 'dynamic-import');
+    assertReports("const mod = require?.('pg');", 'non-relative-import', 'database');
+  });
+
+  it('reports an interpolated template specifier', () => {
+    assertReports('const mod = require(`./${name}`);', 'dynamic-import');
+  });
+
+  it('reports a global-object import escape', () => {
+    assertReports('const mod = globalThis.require(moduleName);', 'global-import');
+    assertReports("globalThis['require']('pg');", 'global-import');
+  });
+
+  it('names the file and the line in the rendered message', () => {
+    const found = scanSource('const a = 1;\nconst mod = require(name);\n', {
+      file: PROBE_FILE,
+      coreRoot: CORE_ROOT,
+    });
+    assert.equal(found.length, 1);
+    const rendered = formatViolation(found[0]);
+    assert.ok(rendered.includes('probe-fixture.js'), rendered);
+    assert.ok(rendered.includes(':2'), rendered);
+    assert.ok(rendered.includes('statically verifiable'), rendered);
+  });
+
+  it('still permits statically known relative specifiers', () => {
+    assertClean("const mod = require('./index');", 'require literal');
+    assertClean("const mod = await import('./index.js');", 'import literal');
+    assertClean('const mod = require(`./index`);', 'template with no interpolation');
+  });
+});
+
+// --- B. symbolic links cannot escape src/ -----------------------------------
+
+describe('purity scanner: symbolic links cannot escape src/', () => {
+  it('rejects a symlinked file inside src/ that points outside the source root', (t) => {
+    const tree = makeTempTree();
+    const outside = makeOutsideTree();
+    try {
+      if (!trySymlink(t, path.join(outside.root, 'outside.js'), path.join(tree.srcRoot, 'linked.js'), 'file')) return;
+      const violations = scanIn(tree, "const mod = require('./linked');");
+      const match = violations.find((violation) => violation.rule === 'import-outside-package');
+      assert.ok(match, 'expected a symlink escape to be reported, got ' + JSON.stringify(violations));
+      assert.ok(match.detail.includes('src/'), match.detail);
+    } finally {
+      tree.dispose();
+      outside.dispose();
+    }
+  });
+
+  it('rejects a symlinked directory inside src/ that points outside the source root', (t) => {
+    const tree = makeTempTree();
+    const outside = makeOutsideTree();
+    try {
+      if (!trySymlink(t, outside.root, path.join(tree.srcRoot, 'vendor'), 'dir')) return;
+      const violations = scanIn(tree, "const mod = require('./vendor/outside');");
+      const match = violations.find((violation) => violation.rule === 'import-outside-package');
+      assert.ok(match, 'expected a symlinked directory escape to be reported, got ' + JSON.stringify(violations));
+    } finally {
+      tree.dispose();
+      outside.dispose();
+    }
+  });
+
+  it('rejects a broken symlink instead of treating it as safe', (t) => {
+    const tree = makeTempTree();
+    const outside = makeOutsideTree();
+    try {
+      if (!trySymlink(t, path.join(outside.root, 'missing.js'), path.join(tree.srcRoot, 'broken.js'), 'file')) return;
+      const violations = scanIn(tree, "const mod = require('./broken');");
+      const match = violations.find((violation) => violation.rule === 'unresolved-import');
+      assert.ok(match, 'expected a broken symlink to be reported, got ' + JSON.stringify(violations));
+      assert.match(match.detail, /symbolic link/);
+    } finally {
+      tree.dispose();
+      outside.dispose();
+    }
+  });
+
+  it('permits an ordinary relative import inside src/', () => {
+    const tree = makeTempTree();
+    try {
+      fs.writeFileSync(path.join(tree.srcRoot, 'util.js'), 'module.exports = 1;\n');
+      assert.deepEqual(scanIn(tree, "const util = require('./util');"), []);
+    } finally {
+      tree.dispose();
+    }
+  });
+
+  it('does not treat a symlinked external file as core source', (t) => {
+    const tree = makeTempTree();
+    const outside = makeOutsideTree();
+    try {
+      if (!trySymlink(t, path.join(outside.root, 'outside.js'), path.join(tree.srcRoot, 'linked.js'), 'file')) return;
+      const files = listSourceFiles(tree.srcRoot);
+      assert.ok(
+        files.includes(path.join(tree.srcRoot, 'linked.js')),
+        'the symlinked source file was skipped instead of scanned: ' + JSON.stringify(files)
+      );
+      const violations = scanFile(path.join(tree.srcRoot, 'linked.js'), tree.root);
+      assert.ok(
+        violations.some((violation) => violation.rule === 'source-file-outside-root'),
+        'a symlinked external file must not be treated as core source: ' + JSON.stringify(violations)
+      );
+    } finally {
+      tree.dispose();
+      outside.dispose();
+    }
+  });
+});
+
+// --- C. regex literals inside template interpolations -----------------------
+
+describe('purity scanner: regex literals are not structural braces', () => {
+  it('detects a forbidden access after a brace inside a regex', () => {
+    assertReports('const q = `${/}/.test(value) ? process.env.API_URL : "safe"}`;', 'process-env');
+  });
+
+  it('handles a regex character class containing a brace', () => {
+    assertReports('const q = `${/[}]/.test(value) ? process.env.API_URL : "safe"}`;', 'process-env');
+  });
+
+  it('handles escaped slashes and braces in a regex', () => {
+    assertReports('const q = `${/a\\/b\\}/.test(value) ? process.env.API_URL : "safe"}`;', 'process-env');
+  });
+
+  it('lexes a regex literal as one token', () => {
+    const tokens = lex('const r = /}/;');
+    const regex = tokens.find((token) => token.type === 'regex');
+    assert.ok(regex, JSON.stringify(tokens));
+    assert.equal(regex.value, '/}/');
+  });
+
+  it('lexes a character-class brace as regex content', () => {
+    const tokens = lex('const r = /[}]/;');
+    const regex = tokens.find((token) => token.type === 'regex');
+    assert.ok(regex, JSON.stringify(tokens));
+    assert.equal(regex.value, '/[}]/');
+  });
+
+  it('keeps division a division', () => {
+    const tokens = lex('const x = (a + b) / 2 / c;');
+    assert.equal(tokens.filter((token) => token.type === 'regex').length, 0);
+    assert.equal(tokens.filter((token) => token.type === 'punct' && token.value === '/').length, 2);
+  });
+
+  it('does not report a forbidden name that is regex text', () => {
+    assertClean('const pattern = /Date\\.now\\(\\)/;', 'regex text');
+  });
+
+  it('handles nested template literals', () => {
+    assertReports('const q = `outer ${`inner ${process.env.HOME}`}`;', 'process-env');
+  });
+
+  it('does not end an interpolation at a brace inside a nested regex', () => {
+    assertClean('const q = `${/[}]/.test(value)}`;', 'regex-only interpolation');
+  });
+});
+
+// --- D. forbidden APIs through a global object ------------------------------
+
+describe('purity scanner: forbidden APIs reached through a global object', () => {
+  it('reports globalThis.fetch(...)', () => {
+    assertReports("globalThis.fetch('https://example.test');", 'http-call');
+  });
+
+  it('reports window.fetch(...) and window.crypto', () => {
+    assertReports("window.fetch('https://example.test');", 'http-call');
+    assertReports('const id = window.crypto.randomUUID();', 'crypto');
+  });
+
+  it('reports globalThis.Date.now()', () => {
+    assertReports('const at = globalThis.Date.now();', 'clock-read');
+  });
+
+  it('reports globalThis.Math.random()', () => {
+    assertReports('const pick = globalThis.Math.random();', 'randomness');
+  });
+
+  it('reports globalThis.process.env', () => {
+    assertReports('const url = globalThis.process.env.API_URL;', 'process-env');
+  });
+
+  it('reports computed global access', () => {
+    assertReports("globalThis['fetch']('https://example.test');", 'http-call');
+    assertReports("const url = globalThis['process']['env'].API_URL;", 'process-env');
+  });
+
+  it('permits new Date(value) through the global object', () => {
+    assertClean('const at = new globalThis.Date(value).toISOString();', 'globalThis.Date(value)');
+  });
+
+  it('still rejects the zero-argument construction through the global object', () => {
+    assertReports('const at = new globalThis.Date();', 'clock-read', 'no argument');
+  });
+
+  it('does not flag property names or unrelated roots', () => {
+    assertClean('const stats = { fetch: 1, window: 2, crypto: 3 };', 'property keys');
+    assertClean('const handle = config.fetch;', 'non-call member read');
+    assertClean('const nested = registry.window.fetch;', 'unknown root');
+  });
+});
+
+// --- E. package files outside src/ are not core source ----------------------
+
+describe('purity scanner: package files outside src/ are not core source', () => {
+  it('rejects a source file importing a test helper inside the package', () => {
+    const violation = assertReports(
+      "const helper = require('../test/purity-scanner');",
+      'import-outside-package',
+      'test/purity-scanner.js'
+    );
+    assert.ok(violation.detail.includes('src/'), violation.detail);
+  });
+
+  it('rejects importing the package manifest', () => {
+    assertReports("const manifest = require('../package.json');", 'import-outside-package', 'package.json');
+  });
+
+  it('still permits a relative import from src/ to src/', () => {
+    assertClean("const core = require('./index');", 'in-src import');
+  });
+});
+
+// --- F. SQL in interpolated template literals -------------------------------
+
+describe('purity scanner: SQL spanning template interpolations', () => {
+  it('reports SELECT ... FROM with an interpolated projection', () => {
+    assertReports('const sql = `SELECT ${columns} FROM products`;', 'sql-string');
+  });
+
+  it('reports INSERT INTO with interpolated column and value lists', () => {
+    assertReports('const sql = `INSERT INTO products (${columns}) VALUES (${values})`;', 'sql-string');
+  });
+
+  it('reports UPDATE ... SET with an interpolated predicate', () => {
+    assertReports('const sql = `update products set price = ${price} where id = ${id}`;', 'sql-string');
+  });
+
+  it('keeps .query() detection', () => {
+    assertReports("client.query('SELECT 1');", 'sql-call');
+  });
+
+  it('does not flag harmless template strings', () => {
+    assertClean('const label = `${role} of ${total}`;', 'no SQL words');
+    assertClean('const note = `Update ${count} builds`;', 'update as prose');
+    assertClean('const note = `choose from ${options.length} candidates`;', 'from as prose');
   });
 });

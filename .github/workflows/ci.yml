@@ -40,6 +40,13 @@ jobs:
       # DB-free and dependency-free by construction, so it needs nothing but
       # Node.
       - run: npm run test:core
+      # RFC §11.6 "Hermetic run". An empty dependency list in package.json is a
+      # claim, not proof: a core test could still resolve something from the
+      # repository's node_modules. This copies the package OUTSIDE the
+      # repository, refuses to run when any node_modules is reachable from the
+      # copy, empties NODE_PATH, runs the package's own test command there and
+      # removes the copy even if the run fails.
+      - run: node packages/recommendation-core/test/hermetic-run.js
       # DB-free API contract/route tests (fastify.inject + stubs; no database).
       - run: npm run test:api
       # Contract ownership: exactly ONE versioned contract in contract/, and no
