@@ -14,10 +14,12 @@ all of them.
 | `database-guard/` (implemented, step 3a) | the write-target guard: normalised-host comparison, target descriptors, direct-host derivation | nothing at all |
 
 `database-guard` is implemented (step 3a) and `recommendation-core` carries its boundary harness (step 4B
-PR 1): `src/index.js` exports nothing on purpose, `test/purity.test.js` gates every file under `src/` and
-`test/index.test.js` pins the surface to `test/export-surface.json`. `recommendation-runtime` still has no
-`src/` at all. **No recommendation module has moved**: the harness exists so the moves that follow are
-checked against a boundary that is already enforced — it is not authorization to move code.
+PR 1, merged as PR #29): `src/index.js` exports nothing on purpose, `test/purity.test.js` with its scanner
+`test/purity-scanner.js` gates every file under `src/`, `test/index.test.js` pins the surface to
+`test/export-surface.json`, and `test/hermetic-run.js` (with `test/hermetic-run.test.js`) proves the suite
+runs with no `node_modules` reachable. `recommendation-runtime` still has no `src/` at all. **No
+recommendation module has moved**: the harness exists so the moves that follow are checked against a
+boundary that is already enforced — it is not authorization to move code.
 
 ## database-guard: non-negotiables
 
@@ -44,6 +46,7 @@ npm run test:database-guard                                    # this package's 
 cd packages/database-guard && npm test                         # the same suite, from the package
 npm run test:scripts                                           # every scripts/lib suite (does not include this one)
 npm run test:core                                              # the core boundary harness (no DB, no deps)
+node packages/recommendation-core/test/hermetic-run.js          # the hermetic run (no node_modules, no deps)
 cd packages/recommendation-core && npm test                    # the same suite, from the package
 ```
 
