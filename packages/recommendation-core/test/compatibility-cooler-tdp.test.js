@@ -9,9 +9,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveCoolerCpuTdp } = require('./cooler-tdp');
-const { REASON_CODES } = require('./reason-codes');
-const { FINAL_STATUSES } = require('./statuses');
+const { resolveCoolerCpuTdp } = require('../src/compatibility/cooler-tdp');
+const { REASON_CODES } = require('../src/compatibility/reason-codes');
+const { FINAL_STATUSES } = require('../src/compatibility/statuses');
 
 const COOLER = 'cooler-1';
 const CPU = 'cpu-1';

@@ -10,10 +10,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { filterCandidates, CANDIDATE_STATUSES } = require('./filter');
-const { COMPONENT_ROLES, ROLE_CATEGORIES } = require('../candidates/roles');
-const { createCandidate } = require('../candidates');
-const { FINAL_STATUSES, REASON_CODES } = require('../compatibility');
+// Step 4B PR 2: this file moved with the implementation into the core package.
+// The module specifiers point at core's own tree; the assertions are unchanged.
+const { filterCandidates, CANDIDATE_STATUSES } = require('../src/filtering/filter');
+const { COMPONENT_ROLES, ROLE_CATEGORIES } = require('../src/candidates/roles');
+const { createCandidate } = require('../src/candidates');
+const { FINAL_STATUSES, REASON_CODES } = require('../src/compatibility');
 
 // Deterministic id helpers (hex, lexicographically orderable).
 const U = (n) => 'uuuuuuuu-uuuu-uuuu-uuuu-' + String(n).padStart(12, '0');
@@ -1103,7 +1105,12 @@ test('B2-D: the filter takes only the context and performs no database access', 
   // The filter's only parameter is the context - there is no db/client slot.
   assert.equal(filterCandidates.length, 1);
 
-  const filterSource = fs.readFileSync(path.join(__dirname, 'filter.js'), 'utf8');
+  // Step 4B PR 2: read the MOVED implementation, never the src/ re-export
+  // shim, so this assertion keeps inspecting real code.
+  const filterSource = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'filtering', 'filter.js'),
+    'utf8'
+  );
   assert.doesNotMatch(filterSource, /require\(['"]pg['"]\)/);
   assert.doesNotMatch(filterSource, /\bPool\b/);
   assert.doesNotMatch(filterSource, /\.query\s*\(/);

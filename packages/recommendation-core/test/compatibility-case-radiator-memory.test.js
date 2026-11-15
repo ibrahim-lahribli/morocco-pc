@@ -9,7 +9,7 @@ const {
   resolveCaseRadiator,
   resolvePlatformMemorySupport,
   resolveMotherboardRamMemoryType,
-} = require('./index');
+} = require('../src/compatibility');
 
 const { PASS, FAIL, UNKNOWN } = FINAL_STATUSES;
 
@@ -365,7 +365,7 @@ test('missing RAM memory type -> UNKNOWN', () => {
 // ---------------------------------------------------------------------------
 
 test('aggregateCompatibilityResults consumes the new resolver outputs', () => {
-  const { aggregateCompatibilityResults } = require('./index');
+  const { aggregateCompatibilityResults } = require('../src/compatibility');
   const aggregated = aggregateCompatibilityResults([
     resolveCaseMotherboardFormFactor({
       case_product_id: 'case-1',

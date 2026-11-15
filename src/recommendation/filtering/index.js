@@ -1,42 +1,45 @@
 /**
  * Engine 2D - Filtering stage (B2-B context loader + B2-D filter + B2-G pipeline).
  *
+ * COMPATIBILITY SHIM (step 4B PR 2). The pure half of this stage moved to
+ * packages/recommendation-core/src/filtering/; the loader and the B2-G
+ * composition stay here because they execute SQL. The six-export public
+ * surface is unchanged and every re-export is by identity, so
+ * filtering/index.test.js passes without an edit.
+ *
  * Public surface:
  *
  *   loadFilteringContext()  - B2-B: assembles the frozen Engine 2D filtering
  *     context from an Engine 2C candidate-pool result and a validated
- *     pg-compatible `db` dependency. B2-B populates specs / platform_by_socket /
- *     compat from candidate-scoped, parameterized PostgreSQL queries (see
- *     ./context-loader).
+ *     pg-compatible `db` dependency (see ./context-loader).
  *
  *   filterCandidates()      - B2-D: pure hard-compatibility filter over the
- *     frozen context. Orchestrates the existing Engine 1 resolvers and
- *     aggregates check -> pair -> relationship -> candidate verdicts
- *     (PASS / UNKNOWN / REJECT). It performs no database access and never
- *     mutates its input (see ./filter).
+ *     frozen context (now packages/recommendation-core/src/filtering).
  *
  *   CANDIDATE_STATUSES      - B2-D candidate verdict vocabulary.
- *   CONTEXT_COMPAT_KEYS     - canonical compat sub-context keys of the
- *     B2-B context.
+ *   CONTEXT_COMPAT_KEYS     - canonical compat sub-context keys of the B2-B
+ *     context; a loader constant, so it is NOT part of the core surface.
  *
- *   buildIntegratedGpuPresentMap() - Decision 11 (iGPU sourcing, resolved
- *     2026-09-17): derives the Engine 3 `integrated_gpu_present` handoff map
- *     { [cpu_product_id]: true | false | null } directly from the frozen
- *     Engine 2D context (no dedicated CPU-spec query; missing cpu_spec row
- *     -> null) (see ./igpu-map).
+ *   buildIntegratedGpuPresentMap() - Decision 11 iGPU handoff map, derived from
+ *     the frozen filtering context (core).
  *
  *   filterCandidatesForRecommendation() - B2-G: canonical public Engine 2D
- *     filtering-stage entry point. Composes loadFilteringContext(pool, db)
- *     -> filterCandidates(context) and returns the filtering result
- *     (see ./pipeline). Re-exported here without duplicating logic.
+ *     filtering-stage entry point, composing loadFilteringContext(pool, db)
+ *     -> filterCandidates(context) (see ./pipeline).
  *
- * Budget filtering, scoring, build generation and persistence belong to
- * later stages/engines. Candidate and error contracts are reused from
- * Engine 2 (../candidates); this module defines no parallel contracts.
+ * Budget filtering, scoring, build generation and persistence belong to later
+ * stages/engines. Candidate and error contracts are reused from Engine 2
+ * (../candidates); this module defines no parallel contracts.
  */
+const core = require('../../../packages/recommendation-core/src/filtering');
 const { loadFilteringContext, CONTEXT_COMPAT_KEYS } = require('./context-loader');
-const { buildIntegratedGpuPresentMap } = require('./igpu-map');
-const { filterCandidates, CANDIDATE_STATUSES } = require('./filter');
 const { filterCandidatesForRecommendation } = require('./pipeline');
 
-module.exports = { loadFilteringContext, CONTEXT_COMPAT_KEYS, buildIntegratedGpuPresentMap, filterCandidates, CANDIDATE_STATUSES, filterCandidatesForRecommendation };
+module.exports = {
+  loadFilteringContext,
+  CONTEXT_COMPAT_KEYS,
+  buildIntegratedGpuPresentMap: core.buildIntegratedGpuPresentMap,
+  filterCandidates: core.filterCandidates,
+  CANDIDATE_STATUSES: core.CANDIDATE_STATUSES,
+  filterCandidatesForRecommendation,
+};

@@ -8,7 +8,7 @@ const {
   resolveCpuMotherboardSocket,
   resolveCpuMotherboardSupport,
   resolveCoolerSocketSupport,
-} = require('./index');
+} = require('../src/compatibility');
 
 const { PASS, FAIL, UNKNOWN } = FINAL_STATUSES;
 
@@ -263,7 +263,7 @@ test('missing CPU socket id -> UNKNOWN', () => {
 // ---------------------------------------------------------------------------
 
 test('aggregateCompatibilityResults consumes the new resolver outputs', () => {
-  const { aggregateCompatibilityResults } = require('./index');
+  const { aggregateCompatibilityResults } = require('../src/compatibility');
   const aggregated = aggregateCompatibilityResults([
     resolveCpuMotherboardSocket({ cpu_socket_id: 'am5', motherboard_socket_id: 'am5' }),
     resolveCpuMotherboardSupport({}),

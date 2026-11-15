@@ -9,7 +9,7 @@ const {
   resolveGpuPsuWattage,
   resolveGpuPsuConnectors,
   aggregateCompatibilityResults,
-} = require('./index');
+} = require('../src/compatibility');
 
 const { PASS, FAIL, UNKNOWN } = FINAL_STATUSES;
 

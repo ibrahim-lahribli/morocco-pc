@@ -8,9 +8,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveCoolerCaseHeight } = require('./cooler-height');
-const { REASON_CODES } = require('./reason-codes');
-const { FINAL_STATUSES } = require('./statuses');
+const { resolveCoolerCaseHeight } = require('../src/compatibility/cooler-height');
+const { REASON_CODES } = require('../src/compatibility/reason-codes');
+const { FINAL_STATUSES } = require('../src/compatibility/statuses');
 
 const COOLER = 'cooler-1';
 const CASE = 'case-1';
