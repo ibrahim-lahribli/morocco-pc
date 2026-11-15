@@ -641,7 +641,7 @@ describe('purity scanner: a regex literal after a condition or a closed block', 
 
 describe('purity scanner: forbidden functions called through call/apply/bind', () => {
   it('reports a bare Date() call', () => {
-    assertReports('const now = Date();', 'clock-read', 'calls Date()');
+    assertReports('const now = Date();', 'clock-read', 'returns the current time');
   });
 
   it('reports Math.random.call(...)', () => {
@@ -667,6 +667,87 @@ describe('purity scanner: forbidden functions called through call/apply/bind', (
     assertClean('const fn = compute.call(null);', 'unknown .call');
     assertClean('const pick = shape.random;', 'ordinary property read');
     assertClean('const at = row.Date();', "a caller object's method named Date");
+  });
+});
+
+// --- C4. every invocation of the Date function reads the clock --------------
+
+describe('purity scanner: any call of the Date function is a clock read', () => {
+  it('reports Date() with arguments', () => {
+    assertReports('const a = Date(0);', 'clock-read', 'returns the current time');
+    assertReports("const b = Date('2020-01-01');", 'clock-read');
+  });
+
+  it('reports the global-object form with arguments', () => {
+    assertReports('const c = globalThis.Date(0);', 'clock-read');
+  });
+
+  it('reports call and apply with arguments', () => {
+    assertReports('const d = Date.call(null, 0);', 'clock-read');
+    assertReports('const e = Date.apply(null, [0]);', 'clock-read');
+  });
+
+  it('still permits a caller-supplied value through new', () => {
+    assertClean('const at = new Date(0);', 'new Date(0)');
+    assertClean("const at = new Date('2020-01-01');", 'new Date(value)');
+    assertClean('const at = new Date(row.created_at).toISOString();', 'new Date(member)');
+  });
+
+  it('does not flag a caller object method named Date', () => {
+    assertClean('const at = row.Date(0);', "row.Date()");
+    assertClean('const at = clock.Date(0);', 'clock.Date(0)');
+  });
+});
+
+// --- C5. a ternary or property colon does not open a block ------------------
+
+describe('purity scanner: an object literal after a colon is not a block', () => {
+  it('reports process.env after a division operand that is a regex', () => {
+    assertReports(
+      'const q = `${flag ? 1 : {} / /}/.test(value) || process.env.API_URL}`;',
+      'process-env'
+    );
+  });
+
+  it('lexes the ternary object as an object and the division as division', () => {
+    const tokens = lex('const q = `${flag ? 1 : {} / /}/.test(value)}`;');
+    assert.deepEqual(
+      tokens.filter((token) => token.type === 'regex').map((token) => token.value),
+      ['/}/'],
+      JSON.stringify(tokens)
+    );
+    assert.equal(
+      tokens.filter((token) => token.type === 'punct' && token.value === '/').length,
+      1,
+      'the division before the regex must stay a division'
+    );
+  });
+
+  it('keeps an object property value an object literal', () => {
+    const tokens = lex('const o = { a: {} / 2 };');
+    assert.equal(tokens.filter((token) => token.type === 'regex').length, 0, JSON.stringify(tokens));
+  });
+
+  it('still treats a case-clause brace as a block', () => {
+    for (const source of [
+      'switch (x) { case 1: { work(); } /}/.test(y); }',
+      'switch (x) { case a ?? b: { work(); } /}/.test(y); }',
+    ]) {
+      assert.deepEqual(
+        lex(source).filter((token) => token.type === 'regex').map((token) => token.value),
+        ['/}/'],
+        source
+      );
+    }
+  });
+
+  it('keeps a labelled block a block', () => {
+    assert.deepEqual(
+      lex('done: { work(); } /}/.test(y);')
+        .filter((token) => token.type === 'regex')
+        .map((token) => token.value),
+      ['/}/']
+    );
   });
 });
 

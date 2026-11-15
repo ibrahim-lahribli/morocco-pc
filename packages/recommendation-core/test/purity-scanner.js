@@ -93,20 +93,31 @@ const GLOBAL_OBJECTS = new Set(['globalThis', 'window', 'self', 'global']);
  * object literal? It decides whether a `/` after that block's `}` starts a
  * statement (regex) or divides an object literal's value. Statement position
  * follows a `)` (a control condition or a function body), `=>`, `else`/`do`/
- * `try`/`finally`, a `;` or `}` that ended the previous statement, `case x:`,
- * or the start of the code; a value position follows `=`, `(`, `[`, `,`,
- * `return` and the operators.
+ * `try`/`finally`, a `;` or `}` that ended the previous statement, or the start
+ * of the code; a value position follows `=`, `(`, `[`, `,`, `return` and the
+ * operators.
+ *
+ * `:` needs the enclosing bracket, because it only introduces a block as a
+ * case or label colon in STATEMENT position. Inside an object literal it
+ * introduces a property value, and after a pending `?` it is a ternary's false
+ * branch; both of those introduce a VALUE, so `{` after them is an object
+ * literal. Reading such an object as a block would turn the division that
+ * follows it into a regex opener and swallow whatever comes next, which is the
+ * escape this distinction exists to prevent.
  */
-function startsBlock(previous) {
+function startsBlock(previous, enclosing) {
   if (!previous) return true;
   if (previous.type === 'punct') {
+    if (previous.value === ':') {
+      if (previous.ternary === true) return false;
+      return enclosing === null || (enclosing.kind === 'brace' && enclosing.block === true);
+    }
     return (
       previous.value === ')' ||
       previous.value === '}' ||
       previous.value === ';' ||
       previous.value === '{' ||
-      previous.value === '>' || // the `>` of `=> {`
-      previous.value === ':'
+      previous.value === '>' // the `>` of `=> {`
     );
   }
   if (previous.type === 'ident') return BLOCK_PRECEDING_KEYWORDS.has(previous.value);
@@ -275,6 +286,9 @@ function lex(source) {
     // tell a `)` that closed `if (...)` from one that closed a call, and a `}`
     // that closed a block from one that closed an object literal.
     const brackets = [];
+    // Depths of the `?` tokens still waiting for their `:`, so a ternary colon
+    // can be told from an object property's colon and from a `case` label's.
+    const ternaries = [];
 
     function innermost() {
       return brackets.length === 0 ? null : brackets[brackets.length - 1];
@@ -352,7 +366,7 @@ function lex(source) {
       }
       if (c === '{') {
         depth++;
-        brackets.push({ kind: 'brace', block: startsBlock(previous()) });
+        brackets.push({ kind: 'brace', block: startsBlock(previous(), innermost()) });
         tokens.push({ type: 'punct', value: '{', offset: i });
         i++;
         continue;
@@ -370,16 +384,41 @@ function lex(source) {
         i++;
         continue;
       }
+      if (c === '?') {
+        if (source[i + 1] === '.') {
+          tokens.push({ type: 'punct', value: '?.', offset: i });
+          i += 2;
+          continue;
+        }
+        // `??` and `??=` are single operators: lexing them as two `?` tokens
+        // would leave a phantom pending ternary behind.
+        if (source[i + 2] === '=' && source[i + 1] === '?') {
+          tokens.push({ type: 'punct', value: '??=', offset: i });
+          i += 3;
+          continue;
+        }
+        if (source[i + 1] === '?') {
+          tokens.push({ type: 'punct', value: '??', offset: i });
+          i += 2;
+          continue;
+        }
+        tokens.push({ type: 'punct', value: '?', offset: i });
+        ternaries.push(brackets.length);
+        i++;
+        continue;
+      }
+      if (c === ':') {
+        // A `:` at the depth of a pending `?` is that ternary's false branch.
+        const isTernary = ternaries.length > 0 && ternaries[ternaries.length - 1] === brackets.length;
+        if (isTernary) ternaries.pop();
+        tokens.push({ type: 'punct', value: ':', offset: i, ternary: isTernary });
+        i++;
+        continue;
+      }
       const three = source.slice(i, i + 3);
-      const two = source.slice(i, i + 2);
       if (three === '...') {
         tokens.push({ type: 'punct', value: '...', offset: i });
         i += 3;
-        continue;
-      }
-      if (two === '?.') {
-        tokens.push({ type: 'punct', value: '?.', offset: i });
-        i += 2;
         continue;
       }
       tokens.push({ type: 'punct', value: c, offset: i });
@@ -761,19 +800,29 @@ function scanSource(source, options) {
         } else if (target[0] === 'Date' && target[1] === 'now' && target.length === 2) {
           report('clock-read', 'reads Date.now(); core receives time from its caller', chain.token.offset);
         } else if (target[0] === 'Date' && target.length === 1) {
-          // A zero-argument construction (`new Date()`) and a zero-argument
-          // call (`Date()`) both read the clock; `new Date(value)` is the
-          // permitted form. `globalThis.Date` is the same binding, so it is
-          // checked without `new` too.
+          // Two forms reach the Date FUNCTION, which returns the current time
+          // however it is called: `Date(...)` — including through
+          // `.call`/`.apply`, whose arguments are the helper's, not Date's —
+          // and the zero-argument construction `new Date()` / `new Date`.
+          // `new Date(value)` is the only permitted form, because it parses a
+          // value the caller supplied. `globalThis.Date` is the same binding,
+          // so it is checked without `new` too.
           const withNew = isIdent(previous, 'new');
-          if ((withNew || isGlobalRoot) && (isEmptyCall || !hasCall)) {
+          if (withNew) {
+            if (isEmptyCall || !hasCall) {
+              report(
+                'clock-read',
+                'constructs a Date with no argument; `new Date(value)` from the caller is the permitted form',
+                chain.token.offset
+              );
+            }
+          } else if (hasCall) {
             report(
               'clock-read',
-              'constructs a Date with no argument; `new Date(value)` from the caller is the permitted form',
+              'reaches the Date function, which returns the current time however it is called; ' +
+                '`new Date(value)` from the caller is the only permitted form',
               chain.token.offset
             );
-          } else if (hasCall && isEmptyCall) {
-            report('clock-read', 'calls Date() with no argument; core receives time from its caller', chain.token.offset);
           }
         } else if (target[0] === 'Math' && target[1] === 'random' && target.length === 2) {
           report('randomness', 'calls Math.random(); core must be deterministic', chain.token.offset);
