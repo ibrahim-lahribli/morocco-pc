@@ -552,6 +552,124 @@ describe('purity scanner: regex literals are not structural braces', () => {
   });
 });
 
+// --- C2. a regex literal can follow a condition or a closed block -----------
+
+describe('purity scanner: a regex literal after a condition or a closed block', () => {
+  it('lexes a regex after an if condition as one token', () => {
+    const tokens = lex('if (flag) /}/.test(text);');
+    const regex = tokens.find((token) => token.type === 'regex');
+    assert.ok(regex, JSON.stringify(tokens));
+    assert.equal(regex.value, '/}/');
+  });
+
+  it('lexes a regex after a while condition as one token', () => {
+    const tokens = lex('while (n) /}/.test(text);');
+    assert.equal(tokens.filter((token) => token.type === 'regex').length, 1);
+    assert.deepEqual(
+      tokens.filter((token) => token.type === 'punct' && token.value === '}'),
+      [],
+      'the brace in the regex must not become a structural brace'
+    );
+  });
+
+  it('lexes a regex after a block statement as one token', () => {
+    const tokens = lex('if (flag) { work(); } /}/.test(text);');
+    const regex = tokens.find((token) => token.type === 'regex');
+    assert.ok(regex, JSON.stringify(tokens));
+    assert.equal(regex.value, '/}/');
+  });
+
+  it('keeps division a division after a call, a group and an object literal', () => {
+    const tokens = lex(['const a = f(x) / 2;', 'const b = (y + 1) / 3;', 'const c = { z: 1 } / 4;'].join('\n'));
+    assert.equal(tokens.filter((token) => token.type === 'regex').length, 0);
+  });
+
+  it('reports process.env after a regex that follows an if condition in an interpolation', () => {
+    assertReports(
+      [
+        'const value = `${(() => {',
+        '  if (flag) /}/.test(text);',
+        '  return 1;',
+        '})() || process.env.API_URL}`;',
+      ].join('\n'),
+      'process-env'
+    );
+  });
+
+  it('reports process.env after a regex that follows a while condition in an interpolation', () => {
+    assertReports(
+      [
+        'const value = `${(() => {',
+        '  while (n) /}/.test(text);',
+        '  return 1;',
+        '})() || process.env.API_URL}`;',
+      ].join('\n'),
+      'process-env'
+    );
+  });
+
+  it('reports a forbidden call after a regex that follows a block closure in an interpolation', () => {
+    assertReports(
+      [
+        'const value = `${(() => {',
+        '  if (flag) { work(); } /}/.test(text);',
+        '  return 1;',
+        '})() || Math.random()}`;',
+      ].join('\n'),
+      'randomness'
+    );
+  });
+
+  it('reports the forbidden access in the reported escape shape', () => {
+    assertReports(
+      [
+        'const value = `${(() => {',
+        '  if (flag) /}/.test(text);',
+        '  return process.env.API_URL;',
+        '})()}`;',
+      ].join('\n'),
+      'process-env'
+    );
+  });
+
+  it('does not end an interpolation at a regex after a condition', () => {
+    assertClean('const q = `${(() => { if (flag) /}/.test(text); return 1; })()}`;', 'regex after if');
+  });
+});
+
+// --- C3. invocation forms of a clock read and a random draw -----------------
+
+describe('purity scanner: forbidden functions called through call/apply/bind', () => {
+  it('reports a bare Date() call', () => {
+    assertReports('const now = Date();', 'clock-read', 'calls Date()');
+  });
+
+  it('reports Math.random.call(...)', () => {
+    assertReports('const r = Math.random.call(Math);', 'randomness');
+  });
+
+  it('reports Date.now.call(...)', () => {
+    assertReports('const now = Date.now.call(Date);', 'clock-read');
+  });
+
+  it('reports the apply and bind forms, and the global-object roots', () => {
+    assertReports('const r = Math.random.apply(Math, []);', 'randomness');
+    assertReports('const f = Math.random.bind(Math);', 'randomness');
+    assertReports('const now = Date.now.apply(Date, []);', 'clock-read');
+    assertReports('const now = globalThis.Date.now.call(globalThis.Date);', 'clock-read');
+    assertReports('const r = globalThis.Math.random.call(globalThis.Math);', 'randomness');
+  });
+
+  it('permits ordinary properties and caller-supplied time', () => {
+    assertClean('const at = new Date(row.created_at);', 'new Date(value)');
+    assertClean('const max = Math.max.call(Math, 1, 2);', 'Math.max.call');
+    assertClean('const joined = names.join.call(names, ",");', 'join.call');
+    assertClean('const fn = compute.call(null);', 'unknown .call');
+    assertClean('const pick = shape.random;', 'ordinary property read');
+    assertClean('const at = row.Date();', "a caller object's method named Date");
+  });
+});
+
 // --- D. forbidden APIs through a global object ------------------------------
 
 describe('purity scanner: forbidden APIs reached through a global object', () => {

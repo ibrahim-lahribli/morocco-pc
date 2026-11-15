@@ -10,16 +10,20 @@
 //   1. copy the package (package.json, src/, test/) into a fresh temporary
 //      directory OUTSIDE the repository, so the repository's node_modules is
 //      not an ancestor of the copy;
-//   2. fail if a node_modules directory exists in the copy or in any ancestor
-//      of it, so no bare import can be satisfied;
+//   2. fail if a node_modules entry exists in the copy or in any ancestor of
+//      it — any depth, and whether it is a directory, a file or a symbolic
+//      link, because Node resolves packages through every one of those;
+//      so no bare import can be satisfied;
 //   3. run the package's own command (`node --test "test/*.test.js"`) from the
 //      copy with NODE_PATH emptied;
 //   4. remove the temporary tree in a `finally`, whether the run passed, failed
 //      or threw.
 //
-// It is deliberately NOT named *.test.js: test:core globs `test/*.test.js`, and
-// a test file that re-runs the suite would invoke itself forever. CI runs it as
-// its own step (`node packages/recommendation-core/test/hermetic-run.js`).
+// This file is not itself a suite: test:core globs `test/*.test.js`, and a test
+// that re-ran the whole suite would invoke itself forever. CI runs it as its
+// own step (`node packages/recommendation-core/test/hermetic-run.js`), and
+// test/hermetic-run.test.js requires the reachability helpers below — `main()`
+// runs only when this file is the entry point.
 //
 // Node's own test runner only: no third-party package, no database, no network.
 
@@ -44,16 +48,57 @@ function ancestorNodeModules(start) {
   return found;
 }
 
-function nestedNodeModules(directory) {
+function realpathOrNull(target) {
+  try {
+    return fs.realpathSync(target);
+  } catch (_err) {
+    return null;
+  }
+}
+
+/**
+ * Every `node_modules` entry under `directory`, at any depth, including one
+ * that IS a symbolic link (`test/node_modules -> ...`) and one inside a
+ * symbolic-linked directory.
+ *
+ * Each entry is inspected with `lstat`, not with the Dirent's own type: a
+ * `node_modules` symlink is not `isDirectory()`, and Node still resolves
+ * packages through it. An entry named `node_modules` is reported whatever it
+ * is — directory, file or link — because each can satisfy an import. A link to
+ * a directory is followed, with real paths remembered so a link loop
+ * terminates; a broken link resolves nothing and is skipped.
+ */
+function nestedNodeModules(directory, visited) {
   const found = [];
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const full = path.join(directory, entry.name);
-    if (entry.name === 'node_modules') {
+  const seen = visited || new Set();
+  const realDirectory = realpathOrNull(directory);
+  if (realDirectory !== null) {
+    if (seen.has(realDirectory)) return found;
+    seen.add(realDirectory);
+  }
+  for (const entry of fs.readdirSync(directory)) {
+    const full = path.join(directory, entry);
+    if (entry === 'node_modules') {
       found.push(full);
       continue;
     }
-    found.push(...nestedNodeModules(full));
+    let entryStat;
+    try {
+      entryStat = fs.lstatSync(full);
+    } catch (err) {
+      throw new Error('cannot inspect ' + full + ': ' + err.message);
+    }
+    if (entryStat.isSymbolicLink()) {
+      let targetStat;
+      try {
+        targetStat = fs.statSync(full);
+      } catch (_err) {
+        continue; // a broken link cannot satisfy an import
+      }
+      if (targetStat.isDirectory()) found.push(...nestedNodeModules(full, seen));
+      continue;
+    }
+    if (entryStat.isDirectory()) found.push(...nestedNodeModules(full, seen));
   }
   return found;
 }
@@ -77,7 +122,7 @@ function main() {
     }
 
     console.log('hermetic core run: ' + packageCopy);
-    console.log('  node_modules: none in the copy or any ancestor');
+    console.log('  node_modules: none in the copy (nested or symlinked) or any ancestor');
     console.log('  NODE_PATH: ""');
 
     const result = spawnSync(process.execPath, ['--test', 'test/*.test.js'], {
@@ -101,4 +146,8 @@ function main() {
   }
 }
 
-process.exitCode = main();
+module.exports = { ancestorNodeModules, nestedNodeModules, main };
+
+if (require.main === module) {
+  process.exitCode = main();
+}

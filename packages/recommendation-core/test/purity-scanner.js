@@ -13,10 +13,16 @@
 //      template-literal VALUES, lexes REGULAR-EXPRESSION literals as their own
 //      token (so a `}` or `Date.now` inside one is content, not structure),
 //      and keeps template `${...}` bodies as code at any nesting depth.
+//      Regex-versus-division is decided from BRACKET NESTING, not from the
+//      preceding character alone: a `/` after a control-flow condition's `)`
+//      (`if (flag) /re/`) or after a block statement's `}` (`if (f) { g(); }
+//      /re/`) starts a regex, while a `/` after a call or group `)` or an
+//      object literal's `}` divides.
 //   2. STRUCTURAL MATCH. Rules match token sequences — `Date` `.` `now`,
 //      `new` `Date` `(`, ident `query` after a member dot and before `(`, and
 //      member chains rooted at a global object — not identifier spellings
-//      alone.
+//      alone. A trailing `.call`/`.apply`/`.bind` segment is dropped first, so
+//      `Math.random.call(Math)` still reads as `Math.random`.
 //   3. IMPORT RESOLUTION. Every statically known `require`/`import`/`from`
 //      specifier is resolved against the real filesystem with Node's resolution
 //      order (exact file, `.js`/`.cjs`/`.mjs`/`.json`, then a directory
@@ -40,6 +46,10 @@
 //   * The name heuristics for connection parameters (`connectionString`,
 //     `DATABASE_URL`, ...) are conservative: a property that merely shares one
 //     of those names is reported, and the fix is to rename it.
+//   * Telling a block statement's `}` from an object literal's `}` is a
+//     heuristic (a `{` in statement position opens a block). It is only used
+//     to choose between a regex and a division after the brace, and the
+//     statement-position reading is the one that fails closed.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -51,13 +61,25 @@ const IDENT_START = /[A-Za-z_$]/;
 const IDENT_PART = /[A-Za-z0-9_$]/;
 
 // A `/` after one of these tokens starts a DIVISION, not a regular expression.
-const DIVISION_PRECEDERS = new Set([')', ']', '}', '++', '--']);
+// `)` and `}` are deliberately NOT here: the lexer decides each one from the
+// bracket it closed (see `afterControlCondition` / `closesBlock` on the token),
+// because `if (flag) /re/` and `if (flag) { work(); } /re/` are valid code.
+const DIVISION_PRECEDERS = new Set([']', '++', '--']);
 // A `/` after one of these keywords starts a regular expression
 // (`return /re/`, `case /re/:`).
 const REGEX_KEYWORDS = new Set([
   'return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void',
   'case', 'do', 'else', 'yield', 'await', 'throw',
 ]);
+// `(` after one of these keywords opens a CONTROL-FLOW CONDITION: the `)` that
+// closes it ends a condition, not a value, so a following `/` is a regex.
+const CONTROL_CONDITION_KEYWORDS = new Set(['if', 'while', 'for', 'switch', 'catch', 'with']);
+// `{` after one of these keywords opens a BLOCK STATEMENT, always.
+const BLOCK_PRECEDING_KEYWORDS = new Set(['else', 'do', 'try', 'finally']);
+// Invocation helpers. `Math.random.call(Math)` reaches the same function as
+// `Math.random()`, so the helper segment is dropped before the rules read the
+// member chain; only the helper segment, never the name under test.
+const INVOCATION_METHODS = new Set(['call', 'apply', 'bind']);
 
 // Objects whose properties ARE the global scope: `window.fetch` reaches the
 // same binding as `fetch`, so the member chain is analysed from the property
@@ -65,6 +87,31 @@ const REGEX_KEYWORDS = new Set([
 const GLOBAL_OBJECTS = new Set(['globalThis', 'window', 'self', 'global']);
 
 // --- lexer ------------------------------------------------------------------
+
+/**
+ * Does the `{` that follows `previous` open a BLOCK STATEMENT rather than an
+ * object literal? It decides whether a `/` after that block's `}` starts a
+ * statement (regex) or divides an object literal's value. Statement position
+ * follows a `)` (a control condition or a function body), `=>`, `else`/`do`/
+ * `try`/`finally`, a `;` or `}` that ended the previous statement, `case x:`,
+ * or the start of the code; a value position follows `=`, `(`, `[`, `,`,
+ * `return` and the operators.
+ */
+function startsBlock(previous) {
+  if (!previous) return true;
+  if (previous.type === 'punct') {
+    return (
+      previous.value === ')' ||
+      previous.value === '}' ||
+      previous.value === ';' ||
+      previous.value === '{' ||
+      previous.value === '>' || // the `>` of `=> {`
+      previous.value === ':'
+    );
+  }
+  if (previous.type === 'ident') return BLOCK_PRECEDING_KEYWORDS.has(previous.value);
+  return false;
+}
 
 /**
  * Tokenize JavaScript well enough to tell code from comments, strings and
@@ -162,7 +209,15 @@ function lex(source) {
   function regexAllowed() {
     const prev = previous();
     if (!prev) return true;
-    if (prev.type === 'punct') return !DIVISION_PRECEDERS.has(prev.value);
+    if (prev.type === 'punct') {
+      // A `)` that closed a control-flow condition and a `}` that closed a
+      // block statement end a STATEMENT position, so `/` starts a regex there;
+      // a `)` that closed a call or a group, and a `}` that closed an object
+      // literal, end a VALUE, so `/` divides.
+      if (prev.value === ')') return prev.afterControlCondition === true;
+      if (prev.value === '}') return prev.closesBlock === true;
+      return !DIVISION_PRECEDERS.has(prev.value);
+    }
     if (prev.type === 'ident') return REGEX_KEYWORDS.has(prev.value);
     // string, number or regex: `/` divides.
     return false;
@@ -216,6 +271,15 @@ function lex(source) {
 
   function lexCode(stopAtBrace) {
     let depth = 0;
+    // Open bracket contexts, innermost last. They are what lets `regexAllowed`
+    // tell a `)` that closed `if (...)` from one that closed a call, and a `}`
+    // that closed a block from one that closed an object literal.
+    const brackets = [];
+
+    function innermost() {
+      return brackets.length === 0 ? null : brackets[brackets.length - 1];
+    }
+
     while (i < n) {
       const c = source[i];
       if (c === '\n' || c === '\r' || c === ' ' || c === '\t') {
@@ -255,19 +319,54 @@ function lex(source) {
         tokens.push(readNumber());
         continue;
       }
+      if (c === '(') {
+        const before = previous();
+        brackets.push({
+          kind: 'paren',
+          control: isIdent(before) && CONTROL_CONDITION_KEYWORDS.has(before.value),
+        });
+        tokens.push({ type: 'punct', value: '(', offset: i });
+        i++;
+        continue;
+      }
+      if (c === ')') {
+        const open = innermost();
+        const closesCondition = open !== null && open.kind === 'paren' && open.control === true;
+        if (open !== null && open.kind === 'paren') brackets.pop();
+        tokens.push({ type: 'punct', value: ')', offset: i, afterControlCondition: closesCondition });
+        i++;
+        continue;
+      }
+      if (c === '[') {
+        brackets.push({ kind: 'bracket' });
+        tokens.push({ type: 'punct', value: '[', offset: i });
+        i++;
+        continue;
+      }
+      if (c === ']') {
+        const open = innermost();
+        if (open !== null && open.kind === 'bracket') brackets.pop();
+        tokens.push({ type: 'punct', value: ']', offset: i });
+        i++;
+        continue;
+      }
       if (c === '{') {
         depth++;
+        brackets.push({ kind: 'brace', block: startsBlock(previous()) });
         tokens.push({ type: 'punct', value: '{', offset: i });
         i++;
         continue;
       }
-      if (c === '}' && stopAtBrace) {
-        if (depth === 0) {
+      if (c === '}') {
+        if (stopAtBrace && depth === 0) {
           i++;
           return;
         }
         depth--;
-        tokens.push({ type: 'punct', value: '}', offset: i });
+        const open = innermost();
+        const closesBlock = open !== null && open.kind === 'brace' && open.block === true;
+        if (open !== null && open.kind === 'brace') brackets.pop();
+        tokens.push({ type: 'punct', value: '}', offset: i, closesBlock });
         i++;
         continue;
       }
@@ -371,6 +470,19 @@ function readMemberChain(tokens, start) {
     break;
   }
   return { segments, end, computed, token: first };
+}
+
+/**
+ * Drop trailing `.call`/`.apply`/`.bind` segments, so a forbidden function is
+ * matched however it is invoked: `Math.random.call(Math)`, `Date.now.apply(x)`
+ * and `Math.random.bind(Math)` all reduce to their two-segment name. Only the
+ * invocation helper is dropped, and never the whole chain, so `obj.call(x)` and
+ * an ordinary property read are unaffected.
+ */
+function calledTarget(segments) {
+  const target = segments.slice();
+  while (target.length > 1 && INVOCATION_METHODS.has(target[target.length - 1])) target.pop();
+  return target;
 }
 
 function lineOf(source, offset) {
@@ -636,30 +748,36 @@ function scanSource(source, options) {
       const chain = readMemberChain(tokens, i);
       const isGlobalRoot = GLOBAL_OBJECTS.has(chain.segments[0]);
       const members = isGlobalRoot ? chain.segments.slice(1) : chain.segments;
+      // `Math.random.call(Math)` and `Date.now.call(Date)` reach the same
+      // functions; the rules below read the name without the invocation helper.
+      const target = calledTarget(members);
       const after = tokens[chain.end + 1];
       const hasCall = isPunct(after, '(');
       const isEmptyCall = hasCall && isPunct(tokens[chain.end + 2], ')');
 
-      if (members.length > 0) {
-        if (members[0] === 'process' && members[1] === 'env') {
+      if (target.length > 0) {
+        if (target[0] === 'process' && target[1] === 'env') {
           report('process-env', 'reads process.env; core takes its environment as an argument', chain.token.offset);
-        } else if (members[0] === 'Date' && members[1] === 'now' && members.length === 2) {
+        } else if (target[0] === 'Date' && target[1] === 'now' && target.length === 2) {
           report('clock-read', 'reads Date.now(); core receives time from its caller', chain.token.offset);
-        } else if (members[0] === 'Date' && members.length === 1) {
-          // A zero-argument construction reads the clock; `new Date(value)` is
-          // the permitted form. `globalThis.Date` is checked even without
-          // `new`, because it is the same binding.
-          const constructs = isGlobalRoot || isIdent(previous, 'new');
-          if (constructs && (isEmptyCall || !hasCall)) {
+        } else if (target[0] === 'Date' && target.length === 1) {
+          // A zero-argument construction (`new Date()`) and a zero-argument
+          // call (`Date()`) both read the clock; `new Date(value)` is the
+          // permitted form. `globalThis.Date` is the same binding, so it is
+          // checked without `new` too.
+          const withNew = isIdent(previous, 'new');
+          if ((withNew || isGlobalRoot) && (isEmptyCall || !hasCall)) {
             report(
               'clock-read',
               'constructs a Date with no argument; `new Date(value)` from the caller is the permitted form',
               chain.token.offset
             );
+          } else if (hasCall && isEmptyCall) {
+            report('clock-read', 'calls Date() with no argument; core receives time from its caller', chain.token.offset);
           }
-        } else if (members[0] === 'Math' && members[1] === 'random' && members.length === 2) {
+        } else if (target[0] === 'Math' && target[1] === 'random' && target.length === 2) {
           report('randomness', 'calls Math.random(); core must be deterministic', chain.token.offset);
-        } else if (members[0] === 'crypto') {
+        } else if (target[0] === 'crypto') {
           // `{ crypto: 2 }` / `{ crypto }` in an object literal: a property key
           // named crypto is a name, not a use of the global. A GLOBAL
           // `globalThis.crypto` is always a use.
@@ -670,7 +788,7 @@ function scanSource(source, options) {
               chain.token.offset
             );
           }
-        } else if (isGlobalRoot && (members[0] === 'require' || members[0] === 'import')) {
+        } else if (isGlobalRoot && (target[0] === 'require' || target[0] === 'import')) {
           report(
             'global-import',
             'reaches ' +
@@ -678,7 +796,7 @@ function scanSource(source, options) {
               '; an import must be a statically verifiable relative path, not a global call',
             chain.token.offset
           );
-        } else if (HTTP_GLOBALS.has(members[0]) && hasCall) {
+        } else if (HTTP_GLOBALS.has(target[0]) && hasCall) {
           report(
             'http-call',
             'calls ' + chain.segments.join('.') + '(); core performs no network I/O',
