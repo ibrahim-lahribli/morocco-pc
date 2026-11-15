@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "pg": "^8.0.0",
-    "@morocco-pc/database-guard": "file:../../packages/database-guard"
+    "@morocco-pc/database-guard": "file:../../packages/database-guard",
+    "dotenv": "^17.4.2"
   },
   "scripts": {
     "test": "node --test \"test/**/*.test.js\"",

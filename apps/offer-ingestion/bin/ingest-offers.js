@@ -17,6 +17,7 @@
 
 require('dotenv').config();
 const fs = require('fs');
+const crypto = require('crypto');
 const { Client } = require('pg');
 
 const {
@@ -76,6 +77,12 @@ function parseArgs(argv) {
   return args;
 }
 
+/** Credential-free target digest, `db:<12 hex>`, for the audit target line. */
+function targetDigest(connectionString) {
+  const { host, database } = normalizeTarget(connectionString);
+  return 'db:' + crypto.createHash('sha256').update(host + '/' + database).digest('hex').slice(0, 12);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -126,16 +133,68 @@ async function main() {
     connectionTimeoutMillis: target.connectionTimeoutMillis,
   });
 
+  // Layer 1 reads, scoped to this run's transaction when committing.
+  async function lookupStore(retailer) {
+    const result = await client.query(
+      'SELECT id FROM store WHERE name = $1 AND is_active = TRUE LIMIT 1',
+      [retailer]
+    );
+    return result.rows.length === 1 ? result.rows[0].id : null;
+  }
+
+  async function lookupCatalogueKey(slug, sku) {
+    const result = await client.query(
+      'SELECT p.id AS product_id, pv.id AS product_variant_id,' +
+        ' (SELECT COUNT(*) FROM product_variant pv2 WHERE pv2.product_id = p.id)::int AS variant_count' +
+        ' FROM product p' +
+        ' LEFT JOIN product_variant pv ON pv.product_id = p.id AND pv.sku = $2' +
+        ' WHERE p.slug = $1 AND p.lifecycle_status = $3',
+      [slug, sku, 'ACTIVE']
+    );
+    const row = result.rows[0];
+    if (!row) {
+      const err = new Error('unknown product slug: ' + slug);
+      err.code = 'UNKNOWN_PRODUCT_SLUG';
+      throw err;
+    }
+    const variantCount = Number(row.variant_count);
+    if (!sku) {
+      if (variantCount > 0) {
+        const err = new Error('variant_sku required for product: ' + slug);
+        err.code = 'VARIANT_SKU_REQUIRED';
+        throw err;
+      }
+      return { productId: row.product_id, variantId: null };
+    }
+    if (variantCount > 0 && !row.product_variant_id) {
+      const err = new Error('unknown variant sku: ' + sku + ' for product: ' + slug);
+      err.code = 'UNKNOWN_VARIANT_SKU';
+      throw err;
+    }
+    return {
+      productId: row.product_id,
+      variantId: row.product_variant_id === undefined ? null : row.product_variant_id,
+    };
+  }
+
   try {
     await client.connect();
 
+    const digest = targetDigest(target.connectionString);
+    console.log(`target: ${identity.host}/${identity.database} (${digest})`);
+    if (!args.testDb) {
+      console.log(`AUDIT TARGET: ${digest} restore-point=${args.restorePoint || '<none>'}`);
+    }
+
     if (!args.commit) {
       const result = await runIngestion(client, {
-        rows: parsed.rows,
         mode: 'dry-run',
         now: new Date(),
         sourceIdentifier: args.file,
         rawText: text,
+        format: args.format,
+        lookupStore,
+        lookupCatalogueKey,
       });
       console.log(result.report);
       console.log('DRY-RUN: nothing written.');
@@ -153,11 +212,13 @@ async function main() {
     let result;
     try {
       result = await runIngestion(client, {
-        rows: parsed.rows,
         mode: 'commit',
         now: new Date(),
         sourceIdentifier: args.file,
         rawText: text,
+        format: args.format,
+        lookupStore,
+        lookupCatalogueKey,
       });
       await client.query('COMMIT');
     } catch (err) {
