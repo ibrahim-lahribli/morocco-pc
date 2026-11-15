@@ -8,6 +8,7 @@
     "test:unit": "node --test \"src/**/*.test.js\"",
     "test:scripts": "node --test \"scripts/lib/*.test.js\"",
     "test:database-guard": "node --test \"packages/database-guard/test/*.test.js\"",
+    "test:core": "node --test \"packages/recommendation-core/test/*.test.js\"",
     "seed": "node scripts/run-seeds.js",
     "gen:decisions": "node scripts/gen-decision-index.js",
     "gen:schema": "node scripts/gen-schema-reference.js",

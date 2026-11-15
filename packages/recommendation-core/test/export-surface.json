@@ -1,0 +1,6 @@
+{
+  "package": "@morocco-pc/recommendation-core",
+  "entry": "src/index.js",
+  "note": "Committed export surface of the pure core, pinned by test/index.test.js. Step 4B PR 1 ships the boundary harness only: the surface is empty because no recommendation module has moved. An extraction PR adds the module's export to src/index.js and to this list in the same commit, so growing the surface is always a reviewable diff.",
+  "exports": []
+}
