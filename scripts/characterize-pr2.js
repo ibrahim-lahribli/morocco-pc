@@ -505,12 +505,21 @@ function main() {
   const serialized = JSON.stringify(document, null, 2) + '\n';
 
   if (check) {
-    const existing = fs.readFileSync(OUT_FILE, 'utf8');
-    if (existing !== serialized) {
-      process.stderr.write('characterize-pr2: the fixture does not match the current implementation\n');
+    // The provenance block names the PRE-MOVE commit, so it is expected to
+    // differ once the extraction is committed. Only the captured behaviour is
+    // compared: that is what must not change.
+    const existing = JSON.parse(fs.readFileSync(OUT_FILE, 'utf8'));
+    const captured = (doc) => {
+      const { provenance: _provenance, ...behaviour } = doc;
+      return JSON.stringify(behaviour, null, 2);
+    };
+    if (captured(existing) !== captured(document)) {
+      process.stderr.write(
+        'characterize-pr2: the captured behaviour no longer matches the pre-move baseline\n'
+      );
       return 1;
     }
-    process.stdout.write('characterize-pr2: OK - fixture matches\n');
+    process.stdout.write('characterize-pr2: OK - behaviour matches the pre-move baseline\n');
     return 0;
   }
 
