@@ -1,0 +1,1781 @@
+{
+  "kind": "pr2-characterization",
+  "description": "Frozen input/output pairs for the PR 2 extraction surface: candidate contracts and pool selection, hard-compatibility filtering, and the integrated-GPU handoff. Compared field by field by packages/recommendation-core/test/characterization.test.js.",
+  "timestamp_policy": "No ambient clock is read while capturing: every id and timestamp is an input literal, so the document is byte-stable on its baseline commit.",
+  "provenance": {
+    "baseline_sha": "afccc671dae5abe6df80ad56dfcbc231d7947c7a",
+    "baseline_commit_date": "2026-11-15T05:04:17+01:00",
+    "node_version": "v24.21.0",
+    "command": "node scripts/characterize-pr2.js",
+    "origin": "Captured from the PRE-MOVE implementation under src/recommendation/** before any module moved into packages/recommendation-core. The committed document is the baseline: do not regenerate it from the extracted code, because a fixture produced by the implementation under test proves nothing."
+  },
+  "candidates": {
+    "selection_input": {
+      "input": {
+        "budget_amount": 8000,
+        "currency": "MAD",
+        "use_case": "GAMING",
+        "required_roles": [
+          "CPU",
+          "MOTHERBOARD",
+          "RAM",
+          "GPU",
+          "PSU",
+          "CASE",
+          "CPU_COOLER",
+          "SSD_BOOT"
+        ]
+      },
+      "validated": {
+        "budget_amount": 8000,
+        "currency": "MAD",
+        "use_case": "GAMING",
+        "required_roles": [
+          "CPU",
+          "MOTHERBOARD",
+          "RAM",
+          "GPU",
+          "PSU",
+          "CASE",
+          "CPU_COOLER",
+          "SSD_BOOT"
+        ]
+      }
+    },
+    "selection_input_rejection": {
+      "input": {
+        "budget_amount": -1,
+        "currency": "MAD",
+        "use_case": "GAMING",
+        "required_roles": [
+          "CPU",
+          "MOTHERBOARD",
+          "RAM",
+          "GPU",
+          "PSU",
+          "CASE",
+          "CPU_COOLER",
+          "SSD_BOOT"
+        ]
+      },
+      "error": {
+        "name": "CandidateSelectionError",
+        "code": "INVALID_FIELD_VALUE",
+        "field": "budget_amount",
+        "message": "\"budget_amount\" must be greater than 0"
+      }
+    },
+    "candidate_base": {
+      "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+      "product_variant_id": null,
+      "category": "CPU",
+      "component_role": "CPU"
+    },
+    "candidate_variant": {
+      "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+      "product_variant_id": "vvvvvvvv-vvvv-vvvy-vvvv-000000000001",
+      "category": "GPU",
+      "component_role": "GPU"
+    },
+    "candidate_rejection": {
+      "input": {
+        "component_role": "GPU",
+        "category": "CPU",
+        "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004"
+      },
+      "error": {
+        "name": "CandidateSelectionError",
+        "code": "ROLE_CATEGORY_MISMATCH",
+        "field": "category",
+        "message": "Component role \"GPU\" requires product category \"GPU\" but got \"CPU\""
+      }
+    },
+    "pool": {
+      "input": {
+        "selection_input": {
+          "budget_amount": 8000,
+          "currency": "MAD",
+          "use_case": "GAMING",
+          "required_roles": [
+            "CPU",
+            "MOTHERBOARD",
+            "RAM",
+            "GPU",
+            "PSU",
+            "CASE",
+            "CPU_COOLER",
+            "SSD_BOOT"
+          ]
+        },
+        "candidates": [
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+            "product_variant_id": null,
+            "category": "STORAGE",
+            "component_role": "SSD_BOOT"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+            "product_variant_id": null,
+            "category": "CASE",
+            "component_role": "CASE"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+            "product_variant_id": null,
+            "category": "CPU",
+            "component_role": "CPU"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+            "product_variant_id": null,
+            "category": "PSU",
+            "component_role": "PSU"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+            "product_variant_id": "vvvvvvvv-vvvv-vvvy-vvvv-000000000001",
+            "category": "GPU",
+            "component_role": "GPU"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+            "product_variant_id": null,
+            "category": "COOLER",
+            "component_role": "CPU_COOLER"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+            "product_variant_id": null,
+            "category": "MOTHERBOARD",
+            "component_role": "MOTHERBOARD"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+            "product_variant_id": null,
+            "category": "MEMORY",
+            "component_role": "RAM"
+          }
+        ]
+      },
+      "output": {
+        "input": {
+          "budget_amount": 8000,
+          "currency": "MAD",
+          "use_case": "GAMING",
+          "required_roles": [
+            "CPU",
+            "MOTHERBOARD",
+            "RAM",
+            "GPU",
+            "PSU",
+            "CASE",
+            "CPU_COOLER",
+            "SSD_BOOT"
+          ]
+        },
+        "pool": [
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+            "product_variant_id": null,
+            "category": "CPU",
+            "component_role": "CPU"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+            "product_variant_id": "vvvvvvvv-vvvv-vvvy-vvvv-000000000001",
+            "category": "GPU",
+            "component_role": "GPU"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+            "product_variant_id": null,
+            "category": "MOTHERBOARD",
+            "component_role": "MOTHERBOARD"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+            "product_variant_id": null,
+            "category": "MEMORY",
+            "component_role": "RAM"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+            "product_variant_id": null,
+            "category": "STORAGE",
+            "component_role": "SSD_BOOT"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+            "product_variant_id": null,
+            "category": "PSU",
+            "component_role": "PSU"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+            "product_variant_id": null,
+            "category": "CASE",
+            "component_role": "CASE"
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+            "product_variant_id": null,
+            "category": "COOLER",
+            "component_role": "CPU_COOLER"
+          }
+        ]
+      },
+      "repeated_run_is_deeply_equal": true
+    },
+    "pool_empty_rejection": {
+      "input": {
+        "selection_input": {
+          "budget_amount": 8000,
+          "currency": "MAD",
+          "use_case": "GAMING",
+          "required_roles": [
+            "CPU",
+            "MOTHERBOARD",
+            "RAM",
+            "GPU",
+            "PSU",
+            "CASE",
+            "CPU_COOLER",
+            "SSD_BOOT"
+          ]
+        },
+        "candidates": []
+      },
+      "error": {
+        "name": "CandidateSelectionError",
+        "code": "EMPTY_CANDIDATE_POOL",
+        "field": "candidates",
+        "message": "Candidate selection requires at least one candidate"
+      }
+    }
+  },
+  "filtering": [
+    {
+      "name": "all-compatible",
+      "context": {
+        "candidates": {
+          "CPU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+              "product_variant_id": null,
+              "category": "CPU",
+              "component_role": "CPU"
+            }
+          ],
+          "GPU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+              "product_variant_id": "vvvvvvvv-vvvv-vvvy-vvvv-000000000001",
+              "category": "GPU",
+              "component_role": "GPU"
+            }
+          ],
+          "MOTHERBOARD": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+              "product_variant_id": null,
+              "category": "MOTHERBOARD",
+              "component_role": "MOTHERBOARD"
+            }
+          ],
+          "RAM": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+              "product_variant_id": null,
+              "category": "MEMORY",
+              "component_role": "RAM"
+            }
+          ],
+          "SSD_BOOT": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+              "product_variant_id": null,
+              "category": "STORAGE",
+              "component_role": "SSD_BOOT"
+            }
+          ],
+          "SSD_SECONDARY": [],
+          "PSU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+              "product_variant_id": null,
+              "category": "PSU",
+              "component_role": "PSU"
+            }
+          ],
+          "CASE": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+              "product_variant_id": null,
+              "category": "CASE",
+              "component_role": "CASE"
+            }
+          ],
+          "CPU_COOLER": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+              "product_variant_id": null,
+              "category": "COOLER",
+              "component_role": "CPU_COOLER"
+            }
+          ]
+        },
+        "specs": {
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000001": {
+            "socket_id": "pppppppp-pppp-pppp-pppp-000000000001",
+            "product_family_id": "pppppppp-pppp-pppp-pppp-000000000030",
+            "integrated_gpu_present": true,
+            "tdp_watts": 125
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000002": {
+            "socket_id": "pppppppp-pppp-pppp-pppp-000000000001",
+            "form_factor": "ATX",
+            "memory_type_id": "pppppppp-pppp-pppp-pppp-000000000020",
+            "dimm_slots": 4,
+            "max_memory_capacity_gb": 128
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000003": {
+            "memory_type_id": "pppppppp-pppp-pppp-pppp-000000000020",
+            "module_count": 2,
+            "capacity_per_module_gb": 8
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000006": {
+            "cooling_type": "AIR",
+            "cooler_requires_radiator": false,
+            "radiator_size_mm": null,
+            "radiator_position": null,
+            "height_mm": 155,
+            "max_tdp_watts": 250
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000007": {
+            "max_gpu_length_mm": 360,
+            "max_gpu_thickness_slots": 3,
+            "max_cpu_cooler_height_mm": 170
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000005": {
+            "rated_wattage": 750,
+            "power_connectors": {
+              "24pin_atx": 1,
+              "eps": 1,
+              "pcie_8pin": 2,
+              "12vhpwr": 1,
+              "sata": 4
+            }
+          },
+          "v:vvvvvvvv-vvvv-vvvy-vvvv-000000000001": {
+            "board_tgp_watts": 180,
+            "length_mm": 300,
+            "width_slots": 2.5,
+            "required_power_connectors": {
+              "pcie_8pin": 1
+            },
+            "recommended_psu_watts": 650,
+            "vram_capacity_gb": 8
+          }
+        },
+        "platform_by_socket": {
+          "pppppppp-pppp-pppp-pppp-000000000001": "pppppppp-pppp-pppp-pppp-000000000010"
+        },
+        "compat": {
+          "cpu_motherboard_exact": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000002": [
+              {
+                "source_table": "cpu_motherboard_support",
+                "source_id": "cm-exact",
+                "support_status": "PASS",
+                "cpu_product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+                "min_bios_version": null
+              }
+            ]
+          },
+          "cpu_motherboard_family": {},
+          "cooler_socket": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000006": [
+              {
+                "source_table": "cooler_socket_support",
+                "source_id": "cs-1",
+                "support_status": "PASS",
+                "socket_id": "pppppppp-pppp-pppp-pppp-000000000001"
+              }
+            ]
+          },
+          "case_form_factor": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000007": [
+              {
+                "source_table": "case_motherboard_form_factor",
+                "source_id": "cff-1",
+                "support_status": null,
+                "form_factor": "ATX"
+              }
+            ]
+          },
+          "case_radiator": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000007": [
+              {
+                "source_table": "case_radiator_support",
+                "source_id": "cr-1",
+                "support_status": null,
+                "radiator_size_mm": 240,
+                "position": "TOP"
+              }
+            ]
+          },
+          "platform_memory": {
+            "pppppppp-pppp-pppp-pppp-000000000010": [
+              {
+                "source_table": "platform_memory_support",
+                "source_id": "pm-1",
+                "support_status": null,
+                "memory_type_id": "pppppppp-pppp-pppp-pppp-000000000020"
+              }
+            ]
+          }
+        }
+      },
+      "output": {
+        "results": [
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+            "product_variant_id": null,
+            "category": "CPU",
+            "component_role": "CPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "cpu_motherboard": "PASS",
+              "cooler_socket": "PASS",
+              "platform_memory": "PASS",
+              "cooler_tdp": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+            "product_variant_id": "vvvvvvvv-vvvv-vvvy-vvvv-000000000001",
+            "category": "GPU",
+            "component_role": "GPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "gpu_case": "PASS",
+              "gpu_psu": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+            "product_variant_id": null,
+            "category": "MOTHERBOARD",
+            "component_role": "MOTHERBOARD",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "cpu_motherboard": "PASS",
+              "motherboard_memory": "PASS",
+              "case_form_factor": "PASS",
+              "mb_memory_slots": "PASS",
+              "mb_memory_capacity": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+            "product_variant_id": null,
+            "category": "MEMORY",
+            "component_role": "RAM",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "motherboard_memory": "PASS",
+              "platform_memory": "PASS",
+              "mb_memory_slots": "PASS",
+              "mb_memory_capacity": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+            "product_variant_id": null,
+            "category": "STORAGE",
+            "component_role": "SSD_BOOT",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+            "product_variant_id": null,
+            "category": "PSU",
+            "component_role": "PSU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "gpu_psu": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+            "product_variant_id": null,
+            "category": "CASE",
+            "component_role": "CASE",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "case_form_factor": "PASS",
+              "case_radiator": "PASS",
+              "gpu_case": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+            "product_variant_id": null,
+            "category": "COOLER",
+            "component_role": "CPU_COOLER",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "cooler_socket": "PASS",
+              "case_radiator": "PASS",
+              "cooler_tdp": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "socket-mismatch",
+      "context": {
+        "candidates": {
+          "CPU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+              "product_variant_id": null,
+              "category": "CPU",
+              "component_role": "CPU"
+            }
+          ],
+          "GPU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+              "product_variant_id": "vvvvvvvv-vvvv-vvvy-vvvv-000000000001",
+              "category": "GPU",
+              "component_role": "GPU"
+            }
+          ],
+          "MOTHERBOARD": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+              "product_variant_id": null,
+              "category": "MOTHERBOARD",
+              "component_role": "MOTHERBOARD"
+            }
+          ],
+          "RAM": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+              "product_variant_id": null,
+              "category": "MEMORY",
+              "component_role": "RAM"
+            }
+          ],
+          "SSD_BOOT": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+              "product_variant_id": null,
+              "category": "STORAGE",
+              "component_role": "SSD_BOOT"
+            }
+          ],
+          "SSD_SECONDARY": [],
+          "PSU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+              "product_variant_id": null,
+              "category": "PSU",
+              "component_role": "PSU"
+            }
+          ],
+          "CASE": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+              "product_variant_id": null,
+              "category": "CASE",
+              "component_role": "CASE"
+            }
+          ],
+          "CPU_COOLER": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+              "product_variant_id": null,
+              "category": "COOLER",
+              "component_role": "CPU_COOLER"
+            }
+          ]
+        },
+        "specs": {
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000001": {
+            "socket_id": "pppppppp-pppp-pppp-pppp-000000000001",
+            "product_family_id": "pppppppp-pppp-pppp-pppp-000000000030",
+            "integrated_gpu_present": true,
+            "tdp_watts": 125
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000002": {
+            "socket_id": "pppppppp-pppp-pppp-pppp-000000000002",
+            "form_factor": "ATX",
+            "memory_type_id": "pppppppp-pppp-pppp-pppp-000000000020",
+            "dimm_slots": 4,
+            "max_memory_capacity_gb": 128
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000003": {
+            "memory_type_id": "pppppppp-pppp-pppp-pppp-000000000020",
+            "module_count": 2,
+            "capacity_per_module_gb": 8
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000006": {
+            "cooling_type": "AIR",
+            "cooler_requires_radiator": false,
+            "radiator_size_mm": null,
+            "radiator_position": null,
+            "height_mm": 155,
+            "max_tdp_watts": 250
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000007": {
+            "max_gpu_length_mm": 360,
+            "max_gpu_thickness_slots": 3,
+            "max_cpu_cooler_height_mm": 170
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000005": {
+            "rated_wattage": 750,
+            "power_connectors": {
+              "24pin_atx": 1,
+              "eps": 1,
+              "pcie_8pin": 2,
+              "12vhpwr": 1,
+              "sata": 4
+            }
+          },
+          "v:vvvvvvvv-vvvv-vvvy-vvvv-000000000001": {
+            "board_tgp_watts": 180,
+            "length_mm": 300,
+            "width_slots": 2.5,
+            "required_power_connectors": {
+              "pcie_8pin": 1
+            },
+            "recommended_psu_watts": 650,
+            "vram_capacity_gb": 8
+          }
+        },
+        "platform_by_socket": {
+          "pppppppp-pppp-pppp-pppp-000000000001": "pppppppp-pppp-pppp-pppp-000000000010"
+        },
+        "compat": {
+          "cpu_motherboard_exact": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000002": [
+              {
+                "source_table": "cpu_motherboard_support",
+                "source_id": "cm-exact",
+                "support_status": "PASS",
+                "cpu_product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+                "min_bios_version": null
+              }
+            ]
+          },
+          "cpu_motherboard_family": {},
+          "cooler_socket": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000006": [
+              {
+                "source_table": "cooler_socket_support",
+                "source_id": "cs-1",
+                "support_status": "PASS",
+                "socket_id": "pppppppp-pppp-pppp-pppp-000000000001"
+              }
+            ]
+          },
+          "case_form_factor": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000007": [
+              {
+                "source_table": "case_motherboard_form_factor",
+                "source_id": "cff-1",
+                "support_status": null,
+                "form_factor": "ATX"
+              }
+            ]
+          },
+          "case_radiator": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000007": [
+              {
+                "source_table": "case_radiator_support",
+                "source_id": "cr-1",
+                "support_status": null,
+                "radiator_size_mm": 240,
+                "position": "TOP"
+              }
+            ]
+          },
+          "platform_memory": {
+            "pppppppp-pppp-pppp-pppp-000000000010": [
+              {
+                "source_table": "platform_memory_support",
+                "source_id": "pm-1",
+                "support_status": null,
+                "memory_type_id": "pppppppp-pppp-pppp-pppp-000000000020"
+              }
+            ]
+          }
+        }
+      },
+      "output": {
+        "results": [
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+            "product_variant_id": null,
+            "category": "CPU",
+            "component_role": "CPU",
+            "status": "REJECT",
+            "reason": "CPU_SOCKET_MISMATCH",
+            "relationships": {
+              "cpu_motherboard": "FAIL",
+              "cooler_socket": "PASS",
+              "platform_memory": "PASS",
+              "cooler_tdp": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+            "product_variant_id": "vvvvvvvv-vvvv-vvvy-vvvv-000000000001",
+            "category": "GPU",
+            "component_role": "GPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "gpu_case": "PASS",
+              "gpu_psu": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+            "product_variant_id": null,
+            "category": "MOTHERBOARD",
+            "component_role": "MOTHERBOARD",
+            "status": "REJECT",
+            "reason": "CPU_SOCKET_MISMATCH",
+            "relationships": {
+              "cpu_motherboard": "FAIL",
+              "motherboard_memory": "PASS",
+              "case_form_factor": "PASS",
+              "mb_memory_slots": "PASS",
+              "mb_memory_capacity": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+            "product_variant_id": null,
+            "category": "MEMORY",
+            "component_role": "RAM",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "motherboard_memory": "PASS",
+              "platform_memory": "PASS",
+              "mb_memory_slots": "PASS",
+              "mb_memory_capacity": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+            "product_variant_id": null,
+            "category": "STORAGE",
+            "component_role": "SSD_BOOT",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+            "product_variant_id": null,
+            "category": "PSU",
+            "component_role": "PSU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "gpu_psu": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+            "product_variant_id": null,
+            "category": "CASE",
+            "component_role": "CASE",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "case_form_factor": "PASS",
+              "case_radiator": "PASS",
+              "gpu_case": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+            "product_variant_id": null,
+            "category": "COOLER",
+            "component_role": "CPU_COOLER",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "cooler_socket": "PASS",
+              "case_radiator": "PASS",
+              "cooler_tdp": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "null-cpu-socket",
+      "context": {
+        "candidates": {
+          "CPU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+              "product_variant_id": null,
+              "category": "CPU",
+              "component_role": "CPU"
+            }
+          ],
+          "GPU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+              "product_variant_id": "vvvvvvvv-vvvv-vvvy-vvvv-000000000001",
+              "category": "GPU",
+              "component_role": "GPU"
+            }
+          ],
+          "MOTHERBOARD": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+              "product_variant_id": null,
+              "category": "MOTHERBOARD",
+              "component_role": "MOTHERBOARD"
+            }
+          ],
+          "RAM": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+              "product_variant_id": null,
+              "category": "MEMORY",
+              "component_role": "RAM"
+            }
+          ],
+          "SSD_BOOT": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+              "product_variant_id": null,
+              "category": "STORAGE",
+              "component_role": "SSD_BOOT"
+            }
+          ],
+          "SSD_SECONDARY": [],
+          "PSU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+              "product_variant_id": null,
+              "category": "PSU",
+              "component_role": "PSU"
+            }
+          ],
+          "CASE": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+              "product_variant_id": null,
+              "category": "CASE",
+              "component_role": "CASE"
+            }
+          ],
+          "CPU_COOLER": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+              "product_variant_id": null,
+              "category": "COOLER",
+              "component_role": "CPU_COOLER"
+            }
+          ]
+        },
+        "specs": {
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000001": {
+            "socket_id": null,
+            "product_family_id": "pppppppp-pppp-pppp-pppp-000000000030",
+            "integrated_gpu_present": true,
+            "tdp_watts": 125
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000002": {
+            "socket_id": "pppppppp-pppp-pppp-pppp-000000000001",
+            "form_factor": "ATX",
+            "memory_type_id": "pppppppp-pppp-pppp-pppp-000000000020",
+            "dimm_slots": 4,
+            "max_memory_capacity_gb": 128
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000003": {
+            "memory_type_id": "pppppppp-pppp-pppp-pppp-000000000020",
+            "module_count": 2,
+            "capacity_per_module_gb": 8
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000006": {
+            "cooling_type": "AIR",
+            "cooler_requires_radiator": false,
+            "radiator_size_mm": null,
+            "radiator_position": null,
+            "height_mm": 155,
+            "max_tdp_watts": 250
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000007": {
+            "max_gpu_length_mm": 360,
+            "max_gpu_thickness_slots": 3,
+            "max_cpu_cooler_height_mm": 170
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000005": {
+            "rated_wattage": 750,
+            "power_connectors": {
+              "24pin_atx": 1,
+              "eps": 1,
+              "pcie_8pin": 2,
+              "12vhpwr": 1,
+              "sata": 4
+            }
+          },
+          "v:vvvvvvvv-vvvv-vvvy-vvvv-000000000001": {
+            "board_tgp_watts": 180,
+            "length_mm": 300,
+            "width_slots": 2.5,
+            "required_power_connectors": {
+              "pcie_8pin": 1
+            },
+            "recommended_psu_watts": 650,
+            "vram_capacity_gb": 8
+          }
+        },
+        "platform_by_socket": {
+          "pppppppp-pppp-pppp-pppp-000000000001": "pppppppp-pppp-pppp-pppp-000000000010"
+        },
+        "compat": {
+          "cpu_motherboard_exact": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000002": [
+              {
+                "source_table": "cpu_motherboard_support",
+                "source_id": "cm-exact",
+                "support_status": "PASS",
+                "cpu_product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+                "min_bios_version": null
+              }
+            ]
+          },
+          "cpu_motherboard_family": {},
+          "cooler_socket": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000006": [
+              {
+                "source_table": "cooler_socket_support",
+                "source_id": "cs-1",
+                "support_status": "PASS",
+                "socket_id": "pppppppp-pppp-pppp-pppp-000000000001"
+              }
+            ]
+          },
+          "case_form_factor": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000007": [
+              {
+                "source_table": "case_motherboard_form_factor",
+                "source_id": "cff-1",
+                "support_status": null,
+                "form_factor": "ATX"
+              }
+            ]
+          },
+          "case_radiator": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000007": [
+              {
+                "source_table": "case_radiator_support",
+                "source_id": "cr-1",
+                "support_status": null,
+                "radiator_size_mm": 240,
+                "position": "TOP"
+              }
+            ]
+          },
+          "platform_memory": {
+            "pppppppp-pppp-pppp-pppp-000000000010": [
+              {
+                "source_table": "platform_memory_support",
+                "source_id": "pm-1",
+                "support_status": null,
+                "memory_type_id": "pppppppp-pppp-pppp-pppp-000000000020"
+              }
+            ]
+          }
+        }
+      },
+      "output": {
+        "results": [
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+            "product_variant_id": null,
+            "category": "CPU",
+            "component_role": "CPU",
+            "status": "UNKNOWN",
+            "reason": "CPU_SOCKET_UNKNOWN",
+            "relationships": {
+              "cpu_motherboard": "UNKNOWN",
+              "cooler_socket": "UNKNOWN",
+              "platform_memory": "UNKNOWN",
+              "cooler_tdp": "PASS"
+            },
+            "unknown_pairwise_count": 3,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+            "product_variant_id": "vvvvvvvv-vvvv-vvvy-vvvv-000000000001",
+            "category": "GPU",
+            "component_role": "GPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "gpu_case": "PASS",
+              "gpu_psu": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+            "product_variant_id": null,
+            "category": "MOTHERBOARD",
+            "component_role": "MOTHERBOARD",
+            "status": "UNKNOWN",
+            "reason": "CPU_SOCKET_UNKNOWN",
+            "relationships": {
+              "cpu_motherboard": "UNKNOWN",
+              "motherboard_memory": "PASS",
+              "case_form_factor": "PASS",
+              "mb_memory_slots": "PASS",
+              "mb_memory_capacity": "PASS"
+            },
+            "unknown_pairwise_count": 1,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+            "product_variant_id": null,
+            "category": "MEMORY",
+            "component_role": "RAM",
+            "status": "UNKNOWN",
+            "reason": "PLATFORM_MEMORY_SUPPORT_UNKNOWN",
+            "relationships": {
+              "motherboard_memory": "PASS",
+              "platform_memory": "UNKNOWN",
+              "mb_memory_slots": "PASS",
+              "mb_memory_capacity": "PASS"
+            },
+            "unknown_pairwise_count": 1,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+            "product_variant_id": null,
+            "category": "STORAGE",
+            "component_role": "SSD_BOOT",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+            "product_variant_id": null,
+            "category": "PSU",
+            "component_role": "PSU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "gpu_psu": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+            "product_variant_id": null,
+            "category": "CASE",
+            "component_role": "CASE",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "case_form_factor": "PASS",
+              "case_radiator": "PASS",
+              "gpu_case": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+            "product_variant_id": null,
+            "category": "COOLER",
+            "component_role": "CPU_COOLER",
+            "status": "UNKNOWN",
+            "reason": "COOLER_SOCKET_SUPPORT_UNKNOWN",
+            "relationships": {
+              "cooler_socket": "UNKNOWN",
+              "case_radiator": "PASS",
+              "cooler_tdp": "PASS"
+            },
+            "unknown_pairwise_count": 1,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "absent-partners",
+      "context": {
+        "candidates": {
+          "CPU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+              "product_variant_id": null,
+              "category": "CPU",
+              "component_role": "CPU"
+            }
+          ],
+          "GPU": [],
+          "MOTHERBOARD": [],
+          "RAM": [],
+          "SSD_BOOT": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+              "product_variant_id": null,
+              "category": "STORAGE",
+              "component_role": "SSD_BOOT"
+            }
+          ],
+          "SSD_SECONDARY": [],
+          "PSU": [],
+          "CASE": [],
+          "CPU_COOLER": []
+        },
+        "specs": {
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000001": {
+            "socket_id": null,
+            "product_family_id": "pppppppp-pppp-pppp-pppp-000000000030",
+            "integrated_gpu_present": true,
+            "tdp_watts": 125
+          }
+        },
+        "platform_by_socket": {},
+        "compat": {}
+      },
+      "output": {
+        "results": [
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+            "product_variant_id": null,
+            "category": "CPU",
+            "component_role": "CPU",
+            "status": "UNKNOWN",
+            "reason": null,
+            "relationships": {
+              "cpu_motherboard": "UNKNOWN",
+              "cooler_socket": "UNKNOWN",
+              "platform_memory": "UNKNOWN",
+              "cooler_tdp": "UNKNOWN"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+            "product_variant_id": null,
+            "category": "STORAGE",
+            "component_role": "SSD_BOOT",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "over-slot-ram",
+      "context": {
+        "candidates": {
+          "CPU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+              "product_variant_id": null,
+              "category": "CPU",
+              "component_role": "CPU"
+            }
+          ],
+          "GPU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+              "product_variant_id": "vvvvvvvv-vvvv-vvvy-vvvv-000000000001",
+              "category": "GPU",
+              "component_role": "GPU"
+            }
+          ],
+          "MOTHERBOARD": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+              "product_variant_id": null,
+              "category": "MOTHERBOARD",
+              "component_role": "MOTHERBOARD"
+            }
+          ],
+          "RAM": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+              "product_variant_id": null,
+              "category": "MEMORY",
+              "component_role": "RAM"
+            }
+          ],
+          "SSD_BOOT": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+              "product_variant_id": null,
+              "category": "STORAGE",
+              "component_role": "SSD_BOOT"
+            }
+          ],
+          "SSD_SECONDARY": [],
+          "PSU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+              "product_variant_id": null,
+              "category": "PSU",
+              "component_role": "PSU"
+            }
+          ],
+          "CASE": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+              "product_variant_id": null,
+              "category": "CASE",
+              "component_role": "CASE"
+            }
+          ],
+          "CPU_COOLER": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+              "product_variant_id": null,
+              "category": "COOLER",
+              "component_role": "CPU_COOLER"
+            }
+          ]
+        },
+        "specs": {
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000001": {
+            "socket_id": "pppppppp-pppp-pppp-pppp-000000000001",
+            "product_family_id": "pppppppp-pppp-pppp-pppp-000000000030",
+            "integrated_gpu_present": true,
+            "tdp_watts": 125
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000002": {
+            "socket_id": "pppppppp-pppp-pppp-pppp-000000000001",
+            "form_factor": "ATX",
+            "memory_type_id": "pppppppp-pppp-pppp-pppp-000000000020",
+            "dimm_slots": 4,
+            "max_memory_capacity_gb": 128
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000003": {
+            "memory_type_id": "pppppppp-pppp-pppp-pppp-000000000020",
+            "module_count": 8,
+            "capacity_per_module_gb": 8
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000006": {
+            "cooling_type": "AIR",
+            "cooler_requires_radiator": false,
+            "radiator_size_mm": null,
+            "radiator_position": null,
+            "height_mm": 155,
+            "max_tdp_watts": 250
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000007": {
+            "max_gpu_length_mm": 360,
+            "max_gpu_thickness_slots": 3,
+            "max_cpu_cooler_height_mm": 170
+          },
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000005": {
+            "rated_wattage": 750,
+            "power_connectors": {
+              "24pin_atx": 1,
+              "eps": 1,
+              "pcie_8pin": 2,
+              "12vhpwr": 1,
+              "sata": 4
+            }
+          },
+          "v:vvvvvvvv-vvvv-vvvy-vvvv-000000000001": {
+            "board_tgp_watts": 180,
+            "length_mm": 300,
+            "width_slots": 2.5,
+            "required_power_connectors": {
+              "pcie_8pin": 1
+            },
+            "recommended_psu_watts": 650,
+            "vram_capacity_gb": 8
+          }
+        },
+        "platform_by_socket": {
+          "pppppppp-pppp-pppp-pppp-000000000001": "pppppppp-pppp-pppp-pppp-000000000010"
+        },
+        "compat": {
+          "cpu_motherboard_exact": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000002": [
+              {
+                "source_table": "cpu_motherboard_support",
+                "source_id": "cm-exact",
+                "support_status": "PASS",
+                "cpu_product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+                "min_bios_version": null
+              }
+            ]
+          },
+          "cpu_motherboard_family": {},
+          "cooler_socket": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000006": [
+              {
+                "source_table": "cooler_socket_support",
+                "source_id": "cs-1",
+                "support_status": "PASS",
+                "socket_id": "pppppppp-pppp-pppp-pppp-000000000001"
+              }
+            ]
+          },
+          "case_form_factor": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000007": [
+              {
+                "source_table": "case_motherboard_form_factor",
+                "source_id": "cff-1",
+                "support_status": null,
+                "form_factor": "ATX"
+              }
+            ]
+          },
+          "case_radiator": {
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000007": [
+              {
+                "source_table": "case_radiator_support",
+                "source_id": "cr-1",
+                "support_status": null,
+                "radiator_size_mm": 240,
+                "position": "TOP"
+              }
+            ]
+          },
+          "platform_memory": {
+            "pppppppp-pppp-pppp-pppp-000000000010": [
+              {
+                "source_table": "platform_memory_support",
+                "source_id": "pm-1",
+                "support_status": null,
+                "memory_type_id": "pppppppp-pppp-pppp-pppp-000000000020"
+              }
+            ]
+          }
+        }
+      },
+      "output": {
+        "results": [
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+            "product_variant_id": null,
+            "category": "CPU",
+            "component_role": "CPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "cpu_motherboard": "PASS",
+              "cooler_socket": "PASS",
+              "platform_memory": "PASS",
+              "cooler_tdp": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+            "product_variant_id": "vvvvvvvv-vvvv-vvvy-vvvv-000000000001",
+            "category": "GPU",
+            "component_role": "GPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "gpu_case": "PASS",
+              "gpu_psu": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+            "product_variant_id": null,
+            "category": "MOTHERBOARD",
+            "component_role": "MOTHERBOARD",
+            "status": "REJECT",
+            "reason": "RAM_SLOTS_EXCEEDED",
+            "relationships": {
+              "cpu_motherboard": "PASS",
+              "motherboard_memory": "PASS",
+              "case_form_factor": "PASS",
+              "mb_memory_slots": "FAIL",
+              "mb_memory_capacity": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+            "product_variant_id": null,
+            "category": "MEMORY",
+            "component_role": "RAM",
+            "status": "REJECT",
+            "reason": "RAM_SLOTS_EXCEEDED",
+            "relationships": {
+              "motherboard_memory": "PASS",
+              "platform_memory": "PASS",
+              "mb_memory_slots": "FAIL",
+              "mb_memory_capacity": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+            "product_variant_id": null,
+            "category": "STORAGE",
+            "component_role": "SSD_BOOT",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+            "product_variant_id": null,
+            "category": "PSU",
+            "component_role": "PSU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "gpu_psu": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+            "product_variant_id": null,
+            "category": "CASE",
+            "component_role": "CASE",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "case_form_factor": "PASS",
+              "case_radiator": "PASS",
+              "gpu_case": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          },
+          {
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+            "product_variant_id": null,
+            "category": "COOLER",
+            "component_role": "CPU_COOLER",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {
+              "cooler_socket": "PASS",
+              "case_radiator": "PASS",
+              "cooler_tdp": "PASS"
+            },
+            "unknown_pairwise_count": 0,
+            "partner_product_id": null,
+            "partner_product_variant_id": null,
+            "compatibility_notes": []
+          }
+        ]
+      }
+    }
+  ],
+  "igpu_map": [
+    {
+      "name": "present-true",
+      "context": {
+        "candidates": {
+          "CPU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+              "product_variant_id": null,
+              "category": "CPU",
+              "component_role": "CPU"
+            },
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000009",
+              "product_variant_id": null,
+              "category": "CPU",
+              "component_role": "CPU"
+            }
+          ],
+          "GPU": [],
+          "MOTHERBOARD": [],
+          "RAM": [],
+          "SSD_BOOT": [],
+          "SSD_SECONDARY": [],
+          "PSU": [],
+          "CASE": [],
+          "CPU_COOLER": []
+        },
+        "specs": {
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000001": {
+            "socket_id": "pppppppp-pppp-pppp-pppp-000000000001",
+            "product_family_id": "pppppppp-pppp-pppp-pppp-000000000030",
+            "integrated_gpu_present": true,
+            "tdp_watts": 125
+          }
+        },
+        "platform_by_socket": {},
+        "compat": {}
+      },
+      "output": {
+        "uuuuuuuu-uuuu-uuuu-uuuu-000000000001": true,
+        "uuuuuuuu-uuuu-uuuu-uuuu-000000000009": null
+      }
+    },
+    {
+      "name": "present-false",
+      "context": {
+        "candidates": {
+          "CPU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+              "product_variant_id": null,
+              "category": "CPU",
+              "component_role": "CPU"
+            },
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000009",
+              "product_variant_id": null,
+              "category": "CPU",
+              "component_role": "CPU"
+            }
+          ],
+          "GPU": [],
+          "MOTHERBOARD": [],
+          "RAM": [],
+          "SSD_BOOT": [],
+          "SSD_SECONDARY": [],
+          "PSU": [],
+          "CASE": [],
+          "CPU_COOLER": []
+        },
+        "specs": {
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000001": {
+            "socket_id": "pppppppp-pppp-pppp-pppp-000000000001",
+            "product_family_id": "pppppppp-pppp-pppp-pppp-000000000030",
+            "integrated_gpu_present": false,
+            "tdp_watts": 125
+          }
+        },
+        "platform_by_socket": {},
+        "compat": {}
+      },
+      "output": {
+        "uuuuuuuu-uuuu-uuuu-uuuu-000000000001": false,
+        "uuuuuuuu-uuuu-uuuu-uuuu-000000000009": null
+      }
+    },
+    {
+      "name": "present-null",
+      "context": {
+        "candidates": {
+          "CPU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+              "product_variant_id": null,
+              "category": "CPU",
+              "component_role": "CPU"
+            },
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000009",
+              "product_variant_id": null,
+              "category": "CPU",
+              "component_role": "CPU"
+            }
+          ],
+          "GPU": [],
+          "MOTHERBOARD": [],
+          "RAM": [],
+          "SSD_BOOT": [],
+          "SSD_SECONDARY": [],
+          "PSU": [],
+          "CASE": [],
+          "CPU_COOLER": []
+        },
+        "specs": {
+          "p:uuuuuuuu-uuuu-uuuu-uuuu-000000000001": {
+            "socket_id": "pppppppp-pppp-pppp-pppp-000000000001",
+            "product_family_id": "pppppppp-pppp-pppp-pppp-000000000030",
+            "integrated_gpu_present": null,
+            "tdp_watts": 125
+          }
+        },
+        "platform_by_socket": {},
+        "compat": {}
+      },
+      "output": {
+        "uuuuuuuu-uuuu-uuuu-uuuu-000000000001": null,
+        "uuuuuuuu-uuuu-uuuu-uuuu-000000000009": null
+      }
+    },
+    {
+      "name": "missing-spec-row",
+      "context": {
+        "candidates": {
+          "CPU": [
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+              "product_variant_id": null,
+              "category": "CPU",
+              "component_role": "CPU"
+            },
+            {
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000009",
+              "product_variant_id": null,
+              "category": "CPU",
+              "component_role": "CPU"
+            }
+          ],
+          "GPU": [],
+          "MOTHERBOARD": [],
+          "RAM": [],
+          "SSD_BOOT": [],
+          "SSD_SECONDARY": [],
+          "PSU": [],
+          "CASE": [],
+          "CPU_COOLER": []
+        },
+        "specs": {},
+        "platform_by_socket": {},
+        "compat": {}
+      },
+      "output": {
+        "uuuuuuuu-uuuu-uuuu-uuuu-000000000001": null,
+        "uuuuuuuu-uuuu-uuuu-uuuu-000000000009": null
+      }
+    }
+  ]
+}
