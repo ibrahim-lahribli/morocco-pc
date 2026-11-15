@@ -13,7 +13,7 @@ const {
   createCandidateSelectionInput,
   createCandidate,
   selectCandidatePool,
-} = require('./index');
+} = require('../src/candidates');
 
 const VALID_INPUT = {
   budget_amount: 8000,

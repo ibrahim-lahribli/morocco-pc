@@ -18,7 +18,7 @@ const {
   ERROR_CODES,
   CandidateSelectionError,
   selectCandidatePool,
-} = require('./index');
+} = require('../src/candidates');
 
 const BASE_INPUT = {
   budget_amount: 8000,
@@ -308,7 +308,12 @@ test('use_case does not affect the pool', () => {
 });
 
 test('no compatibility logic is executed', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'select.js'), 'utf8');
+  // Step 4B PR 2: read the MOVED implementation, not the src/ shim, so this
+  // assertion keeps inspecting real code rather than ten lines of re-export.
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'candidates', 'select.js'),
+    'utf8'
+  );
   const required = [...source.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
   for (const spec of required) {
     assert.ok(!spec.includes('compat'), `select.js must not require ${spec}`);
