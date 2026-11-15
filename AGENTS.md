@@ -20,14 +20,17 @@ engine logic: `apps/api/` (Fastify, the HTTP contract, the connection pool) and 
 
 The repository's layout follows the architecture RFC
 ([`docs/architecture/SYSTEM_ARCHITECTURE_AND_PROJECT_SEPARATION_RFC.md`](docs/architecture/SYSTEM_ARCHITECTURE_AND_PROJECT_SEPARATION_RFC.md)):
-architecture decisions A1-A6 are approved. **Two steps are implemented.** The database-guard package
+architecture decisions A1-A6 are approved. **Three steps are implemented.** The database-guard package
 boundary: the write-target guard lives in `packages/database-guard/` (PR #27, merged 2026-11-11). The
 `recommendation-core` boundary harness (step 4B PR 1, PR #29, merged 2026-11-15 as `56cbb69`): a loadable
 `src/index.js` that exports nothing, a purity gate with its regression suites over every file under `src/`
 (`npm run test:core`), the committed export snapshot at `test/export-surface.json`, and the hermetic runner
 `test/hermetic-run.js` that proves the suite passes with no `node_modules` reachable — `npm run test:core`
-and the hermetic run are both wired into `ci.yml`. **The harness is a boundary gate, not the extraction**: no recommendation module has moved,
-the core entry point is deliberately empty, `packages/recommendation-runtime/` still carries only its
+and the hermetic run are both wired into `ci.yml`. **The harness is a boundary gate, and step 4B PR 2 has begun the extraction behind it**: the pure
+`candidates` modules, the Engine 1 `compatibility` tree and the pure half of `filtering` now live in
+`packages/recommendation-core/src/` behind identity re-export shims at their old paths, and
+`test/export-surface.json` records the three namespaces they publish. The loaders, assembly, scoring,
+retention, ranking, explanation and `offers/as-of` have NOT moved, `packages/recommendation-runtime/` still carries only its
 manifest and planning documentation, `apps/api/src/engine.js` still imports `src/recommendation/**`
 directly, and the RFC remains PROPOSED for the remaining work. B1-B8 are open. Do not start the extraction
 from a documentation task.
