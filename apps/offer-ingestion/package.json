@@ -1,0 +1,21 @@
+{
+  "name": "@morocco-pc/offer-ingestion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offer ingestion operator job: parses operator-supplied listings, matches identities, plans and applies Layer 3 writes. No engine dependency.",
+  "main": "src/index.js",
+  "bin": {
+    "ingest-offers": "./bin/ingest-offers.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "pg": "^8.0.0",
+    "@morocco-pc/database-guard": "file:../../packages/database-guard"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "lint": "node --check src/**/*.js bin/**/*.js gates/**/*.js"
+  }
+}

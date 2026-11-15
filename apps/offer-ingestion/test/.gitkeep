@@ -1,0 +1,12 @@
+# Test directory for @morocco-pc/offer-ingestion
+
+Test strategy per RFC §12 and §22.2:
+
+1. Unit tests for `src/` modules — DB-free, no network, no env. Each module
+   is tested with supplied inputs and asserted outputs.
+2. CLI tests for `bin/ingest-offers.js` — stub `pg` Client, verify target
+   resolution and dry-run vs commit behavior.
+3. Gate tests for `gates/` — stub `pg` Client, verify verdict logic.
+
+No test here may import `@morocco-pc/recommendation-core` or
+`@morocco-pc/recommendation-runtime`. See RFC §12.3 hard rule.
