@@ -82,11 +82,14 @@ satisfaction of it — A1/A3/A4 are still `hypothesis` and OG-43 is open.
 ## 5. Measured numbers (2026-11-02; the offer-freshness date, the EU pass count and the R-14 parity
 DIFFs re-measured 2026-11-06; the test counts re-measured 2026-11-15)
 
-- `npm run test:unit` **1284 pass / 0 fail / 0 cancelled**; `npm run test:scripts` **750 / 0 / 0**;
+- `npm run test:unit` **1052 pass / 0 fail / 0 cancelled**; `npm run test:scripts` **750 / 0 / 0**;
   `npm run test:api` **193 / 0 / 0**; `npm run test:database-guard` **15 / 0 / 0**; `npm run test:core`
-  **101 tests: 99 pass / 0 fail / 2 skipped / 0 cancelled** (the two skipped cases need file symlinks,
+  **360 tests: 358 pass / 0 fail / 2 skipped / 0 cancelled** (the two skipped cases need file symlinks,
   which this platform refuses); `node packages/recommendation-core/test/hermetic-run.js` **PASS** — all
-  six re-measured 2026-11-15 on Node 24.21.0 and npm 11.19.0, on a tree merged with `master` = `4ba4122`.
+  six re-measured 2026-11-15 on Node 24.21.0 and npm 11.19.0, on `master` = `afccc67` plus the step 4B PR 2
+  extraction (234 tests moved from `test:unit` to `test:core` and 18 were added — 26 static / 30
+  effective-minimum assertions: the core surface 3, the characterization replay 12 and the ownership-split
+  filtering barrel 3 — which is why the two counts moved and no test disappeared).
   `npm run test:api:db` **17 / 0** (nightly only — it writes to the TEST branch, and was not re-measured
   here).
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,

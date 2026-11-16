@@ -343,7 +343,13 @@ test('no additional DB query is introduced: the helper is pure over the context'
   // Source-level guarantee: no SQL / async / query surface in the module.
   const fs = require('node:fs');
   const path = require('node:path');
-  const source = fs.readFileSync(path.join(__dirname, 'igpu-map.js'), 'utf8');
+  // Step 4B PR 2: igpu-map.js moved to the core package, so this reads the
+  // MOVED implementation. Reading the src/ shim instead would silently assert
+  // on ten lines of re-export and check nothing about the real module.
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-core', 'src', 'filtering', 'igpu-map.js'),
+    'utf8'
+  );
   assert.equal(source.includes('.query('), false);
   assert.equal(source.includes('SELECT '), false);
   assert.equal(source.includes('FROM '), false);

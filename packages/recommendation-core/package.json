@@ -2,7 +2,7 @@
   "name": "@morocco-pc/recommendation-core",
   "version": "0.1.0",
   "private": true,
-  "description": "Pure recommendation logic (selection, filtering, assembly, scoring, retention, ranking, explanation). Step 4B PR 1 ships the boundary harness only: a loadable entry point that exports nothing, plus the purity and export-surface suites. No module has moved yet.",
+  "description": "Pure recommendation logic (selection, filtering, assembly, scoring, retention, ranking, explanation). Step 4B PR 1 shipped the boundary harness; step 4B PR 2 moved the pure candidates modules, the Engine 1 compatibility tree and the pure filtering half here, so the entry point exports the candidates, compatibility and filtering namespaces and nothing runtime. Assembly, scoring, retention, ranking, explanation and offers/as-of have not moved yet.",
   "main": "src/index.js",
   "engines": {
     "node": ">=22"

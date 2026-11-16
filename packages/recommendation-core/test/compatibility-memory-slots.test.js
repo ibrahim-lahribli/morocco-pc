@@ -9,9 +9,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveRamMotherboardSlots } = require('./memory-slots');
-const { REASON_CODES } = require('./reason-codes');
-const { FINAL_STATUSES } = require('./statuses');
+const { resolveRamMotherboardSlots } = require('../src/compatibility/memory-slots');
+const { REASON_CODES } = require('../src/compatibility/reason-codes');
+const { FINAL_STATUSES } = require('../src/compatibility/statuses');
 
 const RAM = 'ram-1';
 const MB = 'mb-1';

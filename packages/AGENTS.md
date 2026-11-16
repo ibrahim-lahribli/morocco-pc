@@ -9,17 +9,20 @@ all of them.
 
 | Package | Responsibility | May import |
 |---|---|---|
-| `recommendation-core/` (boundary harness implemented, step 4B PR 1; module moves not started) | pure recommendation logic: selection, filtering, assembly, scoring, retention, ranking, explanation | relative paths inside itself, and nothing else |
+| `recommendation-core/` (step 4B: harness, plus pure candidates + compatibility + filtering moved) | pure recommendation logic: selection, filtering, assembly, scoring, retention, ranking, explanation | relative paths inside itself, and nothing else |
 | `recommendation-runtime/` (step 5) | SQL, loaders, persistence and orchestration over an injected `pg`-compatible handle | core's public entry points, and `database-guard` in tests |
 | `database-guard/` (implemented, step 3a) | the write-target guard: normalised-host comparison, target descriptors, direct-host derivation | nothing at all |
 
-`database-guard` is implemented (step 3a) and `recommendation-core` carries its boundary harness (step 4B
-PR 1, merged as PR #29): `src/index.js` exports nothing on purpose, `test/purity.test.js` with its scanner
-`test/purity-scanner.js` gates every file under `src/`, `test/index.test.js` pins the surface to
-`test/export-surface.json`, and `test/hermetic-run.js` (with `test/hermetic-run.test.js`) proves the suite
-runs with no `node_modules` reachable. `recommendation-runtime` still has no `src/` at all. **No
-recommendation module has moved**: the harness exists so the moves that follow are checked against a
-boundary that is already enforced — it is not authorization to move code.
+`database-guard` is implemented (step 3a), and `recommendation-core` carries its boundary harness (step 4B
+PR 1, merged as PR #29) plus the first extracted modules (step 4B PR 2): `test/purity.test.js` with its
+scanner `test/purity-scanner.js` gates every file under `src/`, `test/index.test.js` pins the surface to
+`test/export-surface.json`, `test/surface.test.js` pins each namespace key by key, and `test/hermetic-run.js`
+(with `test/hermetic-run.test.js`) proves the suite runs with no `node_modules` reachable. Under `src/` are
+the pure `candidates`, `compatibility` and `filtering` modules only; their old paths in
+`src/recommendation/**` are identity re-export shims. **A shim is not a copy**: the implementation exists
+once, in the package, and a shim is six lines that re-export it. `recommendation-runtime` still has no
+`src/` at all, and every loader, assembly, scoring, retention, ranking and explanation module is still in
+`src/recommendation/`.
 
 ## database-guard: non-negotiables
 
