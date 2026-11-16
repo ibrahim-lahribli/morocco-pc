@@ -1,11 +1,11 @@
-/**
- * Run — orchestration: parse → match → plan → apply.
+﻿/**
+ * Run â€” orchestration: parse â†’ match â†’ plan â†’ apply.
  *
  * Entry point used by the CLI and by programmatic callers. Coordinates the
- * ingestion stages but owns no database transaction itself — applyPlan
+ * ingestion stages but owns no database transaction itself â€” applyPlan
  * runs inside the caller's transaction.
  *
- * @see RFC §12.1 — runIngestion() orchestration
+ * @see RFC Â§12.1 â€” runIngestion() orchestration
  * @see existing: src/recommendation/ingestion/run.js
  */
 
@@ -31,7 +31,7 @@ function hostOf(productUrl) {
  * Run a full ingestion pass.
  *
  * Entry point used by the CLI and by programmatic callers. Coordinates the
- * ingestion stages but owns no database transaction itself — applyPlan
+ * ingestion stages but owns no database transaction itself â€” applyPlan
  * runs inside the caller's transaction.
  *
  * @param {object} client - pg Client (caller owns transaction for commit mode)
@@ -132,3 +132,4 @@ async function runIngestion(client, input) {
 module.exports = {
   runIngestion,
 };
+

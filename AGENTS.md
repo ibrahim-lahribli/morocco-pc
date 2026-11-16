@@ -15,8 +15,7 @@ and SQL-executing loaders/persistence (the architecture RFC §6.2 records that 1
 modules execute SQL). Two thin layers sit on it and own no
 engine logic: `apps/api/` (Fastify, the HTTP contract, the connection pool) and `apps/web/`
 (Next.js App Router, its own package and lockfile). There is no authentication anywhere in the tree.
-`apps/offer-ingestion` does not exist yet; offer ingestion today runs through `scripts/` and
-`src/recommendation/ingestion/`.
+`apps/offer-ingestion/` owns offer ingestion as a separate application (CLI, adapters, identity matching, offer gates and Layer 3 writes); it imports no engine module. The pre-migration implementation remains in `scripts/` and `src/recommendation/ingestion/`.
 
 The repository's layout follows the architecture RFC
 ([`docs/architecture/SYSTEM_ARCHITECTURE_AND_PROJECT_SEPARATION_RFC.md`](docs/architecture/SYSTEM_ARCHITECTURE_AND_PROJECT_SEPARATION_RFC.md)):

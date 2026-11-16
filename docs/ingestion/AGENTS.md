@@ -1,8 +1,7 @@
 # AGENTS.md — offer ingestion
 
 Scope: offer ingestion as it exists today — `src/recommendation/ingestion/**` and the offer scripts in
-`scripts/`. The design is `PIPELINE_DESIGN.md` beside this file (F8 / OG-06). There is no
-`apps/offer-ingestion/` package yet; do not create one as part of a documentation task.
+`scripts/`. The design is `PIPELINE_DESIGN.md` beside this file (F8 / OG-06). `apps/offer-ingestion/` is the ingestion application (RFC §12 / roadmap R4): it owns the CLI, adapters, identity matching, the offer gates and Layer 3 writes, and imports no engine module.
 
 ## Non-negotiables
 

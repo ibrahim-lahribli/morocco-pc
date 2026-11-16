@@ -120,12 +120,16 @@ function evaluateOfferFreshness(offers, options = {}) {
     }
   }
 
+  // Verdict contract (PASS | FAIL | INCONCLUSIVE; INCONCLUSIVE is never PASS):
+  //   - INCONCLUSIVE: no verified offers anywhere — nothing to count, not a pass.
+  //   - FAIL: any verified offer is expired (beyond the window) or has unknown age.
+  //   - PASS: every verified offer has a known age inside the window.
+  // `firstVerifiedDays` (the soonest expiry) only measures how close the freshest
+  // offer is to expiring; it must not flip a fully-fresh catalog to FAIL.
   let verdict;
   if (counts.verifiedTotal === 0) {
     verdict = 'INCONCLUSIVE';
-  } else if (counts.verifiedExpired > 0) {
-    verdict = 'FAIL';
-  } else if (firstVerifiedDays !== null && firstVerifiedDays <= maxAgeDays) {
+  } else if (counts.verifiedExpired > 0 || counts.verifiedUnknownAge > 0) {
     verdict = 'FAIL';
   } else {
     verdict = 'PASS';

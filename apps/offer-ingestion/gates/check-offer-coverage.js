@@ -1,6 +1,16 @@
 'use strict';
 
-const { COVERAGE_ROLES, VERDICTS, exitCodeFor, formatReport, reasonOf } = require('../scripts/lib/offer-coverage');
+/** The eight roles a build expands into (`candidates/roles.js` EXPANSION_ORDER). */
+const COVERAGE_ROLES = Object.freeze([
+  'CPU',
+  'GPU',
+  'MOTHERBOARD',
+  'RAM',
+  'SSD_BOOT',
+  'PSU',
+  'CASE',
+  'CPU_COOLER',
+]);
 
 /**
  * SQL: read only — eligibility = verified (ingestion_record_id not null),

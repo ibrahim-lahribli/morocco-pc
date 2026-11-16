@@ -27,6 +27,7 @@ const {
 
 const { runIngestion } = require('../src/run');
 const { parseManualText } = require('../src/adapters/manual');
+const { planKey } = require('../src/plan');
 
 const USAGE = [
   'usage: node bin/ingest-offers.js --adapter=manual --file=<path> [options]',
@@ -49,6 +50,7 @@ function parseArgs(argv) {
     commit: false,
     testDb: false,
     restorePoint: null,
+    targetEnv: null,
     errors: [],
   };
 
@@ -112,25 +114,54 @@ async function main() {
     process.exit(2);
   }
 
-  // Resolve target through the database-guard. Never target shared without
-  // explicit confirmation.
-  let target;
-  try {
-    target = resolveTestDbUrl(process.env);
-  } catch (err) {
-    console.error('ERROR: ' + err.message);
+  // Resolve target connection string. Never target shared without explicit
+  // confirmation; the database-guard compares hosts by db:<12 hex> digest.
+  let connectionString;
+  let targetLabel;
+  if (args.testDb && args.targetEnv) {
+    console.error('ERROR: --test-db and --target-env are mutually exclusive');
+    process.exit(2);
+  }
+  if (args.testDb) {
+    try {
+      const resolved = resolveTestDbUrl(process.env);
+      connectionString = resolved.connectionString;
+    } catch (err) {
+      console.error('ERROR: ' + err.message);
+      process.exit(2);
+    }
+    targetLabel = 'TEST_DATABASE_URL';
+  } else if (args.targetEnv) {
+    const raw = process.env[args.targetEnv];
+    if (typeof raw !== 'string' || raw.trim() === '') {
+      console.error('ERROR: --target-env ' + args.targetEnv + ' is not set');
+      process.exit(2);
+    }
+    if (args.targetEnv === 'DATABASE_URL' || args.targetEnv === 'TEST_DATABASE_URL') {
+      console.error('ERROR: --target-env must not name DATABASE_URL or TEST_DATABASE_URL by name');
+      process.exit(2);
+    }
+    try { new URL(raw); } catch (_err) {
+      console.error('ERROR: --target-env ' + args.targetEnv + ' is not a valid URL');
+      process.exit(2);
+    }
+    connectionString = raw;
+    targetLabel = args.targetEnv;
+  } else {
+    console.error('ERROR: specify --test-db or --target-env=<VAR>');
     process.exit(2);
   }
 
-  const identity = normalizeTarget(target.connectionString);
-  console.log(`target: ${identity.host}/${identity.database}`);
+  const identity = normalizeTarget(connectionString);
+  const digest = targetDigest(connectionString);
+  console.log(`target: ${identity.host}/${identity.database} (${digest})`);
   if (!args.testDb) {
-    console.log(`AUDIT TARGET: restore-point=${args.restorePoint || '<none>'}`);
+    console.log(`AUDIT TARGET: ${digest} restore-point=${args.restorePoint || '<none>'}`);
   }
 
   const client = new Client({
-    connectionString: target.connectionString,
-    connectionTimeoutMillis: target.connectionTimeoutMillis,
+    connectionString,
+    connectionTimeoutMillis: 15000,
   });
 
   // Layer 1 reads, scoped to this run's transaction when committing.
@@ -177,10 +208,32 @@ async function main() {
     };
   }
 
+  async function lookupExistingOffers(keys) {
+    if (keys.length === 0) return new Map();
+    const map = new Map();
+    const conditions = keys.map((_, i) => '(' + '$' + (i * 2 + 1) + ', ' + '$' + (i * 2 + 2) + ')').join(', ');
+    const params = keys.flatMap((k) => [k.storeId, k.listingIdentifier]);
+    const result = await client.query(
+      'SELECT store_id, listing_identifier, price, availability FROM store_offer WHERE (store_id, listing_identifier) IN (' + conditions + ')',
+      params
+    );
+    for (const row of result.rows) {
+      map.set(planKey(row.store_id, row.listing_identifier), { price: row.price, availability: row.availability });
+    }
+    return map;
+  }
+
+  // Restore-point format (R-29): must look like a Neon restore-point id.
+  if (args.commit && args.restorePoint && !/^[A-Za-z0-9_-]{8,}$/.test(args.restorePoint)) {
+    console.error('ERROR: --restore-point must match ^[A-Za-z0-9_-]{8,}$');
+    await client.end().catch(() => {});
+    process.exit(2);
+  }
+
   try {
     await client.connect();
 
-    const digest = targetDigest(target.connectionString);
+    const digest = targetDigest(connectionString);
     console.log(`target: ${identity.host}/${identity.database} (${digest})`);
     if (!args.testDb) {
       console.log(`AUDIT TARGET: ${digest} restore-point=${args.restorePoint || '<none>'}`);
@@ -195,6 +248,7 @@ async function main() {
         format: args.format,
         lookupStore,
         lookupCatalogueKey,
+        lookupExistingOffers,
       });
       console.log(result.report);
       console.log('DRY-RUN: nothing written.');
@@ -219,6 +273,7 @@ async function main() {
         format: args.format,
         lookupStore,
         lookupCatalogueKey,
+        lookupExistingOffers,
       });
       await client.query('COMMIT');
     } catch (err) {
