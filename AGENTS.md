@@ -95,6 +95,7 @@ picking a side.
 | `docs/RECIPES/` | deployment, release and documentation-governance recipes |
 | `docs/decisions/`, `docs/briefs/`, `docs/architecture/`, `docs/archive/` | templates, epic briefs, the RFC, superseded documents |
 | `docs/DECISION_INDEX.md`, `docs/SCHEMA_REFERENCE.md`, `docs/DATA_STATE.md` | GENERATED — never hand-edit |
+| `extraction-manifest.json` | versioned extraction provenance (schema: `scripts/lib/extraction-manifest.js`): one batch per extraction PR, each with its immutable baseline SHA, source/destination pairs, identity policy and optional characterization record |
 | `database/migrations/` | authoritative schema, `001`–`023` |
 | `database/seeds/` | idempotent DML-only seed data |
 | `src/recommendation/` | the engine, one directory per pipeline stage |
@@ -149,6 +150,9 @@ Read the owning file before changing that layer:
 | `node scripts/check-openapi-compatibility.js --base=origin/master` | contract compatibility against a Git ref (ADDITIVE passes, unapproved BREAKING fails) |
 | `npm run test:api:db` | HTTP end-to-end against the TEST branch (nightly; writes) |
 | `npm run verify:docs` | doc-claim gates; `--offline` for a DB-free run, `--live` adds read-only DB checks |
+| `npm run check:characterization` | the PR 2 characterization fixture still reproduces the pre-move behaviour (`--check` never writes) |
+| `npm run verify:extraction` | manifest-driven extraction provenance: every declared move is blob-identical to its batch baseline (L3) and each characterized batch's fixture predates its move (L2) |
+| `npm run verify:ownership` | test-ownership audit against the PR 2 baseline; `--base=<git-ref>` selects another revision explicitly |
 | `node scripts/gen-decision-index.js --check` | decision index freshness |
 | `npm run verify:replay -- --test-db` | replay every migration into an empty DB and diff by definition |
 | `node scripts/run-migrations.js --check` | pending migrations |

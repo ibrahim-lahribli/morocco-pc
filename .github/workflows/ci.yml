@@ -47,6 +47,28 @@ jobs:
       # copy, empties NODE_PATH, runs the package's own test command there and
       # removes the copy even if the run fails.
       - run: node packages/recommendation-core/test/hermetic-run.js
+      # --- Step 4B extraction evidence (PR 3) -------------------------------
+      # Three guarantees that used to live only in a review write-up are gates
+      # now. All three are READ-ONLY and DB-free; they read Git history, which is
+      # why the full-history checkout above is load-bearing.
+      #   * L2  - the frozen characterization fixture still reproduces the
+      #           PRE-MOVE implementation's behaviour, and --check never writes;
+      #   * L3  - every move declared in extraction-manifest.json is
+      #           blob-identical to its immutable batch baseline, and each
+      #           characterized batch's fixture predates its move;
+      #   * ownership - every moved/stayed/split test file keeps its test and
+      #           assertion counts, and an added test is never counted as moved.
+      # Separate NAMED steps: a red run names the guarantee that broke instead of
+      # pointing at one opaque "verify" step.
+      - name: Extraction characterization (L2, frozen fixture)
+        run: npm run check:characterization
+      - name: Extraction provenance (L3, manifest baseline)
+        run: npm run verify:extraction
+      # The PR 2 baseline is passed EXPLICITLY: "the commit before the move" is
+      # immutable evidence, so it is pinned here as well as in the manifest rather
+      # than inherited from whatever the manifest happens to say.
+      - name: Extraction test ownership (immutable PR2 baseline)
+        run: npm run verify:ownership -- --base=afccc671dae5abe6df80ad56dfcbc231d7947c7a
       # DB-free API contract/route tests (fastify.inject + stubs; no database).
       - run: npm run test:api
       # Contract ownership: exactly ONE versioned contract in contract/, and no
