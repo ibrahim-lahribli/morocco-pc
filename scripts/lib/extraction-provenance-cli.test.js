@@ -831,3 +831,29 @@ test('a declared capture path that already existed at the baseline is refused', 
   );
   assert.match(result.stderr, /changes paths other than the fixture and its declared capture paths: M scripts\/characterize\.js/);
 });
+
+test('an invalid capture_paths record fails closed before any batch is verified', (t) => {
+  const { fixture, baseline } = movedRepository(t);
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    characterization: {
+      fixture: 'fixtures/characterization.json',
+      capture_command: 'node scripts/characterize.js',
+      capture_commit_subject: 'capture',
+      expect_touch_commits: 1,
+      // A bare string is a plausible typo, and it must not be coerced to one path.
+      capture_paths: 'scripts/characterize.js',
+    },
+    modules: [{ source: 'src/a.js', destination: 'packages/a.js' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /characterization\.capture_paths must be an array of repo-relative paths/);
+  assert.equal(
+    /blob-identical:/.test(result.stdout),
+    false,
+    'a record that does not validate must not be partially verified'
+  );
+});
