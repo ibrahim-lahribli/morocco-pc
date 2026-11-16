@@ -20,11 +20,11 @@ const {
   MANIFEST_REL,
   MANIFEST_VERSION,
   REPO_ROOT,
-  blobAt,
   isAncestor,
   isRepoRelativePath,
   loadManifest,
   manifestFile,
+  regularFileAt,
   resolveCommit,
   validateManifest,
 } = require('./extraction-manifest');
@@ -231,7 +231,7 @@ test('isRepoRelativePath accepts repo paths and refuses escapes', () => {
   }
 });
 
-test('git helpers resolve commits, ancestry and blob identity', (t) => {
+test('git helpers resolve commits, ancestry and regular-file entries', (t) => {
   const repo = makeRepo(t);
   repo.write('src/a.js', 'same bytes\n');
   const baseline = repo.commit('baseline');
@@ -251,12 +251,13 @@ test('git helpers resolve commits, ancestry and blob identity', (t) => {
   assert.equal(isAncestor(repo.dir, baseline), true);
   assert.equal(isAncestor(repo.dir, head.sha), true);
 
-  const before = blobAt(repo.dir, baseline, 'src/a.js');
-  const after = blobAt(repo.dir, 'HEAD', 'packages/a.js');
-  assert.equal(before.ok, true);
-  assert.equal(after.ok, true);
+  const before = regularFileAt(repo.dir, baseline, 'src/a.js');
+  const after = regularFileAt(repo.dir, 'HEAD', 'packages/a.js');
+  assert.deepEqual({ ok: before.ok, mode: before.mode }, { ok: true, mode: '100644' });
+  assert.deepEqual({ ok: after.ok, mode: after.mode }, { ok: true, mode: '100644' });
   assert.equal(before.oid, after.oid);
-  assert.equal(blobAt(repo.dir, baseline, 'src/missing.js').ok, false);
+  assert.deepEqual(regularFileAt(repo.dir, baseline, 'src/missing.js'), { ok: false, reason: 'missing' });
+  assert.equal(regularFileAt(repo.dir, 'HEAD', 'packages').reason, 'directory', 'a directory is not a file');
 
   repo.run(['checkout', '--quiet', '-b', 'side']);
   repo.write('src/side.js', 'side\n');
@@ -266,6 +267,24 @@ test('git helpers resolve commits, ancestry and blob identity', (t) => {
   repo.write('packages/b.js', 'more\n');
   repo.commit('after the side branch');
   assert.equal(isAncestor(repo.dir, side), false, 'a sibling branch is not an ancestor');
+
+  // A symlink and a gitlink are index entries with no working-tree file, so they
+  // are staged directly and committed without `git add -A` (which would delete
+  // them). Both resolve through `rev:path`, which is exactly why the helper
+  // classifies by tree-entry mode and object type instead of object id alone.
+  const linkBlob = execFileSync('git', ['hash-object', '-w', '--stdin'], {
+    cwd: repo.dir,
+    encoding: 'utf8',
+    input: 'target.js',
+  }).trim();
+  repo.run(['update-index', '--add', '--cacheinfo', '120000,' + linkBlob + ',packages/link.js']);
+  repo.run(['commit', '--quiet', '-m', 'symlink entry']);
+  assert.equal(regularFileAt(repo.dir, 'HEAD', 'packages/link.js').reason, 'symlink');
+
+  const parent = repo.run(['rev-parse', 'HEAD']);
+  repo.run(['update-index', '--add', '--cacheinfo', '160000,' + parent + ',packages/sub']);
+  repo.run(['commit', '--quiet', '-m', 'gitlink entry']);
+  assert.equal(regularFileAt(repo.dir, 'HEAD', 'packages/sub').reason, 'gitlink');
 });
 
 test('loadManifest reports a missing file and invalid JSON instead of throwing', (t) => {

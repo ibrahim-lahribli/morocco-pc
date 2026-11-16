@@ -293,11 +293,51 @@ function isAncestor(repo, sha) {
   return tryGit(repo, ['merge-base', '--is-ancestor', sha, 'HEAD']).ok;
 }
 
-/** Blob object id of `rev:path`; { ok: false } when the path does not exist there. */
-function blobAt(repo, rev, filePath) {
-  const result = tryGit(repo, ['rev-parse', '--verify', '--quiet', rev + ':' + filePath]);
-  if (!result.ok || result.out === '') return { ok: false, oid: null };
-  return { ok: true, oid: result.out };
+/**
+ * Classify a manifest path at a revision.
+ *
+ * `rev:path` resolves to ANY object, so object-id equality alone would accept a
+ * directory (tree), a gitlink (commit) or a symlink (blob, mode 120000) as a
+ * "byte-identical file move": two trees compare equal, and a symlink shares its
+ * blob with any regular file whose bytes happen to be the link target. The tree
+ * ENTRY is the only place that difference is visible, so the entry - mode, type
+ * and oid - is what this reads.
+ *
+ * One `ls-tree -z` call per path, for three reasons: it reports the mode that
+ * distinguishes a link from a file, `-z` emits the path unquoted (so an exact
+ * comparison is meaningful), and a NUL-terminated record set needs no line
+ * parsing. When the pathspec names a directory, some Git versions print the tree
+ * entry and others its children; both are detected below and neither is accepted.
+ * No link is ever followed: the object is read from the tree, not the filesystem.
+ *
+ * Accepted: regular files 100644 and 100755. Everything else is { ok: false }
+ * with a reason the caller turns into a message naming the side and revision.
+ */
+function regularFileAt(repo, rev, filePath) {
+  const listing = tryGit(repo, ['ls-tree', '-z', rev, '--', filePath]);
+  if (!listing.ok) return { ok: false, reason: 'unreadable' };
+
+  const entries = [];
+  for (const record of listing.out.split('\u0000')) {
+    if (record === '') continue;
+    const parsed = /^(\d{6}) (\w+) ([0-9a-f]{40})\t([\s\S]*)$/.exec(record);
+    if (!parsed) return { ok: false, reason: 'unreadable' };
+    entries.push({ mode: parsed[1], type: parsed[2], oid: parsed[3], path: parsed[4] });
+  }
+  if (entries.length === 0) return { ok: false, reason: 'missing' };
+
+  const entry = entries.find((candidate) => candidate.path === filePath);
+  if (!entry) {
+    const isDirectory = entries.some((candidate) => candidate.path.startsWith(filePath + '/'));
+    return { ok: false, reason: isDirectory ? 'directory' : 'missing' };
+  }
+  if (entry.type === 'tree') return { ok: false, reason: 'directory', oid: entry.oid, type: entry.type };
+  if (entry.type === 'commit') return { ok: false, reason: 'gitlink', oid: entry.oid, type: entry.type };
+  if (entry.mode === '120000') {
+    return { ok: false, reason: 'symlink', oid: entry.oid, mode: entry.mode, type: entry.type };
+  }
+  if (entry.mode === '100644' || entry.mode === '100755') return { ok: true, oid: entry.oid, mode: entry.mode };
+  return { ok: false, reason: 'mode', oid: entry.oid, mode: entry.mode, type: entry.type };
 }
 
 module.exports = {
@@ -306,12 +346,12 @@ module.exports = {
   MANIFEST_REL,
   MANIFEST_VERSION,
   REPO_ROOT,
-  blobAt,
   isAncestor,
   isGitRepository,
   isRepoRelativePath,
   loadManifest,
   manifestFile,
+  regularFileAt,
   resolveCommit,
   tryGit,
   validateManifest,

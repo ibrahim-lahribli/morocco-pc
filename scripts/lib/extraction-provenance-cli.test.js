@@ -41,6 +41,9 @@ function makeFixture(t) {
   git(['config', 'user.email', 'test@example.invalid']);
   git(['config', 'user.name', 'Extraction Test']);
   git(['config', 'commit.gpgsign', 'false']);
+  // Byte identity must mean the bytes written, not the bytes after EOL
+  // conversion on this machine's global core.autocrlf.
+  git(['config', 'core.autocrlf', 'false']);
 
   const fixture = {
     root,
@@ -65,6 +68,21 @@ function makeFixture(t) {
       const bytes = fs.readFileSync(path.join(dir, source));
       fixture.write(destination, bytes);
       fixture.remove(source);
+    },
+    hashBlob(text) {
+      return execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, encoding: 'utf8', input: text }).trim();
+    },
+    /** Stage one index entry directly: a mode, an object, a path - no working-tree file. */
+    stage(mode, objectId, relative) {
+      git(['update-index', '--add', '--cacheinfo', mode + ',' + objectId + ',' + relative]);
+    },
+    unstage(relative) {
+      git(['update-index', '--force-remove', relative]);
+    },
+    /** Commit the INDEX as staged. `git add -A` here would delete cacheinfo entries. */
+    commitStaged(message) {
+      git(['commit', '--quiet', '-m', message]);
+      return git(['rev-parse', 'HEAD']);
     },
     manifest(entry) {
       fs.writeFileSync(
@@ -361,6 +379,181 @@ test('a batch that declares no characterization says so instead of implying L2',
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /characterization: none declared for this batch/);
   assert.match(result.stdout, /characterization verified for: no batch/);
+});
+
+test('an executable 100755 source and destination with identical content pass', (t) => {
+  const fixture = makeFixture(t);
+  const blob = fixture.hashBlob('#!/bin/sh\necho hi\n');
+  fixture.stage('100755', blob, 'src/tool.sh');
+  const baseline = fixture.commitStaged('baseline');
+  fixture.unstage('src/tool.sh');
+  fixture.stage('100755', blob, 'packages/tool.sh');
+  fixture.commitStaged('move');
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    modules: [{ source: 'src/tool.sh', destination: 'packages/tool.sh' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /100755 [0-9a-f]{10}/);
+  assert.match(result.stdout, /blob-identical: 1 \/ 1/);
+});
+
+test('a permission-bit change with identical bytes passes: byte identity, not file state', (t) => {
+  const fixture = makeFixture(t);
+  const blob = fixture.hashBlob('same bytes\n');
+  fixture.stage('100644', blob, 'src/run.sh');
+  const baseline = fixture.commitStaged('baseline');
+  fixture.unstage('src/run.sh');
+  fixture.stage('100755', blob, 'packages/run.sh');
+  fixture.commitStaged('make the moved file executable');
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    modules: [{ source: 'src/run.sh', destination: 'packages/run.sh' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /100644 [0-9a-f]{10} \| 100755 [0-9a-f]{10}/);
+});
+
+test('a directory source is rejected as a tree, and only that side is named', (t) => {
+  const fixture = makeFixture(t);
+  fixture.write('src/dir/a.js', 'content\n');
+  const baseline = fixture.commit('baseline');
+  fixture.write('packages/a.js', 'content\n');
+  fixture.remove('src/dir/a.js');
+  fixture.commit('move');
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    modules: [{ source: 'src/dir', destination: 'packages/a.js' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /batch batch-one: source src\/dir is a directory \(tree\) at baseline [0-9a-f]{40}, not a regular file/
+  );
+  assert.equal(/destination packages\/a\.js/.test(result.stderr), false, 'the valid side must not be reported');
+});
+
+test('a directory destination is rejected as a tree, and only that side is named', (t) => {
+  const fixture = makeFixture(t);
+  fixture.write('src/a.js', 'content\n');
+  const baseline = fixture.commit('baseline');
+  fixture.write('packages/dir/a.js', 'content\n');
+  fixture.remove('src/a.js');
+  fixture.commit('move');
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    modules: [{ source: 'src/a.js', destination: 'packages/dir' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /batch batch-one: destination packages\/dir is a directory \(tree\) at HEAD, not a regular file/);
+  assert.equal(/source src\/a\.js/.test(result.stderr), false, 'the valid side must not be reported');
+});
+
+test('a gitlink source is rejected as a submodule commit', (t) => {
+  const fixture = makeFixture(t);
+  fixture.write('vendor.txt', 'v\n');
+  const vendored = fixture.commit('vendor');
+  const blob = fixture.hashBlob('module.exports = 1;\n');
+  fixture.stage('160000', vendored, 'src/sub');
+  const baseline = fixture.commitStaged('baseline');
+  fixture.unstage('src/sub');
+  fixture.stage('100644', blob, 'packages/sub');
+  fixture.commitStaged('move');
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    modules: [{ source: 'src/sub', destination: 'packages/sub' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /batch batch-one: source src\/sub is a gitlink \(mode 160000, a submodule commit\) at baseline [0-9a-f]{40}, not a regular file/
+  );
+  assert.equal(/destination packages\/sub/.test(result.stderr), false, 'the valid side must not be reported');
+});
+
+test('a gitlink destination is rejected as a submodule commit', (t) => {
+  const fixture = makeFixture(t);
+  const blob = fixture.hashBlob('module.exports = 1;\n');
+  fixture.write('vendor.txt', 'v\n');
+  const vendored = fixture.commit('vendor');
+  fixture.stage('100644', blob, 'src/lib.js');
+  const baseline = fixture.commitStaged('baseline');
+  fixture.unstage('src/lib.js');
+  fixture.stage('160000', vendored, 'packages/sub');
+  fixture.commitStaged('move');
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    modules: [{ source: 'src/lib.js', destination: 'packages/sub' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /batch batch-one: destination packages\/sub is a gitlink \(mode 160000, a submodule commit\) at HEAD, not a regular file/
+  );
+  assert.equal(/source src\/lib\.js/.test(result.stderr), false, 'the valid side must not be reported');
+});
+
+test('a symlink source is rejected even when its blob matches the destination file', (t) => {
+  const fixture = makeFixture(t);
+  const linkBlob = fixture.hashBlob('target.js');
+  fixture.stage('120000', linkBlob, 'src/link.js');
+  const baseline = fixture.commitStaged('baseline');
+  fixture.unstage('src/link.js');
+  // The regular file holds exactly the bytes the link target names, so the two
+  // blobs are identical: only the tree-entry mode distinguishes them.
+  fixture.stage('100644', linkBlob, 'packages/target.js');
+  fixture.commitStaged('move');
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    modules: [{ source: 'src/link.js', destination: 'packages/target.js' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /batch batch-one: source src\/link\.js is a symlink \(mode 120000\) at baseline [0-9a-f]{40}, not a regular file/
+  );
+  assert.equal(/destination packages\/target\.js/.test(result.stderr), false, 'the valid side must not be reported');
+});
+
+test('a symlink destination is rejected even when its blob matches the source file', (t) => {
+  const fixture = makeFixture(t);
+  const linkBlob = fixture.hashBlob('target.js');
+  fixture.stage('100644', linkBlob, 'src/target.js');
+  const baseline = fixture.commitStaged('baseline');
+  fixture.unstage('src/target.js');
+  fixture.stage('120000', linkBlob, 'packages/link.js');
+  fixture.commitStaged('move');
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    modules: [{ source: 'src/target.js', destination: 'packages/link.js' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /batch batch-one: destination packages\/link\.js is a symlink \(mode 120000\) at HEAD, not a regular file/);
+  assert.equal(/source src\/target\.js/.test(result.stderr), false, 'the valid side must not be reported');
 });
 
 test('the real PR 2 batch still verifies 21/21', () => {

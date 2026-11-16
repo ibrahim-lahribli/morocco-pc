@@ -24,7 +24,9 @@
  *
  * What is verified, per batch
  *   * the baseline is a real commit and an ancestor of HEAD;
- *   * every source exists at the baseline and every destination at HEAD;
+ *   * every source and destination is a REGULAR FILE (mode 100644 or 100755) at
+ *     its own revision - not a directory tree, a gitlink or a symlink, and a
+ *     missing path is named as missing rather than as a mode problem;
  *   * the source blob at the baseline equals the destination blob at HEAD
  *     (IDENTITY_POLICY is the only policy, so there is nothing to branch on);
  *   * a batch that declares a characterization record must also show that its
@@ -44,11 +46,11 @@ const path = require('node:path');
 
 const {
   REPO_ROOT,
-  blobAt,
   isAncestor,
   isGitRepository,
   loadManifest,
   manifestFile,
+  regularFileAt,
   resolveCommit,
   tryGit,
 } = require('./lib/extraction-manifest');
@@ -77,6 +79,34 @@ function parseArgs(argv) {
 function displayPath(absolute) {
   const relative = path.relative(REPO_ROOT, absolute);
   return (relative.length === 0 ? absolute : relative).split(path.sep).join('/');
+}
+
+/** One failure message, naming the side, the path and the revision that failed. */
+function rejection(batchId, side, filePath, where, entry) {
+  const prefix = 'batch ' + batchId + ': ' + side + ' ' + filePath;
+  switch (entry.reason) {
+    case 'missing':
+      return prefix + ' does not exist at ' + where;
+    case 'directory':
+      return prefix + ' is a directory (tree) at ' + where + ', not a regular file';
+    case 'gitlink':
+      return prefix + ' is a gitlink (mode 160000, a submodule commit) at ' + where + ', not a regular file';
+    case 'symlink':
+      return prefix + ' is a symlink (mode 120000) at ' + where + ', not a regular file';
+    case 'mode':
+    case 'object':
+      return prefix + ' is not a regular file at ' + where +
+        ' (mode ' + (entry.mode || '?') + ', type ' + (entry.type || '?') + ')';
+    default:
+      return prefix + ' could not be read as a Git object at ' + where;
+  }
+}
+
+/** A table cell: the accepted file's mode and blob prefix, or why it was refused. */
+function renderEntry(entry) {
+  if (entry.ok) return entry.mode + ' ' + entry.oid.slice(0, 10);
+  if (entry.reason === 'missing') return 'missing';
+  return entry.mode ? entry.reason + ' ' + entry.mode : entry.reason;
 }
 
 /**
@@ -200,19 +230,15 @@ function verifyBatch(repo, batch, failures) {
   }
 
   lines.push('');
-  lines.push('| Declared move | baseline blob | HEAD blob | identical |');
+  lines.push('| Declared move | baseline entry | HEAD entry | identical |');
   lines.push('|---|---|---|---|');
 
   let identical = 0;
   for (const module of batch.modules) {
-    const before = blobAt(repo, batch.baseline_sha, module.source);
-    const after = blobAt(repo, 'HEAD', module.destination);
-    if (!before.ok) {
-      failures.push('batch ' + batch.id + ': source ' + module.source + ' does not exist at baseline ' + batch.baseline_sha);
-    }
-    if (!after.ok) {
-      failures.push('batch ' + batch.id + ': destination ' + module.destination + ' does not exist at HEAD');
-    }
+    const before = regularFileAt(repo, batch.baseline_sha, module.source);
+    const after = regularFileAt(repo, 'HEAD', module.destination);
+    if (!before.ok) failures.push(rejection(batch.id, 'source', module.source, 'baseline ' + batch.baseline_sha, before));
+    if (!after.ok) failures.push(rejection(batch.id, 'destination', module.destination, 'HEAD', after));
 
     const same = before.ok && after.ok && before.oid === after.oid;
     if (before.ok && after.ok && !same) {
@@ -222,9 +248,7 @@ function verifyBatch(repo, batch, failures) {
 
     lines.push(
       '| `' + module.source + '` -> `' + module.destination + '` | ' +
-      (before.ok ? before.oid.slice(0, 10) : 'missing') + ' | ' +
-      (after.ok ? after.oid.slice(0, 10) : 'missing') + ' | ' +
-      (same ? 'yes' : '**NO**') + ' |'
+      renderEntry(before) + ' | ' + renderEntry(after) + ' | ' + (same ? 'yes' : '**NO**') + ' |'
     );
   }
 
@@ -299,6 +323,8 @@ if (require.main === module) {
 // not run the gate.
 module.exports = {
   parseArgs,
+  rejection,
+  renderEntry,
   verifyBatch,
   verifyCharacterization,
 };
