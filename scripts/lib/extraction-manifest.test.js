@@ -1,0 +1,325 @@
+'use strict';
+
+// scripts/lib/extraction-manifest.test.js - the manifest is the single versioned
+// source of extraction provenance, so its VALIDATION is a gate of its own: a
+// malformed record must fail closed instead of being half-verified, and a later
+// batch must be addable without touching PR 2's baseline.
+//
+// DB-free and dependency-free. The Git half builds throwaway repositories under
+// os.tmpdir(); nothing here reads or writes the real database.
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+
+const {
+  MANIFEST_KIND,
+  MANIFEST_REL,
+  MANIFEST_VERSION,
+  REPO_ROOT,
+  isAncestor,
+  isRepoRelativePath,
+  loadManifest,
+  manifestFile,
+  regularFileAt,
+  resolveCommit,
+  validateManifest,
+} = require('./extraction-manifest');
+
+const FIXTURE_REL = 'packages/recommendation-core/test/fixtures/pr2-characterization.json';
+
+function batch(overrides = {}) {
+  return {
+    id: 'batch-one',
+    baseline_sha: 'a'.repeat(40),
+    identity_policy: 'byte-identical',
+    modules: [{ source: 'src/a.js', destination: 'packages/a.js' }],
+    ...overrides,
+  };
+}
+
+function document(batches, overrides = {}) {
+  return { kind: MANIFEST_KIND, version: MANIFEST_VERSION, batches, ...overrides };
+}
+
+function errorsFor(doc) {
+  const { errors } = validateManifest(doc);
+  assert.ok(errors.length > 0, 'expected the manifest to be rejected');
+  return errors;
+}
+
+function makeRepo(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'extraction-manifest-git-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const run = (args) =>
+    execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  run(['init', '--quiet']);
+  run(['config', 'user.email', 'test@example.invalid']);
+  run(['config', 'user.name', 'Extraction Test']);
+  run(['config', 'commit.gpgsign', 'false']);
+  const write = (relative, text) => {
+    const absolute = path.join(dir, relative);
+    fs.mkdirSync(path.dirname(absolute), { recursive: true });
+    fs.writeFileSync(absolute, text);
+  };
+  const commit = (message) => {
+    run(['add', '-A']);
+    run(['commit', '--quiet', '-m', message]);
+    return run(['rev-parse', 'HEAD']);
+  };
+  return { dir, run, write, commit };
+}
+
+test('the committed manifest is valid and pins PR 2 as its first batch', () => {
+  const loaded = loadManifest(manifestFile(REPO_ROOT));
+  assert.deepEqual(loaded.errors, []);
+  assert.equal(loaded.batches.length, 1);
+
+  const pr2 = loaded.batches[0];
+  assert.equal(pr2.id, 'step-4b-pr2');
+  assert.equal(pr2.identity_policy, 'byte-identical');
+  assert.equal(pr2.modules.length, 21);
+  assert.match(pr2.baseline_sha, /^[0-9a-f]{40}$/);
+  assert.ok(pr2.characterization, 'PR 2 declares its characterization record');
+  assert.equal(pr2.characterization.fixture, FIXTURE_REL);
+  assert.equal(pr2.characterization.capture_command, 'node scripts/characterize-pr2.js');
+  assert.equal(pr2.characterization.expect_touch_commits, 1);
+  // 581ee73 added the capture tool beside the fixture, so the record declares it;
+  // the verifier proves it was absent at the baseline rather than ignoring it.
+  assert.deepEqual(pr2.characterization.capture_paths, ['scripts/characterize-pr2.js']);
+});
+
+test('the manifest baseline is the fixture baseline, never the working tree', () => {
+  const { batches } = loadManifest(manifestFile(REPO_ROOT));
+  const pr2 = batches[0];
+  const fixture = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, FIXTURE_REL), 'utf8'));
+  assert.equal(fixture.provenance.baseline_sha, pr2.baseline_sha);
+
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+  assert.notEqual(pr2.baseline_sha, head, 'the baseline must not be inferred from the current revision');
+});
+
+test('every PR 2 move is declared once, from src/recommendation into the core package', () => {
+  const { batches } = loadManifest(manifestFile(REPO_ROOT));
+  const modules = batches[0].modules;
+  assert.equal(new Set(modules.map((entry) => entry.source)).size, modules.length);
+  assert.equal(new Set(modules.map((entry) => entry.destination)).size, modules.length);
+  for (const entry of modules) {
+    assert.match(entry.source, /^src\/recommendation\/.+\.js$/);
+    assert.match(entry.destination, /^packages\/recommendation-core\/src\/.+\.js$/);
+  }
+});
+
+test('a top-level schema violation is rejected', () => {
+  const cases = [
+    ['a non-object document', [], /expected a JSON object/],
+    ['a missing kind', { version: MANIFEST_VERSION, batches: [batch()] }, /kind must be/],
+    ['a wrong kind', document([batch()], { kind: 'migration-ledger' }), /kind must be/],
+    ['a wrong version', document([batch()], { version: 2 }), /version must be/],
+    ['no batches key', { kind: MANIFEST_KIND, version: MANIFEST_VERSION }, /batches must be/],
+    ['empty batches', document([]), /batches must be/],
+  ];
+  for (const [name, doc, pattern] of cases) {
+    const errors = errorsFor(doc);
+    assert.ok(errors.some((error) => pattern.test(error)), name + ': ' + errors.join(' | '));
+  }
+});
+
+test('a malformed batch record is rejected', () => {
+  const cases = [
+    ['a missing id', document([{ baseline_sha: 'a'.repeat(40), modules: batch().modules }]), /id must be/],
+    ['a non-kebab id', document([batch({ id: 'Step_4B' })]), /id must be/],
+    ['a duplicate id', document([batch(), batch({ modules: [{ source: 'src/b.js', destination: 'packages/b.js' }] })]), /duplicate batch id/],
+    ['a short baseline', document([batch({ baseline_sha: 'afccc67' })]), /40-character/],
+    ['an uppercase baseline', document([batch({ baseline_sha: 'A'.repeat(40) })]), /40-character/],
+    ['an unsupported batch policy', document([batch({ identity_policy: 'pretty-printed' })]), /only implemented policy/],
+    ['a missing modules list', document([{ id: 'batch-one', baseline_sha: 'a'.repeat(40), identity_policy: 'byte-identical' }]), /modules must be/],
+    ['an empty modules list', document([batch({ modules: [] })]), /modules must be/],
+    ['a non-object batch', document(['not-a-batch']), /expected an object/],
+  ];
+  for (const [name, doc, pattern] of cases) {
+    const errors = errorsFor(doc);
+    assert.ok(errors.some((error) => pattern.test(error)), name + ': ' + errors.join(' | '));
+  }
+});
+
+test('a malformed move record is rejected', () => {
+  const cases = [
+    ['a missing source', document([batch({ modules: [{ destination: 'packages/a.js' }] })]), /source must be/],
+    ['a missing destination', document([batch({ modules: [{ source: 'src/a.js' }] })]), /destination must be/],
+    ['an absolute destination', document([batch({ modules: [{ source: 'src/a.js', destination: '/tmp/a.js' }] })]), /destination must be/],
+    ['a parent-relative escape', document([batch({ modules: [{ source: 'src/a.js', destination: 'packages/../../a.js' }] })]), /destination must be/],
+    ['a backslash path', document([batch({ modules: [{ source: 'src/a.js', destination: 'packages\\a.js' }] })]), /destination must be/],
+    ['a drive-letter path', document([batch({ modules: [{ source: 'C:/src/a.js', destination: 'packages/a.js' }] })]), /source must be/],
+    ['source equal to destination', document([batch({ modules: [{ source: 'packages/a.js', destination: 'packages/a.js' }] })]), /same path/],
+    ['a non-object module', document([batch({ modules: ['src/a.js'] })]), /expected an object/],
+  ];
+  for (const [name, doc, pattern] of cases) {
+    const errors = errorsFor(doc);
+    assert.ok(errors.some((error) => pattern.test(error)), name + ': ' + errors.join(' | '));
+  }
+});
+
+test('a duplicate move or a shared destination is rejected, across batches too', () => {
+  const duplicated = validateManifest(document([batch({ modules: [
+    { source: 'src/a.js', destination: 'packages/a.js' },
+    { source: 'src/a.js', destination: 'packages/a.js' },
+  ] })]));
+  assert.ok(duplicated.errors.some((error) => /duplicate move/.test(error)), duplicated.errors.join(' | '));
+
+  const sharedDestination = validateManifest(document([
+    batch({ modules: [{ source: 'src/a.js', destination: 'packages/a.js' }] }),
+    batch({ id: 'batch-two', modules: [{ source: 'src/b.js', destination: 'packages/a.js' }] }),
+  ]));
+  assert.ok(
+    sharedDestination.errors.some((error) => /already a destination in batch batch-one/.test(error)),
+    sharedDestination.errors.join(' | ')
+  );
+});
+
+test('a characterization record is optional, and malformed when wrong', () => {
+  const absent = validateManifest(document([batch()]));
+  assert.deepEqual(absent.errors, []);
+  assert.equal(absent.batches[0].characterization, null);
+
+  const nulled = validateManifest(document([batch({ characterization: null })]));
+  assert.deepEqual(nulled.errors, []);
+
+  const cases = [
+    ['a non-object record', batch({ characterization: 'pr2-characterization.json' }), /characterization must be an object or null/],
+    ['a missing fixture', batch({ characterization: { capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1 } }), /characterization\.fixture/],
+    ['a missing command', batch({ characterization: { fixture: 'f.json', capture_commit_subject: 'capture', expect_touch_commits: 1 } }), /capture_command/],
+    ['a missing subject', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', expect_touch_commits: 1 } }), /capture_commit_subject/],
+    ['a zero touch count', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 0 } }), /expect_touch_commits/],
+    ['a non-array capture_paths', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1, capture_paths: 'scripts/x.js' } }), /capture_paths must be an array/],
+    ['an absolute capture path', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1, capture_paths: ['/etc/passwd'] } }), /capture_paths\[0\] must be a repo-relative/],
+    ['a capture path naming the fixture', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1, capture_paths: ['f.json'] } }), /capture_paths\[0\] names the fixture itself/],
+    ['a repeated capture path', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1, capture_paths: ['scripts/x.js', 'scripts/x.js'] } }), /repeats scripts\/x\.js/],
+  ];
+  for (const [name, record, pattern] of cases) {
+    const { errors } = validateManifest(document([record]));
+    assert.ok(errors.some((error) => pattern.test(error)), name + ': ' + errors.join(' | '));
+  }
+
+  // Omitted means "the fixture is the only path the capture commit may add";
+  // declared paths are kept so the verifier can prove each one was introduced.
+  const omitted = validateManifest(document([batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1 } })]));
+  assert.deepEqual(omitted.errors, []);
+  assert.deepEqual(omitted.batches[0].characterization.capture_paths, []);
+  const declared = validateManifest(document([batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1, capture_paths: ['scripts/x.js'] } })]));
+  assert.deepEqual(declared.errors, []);
+  assert.deepEqual(declared.batches[0].characterization.capture_paths, ['scripts/x.js']);
+});
+
+test('a later batch can be appended without disturbing batch one', () => {
+  const { batches, errors } = validateManifest(document([
+    batch(),
+    {
+      id: 'step-4b-pr3',
+      baseline_sha: 'b'.repeat(40),
+      identity_policy: 'byte-identical',
+      characterization: {
+        fixture: 'packages/recommendation-core/test/fixtures/pr3-characterization.json',
+        capture_command: 'node scripts/characterize-pr3.js',
+        capture_commit_subject: 'test(core): freeze the PR 3 surface',
+        expect_touch_commits: 1,
+      },
+      modules: [{ source: 'src/b.js', destination: 'packages/b.js' }],
+    },
+  ]));
+  assert.deepEqual(errors, []);
+  assert.equal(batches.length, 2);
+  assert.equal(batches[0].baseline_sha, 'a'.repeat(40));
+  assert.equal(batches[0].characterization, null);
+  assert.equal(batches[1].baseline_sha, 'b'.repeat(40));
+  assert.equal(batches[1].characterization.fixture, 'packages/recommendation-core/test/fixtures/pr3-characterization.json');
+});
+
+test('isRepoRelativePath accepts repo paths and refuses escapes', () => {
+  for (const value of ['src/a.js', 'packages/recommendation-core/src/a.js', 'a']) {
+    assert.equal(isRepoRelativePath(value), true, value);
+  }
+  for (const value of ['', '/src/a.js', 'src/../a.js', './a.js', 'src/a.js/', 'src\\a.js', 'C:/a.js', null, 42]) {
+    assert.equal(isRepoRelativePath(value), false, String(value));
+  }
+});
+
+test('git helpers resolve commits, ancestry and regular-file entries', (t) => {
+  const repo = makeRepo(t);
+  repo.write('src/a.js', 'same bytes\n');
+  const baseline = repo.commit('baseline');
+
+  repo.write('packages/a.js', 'same bytes\n');
+  const move = repo.commit('move');
+
+  const head = resolveCommit(repo.dir, 'HEAD');
+  assert.equal(head.ok, true);
+  assert.equal(head.sha, move);
+
+  assert.equal(resolveCommit(repo.dir, 'afccc67').ok, false, 'a short SHA is not accepted');
+  assert.equal(resolveCommit(repo.dir, 'f'.repeat(40)).ok, false, 'an unknown commit is refused');
+  assert.equal(resolveCommit(repo.dir, '-n').ok, false, 'an option-shaped reference is refused');
+  assert.equal(resolveCommit(repo.dir, '').ok, false);
+
+  assert.equal(isAncestor(repo.dir, baseline), true);
+  assert.equal(isAncestor(repo.dir, head.sha), true);
+
+  const before = regularFileAt(repo.dir, baseline, 'src/a.js');
+  const after = regularFileAt(repo.dir, 'HEAD', 'packages/a.js');
+  assert.deepEqual({ ok: before.ok, mode: before.mode }, { ok: true, mode: '100644' });
+  assert.deepEqual({ ok: after.ok, mode: after.mode }, { ok: true, mode: '100644' });
+  assert.equal(before.oid, after.oid);
+  assert.deepEqual(regularFileAt(repo.dir, baseline, 'src/missing.js'), { ok: false, reason: 'missing' });
+  assert.equal(regularFileAt(repo.dir, 'HEAD', 'packages').reason, 'directory', 'a directory is not a file');
+
+  repo.run(['checkout', '--quiet', '-b', 'side']);
+  repo.write('src/side.js', 'side\n');
+  const side = repo.commit('side work');
+  assert.equal(isAncestor(repo.dir, side), true);
+  repo.run(['checkout', '--quiet', '-']);
+  repo.write('packages/b.js', 'more\n');
+  repo.commit('after the side branch');
+  assert.equal(isAncestor(repo.dir, side), false, 'a sibling branch is not an ancestor');
+
+  // A symlink and a gitlink are index entries with no working-tree file, so they
+  // are staged directly and committed without `git add -A` (which would delete
+  // them). Both resolve through `rev:path`, which is exactly why the helper
+  // classifies by tree-entry mode and object type instead of object id alone.
+  const linkBlob = execFileSync('git', ['hash-object', '-w', '--stdin'], {
+    cwd: repo.dir,
+    encoding: 'utf8',
+    input: 'target.js',
+  }).trim();
+  repo.run(['update-index', '--add', '--cacheinfo', '120000,' + linkBlob + ',packages/link.js']);
+  repo.run(['commit', '--quiet', '-m', 'symlink entry']);
+  assert.equal(regularFileAt(repo.dir, 'HEAD', 'packages/link.js').reason, 'symlink');
+
+  const parent = repo.run(['rev-parse', 'HEAD']);
+  repo.run(['update-index', '--add', '--cacheinfo', '160000,' + parent + ',packages/sub']);
+  repo.run(['commit', '--quiet', '-m', 'gitlink entry']);
+  assert.equal(regularFileAt(repo.dir, 'HEAD', 'packages/sub').reason, 'gitlink');
+});
+
+test('loadManifest reports a missing file and invalid JSON instead of throwing', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'extraction-manifest-json-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const missing = loadManifest(path.join(dir, 'absent.json'));
+  assert.equal(missing.document, null);
+  assert.ok(missing.errors.some((error) => /cannot read/.test(error)), missing.errors.join(' | '));
+
+  const broken = path.join(dir, 'broken.json');
+  fs.writeFileSync(broken, '{ "kind": "extraction-manifest", ');
+  const invalid = loadManifest(broken);
+  assert.equal(invalid.document, null);
+  assert.ok(invalid.errors.some((error) => /not valid JSON/.test(error)), invalid.errors.join(' | '));
+});
+
+test('the manifest lives at the repository root under a known name', () => {
+  assert.equal(MANIFEST_REL, 'extraction-manifest.json');
+  assert.equal(manifestFile(REPO_ROOT), path.join(REPO_ROOT, MANIFEST_REL));
+  assert.equal(fs.existsSync(manifestFile(REPO_ROOT)), true);
+});

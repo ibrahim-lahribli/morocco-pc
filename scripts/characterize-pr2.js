@@ -28,8 +28,14 @@
  *   output.
  *
  * Usage
- *   node scripts/characterize-pr2.js            # write the fixture
- *   node scripts/characterize-pr2.js --check    # compare, do not write
+ *   node scripts/characterize-pr2.js                        # write the fixture
+ *   node scripts/characterize-pr2.js --check                # compare, never write
+ *   node scripts/characterize-pr2.js --check --fixture=<p>  # compare another copy
+ *
+ * --fixture=<path> exists so a regression test can point --check at a
+ * deliberately altered copy and prove the comparison REFUSES it, without
+ * touching the committed baseline. --check never creates, truncates or rewrites
+ * a file: a missing fixture is an error, not an invitation to write one.
  */
 
 const fs = require('node:fs');
@@ -499,8 +505,37 @@ function buildDocument() {
   };
 }
 
-function main() {
-  const check = process.argv.includes('--check');
+function parseArgs(argv) {
+  const options = { check: false, fixture: OUT_FILE, errors: [] };
+  for (const arg of argv) {
+    if (arg === '--check') {
+      options.check = true;
+    } else if (arg.startsWith('--fixture=')) {
+      const value = arg.slice('--fixture='.length);
+      if (value.length === 0) options.errors.push('--fixture= needs a path');
+      else options.fixture = path.resolve(process.cwd(), value);
+    } else {
+      options.errors.push('unknown argument ' + JSON.stringify(arg));
+    }
+  }
+  return options;
+}
+
+function displayPath(file) {
+  const relative = path.relative(REPO_ROOT, file);
+  return (relative.length === 0 ? file : relative).split(path.sep).join('/');
+}
+
+function main(argv) {
+  const options = parseArgs(argv);
+  if (options.errors.length > 0) {
+    process.stderr.write('characterize-pr2: ' + options.errors.join('\n  ') + '\n');
+    process.stderr.write('usage: node scripts/characterize-pr2.js [--check] [--fixture=<path>]\n');
+    return 2;
+  }
+
+  const check = options.check;
+  const outFile = options.fixture;
   const document = buildDocument();
   const serialized = JSON.stringify(document, null, 2) + '\n';
 
@@ -508,29 +543,41 @@ function main() {
     // The provenance block names the PRE-MOVE commit, so it is expected to
     // differ once the extraction is committed. Only the captured behaviour is
     // compared: that is what must not change.
-    const existing = JSON.parse(fs.readFileSync(OUT_FILE, 'utf8'));
+    if (!fs.existsSync(outFile)) {
+      process.stderr.write(
+        'characterize-pr2: no fixture at ' + displayPath(outFile) +
+        '; --check compares an existing baseline and never writes one\n'
+      );
+      return 1;
+    }
+    let existing;
+    try {
+      existing = JSON.parse(fs.readFileSync(outFile, 'utf8'));
+    } catch (err) {
+      process.stderr.write('characterize-pr2: ' + displayPath(outFile) + ' is not valid JSON: ' + err.message + '\n');
+      return 1;
+    }
     const captured = (doc) => {
       const { provenance: _provenance, ...behaviour } = doc;
       return JSON.stringify(behaviour, null, 2);
     };
     if (captured(existing) !== captured(document)) {
       process.stderr.write(
-        'characterize-pr2: the captured behaviour no longer matches the pre-move baseline\n'
+        'characterize-pr2: the captured behaviour no longer matches the pre-move baseline (' +
+        displayPath(outFile) + ')\n'
       );
       return 1;
     }
-    process.stdout.write('characterize-pr2: OK - behaviour matches the pre-move baseline\n');
+    process.stdout.write('characterize-pr2: OK - behaviour matches the pre-move baseline (' + displayPath(outFile) + ')\n');
     return 0;
   }
 
-  fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
-  fs.writeFileSync(OUT_FILE, serialized);
+  fs.mkdirSync(path.dirname(outFile), { recursive: true });
+  fs.writeFileSync(outFile, serialized);
   process.stdout.write(
-    'characterize-pr2: wrote ' +
-      path.relative(REPO_ROOT, OUT_FILE).split(path.sep).join('/') +
-      ' (' + serialized.length + ' bytes)\n'
+    'characterize-pr2: wrote ' + displayPath(outFile) + ' (' + serialized.length + ' bytes)\n'
   );
   return 0;
 }
 
-process.exitCode = main();
+process.exitCode = main(process.argv.slice(2));

@@ -18,8 +18,8 @@
  *   * assertions repeated by a `for (const x of [ ... ])` loop are expanded
  *     STRUCTURALLY from the loop's literal case list - see deriveLoopExpansion -
  *     so an "effective" figure is computed from the source, never declared;
- *   * before-counts are read from the baseline commit named by the frozen
- *     characterization fixture, after-counts from the working tree;
+ *   * before-counts are read from a RESOLVED revision (see "Which revision"
+ *     below), after-counts from the working tree;
  *   * every row is classified MOVED / STAYED / SPLIT / ADDED, so a newly added
  *     test can never be presented as a relocated one;
  *   * every core-owned test file is scanned with the SAME purity scanner that
@@ -32,23 +32,52 @@
  *   * the L2/L3 provenance claims are delegated to scripts/verify-pr2-provenance.js
  *     rather than re-implemented here.
  *
+ * Which revision supplies the BEFORE-counts is an input, never the working tree:
+ *   * with no argument it is the baseline of the `step-4b-pr2` batch in
+ *     extraction-manifest.json - the same immutable commit the L2 fixture was
+ *     captured at;
+ *   * `--base=<git-ref>` selects another revision explicitly. The reference must
+ *     resolve to a commit that is an ancestor of HEAD, and the resolved
+ *     40-character SHA is printed so a run is reproducible.
+ * The flag changes the revision and nothing else: the inventory, the structural
+ * counting, the purity scan and the invariants are identical for every base. A
+ * base that does not contain a baseline file FAILS the audit instead of
+ * measuring that file as zero, so a bad base can never be mistaken for a clean
+ * relocation.
+ *
  * DB-free, dependency-free, read-only. Run from the repository root:
  *   node scripts/audit-pr2-test-ownership.js
+ *   node scripts/audit-pr2-test-ownership.js --base=581ee73
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { execFileSync, spawnSync } = require('node:child_process');
+const { spawnSync } = require('node:child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const CORE_ROOT = path.join(REPO_ROOT, 'packages', 'recommendation-core');
 const CORE_TEST_REL = 'packages/recommendation-core/test';
 const CORE_TEST_DIR = path.join(REPO_ROOT, CORE_TEST_REL);
 const SCANNER = path.join(CORE_TEST_DIR, 'purity-scanner.js');
-const FIXTURE_REL = 'packages/recommendation-core/test/fixtures/pr2-characterization.json';
 const PROVENANCE_SCRIPT = path.join(__dirname, 'verify-pr2-provenance.js');
 
+/**
+ * The manifest batch that supplies the DEFAULT baseline. PR 2 is the batch this
+ * inventory was measured against; a later extraction batch appends to the
+ * manifest and does not move this pointer.
+ */
+const DEFAULT_BASELINE_BATCH = 'step-4b-pr2';
+
 const { lex, scanSource } = require(SCANNER);
+const {
+  MANIFEST_REL,
+  isAncestor,
+  isGitRepository,
+  loadManifest,
+  manifestFile,
+  resolveCommit,
+  tryGit,
+} = require('./lib/extraction-manifest');
 
 /**
  * What a core TEST may import from outside the package.
@@ -197,10 +226,6 @@ const RUNTIME_IDENTIFIERS = [
 ];
 
 const TEST_MODIFIERS = new Set(['skip', 'only', 'todo', 'concurrent']);
-
-function git(args) {
-  return execFileSync('git', args, { cwd: REPO_ROOT, encoding: 'utf8' });
-}
 
 function isPunct(token, value) {
   return Boolean(token) && token.type === 'punct' && token.value === value;
@@ -540,13 +565,106 @@ function corePurityViolations(source, file, relativePath) {
   });
 }
 
-function main() {
-  const fixture = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, FIXTURE_REL), 'utf8'));
-  const baseline = fixture.provenance.baseline_sha;
+function parseArgs(argv) {
+  const options = { base: null, errors: [] };
+  for (const arg of argv) {
+    if (arg === '--base=') {
+      options.errors.push('--base= needs a git reference');
+    } else if (arg.startsWith('--base=')) {
+      options.base = arg.slice('--base='.length);
+    } else {
+      options.errors.push('unknown argument ' + JSON.stringify(arg));
+    }
+  }
+  return options;
+}
+
+/**
+ * Resolve the revision the before-counts are read from. The default comes from
+ * the manifest, so there is one versioned baseline instead of a second copy in
+ * this file; --base overrides it for a deliberate comparison.
+ */
+function resolveBaseline(options) {
+  if (options.base) {
+    const resolved = resolveCommit(REPO_ROOT, options.base);
+    if (!resolved.ok) {
+      return { ok: false, sha: null, source: null, error: '--base=' + options.base + ' is not a commit in this repository' };
+    }
+    if (!isAncestor(REPO_ROOT, resolved.sha, 'HEAD')) {
+      return {
+        ok: false,
+        sha: null,
+        source: null,
+        error: '--base=' + options.base + ' (' + resolved.sha + ') is not an ancestor of HEAD; before-counts must come from an earlier revision',
+      };
+    }
+    return { ok: true, sha: resolved.sha, source: '--base=' + options.base, error: null };
+  }
+
+  const loaded = loadManifest(manifestFile(REPO_ROOT));
+  if (loaded.errors.length > 0) {
+    return {
+      ok: false,
+      sha: null,
+      source: null,
+      error: 'cannot read the default baseline from ' + MANIFEST_REL + ': ' + loaded.errors.join('; '),
+    };
+  }
+  const batch = loaded.batches.find((entry) => entry.id === DEFAULT_BASELINE_BATCH);
+  if (!batch) {
+    return {
+      ok: false,
+      sha: null,
+      source: null,
+      error: 'the manifest declares no batch ' + JSON.stringify(DEFAULT_BASELINE_BATCH) + '; pass --base=<git-ref>',
+    };
+  }
+  const resolved = resolveCommit(REPO_ROOT, batch.baseline_sha);
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      sha: null,
+      source: null,
+      error: 'the manifest baseline ' + batch.baseline_sha + ' is not a commit in this repository',
+    };
+  }
+  return { ok: true, sha: resolved.sha, source: 'manifest batch ' + batch.id + ' (default)', error: null };
+}
+
+/** Baseline text for one inventory row; a missing file FAILS rather than counting 0. */
+function readAtBaseline(baseline, file, failures) {
+  const result = tryGit(REPO_ROOT, ['show', baseline + ':' + file]);
+  if (!result.ok) {
+    failures.push(
+      'baseline ' + baseline.slice(0, 7) + ' has no file at ' + file +
+      ', so this row cannot be measured against it'
+    );
+    return '';
+  }
+  return result.out;
+}
+
+function main(argv) {
+  const options = parseArgs(argv);
+  if (options.errors.length > 0) {
+    process.stderr.write('audit-pr2-test-ownership: ' + options.errors.join('\n  ') + '\n');
+    process.stderr.write('usage: node scripts/audit-pr2-test-ownership.js [--base=<git-ref>]\n');
+    return 2;
+  }
+  if (!isGitRepository(REPO_ROOT)) {
+    process.stderr.write('audit: FAIL\n  - ' + REPO_ROOT + ' is not a git repository\n');
+    return 1;
+  }
+  const selection = resolveBaseline(options);
+  if (!selection.ok) {
+    process.stderr.write('audit: FAIL\n  - ' + selection.error + '\n');
+    return 1;
+  }
+  const baseline = selection.sha;
   const failures = [];
 
   const rows = INVENTORY.map((entry) => {
-    const before = entry.baseline ? git(['show', baseline + ':' + entry.baseline]) : '';
+    const before = entry.baseline ? readAtBaseline(baseline, entry.baseline, failures) : '';
     const file = path.join(REPO_ROOT, entry.current);
     const after = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
     if (after === null) failures.push('inventory file is missing: ' + entry.current);
@@ -572,7 +690,8 @@ function main() {
     };
   });
 
-  process.stdout.write('baseline: ' + baseline + '\n\n');
+  process.stdout.write('baseline: ' + baseline + '\n');
+  process.stdout.write('baseline source: ' + selection.source + '\n\n');
   process.stdout.write('| Class | Test file (baseline -> current) | Tests | Assertions | Runtime dependency | Owner | Reason |\n');
   process.stdout.write('|---|---|---|---|---|---|---|\n');
   for (const row of rows) {
@@ -819,7 +938,8 @@ function main() {
   }
   process.stdout.write(
     '\n### Provenance (delegated to scripts/verify-pr2-provenance.js)\n' +
-    '* fixture baseline, no post-move regeneration, 21/21 blob identity: **' + provenanceVerdict + '**\n'
+    '* manifest baseline and fixture origin, every declared move blob-identical (extraction-manifest.json): **' +
+    provenanceVerdict + '**\n'
   );
 
   if (failures.length > 0) {
@@ -838,16 +958,19 @@ function main() {
 }
 
 if (require.main === module) {
-  process.exitCode = main();
+  process.exitCode = main(process.argv.slice(2));
 }
 
 // Exported for inspection: requiring this file must not run the audit, so the
 // counting/purity helpers can be exercised directly.
 module.exports = {
+  DEFAULT_BASELINE_BATCH,
   countDeclarations,
   deriveLoopExpansion,
   corePurityViolations,
   listCoreTestFiles,
+  parseArgs,
+  resolveBaseline,
   TEST_ALLOWED_BARE,
   FILESYSTEM_EXCEPTIONS,
 };

@@ -1,0 +1,106 @@
+{
+  "kind": "extraction-manifest",
+  "version": 1,
+  "description": "Versioned provenance for code extracted out of src/recommendation/ into packages/. One batch per extraction PR, and each batch keeps its own immutable baseline commit, its source -> destination pairs and the identity policy those pairs must satisfy. A later PR APPENDS a batch; a merged batch is never rewritten, so PR 2's baseline cannot drift when PR 3 or PR 4 is measured.",
+  "batches": [
+    {
+      "id": "step-4b-pr2",
+      "description": "Step 4B PR 2: the pure candidates modules, the Engine 1 compatibility tree and the pure half of filtering moved into packages/recommendation-core/src/, leaving identity re-export shims at the old paths. Nothing here is a rewrite: each destination is the same bytes as the source at the baseline.",
+      "baseline_sha": "afccc671dae5abe6df80ad56dfcbc231d7947c7a",
+      "identity_policy": "byte-identical",
+      "characterization": {
+        "fixture": "packages/recommendation-core/test/fixtures/pr2-characterization.json",
+        "capture_command": "node scripts/characterize-pr2.js",
+        "capture_commit_subject": "test(core): freeze the PR 2 surface before anything moves",
+        "expect_touch_commits": 1,
+        "capture_paths": ["scripts/characterize-pr2.js"]
+      },
+      "modules": [
+        {
+          "source": "src/recommendation/candidates/roles.js",
+          "destination": "packages/recommendation-core/src/candidates/roles.js"
+        },
+        {
+          "source": "src/recommendation/candidates/errors.js",
+          "destination": "packages/recommendation-core/src/candidates/errors.js"
+        },
+        {
+          "source": "src/recommendation/candidates/input.js",
+          "destination": "packages/recommendation-core/src/candidates/input.js"
+        },
+        {
+          "source": "src/recommendation/candidates/candidate.js",
+          "destination": "packages/recommendation-core/src/candidates/candidate.js"
+        },
+        {
+          "source": "src/recommendation/candidates/select.js",
+          "destination": "packages/recommendation-core/src/candidates/select.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/aggregate.js",
+          "destination": "packages/recommendation-core/src/compatibility/aggregate.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/case-radiator.js",
+          "destination": "packages/recommendation-core/src/compatibility/case-radiator.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/cooler.js",
+          "destination": "packages/recommendation-core/src/compatibility/cooler.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/cooler-height.js",
+          "destination": "packages/recommendation-core/src/compatibility/cooler-height.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/cooler-tdp.js",
+          "destination": "packages/recommendation-core/src/compatibility/cooler-tdp.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/cpu-motherboard.js",
+          "destination": "packages/recommendation-core/src/compatibility/cpu-motherboard.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/gpu.js",
+          "destination": "packages/recommendation-core/src/compatibility/gpu.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/index.js",
+          "destination": "packages/recommendation-core/src/compatibility/index.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/memory.js",
+          "destination": "packages/recommendation-core/src/compatibility/memory.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/memory-capacity.js",
+          "destination": "packages/recommendation-core/src/compatibility/memory-capacity.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/memory-slots.js",
+          "destination": "packages/recommendation-core/src/compatibility/memory-slots.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/reason-codes.js",
+          "destination": "packages/recommendation-core/src/compatibility/reason-codes.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/result.js",
+          "destination": "packages/recommendation-core/src/compatibility/result.js"
+        },
+        {
+          "source": "src/recommendation/compatibility/statuses.js",
+          "destination": "packages/recommendation-core/src/compatibility/statuses.js"
+        },
+        {
+          "source": "src/recommendation/filtering/filter.js",
+          "destination": "packages/recommendation-core/src/filtering/filter.js"
+        },
+        {
+          "source": "src/recommendation/filtering/igpu-map.js",
+          "destination": "packages/recommendation-core/src/filtering/igpu-map.js"
+        }
+      ]
+    }
+  ]
+}
