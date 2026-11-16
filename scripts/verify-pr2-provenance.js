@@ -30,9 +30,14 @@
  *   * the source blob at the baseline equals the destination blob at HEAD
  *     (IDENTITY_POLICY is the only policy, so there is nothing to branch on);
  *   * a batch that declares a characterization record must also show that its
- *     fixture names the same baseline, was ADDED by a commit whose parent is
+ *     committed copy at HEAD (never the working tree) is a regular file that
+ *     parses and names the same baseline, was ADDED by a commit whose parent is
  *     that baseline (captured before the move), is the only commit that touched
- *     it since, and has not changed since the capture commit.
+ *     it since, and has not changed since the capture commit;
+ *   * that capture commit changed nothing except the fixture and the batch's
+ *     declared `capture_paths` - no added, modified, renamed or deleted path
+ *     outside them - and each declared capture path was absent at the baseline
+ *     and is a regular file at the capture commit.
  *
  * DB-free, dependency-free, read-only. Run from the repository root:
  *   node scripts/verify-pr2-provenance.js
@@ -41,8 +46,8 @@
  * Exit codes: 0 PASS, 1 FAIL, 2 argument error.
  */
 
-const fs = require('node:fs');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 
 const {
   REPO_ROOT,
@@ -109,34 +114,109 @@ function renderEntry(entry) {
   return entry.mode ? entry.reason + ' ' + entry.mode : entry.reason;
 }
 
+/** Why a path is not a usable regular file at `where`. */
+function describeEntryAt(where, entry) {
+  if (entry.reason === 'missing') return 'is missing at ' + where;
+  if (entry.reason === 'directory') return 'is a directory (tree) at ' + where + ', not a regular file';
+  if (entry.reason === 'gitlink') return 'is a gitlink (mode 160000, a submodule commit) at ' + where + ', not a regular file';
+  if (entry.reason === 'symlink') return 'is a symlink (mode 120000) at ' + where + ', not a regular file';
+  if (entry.reason === 'mode' || entry.reason === 'object') {
+    return 'is not a regular file at ' + where + ' (mode ' + (entry.mode || '?') + ', type ' + (entry.type || '?') + ')';
+  }
+  return 'could not be read as a Git object at ' + where;
+}
+
+/**
+ * Raw `git diff-tree --no-commit-id -r -M -z <commit>` output, untrimmed.
+ *
+ * `diff-tree` reads the commit's own trees, so the working tree cannot
+ * contribute to the answer. The raw record format is used (not
+ * `--name-status`) because it carries the tree modes beside the status, and
+ * `-z` emits paths unquoted so an exact comparison with a manifest path is
+ * meaningful. Output is NOT trimmed: a trailing-space path is still a path.
+ */
+function runGitRaw(repo, args) {
+  try {
+    return execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (_err) {
+    return null;
+  }
+}
+
+/**
+ * Every path a commit changed, with its status and destination mode.
+ *
+ * A record is `:<old mode> <new mode> <old sha> <new sha> <status>\0<path>\0`,
+ * and a rename or copy carries TWO paths (`R100\0old\0new\0`), so a rename
+ * INTO an allowed name is still visible as a rename and still fails.
+ */
+function commitChanges(repo, commit) {
+  const output = runGitRaw(repo, ['diff-tree', '--no-commit-id', '-r', '-M', '-z', commit]);
+  if (output === null) return null;
+  const tokens = output.split('\u0000');
+  const changes = [];
+  for (let i = 0; i < tokens.length; ) {
+    const header = tokens[i];
+    if (header === '') break;
+    const parsed = /^:(\d{6}) (\d{6}) ([0-9a-f]{40}) ([0-9a-f]{40}) ([A-Z])(\d{1,3})?$/.exec(header);
+    if (!parsed) return null;
+    const status = parsed[5] + (parsed[6] || '');
+    const paired = parsed[5] === 'R' || parsed[5] === 'C';
+    const paths = paired ? [tokens[i + 1], tokens[i + 2]] : [tokens[i + 1]];
+    if (paths.some((changed) => typeof changed !== 'string' || changed.length === 0)) return null;
+    changes.push({
+      status,
+      paths,
+      mode: parsed[2],
+      description: status + ' ' + paths.join(' -> '),
+    });
+    i += paired ? 3 : 2;
+  }
+  return changes;
+}
+
 /**
  * L2, for one batch: the fixture predates the move and was not regenerated.
  *
- * The fixture cannot prove its own honesty, so the proof is in Git history:
- * exactly `expect_touch_commits` commits touched it since the baseline, the
- * commit that ADDED it is one of them, that commit's parent is the baseline (so
- * the capture was committed before anything moved), its subject matches the
- * manifest, and the fixture has not changed since.
+ * The fixture cannot prove its own honesty, so the proof is in Git history, and
+ * the fixture is read from HEAD rather than the working tree - a dirty or
+ * edited file must not stand in for the committed evidence:
+ *   * the committed fixture is a regular file at HEAD and parses;
+ *   * it names the manifest baseline and the declared capture command;
+ *   * exactly `expect_touch_commits` commits touched it since the baseline, each
+ *     carrying the declared subject;
+ *   * the commit that ADDED it is the only one, and its parent is the baseline,
+ *     so the capture was committed before anything moved;
+ *   * that commit changes NOTHING except the fixture and any declared
+ *     `capture_paths`; each declared path must have been absent at the baseline
+ *     (nothing to alter) and be a regular file at the capture commit;
+ *   * the fixture has not changed since.
  */
 function verifyCharacterization(repo, batch, lines, failures) {
   const record = batch.characterization;
   const label = batch.id;
-  const fixtureAbs = path.join(repo, record.fixture);
+  const fixtureLabel = 'characterization fixture ' + record.fixture;
+  const capturePaths = record.capture_paths || [];
 
-  lines.push('characterization fixture: ' + record.fixture);
-
-  if (!fs.existsSync(fixtureAbs)) {
-    failures.push('batch ' + label + ': characterization fixture ' + record.fixture + ' is missing');
+  const atHead = regularFileAt(repo, 'HEAD', record.fixture);
+  if (!atHead.ok) {
+    failures.push('batch ' + label + ': ' + fixtureLabel + ' ' + describeEntryAt('HEAD', atHead));
     return;
   }
-
+  const committed = tryGit(repo, ['show', 'HEAD:' + record.fixture]);
+  if (!committed.ok) {
+    failures.push('batch ' + label + ': ' + fixtureLabel + ' could not be read at HEAD');
+    return;
+  }
   let fixture;
   try {
-    fixture = JSON.parse(fs.readFileSync(fixtureAbs, 'utf8'));
+    fixture = JSON.parse(committed.out);
   } catch (err) {
-    failures.push('batch ' + label + ': characterization fixture ' + record.fixture + ' is not valid JSON: ' + err.message);
+    failures.push('batch ' + label + ': ' + fixtureLabel + ' is not valid JSON at HEAD: ' + err.message);
     return;
   }
+
+  lines.push('characterization fixture: ' + record.fixture + ' (read from HEAD)');
 
   const provenance = fixture && typeof fixture === 'object' ? fixture.provenance : null;
   if (provenance === null || typeof provenance !== 'object') {
@@ -183,6 +263,41 @@ function verifyCharacterization(repo, batch, lines, failures) {
     return;
   }
   const capture = captures[0];
+
+  const changes = commitChanges(repo, capture);
+  if (changes === null) {
+    failures.push('batch ' + label + ': the changed paths of the capture commit ' + capture + ' could not be read');
+  } else {
+    const allowed = new Set([record.fixture, ...capturePaths]);
+    const unexpected = changes.filter((change) => change.status !== 'A' || !allowed.has(change.paths[0]));
+    if (changes.length === 0) {
+      failures.push('batch ' + label + ': the capture commit ' + capture + ' changes no path, so it cannot be the fixture capture');
+    } else if (unexpected.length > 0) {
+      failures.push(
+        'batch ' + label + ': the capture commit ' + capture +
+        ' changes paths other than the fixture and its declared capture paths: ' +
+        unexpected.map((change) => change.description).join(', ')
+      );
+    } else {
+      lines.push('capture commit changes only declared paths: ' + changes.map((change) => change.description).join(', '));
+    }
+
+    for (const capturePath of capturePaths) {
+      if (regularFileAt(repo, batch.baseline_sha, capturePath).reason !== 'missing') {
+        failures.push(
+          'batch ' + label + ': capture path ' + capturePath + ' already exists at the baseline ' +
+          batch.baseline_sha + ', so it cannot have been introduced by the capture commit'
+        );
+      }
+      const atCapture = regularFileAt(repo, capture, capturePath);
+      if (!atCapture.ok) {
+        failures.push(
+          'batch ' + label + ': capture path ' + capturePath + ' ' +
+          describeEntryAt('the capture commit ' + capture, atCapture)
+        );
+      }
+    }
+  }
 
   const parent = tryGit(repo, ['rev-parse', capture + '^']);
   const capturedBeforeTheMove = parent.ok && parent.out === batch.baseline_sha;

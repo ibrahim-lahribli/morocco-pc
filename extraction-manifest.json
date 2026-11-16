@@ -12,7 +12,8 @@
         "fixture": "packages/recommendation-core/test/fixtures/pr2-characterization.json",
         "capture_command": "node scripts/characterize-pr2.js",
         "capture_commit_subject": "test(core): freeze the PR 2 surface before anything moves",
-        "expect_touch_commits": 1
+        "expect_touch_commits": 1,
+        "capture_paths": ["scripts/characterize-pr2.js"]
       },
       "modules": [
         {

@@ -578,3 +578,253 @@ test('an unknown argument and a non-repository are refused', (t) => {
   assert.equal(notARepo.status, 1);
   assert.match(notARepo.stderr, /is not a git repository/);
 });
+
+// The capture commit is the moment the surface is frozen, so it may not carry
+// anything else: a commit that edits implementation code and commits a fixture
+// beside it would prove nothing about what the fixture saw. PR 2's real capture
+// (581ee73) also added its own capture tool, so the manifest names such paths
+// explicitly in `capture_paths` and the verifier proves each was absent at the
+// baseline - a declared path can be introduced, never altered.
+
+test('a capture commit that also modifies implementation code fails', (t) => {
+  const fixture = makeFixture(t);
+  fixture.write('src/a.js', 'module.exports = 1;\n');
+  const baseline = fixture.commit('baseline');
+
+  fixture.write('src/a.js', 'module.exports = 2;\n');
+  const behaviour = { provenance: { baseline_sha: baseline, command: 'node scripts/characterize.js' }, captured: { verdict: 'PASS' } };
+  fixture.write('fixtures/characterization.json', JSON.stringify(behaviour, null, 2) + '\n');
+  fixture.commit('test: freeze the surface before anything moves');
+
+  // The move still preserves the baseline bytes, so identity is not the failure.
+  fixture.write('packages/a.js', 'module.exports = 1;\n');
+  fixture.remove('src/a.js');
+  fixture.commit('move');
+
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    characterization: {
+      fixture: 'fixtures/characterization.json',
+      capture_command: 'node scripts/characterize.js',
+      capture_commit_subject: 'test: freeze the surface before anything moves',
+      expect_touch_commits: 1,
+    },
+    modules: [{ source: 'src/a.js', destination: 'packages/a.js' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /batch batch-one: the capture commit [0-9a-f]{40} changes paths other than the fixture and its declared capture paths: M src\/a\.js/
+  );
+  assert.equal(
+    /changes paths other than the fixture and its declared capture paths:.*characterization\.json/.test(result.stderr),
+    false,
+    'the fixture itself is not an unexpected path'
+  );
+  assert.equal(/blob differs for/.test(result.stderr), false, 'the move still preserves the baseline bytes');
+  assert.match(result.stdout, /blob-identical in 'batch-one': 1 \/ 1/);
+});
+
+test('a capture commit that adds an unrelated file fails', (t) => {
+  const fixture = makeFixture(t);
+  fixture.write('src/a.js', 'module.exports = 1;\n');
+  const baseline = fixture.commit('baseline');
+
+  const behaviour = { provenance: { baseline_sha: baseline, command: 'node scripts/characterize.js' }, captured: { verdict: 'PASS' } };
+  fixture.write('fixtures/characterization.json', JSON.stringify(behaviour, null, 2) + '\n');
+  fixture.write('scripts/unrelated.js', 'module.exports = 3;\n');
+  fixture.commit('test: freeze the surface before anything moves');
+
+  fixture.move('src/a.js', 'packages/a.js');
+  fixture.commit('move');
+
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    characterization: {
+      fixture: 'fixtures/characterization.json',
+      capture_command: 'node scripts/characterize.js',
+      capture_commit_subject: 'test: freeze the surface before anything moves',
+      expect_touch_commits: 1,
+    },
+    modules: [{ source: 'src/a.js', destination: 'packages/a.js' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /changes paths other than the fixture and its declared capture paths: A scripts\/unrelated\.js/
+  );
+  assert.match(result.stdout, /blob-identical in 'batch-one': 1 \/ 1/);
+});
+
+test('the fixture is read from HEAD, so a dirty working-tree copy cannot stand in', (t) => {
+  const fixture = makeFixture(t);
+  fixture.write('src/a.js', 'module.exports = 1;\n');
+  const baseline = fixture.commit('baseline');
+
+  const behaviour = { provenance: { baseline_sha: baseline, command: 'node scripts/characterize.js' }, captured: { verdict: 'PASS' } };
+  fixture.write('fixtures/characterization.json', JSON.stringify(behaviour, null, 2) + '\n');
+  fixture.commit('test: freeze the surface before anything moves');
+  fixture.move('src/a.js', 'packages/a.js');
+  fixture.commit('move');
+
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    characterization: {
+      fixture: 'fixtures/characterization.json',
+      capture_command: 'node scripts/characterize.js',
+      capture_commit_subject: 'test: freeze the surface before anything moves',
+      expect_touch_commits: 1,
+    },
+    modules: [{ source: 'src/a.js', destination: 'packages/a.js' }],
+  });
+
+  // Uncommitted: the working tree now disagrees with HEAD about the fixture.
+  fixture.write('fixtures/characterization.json', '{ "provenance": { "baseline_sha": "not-the-baseline" } }');
+
+  const result = fixture.verify();
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /characterization fixture: fixtures\/characterization\.json \(read from HEAD\)/);
+  assert.match(result.stdout, /fixture unchanged since its capture commit: yes/);
+});
+
+test('a committed fixture that is not valid JSON fails clearly', (t) => {
+  const fixture = makeFixture(t);
+  fixture.write('src/a.js', 'module.exports = 1;\n');
+  const baseline = fixture.commit('baseline');
+
+  fixture.write('fixtures/characterization.json', '{ "provenance": oops }\n');
+  fixture.commit('test: freeze the surface before anything moves');
+  fixture.move('src/a.js', 'packages/a.js');
+  fixture.commit('move');
+
+  // A valid working-tree copy must not rescue an unparsable committed fixture.
+  fixture.write(
+    'fixtures/characterization.json',
+    JSON.stringify({ provenance: { baseline_sha: baseline, command: 'node scripts/characterize.js' }, captured: {} }) + '\n'
+  );
+
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    characterization: {
+      fixture: 'fixtures/characterization.json',
+      capture_command: 'node scripts/characterize.js',
+      capture_commit_subject: 'test: freeze the surface before anything moves',
+      expect_touch_commits: 1,
+    },
+    modules: [{ source: 'src/a.js', destination: 'packages/a.js' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /characterization fixture fixtures\/characterization\.json is not valid JSON at HEAD/);
+});
+
+test('a fixture deleted after its capture fails as missing at HEAD', (t) => {
+  const fixture = makeFixture(t);
+  fixture.write('src/a.js', 'module.exports = 1;\n');
+  const baseline = fixture.commit('baseline');
+
+  const behaviour = { provenance: { baseline_sha: baseline, command: 'node scripts/characterize.js' }, captured: {} };
+  fixture.write('fixtures/characterization.json', JSON.stringify(behaviour, null, 2) + '\n');
+  fixture.commit('test: freeze the surface before anything moves');
+  fixture.move('src/a.js', 'packages/a.js');
+  fixture.commit('move');
+  fixture.remove('fixtures/characterization.json');
+  fixture.commit('drop the characterization fixture');
+
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    characterization: {
+      fixture: 'fixtures/characterization.json',
+      capture_command: 'node scripts/characterize.js',
+      capture_commit_subject: 'test: freeze the surface before anything moves',
+      expect_touch_commits: 1,
+    },
+    modules: [{ source: 'src/a.js', destination: 'packages/a.js' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /characterization fixture fixtures\/characterization\.json is missing at HEAD/);
+});
+
+test('a declared capture path introduced by the capture commit passes', (t) => {
+  const fixture = makeFixture(t);
+  fixture.write('src/a.js', 'module.exports = 1;\n');
+  const baseline = fixture.commit('baseline');
+
+  const behaviour = { provenance: { baseline_sha: baseline, command: 'node scripts/characterize.js' }, captured: {} };
+  fixture.write('fixtures/characterization.json', JSON.stringify(behaviour, null, 2) + '\n');
+  fixture.write('scripts/characterize.js', 'console.log("capture");\n');
+  fixture.commit('test: freeze the surface before anything moves');
+
+  fixture.move('src/a.js', 'packages/a.js');
+  fixture.commit('move');
+
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    characterization: {
+      fixture: 'fixtures/characterization.json',
+      capture_command: 'node scripts/characterize.js',
+      capture_commit_subject: 'test: freeze the surface before anything moves',
+      expect_touch_commits: 1,
+      capture_paths: ['scripts/characterize.js'],
+    },
+    modules: [{ source: 'src/a.js', destination: 'packages/a.js' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stdout,
+    /capture commit changes only declared paths: A fixtures\/characterization\.json, A scripts\/characterize\.js/
+  );
+});
+
+test('a declared capture path that already existed at the baseline is refused', (t) => {
+  const fixture = makeFixture(t);
+  fixture.write('src/a.js', 'module.exports = 1;\n');
+  fixture.write('scripts/characterize.js', 'console.log("capture v1");\n');
+  const baseline = fixture.commit('baseline');
+
+  // The capture commit rewrites an existing tool, so the declared path is not a
+  // path it introduced: declaring it would hide a modification of baseline code.
+  fixture.write('scripts/characterize.js', 'console.log("capture v2");\n');
+  const behaviour = { provenance: { baseline_sha: baseline, command: 'node scripts/characterize.js' }, captured: {} };
+  fixture.write('fixtures/characterization.json', JSON.stringify(behaviour, null, 2) + '\n');
+  fixture.commit('test: freeze the surface before anything moves');
+
+  fixture.move('src/a.js', 'packages/a.js');
+  fixture.commit('move');
+
+  fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    characterization: {
+      fixture: 'fixtures/characterization.json',
+      capture_command: 'node scripts/characterize.js',
+      capture_commit_subject: 'test: freeze the surface before anything moves',
+      expect_touch_commits: 1,
+      capture_paths: ['scripts/characterize.js'],
+    },
+    modules: [{ source: 'src/a.js', destination: 'packages/a.js' }],
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /batch batch-one: capture path scripts\/characterize\.js already exists at the baseline [0-9a-f]{40}, so it cannot have been introduced by the capture commit/
+  );
+  assert.match(result.stderr, /changes paths other than the fixture and its declared capture paths: M scripts\/characterize\.js/);
+});

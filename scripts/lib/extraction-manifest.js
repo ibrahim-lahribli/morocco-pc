@@ -29,7 +29,8 @@
  *           "fixture": "<repo-relative path>",
  *           "capture_command": "<command that produced it>",
  *           "capture_commit_subject": "<subject of the capture commit>",
- *           "expect_touch_commits": 1
+ *           "expect_touch_commits": 1,
+ *           "capture_paths": ["<path>"]           // optional; files the capture commit may ADD
  *         },
  *         "modules": [{ "source": "<path at baseline>", "destination": "<path at HEAD>" }]
  *       }
@@ -42,6 +43,15 @@
  *   PR 2 fixture is never treated as a universal baseline: a batch without the
  *   block is held to L3 only, explicitly. Declaring a policy other than
  *   IDENTITY_POLICY fails closed instead of passing unverified.
+ *
+ * `capture_paths` exists because a capture commit sometimes introduces its own
+ * tool: PR 2's `581ee73` added `scripts/characterize-pr2.js` beside the fixture.
+ * A fixture-only rule would reject that real evidence, and relaxing the rule
+ * without saying so would hide a capture commit that edits implementation code.
+ * The field is the explicit alternative: any extra path the capture commit may
+ * add is declared, and the verifier proves each one was ABSENT at the baseline
+ * (so it has no baseline identity to alter) and is a regular file at the capture
+ * commit. Omitted means "the fixture is the only changed path".
  *
  * What is deliberately NOT here
  *   No schema framework, no per-module policy override and no inherited default:
@@ -112,12 +122,27 @@ function validateCharacterization(raw, label, errors) {
   if (!Number.isInteger(raw.expect_touch_commits) || raw.expect_touch_commits < 1) {
     errors.push(label + ': characterization.expect_touch_commits must be a positive integer');
   }
+  const capturePaths = raw.capture_paths === undefined ? [] : raw.capture_paths;
+  if (!Array.isArray(capturePaths)) {
+    errors.push(label + ': characterization.capture_paths must be an array of repo-relative paths');
+  } else {
+    capturePaths.forEach((capturePath, index) => {
+      if (!isRepoRelativePath(capturePath)) {
+        errors.push(label + ': characterization.capture_paths[' + index + '] must be a repo-relative POSIX path (found ' + JSON.stringify(capturePath) + ')');
+      } else if (capturePath === raw.fixture) {
+        errors.push(label + ': characterization.capture_paths[' + index + '] names the fixture itself');
+      } else if (capturePaths.indexOf(capturePath) !== index) {
+        errors.push(label + ': characterization.capture_paths[' + index + '] repeats ' + capturePath);
+      }
+    });
+  }
   if (errors.length > errorsBefore) return null;
   return {
     fixture: raw.fixture,
     capture_command: raw.capture_command,
     capture_commit_subject: raw.capture_commit_subject,
     expect_touch_commits: raw.expect_touch_commits,
+    capture_paths: Array.isArray(capturePaths) ? capturePaths : [],
   };
 }
 

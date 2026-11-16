@@ -95,7 +95,7 @@ picking a side.
 | `docs/RECIPES/` | deployment, release and documentation-governance recipes |
 | `docs/decisions/`, `docs/briefs/`, `docs/architecture/`, `docs/archive/` | templates, epic briefs, the RFC, superseded documents |
 | `docs/DECISION_INDEX.md`, `docs/SCHEMA_REFERENCE.md`, `docs/DATA_STATE.md` | GENERATED — never hand-edit |
-| `extraction-manifest.json` | versioned extraction provenance (schema: `scripts/lib/extraction-manifest.js`): one batch per extraction PR, each with its immutable baseline SHA, source/destination pairs, identity policy and optional characterization record |
+| `extraction-manifest.json` | versioned extraction provenance (schema: `scripts/lib/extraction-manifest.js`): one batch per extraction PR, each with its immutable baseline SHA, source/destination pairs, identity policy and optional characterization record (fixture, capture command, capture-commit subject, and any `capture_paths` the capture commit may add - each proven absent at the baseline) |
 | `database/migrations/` | authoritative schema, `001`–`023` |
 | `database/seeds/` | idempotent DML-only seed data |
 | `src/recommendation/` | the engine, one directory per pipeline stage |

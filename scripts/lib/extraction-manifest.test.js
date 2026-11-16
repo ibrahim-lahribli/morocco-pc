@@ -87,6 +87,9 @@ test('the committed manifest is valid and pins PR 2 as its first batch', () => {
   assert.equal(pr2.characterization.fixture, FIXTURE_REL);
   assert.equal(pr2.characterization.capture_command, 'node scripts/characterize-pr2.js');
   assert.equal(pr2.characterization.expect_touch_commits, 1);
+  // 581ee73 added the capture tool beside the fixture, so the record declares it;
+  // the verifier proves it was absent at the baseline rather than ignoring it.
+  assert.deepEqual(pr2.characterization.capture_paths, ['scripts/characterize-pr2.js']);
 });
 
 test('the manifest baseline is the fixture baseline, never the working tree', () => {
@@ -191,11 +194,24 @@ test('a characterization record is optional, and malformed when wrong', () => {
     ['a missing command', batch({ characterization: { fixture: 'f.json', capture_commit_subject: 'capture', expect_touch_commits: 1 } }), /capture_command/],
     ['a missing subject', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', expect_touch_commits: 1 } }), /capture_commit_subject/],
     ['a zero touch count', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 0 } }), /expect_touch_commits/],
+    ['a non-array capture_paths', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1, capture_paths: 'scripts/x.js' } }), /capture_paths must be an array/],
+    ['an absolute capture path', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1, capture_paths: ['/etc/passwd'] } }), /capture_paths\[0\] must be a repo-relative/],
+    ['a capture path naming the fixture', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1, capture_paths: ['f.json'] } }), /capture_paths\[0\] names the fixture itself/],
+    ['a repeated capture path', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1, capture_paths: ['scripts/x.js', 'scripts/x.js'] } }), /repeats scripts\/x\.js/],
   ];
   for (const [name, record, pattern] of cases) {
     const { errors } = validateManifest(document([record]));
     assert.ok(errors.some((error) => pattern.test(error)), name + ': ' + errors.join(' | '));
   }
+
+  // Omitted means "the fixture is the only path the capture commit may add";
+  // declared paths are kept so the verifier can prove each one was introduced.
+  const omitted = validateManifest(document([batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1 } })]));
+  assert.deepEqual(omitted.errors, []);
+  assert.deepEqual(omitted.batches[0].characterization.capture_paths, []);
+  const declared = validateManifest(document([batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1, capture_paths: ['scripts/x.js'] } })]));
+  assert.deepEqual(declared.errors, []);
+  assert.deepEqual(declared.batches[0].characterization.capture_paths, ['scripts/x.js']);
 });
 
 test('a later batch can be appended without disturbing batch one', () => {
