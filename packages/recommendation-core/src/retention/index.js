@@ -1,0 +1,124 @@
+/**
+ * Decision 12 - Candidate retention stage (per-role top-K, Engine 2D -> Engine 3).
+ *
+ * Boundary: a thin pure composition over already-loaded, already-validated
+ * data, following the assembly/pipeline.js composition convention exactly. It
+ * owns no logic of its own: no validation beyond the light gates, no policy,
+ * no SQL. Pipeline position (Decision 12):
+ *
+ *   Engine 2C (pool) -> Engine 2D (filter) -> retention/ (here) -> Engine 3
+ *
+ *   Engine 2D filter result { results: [verdict, ...] }  (PASS/UNKNOWN/REJECT)
+ *   Engine 4 STEP 2 candidate scores { scores: [...] }
+ *   Engine 2 Stage 1 price carrier (Decision 27)
+ *   candidate_caps.top_k_per_role (Decision 11-validated K)
+ *         |  retainTopKPerRole(...)      - per-role top-K retention
+ *         |                                (./retain): Rule 2 eligibility
+ *         |                                (PASS | UNKNOWN), Rule 3/5 ordering
+ *         |                                (score DESC, then the existing
+ *         |                                compareCandidates() tie-break),
+ *         |                                Rule 4 hard cap, and the
+ *         |                                Decision 27 cheapest-per-role
+ *         |                                reservation inside it
+ *         v
+ *   frozen { results: [retained verdict, ...] } - Engine 3's existing
+ *   candidate-pool input shape; drop-in for filterResult (Decision 14
+ *   Rule 6: Engine 3 changes nothing)
+ *
+ * Public surface (direct re-export only - no wrappers, no logic):
+ *
+ *   retainTopKPerRole({ filterResult, candidateScores, topKPerRole, prices })
+ *     - the Decision 12 retention stage (see ./retain). `prices` is the Engine 2
+ *     Stage 1 carrier and is required since Decision 27. E2 adds the optional
+ *     `roleTargets`; E6 (Decision 54) adds the optional `roleExclusions`, which
+ *     drops policy-ineligible candidates before ordering and the K cap;
+ *     Decision 59 adds the optional `topKByRole`, a role-keyed depth override
+ *     whose absent roles keep `topKPerRole` (an absent map is byte-identical
+ *     to the uniform contract).
+ *
+ *   excludedCpuProductIds({ gpuPolicy, filteringContext })   (E6)
+ *     - the CPU eligibility set implied by a DECLARED `IGPU_ALLOWED` policy:
+ *     null for any other policy, else the product ids of CPU candidates with no
+ *     verified integrated GPU (see ./igpu-pool). The orchestrator passes the
+ *     result to retainTopKPerRole as `roleExclusions.CPU`.
+ *
+ *   computeBudgetFloor({ retained, prices, budgetAmount, currency })
+ *     - the Decision 27 zero-build diagnostic (see ./budget-floor): the
+ *     cheapest total the retained pool could form, and whether the budget can
+ *     afford it. Always called, on every pass.
+ *
+ *   BUDGET_FLOOR_ROLES
+ *     - the roles computeBudgetFloor sums over: EXPANSION_ORDER minus GPU, whose
+ *     price the Step 3 GPU policy can make omissible. Pinned against the real
+ *     EXPANSION_ORDER by budget-floor.test.js.
+ *
+ *   computeRoleTargets({ spendTargets, budgetAmount, resolution })   (E2)
+ *     - the per-role price targets from a profile's `spend_targets` (see
+ *     ./targets); the orchestrator passes them to retainTopKPerRole as
+ *     `roleTargets`.
+ *
+ *   resolutionMultiplier(resolution) / RESOLUTION_MULTIPLIERS /
+ *   BAND_TOLERANCE / BAND_CEILING_FACTOR
+ *     - the E2 band constants, re-exported so a caller can explain a retained
+ *     set without re-deriving them.
+ *
+ * Field sourcing (no invention, one owner per field):
+ *   verdicts          Engine 2D filter result, handed over intact by
+ *                     reference (no fields added, none removed)
+ *   candidate_score   Engine 4 computeCandidateScores (Decision 13 STEP 2);
+ *                     orders the retention only, never written onto a verdict
+ *   topKPerRole       candidate_caps.top_k_per_role (Decision 11 Rule 8),
+ *                     the same K for every role that has no override
+ *   topKByRole        candidate_caps.top_k_by_role (Decision 59, OPTIONAL), a
+ *                     role-keyed positive-integer override of topKPerRole
+ *   prices            the Engine 2 Stage 1 price carrier; owned by Engine 2,
+ *                     required since Decision 27 because the reservation
+ *                     cannot select without it. Never validated, copied or
+ *                     edited here - retention only reads selected_price
+ *
+ * Explicit NON-responsibilities (deliberately absent from this module)
+ *   - no database access, no connection, no SQL: the loaders
+ *     (loadCandidates, loadFilteringContext, loadComponentAssessments,
+ *     loadScoringModel) are the caller's to run; this module receives their
+ *     outputs, so retention/ stays database-free (same policy as the Engine
+ *     2D B2-G pipeline, filtering/pipeline.js, and the Engine 3 composition
+ *     entry point, assembly/pipeline.js)
+ *   - no compatibility evaluation, no verdict aggregation (Engine 2D owns it)
+ *   - no scoring and no score arithmetic (Engine 4 owns it)
+ *   - no Engine 5 build ranking (whole-build build_score, Decision 13 STEP 3)
+ *   - no Engine 3 work: assembly, GPU policy, prices, and
+ *     max_builds_per_query (Decision 14 Rule 7) stay untouched
+ *   - no new error codes and no second status vocabulary: the Engine 2
+ *     error vocabulary and the Engine 2D CANDIDATE_STATUSES are reused
+ *   - no persistence
+ *
+ * Determinism: no clock reads, no randomness, no I/O; identical inputs yield
+ * deeply equal output in canonical COMPONENT_ROLES bucket order.
+ *
+ * Pure: no database access, no framework.
+ */
+
+'use strict';
+
+const { retainTopKPerRole } = require('./retain');
+const { excludedCpuProductIds } = require('./igpu-pool');
+const { BUDGET_FLOOR_ROLES, computeBudgetFloor } = require('./budget-floor');
+const {
+  RESOLUTION_MULTIPLIERS,
+  BAND_TOLERANCE,
+  BAND_CEILING_FACTOR,
+  resolutionMultiplier,
+  computeRoleTargets,
+} = require('./targets');
+
+module.exports = {
+  retainTopKPerRole,
+  excludedCpuProductIds,
+  BUDGET_FLOOR_ROLES,
+  computeBudgetFloor,
+  computeRoleTargets,
+  resolutionMultiplier,
+  RESOLUTION_MULTIPLIERS,
+  BAND_TOLERANCE,
+  BAND_CEILING_FACTOR,
+};
