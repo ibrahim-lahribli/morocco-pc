@@ -566,16 +566,12 @@ function corePurityViolations(source, file, relativePath) {
 }
 
 function parseArgs(argv) {
-  const options = { base: null, manifest: null, errors: [] };
+  const options = { base: null, errors: [] };
   for (const arg of argv) {
-    if (arg.startsWith('--base=')) {
-      const value = arg.slice('--base='.length);
-      if (value.length === 0) options.errors.push('--base= needs a git reference');
-      else options.base = value;
-    } else if (arg.startsWith('--manifest=')) {
-      const value = arg.slice('--manifest='.length);
-      if (value.length === 0) options.errors.push('--manifest= needs a path');
-      else options.manifest = path.resolve(process.cwd(), value);
+    if (arg === '--base=') {
+      options.errors.push('--base= needs a git reference');
+    } else if (arg.startsWith('--base=')) {
+      options.base = arg.slice('--base='.length);
     } else {
       options.errors.push('unknown argument ' + JSON.stringify(arg));
     }
@@ -605,8 +601,7 @@ function resolveBaseline(options) {
     return { ok: true, sha: resolved.sha, source: '--base=' + options.base, error: null };
   }
 
-  const file = options.manifest || manifestFile(REPO_ROOT);
-  const loaded = loadManifest(file);
+  const loaded = loadManifest(manifestFile(REPO_ROOT));
   if (loaded.errors.length > 0) {
     return {
       ok: false,
@@ -653,7 +648,7 @@ function main(argv) {
   const options = parseArgs(argv);
   if (options.errors.length > 0) {
     process.stderr.write('audit-pr2-test-ownership: ' + options.errors.join('\n  ') + '\n');
-    process.stderr.write('usage: node scripts/audit-pr2-test-ownership.js [--base=<git-ref>] [--manifest=<path>]\n');
+    process.stderr.write('usage: node scripts/audit-pr2-test-ownership.js [--base=<git-ref>]\n');
     return 2;
   }
   if (!isGitRepository(REPO_ROOT)) {
@@ -936,9 +931,7 @@ function main(argv) {
   );
 
   // --- provenance, delegated ---------------------------------------------
-  const provenanceArgs = [PROVENANCE_SCRIPT];
-  if (options.manifest) provenanceArgs.push('--manifest=' + options.manifest);
-  const provenance = spawnSync(process.execPath, provenanceArgs, { cwd: REPO_ROOT, encoding: 'utf8' });
+  const provenance = spawnSync(process.execPath, [PROVENANCE_SCRIPT], { cwd: REPO_ROOT, encoding: 'utf8' });
   const provenanceVerdict = provenance.status === 0 ? 'PASS' : 'FAIL';
   if (provenance.status !== 0) {
     failures.push('scripts/verify-pr2-provenance.js failed (L2/L3)');

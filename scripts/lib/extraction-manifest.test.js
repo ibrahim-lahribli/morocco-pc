@@ -35,6 +35,7 @@ function batch(overrides = {}) {
   return {
     id: 'batch-one',
     baseline_sha: 'a'.repeat(40),
+    identity_policy: 'byte-identical',
     modules: [{ source: 'src/a.js', destination: 'packages/a.js' }],
     ...overrides,
   };
@@ -106,7 +107,6 @@ test('every PR 2 move is declared once, from src/recommendation into the core pa
   for (const entry of modules) {
     assert.match(entry.source, /^src\/recommendation\/.+\.js$/);
     assert.match(entry.destination, /^packages\/recommendation-core\/src\/.+\.js$/);
-    assert.equal(entry.identity_policy, 'byte-identical');
   }
 });
 
@@ -118,7 +118,6 @@ test('a top-level schema violation is rejected', () => {
     ['a wrong version', document([batch()], { version: 2 }), /version must be/],
     ['no batches key', { kind: MANIFEST_KIND, version: MANIFEST_VERSION }, /batches must be/],
     ['empty batches', document([]), /batches must be/],
-    ['an unsupported default policy', document([batch()], { identity_policy: 'rename-similarity' }), /unsupported identity_policy/],
   ];
   for (const [name, doc, pattern] of cases) {
     const errors = errorsFor(doc);
@@ -133,8 +132,8 @@ test('a malformed batch record is rejected', () => {
     ['a duplicate id', document([batch(), batch({ modules: [{ source: 'src/b.js', destination: 'packages/b.js' }] })]), /duplicate batch id/],
     ['a short baseline', document([batch({ baseline_sha: 'afccc67' })]), /40-character/],
     ['an uppercase baseline', document([batch({ baseline_sha: 'A'.repeat(40) })]), /40-character/],
-    ['an unsupported batch policy', document([batch({ identity_policy: 'pretty-printed' })]), /unsupported identity_policy/],
-    ['a missing modules list', document([{ id: 'batch-one', baseline_sha: 'a'.repeat(40) }]), /modules must be/],
+    ['an unsupported batch policy', document([batch({ identity_policy: 'pretty-printed' })]), /only implemented policy/],
+    ['a missing modules list', document([{ id: 'batch-one', baseline_sha: 'a'.repeat(40), identity_policy: 'byte-identical' }]), /modules must be/],
     ['an empty modules list', document([batch({ modules: [] })]), /modules must be/],
     ['a non-object batch', document(['not-a-batch']), /expected an object/],
   ];
@@ -153,7 +152,6 @@ test('a malformed move record is rejected', () => {
     ['a backslash path', document([batch({ modules: [{ source: 'src/a.js', destination: 'packages\\a.js' }] })]), /destination must be/],
     ['a drive-letter path', document([batch({ modules: [{ source: 'C:/src/a.js', destination: 'packages/a.js' }] })]), /source must be/],
     ['source equal to destination', document([batch({ modules: [{ source: 'packages/a.js', destination: 'packages/a.js' }] })]), /same path/],
-    ['an unsupported per-module policy', document([batch({ modules: [{ source: 'src/a.js', destination: 'packages/a.js', identity_policy: 'fuzzy' }] })]), /unsupported identity_policy/],
     ['a non-object module', document([batch({ modules: ['src/a.js'] })]), /expected an object/],
   ];
   for (const [name, doc, pattern] of cases) {
@@ -250,8 +248,8 @@ test('git helpers resolve commits, ancestry and blob identity', (t) => {
   assert.equal(resolveCommit(repo.dir, '-n').ok, false, 'an option-shaped reference is refused');
   assert.equal(resolveCommit(repo.dir, '').ok, false);
 
-  assert.equal(isAncestor(repo.dir, baseline, 'HEAD'), true);
-  assert.equal(isAncestor(repo.dir, head.sha, 'HEAD'), true);
+  assert.equal(isAncestor(repo.dir, baseline), true);
+  assert.equal(isAncestor(repo.dir, head.sha), true);
 
   const before = blobAt(repo.dir, baseline, 'src/a.js');
   const after = blobAt(repo.dir, 'HEAD', 'packages/a.js');
@@ -263,11 +261,11 @@ test('git helpers resolve commits, ancestry and blob identity', (t) => {
   repo.run(['checkout', '--quiet', '-b', 'side']);
   repo.write('src/side.js', 'side\n');
   const side = repo.commit('side work');
-  assert.equal(isAncestor(repo.dir, side, 'HEAD'), true);
+  assert.equal(isAncestor(repo.dir, side), true);
   repo.run(['checkout', '--quiet', '-']);
   repo.write('packages/b.js', 'more\n');
   repo.commit('after the side branch');
-  assert.equal(isAncestor(repo.dir, side, 'HEAD'), false, 'a sibling branch is not an ancestor');
+  assert.equal(isAncestor(repo.dir, side), false, 'a sibling branch is not an ancestor');
 });
 
 test('loadManifest reports a missing file and invalid JSON instead of throwing', (t) => {

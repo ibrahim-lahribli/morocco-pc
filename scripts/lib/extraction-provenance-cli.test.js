@@ -69,7 +69,11 @@ function makeFixture(t) {
     manifest(entry) {
       fs.writeFileSync(
         fixture.manifestPath,
-        JSON.stringify({ kind: 'extraction-manifest', version: 1, batches: [entry] }, null, 2) + '\n'
+        JSON.stringify(
+          { kind: 'extraction-manifest', version: 1, batches: [{ identity_policy: 'byte-identical', ...entry }] },
+          null,
+          2
+        ) + '\n'
       );
       return fixture.manifestPath;
     },
@@ -368,16 +372,6 @@ test('the real PR 2 batch still verifies 21/21', () => {
   assert.match(result.stdout, /blob-identical: 21 \/ 21/);
   assert.match(result.stdout, /characterization verified for: step-4b-pr2/);
   assert.match(result.stdout, /verify-pr2-provenance: PASS/);
-});
-
-test('a batch can be selected explicitly, and an unknown one is refused', () => {
-  const selected = run(['--batch=step-4b-pr2']);
-  assert.equal(selected.status, 0, selected.stderr);
-  assert.match(selected.stdout, /moves checked: 21 declared in 1 batch\(es\)/);
-
-  const unknown = run(['--batch=step-4b-pr9']);
-  assert.equal(unknown.status, 2);
-  assert.match(unknown.stderr, /declares no batch "step-4b-pr9"/);
 });
 
 test('an unknown argument and a non-repository are refused', (t) => {

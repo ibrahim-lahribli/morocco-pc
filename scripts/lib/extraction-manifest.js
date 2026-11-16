@@ -15,39 +15,39 @@
  *   PR 2's baseline is never re-derived from the working tree and never
  *   rewritten by a later PR.
  *
- * Schema (version 1) - required unless marked optional:
+ * Schema (version 1):
  *   {
  *     "kind": "extraction-manifest",
  *     "version": 1,
- *     "identity_policy": "byte-identical",        // optional default for batches
  *     "batches": [
  *       {
  *         "id": "step-4b-pr2",                    // kebab-case, unique
  *         "description": "...",                   // optional
  *         "baseline_sha": "<40 lowercase hex>",   // the commit the code moved FROM
- *         "identity_policy": "byte-identical",    // optional; inherits the default
+ *         "identity_policy": "byte-identical",    // the only implemented policy
  *         "characterization": {                   // optional; absent/null = L3 only
  *           "fixture": "<repo-relative path>",
  *           "capture_command": "<command that produced it>",
  *           "capture_commit_subject": "<subject of the capture commit>",
  *           "expect_touch_commits": 1
  *         },
- *         "modules": [
- *           { "source": "<path at baseline>",
- *             "destination": "<path at HEAD>",
- *             "identity_policy": "byte-identical" }   // optional per-module override
- *         ]
+ *         "modules": [{ "source": "<path at baseline>", "destination": "<path at HEAD>" }]
  *       }
  *     ]
  *   }
  *
  * How future batches extend it
- *   Append a batch object with its own id and baseline. A batch that captures a
- *   behaviour fixture names that fixture in `characterization`, so the PR 2
- *   fixture is never treated as a universal baseline: a batch without the block
- *   is held to L3 only, explicitly. `identity_policy` is checked against
- *   SUPPORTED_IDENTITY_POLICIES: a batch may declare a policy the checker does
- *   not implement yet, and that FAILS closed instead of passing unverified.
+ *   Append a batch with its own id, baseline and identity policy. A batch that
+ *   captures a behaviour fixture names that fixture in `characterization`, so the
+ *   PR 2 fixture is never treated as a universal baseline: a batch without the
+ *   block is held to L3 only, explicitly. Declaring a policy other than
+ *   IDENTITY_POLICY fails closed instead of passing unverified.
+ *
+ * What is deliberately NOT here
+ *   No schema framework, no per-module policy override and no inherited default:
+ *   a normalised batch always carries its own policy and every normalised module
+ *   already has both paths, so callers read those facts instead of re-checking
+ *   them. Validation is the only place a shape is decided.
  *
  * Fail-closed
  *   Every violation is collected and returned, never thrown: a caller needs the
@@ -65,14 +65,13 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const MANIFEST_REL = 'extraction-manifest.json';
 const MANIFEST_KIND = 'extraction-manifest';
 const MANIFEST_VERSION = 1;
-const DEFAULT_IDENTITY_POLICY = 'byte-identical';
 
 /**
- * Only blob equality is implemented. A future policy ("identical after comment
- * normalisation", say) is added here AND in the verifier in the same commit;
- * until then declaring it is a hard failure rather than a silent pass.
+ * The only identity policy implemented: the destination blob equals the source
+ * blob at the baseline. A batch declaring anything else is rejected here rather
+ * than silently verified as something it is not.
  */
-const SUPPORTED_IDENTITY_POLICIES = Object.freeze([DEFAULT_IDENTITY_POLICY]);
+const IDENTITY_POLICY = 'byte-identical';
 
 const BATCH_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const COMMIT_SHA = /^[0-9a-f]{40}$/;
@@ -90,48 +89,30 @@ function manifestFile(repo = REPO_ROOT) {
  */
 function isRepoRelativePath(value) {
   if (typeof value !== 'string' || value.length === 0) return false;
-  if (value.includes('\\')) return false;
-  if (value.startsWith('/')) return false;
-  if (value.endsWith('/')) return false;
+  if (value.includes('\\') || value.startsWith('/') || value.endsWith('/')) return false;
   if (/^[A-Za-z]:/.test(value)) return false;
   return value.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..');
 }
 
-/**
- * A string that can be handed to `git rev-parse` as a reference. Rejects an
- * empty value, a leading `-` (which Git would read as an option) and anything
- * containing whitespace or a control character.
- */
-function isRefValue(value) {
-  if (typeof value !== 'string' || value.length === 0 || value.length > 200) return false;
-  if (value.startsWith('-')) return false;
-  // eslint-disable-next-line no-control-regex
-  return !/[\s\u0000-\u001f]/.test(value);
-}
-
-function validateCharacterization(raw, label, errors, { defaultPolicy } = {}) {
-  void defaultPolicy;
+function validateCharacterization(raw, label, errors) {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== 'object' || Array.isArray(raw)) {
     errors.push(label + ': characterization must be an object or null');
     return null;
   }
-  let valid = true;
+  const errorsBefore = errors.length;
   if (!isRepoRelativePath(raw.fixture)) {
     errors.push(label + ': characterization.fixture must be a repo-relative POSIX path (found ' + JSON.stringify(raw.fixture) + ')');
-    valid = false;
   }
   for (const key of ['capture_command', 'capture_commit_subject']) {
     if (typeof raw[key] !== 'string' || raw[key].length === 0) {
       errors.push(label + ': characterization.' + key + ' must be a non-empty string');
-      valid = false;
     }
   }
   if (!Number.isInteger(raw.expect_touch_commits) || raw.expect_touch_commits < 1) {
     errors.push(label + ': characterization.expect_touch_commits must be a positive integer');
-    valid = false;
   }
-  if (!valid) return null;
+  if (errors.length > errorsBefore) return null;
   return {
     fixture: raw.fixture,
     capture_command: raw.capture_command,
@@ -141,9 +122,10 @@ function validateCharacterization(raw, label, errors, { defaultPolicy } = {}) {
 }
 
 /**
- * Validate a parsed manifest document. Returns the normalised batches (defaults
- * applied) and every error found. A normalised batch always carries
- * `identity_policy`, `characterization` (null when undeclared) and `modules`.
+ * Validate a parsed manifest document. Returns the normalised batches and every
+ * error found; a normalised module is { source, destination } and a normalised
+ * batch always carries `identity_policy`, `characterization` (null when
+ * undeclared) and `modules`.
  */
 function validateManifest(document) {
   const errors = [];
@@ -158,21 +140,14 @@ function validateManifest(document) {
   if (document.version !== MANIFEST_VERSION) {
     errors.push('manifest: version must be ' + MANIFEST_VERSION + ' (found ' + JSON.stringify(document.version) + ')');
   }
-  const defaultPolicy = document.identity_policy === undefined ? DEFAULT_IDENTITY_POLICY : document.identity_policy;
-  if (!SUPPORTED_IDENTITY_POLICIES.includes(defaultPolicy)) {
-    errors.push(
-      'manifest: unsupported identity_policy ' + JSON.stringify(defaultPolicy) +
-      ' (supported: ' + SUPPORTED_IDENTITY_POLICIES.join(', ') + ')'
-    );
-  }
   if (!Array.isArray(document.batches) || document.batches.length === 0) {
     errors.push('manifest: batches must be a non-empty array');
     return { batches, errors };
   }
 
-  const seenBatchIds = new Set();
-  const seenPairs = new Map();
-  const seenDestinations = new Map();
+  const batchIds = new Set();
+  const pairs = new Map();
+  const destinations = new Map();
 
   document.batches.forEach((raw, index) => {
     const label = 'batch[' + index + ']' +
@@ -181,13 +156,14 @@ function validateManifest(document) {
       errors.push(label + ': expected an object');
       return;
     }
+    const batchRef = typeof raw.id === 'string' ? raw.id : label;
 
     if (typeof raw.id !== 'string' || !BATCH_ID.test(raw.id)) {
       errors.push(label + ': id must be a kebab-case identifier (found ' + JSON.stringify(raw.id) + ')');
-    } else if (seenBatchIds.has(raw.id)) {
+    } else if (batchIds.has(raw.id)) {
       errors.push(label + ': duplicate batch id ' + raw.id);
     } else {
-      seenBatchIds.add(raw.id);
+      batchIds.add(raw.id);
     }
 
     if (typeof raw.baseline_sha !== 'string' || !COMMIT_SHA.test(raw.baseline_sha)) {
@@ -196,17 +172,11 @@ function validateManifest(document) {
         JSON.stringify(raw.baseline_sha) + ')'
       );
     }
-
-    const policy = raw.identity_policy === undefined ? defaultPolicy : raw.identity_policy;
-    if (!SUPPORTED_IDENTITY_POLICIES.includes(policy)) {
+    if (raw.identity_policy !== IDENTITY_POLICY) {
       errors.push(
-        label + ': unsupported identity_policy ' + JSON.stringify(policy) +
-        ' (supported: ' + SUPPORTED_IDENTITY_POLICIES.join(', ') + ')'
+        label + ': identity_policy must be ' + JSON.stringify(IDENTITY_POLICY) +
+        ', the only implemented policy (found ' + JSON.stringify(raw.identity_policy) + ')'
       );
-    }
-
-    if (raw.description !== undefined && typeof raw.description !== 'string') {
-      errors.push(label + ': description must be a string');
     }
 
     const characterization = validateCharacterization(raw.characterization, label, errors);
@@ -221,49 +191,32 @@ function validateManifest(document) {
           errors.push(moduleLabel + ': expected an object');
           return;
         }
-        let valid = true;
         if (!isRepoRelativePath(module.source)) {
           errors.push(moduleLabel + ': source must be a repo-relative POSIX path (found ' + JSON.stringify(module.source) + ')');
-          valid = false;
+          return;
         }
         if (!isRepoRelativePath(module.destination)) {
           errors.push(moduleLabel + ': destination must be a repo-relative POSIX path (found ' + JSON.stringify(module.destination) + ')');
-          valid = false;
+          return;
         }
-        if (valid && module.source === module.destination) {
+        if (module.source === module.destination) {
           errors.push(moduleLabel + ': source and destination are the same path (' + module.source + '), so there is no move');
-          valid = false;
+          return;
         }
-        const modulePolicy = module.identity_policy === undefined ? policy : module.identity_policy;
-        if (!SUPPORTED_IDENTITY_POLICIES.includes(modulePolicy)) {
-          errors.push(
-            moduleLabel + ': unsupported identity_policy ' + JSON.stringify(modulePolicy) +
-            ' (supported: ' + SUPPORTED_IDENTITY_POLICIES.join(', ') + ')'
-          );
-          valid = false;
-        }
-        if (!valid) return;
 
         const pairKey = module.source + ' -> ' + module.destination;
-        if (seenPairs.has(pairKey)) {
-          errors.push(moduleLabel + ': duplicate move ' + pairKey + ' (already declared by batch ' + seenPairs.get(pairKey) + ')');
+        if (pairs.has(pairKey)) {
+          errors.push(moduleLabel + ': duplicate move ' + pairKey + ' (already declared by ' + pairs.get(pairKey) + ')');
         } else {
-          seenPairs.set(pairKey, typeof raw.id === 'string' ? raw.id : label);
+          pairs.set(pairKey, batchRef);
         }
-        if (seenDestinations.has(module.destination)) {
-          errors.push(
-            moduleLabel + ': destination ' + module.destination +
-            ' is already a destination in batch ' + seenDestinations.get(module.destination)
-          );
+        if (destinations.has(module.destination)) {
+          errors.push(moduleLabel + ': destination ' + module.destination + ' is already a destination in batch ' + destinations.get(module.destination));
         } else {
-          seenDestinations.set(module.destination, typeof raw.id === 'string' ? raw.id : label);
+          destinations.set(module.destination, batchRef);
         }
 
-        modules.push({
-          source: module.source,
-          destination: module.destination,
-          identity_policy: modulePolicy,
-        });
+        modules.push({ source: module.source, destination: module.destination });
       });
     }
 
@@ -271,7 +224,7 @@ function validateManifest(document) {
       id: typeof raw.id === 'string' ? raw.id : null,
       description: raw.description === undefined ? null : raw.description,
       baseline_sha: typeof raw.baseline_sha === 'string' ? raw.baseline_sha : null,
-      identity_policy: policy,
+      identity_policy: raw.identity_policy,
       characterization,
       modules,
     });
@@ -290,29 +243,21 @@ function loadManifest(file = manifestFile()) {
   try {
     text = fs.readFileSync(file, 'utf8');
   } catch (err) {
-    return {
-      document: null,
-      batches: [],
-      errors: ['manifest: cannot read ' + file + ' (' + (err.code || err.message) + ')'],
-    };
+    return { document: null, batches: [], errors: ['manifest: cannot read ' + file + ' (' + (err.code || err.message) + ')'] };
   }
   let document;
   try {
     document = JSON.parse(text);
   } catch (err) {
-    return {
-      document: null,
-      batches: [],
-      errors: ['manifest: ' + file + ' is not valid JSON: ' + err.message],
-    };
+    return { document: null, batches: [], errors: ['manifest: ' + file + ' is not valid JSON: ' + err.message] };
   }
   const { batches, errors } = validateManifest(document);
   return { document, batches, errors };
 }
 
 // ---------------------------------------------------------------------------
-// Git helpers. Every one of them answers { ok, ... } instead of throwing: a
-// missing object is an expected FAIL of the gate, not a crash.
+// Git helpers. A missing object is an expected FAIL of the gate, so every helper
+// answers { ok: false } instead of throwing.
 // ---------------------------------------------------------------------------
 
 function tryGit(repo, args) {
@@ -322,10 +267,9 @@ function tryGit(repo, args) {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    return { ok: true, out: out.replace(/\s+$/, ''), error: null };
-  } catch (err) {
-    const stderr = err && err.stderr ? String(err.stderr).trim() : '';
-    return { ok: false, out: '', error: stderr || (err && err.message) || 'git failed' };
+    return { ok: true, out: out.replace(/\s+$/, '') };
+  } catch (_err) {
+    return { ok: false, out: '' };
   }
 }
 
@@ -335,27 +279,21 @@ function isGitRepository(repo) {
 
 /** Resolve a reference to a full commit SHA. */
 function resolveCommit(repo, ref) {
-  if (!isRefValue(ref)) {
-    return { ok: false, sha: null, error: 'refusing to resolve ' + JSON.stringify(ref) + ': a git reference is expected' };
+  // A leading '-' would be parsed by Git as an option, not a revision.
+  if (typeof ref !== 'string' || ref.length === 0 || ref.startsWith('-')) {
+    return { ok: false, sha: null };
   }
   const result = tryGit(repo, ['rev-parse', '--verify', '--quiet', ref + '^{commit}']);
-  if (!result.ok || !COMMIT_SHA.test(result.out)) {
-    return { ok: false, sha: null, error: 'not a commit in this repository: ' + ref };
-  }
-  return { ok: true, sha: result.out, error: null };
+  if (!result.ok || !COMMIT_SHA.test(result.out)) return { ok: false, sha: null };
+  return { ok: true, sha: result.out };
 }
 
-/** Is `sha` an ancestor of `descendant` (default HEAD)? */
-function isAncestor(repo, sha, descendant = 'HEAD') {
-  return tryGit(repo, ['merge-base', '--is-ancestor', sha, descendant]).ok;
+/** Is `sha` an ancestor of HEAD? */
+function isAncestor(repo, sha) {
+  return tryGit(repo, ['merge-base', '--is-ancestor', sha, 'HEAD']).ok;
 }
 
-/** Does `rev:path` exist? */
-function fileExistsAt(repo, rev, filePath) {
-  return tryGit(repo, ['cat-file', '-e', rev + ':' + filePath]).ok;
-}
-
-/** Blob object id of `rev:path`, or { ok: false } when it does not exist. */
+/** Blob object id of `rev:path`; { ok: false } when the path does not exist there. */
 function blobAt(repo, rev, filePath) {
   const result = tryGit(repo, ['rev-parse', '--verify', '--quiet', rev + ':' + filePath]);
   if (!result.ok || result.out === '') return { ok: false, oid: null };
@@ -363,18 +301,14 @@ function blobAt(repo, rev, filePath) {
 }
 
 module.exports = {
-  COMMIT_SHA,
-  DEFAULT_IDENTITY_POLICY,
+  IDENTITY_POLICY,
   MANIFEST_KIND,
   MANIFEST_REL,
   MANIFEST_VERSION,
   REPO_ROOT,
-  SUPPORTED_IDENTITY_POLICIES,
   blobAt,
-  fileExistsAt,
   isAncestor,
   isGitRepository,
-  isRefValue,
   isRepoRelativePath,
   loadManifest,
   manifestFile,

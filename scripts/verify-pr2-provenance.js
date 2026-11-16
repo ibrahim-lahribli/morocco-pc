@@ -17,30 +17,23 @@
  * Where the claims come from
  *   Not from this file. Every declared move, baseline and identity policy is
  *   read from extraction-manifest.json (version 1) through
- *   scripts/lib/extraction-manifest.js, so adding a batch is publishing a new
- *   object in the manifest rather than editing a checker. PR 2's baseline is the
- *   commit recorded in the manifest and in the frozen fixture; it is never
- *   re-derived from the working tree.
+ *   scripts/lib/extraction-manifest.js. PR 2's baseline is the commit recorded in
+ *   the manifest and in the frozen fixture; it is never re-derived from the
+ *   working tree, and a batch whose record does not validate is never partially
+ *   verified.
  *
  * What is verified, per batch
  *   * the baseline is a real commit and an ancestor of HEAD;
- *   * every source path exists at the baseline and every destination exists at
- *     HEAD;
- *   * the source blob at the baseline equals the destination blob at HEAD under
- *     the declared identity policy;
- *   * every declared move is checked exactly once (duplicates are rejected while
- *     validating the manifest, and re-detected here);
+ *   * every source exists at the baseline and every destination at HEAD;
+ *   * the source blob at the baseline equals the destination blob at HEAD
+ *     (IDENTITY_POLICY is the only policy, so there is nothing to branch on);
  *   * a batch that declares a characterization record must also show that its
  *     fixture names the same baseline, was ADDED by a commit whose parent is
  *     that baseline (captured before the move), is the only commit that touched
  *     it since, and has not changed since the capture commit.
  *
- * Fail-closed: a missing manifest, an unknown batch, a malformed record, an
- * unsupported identity policy or a missing object is a FAIL, never a skip.
- *
  * DB-free, dependency-free, read-only. Run from the repository root:
  *   node scripts/verify-pr2-provenance.js
- *   node scripts/verify-pr2-provenance.js --batch=step-4b-pr2
  *   node scripts/verify-pr2-provenance.js --manifest=<path> --repo=<path>
  *
  * Exit codes: 0 PASS, 1 FAIL, 2 argument error.
@@ -52,7 +45,6 @@ const path = require('node:path');
 const {
   REPO_ROOT,
   blobAt,
-  fileExistsAt,
   isAncestor,
   isGitRepository,
   loadManifest,
@@ -61,24 +53,20 @@ const {
   tryGit,
 } = require('./lib/extraction-manifest');
 
-const USAGE =
-  'usage: node scripts/verify-pr2-provenance.js [--manifest=<path>] [--repo=<path>] [--batch=<id>]';
+const USAGE = 'usage: node scripts/verify-pr2-provenance.js [--manifest=<path>] [--repo=<path>]';
 
 function parseArgs(argv) {
-  const options = { repo: REPO_ROOT, manifest: null, batch: null, errors: [] };
+  const options = { repo: REPO_ROOT, manifest: null, errors: [] };
   for (const arg of argv) {
-    if (arg.startsWith('--repo=')) {
-      const value = arg.slice('--repo='.length);
-      if (value.length === 0) options.errors.push('--repo= needs a path');
-      else options.repo = path.resolve(process.cwd(), value);
-    } else if (arg.startsWith('--manifest=')) {
-      const value = arg.slice('--manifest='.length);
-      if (value.length === 0) options.errors.push('--manifest= needs a path');
-      else options.manifest = path.resolve(process.cwd(), value);
-    } else if (arg.startsWith('--batch=')) {
-      const value = arg.slice('--batch='.length);
-      if (value.length === 0) options.errors.push('--batch= needs a batch id');
-      else options.batch = value;
+    if (arg.startsWith('--repo=') || arg.startsWith('--manifest=')) {
+      const value = arg.slice(arg.indexOf('=') + 1);
+      if (value.length === 0) {
+        options.errors.push(arg.slice(0, arg.indexOf('=') + 1) + ' needs a path');
+      } else if (arg.startsWith('--repo=')) {
+        options.repo = path.resolve(process.cwd(), value);
+      } else {
+        options.manifest = path.resolve(process.cwd(), value);
+      }
     } else {
       options.errors.push('unknown argument ' + JSON.stringify(arg));
     }
@@ -161,15 +149,14 @@ function verifyCharacterization(repo, batch, lines, failures) {
   const added = tryGit(repo, ['log', '--diff-filter=A', '--format=%H', batch.baseline_sha + '..HEAD', '--', record.fixture]);
   const captures = added.ok ? added.out.split('\n').filter(Boolean) : [];
   if (captures.length !== 1) {
-    failures.push(
-      'batch ' + label + ': the fixture must be ADDED by exactly one commit after the baseline, found ' + captures.length
-    );
+    failures.push('batch ' + label + ': the fixture must be ADDED by exactly one commit after the baseline, found ' + captures.length);
     return;
   }
   const capture = captures[0];
 
   const parent = tryGit(repo, ['rev-parse', capture + '^']);
-  if (!parent.ok || parent.out !== batch.baseline_sha) {
+  const capturedBeforeTheMove = parent.ok && parent.out === batch.baseline_sha;
+  if (!capturedBeforeTheMove) {
     failures.push(
       'batch ' + label + ': the fixture capture commit ' + capture.slice(0, 10) +
       ' is not a child of the baseline ' + batch.baseline_sha +
@@ -182,7 +169,7 @@ function verifyCharacterization(repo, batch, lines, failures) {
     failures.push('batch ' + label + ': the fixture changed after its capture commit ' + capture.slice(0, 10) + ' - it was regenerated');
   }
 
-  lines.push('fixture captured before the move: ' + (parent.ok && parent.out === batch.baseline_sha ? 'yes' : '**NO**'));
+  lines.push('fixture captured before the move: ' + (capturedBeforeTheMove ? 'yes' : '**NO**'));
   lines.push('fixture unchanged since its capture commit: ' + (unchanged.ok ? 'yes' : '**NO**'));
 }
 
@@ -193,14 +180,13 @@ function verifyBatch(repo, batch, failures) {
   if (batch.description) lines.push(batch.description);
   lines.push('baseline: ' + batch.baseline_sha);
 
-  const resolved = resolveCommit(repo, batch.baseline_sha);
-  if (!resolved.ok) {
+  if (!resolveCommit(repo, batch.baseline_sha).ok) {
     failures.push('batch ' + batch.id + ': the baseline ' + batch.baseline_sha + ' does not exist in this repository');
-    return { lines, declared: batch.modules.length, identical: 0, characterized: false };
+    return { lines, identical: 0 };
   }
-  if (!isAncestor(repo, batch.baseline_sha, 'HEAD')) {
+  if (!isAncestor(repo, batch.baseline_sha)) {
     failures.push('batch ' + batch.id + ': the baseline ' + batch.baseline_sha + ' is not an ancestor of HEAD');
-    return { lines, declared: batch.modules.length, identical: 0, characterized: false };
+    return { lines, identical: 0 };
   }
 
   const date = tryGit(repo, ['log', '-1', '--format=%cI', batch.baseline_sha]);
@@ -219,29 +205,20 @@ function verifyBatch(repo, batch, failures) {
 
   let identical = 0;
   for (const module of batch.modules) {
-    const sourceThere = fileExistsAt(repo, batch.baseline_sha, module.source);
-    const destinationThere = fileExistsAt(repo, 'HEAD', module.destination);
-    if (!sourceThere) {
+    const before = blobAt(repo, batch.baseline_sha, module.source);
+    const after = blobAt(repo, 'HEAD', module.destination);
+    if (!before.ok) {
       failures.push('batch ' + batch.id + ': source ' + module.source + ' does not exist at baseline ' + batch.baseline_sha);
     }
-    if (!destinationThere) {
+    if (!after.ok) {
       failures.push('batch ' + batch.id + ': destination ' + module.destination + ' does not exist at HEAD');
     }
 
-    const before = sourceThere ? blobAt(repo, batch.baseline_sha, module.source) : { ok: false, oid: null };
-    const after = destinationThere ? blobAt(repo, 'HEAD', module.destination) : { ok: false, oid: null };
-
-    let same = false;
-    if (before.ok && after.ok) {
-      if (module.identity_policy !== 'byte-identical') {
-        failures.push('batch ' + batch.id + ': identity policy ' + JSON.stringify(module.identity_policy) + ' is not implemented');
-      } else if (before.oid === after.oid) {
-        same = true;
-        identical += 1;
-      } else {
-        failures.push('batch ' + batch.id + ': blob differs for ' + module.destination + ' - the file was rewritten, not moved');
-      }
+    const same = before.ok && after.ok && before.oid === after.oid;
+    if (before.ok && after.ok && !same) {
+      failures.push('batch ' + batch.id + ': blob differs for ' + module.destination + ' - the file was rewritten, not moved');
     }
+    if (same) identical += 1;
 
     lines.push(
       '| `' + module.source + '` -> `' + module.destination + '` | ' +
@@ -254,12 +231,7 @@ function verifyBatch(repo, batch, failures) {
   lines.push('');
   lines.push("blob-identical in '" + batch.id + "': " + identical + ' / ' + batch.modules.length);
 
-  return {
-    lines,
-    declared: batch.modules.length,
-    identical,
-    characterized: Boolean(batch.characterization),
-  };
+  return { lines, identical };
 }
 
 function main(argv) {
@@ -284,43 +256,23 @@ function main(argv) {
     return 1;
   }
 
-  let batches = loaded.batches;
-  if (options.batch) {
-    batches = batches.filter((batch) => batch.id === options.batch);
-    if (batches.length === 0) {
-      process.stderr.write(
-        'verify-pr2-provenance: FAIL\n  - the manifest declares no batch ' + JSON.stringify(options.batch) + '\n'
-      );
-      return 2;
-    }
-  }
-
   const failures = [];
-  const checked = new Set();
   const characterized = [];
   let declared = 0;
   let identical = 0;
 
-  for (const batch of batches) {
+  // Validation already rejects duplicate moves and shared destinations, so a
+  // normalised manifest gives each move exactly one visit here.
+  for (const batch of loaded.batches) {
     const result = verifyBatch(options.repo, batch, failures);
     for (const line of result.lines) process.stdout.write(line + '\n');
-    declared += result.declared;
+    declared += batch.modules.length;
     identical += result.identical;
-    if (result.characterized) characterized.push(batch.id);
-
-    // "Every declared move is checked exactly once": validation already rejects
-    // duplicates; this is the second, independent statement of the same rule.
-    for (const module of batch.modules) {
-      const key = module.source + '\u0000' + module.destination;
-      if (checked.has(key)) {
-        failures.push('move ' + module.source + ' -> ' + module.destination + ' was verified more than once');
-      }
-      checked.add(key);
-    }
+    if (batch.characterization) characterized.push(batch.id);
   }
 
   process.stdout.write(
-    '\nmoves checked: ' + declared + ' declared in ' + batches.length + ' batch(es), each exactly once\n' +
+    '\nmoves checked: ' + declared + ' declared in ' + loaded.batches.length + ' batch(es), each exactly once\n' +
     'blob-identical: ' + identical + ' / ' + declared + '\n' +
     'characterization verified for: ' + (characterized.length > 0 ? characterized.join(', ') : 'no batch') + '\n'
   );
@@ -332,7 +284,7 @@ function main(argv) {
   }
 
   process.stdout.write(
-    'verify-pr2-provenance: PASS - ' + declared + ' declared move(s) across ' + batches.length +
+    'verify-pr2-provenance: PASS - ' + declared + ' declared move(s) across ' + loaded.batches.length +
     ' batch(es); ' + identical + ' blob-identical; ' +
     (characterized.length > 0 ? characterized.length + ' fixture origin(s) verified' : 'no fixture origin declared') + '\n'
   );

@@ -2,7 +2,6 @@
   "kind": "extraction-manifest",
   "version": 1,
   "description": "Versioned provenance for code extracted out of src/recommendation/ into packages/. One batch per extraction PR, and each batch keeps its own immutable baseline commit, its source -> destination pairs and the identity policy those pairs must satisfy. A later PR APPENDS a batch; a merged batch is never rewritten, so PR 2's baseline cannot drift when PR 3 or PR 4 is measured.",
-  "identity_policy": "byte-identical",
   "batches": [
     {
       "id": "step-4b-pr2",
