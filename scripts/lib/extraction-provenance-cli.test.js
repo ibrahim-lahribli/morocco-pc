@@ -279,6 +279,9 @@ test('a characterization record proves the fixture predates the move', (t) => {
   assert.match(result.stdout, /fixture captured before the move: yes/);
   assert.match(result.stdout, /fixture unchanged since its capture commit: yes/);
   assert.match(result.stdout, /characterization verified for: batch-one/);
+  // A capture commit that adds ONLY the fixture passes the path restriction:
+  // with no declared capture_paths, the fixture is the one path it may change.
+  assert.match(result.stdout, /capture commit changes only declared paths: A fixtures\/characterization\.json/);
   assert.equal(capture, fixture.git(['rev-parse', capture]), 'the capture commit is a real commit');
 });
 
