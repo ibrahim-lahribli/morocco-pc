@@ -193,7 +193,14 @@ test('a characterization record is optional, and malformed when wrong', () => {
     ['a missing fixture', batch({ characterization: { capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1 } }), /characterization\.fixture/],
     ['a missing command', batch({ characterization: { fixture: 'f.json', capture_commit_subject: 'capture', expect_touch_commits: 1 } }), /capture_command/],
     ['a missing subject', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', expect_touch_commits: 1 } }), /capture_commit_subject/],
-    ['a zero touch count', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 0 } }), /expect_touch_commits/],
+    ['a zero touch count', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 0 } }), /expect_touch_commits must be exactly 1/],
+    // The fixture is introduced once and stays immutable: a record may not ask
+    // for the weaker "N commits carrying the right subject" rule, which a
+    // modify-and-restore cycle would satisfy.
+    ['two expected touches', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 2 } }), /expect_touch_commits must be exactly 1 \(found 2\)/],
+    ['three expected touches', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 3 } }), /introduced once and must never be/],
+    ['a fractional touch count', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1.5 } }), /expect_touch_commits must be exactly 1/],
+    ['a quoted touch count', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: '1' } }), /expect_touch_commits must be exactly 1/],
     ['a non-array capture_paths', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1, capture_paths: 'scripts/x.js' } }), /capture_paths must be an array/],
     ['an absolute capture path', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1, capture_paths: ['/etc/passwd'] } }), /capture_paths\[0\] must be a repo-relative/],
     ['a capture path naming the fixture', batch({ characterization: { fixture: 'f.json', capture_command: 'node x.js', capture_commit_subject: 'capture', expect_touch_commits: 1, capture_paths: ['f.json'] } }), /capture_paths\[0\] names the fixture itself/],

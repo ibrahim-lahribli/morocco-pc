@@ -183,8 +183,11 @@ function commitChanges(repo, commit) {
  * edited file must not stand in for the committed evidence:
  *   * the committed fixture is a regular file at HEAD and parses;
  *   * it names the manifest baseline and the declared capture command;
- *   * exactly `expect_touch_commits` commits touched it since the baseline, each
- *     carrying the declared subject;
+ *   * EXACTLY ONE commit touched it since the baseline - its capture - carrying
+ *     the declared subject. The manifest's `expect_touch_commits` is held to 1
+ *     as well: counting commits alone is not the invariant, because a fixture
+ *     modified and then restored in two later commits still ends up identical
+ *     to its capture and would satisfy "N touches, one add, unchanged at HEAD";
  *   * the commit that ADDED it is the only one, and its parent is the baseline,
  *     so the capture was committed before anything moved;
  *   * that commit changes NOTHING except the fixture and any declared
@@ -236,14 +239,33 @@ function verifyCharacterization(repo, batch, lines, failures) {
     );
   }
 
-  const touching = tryGit(repo, ['log', '--format=%H\t%s', batch.baseline_sha + '..HEAD', '--', record.fixture]);
-  const touches = touching.ok ? touching.out.split('\n').filter(Boolean) : [];
-  lines.push('commits touching the fixture since baseline: ' + touches.length + ' (expected ' + record.expect_touch_commits + ')');
-  for (const line of touches) lines.push('  ' + line.replace('\t', ' '));
-  if (touches.length !== record.expect_touch_commits) {
+  // Introduction-once-then-immutable. Held here as well as in the manifest
+  // validator, so a caller that builds a batch object directly cannot ask for
+  // the weaker "N touches" rule either.
+  if (record.expect_touch_commits !== 1) {
     failures.push(
-      'batch ' + label + ': the fixture was touched by ' + touches.length + ' commits; expected exactly ' +
-      record.expect_touch_commits + ' (its capture)'
+      'batch ' + label + ': characterization.expect_touch_commits declares ' +
+      String(record.expect_touch_commits) + '; the fixture is introduced once and must stay immutable, ' +
+      'so exactly 1 is the only supported value'
+    );
+  }
+
+  const touching = tryGit(repo, ['log', '--format=%H\t%s', batch.baseline_sha + '..HEAD', '--', record.fixture]);
+  if (!touching.ok) {
+    failures.push(
+      'batch ' + label + ': the history of the fixture since the baseline could not be read, ' +
+      'so its origin is unproven'
+    );
+    return;
+  }
+  const touches = touching.out.split('\n').filter(Boolean);
+  lines.push('commits touching the fixture since baseline: ' + touches.length + ' (must be exactly 1)');
+  for (const line of touches) lines.push('  ' + line.replace('\t', ' '));
+  if (touches.length !== 1) {
+    failures.push(
+      'batch ' + label + ': the fixture was touched by ' + touches.length + ' commits since the baseline ' +
+      batch.baseline_sha + '; it must be introduced ONCE and never modified, renamed, deleted or replaced ' +
+      'afterwards, so a later commit is a failure even when it restores the captured bytes'
     );
   }
   for (const line of touches) {
@@ -257,12 +279,27 @@ function verifyCharacterization(repo, batch, lines, failures) {
   }
 
   const added = tryGit(repo, ['log', '--diff-filter=A', '--format=%H', batch.baseline_sha + '..HEAD', '--', record.fixture]);
-  const captures = added.ok ? added.out.split('\n').filter(Boolean) : [];
+  if (!added.ok) {
+    failures.push(
+      'batch ' + label + ': the commit that ADDED the fixture could not be resolved, so its origin is unproven'
+    );
+    return;
+  }
+  const captures = added.out.split('\n').filter(Boolean);
   if (captures.length !== 1) {
     failures.push('batch ' + label + ': the fixture must be ADDED by exactly one commit after the baseline, found ' + captures.length);
     return;
   }
   const capture = captures[0];
+
+  // The single touch must BE that add. Two different commits here would mean the
+  // fixture's history is not one introduction, and the origin would be ambiguous.
+  if (touches.length === 1 && touches[0].split('\t')[0] !== capture) {
+    failures.push(
+      'batch ' + label + ': the only commit touching the fixture is ' + touches[0].split('\t')[0].slice(0, 10) +
+      ' but the commit that added it is ' + capture.slice(0, 10) + ', so the origin is ambiguous'
+    );
+  }
 
   const changes = commitChanges(repo, capture);
   if (changes === null) {
