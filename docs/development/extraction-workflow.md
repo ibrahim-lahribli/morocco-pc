@@ -196,9 +196,29 @@ Ownership proves *which* tests moved and that their counts survived; characteriz
 implementation still returns the recorded values. Neither substitutes for the other, and neither is a
 proof that the fixture was captured before the move — that is 3.8.
 
-### 3.10 Run the full verification suite
+### 3.10 Run the verification suite
 
-Exactly the steps `ci.yml`'s `unit-and-docs` job runs, in that order:
+The `unit-and-docs` job is broader than this workflow: it runs the repository-wide suite and two
+read-only database gates alongside the extraction evidence. Only the three extraction-specific checks
+below are required by this workflow, and only they carry the DB-free guarantee.
+
+**Extraction-specific checks — DB-free**
+
+```bash
+npm run check:characterization
+npm run verify:extraction
+npm run verify:ownership -- --base=afccc671dae5abe6df80ad56dfcbc231d7947c7a
+```
+
+CI pins the PR 2 baseline explicitly; a new batch passes its own (`--base=<baseline-sha>`, section 3.3).
+
+These three are DB-free by construction: they read Git objects, the working tree and the committed
+fixture. None connects, none reads `DATABASE_URL`, and none reads a credential. That is a property of
+these three commands, not of the CI job that happens to run them.
+
+**Additional checks in the full `unit-and-docs` job**
+
+The same job also runs, around them:
 
 ```bash
 npm run test:unit
@@ -206,19 +226,20 @@ npm run test:scripts
 npm run test:database-guard
 npm run test:core
 node packages/recommendation-core/test/hermetic-run.js
-npm run check:characterization
-npm run verify:extraction
-npm run verify:ownership -- --base=<baseline-sha>
 npm run test:api
 npm run check:contract
 node scripts/check-openapi-compatibility.js --base=origin/master
 node scripts/gen-decision-index.js --check
 node scripts/verify-docs.js --offline
-git diff --check
+node scripts/check-catalog-identity.js   # read-only; uses DATABASE_URL when configured
+node scripts/check-deferred-rules.js     # read-only; uses DATABASE_URL when configured
 ```
 
-An extraction is a **T0** step (RFC §19.2): no database contact, no credential read, no migration run.
-`npm run verify:replay` and `npm run test:api:db` belong to a database step, not this one.
+**Those last two are why the job must not be called DB-free.** They issue SELECTs only and write
+nothing, but they do contact the database and read its credential when the repository secret
+`DATABASE_URL` is configured. When it is not — a pull request from a fork, which receives no secrets —
+each step prints a `::notice` and exits 0, so the substantive check is *skipped*, not run offline. The
+steps above them are given no `DATABASE_URL` by the workflow, and their suites are written DB-free.
 
 What the package-level commands add beyond the engine suite:
 
@@ -227,8 +248,15 @@ What the package-level commands add beyond the engine suite:
 * `node packages/recommendation-core/test/hermetic-run.js` — copies the package outside the repository,
   refuses to run if any `node_modules` is reachable, empties `NODE_PATH` and runs the suite there: an
   empty dependency list in `package.json` is a claim until this proves it;
-* `npm run verify:docs -- --offline` / `node scripts/verify-docs.js --offline` — the doc-claim gates,
-  DB-free.
+* `npm run verify:docs -- --offline` / `node scripts/verify-docs.js --offline` — the doc-claim gates. The
+  `--offline` flag is what keeps them DB-free; `--live` adds read-only database checks and is not run here.
+
+`git diff --check` is **not** a step in `unit-and-docs`: run it locally before pushing (section 3.11).
+`npm run verify:replay` and `npm run test:api:db` belong to the `recurring-gates` job, not this one.
+
+The T0 rule (RFC §19.2) is about the extraction step: the three checks above, the local commands in this
+section, and the move itself. It is not a claim that the whole CI job never touches the database — the
+two read-only gates do, whenever the secret is configured.
 
 ### 3.11 Open a PR with evidence, measured counts and CI results
 
@@ -242,7 +270,8 @@ re-run each command and get the same numbers.
 Merge only when all of the following hold on the exact head commit being merged:
 
 * `unit-and-docs` is green (the check run named after the job id in `.github/workflows/ci.yml`);
-* the branch is up to date with `master` (so a green run cannot predate a conflicting merge);
+* the branch is up to date with `master` (so a green run cannot predate a conflicting merge) — enforced
+  by the `master` ruleset since 2026-11-17 (section 6);
 * the diff contains only the move, the shims, the entry point and export snapshot, the manifest batch,
   the capture script and fixture, and the inventory/CI wiring the batch needs.
 
@@ -276,3 +305,31 @@ run on a recommendation-only PR and is not a merge gate for one.
 Behaviour changes, barrel narrowing (e.g. `ranking/rank.js` importing the `assembly` barrel for one
 constant — RFC §11.3), the `apps/api` migration (step 6), the runtime extraction (step 5) and anything
 that touches a database. Those are separate steps with their own safety tiers.
+
+## 6. Merge policy in force — dated operational snapshot (2026-11-17)
+
+This section records repository **policy state**, not extraction guidance. It was read from GitHub at the
+time stated, it will go stale, and it says nothing about how any earlier PR was reviewed. Re-check it with
+`GET /repos/ibrahim-lahribli/morocco-pc/rules/branches/master` (effective rules) and
+`GET /repos/ibrahim-lahribli/morocco-pc/rulesets/26943876` (the record) rather than trusting the table.
+
+Verified 2026-11-17 at `master` = `30b459b`; ruleset `26943876` (`master`), `enforcement: active`,
+`updated_at` 2026-11-17T10:42:40+01:00, `current_user_can_bypass: never`:
+
+| Verified setting | Value |
+|---|---|
+| Pull requests | required; `required_approving_review_count: 0` |
+| Required status check | `unit-and-docs` (GitHub Actions, integration `15368`) |
+| Up-to-date enforcement | `strict_required_status_checks_policy: true` |
+| Branch deletion | blocked (`deletion`) |
+| Force pushes | blocked (`non_fast_forward`) |
+| Bypass actors | none — the owner is bound too |
+| Classic branch protection | none: `GET /branches/master/protection` returns 404 `Branch not protected`, so nothing compounds with the ruleset |
+
+Two consequences for this workflow: every extraction lands through a pull request, never a direct push to
+`master`; and the up-to-date requirement in 3.12 is enforced, so each out-of-date update costs one more
+`unit-and-docs` run (~45 s wall clock, measured 2026-11-17).
+
+**Not retroactive.** Ruleset `26943876` existed but was **disabled** — and `GET /rules/branches/master`
+returned `[]` — when this document was first committed earlier the same day. Activation happened
+afterwards; that earlier state describes how the document was written, not what is in force now.
