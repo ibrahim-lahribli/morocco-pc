@@ -162,7 +162,7 @@ const {
   resolveGpuCaseThickness,
   resolveGpuPsuWattage,
   resolveGpuPsuConnectors,
-} = require('../compatibility');
+} = require('./compatibility');
 
 /**
  * Candidate verdict vocabulary. PASS / UNKNOWN keep the Engine 1 final
