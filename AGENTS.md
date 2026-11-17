@@ -89,6 +89,7 @@ picking a side.
 | `docs/GLOSSARY.md`, `docs/TEST_MAP.md` | load-bearing vocabulary; which test pins which contract |
 | `docs/RECOMMENDATION_ENGINE_DECISIONS.md` | append-only decision log (Decisions 1-65) |
 | `docs/engine/` | pure engine contract, engine recipes, engine agent instructions |
+| `docs/development/` | the extraction workflow (`extraction-workflow.md`): the evidence a future module move must produce, and what each gate proves |
 | `docs/api/` | the HTTP contract (`CONTRACT.md`) |
 | `docs/ingestion/` | ingestion design, recipes, agent instructions |
 | `docs/database/` | migration, seed and role recipes |
