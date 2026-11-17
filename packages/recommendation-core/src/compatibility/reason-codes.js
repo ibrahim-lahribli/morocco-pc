@@ -1,0 +1,79 @@
+﻿/**
+ * Stable machine-readable reason codes for compatibility results.
+ *
+ * Reason codes are part of the resolver contract: they may be persisted
+ * (rejection-reason persistence is a documented future item) and consumed
+ * by explanation generation, so they must not be renamed casually.
+ */
+const REASON_CODES = Object.freeze({
+  // CPU <-> motherboard
+  CPU_SOCKET_MISMATCH: 'CPU_SOCKET_MISMATCH',
+  CPU_SOCKET_UNKNOWN: 'CPU_SOCKET_UNKNOWN',
+  CPU_MOTHERBOARD_SUPPORT_FAIL: 'CPU_MOTHERBOARD_SUPPORT_FAIL',
+  CPU_MOTHERBOARD_SUPPORT_UNKNOWN: 'CPU_MOTHERBOARD_SUPPORT_UNKNOWN',
+  CPU_MOTHERBOARD_CONDITIONAL_UNVERIFIABLE:
+    'CPU_MOTHERBOARD_CONDITIONAL_UNVERIFIABLE',
+
+  // Cooler <-> socket
+  COOLER_SOCKET_MISMATCH: 'COOLER_SOCKET_MISMATCH',
+  COOLER_SOCKET_SUPPORT_UNKNOWN: 'COOLER_SOCKET_SUPPORT_UNKNOWN',
+
+  // Case <-> motherboard form factor
+  CASE_FORM_FACTOR_MISMATCH: 'CASE_FORM_FACTOR_MISMATCH',
+  CASE_FORM_FACTOR_UNKNOWN: 'CASE_FORM_FACTOR_UNKNOWN',
+
+  // Case <-> radiator
+  RADIATOR_UNSUPPORTED: 'RADIATOR_UNSUPPORTED',
+  RADIATOR_SUPPORT_UNKNOWN: 'RADIATOR_SUPPORT_UNKNOWN',
+
+  // Case <-> AIR cooler height (derived from numeric specs, Decision 26
+  // un-deferral of OG-10). A NULL cooler height or case clearance is UNKNOWN,
+  // never a PASS: an unmeasured cooler is not an unlimited one.
+  COOLER_TOO_TALL: 'COOLER_TOO_TALL',
+  COOLER_HEIGHT_UNKNOWN: 'COOLER_HEIGHT_UNKNOWN',
+
+  // Cooler <-> CPU TDP adequacy (OG-09, E8 / Decision 45). SOFT: an
+  // under-spec cooler resolves UNKNOWN, never FAIL - vendor TDP figures are
+  // marketing numbers, so an apparent shortfall is surfaced, not rejected.
+  COOLER_TDP_INSUFFICIENT: 'COOLER_TDP_INSUFFICIENT',
+  COOLER_TDP_UNKNOWN: 'COOLER_TDP_UNKNOWN',
+
+  // Platform <-> RAM memory type
+  PLATFORM_MEMORY_TYPE_UNSUPPORTED: 'PLATFORM_MEMORY_TYPE_UNSUPPORTED',
+  PLATFORM_MEMORY_SUPPORT_UNKNOWN: 'PLATFORM_MEMORY_SUPPORT_UNKNOWN',
+
+  // Motherboard <-> RAM memory type. MOTHERBOARD_MEMORY_TYPE_MISMATCH is the
+  // legacy single-column strict rule (Decision 2) and also an explicit FAIL
+  // row on motherboard_memory_support; MOTHERBOARD_MEMORY_TYPE_UNSUPPORTED is
+  // positive exclusion evidence from that table's row set (Decision 33,
+  // OG-02): the board has rows, and the requested type is not among them.
+  MOTHERBOARD_MEMORY_TYPE_MISMATCH: 'MOTHERBOARD_MEMORY_TYPE_MISMATCH',
+  MOTHERBOARD_MEMORY_TYPE_UNSUPPORTED: 'MOTHERBOARD_MEMORY_TYPE_UNSUPPORTED',
+  MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN: 'MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN',
+
+  // RAM kit <-> motherboard physical limits (OG-11 + OG-12, E8 / Decision 45).
+  // HARD rules: an over-slot or over-capacity kit is a definitive REJECT.
+  RAM_SLOTS_EXCEEDED: 'RAM_SLOTS_EXCEEDED',
+  RAM_SLOTS_UNKNOWN: 'RAM_SLOTS_UNKNOWN',
+  RAM_CAPACITY_EXCEEDED: 'RAM_CAPACITY_EXCEEDED',
+  RAM_CAPACITY_UNKNOWN: 'RAM_CAPACITY_UNKNOWN',
+
+  // GPU <-> case (derived from numeric specs)
+  GPU_TOO_LONG: 'GPU_TOO_LONG',
+  GPU_TOO_THICK: 'GPU_TOO_THICK',
+  GPU_DIMENSIONS_UNKNOWN: 'GPU_DIMENSIONS_UNKNOWN',
+
+  // GPU <-> PSU (derived from numeric specs)
+  GPU_PSU_WATTAGE_INSUFFICIENT: 'GPU_PSU_WATTAGE_INSUFFICIENT',
+  GPU_PSU_WATTAGE_UNKNOWN: 'GPU_PSU_WATTAGE_UNKNOWN',
+  GPU_PSU_CONNECTOR_UNAVAILABLE: 'GPU_PSU_CONNECTOR_UNAVAILABLE',
+  GPU_PSU_CONNECTOR_UNKNOWN: 'GPU_PSU_CONNECTOR_UNKNOWN',
+  // Decision 26 / architecture section 5.2: on a HIGH-TGP board
+  // (gpu_board_spec.board_tgp_watts >= 200 W) a required, known connector
+  // whose PSU availability is NULL is treated as FAIL, not UNKNOWN - the risk
+  // of an unsafe build outweighs the false negative. NULL availability on a
+  // lower-TGP board stays UNKNOWN (see gpu.js Rule 11).
+  GPU_PSU_CONNECTOR_NULL_HIGH_TGP: 'GPU_PSU_CONNECTOR_NULL_HIGH_TGP',
+});
+
+module.exports = { REASON_CODES };
