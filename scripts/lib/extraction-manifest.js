@@ -29,7 +29,7 @@
  *           "fixture": "<repo-relative path>",
  *           "capture_command": "<command that produced it>",
  *           "capture_commit_subject": "<subject of the capture commit>",
- *           "expect_touch_commits": 1,
+ *           "expect_touch_commits": 1,             // exactly 1; see below
  *           "capture_paths": ["<path>"]           // optional; files the capture commit may ADD
  *         },
  *         "modules": [{ "source": "<path at baseline>", "destination": "<path at HEAD>" }]
@@ -43,6 +43,16 @@
  *   PR 2 fixture is never treated as a universal baseline: a batch without the
  *   block is held to L3 only, explicitly. Declaring a policy other than
  *   IDENTITY_POLICY fails closed instead of passing unverified.
+ *
+ * `expect_touch_commits` is held to EXACTLY 1, and that is the invariant rather
+ * than a tunable: the fixture is captured once and must stay immutable
+ * afterwards. A larger value used to be accepted, and it allowed a real hole -
+ * a fixture modified and then restored in two later commits produces three
+ * "touches" with the capture's subject, and a restored blob makes the
+ * "unchanged since capture" diff clean. Counting commits cannot distinguish
+ * that from an honest capture, so the record may not ask for the weaker rule.
+ * The field stays in the schema because it states the expectation explicitly;
+ * any value other than 1 fails closed.
  *
  * `capture_paths` exists because a capture commit sometimes introduces its own
  * tool: PR 2's `581ee73` added `scripts/characterize-pr2.js` beside the fixture.
@@ -119,8 +129,12 @@ function validateCharacterization(raw, label, errors) {
       errors.push(label + ': characterization.' + key + ' must be a non-empty string');
     }
   }
-  if (!Number.isInteger(raw.expect_touch_commits) || raw.expect_touch_commits < 1) {
-    errors.push(label + ': characterization.expect_touch_commits must be a positive integer');
+  if (raw.expect_touch_commits !== 1) {
+    errors.push(
+      label + ': characterization.expect_touch_commits must be exactly 1 (found ' +
+      JSON.stringify(raw.expect_touch_commits) + '); the fixture is introduced once and must never be ' +
+      'modified, renamed, deleted or replaced afterwards'
+    );
   }
   const capturePaths = raw.capture_paths === undefined ? [] : raw.capture_paths;
   if (!Array.isArray(capturePaths)) {

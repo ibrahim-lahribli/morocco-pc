@@ -17,6 +17,7 @@ const { execFileSync, spawnSync } = require('node:child_process');
 const { REPO_ROOT } = require('./extraction-manifest');
 
 const SCRIPT = path.resolve(__dirname, '..', 'verify-pr2-provenance.js');
+const { verifyCharacterization } = require('../verify-pr2-provenance');
 
 function run(args, options = {}) {
   return spawnSync(process.execPath, [SCRIPT, ...args], {
@@ -855,5 +856,242 @@ test('an invalid capture_paths record fails closed before any batch is verified'
     /blob-identical:/.test(result.stdout),
     false,
     'a record that does not validate must not be partially verified'
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The capture invariant: introduced ONCE, then immutable.
+//
+// Counting commits is not the invariant by itself. A fixture modified and then
+// restored produces three "touches" and a blob at HEAD identical to the one the
+// capture wrote, so a manifest that declared three touches used to be able to
+// describe that tampering as an honest capture. The record is now held to
+// exactly one touch, and the verifier enforces it independently.
+// ---------------------------------------------------------------------------
+
+const CAPTURE_SUBJECT = 'test: freeze the surface before anything moves';
+const CAPTURE_COMMAND = 'node scripts/characterize.js';
+
+/** A repository whose fixture was added by one commit whose parent is the baseline. */
+function capturedRepository(t) {
+  const fixture = makeFixture(t);
+  fixture.write('src/a.js', 'module.exports = 1;\n');
+  const baseline = fixture.commit('baseline');
+
+  const behaviour = { provenance: { baseline_sha: baseline, command: CAPTURE_COMMAND }, captured: { verdict: 'PASS' } };
+  const committed = JSON.stringify(behaviour, null, 2) + '\n';
+  fixture.write('fixtures/characterization.json', committed);
+  fixture.commit(CAPTURE_SUBJECT);
+
+  fixture.move('src/a.js', 'packages/a.js');
+  fixture.commit('move');
+
+  return { fixture, baseline, committed };
+}
+
+function capturedManifest(fixture, baseline, extra = {}) {
+  return fixture.manifest({
+    id: 'batch-one',
+    baseline_sha: baseline,
+    characterization: {
+      fixture: 'fixtures/characterization.json',
+      capture_command: CAPTURE_COMMAND,
+      capture_commit_subject: CAPTURE_SUBJECT,
+      expect_touch_commits: 1,
+    },
+    modules: [{ source: 'src/a.js', destination: 'packages/a.js' }],
+    ...extra,
+  });
+}
+
+test('a fixture modified and then restored still fails: the capture is one commit', (t) => {
+  const { fixture, baseline, committed } = capturedRepository(t);
+
+  // Tamper, then put the captured bytes back - both commits carrying the
+  // capture's own subject, which is all the old "N touches" rule inspected.
+  fixture.write('fixtures/characterization.json', '{ "captured": { "verdict": "REJECT" } }\n');
+  fixture.commit(CAPTURE_SUBJECT);
+  fixture.write('fixtures/characterization.json', committed);
+  fixture.commit(CAPTURE_SUBJECT);
+
+  assert.equal(
+    fixture.git(['show', 'HEAD:fixtures/characterization.json']),
+    committed.trim(),
+    'the blob at HEAD is byte-identical to the captured one, so the restore is invisible to a diff'
+  );
+
+  capturedManifest(fixture, baseline);
+  const result = fixture.verify();
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /the fixture was touched by 3 commits since the baseline/);
+  assert.match(result.stderr, /introduced ONCE and never modified, renamed, deleted or replaced/);
+});
+
+test('a manifest that expects three touch commits is rejected outright', (t) => {
+  const { fixture, baseline } = capturedRepository(t);
+  capturedManifest(fixture, baseline, {
+    characterization: {
+      fixture: 'fixtures/characterization.json',
+      capture_command: CAPTURE_COMMAND,
+      capture_commit_subject: CAPTURE_SUBJECT,
+      expect_touch_commits: 3,
+    },
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /expect_touch_commits must be exactly 1 \(found 3\)/);
+  assert.equal(
+    /blob-identical:/.test(result.stdout),
+    false,
+    'an unsupported record must not be partially verified'
+  );
+});
+
+test('the verifier refuses a multi-touch expectation even when validation is bypassed', (t) => {
+  const { fixture, baseline } = capturedRepository(t);
+  const lines = [];
+  const failures = [];
+
+  // A caller that builds a batch object directly (not through loadManifest) must
+  // not be able to relax the invariant either.
+  verifyCharacterization(
+    fixture.dir,
+    {
+      id: 'batch-one',
+      baseline_sha: baseline,
+      characterization: {
+        fixture: 'fixtures/characterization.json',
+        capture_command: CAPTURE_COMMAND,
+        capture_commit_subject: CAPTURE_SUBJECT,
+        expect_touch_commits: 3,
+        capture_paths: [],
+      },
+      modules: [],
+    },
+    lines,
+    failures
+  );
+
+  assert.ok(
+    failures.some((failure) => /exactly 1 is the only supported value/.test(failure)),
+    failures.join(' | ')
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Raw `git diff-tree -z` path edge cases. Each one builds a real repository and
+// a real commit; none of them feeds the parser mocked output.
+// ---------------------------------------------------------------------------
+
+test('a rename of an unrelated file into a declared capture path fails', (t) => {
+  const fixture = makeFixture(t);
+  fixture.write('src/a.js', 'module.exports = 1;\n');
+  fixture.write('scripts/old-tool.js', 'console.log("old");\n');
+  const baseline = fixture.commit('baseline');
+
+  const behaviour = { provenance: { baseline_sha: baseline, command: CAPTURE_COMMAND }, captured: {} };
+  fixture.write('fixtures/characterization.json', JSON.stringify(behaviour, null, 2) + '\n');
+  // The tool existed at the baseline and is MOVED to the declared name, so the
+  // path is not introduced: it is baseline code arriving under an allowed name.
+  fixture.move('scripts/old-tool.js', 'scripts/characterize.js');
+  fixture.commit(CAPTURE_SUBJECT);
+
+  fixture.move('src/a.js', 'packages/a.js');
+  fixture.commit('move');
+
+  capturedManifest(fixture, baseline, {
+    characterization: {
+      fixture: 'fixtures/characterization.json',
+      capture_command: CAPTURE_COMMAND,
+      capture_commit_subject: CAPTURE_SUBJECT,
+      expect_touch_commits: 1,
+      capture_paths: ['scripts/characterize.js'],
+    },
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /changes paths other than the fixture and its declared capture paths: R100 scripts\/old-tool\.js -> scripts\/characterize\.js/
+  );
+});
+
+test('a declared capture path with trailing whitespace is preserved exactly', (t) => {
+  const fixture = makeFixture(t);
+  fixture.write('src/a.js', 'module.exports = 1;\n');
+  const baseline = fixture.commit('baseline');
+
+  const behaviour = { provenance: { baseline_sha: baseline, command: CAPTURE_COMMAND }, captured: {} };
+  fixture.write('fixtures/characterization.json', JSON.stringify(behaviour, null, 2) + '\n');
+  fixture.git(['add', '--', 'fixtures/characterization.json']);
+
+  // A trailing space cannot round-trip through NTFS, so the capture path is
+  // staged straight into the index: the commit still carries the exact bytes.
+  // Git for Windows refuses such a path while core.protectNTFS is on, which is
+  // a property of this filesystem, not of the parser under test.
+  fixture.git(['config', 'core.protectNTFS', 'false']);
+  const awkward = 'scripts/capture tool.js ';
+  fixture.stage('100644', fixture.hashBlob('console.log("capture");\n'), awkward);
+  fixture.commitStaged(CAPTURE_SUBJECT);
+
+  // Move through the index as well, so a later `git add -A` cannot delete the
+  // index-only capture path for being absent from the working tree.
+  fixture.stage('100644', fixture.git(['rev-parse', baseline + ':src/a.js']), 'packages/a.js');
+  fixture.unstage('src/a.js');
+  fixture.commitStaged('move');
+
+  capturedManifest(fixture, baseline, {
+    characterization: {
+      fixture: 'fixtures/characterization.json',
+      capture_command: CAPTURE_COMMAND,
+      capture_commit_subject: CAPTURE_SUBJECT,
+      expect_touch_commits: 1,
+      capture_paths: [awkward],
+    },
+  });
+
+  const result = fixture.verify();
+  assert.equal(result.status, 0, result.stderr);
+  const changedLine = result.stdout
+    .split('\n')
+    .find((line) => line.startsWith('capture commit changes only declared paths:'));
+  assert.ok(changedLine, 'the capture commit changed-path line must be printed');
+  assert.ok(
+    changedLine.includes('A ' + awkward),
+    'the exact declared path, trailing space included, must appear unchanged: ' + changedLine
+  );
+  assert.equal(
+    changedLine.endsWith(awkward),
+    true,
+    'the NUL-delimited parse must not trim the trailing space from the record: ' + JSON.stringify(changedLine)
+  );
+});
+
+test('a capture commit that deletes an unrelated file fails', (t) => {
+  const fixture = makeFixture(t);
+  fixture.write('src/a.js', 'module.exports = 1;\n');
+  fixture.write('docs/notes.md', 'notes\n');
+  const baseline = fixture.commit('baseline');
+
+  const behaviour = { provenance: { baseline_sha: baseline, command: CAPTURE_COMMAND }, captured: {} };
+  fixture.write('fixtures/characterization.json', JSON.stringify(behaviour, null, 2) + '\n');
+  // A delete record is the one status the allowed-path filter must not mistake
+  // for "the fixture was deleted": the path is unrelated, and it is reported.
+  fixture.remove('docs/notes.md');
+  fixture.commit(CAPTURE_SUBJECT);
+
+  fixture.move('src/a.js', 'packages/a.js');
+  fixture.commit('move');
+
+  capturedManifest(fixture, baseline);
+  const result = fixture.verify();
+
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /changes paths other than the fixture and its declared capture paths: D docs\/notes\.md/
   );
 });

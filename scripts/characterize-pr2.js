@@ -32,10 +32,26 @@
  *   node scripts/characterize-pr2.js --check                # compare, never write
  *   node scripts/characterize-pr2.js --check --fixture=<p>  # compare another copy
  *
- * --fixture=<path> exists so a regression test can point --check at a
- * deliberately altered copy and prove the comparison REFUSES it, without
- * touching the committed baseline. --check never creates, truncates or rewrites
- * a file: a missing fixture is an error, not an invitation to write one.
+ * Where --check reads the fixture from
+ *   With no --fixture, --check compares against the COMMITTED fixture blob at
+ *   HEAD (`git show HEAD:<path>`), not the working tree. This command is a CI
+ *   gate, and a gate that reads a file the working tree can edit would agree
+ *   with an uncommitted "fix" to itself. A dirty or modified working-tree copy
+ *   is therefore ignored, and the output says `HEAD:<path>` so the source is
+ *   never ambiguous.
+ *
+ *   --fixture=<path> is the deliberate exception: it names an explicit copy and
+ *   is read from disk. Regression tests use it to prove the comparison REFUSES
+ *   an altered baseline without touching the committed one.
+ *
+ *   This command proves the extracted code still reproduces the frozen
+ *   behaviour. It does NOT prove the fixture's origin: when and by which commit
+ *   it was introduced, and that nothing changed it since, is owned by
+ *   scripts/verify-pr2-provenance.js, which remains the authoritative gate.
+ *   Never treat a green --check as provenance verification.
+ *
+ * --check never creates, truncates or rewrites a file: a missing fixture is an
+ * error, not an invitation to write one.
  */
 
 const fs = require('node:fs');
@@ -63,6 +79,25 @@ const OUT_FILE = path.join(
   'fixtures',
   'pr2-characterization.json'
 );
+
+/** The fixture path as a Git path, for `HEAD:<path>`. */
+const FIXTURE_REL = path.relative(REPO_ROOT, OUT_FILE).split(path.sep).join('/');
+
+/**
+ * The committed bytes of a repository path at HEAD, or null when HEAD has no
+ * such blob. Read through Git so the working tree cannot contribute.
+ */
+function committedFixture(relative) {
+  try {
+    return execFileSync('git', ['show', 'HEAD:' + relative], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (_err) {
+    return null;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Deterministic identifiers (hex, lexicographically orderable).
@@ -543,18 +578,37 @@ function main(argv) {
     // The provenance block names the PRE-MOVE commit, so it is expected to
     // differ once the extraction is committed. Only the captured behaviour is
     // compared: that is what must not change.
-    if (!fs.existsSync(outFile)) {
-      process.stderr.write(
-        'characterize-pr2: no fixture at ' + displayPath(outFile) +
-        '; --check compares an existing baseline and never writes one\n'
-      );
-      return 1;
+    //
+    // The default fixture is the COMMITTED one at HEAD: this is a repository
+    // gate, and an uncommitted working-tree edit must not be able to satisfy it.
+    // --fixture names an explicit copy and is read from disk instead.
+    const fromCommit = outFile === OUT_FILE;
+    const source = fromCommit ? 'HEAD:' + FIXTURE_REL : displayPath(outFile);
+    let text;
+    if (fromCommit) {
+      text = committedFixture(FIXTURE_REL);
+      if (text === null) {
+        process.stderr.write(
+          'characterize-pr2: no committed fixture at ' + source +
+          '; --check compares the committed baseline and never writes one\n'
+        );
+        return 1;
+      }
+    } else {
+      if (!fs.existsSync(outFile)) {
+        process.stderr.write(
+          'characterize-pr2: no fixture at ' + source +
+          '; --check compares an existing baseline and never writes one\n'
+        );
+        return 1;
+      }
+      text = fs.readFileSync(outFile, 'utf8');
     }
     let existing;
     try {
-      existing = JSON.parse(fs.readFileSync(outFile, 'utf8'));
+      existing = JSON.parse(text);
     } catch (err) {
-      process.stderr.write('characterize-pr2: ' + displayPath(outFile) + ' is not valid JSON: ' + err.message + '\n');
+      process.stderr.write('characterize-pr2: ' + source + ' is not valid JSON: ' + err.message + '\n');
       return 1;
     }
     const captured = (doc) => {
@@ -564,11 +618,16 @@ function main(argv) {
     if (captured(existing) !== captured(document)) {
       process.stderr.write(
         'characterize-pr2: the captured behaviour no longer matches the pre-move baseline (' +
-        displayPath(outFile) + ')\n'
+        source + ')\n'
       );
       return 1;
     }
-    process.stdout.write('characterize-pr2: OK - behaviour matches the pre-move baseline (' + displayPath(outFile) + ')\n');
+    // Behaviour only. Where the fixture came from is proven by
+    // scripts/verify-pr2-provenance.js, which this line must not imply.
+    process.stdout.write(
+      'characterize-pr2: OK - behaviour matches the pre-move baseline (' + source + '); ' +
+      'fixture origin is not checked here (see verify-pr2-provenance)\n'
+    );
     return 0;
   }
 
