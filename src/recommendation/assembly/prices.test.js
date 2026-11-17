@@ -539,7 +539,11 @@ test('exports exactly the Step 2 API', () => {
 test('module stays within the price-carrier boundary', () => {
   const fs = require('node:fs');
   const path = require('node:path');
-  const source = fs.readFileSync(path.join(__dirname, 'prices.js'), 'utf8');
+  // Step 4B PR 3: the implementation moved; assert on it, not on the shim.
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-core', 'src', 'assembly', 'prices.js'),
+    'utf8'
+  );
   for (const banned of ['require(\'pg\')', 'require("pg")', '.query(', 'SELECT', 'select store offers', 'top_k_per_role']) {
     assert.ok(!source.includes(banned), `prices.js must not contain ${banned}`);
   }

@@ -76,7 +76,8 @@ function makeRepo(t) {
 test('the committed manifest is valid and pins PR 2 as its first batch', () => {
   const loaded = loadManifest(manifestFile(REPO_ROOT));
   assert.deepEqual(loaded.errors, []);
-  assert.equal(loaded.batches.length, 1);
+  // One batch per extraction PR: PR 2 first, PR 3 appended after it.
+  assert.equal(loaded.batches.length, 2);
 
   const pr2 = loaded.batches[0];
   assert.equal(pr2.id, 'step-4b-pr2');
@@ -90,6 +91,17 @@ test('the committed manifest is valid and pins PR 2 as its first batch', () => {
   // 581ee73 added the capture tool beside the fixture, so the record declares it;
   // the verifier proves it was absent at the baseline rather than ignoring it.
   assert.deepEqual(pr2.characterization.capture_paths, ['scripts/characterize-pr2.js']);
+
+  const pr3 = loaded.batches[1];
+  assert.equal(pr3.id, 'step-4b-pr3');
+  assert.equal(pr3.identity_policy, 'byte-identical');
+  assert.equal(pr3.modules.length, 7);
+  assert.equal(pr3.baseline_sha, 'de659adaaf4bbde4b2e1673aae08314d07af000e');
+  assert.ok(pr3.characterization, 'PR 3 declares its characterization record');
+  assert.equal(pr3.characterization.fixture, 'packages/recommendation-core/test/fixtures/pr3-characterization.json');
+  assert.equal(pr3.characterization.capture_command, 'node scripts/characterize-pr3.js');
+  assert.equal(pr3.characterization.expect_touch_commits, 1);
+  assert.deepEqual(pr3.characterization.capture_paths, ['scripts/characterize-pr3.js']);
 });
 
 test('the manifest baseline is the fixture baseline, never the working tree', () => {

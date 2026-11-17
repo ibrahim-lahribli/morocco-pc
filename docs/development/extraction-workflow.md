@@ -1,7 +1,9 @@
 # Extraction workflow — proving a recommendation-module move
 
-Status: current at `master` = `30b459b` (2026-11-17), after PR #33 (`7d5f3b6`) and PR #34 (`30b459b`).
-Every figure below was measured on that tree; re-measure before quoting it against a later commit.
+Status: the figures below were measured at `master` = `30b459b` (2026-11-17), after PR #33 (`7d5f3b6`) and
+PR #34 (`30b459b`), and they still hold at `master` = `de659ad`, which adds the step 4B PR 3 assembly batch
+(the second batch this workflow was used for; sections 3.4, 3.10 and 4 record what it needed beyond PR 2).
+Re-measure before quoting any figure against a later commit.
 
 Scope: how to plan, capture, move and **prove** a module extraction out of `src/recommendation/` into
 `packages/recommendation-core/`. This document changes no engine behaviour and authorises no move: each
@@ -18,7 +20,7 @@ That is the ordering rule, and it is not a matter of taste:
 | Stage | Its relative imports | Can it move alone? |
 |---|---|---|
 | `candidates`, `compatibility`, `filtering` | — | already moved (batch `step-4b-pr2`) |
-| `assembly` | `../candidates/*`, `../filtering/*` | **yes** — both namespaces are already in the core |
+| `assembly` | `../candidates/*`, `../filtering/*` | already moved (batch `step-4b-pr3`) — both namespaces were in the core first |
 | `ranking` | `../assembly` (the barrel), `../candidates/errors` | no — needs `assembly` first |
 | `retention` | `../assembly/prices`, `../candidates`, `../filtering/filter` | no — needs `assembly` first |
 | `scoring` | `../assembly/assemble`, `../candidates/*` | no — needs `assembly`, and 2 of its 8 files are SQL loaders |
@@ -210,7 +212,8 @@ npm run verify:extraction
 npm run verify:ownership -- --base=afccc671dae5abe6df80ad56dfcbc231d7947c7a
 ```
 
-CI pins the PR 2 baseline explicitly; a new batch passes its own (`--base=<baseline-sha>`, section 3.3).
+CI pins each batch's baseline explicitly and names the inventory it measures; a new batch passes its own
+(`--base=<baseline-sha> --inventory=<name>`, section 3.3).
 
 These three are DB-free by construction: they read Git objects, the working tree and the committed
 fixture. None connects, none reads `DATABASE_URL`, and none reads a credential. That is a property of
@@ -283,13 +286,19 @@ run on a recommendation-only PR and is not a merge gate for one.
 * **The manifest gate generalises; the capture and audit scripts do not.** `verify-pr2-provenance.js` is
   manifest-driven and verifies every batch. `scripts/characterize-pr2.js` hardcodes its fixture path, its
   output document kind and the PR 2 modules it imports, and `scripts/audit-pr2-test-ownership.js`
-  hardcodes the PR 2 `INVENTORY` and `SPLIT_FACTS`. A new batch needs a new capture script (declared in
-  `capture_paths`) and an inventory for its own files; `--base=` changes only the revision, never the
-  inventory.
-* **`npm run check:characterization` is wired to the PR 2 fixture only.** A later batch's behavioural
-  check needs its own script entry and its own CI step, or it is not running anywhere.
-* **CI pins the PR 2 baseline explicitly** (`npm run verify:ownership -- --base=afccc671...`). A new
-  batch's ownership step must name its own baseline the same way.
+  hardcodes the `INVENTORY` and `SPLIT_FACTS`. A new batch needs a new capture script (declared in
+  `capture_paths`) and its own inventory rows; `--base=` changes only the revision, never the inventory.
+  PR 3 is the worked example of the second problem: its baseline is AFTER the PR 2 move, so the PR 2
+  baseline paths no longer exist there. The audit therefore takes `--inventory=pr2|pr3` — one named
+  inventory per batch, each measured against that batch's own baseline — and the two runs are separate CI
+  steps. Do not merge two batches' rows into one measured set; a single row set cannot be measured against
+  two different baselines.
+* **`npm run check:characterization` is wired to the PR 2 fixture only.** Each later batch needs its own
+  script entry and its own CI step (`npm run check:characterization:pr3` is the PR 3 one), or its
+  behaviour is not checked anywhere.
+* **CI pins one ownership command per batch, each with its own baseline and inventory**
+  (`--base=afccc671... --inventory=pr2`, `--base=de659ad... --inventory=pr3`). A new batch's ownership
+  step must name both the same way.
 * **`scripts/lib/ci-workflow.test.js` asserts that `ci.yml` has exactly two jobs**, `unit-and-docs` and
   `recurring-gates`. New evidence belongs in a **step** inside `unit-and-docs`; adding a third job fails
   that suite.

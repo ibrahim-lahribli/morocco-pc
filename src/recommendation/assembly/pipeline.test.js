@@ -718,7 +718,11 @@ test('fail-fast: candidate_caps stays Step 1 ownership; a missing price is never
 // 5. Source boundary and public surface.
 // ---------------------------------------------------------------------------
 
-const PIPELINE_SOURCE = fs.readFileSync(path.join(__dirname, 'pipeline.js'), 'utf8');
+// Step 4B PR 3: read the moved implementation, not the shim beside this test.
+const PIPELINE_SOURCE = fs.readFileSync(
+  path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-core', 'src', 'assembly', 'pipeline.js'),
+  'utf8'
+);
 
 test('pipeline.js keeps its source boundary (pure composition, no DB access)', () => {
   const forbidden = [

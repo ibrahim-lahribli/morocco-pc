@@ -727,7 +727,13 @@ test('exports exactly validateEngine3Input with arity 1', () => {
 // Source boundaries (input.js must stay a structural contract gate)
 // ---------------------------------------------------------------------------
 
-const INPUT_SOURCE = fs.readFileSync(path.join(__dirname, 'input.js'), 'utf8');
+// Step 4B PR 3: the implementation moved into the core package; read it there
+// rather than the shim beside this test (a shim passes every "must not
+// contain" check vacuously).
+const INPUT_SOURCE = fs.readFileSync(
+  path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-core', 'src', 'assembly', 'input.js'),
+  'utf8'
+);
 
 // Literal substrings that would prove the module had crossed an architectural
 // boundary (database access, SQL, another engine's internals, GPU policy, price

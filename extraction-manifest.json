@@ -101,6 +101,49 @@
           "destination": "packages/recommendation-core/src/filtering/igpu-map.js"
         }
       ]
+    },
+    {
+      "id": "step-4b-pr3",
+      "description": "Step 4B PR 3: the pure Engine 3 assembly stage moved into packages/recommendation-core/src/assembly/, leaving identity re-export shims at the old paths. Its only intra-tree dependencies (../candidates/*, ../filtering/*) already live in the core package, so every relative specifier resolves unchanged from the destination: nothing here is a rewrite.",
+      "baseline_sha": "de659adaaf4bbde4b2e1673aae08314d07af000e",
+      "identity_policy": "byte-identical",
+      "characterization": {
+        "fixture": "packages/recommendation-core/test/fixtures/pr3-characterization.json",
+        "capture_command": "node scripts/characterize-pr3.js",
+        "capture_commit_subject": "test(core): freeze the assembly surface before anything moves",
+        "expect_touch_commits": 1,
+        "capture_paths": ["scripts/characterize-pr3.js"]
+      },
+      "modules": [
+        {
+          "source": "src/recommendation/assembly/assemble.js",
+          "destination": "packages/recommendation-core/src/assembly/assemble.js"
+        },
+        {
+          "source": "src/recommendation/assembly/gpu-input.js",
+          "destination": "packages/recommendation-core/src/assembly/gpu-input.js"
+        },
+        {
+          "source": "src/recommendation/assembly/gpu-policy.js",
+          "destination": "packages/recommendation-core/src/assembly/gpu-policy.js"
+        },
+        {
+          "source": "src/recommendation/assembly/index.js",
+          "destination": "packages/recommendation-core/src/assembly/index.js"
+        },
+        {
+          "source": "src/recommendation/assembly/input.js",
+          "destination": "packages/recommendation-core/src/assembly/input.js"
+        },
+        {
+          "source": "src/recommendation/assembly/pipeline.js",
+          "destination": "packages/recommendation-core/src/assembly/pipeline.js"
+        },
+        {
+          "source": "src/recommendation/assembly/prices.js",
+          "destination": "packages/recommendation-core/src/assembly/prices.js"
+        }
+      ]
     }
   ]
 }

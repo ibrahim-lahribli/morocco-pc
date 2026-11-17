@@ -92,6 +92,11 @@ DIFFs re-measured 2026-11-06; the test counts re-measured 2026-11-15)
   filtering barrel 3 — which is why the two counts moved and no test disappeared).
   `npm run test:api:db` **17 / 0** (nightly only — it writes to the TEST branch, and was not re-measured
   here).
+- **Step 4B PR 3** (`master` = `de659ad` plus the assembly batch, re-measured 2026-11-17 on Node 24.21.0):
+  `npm run test:unit` is unchanged at **1052 pass / 0 fail** — the seven `assembly/*.test.js` files stayed
+  in the runtime tree and kept their counts — and `npm run test:core` is **361 tests: 359 pass / 0 fail /
+  2 skipped / 0 cancelled**. The net +1 is the key-by-key `assembly` namespace test added to
+  `test/surface.test.js`; no test moved between the two commands.
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of

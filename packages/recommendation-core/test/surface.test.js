@@ -60,6 +60,20 @@ const COMPATIBILITY_KEYS = [
 
 const FILTERING_KEYS = ['filterCandidates', 'CANDIDATE_STATUSES', 'buildIntegratedGpuPresentMap'];
 
+const ASSEMBLY_KEYS = [
+  'validateEngine3Input',
+  'priceKey',
+  'validatePrices',
+  'lookupPrice',
+  'resolveGpuRequirement',
+  'assembleBuilds',
+  'EXPANSION_ORDER',
+  'buildGpuInputs',
+  'assembleBuildsForRecommendation',
+  'evaluateBuild',
+  'evaluateBuildReplacement',
+];
+
 describe('core namespaces', () => {
   it('candidates exposes the pure contract and nothing runtime', () => {
     assert.deepEqual(Object.keys(core.candidates).sort(), [...CANDIDATES_KEYS].sort());
@@ -69,6 +83,10 @@ describe('core namespaces', () => {
 
   it('compatibility exposes the whole Engine 1 surface', () => {
     assert.deepEqual(Object.keys(core.compatibility).sort(), [...COMPATIBILITY_KEYS].sort());
+  });
+
+  it('assembly exposes the whole Engine 3 surface', () => {
+    assert.deepEqual(Object.keys(core.assembly).sort(), [...ASSEMBLY_KEYS].sort());
   });
 
   it('filtering exposes the pure half of Engine 2D and nothing runtime', () => {

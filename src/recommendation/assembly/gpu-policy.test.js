@@ -247,7 +247,12 @@ test('exports exactly resolveGpuRequirement with arity 1', () => {
 });
 
 test('gpu-policy.js contains no out-of-scope boundary crossings', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'gpu-policy.js'), 'utf8');
+  // Step 4B PR 3: assert on the moved implementation, not on the shim beside
+  // this test (a shim would pass every "must not contain" check vacuously).
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-core', 'src', 'assembly', 'gpu-policy.js'),
+    'utf8'
+  );
   const forbidden = ["require('pg')", 'new Pool', '.query(', 'SELECT ', 'INSERT ',
     '../filtering', '../compatibility', '../candidates', 'lookupPrice',
     'priceKey', 'validatePrices', 'assemble', 'top_k_per_role',

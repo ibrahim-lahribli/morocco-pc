@@ -2,12 +2,18 @@
 
 /**
  * scripts/audit-pr2-test-ownership.js - reproducible ownership audit for the
- * step 4B PR 2 extraction.
+ * step 4B extractions.
  *
  * The PR moves pure test files into packages/recommendation-core/test/ and
  * leaves runtime-dependent ones in src/recommendation/. "Which test went
  * where, and why" must be checkable rather than asserted, so this script reads
  * the files themselves.
+ *
+ * The inventory below carries the PR 2 rows and, since step 4B PR 3, the seven
+ * Engine 3 assembly rows: assembly's implementation moved into the core package
+ * while its tests stayed in the runtime tree (they import ../ranking,
+ * ../filtering/context-loader and ../offers/select). `--base` selects the
+ * revision the before-counts come from; it never changes the inventory.
  *
  * How it measures:
  *   * tests and assertions are counted from the TOKEN STREAM (the core package's
@@ -178,6 +184,23 @@ const INVENTORY = [
   { kind: 'stayed', baseline: 'src/recommendation/filtering/pipeline.test.js', current: 'src/recommendation/filtering/pipeline.test.js' },
   { kind: 'stayed', baseline: 'src/recommendation/filtering/igpu-map.test.js', current: 'src/recommendation/filtering/igpu-map.test.js' },
 
+  // --- stayed (step 4B PR 3): the Engine 3 tests stay in the runtime tree ---
+  // The implementation moved to packages/recommendation-core/src/assembly/,
+  // but these seven files cannot follow it byte-identically: assemble.test.js
+  // imports ../ranking/select-diverse, gpu-input.test.js and pipeline.test.js
+  // import ../filtering/context-loader and ../offers/select, and six of them
+  // read the implementation SOURCE through __dirname. Repointing that read at
+  // the core path is what keeps the assertion honest after the move (a shim
+  // would pass every "must not contain" check vacuously). No test or assertion
+  // was removed or weakened - the counts below prove it.
+  { batch: 'step-4b-pr3', kind: 'stayed', baseline: 'src/recommendation/assembly/assemble.test.js', current: 'src/recommendation/assembly/assemble.test.js' },
+  { batch: 'step-4b-pr3', kind: 'stayed', baseline: 'src/recommendation/assembly/gpu-input.test.js', current: 'src/recommendation/assembly/gpu-input.test.js' },
+  { batch: 'step-4b-pr3', kind: 'stayed', baseline: 'src/recommendation/assembly/gpu-policy.test.js', current: 'src/recommendation/assembly/gpu-policy.test.js' },
+  { batch: 'step-4b-pr3', kind: 'stayed', baseline: 'src/recommendation/assembly/index.test.js', current: 'src/recommendation/assembly/index.test.js' },
+  { batch: 'step-4b-pr3', kind: 'stayed', baseline: 'src/recommendation/assembly/input.test.js', current: 'src/recommendation/assembly/input.test.js' },
+  { batch: 'step-4b-pr3', kind: 'stayed', baseline: 'src/recommendation/assembly/pipeline.test.js', current: 'src/recommendation/assembly/pipeline.test.js' },
+  { batch: 'step-4b-pr3', kind: 'stayed', baseline: 'src/recommendation/assembly/prices.test.js', current: 'src/recommendation/assembly/prices.test.js' },
+
   // --- split: the same barrel contract, now asserted by two owners ---
   { kind: 'split', baseline: 'src/recommendation/filtering/index.test.js', current: 'src/recommendation/filtering/index.test.js' },
 
@@ -186,6 +209,17 @@ const INVENTORY = [
   { kind: 'added', current: 'packages/recommendation-core/test/surface.test.js' },
   { kind: 'added', current: 'packages/recommendation-core/test/characterization.test.js' },
 ];
+
+/**
+ * Named inventories. `--inventory` selects which batch's rows are measured;
+ * the default is the PR 2 set, so an existing run keeps its exact meaning.
+ * Each batch is measured against ITS OWN baseline (-base), because a row's
+ * baseline path stops existing once that batch has moved it.
+ */
+const INVENTORIES = {
+  pr2: INVENTORY.filter((row) => row.batch !== 'step-4b-pr3'),
+  pr3: INVENTORY.filter((row) => row.batch === 'step-4b-pr3'),
+};
 
 /**
  * Facts from the review of this split, kept as the EXPECTATION the tree is
@@ -566,12 +600,19 @@ function corePurityViolations(source, file, relativePath) {
 }
 
 function parseArgs(argv) {
-  const options = { base: null, errors: [] };
+  const options = { base: null, inventory: 'pr2', errors: [] };
   for (const arg of argv) {
     if (arg === '--base=') {
       options.errors.push('--base= needs a git reference');
     } else if (arg.startsWith('--base=')) {
       options.base = arg.slice('--base='.length);
+    } else if (arg.startsWith('--inventory=')) {
+      const value = arg.slice('--inventory='.length);
+      if (!Object.prototype.hasOwnProperty.call(INVENTORIES, value)) {
+        options.errors.push('--inventory=' + value + ' is not one of ' + Object.keys(INVENTORIES).join(', '));
+      } else {
+        options.inventory = value;
+      }
     } else {
       options.errors.push('unknown argument ' + JSON.stringify(arg));
     }
@@ -648,7 +689,7 @@ function main(argv) {
   const options = parseArgs(argv);
   if (options.errors.length > 0) {
     process.stderr.write('audit-pr2-test-ownership: ' + options.errors.join('\n  ') + '\n');
-    process.stderr.write('usage: node scripts/audit-pr2-test-ownership.js [--base=<git-ref>]\n');
+    process.stderr.write('usage: node scripts/audit-pr2-test-ownership.js [--base=<git-ref>] [--inventory=pr2|pr3]\n');
     return 2;
   }
   if (!isGitRepository(REPO_ROOT)) {
@@ -663,7 +704,9 @@ function main(argv) {
   const baseline = selection.sha;
   const failures = [];
 
-  const rows = INVENTORY.map((entry) => {
+  const inventory = INVENTORIES[options.inventory];
+  process.stdout.write('inventory: ' + options.inventory + ' (' + inventory.length + ' file(s))\n');
+  const rows = inventory.map((entry) => {
     const before = entry.baseline ? readAtBaseline(baseline, entry.baseline, failures) : '';
     const file = path.join(REPO_ROOT, entry.current);
     const after = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
@@ -789,8 +832,9 @@ function main(argv) {
   );
 
   // --- the split's declared facts, with the effective count DERIVED --------
-  const coreBarrel = rows.find((row) => row.current === SPLIT_FACTS.coreBarrel.path);
-  const runtimeBarrel = rows.find((row) => row.current === SPLIT_FACTS.runtimeBarrel.path);
+  const splitSelected = rows.some((row) => row.current === SPLIT_FACTS.runtimeBarrel.path);
+  const coreBarrel = splitSelected ? rows.find((row) => row.current === SPLIT_FACTS.coreBarrel.path) : null;
+  const runtimeBarrel = splitSelected ? rows.find((row) => row.current === SPLIT_FACTS.runtimeBarrel.path) : null;
   const coreFacts = SPLIT_FACTS.coreBarrel;
 
   process.stdout.write('\n### Derived from source (loop expansion)\n');
@@ -822,7 +866,9 @@ function main(argv) {
   }
 
   const derivedBarrel = coreBarrel ? coreBarrel.assertsEffective : null;
-  if (!coreBarrel) {
+  if (!splitSelected) {
+    process.stdout.write('* split facts not asserted: they belong to the pr2 inventory\n');
+  } else if (!coreBarrel) {
     failures.push('the core filtering-barrel test is missing from the inventory: ' + coreFacts.path);
   } else {
     if (coreBarrel.testsAfter !== coreFacts.tests) {
@@ -855,7 +901,9 @@ function main(argv) {
       ' -> derived ' + derivedBarrel + ' effective assertions (review\'s figure: ' + coreFacts.effectiveAssertions + ')\n'
     );
   }
-  if (!runtimeBarrel) {
+  if (!splitSelected) {
+    // nothing to check: not this inventory
+  } else if (!runtimeBarrel) {
     failures.push('the runtime filtering-barrel test is missing from the inventory: ' + SPLIT_FACTS.runtimeBarrel.path);
   } else if (runtimeBarrel.assertsAfter !== SPLIT_FACTS.runtimeBarrel.assertions) {
     failures.push('runtime filtering-barrel assertions: expected ' + SPLIT_FACTS.runtimeBarrel.assertions + ', found ' + runtimeBarrel.assertsAfter);
@@ -885,7 +933,7 @@ function main(argv) {
     0
   );
 
-  process.stdout.write('\n### Totals (static counts, all inventory rows)\n');
+  process.stdout.write('\n### Totals (static counts, inventory ' + options.inventory + ')\n');
   process.stdout.write(
     '* files: ' + rows.length + ' (moved ' + moved.length + ', stayed ' + stayed.length +
     ', split ' + split.length + ', added ' + added.length + ')\n'
