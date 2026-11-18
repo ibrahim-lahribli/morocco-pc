@@ -80,7 +80,7 @@ adopted for the private beta as an explicit PROVISIONAL OVERRIDE of Decision 57 
 satisfaction of it — A1/A3/A4 are still `hypothesis` and OG-43 is open.
 
 ## 5. Measured numbers (2026-11-02; the offer-freshness date, the EU pass count and the R-14 parity
-DIFFs re-measured 2026-11-06; the test counts re-measured 2026-11-15)
+DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15)
 
 - `npm run test:unit` **1052 pass / 0 fail / 0 cancelled**; `npm run test:scripts` **750 / 0 / 0**;
   `npm run test:api` **193 / 0 / 0**; `npm run test:database-guard` **15 / 0 / 0**; `npm run test:core`
@@ -92,12 +92,15 @@ DIFFs re-measured 2026-11-06; the test counts re-measured 2026-11-15)
   filtering barrel 3 — which is why the two counts moved and no test disappeared).
   `npm run test:api:db` **17 / 0** (nightly only — it writes to the TEST branch, and was not re-measured
   here).
-- **Step 4B PR 3** (PR #36 head `89b0bb2`, which is `master` = `de659ad` plus the assembly batch on the PR
-  branch — not in `master` until PR #36 merges; re-measured 2026-11-17 on Node 24.21.0):
+- **Step 4B PR 3** (measured on the PR #36 implementation snapshot `89b0bb2`, which is `master` = `de659ad`
+  plus the assembly batch on the branch — the batch reaches `master` only when PR #36 merges; re-measured
+  2026-11-17 on Node 24.21.0):
   `npm run test:unit` is unchanged at **1052 pass / 0 fail** — the seven `assembly/*.test.js` files stayed
   in the runtime tree and kept their counts — and `npm run test:core` is **361 tests: 359 pass / 0 fail /
   2 skipped / 0 cancelled**. The net +1 is the key-by-key `assembly` namespace test added to
-  `test/surface.test.js`; no test moved between the two commands.
+  `test/surface.test.js`; no test moved between the two commands. The branch has since advanced to
+  `11ca631`, a documentation-only commit touching only `CONTEXT.md` and `docs/development/extraction-workflow.md`;
+  it changed neither the implementation nor the counts above, so `89b0bb2` remains the measurement snapshot.
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of

@@ -5,8 +5,9 @@ PR #34 (`30b459b`), and they hold unchanged at `master` = `de659ad` (2026-11-17,
 baseline PR #36 extracts FROM, not a revision that already contains the move: `master` at `de659ad` has no
 step 4B PR 3 assembly batch. That batch is the second this workflow was used for (sections 3.4, 3.10 and 4
 record what it needed beyond PR 2), and it exists only on the PR #36 branch `feat/core-extract-assembly`,
-head `89b0bb2`; `master` gains it when PR #36 merges. Re-measure before quoting any figure against a later
-commit.
+measured at its implementation snapshot `89b0bb2` (not the branch head: the only commit since is the
+documentation-only `11ca631`, so the snapshot and the figures hold); `master` gains it when PR #36 merges.
+Re-measure before quoting any figure against a later commit.
 
 Scope: how to plan, capture, move and **prove** a module extraction out of `src/recommendation/` into
 `packages/recommendation-core/`. This document changes no engine behaviour and authorises no move: each
