@@ -1,0 +1,5562 @@
+{
+  "kind": "pr4-characterization",
+  "description": "Frozen input/output pairs for the PR 4 extraction surface: the ranking barrel contract, round2 and the build signature, the derived compatibility status, rankBuilds ordering and its top-N cap, selectDiverseTop pair-cap selection and selectArchetypes strategy selection (including Decision 58 objectives), plus one composed pipeline over a fixed 11-build set. DB-free: every build is assembled from literals.",
+  "timestamp_policy": "No ambient clock is read while capturing: every id, score and price is an input literal, so the document is byte-stable on its baseline commit. String order is recorded by code unit; nothing here reads a locale.",
+  "provenance": {
+    "baseline_sha": "07dfd22be7170ede689da1a1637cfab1645cb209",
+    "baseline_commit_date": "2026-11-18T19:37:05+01:00",
+    "node_version": "v24.21.0",
+    "command": "node scripts/characterize-pr4.js",
+    "origin": "Captured from the PRE-MOVE implementation under src/recommendation/ranking/ before any module moved into packages/recommendation-core. The committed document is the baseline: do not regenerate it from the extracted code, because a fixture produced by the implementation under test proves nothing."
+  },
+  "barrel": {
+    "exports": [
+      "rankBuilds",
+      "TOP_N_PERSISTED",
+      "selectDiverseTop",
+      "MAX_PER_PAIR",
+      "selectArchetypes",
+      "PERFORMANCE_FLOOR",
+      "STRATEGIES",
+      "REASON_CODES"
+    ],
+    "constants": {
+      "TOP_N_PERSISTED": 10,
+      "MAX_PER_PAIR": 3,
+      "PERFORMANCE_FLOOR": 0.85,
+      "STRATEGIES": [
+        "PERFORMANCE",
+        "BALANCED",
+        "VALUE"
+      ],
+      "REASON_CODES": {
+        "EMPTY_RANKED": "EMPTY_RANKED",
+        "NO_PERFORMANCE_CANDIDATE": "NO_PERFORMANCE_CANDIDATE",
+        "NO_BALANCED_CANDIDATE": "NO_BALANCED_CANDIDATE",
+        "NO_VALUE_CANDIDATE": "NO_VALUE_CANDIDATE"
+      }
+    },
+    "arity": {
+      "rankBuilds": 1,
+      "selectDiverseTop": 0,
+      "selectArchetypes": 0
+    },
+    "frozen": {
+      "TOP_N_PERSISTED": true,
+      "MAX_PER_PAIR": true,
+      "STRATEGIES": true,
+      "REASON_CODES": true
+    },
+    "reexported_by_identity": {
+      "rankBuilds": true,
+      "TOP_N_PERSISTED": true,
+      "selectDiverseTop": true,
+      "MAX_PER_PAIR": true,
+      "selectArchetypes": true,
+      "PERFORMANCE_FLOOR": true,
+      "STRATEGIES": true,
+      "REASON_CODES": true
+    }
+  },
+  "round2": {
+    "cases": [
+      {
+        "case": "binary-float boundary 1.005",
+        "input": 1.005,
+        "output": 1.01
+      },
+      {
+        "case": "binary-float boundary 2.675",
+        "input": 2.675,
+        "output": 2.68
+      },
+      {
+        "case": "0.5 stays 0.5",
+        "input": 0.5,
+        "output": 0.5
+      },
+      {
+        "case": "0.005 rounds up",
+        "input": 0.005,
+        "output": 0.01
+      },
+      {
+        "case": "integer unchanged",
+        "input": 5,
+        "output": 5
+      },
+      {
+        "case": "zero unchanged",
+        "input": 0,
+        "output": 0
+      },
+      {
+        "case": "hundred unchanged",
+        "input": 100,
+        "output": 100
+      },
+      {
+        "case": "87.4999 rounds up",
+        "input": 87.4999,
+        "output": 87.5
+      },
+      {
+        "case": "87.494 rounds down",
+        "input": 87.494,
+        "output": 87.49
+      },
+      {
+        "case": "87.495 half-up",
+        "input": 87.495,
+        "output": 87.5
+      },
+      {
+        "case": "87.4949 rounds down",
+        "input": 87.4949,
+        "output": 87.49
+      },
+      {
+        "case": "19.999 rounds to 20",
+        "input": 19.999,
+        "output": 20
+      },
+      {
+        "case": "negative half-up",
+        "input": -1.005,
+        "output": -1.01
+      }
+    ],
+    "errors": [
+      {
+        "case": "NaN",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "\"round2\" requires a finite number",
+          "message": "value"
+        }
+      },
+      {
+        "case": "Infinity",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "\"round2\" requires a finite number",
+          "message": "value"
+        }
+      },
+      {
+        "case": "string",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "\"round2\" requires a finite number",
+          "message": "value"
+        }
+      },
+      {
+        "case": "null",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "\"round2\" requires a finite number",
+          "message": "value"
+        }
+      },
+      {
+        "case": "undefined",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "\"round2\" requires a finite number",
+          "message": "value"
+        }
+      },
+      {
+        "case": "object",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "\"round2\" requires a finite number",
+          "message": "value"
+        }
+      }
+    ]
+  },
+  "signature": {
+    "full_build": "CPU:cpu-sig:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-sig:gpu-sig-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+    "full_build_segment_count": 8,
+    "omitted_gpu": "CPU:cpu-sig:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU::|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+    "omitted_gpu_segments": [
+      "CPU:cpu-sig:",
+      "MOTHERBOARD:mb-1:",
+      "RAM:ram-1:",
+      "GPU::",
+      "PSU:psu-1:",
+      "CASE:case-1:",
+      "CPU_COOLER:cooler-1:",
+      "SSD_BOOT:ssd-1:"
+    ],
+    "null_variant": "CPU:cpu-sig:|MOTHERBOARD:mb-a:|RAM::|GPU::|PSU::|CASE::|CPU_COOLER::|SSD_BOOT::",
+    "set_variant": "CPU:cpu-sig:|MOTHERBOARD:mb-a:mb-a-v1|RAM::|GPU::|PSU::|CASE::|CPU_COOLER::|SSD_BOOT::",
+    "null_and_set_variant_differ": true,
+    "upper_case_gpu": "CPU:cpu-sig:|MOTHERBOARD::|RAM::|GPU:Z:Z-var|PSU::|CASE::|CPU_COOLER::|SSD_BOOT::",
+    "lower_case_gpu": "CPU:cpu-sig:|MOTHERBOARD::|RAM::|GPU:gpu-a:gpu-a-var|PSU::|CASE::|CPU_COOLER::|SSD_BOOT::",
+    "upper_sorts_before_lower": true,
+    "distinct_cpu_products_differ": true
+  },
+  "derive_status": [
+    {
+      "case": "all PASS and zero unknown pairwise",
+      "status": "PASS"
+    },
+    {
+      "case": "one unknown pairwise",
+      "status": "UNKNOWN"
+    },
+    {
+      "case": "five unknown pairwise",
+      "status": "UNKNOWN"
+    },
+    {
+      "case": "one UNKNOWN component, zero pairwise",
+      "status": "UNKNOWN"
+    },
+    {
+      "case": "UNKNOWN component and unknown pairwise",
+      "status": "UNKNOWN"
+    }
+  ],
+  "rank": {
+    "scenarios": [
+      {
+        "case": "build_score DESC determines order",
+        "input": [
+          {
+            "build_score": 40,
+            "total_price": 50,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-lo",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-lo",
+                "product_variant_id": "gpu-lo-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "build_score": 90,
+            "total_price": 50,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-hi",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-hi",
+                "product_variant_id": "gpu-hi-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "build_score": 70,
+            "total_price": 50,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-mid",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-mid",
+                "product_variant_id": "gpu-mid-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "ranked": [
+            {
+              "rank": 1,
+              "build_score": 90,
+              "total_price": 50,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-hi:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-hi:gpu-hi-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-hi",
+                "gpu": "gpu-hi-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 70,
+              "total_price": 50,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-mid:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-mid:gpu-mid-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-mid",
+                "gpu": "gpu-mid-var"
+              }
+            },
+            {
+              "rank": 3,
+              "build_score": 40,
+              "total_price": 50,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-lo:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-lo:gpu-lo-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-lo",
+                "gpu": "gpu-lo-var"
+              }
+            }
+          ],
+          "top_n": [
+            {
+              "rank": 1,
+              "build_score": 90,
+              "total_price": 50,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-hi:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-hi:gpu-hi-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-hi",
+                "gpu": "gpu-hi-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 70,
+              "total_price": 50,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-mid:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-mid:gpu-mid-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-mid",
+                "gpu": "gpu-mid-var"
+              }
+            },
+            {
+              "rank": 3,
+              "build_score": 40,
+              "total_price": 50,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-lo:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-lo:gpu-lo-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-lo",
+                "gpu": "gpu-lo-var"
+              }
+            }
+          ],
+          "ranked_length": 3,
+          "top_n_length": 3
+        }
+      },
+      {
+        "case": "equal rounded score falls to total_price ASC",
+        "input": [
+          {
+            "build_score": 50,
+            "total_price": 300,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-b",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-b",
+                "product_variant_id": "gpu-b-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "build_score": 50,
+            "total_price": 200,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-a",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-a",
+                "product_variant_id": "gpu-a-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "build_score": 50,
+            "total_price": 400,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-c",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-c",
+                "product_variant_id": "gpu-c-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "ranked": [
+            {
+              "rank": 1,
+              "build_score": 50,
+              "total_price": 200,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-a:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-a:gpu-a-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-a",
+                "gpu": "gpu-a-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 50,
+              "total_price": 300,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-b:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-b:gpu-b-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-b",
+                "gpu": "gpu-b-var"
+              }
+            },
+            {
+              "rank": 3,
+              "build_score": 50,
+              "total_price": 400,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-c:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-c:gpu-c-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-c",
+                "gpu": "gpu-c-var"
+              }
+            }
+          ],
+          "top_n": [
+            {
+              "rank": 1,
+              "build_score": 50,
+              "total_price": 200,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-a:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-a:gpu-a-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-a",
+                "gpu": "gpu-a-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 50,
+              "total_price": 300,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-b:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-b:gpu-b-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-b",
+                "gpu": "gpu-b-var"
+              }
+            },
+            {
+              "rank": 3,
+              "build_score": 50,
+              "total_price": 400,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-c:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-c:gpu-c-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-c",
+                "gpu": "gpu-c-var"
+              }
+            }
+          ],
+          "ranked_length": 3,
+          "top_n_length": 3
+        }
+      },
+      {
+        "case": "equal score and price falls to signature ASC",
+        "input": [
+          {
+            "build_score": 50,
+            "total_price": 100,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-b",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-b",
+                "product_variant_id": "gpu-b-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "build_score": 50,
+            "total_price": 100,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-a",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-a",
+                "product_variant_id": "gpu-a-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "ranked": [
+            {
+              "rank": 1,
+              "build_score": 50,
+              "total_price": 100,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-a:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-a:gpu-a-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-a",
+                "gpu": "gpu-a-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 50,
+              "total_price": 100,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-b:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-b:gpu-b-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-b",
+                "gpu": "gpu-b-var"
+              }
+            }
+          ],
+          "top_n": [
+            {
+              "rank": 1,
+              "build_score": 50,
+              "total_price": 100,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-a:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-a:gpu-a-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-a",
+                "gpu": "gpu-a-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 50,
+              "total_price": 100,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-b:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-b:gpu-b-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-b",
+                "gpu": "gpu-b-var"
+              }
+            }
+          ],
+          "ranked_length": 2,
+          "top_n_length": 2
+        }
+      },
+      {
+        "case": "87.494 and 87.4949 both round to 87.49 and tie on price",
+        "input": [
+          {
+            "build_score": 87.494,
+            "total_price": 300,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-c",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-c",
+                "product_variant_id": "gpu-c-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "build_score": 87.4949,
+            "total_price": 200,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-a",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-a",
+                "product_variant_id": "gpu-a-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "ranked": [
+            {
+              "rank": 1,
+              "build_score": 87.49,
+              "total_price": 200,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-a:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-a:gpu-a-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-a",
+                "gpu": "gpu-a-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 87.49,
+              "total_price": 300,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-c:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-c:gpu-c-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-c",
+                "gpu": "gpu-c-var"
+              }
+            }
+          ],
+          "top_n": [
+            {
+              "rank": 1,
+              "build_score": 87.49,
+              "total_price": 200,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-a:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-a:gpu-a-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-a",
+                "gpu": "gpu-a-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 87.49,
+              "total_price": 300,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-c:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-c:gpu-c-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-c",
+                "gpu": "gpu-c-var"
+              }
+            }
+          ],
+          "ranked_length": 2,
+          "top_n_length": 2
+        }
+      },
+      {
+        "case": "87.495 rounds to 87.5 and orders above 87.494 regardless of price",
+        "input": [
+          {
+            "build_score": 87.494,
+            "total_price": 999,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-low",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-low",
+                "product_variant_id": "gpu-low-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "build_score": 87.495,
+            "total_price": 1,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-high",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-high",
+                "product_variant_id": "gpu-high-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "ranked": [
+            {
+              "rank": 1,
+              "build_score": 87.5,
+              "total_price": 1,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-high:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-high:gpu-high-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-high",
+                "gpu": "gpu-high-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 87.49,
+              "total_price": 999,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-low:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-low:gpu-low-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-low",
+                "gpu": "gpu-low-var"
+              }
+            }
+          ],
+          "top_n": [
+            {
+              "rank": 1,
+              "build_score": 87.5,
+              "total_price": 1,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-high:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-high:gpu-high-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-high",
+                "gpu": "gpu-high-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 87.49,
+              "total_price": 999,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-low:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-low:gpu-low-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-low",
+                "gpu": "gpu-low-var"
+              }
+            }
+          ],
+          "ranked_length": 2,
+          "top_n_length": 2
+        }
+      },
+      {
+        "case": "rounded values are carried on the ranked entries",
+        "input": [
+          {
+            "build_score": 87.495,
+            "total_price": 19.999,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-x",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-x",
+                "product_variant_id": "gpu-x-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "ranked": [
+            {
+              "rank": 1,
+              "build_score": 87.5,
+              "total_price": 20,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-x:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-x:gpu-x-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-x",
+                "gpu": "gpu-x-var"
+              }
+            }
+          ],
+          "top_n": [
+            {
+              "rank": 1,
+              "build_score": 87.5,
+              "total_price": 20,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-x:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-x:gpu-x-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-x",
+                "gpu": "gpu-x-var"
+              }
+            }
+          ],
+          "ranked_length": 1,
+          "top_n_length": 1
+        }
+      },
+      {
+        "case": "omitted GPU keeps an empty GPU:: slot and sorts first on a tie",
+        "input": [
+          {
+            "build_score": 50,
+            "total_price": 100,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-same",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-1",
+                "product_variant_id": "gpu-1-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "build_score": 50,
+            "total_price": 100,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-same",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "ranked": [
+            {
+              "rank": 1,
+              "build_score": 50,
+              "total_price": 100,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU::|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "OMITTED"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 50,
+              "total_price": 100,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-1:gpu-1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "gpu-1-var"
+              }
+            }
+          ],
+          "top_n": [
+            {
+              "rank": 1,
+              "build_score": 50,
+              "total_price": 100,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU::|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "OMITTED"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 50,
+              "total_price": 100,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-1:gpu-1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "gpu-1-var"
+              }
+            }
+          ],
+          "ranked_length": 2,
+          "top_n_length": 2
+        }
+      },
+      {
+        "case": "upper-case GPU id sorts before a lower-case one by code unit",
+        "input": [
+          {
+            "build_score": 50,
+            "total_price": 100,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-same",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-a",
+                "product_variant_id": "gpu-a-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "build_score": 50,
+            "total_price": 100,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-same",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "Z",
+                "product_variant_id": "Z-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-1",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "ranked": [
+            {
+              "rank": 1,
+              "build_score": 50,
+              "total_price": 100,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:Z:Z-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "Z-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 50,
+              "total_price": 100,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-a:gpu-a-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "gpu-a-var"
+              }
+            }
+          ],
+          "top_n": [
+            {
+              "rank": 1,
+              "build_score": 50,
+              "total_price": 100,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:Z:Z-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "Z-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 50,
+              "total_price": 100,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-a:gpu-a-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "gpu-a-var"
+              }
+            }
+          ],
+          "ranked_length": 2,
+          "top_n_length": 2
+        }
+      },
+      {
+        "case": "integration: orchestrator-shaped builds rank end-to-end",
+        "input": [
+          {
+            "build_score": 95,
+            "total_price": 7500,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-X",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-X",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-X",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-X",
+                "product_variant_id": "gpu-X-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-X",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-X",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-X",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-X",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "build_score": 95,
+            "total_price": 7000,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-Y",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-Y",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-Y",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-Y",
+                "product_variant_id": "gpu-Y-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-Y",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-Y",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-Y",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-Y",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          },
+          {
+            "build_score": 88,
+            "total_price": 6000,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0,
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "cpu-Z",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "mb-Z",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "ram-Z",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "gpu-Z",
+                "product_variant_id": "gpu-Z-var",
+                "status": "PASS"
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "psu-Z",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "case-Z",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "cooler-Z",
+                "product_variant_id": null,
+                "status": "PASS"
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "ssd-Z",
+                "product_variant_id": null,
+                "status": "PASS"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "ranked": [
+            {
+              "rank": 1,
+              "build_score": 95,
+              "total_price": 7000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-Y:|MOTHERBOARD:mb-Y:|RAM:ram-Y:|GPU:gpu-Y:gpu-Y-var|PSU:psu-Y:|CASE:case-Y:|CPU_COOLER:cooler-Y:|SSD_BOOT:ssd-Y:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-Y",
+                "gpu": "gpu-Y-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 95,
+              "total_price": 7500,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-X:|MOTHERBOARD:mb-X:|RAM:ram-X:|GPU:gpu-X:gpu-X-var|PSU:psu-X:|CASE:case-X:|CPU_COOLER:cooler-X:|SSD_BOOT:ssd-X:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-X",
+                "gpu": "gpu-X-var"
+              }
+            },
+            {
+              "rank": 3,
+              "build_score": 88,
+              "total_price": 6000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-Z:|MOTHERBOARD:mb-Z:|RAM:ram-Z:|GPU:gpu-Z:gpu-Z-var|PSU:psu-Z:|CASE:case-Z:|CPU_COOLER:cooler-Z:|SSD_BOOT:ssd-Z:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-Z",
+                "gpu": "gpu-Z-var"
+              }
+            }
+          ],
+          "top_n": [
+            {
+              "rank": 1,
+              "build_score": 95,
+              "total_price": 7000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-Y:|MOTHERBOARD:mb-Y:|RAM:ram-Y:|GPU:gpu-Y:gpu-Y-var|PSU:psu-Y:|CASE:case-Y:|CPU_COOLER:cooler-Y:|SSD_BOOT:ssd-Y:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-Y",
+                "gpu": "gpu-Y-var"
+              }
+            },
+            {
+              "rank": 2,
+              "build_score": 95,
+              "total_price": 7500,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-X:|MOTHERBOARD:mb-X:|RAM:ram-X:|GPU:gpu-X:gpu-X-var|PSU:psu-X:|CASE:case-X:|CPU_COOLER:cooler-X:|SSD_BOOT:ssd-X:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-X",
+                "gpu": "gpu-X-var"
+              }
+            },
+            {
+              "rank": 3,
+              "build_score": 88,
+              "total_price": 6000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-Z:|MOTHERBOARD:mb-Z:|RAM:ram-Z:|GPU:gpu-Z:gpu-Z-var|PSU:psu-Z:|CASE:case-Z:|CPU_COOLER:cooler-Z:|SSD_BOOT:ssd-Z:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-Z",
+                "gpu": "gpu-Z-var"
+              }
+            }
+          ],
+          "ranked_length": 3,
+          "top_n_length": 3
+        }
+      }
+    ],
+    "top_n": {
+      "caps": [
+        {
+          "builds": 0,
+          "ranked_length": 0,
+          "top_n_length": 0,
+          "top_n_ranks": []
+        },
+        {
+          "builds": 1,
+          "ranked_length": 1,
+          "top_n_length": 1,
+          "top_n_ranks": [
+            1
+          ]
+        },
+        {
+          "builds": 9,
+          "ranked_length": 9,
+          "top_n_length": 9,
+          "top_n_ranks": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ]
+        },
+        {
+          "builds": 10,
+          "ranked_length": 10,
+          "top_n_length": 10,
+          "top_n_ranks": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ]
+        },
+        {
+          "builds": 11,
+          "ranked_length": 11,
+          "top_n_length": 10,
+          "top_n_ranks": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ]
+        },
+        {
+          "builds": 25,
+          "ranked_length": 25,
+          "top_n_length": 10,
+          "top_n_ranks": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ]
+        }
+      ],
+      "ascending_scores_top_n_cpus": [
+        "cpu-24",
+        "cpu-23",
+        "cpu-22",
+        "cpu-21",
+        "cpu-20",
+        "cpu-19",
+        "cpu-18",
+        "cpu-17",
+        "cpu-16",
+        "cpu-15"
+      ],
+      "empty_result": {
+        "ranked": [],
+        "top_n": [],
+        "ranked_length": 0,
+        "top_n_length": 0
+      },
+      "empty_result_frozen": {
+        "result": true,
+        "ranked": true,
+        "top_n": true
+      }
+    },
+    "determinism": {
+      "reference": [
+        {
+          "rank": 1,
+          "cpu": "cpu-A"
+        },
+        {
+          "rank": 2,
+          "cpu": "cpu-B"
+        },
+        {
+          "rank": 3,
+          "cpu": "cpu-C"
+        },
+        {
+          "rank": 4,
+          "cpu": "cpu-D"
+        },
+        {
+          "rank": 5,
+          "cpu": "cpu-E"
+        }
+      ],
+      "permutations": [
+        {
+          "order": [
+            4,
+            3,
+            2,
+            1,
+            0
+          ],
+          "output": [
+            {
+              "rank": 1,
+              "cpu": "cpu-A"
+            },
+            {
+              "rank": 2,
+              "cpu": "cpu-B"
+            },
+            {
+              "rank": 3,
+              "cpu": "cpu-C"
+            },
+            {
+              "rank": 4,
+              "cpu": "cpu-D"
+            },
+            {
+              "rank": 5,
+              "cpu": "cpu-E"
+            }
+          ]
+        },
+        {
+          "order": [
+            0,
+            4,
+            1,
+            3,
+            2
+          ],
+          "output": [
+            {
+              "rank": 1,
+              "cpu": "cpu-A"
+            },
+            {
+              "rank": 2,
+              "cpu": "cpu-B"
+            },
+            {
+              "rank": 3,
+              "cpu": "cpu-C"
+            },
+            {
+              "rank": 4,
+              "cpu": "cpu-D"
+            },
+            {
+              "rank": 5,
+              "cpu": "cpu-E"
+            }
+          ]
+        },
+        {
+          "order": [
+            2,
+            1,
+            0,
+            4,
+            3
+          ],
+          "output": [
+            {
+              "rank": 1,
+              "cpu": "cpu-A"
+            },
+            {
+              "rank": 2,
+              "cpu": "cpu-B"
+            },
+            {
+              "rank": 3,
+              "cpu": "cpu-C"
+            },
+            {
+              "rank": 4,
+              "cpu": "cpu-D"
+            },
+            {
+              "rank": 5,
+              "cpu": "cpu-E"
+            }
+          ]
+        },
+        {
+          "order": [
+            3,
+            0,
+            4,
+            1,
+            2
+          ],
+          "output": [
+            {
+              "rank": 1,
+              "cpu": "cpu-A"
+            },
+            {
+              "rank": 2,
+              "cpu": "cpu-B"
+            },
+            {
+              "rank": 3,
+              "cpu": "cpu-C"
+            },
+            {
+              "rank": 4,
+              "cpu": "cpu-D"
+            },
+            {
+              "rank": 5,
+              "cpu": "cpu-E"
+            }
+          ]
+        }
+      ],
+      "all_match_reference": true
+    },
+    "shape": {
+      "entry_keys": [
+        "rank",
+        "build",
+        "build_score",
+        "total_price",
+        "compatibility_status",
+        "signature",
+        "explanation"
+      ],
+      "explanation_is_null": true,
+      "build_is_input_reference": true,
+      "frozen": {
+        "result": true,
+        "ranked": true,
+        "top_n": true,
+        "entry": true,
+        "top_n_entry": true
+      }
+    },
+    "immutability": {
+      "before": [
+        {
+          "build_score": 90,
+          "total_price": 300,
+          "currency": "MAD",
+          "unknown_pairwise_count": 0,
+          "components": [
+            {
+              "component_role": "CPU",
+              "product_id": "cpu-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "MOTHERBOARD",
+              "product_id": "mb-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "RAM",
+              "product_id": "ram-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "GPU",
+              "product_id": "gpu-1",
+              "product_variant_id": "gpu-1-var",
+              "status": "PASS"
+            },
+            {
+              "component_role": "PSU",
+              "product_id": "psu-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "CASE",
+              "product_id": "case-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "CPU_COOLER",
+              "product_id": "cooler-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "SSD_BOOT",
+              "product_id": "ssd-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            }
+          ]
+        },
+        {
+          "build_score": 80,
+          "total_price": 200,
+          "currency": "MAD",
+          "unknown_pairwise_count": 0,
+          "components": [
+            {
+              "component_role": "CPU",
+              "product_id": "cpu-2",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "MOTHERBOARD",
+              "product_id": "mb-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "RAM",
+              "product_id": "ram-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "GPU",
+              "product_id": "gpu-2",
+              "product_variant_id": "gpu-2-var",
+              "status": "PASS"
+            },
+            {
+              "component_role": "PSU",
+              "product_id": "psu-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "CASE",
+              "product_id": "case-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "CPU_COOLER",
+              "product_id": "cooler-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "SSD_BOOT",
+              "product_id": "ssd-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            }
+          ]
+        }
+      ],
+      "after": [
+        {
+          "build_score": 90,
+          "total_price": 300,
+          "currency": "MAD",
+          "unknown_pairwise_count": 0,
+          "components": [
+            {
+              "component_role": "CPU",
+              "product_id": "cpu-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "MOTHERBOARD",
+              "product_id": "mb-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "RAM",
+              "product_id": "ram-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "GPU",
+              "product_id": "gpu-1",
+              "product_variant_id": "gpu-1-var",
+              "status": "PASS"
+            },
+            {
+              "component_role": "PSU",
+              "product_id": "psu-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "CASE",
+              "product_id": "case-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "CPU_COOLER",
+              "product_id": "cooler-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "SSD_BOOT",
+              "product_id": "ssd-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            }
+          ]
+        },
+        {
+          "build_score": 80,
+          "total_price": 200,
+          "currency": "MAD",
+          "unknown_pairwise_count": 0,
+          "components": [
+            {
+              "component_role": "CPU",
+              "product_id": "cpu-2",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "MOTHERBOARD",
+              "product_id": "mb-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "RAM",
+              "product_id": "ram-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "GPU",
+              "product_id": "gpu-2",
+              "product_variant_id": "gpu-2-var",
+              "status": "PASS"
+            },
+            {
+              "component_role": "PSU",
+              "product_id": "psu-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "CASE",
+              "product_id": "case-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "CPU_COOLER",
+              "product_id": "cooler-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            },
+            {
+              "component_role": "SSD_BOOT",
+              "product_id": "ssd-1",
+              "product_variant_id": null,
+              "status": "PASS"
+            }
+          ]
+        }
+      ],
+      "unchanged": true
+    },
+    "errors": [
+      {
+        "case": "non-array builds",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "builds",
+          "message": "\"builds\" must be an array"
+        }
+      },
+      {
+        "case": "missing required build fields",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "builds",
+          "message": "builds[0].components is required"
+        }
+      },
+      {
+        "case": "duplicate build signature",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "Duplicate build signature \"CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-same:gpu-same-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:\" at builds[1] and builds[0]"
+        }
+      },
+      {
+        "case": "build_score below range",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].build_score must be a finite number in [0, 100]"
+        }
+      },
+      {
+        "case": "build_score above range",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].build_score must be a finite number in [0, 100]"
+        }
+      },
+      {
+        "case": "build_score NaN",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].build_score must be a finite number in [0, 100]"
+        }
+      },
+      {
+        "case": "build_score string",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].build_score must be a finite number in [0, 100]"
+        }
+      },
+      {
+        "case": "build_score boundary 0 accepted",
+        "error": {
+          "threw": false
+        }
+      },
+      {
+        "case": "build_score boundary 100 accepted",
+        "error": {
+          "threw": false
+        }
+      },
+      {
+        "case": "total_price zero",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].total_price must be a finite number greater than 0"
+        }
+      },
+      {
+        "case": "total_price negative",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].total_price must be a finite number greater than 0"
+        }
+      },
+      {
+        "case": "total_price Infinity",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].total_price must be a finite number greater than 0"
+        }
+      },
+      {
+        "case": "currency lower case",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].currency must be a 3-letter uppercase ISO 4217 code"
+        }
+      },
+      {
+        "case": "currency four letters",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].currency must be a 3-letter uppercase ISO 4217 code"
+        }
+      },
+      {
+        "case": "currency too short",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].currency must be a 3-letter uppercase ISO 4217 code"
+        }
+      },
+      {
+        "case": "currency absent",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "builds",
+          "message": "builds[0].currency is required"
+        }
+      },
+      {
+        "case": "unknown_pairwise_count negative",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].unknown_pairwise_count must be a non-negative integer"
+        }
+      },
+      {
+        "case": "unknown_pairwise_count fractional",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].unknown_pairwise_count must be a non-negative integer"
+        }
+      },
+      {
+        "case": "unknown_pairwise_count absent",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "builds",
+          "message": "builds[0].unknown_pairwise_count is required"
+        }
+      },
+      {
+        "case": "unknown_pairwise_count null",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "builds",
+          "message": "builds[0].unknown_pairwise_count is required"
+        }
+      },
+      {
+        "case": "empty components array",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].components must be a non-empty array"
+        }
+      },
+      {
+        "case": "duplicate component role",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0] carries more than one \"CPU\" component (one per role)"
+        }
+      },
+      {
+        "case": "unknown component role",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].components[0].component_role \"SSD_SECONDARY\" is not a participating Engine 3 role"
+        }
+      },
+      {
+        "case": "empty product_id",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].components[0].product_id must be a non-empty string"
+        }
+      },
+      {
+        "case": "non-string product_variant_id",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].components[0].product_variant_id must be a string or null"
+        }
+      },
+      {
+        "case": "invalid component status",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "builds",
+          "message": "builds[0].components[0].status must be exactly \"PASS\" or \"UNKNOWN\""
+        }
+      }
+    ]
+  },
+  "diverse": {
+    "scenarios": [
+      {
+        "case": "per-pair cap and limit",
+        "ranked_length": 16,
+        "output": {
+          "selected": [
+            {
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "persisted_rank": 2,
+              "build_score": 99,
+              "total_price": 1001,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "persisted_rank": 3,
+              "build_score": 98,
+              "total_price": 1002,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "persisted_rank": 4,
+              "build_score": 96,
+              "total_price": 1004,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "persisted_rank": 5,
+              "build_score": 95,
+              "total_price": 1005,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "persisted_rank": 6,
+              "build_score": 94,
+              "total_price": 1006,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "persisted_rank": 7,
+              "build_score": 92,
+              "total_price": 1008,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            },
+            {
+              "persisted_rank": 8,
+              "build_score": 91,
+              "total_price": 1009,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            },
+            {
+              "persisted_rank": 9,
+              "build_score": 90,
+              "total_price": 1010,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            },
+            {
+              "persisted_rank": 10,
+              "build_score": 88,
+              "total_price": 1012,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-D:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-D1:gpu-D1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-D",
+                "gpu": "gpu-D1-var"
+              }
+            }
+          ],
+          "dropped_count": 3
+        }
+      },
+      {
+        "case": "omitted-GPU entries share one pair key and are capped",
+        "ranked_length": 7,
+        "output": {
+          "selected": [
+            {
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-shared:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-1:gpu-1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-shared",
+                "gpu": "gpu-1-var"
+              }
+            },
+            {
+              "persisted_rank": 2,
+              "build_score": 99,
+              "total_price": 1001,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-shared:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-1:gpu-1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-shared",
+                "gpu": "gpu-1-var"
+              }
+            },
+            {
+              "persisted_rank": 3,
+              "build_score": 90,
+              "total_price": 800,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-shared:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU::|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-shared",
+                "gpu": "OMITTED"
+              }
+            },
+            {
+              "persisted_rank": 4,
+              "build_score": 89,
+              "total_price": 801,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-shared:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU::|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-shared",
+                "gpu": "OMITTED"
+              }
+            }
+          ],
+          "dropped_count": 3
+        }
+      },
+      {
+        "case": "rank order preserved in selection",
+        "output": {
+          "selected": [
+            {
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-0:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-0:gpu-0-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-0",
+                "gpu": "gpu-0-var"
+              }
+            },
+            {
+              "persisted_rank": 2,
+              "build_score": 99,
+              "total_price": 1001,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-1:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-1:gpu-1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-1",
+                "gpu": "gpu-1-var"
+              }
+            },
+            {
+              "persisted_rank": 3,
+              "build_score": 98,
+              "total_price": 1002,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-2:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-2:gpu-2-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-2",
+                "gpu": "gpu-2-var"
+              }
+            },
+            {
+              "persisted_rank": 4,
+              "build_score": 97,
+              "total_price": 1003,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-3:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-3:gpu-3-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-3",
+                "gpu": "gpu-3-var"
+              }
+            },
+            {
+              "persisted_rank": 5,
+              "build_score": 96,
+              "total_price": 1004,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-4:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-4:gpu-4-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-4",
+                "gpu": "gpu-4-var"
+              }
+            },
+            {
+              "persisted_rank": 6,
+              "build_score": 95,
+              "total_price": 1005,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-5:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-5:gpu-5-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-5",
+                "gpu": "gpu-5-var"
+              }
+            }
+          ],
+          "dropped_count": 0
+        }
+      },
+      {
+        "case": "k < limit when diversity is insufficient",
+        "output": {
+          "selected": [
+            {
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A:gpu-A-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A-var"
+              }
+            },
+            {
+              "persisted_rank": 2,
+              "build_score": 99,
+              "total_price": 1001,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A:gpu-A-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A-var"
+              }
+            },
+            {
+              "persisted_rank": 3,
+              "build_score": 98,
+              "total_price": 1002,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A:gpu-A-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A-var"
+              }
+            },
+            {
+              "persisted_rank": 4,
+              "build_score": 90,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B:gpu-B-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B-var"
+              }
+            },
+            {
+              "persisted_rank": 5,
+              "build_score": 89,
+              "total_price": 901,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B:gpu-B-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B-var"
+              }
+            },
+            {
+              "persisted_rank": 6,
+              "build_score": 88,
+              "total_price": 902,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B:gpu-B-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B-var"
+              }
+            }
+          ],
+          "dropped_count": 3
+        }
+      },
+      {
+        "case": "defaults: maxPerPair 3",
+        "output": {
+          "selected": [
+            {
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-same:gpu-same-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "gpu-same-var"
+              }
+            },
+            {
+              "persisted_rank": 2,
+              "build_score": 99,
+              "total_price": 1001,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-same:gpu-same-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "gpu-same-var"
+              }
+            },
+            {
+              "persisted_rank": 3,
+              "build_score": 98,
+              "total_price": 1002,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-same:gpu-same-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "gpu-same-var"
+              }
+            }
+          ],
+          "dropped_count": 2
+        }
+      },
+      {
+        "case": "explicit maxPerPair 2",
+        "output": {
+          "selected": [
+            {
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-same:gpu-same-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "gpu-same-var"
+              }
+            },
+            {
+              "persisted_rank": 2,
+              "build_score": 99,
+              "total_price": 1001,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-same:gpu-same-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "gpu-same-var"
+              }
+            }
+          ],
+          "dropped_count": 3
+        }
+      },
+      {
+        "case": "explicit limit 2",
+        "output": {
+          "selected": [
+            {
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-same:gpu-same-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "gpu-same-var"
+              }
+            },
+            {
+              "persisted_rank": 2,
+              "build_score": 99,
+              "total_price": 1001,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-same:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-same:gpu-same-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-same",
+                "gpu": "gpu-same-var"
+              }
+            }
+          ],
+          "dropped_count": 0
+        }
+      },
+      {
+        "case": "empty ranked array",
+        "output": {
+          "selected": [],
+          "dropped_count": 0
+        }
+      },
+      {
+        "case": "absent arguments",
+        "output": {
+          "selected": [],
+          "dropped_count": 0
+        }
+      }
+    ],
+    "frozen": {
+      "result": true,
+      "selected": true,
+      "entry": true
+    },
+    "errors": [
+      {
+        "case": "non-array ranked",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "ranked",
+          "message": "\"ranked\" must be an array"
+        }
+      },
+      {
+        "case": "limit negative",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "limit",
+          "message": "\"limit\" must be a positive integer"
+        }
+      },
+      {
+        "case": "limit fractional",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "limit",
+          "message": "\"limit\" must be a positive integer"
+        }
+      },
+      {
+        "case": "limit string",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "limit",
+          "message": "\"limit\" must be a positive integer"
+        }
+      },
+      {
+        "case": "maxPerPair zero",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "maxPerPair",
+          "message": "\"maxPerPair\" must be a positive integer"
+        }
+      },
+      {
+        "case": "maxPerPair negative",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "maxPerPair",
+          "message": "\"maxPerPair\" must be a positive integer"
+        }
+      },
+      {
+        "case": "maxPerPair string",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "maxPerPair",
+          "message": "\"maxPerPair\" must be a positive integer"
+        }
+      },
+      {
+        "case": "ranked entry without a CPU component",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "ranked",
+          "message": "ranked entry build has no CPU component - contract violation (Decision 10 required_roles)"
+        }
+      }
+    ]
+  },
+  "archetypes": {
+    "priorities": [
+      {
+        "case": "priority ABSENT",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": "ABSENT",
+          "archetype_objectives": "ABSENT"
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "priority null",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": null,
+          "archetype_objectives": "ABSENT"
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "priority 1",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": 1,
+          "archetype_objectives": "ABSENT"
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "priority 2",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": 2,
+          "archetype_objectives": "ABSENT"
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "priority 3",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": 3,
+          "archetype_objectives": "ABSENT"
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "priority 4",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": 4,
+          "archetype_objectives": "ABSENT"
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "priority 5",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": 5,
+          "archetype_objectives": "ABSENT"
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      }
+    ],
+    "strategies": [
+      {
+        "case": "PERFORMANCE floor: 0.84 excluded, exactly 0.85 eligible",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": 4,
+          "archetype_objectives": "ABSENT"
+        },
+        "spend_shares": [
+          {
+            "cpu": "cpu-below",
+            "spend_share": 0.84
+          },
+          {
+            "cpu": "cpu-at",
+            "spend_share": 0.85
+          },
+          {
+            "cpu": "cpu-above",
+            "spend_share": 1.2
+          }
+        ],
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 1,
+              "build_score": 70,
+              "total_price": 850,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-at:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-at:gpu-at-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-at",
+                "gpu": "gpu-at-var"
+              }
+            },
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 840,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-below:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-below:gpu-below-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-below",
+                "gpu": "gpu-below-var"
+              }
+            },
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 3,
+              "build_score": 50,
+              "total_price": 1200,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-above:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-above:gpu-above-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-above",
+                "gpu": "gpu-above-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "BALANCED picks the highest score overall",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": 3,
+          "archetype_objectives": "ABSENT"
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "VALUE ties on score per MAD and prefers the cheaper build",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": 1,
+          "archetype_objectives": "ABSENT"
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 1,
+              "build_score": 50,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-b:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-b:gpu-b-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-b",
+                "gpu": "gpu-b-var"
+              }
+            },
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 2,
+              "build_score": 100,
+              "total_price": 2000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-a:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-a:gpu-a-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-a",
+                "gpu": "gpu-a-var"
+              }
+            }
+          ],
+          "reason_codes": [
+            "NO_BALANCED_CANDIDATE"
+          ]
+        }
+      },
+      {
+        "case": "VALUE ties on score per MAD and price, then signature ASC",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": 1,
+          "archetype_objectives": "ABSENT"
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 1,
+              "build_score": 50,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-a:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-a:gpu-a-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-a",
+                "gpu": "gpu-a-var"
+              }
+            },
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 2,
+              "build_score": 50,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-b:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-b:gpu-b-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-b",
+                "gpu": "gpu-b-var"
+              }
+            }
+          ],
+          "reason_codes": [
+            "NO_BALANCED_CANDIDATE"
+          ]
+        }
+      },
+      {
+        "case": "one strategy per (CPU, GPU) pair: a claimed pair is skipped",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": "ABSENT",
+          "archetype_objectives": "ABSENT"
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-X:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-X:gpu-X-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-X",
+                "gpu": "gpu-X-var"
+              }
+            },
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 2,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-Y:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-Y:gpu-Y-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-Y",
+                "gpu": "gpu-Y-var"
+              }
+            },
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 3,
+              "build_score": 70,
+              "total_price": 1200,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-Z:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-Z:gpu-Z-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-Z",
+                "gpu": "gpu-Z-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "degradation: a single build yields one archetype and two reason codes",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": "ABSENT",
+          "archetype_objectives": "ABSENT"
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 1,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-only:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-only:gpu-only-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-only",
+                "gpu": "gpu-only-var"
+              }
+            }
+          ],
+          "reason_codes": [
+            "NO_PERFORMANCE_CANDIDATE",
+            "NO_VALUE_CANDIDATE"
+          ]
+        }
+      },
+      {
+        "case": "degradation: empty ranked yields EMPTY_RANKED",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": "ABSENT",
+          "archetype_objectives": "ABSENT"
+        },
+        "output": {
+          "archetypes": [],
+          "reason_codes": [
+            "EMPTY_RANKED"
+          ]
+        }
+      }
+    ],
+    "objectives": [
+      {
+        "case": "objectives reorder under neutral priority null",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": null,
+          "archetype_objectives": {
+            "VALUE": 1
+          }
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "objectives reorder under neutral priority 3",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": 3,
+          "archetype_objectives": {
+            "PERFORMANCE": 2,
+            "BALANCED": 1
+          }
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "explicit priority 4 outranks the objectives",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": 4,
+          "archetype_objectives": {
+            "VALUE": 1
+          }
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "explicit priority 1 outranks the objectives",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": 1,
+          "archetype_objectives": {
+            "PERFORMANCE": 5
+          }
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "equal weights fall back to the base order position",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": 3,
+          "archetype_objectives": {
+            "VALUE": 1,
+            "BALANCED": 1,
+            "PERFORMANCE": 1
+          }
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      },
+      {
+        "case": "partial objectives treat an absent strategy as weight 0",
+        "input": {
+          "budget": {
+            "amount": 1000,
+            "currency": "MAD"
+          },
+          "priority": null,
+          "archetype_objectives": {
+            "VALUE": 0.5
+          }
+        },
+        "output": {
+          "archetypes": [
+            {
+              "strategy_key": "VALUE",
+              "persisted_rank": 1,
+              "build_score": 100,
+              "total_price": 1000,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-A",
+                "gpu": "gpu-A1-var"
+              }
+            },
+            {
+              "strategy_key": "BALANCED",
+              "persisted_rank": 2,
+              "build_score": 90,
+              "total_price": 950,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-B",
+                "gpu": "gpu-B1-var"
+              }
+            },
+            {
+              "strategy_key": "PERFORMANCE",
+              "persisted_rank": 3,
+              "build_score": 80,
+              "total_price": 900,
+              "compatibility_status": "PASS",
+              "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+              "explanation": null,
+              "pair": {
+                "cpu": "cpu-C",
+                "gpu": "gpu-C1-var"
+              }
+            }
+          ],
+          "reason_codes": []
+        }
+      }
+    ],
+    "shape": {
+      "archetype_keys": [
+        "strategy_key",
+        "persisted_rank",
+        "build_score",
+        "total_price",
+        "compatibility_status",
+        "signature",
+        "explanation",
+        "build"
+      ],
+      "frozen": {
+        "result": true,
+        "archetypes": true,
+        "entry": true,
+        "reason_codes": true
+      },
+      "persisted_ranks": [
+        1,
+        2,
+        3
+      ]
+    },
+    "errors": [
+      {
+        "case": "budget absent",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "budget",
+          "message": "\"budget\" is required (the pinned query budget)"
+        }
+      },
+      {
+        "case": "budget null",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "budget",
+          "message": "\"budget\" is required (the pinned query budget)"
+        }
+      },
+      {
+        "case": "budget.amount zero",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "budget.amount",
+          "message": "\"budget.amount\" must be a finite number > 0"
+        }
+      },
+      {
+        "case": "budget.amount negative",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "budget.amount",
+          "message": "\"budget.amount\" must be a finite number > 0"
+        }
+      },
+      {
+        "case": "budget.amount string",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "budget.amount",
+          "message": "\"budget.amount\" must be a finite number > 0"
+        }
+      },
+      {
+        "case": "budget without an amount",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "budget.amount",
+          "message": "\"budget.amount\" must be a finite number > 0"
+        }
+      },
+      {
+        "case": "ranked non-array",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "ranked",
+          "message": "\"ranked\" must be an array"
+        }
+      },
+      {
+        "case": "priority 0",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "priority",
+          "message": "\"priority\" must be 1..5 or null"
+        }
+      },
+      {
+        "case": "priority 6",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "priority",
+          "message": "\"priority\" must be 1..5 or null"
+        }
+      },
+      {
+        "case": "priority fractional",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "priority",
+          "message": "\"priority\" must be 1..5 or null"
+        }
+      },
+      {
+        "case": "priority string",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "priority",
+          "message": "\"priority\" must be 1..5 or null"
+        }
+      },
+      {
+        "case": "unknown objective strategy",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "archetypeObjectives",
+          "message": "\"archetypeObjectives\" has unknown strategy \"ULTRABOOK\" (expected PERFORMANCE, BALANCED, VALUE)"
+        }
+      },
+      {
+        "case": "negative objective weight",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "archetypeObjectives.VALUE",
+          "message": "\"archetypeObjectives.VALUE\" must be a finite number >= 0"
+        }
+      },
+      {
+        "case": "zero-sum objectives",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "archetypeObjectives",
+          "message": "\"archetypeObjectives\" must sum to a positive number"
+        }
+      },
+      {
+        "case": "objectives as an array",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "archetypeObjectives",
+          "message": "\"archetypeObjectives\" must be an object keyed by strategy"
+        }
+      },
+      {
+        "case": "objective weight NaN",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "archetypeObjectives.VALUE",
+          "message": "\"archetypeObjectives.VALUE\" must be a finite number >= 0"
+        }
+      }
+    ]
+  },
+  "pipeline": {
+    "input_builds": [
+      {
+        "build_score": 90,
+        "total_price": 1000,
+        "currency": "MAD",
+        "unknown_pairwise_count": 0,
+        "components": [
+          {
+            "component_role": "CPU",
+            "product_id": "cpu-A",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "MOTHERBOARD",
+            "product_id": "mb-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "RAM",
+            "product_id": "ram-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "GPU",
+            "product_id": "gpu-A1",
+            "product_variant_id": "gpu-A1-var",
+            "status": "PASS"
+          },
+          {
+            "component_role": "PSU",
+            "product_id": "psu-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CASE",
+            "product_id": "case-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CPU_COOLER",
+            "product_id": "cooler-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "SSD_BOOT",
+            "product_id": "ssd-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          }
+        ]
+      },
+      {
+        "build_score": 85,
+        "total_price": 950,
+        "currency": "MAD",
+        "unknown_pairwise_count": 0,
+        "components": [
+          {
+            "component_role": "CPU",
+            "product_id": "cpu-A",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "MOTHERBOARD",
+            "product_id": "mb-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "RAM",
+            "product_id": "ram-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "GPU",
+            "product_id": "gpu-A2",
+            "product_variant_id": "gpu-A2-var",
+            "status": "PASS"
+          },
+          {
+            "component_role": "PSU",
+            "product_id": "psu-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CASE",
+            "product_id": "case-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CPU_COOLER",
+            "product_id": "cooler-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "SSD_BOOT",
+            "product_id": "ssd-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          }
+        ]
+      },
+      {
+        "build_score": 80,
+        "total_price": 900,
+        "currency": "MAD",
+        "unknown_pairwise_count": 0,
+        "components": [
+          {
+            "component_role": "CPU",
+            "product_id": "cpu-A",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "MOTHERBOARD",
+            "product_id": "mb-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "RAM",
+            "product_id": "ram-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "GPU",
+            "product_id": "gpu-A3",
+            "product_variant_id": "gpu-A3-var",
+            "status": "PASS"
+          },
+          {
+            "component_role": "PSU",
+            "product_id": "psu-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CASE",
+            "product_id": "case-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CPU_COOLER",
+            "product_id": "cooler-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "SSD_BOOT",
+            "product_id": "ssd-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          }
+        ]
+      },
+      {
+        "build_score": 88,
+        "total_price": 1100,
+        "currency": "MAD",
+        "unknown_pairwise_count": 0,
+        "components": [
+          {
+            "component_role": "CPU",
+            "product_id": "cpu-B",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "MOTHERBOARD",
+            "product_id": "mb-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "RAM",
+            "product_id": "ram-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "GPU",
+            "product_id": "gpu-B1",
+            "product_variant_id": "gpu-B1-var",
+            "status": "PASS"
+          },
+          {
+            "component_role": "PSU",
+            "product_id": "psu-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CASE",
+            "product_id": "case-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CPU_COOLER",
+            "product_id": "cooler-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "SSD_BOOT",
+            "product_id": "ssd-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          }
+        ]
+      },
+      {
+        "build_score": 82,
+        "total_price": 1050,
+        "currency": "MAD",
+        "unknown_pairwise_count": 0,
+        "components": [
+          {
+            "component_role": "CPU",
+            "product_id": "cpu-B",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "MOTHERBOARD",
+            "product_id": "mb-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "RAM",
+            "product_id": "ram-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "GPU",
+            "product_id": "gpu-B2",
+            "product_variant_id": "gpu-B2-var",
+            "status": "PASS"
+          },
+          {
+            "component_role": "PSU",
+            "product_id": "psu-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CASE",
+            "product_id": "case-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CPU_COOLER",
+            "product_id": "cooler-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "SSD_BOOT",
+            "product_id": "ssd-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          }
+        ]
+      },
+      {
+        "build_score": 78,
+        "total_price": 1000,
+        "currency": "MAD",
+        "unknown_pairwise_count": 0,
+        "components": [
+          {
+            "component_role": "CPU",
+            "product_id": "cpu-B",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "MOTHERBOARD",
+            "product_id": "mb-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "RAM",
+            "product_id": "ram-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "GPU",
+            "product_id": "gpu-B3",
+            "product_variant_id": "gpu-B3-var",
+            "status": "PASS"
+          },
+          {
+            "component_role": "PSU",
+            "product_id": "psu-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CASE",
+            "product_id": "case-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CPU_COOLER",
+            "product_id": "cooler-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "SSD_BOOT",
+            "product_id": "ssd-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          }
+        ]
+      },
+      {
+        "build_score": 86,
+        "total_price": 1200,
+        "currency": "MAD",
+        "unknown_pairwise_count": 0,
+        "components": [
+          {
+            "component_role": "CPU",
+            "product_id": "cpu-C",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "MOTHERBOARD",
+            "product_id": "mb-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "RAM",
+            "product_id": "ram-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "GPU",
+            "product_id": "gpu-C1",
+            "product_variant_id": "gpu-C1-var",
+            "status": "PASS"
+          },
+          {
+            "component_role": "PSU",
+            "product_id": "psu-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CASE",
+            "product_id": "case-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CPU_COOLER",
+            "product_id": "cooler-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "SSD_BOOT",
+            "product_id": "ssd-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          }
+        ]
+      },
+      {
+        "build_score": 81,
+        "total_price": 1150,
+        "currency": "MAD",
+        "unknown_pairwise_count": 0,
+        "components": [
+          {
+            "component_role": "CPU",
+            "product_id": "cpu-C",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "MOTHERBOARD",
+            "product_id": "mb-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "RAM",
+            "product_id": "ram-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "GPU",
+            "product_id": "gpu-C2",
+            "product_variant_id": "gpu-C2-var",
+            "status": "PASS"
+          },
+          {
+            "component_role": "PSU",
+            "product_id": "psu-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CASE",
+            "product_id": "case-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CPU_COOLER",
+            "product_id": "cooler-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "SSD_BOOT",
+            "product_id": "ssd-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          }
+        ]
+      },
+      {
+        "build_score": 76,
+        "total_price": 1100,
+        "currency": "MAD",
+        "unknown_pairwise_count": 0,
+        "components": [
+          {
+            "component_role": "CPU",
+            "product_id": "cpu-C",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "MOTHERBOARD",
+            "product_id": "mb-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "RAM",
+            "product_id": "ram-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "GPU",
+            "product_id": "gpu-C3",
+            "product_variant_id": "gpu-C3-var",
+            "status": "PASS"
+          },
+          {
+            "component_role": "PSU",
+            "product_id": "psu-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CASE",
+            "product_id": "case-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CPU_COOLER",
+            "product_id": "cooler-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "SSD_BOOT",
+            "product_id": "ssd-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          }
+        ]
+      },
+      {
+        "build_score": 70,
+        "total_price": 800,
+        "currency": "MAD",
+        "unknown_pairwise_count": 0,
+        "components": [
+          {
+            "component_role": "CPU",
+            "product_id": "cpu-D",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "MOTHERBOARD",
+            "product_id": "mb-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "RAM",
+            "product_id": "ram-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "GPU",
+            "product_id": "gpu-D1",
+            "product_variant_id": "gpu-D1-var",
+            "status": "PASS"
+          },
+          {
+            "component_role": "PSU",
+            "product_id": "psu-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CASE",
+            "product_id": "case-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CPU_COOLER",
+            "product_id": "cooler-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "SSD_BOOT",
+            "product_id": "ssd-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          }
+        ]
+      },
+      {
+        "build_score": 65,
+        "total_price": 750,
+        "currency": "MAD",
+        "unknown_pairwise_count": 0,
+        "components": [
+          {
+            "component_role": "CPU",
+            "product_id": "cpu-D",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "MOTHERBOARD",
+            "product_id": "mb-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "RAM",
+            "product_id": "ram-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "GPU",
+            "product_id": "gpu-D2",
+            "product_variant_id": "gpu-D2-var",
+            "status": "PASS"
+          },
+          {
+            "component_role": "PSU",
+            "product_id": "psu-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CASE",
+            "product_id": "case-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "CPU_COOLER",
+            "product_id": "cooler-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          },
+          {
+            "component_role": "SSD_BOOT",
+            "product_id": "ssd-1",
+            "product_variant_id": null,
+            "status": "PASS"
+          }
+        ]
+      }
+    ],
+    "ranked": {
+      "ranked": [
+        {
+          "rank": 1,
+          "build_score": 90,
+          "total_price": 1000,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-A",
+            "gpu": "gpu-A1-var"
+          }
+        },
+        {
+          "rank": 2,
+          "build_score": 88,
+          "total_price": 1100,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-B",
+            "gpu": "gpu-B1-var"
+          }
+        },
+        {
+          "rank": 3,
+          "build_score": 86,
+          "total_price": 1200,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-C",
+            "gpu": "gpu-C1-var"
+          }
+        },
+        {
+          "rank": 4,
+          "build_score": 85,
+          "total_price": 950,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A2:gpu-A2-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-A",
+            "gpu": "gpu-A2-var"
+          }
+        },
+        {
+          "rank": 5,
+          "build_score": 82,
+          "total_price": 1050,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B2:gpu-B2-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-B",
+            "gpu": "gpu-B2-var"
+          }
+        },
+        {
+          "rank": 6,
+          "build_score": 81,
+          "total_price": 1150,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C2:gpu-C2-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-C",
+            "gpu": "gpu-C2-var"
+          }
+        },
+        {
+          "rank": 7,
+          "build_score": 80,
+          "total_price": 900,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A3:gpu-A3-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-A",
+            "gpu": "gpu-A3-var"
+          }
+        },
+        {
+          "rank": 8,
+          "build_score": 78,
+          "total_price": 1000,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B3:gpu-B3-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-B",
+            "gpu": "gpu-B3-var"
+          }
+        },
+        {
+          "rank": 9,
+          "build_score": 76,
+          "total_price": 1100,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C3:gpu-C3-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-C",
+            "gpu": "gpu-C3-var"
+          }
+        },
+        {
+          "rank": 10,
+          "build_score": 70,
+          "total_price": 800,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-D:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-D1:gpu-D1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-D",
+            "gpu": "gpu-D1-var"
+          }
+        },
+        {
+          "rank": 11,
+          "build_score": 65,
+          "total_price": 750,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-D:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-D2:gpu-D2-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-D",
+            "gpu": "gpu-D2-var"
+          }
+        }
+      ],
+      "top_n": [
+        {
+          "rank": 1,
+          "build_score": 90,
+          "total_price": 1000,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-A",
+            "gpu": "gpu-A1-var"
+          }
+        },
+        {
+          "rank": 2,
+          "build_score": 88,
+          "total_price": 1100,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-B",
+            "gpu": "gpu-B1-var"
+          }
+        },
+        {
+          "rank": 3,
+          "build_score": 86,
+          "total_price": 1200,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-C",
+            "gpu": "gpu-C1-var"
+          }
+        },
+        {
+          "rank": 4,
+          "build_score": 85,
+          "total_price": 950,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A2:gpu-A2-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-A",
+            "gpu": "gpu-A2-var"
+          }
+        },
+        {
+          "rank": 5,
+          "build_score": 82,
+          "total_price": 1050,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B2:gpu-B2-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-B",
+            "gpu": "gpu-B2-var"
+          }
+        },
+        {
+          "rank": 6,
+          "build_score": 81,
+          "total_price": 1150,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C2:gpu-C2-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-C",
+            "gpu": "gpu-C2-var"
+          }
+        },
+        {
+          "rank": 7,
+          "build_score": 80,
+          "total_price": 900,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A3:gpu-A3-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-A",
+            "gpu": "gpu-A3-var"
+          }
+        },
+        {
+          "rank": 8,
+          "build_score": 78,
+          "total_price": 1000,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B3:gpu-B3-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-B",
+            "gpu": "gpu-B3-var"
+          }
+        },
+        {
+          "rank": 9,
+          "build_score": 76,
+          "total_price": 1100,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C3:gpu-C3-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-C",
+            "gpu": "gpu-C3-var"
+          }
+        },
+        {
+          "rank": 10,
+          "build_score": 70,
+          "total_price": 800,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-D:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-D1:gpu-D1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-D",
+            "gpu": "gpu-D1-var"
+          }
+        }
+      ],
+      "ranked_length": 11,
+      "top_n_length": 10
+    },
+    "diverse": {
+      "selected": [
+        {
+          "persisted_rank": 1,
+          "build_score": 90,
+          "total_price": 1000,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-A",
+            "gpu": "gpu-A1-var"
+          }
+        },
+        {
+          "persisted_rank": 2,
+          "build_score": 88,
+          "total_price": 1100,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-B",
+            "gpu": "gpu-B1-var"
+          }
+        },
+        {
+          "persisted_rank": 3,
+          "build_score": 86,
+          "total_price": 1200,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C1:gpu-C1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-C",
+            "gpu": "gpu-C1-var"
+          }
+        },
+        {
+          "persisted_rank": 4,
+          "build_score": 85,
+          "total_price": 950,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A2:gpu-A2-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-A",
+            "gpu": "gpu-A2-var"
+          }
+        },
+        {
+          "persisted_rank": 5,
+          "build_score": 82,
+          "total_price": 1050,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B2:gpu-B2-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-B",
+            "gpu": "gpu-B2-var"
+          }
+        },
+        {
+          "persisted_rank": 6,
+          "build_score": 81,
+          "total_price": 1150,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C2:gpu-C2-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-C",
+            "gpu": "gpu-C2-var"
+          }
+        },
+        {
+          "persisted_rank": 7,
+          "build_score": 80,
+          "total_price": 900,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A3:gpu-A3-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-A",
+            "gpu": "gpu-A3-var"
+          }
+        },
+        {
+          "persisted_rank": 8,
+          "build_score": 78,
+          "total_price": 1000,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B3:gpu-B3-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-B",
+            "gpu": "gpu-B3-var"
+          }
+        },
+        {
+          "persisted_rank": 9,
+          "build_score": 76,
+          "total_price": 1100,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-C:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-C3:gpu-C3-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-C",
+            "gpu": "gpu-C3-var"
+          }
+        },
+        {
+          "persisted_rank": 10,
+          "build_score": 70,
+          "total_price": 800,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-D:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-D1:gpu-D1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-D",
+            "gpu": "gpu-D1-var"
+          }
+        }
+      ],
+      "dropped_count": 0
+    },
+    "archetypes": {
+      "archetypes": [
+        {
+          "strategy_key": "BALANCED",
+          "persisted_rank": 1,
+          "build_score": 90,
+          "total_price": 1000,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A1:gpu-A1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-A",
+            "gpu": "gpu-A1-var"
+          }
+        },
+        {
+          "strategy_key": "PERFORMANCE",
+          "persisted_rank": 2,
+          "build_score": 88,
+          "total_price": 1100,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-B:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-B1:gpu-B1-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-B",
+            "gpu": "gpu-B1-var"
+          }
+        },
+        {
+          "strategy_key": "VALUE",
+          "persisted_rank": 3,
+          "build_score": 85,
+          "total_price": 950,
+          "compatibility_status": "PASS",
+          "signature": "CPU:cpu-A:|MOTHERBOARD:mb-1:|RAM:ram-1:|GPU:gpu-A2:gpu-A2-var|PSU:psu-1:|CASE:case-1:|CPU_COOLER:cooler-1:|SSD_BOOT:ssd-1:",
+          "explanation": null,
+          "pair": {
+            "cpu": "cpu-A",
+            "gpu": "gpu-A2-var"
+          }
+        }
+      ],
+      "reason_codes": []
+    }
+  }
+}
