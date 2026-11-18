@@ -1,13 +1,16 @@
 # Extraction workflow — proving a recommendation-module move
 
 Status: the figures below were measured at `master` = `30b459b` (2026-11-17), after PR #33 (`7d5f3b6`) and
-PR #34 (`30b459b`), and they hold unchanged at `master` = `de659ad` (2026-11-17, PR #35). `de659ad` is the
-baseline PR #36 extracts FROM, not a revision that already contains the move: `master` at `de659ad` has no
-step 4B PR 3 assembly batch. That batch is the second this workflow was used for (sections 3.4, 3.10 and 4
-record what it needed beyond PR 2), and it exists only on the PR #36 branch `feat/core-extract-assembly`,
-measured at its implementation snapshot `89b0bb2` (not the branch head: the only commit since is the
-documentation-only `11ca631`, so the snapshot and the figures hold); `master` gains it when PR #36 merges.
-Re-measure before quoting any figure against a later commit.
+PR #34 (`30b459b`), and they hold unchanged at `master` = `de659ad` (2026-11-17, PR #35). Both are
+historical measurement points, not the current head. **The current head is `07dfd22` (2026-11-18):** PR #36
+merged the step 4B PR 3 assembly batch as `57bca1c`, and PR #37 merged the metadata-only package-description
+correction as `07dfd22`. `master` therefore contains both batches this workflow has been used for —
+`step-4b-pr2` and `step-4b-pr3` (7 assembly modules) — so the four namespaces `candidates`,
+`compatibility`, `filtering` and `assembly` are now published from `packages/recommendation-core/src/`
+behind identity re-export shims at their old paths. The assembly batch was measured at its implementation
+snapshot `89b0bb2` (not the branch head: the only commit since was the documentation-only `11ca631`); those
+figures are carried onto `master` by the merge, which moved no byte of the batch, and were **not**
+re-measured there. Re-measure before quoting any figure against a later commit.
 
 Scope: how to plan, capture, move and **prove** a module extraction out of `src/recommendation/` into
 `packages/recommendation-core/`. This document changes no engine behaviour and authorises no move: each
@@ -24,7 +27,7 @@ That is the ordering rule, and it is not a matter of taste:
 | Stage | Its relative imports | Can it move alone? |
 |---|---|---|
 | `candidates`, `compatibility`, `filtering` | — | already moved (batch `step-4b-pr2`) |
-| `assembly` | `../candidates/*`, `../filtering/*` | moved on the PR #36 branch only (batch `step-4b-pr3`; absent from `master` at `de659ad`) — both namespaces were in the core first |
+| `assembly` | `../candidates/*`, `../filtering/*` | moved (batch `step-4b-pr3`, PR #36 merged 2026-11-18 as `57bca1c`) — both namespaces were in the core first |
 | `ranking` | `../assembly` (the barrel), `../candidates/errors` | no — needs `assembly` first |
 | `retention` | `../assembly/prices`, `../candidates`, `../filtering/filter` | no — needs `assembly` first |
 | `scoring` | `../assembly/assemble`, `../candidates/*` | no — needs `assembly`, and 2 of its 8 files are SQL loaders |
