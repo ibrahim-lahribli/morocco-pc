@@ -92,7 +92,8 @@ DIFFs re-measured 2026-11-06; the test counts re-measured 2026-11-15)
   filtering barrel 3 — which is why the two counts moved and no test disappeared).
   `npm run test:api:db` **17 / 0** (nightly only — it writes to the TEST branch, and was not re-measured
   here).
-- **Step 4B PR 3** (`master` = `de659ad` plus the assembly batch, re-measured 2026-11-17 on Node 24.21.0):
+- **Step 4B PR 3** (PR #36 head `89b0bb2`, which is `master` = `de659ad` plus the assembly batch on the PR
+  branch — not in `master` until PR #36 merges; re-measured 2026-11-17 on Node 24.21.0):
   `npm run test:unit` is unchanged at **1052 pass / 0 fail** — the seven `assembly/*.test.js` files stayed
   in the runtime tree and kept their counts — and `npm run test:core` is **361 tests: 359 pass / 0 fail /
   2 skipped / 0 cancelled**. The net +1 is the key-by-key `assembly` namespace test added to
