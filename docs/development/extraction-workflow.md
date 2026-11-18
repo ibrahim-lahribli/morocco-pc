@@ -8,9 +8,11 @@ correction as `07dfd22`. `master` therefore contains both batches this workflow 
 `step-4b-pr2` and `step-4b-pr3` (7 assembly modules) — so the four namespaces `candidates`,
 `compatibility`, `filtering` and `assembly` are now published from `packages/recommendation-core/src/`
 behind identity re-export shims at their old paths. The assembly batch was measured at its implementation
-snapshot `89b0bb2` (not the branch head: the only commit since was the documentation-only `11ca631`); those
+snapshot `89b0bb2` (not the branch head: two later commits, `11ca631` and `2c19a87`, changed documentation
+only — `CONTEXT.md` and this file — and neither changed implementation nor the measured counts); those
 figures are carried onto `master` by the merge, which moved no byte of the batch, and were **not**
-re-measured there. Re-measure before quoting any figure against a later commit.
+re-measured there. PR #37 (`07dfd22`) then changed the `packages/recommendation-core` package description
+without changing implementation. Re-measure before quoting any figure against a later commit.
 
 Scope: how to plan, capture, move and **prove** a module extraction out of `src/recommendation/` into
 `packages/recommendation-core/`. This document changes no engine behaviour and authorises no move: each
