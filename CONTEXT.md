@@ -92,15 +92,24 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15)
   filtering barrel 3 — which is why the two counts moved and no test disappeared).
   `npm run test:api:db` **17 / 0** (nightly only — it writes to the TEST branch, and was not re-measured
   here).
-- **Step 4B PR 3** (measured on the PR #36 implementation snapshot `89b0bb2`, which is `master` = `de659ad`
-  plus the assembly batch on the branch — the batch reaches `master` only when PR #36 merges; re-measured
-  2026-11-17 on Node 24.21.0):
+- **Step 4B PR 3 — merged** (PR #36 merged 2026-11-18 as `57bca1c`). The figures below are the **historical
+  2026-11-17 measurement** taken on the batch's implementation snapshot `89b0bb2`, which was `master` =
+  `de659ad` plus the assembly batch on its branch; they were **not** re-measured after the merge. The
+  implementation snapshot remains `89b0bb2`: two subsequent commits, `11ca631` and `2c19a87`, changed
+  documentation only (`CONTEXT.md` and `docs/development/extraction-workflow.md`), not implementation or the
+  measured counts. PR #37 (`07dfd22`) then changed the `packages/recommendation-core` package description
+  without changing implementation:
   `npm run test:unit` is unchanged at **1052 pass / 0 fail** — the seven `assembly/*.test.js` files stayed
   in the runtime tree and kept their counts — and `npm run test:core` is **361 tests: 359 pass / 0 fail /
   2 skipped / 0 cancelled**. The net +1 is the key-by-key `assembly` namespace test added to
-  `test/surface.test.js`; no test moved between the two commands. The branch has since advanced to
-  `11ca631`, a documentation-only commit touching only `CONTEXT.md` and `docs/development/extraction-workflow.md`;
-  it changed neither the implementation nor the counts above, so `89b0bb2` remains the measurement snapshot.
+  `test/surface.test.js`; no test moved between the two commands.
+- **Current extraction state:** `packages/recommendation-core/` is part of merged `master` and publishes
+  four namespaces — `candidates`, `compatibility`, `filtering`, `assembly` — pinned key by key in
+  `test/surface.test.js` and in `test/export-surface.json`, behind identity re-export shims at the old
+  `src/recommendation/**` paths. Nothing else has moved: the loaders, `scoring`, `retention`, `ranking`,
+  `explanation` and `offers/as-of` still live in `src/recommendation/`,
+  `packages/recommendation-runtime/` still carries only its manifest and `docs/LOADERS_AND_TRANSACTIONS.md`,
+  and `apps/api/src/engine.js` still imports the `src/recommendation/**` barrels directly.
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of
