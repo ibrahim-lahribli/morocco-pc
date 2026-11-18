@@ -502,7 +502,12 @@ test('rejects a missing or malformed filtering context', () => {
 // 7. Source boundary and public surface.
 // ---------------------------------------------------------------------------
 
-const GPU_INPUT_SOURCE = fs.readFileSync(path.join(__dirname, 'gpu-input.js'), 'utf8');
+// Step 4B PR 3: read the moved implementation, not the shim left beside this
+// test (a shim would pass a "no SQL" check vacuously).
+const GPU_INPUT_SOURCE = fs.readFileSync(
+  path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-core', 'src', 'assembly', 'gpu-input.js'),
+  'utf8'
+);
 
 test('gpu-input.js keeps its source boundary (pure, DB-free, no duplicated steps)', () => {
   const forbidden = [

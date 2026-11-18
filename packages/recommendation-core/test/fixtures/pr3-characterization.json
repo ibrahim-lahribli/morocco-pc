@@ -1,0 +1,2556 @@
+{
+  "kind": "pr3-characterization",
+  "description": "Frozen input/output pairs for the PR 3 extraction surface: the Engine 3 input contract, the price carrier, the GPU policy, the DFS build assembly, the read-only build/swap verdicts and the composition entry point over in-memory Engine 2 sources. DB-free: every source object is built from literals and the pure candidate/filtering contracts.",
+  "timestamp_policy": "No ambient clock is read while capturing: every id and timestamp is an input literal, so the document is byte-stable on its baseline commit.",
+  "provenance": {
+    "baseline_sha": "de659adaaf4bbde4b2e1673aae08314d07af000e",
+    "baseline_commit_date": "2026-11-17T10:55:27+01:00",
+    "node_version": "v24.21.0",
+    "command": "node scripts/characterize-pr3.js",
+    "origin": "Captured from the PRE-MOVE implementation under src/recommendation/assembly/ before any module moved into packages/recommendation-core. The committed document is the baseline: do not regenerate it from the extracted code, because a fixture produced by the implementation under test proves nothing."
+  },
+  "engine3_input": {
+    "valid": {
+      "input": {
+        "results": [
+          {
+            "product_id": "a-cpu",
+            "product_variant_id": null,
+            "category": "CPU",
+            "component_role": "CPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-mb",
+            "product_variant_id": null,
+            "category": "MOTHERBOARD",
+            "component_role": "MOTHERBOARD",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-ram",
+            "product_variant_id": null,
+            "category": "MEMORY",
+            "component_role": "RAM",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-gpu",
+            "product_variant_id": "a-gpu-var",
+            "category": "GPU",
+            "component_role": "GPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-psu",
+            "product_variant_id": null,
+            "category": "PSU",
+            "component_role": "PSU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-case",
+            "product_variant_id": null,
+            "category": "CASE",
+            "component_role": "CASE",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-cooler",
+            "product_variant_id": null,
+            "category": "COOLER",
+            "component_role": "CPU_COOLER",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-ssd",
+            "product_variant_id": null,
+            "category": "STORAGE",
+            "component_role": "SSD_BOOT",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          }
+        ],
+        "budget_amount": 100000,
+        "currency": "MAD",
+        "required_roles": [
+          "CPU",
+          "MOTHERBOARD",
+          "RAM",
+          "GPU",
+          "PSU",
+          "CASE",
+          "CPU_COOLER",
+          "SSD_BOOT"
+        ],
+        "use_case": "office",
+        "gpu_required_use_cases": [
+          "gaming"
+        ],
+        "integrated_gpu_present": {
+          "a-cpu": true
+        },
+        "candidate_caps": {
+          "top_k_per_role": 5,
+          "max_builds_per_query": 10
+        },
+        "prices": {
+          "[\"a-cpu\",null,\"CPU\"]": {
+            "selected_price": 300,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-mb\",null,\"MOTHERBOARD\"]": {
+            "selected_price": 150,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-ram\",null,\"RAM\"]": {
+            "selected_price": 100,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-gpu\",\"a-gpu-var\",\"GPU\"]": {
+            "selected_price": 500,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-psu\",null,\"PSU\"]": {
+            "selected_price": 120,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-case\",null,\"CASE\"]": {
+            "selected_price": 90,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-cooler\",null,\"CPU_COOLER\"]": {
+            "selected_price": 60,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-ssd\",null,\"SSD_BOOT\"]": {
+            "selected_price": 80,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          }
+        },
+        "filtering_context": {
+          "candidates": {},
+          "specs": {},
+          "platform_by_socket": {},
+          "compat": {}
+        }
+      },
+      "validated": {
+        "results": [
+          {
+            "product_id": "a-cpu",
+            "product_variant_id": null,
+            "category": "CPU",
+            "component_role": "CPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-mb",
+            "product_variant_id": null,
+            "category": "MOTHERBOARD",
+            "component_role": "MOTHERBOARD",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-ram",
+            "product_variant_id": null,
+            "category": "MEMORY",
+            "component_role": "RAM",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-gpu",
+            "product_variant_id": "a-gpu-var",
+            "category": "GPU",
+            "component_role": "GPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-psu",
+            "product_variant_id": null,
+            "category": "PSU",
+            "component_role": "PSU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-case",
+            "product_variant_id": null,
+            "category": "CASE",
+            "component_role": "CASE",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-cooler",
+            "product_variant_id": null,
+            "category": "COOLER",
+            "component_role": "CPU_COOLER",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-ssd",
+            "product_variant_id": null,
+            "category": "STORAGE",
+            "component_role": "SSD_BOOT",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          }
+        ],
+        "budget_amount": 100000,
+        "currency": "MAD",
+        "required_roles": [
+          "CPU",
+          "MOTHERBOARD",
+          "RAM",
+          "GPU",
+          "PSU",
+          "CASE",
+          "CPU_COOLER",
+          "SSD_BOOT"
+        ],
+        "use_case": "office",
+        "gpu_required_use_cases": [
+          "gaming"
+        ],
+        "integrated_gpu_present": {
+          "a-cpu": true
+        },
+        "candidate_caps": {
+          "top_k_per_role": 5,
+          "max_builds_per_query": 10
+        },
+        "prices": {
+          "[\"a-cpu\",null,\"CPU\"]": {
+            "selected_price": 300,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-mb\",null,\"MOTHERBOARD\"]": {
+            "selected_price": 150,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-ram\",null,\"RAM\"]": {
+            "selected_price": 100,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-gpu\",\"a-gpu-var\",\"GPU\"]": {
+            "selected_price": 500,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-psu\",null,\"PSU\"]": {
+            "selected_price": 120,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-case\",null,\"CASE\"]": {
+            "selected_price": 90,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-cooler\",null,\"CPU_COOLER\"]": {
+            "selected_price": 60,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-ssd\",null,\"SSD_BOOT\"]": {
+            "selected_price": 80,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          }
+        },
+        "filtering_context": {
+          "candidates": {},
+          "specs": {},
+          "platform_by_socket": {},
+          "compat": {}
+        }
+      },
+      "frozen": true
+    },
+    "valid_with_policy_and_floor": {
+      "input": {
+        "results": [
+          {
+            "product_id": "a-cpu",
+            "product_variant_id": null,
+            "category": "CPU",
+            "component_role": "CPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-mb",
+            "product_variant_id": null,
+            "category": "MOTHERBOARD",
+            "component_role": "MOTHERBOARD",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-ram",
+            "product_variant_id": null,
+            "category": "MEMORY",
+            "component_role": "RAM",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-gpu",
+            "product_variant_id": "a-gpu-var",
+            "category": "GPU",
+            "component_role": "GPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-psu",
+            "product_variant_id": null,
+            "category": "PSU",
+            "component_role": "PSU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-case",
+            "product_variant_id": null,
+            "category": "CASE",
+            "component_role": "CASE",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-cooler",
+            "product_variant_id": null,
+            "category": "COOLER",
+            "component_role": "CPU_COOLER",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-ssd",
+            "product_variant_id": null,
+            "category": "STORAGE",
+            "component_role": "SSD_BOOT",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          }
+        ],
+        "budget_amount": 100000,
+        "currency": "MAD",
+        "required_roles": [
+          "CPU",
+          "MOTHERBOARD",
+          "RAM",
+          "GPU",
+          "PSU",
+          "CASE",
+          "CPU_COOLER",
+          "SSD_BOOT"
+        ],
+        "use_case": "office",
+        "gpu_required_use_cases": [
+          "gaming"
+        ],
+        "integrated_gpu_present": {
+          "a-cpu": true
+        },
+        "candidate_caps": {
+          "top_k_per_role": 5,
+          "max_builds_per_query": 10
+        },
+        "prices": {
+          "[\"a-cpu\",null,\"CPU\"]": {
+            "selected_price": 300,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-mb\",null,\"MOTHERBOARD\"]": {
+            "selected_price": 150,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-ram\",null,\"RAM\"]": {
+            "selected_price": 100,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-gpu\",\"a-gpu-var\",\"GPU\"]": {
+            "selected_price": 500,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-psu\",null,\"PSU\"]": {
+            "selected_price": 120,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-case\",null,\"CASE\"]": {
+            "selected_price": 90,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-cooler\",null,\"CPU_COOLER\"]": {
+            "selected_price": 60,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-ssd\",null,\"SSD_BOOT\"]": {
+            "selected_price": 80,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          }
+        },
+        "filtering_context": {
+          "candidates": {},
+          "specs": {},
+          "platform_by_socket": {},
+          "compat": {}
+        },
+        "gpu_policy": "IGPU_ALLOWED",
+        "vram_floor_gb": 8
+      },
+      "validated": {
+        "results": [
+          {
+            "product_id": "a-cpu",
+            "product_variant_id": null,
+            "category": "CPU",
+            "component_role": "CPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-mb",
+            "product_variant_id": null,
+            "category": "MOTHERBOARD",
+            "component_role": "MOTHERBOARD",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-ram",
+            "product_variant_id": null,
+            "category": "MEMORY",
+            "component_role": "RAM",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-gpu",
+            "product_variant_id": "a-gpu-var",
+            "category": "GPU",
+            "component_role": "GPU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-psu",
+            "product_variant_id": null,
+            "category": "PSU",
+            "component_role": "PSU",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-case",
+            "product_variant_id": null,
+            "category": "CASE",
+            "component_role": "CASE",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-cooler",
+            "product_variant_id": null,
+            "category": "COOLER",
+            "component_role": "CPU_COOLER",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          },
+          {
+            "product_id": "a-ssd",
+            "product_variant_id": null,
+            "category": "STORAGE",
+            "component_role": "SSD_BOOT",
+            "status": "PASS",
+            "reason": null,
+            "relationships": {},
+            "unknown_pairwise_count": 0
+          }
+        ],
+        "budget_amount": 100000,
+        "currency": "MAD",
+        "required_roles": [
+          "CPU",
+          "MOTHERBOARD",
+          "RAM",
+          "GPU",
+          "PSU",
+          "CASE",
+          "CPU_COOLER",
+          "SSD_BOOT"
+        ],
+        "use_case": "office",
+        "gpu_required_use_cases": [
+          "gaming"
+        ],
+        "integrated_gpu_present": {
+          "a-cpu": true
+        },
+        "candidate_caps": {
+          "top_k_per_role": 5,
+          "max_builds_per_query": 10
+        },
+        "prices": {
+          "[\"a-cpu\",null,\"CPU\"]": {
+            "selected_price": 300,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-mb\",null,\"MOTHERBOARD\"]": {
+            "selected_price": 150,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-ram\",null,\"RAM\"]": {
+            "selected_price": 100,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-gpu\",\"a-gpu-var\",\"GPU\"]": {
+            "selected_price": 500,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-psu\",null,\"PSU\"]": {
+            "selected_price": 120,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-case\",null,\"CASE\"]": {
+            "selected_price": 90,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-cooler\",null,\"CPU_COOLER\"]": {
+            "selected_price": 60,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          },
+          "[\"a-ssd\",null,\"SSD_BOOT\"]": {
+            "selected_price": 80,
+            "currency": "MAD",
+            "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+            "price_checked_at": "2026-11-17T00:00:00.000Z",
+            "offer_id": "33333333-3333-4333-8333-333333333333",
+            "offer_class": "SEED_UNVERIFIED"
+          }
+        },
+        "filtering_context": {
+          "candidates": {},
+          "specs": {},
+          "platform_by_socket": {},
+          "compat": {}
+        },
+        "vram_floor_gb": 8,
+        "gpu_policy": "IGPU_ALLOWED"
+      }
+    },
+    "errors": [
+      {
+        "case": "missing required field",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "results",
+          "message": "Engine 3 input requires \"results\""
+        }
+      },
+      {
+        "case": "non-positive budget",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "budget_amount",
+          "message": "\"budget_amount\" must be greater than 0"
+        }
+      },
+      {
+        "case": "unknown component role",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_COMPONENT_ROLE",
+          "field": "required_roles",
+          "message": "Unknown component role \"NOPE\" in \"required_roles\""
+        }
+      },
+      {
+        "case": "unknown top-level field",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "unexpected",
+          "message": "Unknown Engine 3 input field \"unexpected\""
+        }
+      },
+      {
+        "case": "unknown gpu_policy value",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "gpu_policy",
+          "message": "\"gpu_policy\" must be one of REQUIRED, IGPU_ALLOWED when declared"
+        }
+      }
+    ]
+  },
+  "prices": {
+    "keys": [
+      "[\"uuuuuuuu-uuuu-uuuu-uuuu-000000000001\",null,\"CPU\"]",
+      "[\"uuuuuuuu-uuuu-uuuu-uuuu-000000000002\",\"vvvvvvvv-vvvv-vvvv-vvvv-000000000001\",\"GPU\"]",
+      "[\"uuuuuuuu-uuuu-uuuu-uuuu-000000000003\",null,\"RAM\"]"
+    ],
+    "carrier_keys": [
+      "[\"a-cpu\",null,\"CPU\"]",
+      "[\"a-mb\",null,\"MOTHERBOARD\"]",
+      "[\"a-ram\",null,\"RAM\"]",
+      "[\"a-gpu\",\"a-gpu-var\",\"GPU\"]",
+      "[\"a-psu\",null,\"PSU\"]",
+      "[\"a-case\",null,\"CASE\"]",
+      "[\"a-cooler\",null,\"CPU_COOLER\"]",
+      "[\"a-ssd\",null,\"SSD_BOOT\"]"
+    ],
+    "carrier": {
+      "[\"a-cpu\",null,\"CPU\"]": {
+        "selected_price": 300,
+        "currency": "MAD",
+        "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+        "price_checked_at": "2026-11-17T00:00:00.000Z",
+        "offer_id": "33333333-3333-4333-8333-333333333333",
+        "offer_class": "SEED_UNVERIFIED"
+      },
+      "[\"a-mb\",null,\"MOTHERBOARD\"]": {
+        "selected_price": 150,
+        "currency": "MAD",
+        "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+        "price_checked_at": "2026-11-17T00:00:00.000Z",
+        "offer_id": "33333333-3333-4333-8333-333333333333",
+        "offer_class": "SEED_UNVERIFIED"
+      },
+      "[\"a-ram\",null,\"RAM\"]": {
+        "selected_price": 100,
+        "currency": "MAD",
+        "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+        "price_checked_at": "2026-11-17T00:00:00.000Z",
+        "offer_id": "33333333-3333-4333-8333-333333333333",
+        "offer_class": "SEED_UNVERIFIED"
+      },
+      "[\"a-gpu\",\"a-gpu-var\",\"GPU\"]": {
+        "selected_price": 500,
+        "currency": "MAD",
+        "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+        "price_checked_at": "2026-11-17T00:00:00.000Z",
+        "offer_id": "33333333-3333-4333-8333-333333333333",
+        "offer_class": "SEED_UNVERIFIED"
+      },
+      "[\"a-psu\",null,\"PSU\"]": {
+        "selected_price": 120,
+        "currency": "MAD",
+        "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+        "price_checked_at": "2026-11-17T00:00:00.000Z",
+        "offer_id": "33333333-3333-4333-8333-333333333333",
+        "offer_class": "SEED_UNVERIFIED"
+      },
+      "[\"a-case\",null,\"CASE\"]": {
+        "selected_price": 90,
+        "currency": "MAD",
+        "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+        "price_checked_at": "2026-11-17T00:00:00.000Z",
+        "offer_id": "33333333-3333-4333-8333-333333333333",
+        "offer_class": "SEED_UNVERIFIED"
+      },
+      "[\"a-cooler\",null,\"CPU_COOLER\"]": {
+        "selected_price": 60,
+        "currency": "MAD",
+        "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+        "price_checked_at": "2026-11-17T00:00:00.000Z",
+        "offer_id": "33333333-3333-4333-8333-333333333333",
+        "offer_class": "SEED_UNVERIFIED"
+      },
+      "[\"a-ssd\",null,\"SSD_BOOT\"]": {
+        "selected_price": 80,
+        "currency": "MAD",
+        "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+        "price_checked_at": "2026-11-17T00:00:00.000Z",
+        "offer_id": "33333333-3333-4333-8333-333333333333",
+        "offer_class": "SEED_UNVERIFIED"
+      }
+    },
+    "lookups": [
+      {
+        "candidate": {
+          "product_id": "a-cpu",
+          "product_variant_id": null,
+          "category": "CPU",
+          "component_role": "CPU",
+          "status": "PASS",
+          "reason": null,
+          "relationships": {},
+          "unknown_pairwise_count": 0
+        },
+        "entry": {
+          "selected_price": 300,
+          "currency": "MAD",
+          "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+          "price_checked_at": "2026-11-17T00:00:00.000Z",
+          "offer_id": "33333333-3333-4333-8333-333333333333",
+          "offer_class": "SEED_UNVERIFIED"
+        }
+      },
+      {
+        "candidate": {
+          "product_id": "a-gpu",
+          "product_variant_id": "a-gpu-var",
+          "category": "GPU",
+          "component_role": "GPU",
+          "status": "PASS",
+          "reason": null,
+          "relationships": {},
+          "unknown_pairwise_count": 0
+        },
+        "entry": {
+          "selected_price": 500,
+          "currency": "MAD",
+          "store_id": "9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a",
+          "price_checked_at": "2026-11-17T00:00:00.000Z",
+          "offer_id": "33333333-3333-4333-8333-333333333333",
+          "offer_class": "SEED_UNVERIFIED"
+        }
+      }
+    ],
+    "errors": [
+      {
+        "case": "missing carrier entry",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_CANDIDATE",
+          "field": "prices",
+          "message": "No price for candidate key [\"a-psu-not-priced\",null,\"PSU\"]"
+        }
+      },
+      {
+        "case": "null carrier",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "prices",
+          "message": "\"prices\" must be a null-prototype object"
+        }
+      },
+      {
+        "case": "non-positive selected price",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "prices",
+          "message": "\"prices\" must be a null-prototype object"
+        }
+      }
+    ]
+  },
+  "gpu_policy": [
+    {
+      "case": "declared REQUIRED wins over an iGPU",
+      "input": {
+        "use_case": "office",
+        "gpu_required_use_cases": [
+          "gaming"
+        ],
+        "integrated_gpu_present": {
+          "cpu": true
+        },
+        "selectedCpuProductId": "cpu",
+        "gpuPolicy": "REQUIRED"
+      },
+      "decision": "REQUIRED"
+    },
+    {
+      "case": "declared IGPU_ALLOWED on an iGPU CPU",
+      "input": {
+        "use_case": "gaming",
+        "gpu_required_use_cases": [
+          "gaming"
+        ],
+        "integrated_gpu_present": {
+          "cpu": true
+        },
+        "selectedCpuProductId": "cpu",
+        "gpuPolicy": "IGPU_ALLOWED"
+      },
+      "decision": "OPTIONAL"
+    },
+    {
+      "case": "declared IGPU_ALLOWED on a CPU without an iGPU",
+      "input": {
+        "use_case": "office",
+        "gpu_required_use_cases": [],
+        "integrated_gpu_present": {
+          "cpu": false
+        },
+        "selectedCpuProductId": "cpu",
+        "gpuPolicy": "IGPU_ALLOWED"
+      },
+      "decision": "REQUIRED"
+    },
+    {
+      "case": "legacy rule 1: the use case requires a GPU",
+      "input": {
+        "use_case": "gaming",
+        "gpu_required_use_cases": [
+          "gaming",
+          "rendering"
+        ],
+        "integrated_gpu_present": {
+          "cpu": true
+        },
+        "selectedCpuProductId": "cpu",
+        "gpuPolicy": null
+      },
+      "decision": "REQUIRED"
+    },
+    {
+      "case": "legacy rule 2: an iGPU makes the GPU optional",
+      "input": {
+        "use_case": "office",
+        "gpu_required_use_cases": [
+          "gaming"
+        ],
+        "integrated_gpu_present": {
+          "cpu": true
+        },
+        "selectedCpuProductId": "cpu",
+        "gpuPolicy": null
+      },
+      "decision": "OPTIONAL"
+    },
+    {
+      "case": "legacy: no iGPU, no required use case",
+      "input": {
+        "use_case": "office",
+        "gpu_required_use_cases": [
+          "gaming"
+        ],
+        "integrated_gpu_present": {
+          "cpu": null
+        },
+        "selectedCpuProductId": "cpu",
+        "gpuPolicy": null
+      },
+      "decision": "REQUIRED"
+    }
+  ],
+  "assembly": [
+    {
+      "case": "legacy OPTIONAL: discrete GPU first, omit path second",
+      "output": {
+        "build_count": 2,
+        "builds": [
+          {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "a-cpu",
+                "product_variant_id": null,
+                "category": "CPU",
+                "status": "PASS",
+                "selected_price": 300,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "a-mb",
+                "product_variant_id": null,
+                "category": "MOTHERBOARD",
+                "status": "PASS",
+                "selected_price": 150,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "a-ram",
+                "product_variant_id": null,
+                "category": "MEMORY",
+                "status": "PASS",
+                "selected_price": 100,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "a-gpu",
+                "product_variant_id": "a-gpu-var",
+                "category": "GPU",
+                "status": "PASS",
+                "selected_price": 500,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "a-psu",
+                "product_variant_id": null,
+                "category": "PSU",
+                "status": "PASS",
+                "selected_price": 120,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "a-case",
+                "product_variant_id": null,
+                "category": "CASE",
+                "status": "PASS",
+                "selected_price": 90,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "a-cooler",
+                "product_variant_id": null,
+                "category": "COOLER",
+                "status": "PASS",
+                "selected_price": 60,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "a-ssd",
+                "product_variant_id": null,
+                "category": "STORAGE",
+                "status": "PASS",
+                "selected_price": 80,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              }
+            ],
+            "total_price": 1400,
+            "currency": "MAD",
+            "unknown_pairwise_count": 11
+          },
+          {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "a-cpu",
+                "product_variant_id": null,
+                "category": "CPU",
+                "status": "PASS",
+                "selected_price": 300,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "a-mb",
+                "product_variant_id": null,
+                "category": "MOTHERBOARD",
+                "status": "PASS",
+                "selected_price": 150,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "a-ram",
+                "product_variant_id": null,
+                "category": "MEMORY",
+                "status": "PASS",
+                "selected_price": 100,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "a-psu",
+                "product_variant_id": null,
+                "category": "PSU",
+                "status": "PASS",
+                "selected_price": 120,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "a-case",
+                "product_variant_id": null,
+                "category": "CASE",
+                "status": "PASS",
+                "selected_price": 90,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "a-cooler",
+                "product_variant_id": null,
+                "category": "COOLER",
+                "status": "PASS",
+                "selected_price": 60,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "a-ssd",
+                "product_variant_id": null,
+                "category": "STORAGE",
+                "status": "PASS",
+                "selected_price": 80,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              }
+            ],
+            "total_price": 900,
+            "currency": "MAD",
+            "unknown_pairwise_count": 9
+          }
+        ]
+      }
+    },
+    {
+      "case": "declared IGPU_ALLOWED: the omit path is the only path",
+      "output": {
+        "build_count": 1,
+        "builds": [
+          {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "a-cpu",
+                "product_variant_id": null,
+                "category": "CPU",
+                "status": "PASS",
+                "selected_price": 300,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "a-mb",
+                "product_variant_id": null,
+                "category": "MOTHERBOARD",
+                "status": "PASS",
+                "selected_price": 150,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "a-ram",
+                "product_variant_id": null,
+                "category": "MEMORY",
+                "status": "PASS",
+                "selected_price": 100,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "a-psu",
+                "product_variant_id": null,
+                "category": "PSU",
+                "status": "PASS",
+                "selected_price": 120,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "a-case",
+                "product_variant_id": null,
+                "category": "CASE",
+                "status": "PASS",
+                "selected_price": 90,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "a-cooler",
+                "product_variant_id": null,
+                "category": "COOLER",
+                "status": "PASS",
+                "selected_price": 60,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "a-ssd",
+                "product_variant_id": null,
+                "category": "STORAGE",
+                "status": "PASS",
+                "selected_price": 80,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              }
+            ],
+            "total_price": 900,
+            "currency": "MAD",
+            "unknown_pairwise_count": 9
+          }
+        ]
+      }
+    },
+    {
+      "case": "declared REQUIRED: the omit path is closed",
+      "output": {
+        "build_count": 1,
+        "builds": [
+          {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "a-cpu",
+                "product_variant_id": null,
+                "category": "CPU",
+                "status": "PASS",
+                "selected_price": 300,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "a-mb",
+                "product_variant_id": null,
+                "category": "MOTHERBOARD",
+                "status": "PASS",
+                "selected_price": 150,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "a-ram",
+                "product_variant_id": null,
+                "category": "MEMORY",
+                "status": "PASS",
+                "selected_price": 100,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "a-gpu",
+                "product_variant_id": "a-gpu-var",
+                "category": "GPU",
+                "status": "PASS",
+                "selected_price": 500,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "a-psu",
+                "product_variant_id": null,
+                "category": "PSU",
+                "status": "PASS",
+                "selected_price": 120,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "a-case",
+                "product_variant_id": null,
+                "category": "CASE",
+                "status": "PASS",
+                "selected_price": 90,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "a-cooler",
+                "product_variant_id": null,
+                "category": "COOLER",
+                "status": "PASS",
+                "selected_price": 60,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "a-ssd",
+                "product_variant_id": null,
+                "category": "STORAGE",
+                "status": "PASS",
+                "selected_price": 80,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              }
+            ],
+            "total_price": 1400,
+            "currency": "MAD",
+            "unknown_pairwise_count": 11
+          }
+        ]
+      }
+    },
+    {
+      "case": "budget below the cheapest build",
+      "output": {
+        "build_count": 0,
+        "builds": []
+      }
+    },
+    {
+      "case": "UNKNOWN verdicts stay eligible",
+      "output": {
+        "build_count": 2,
+        "builds": [
+          {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "a-cpu",
+                "product_variant_id": null,
+                "category": "CPU",
+                "status": "UNKNOWN",
+                "selected_price": 300,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "a-mb",
+                "product_variant_id": null,
+                "category": "MOTHERBOARD",
+                "status": "UNKNOWN",
+                "selected_price": 150,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "a-ram",
+                "product_variant_id": null,
+                "category": "MEMORY",
+                "status": "UNKNOWN",
+                "selected_price": 100,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "a-gpu",
+                "product_variant_id": "a-gpu-var",
+                "category": "GPU",
+                "status": "UNKNOWN",
+                "selected_price": 500,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "a-psu",
+                "product_variant_id": null,
+                "category": "PSU",
+                "status": "UNKNOWN",
+                "selected_price": 120,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "a-case",
+                "product_variant_id": null,
+                "category": "CASE",
+                "status": "UNKNOWN",
+                "selected_price": 90,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "a-cooler",
+                "product_variant_id": null,
+                "category": "COOLER",
+                "status": "UNKNOWN",
+                "selected_price": 60,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "a-ssd",
+                "product_variant_id": null,
+                "category": "STORAGE",
+                "status": "UNKNOWN",
+                "selected_price": 80,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              }
+            ],
+            "total_price": 1400,
+            "currency": "MAD",
+            "unknown_pairwise_count": 11
+          },
+          {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "a-cpu",
+                "product_variant_id": null,
+                "category": "CPU",
+                "status": "UNKNOWN",
+                "selected_price": 300,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "a-mb",
+                "product_variant_id": null,
+                "category": "MOTHERBOARD",
+                "status": "UNKNOWN",
+                "selected_price": 150,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "a-ram",
+                "product_variant_id": null,
+                "category": "MEMORY",
+                "status": "UNKNOWN",
+                "selected_price": 100,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "a-psu",
+                "product_variant_id": null,
+                "category": "PSU",
+                "status": "UNKNOWN",
+                "selected_price": 120,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "a-case",
+                "product_variant_id": null,
+                "category": "CASE",
+                "status": "UNKNOWN",
+                "selected_price": 90,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "a-cooler",
+                "product_variant_id": null,
+                "category": "COOLER",
+                "status": "UNKNOWN",
+                "selected_price": 60,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "a-ssd",
+                "product_variant_id": null,
+                "category": "STORAGE",
+                "status": "UNKNOWN",
+                "selected_price": 80,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              }
+            ],
+            "total_price": 900,
+            "currency": "MAD",
+            "unknown_pairwise_count": 9
+          }
+        ]
+      }
+    },
+    {
+      "case": "two CPUs, max_builds_per_query halts the walk",
+      "output": {
+        "build_count": 3,
+        "builds": [
+          {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "a-cpu",
+                "product_variant_id": null,
+                "category": "CPU",
+                "status": "PASS",
+                "selected_price": 300,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "a-mb",
+                "product_variant_id": null,
+                "category": "MOTHERBOARD",
+                "status": "PASS",
+                "selected_price": 150,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "a-ram",
+                "product_variant_id": null,
+                "category": "MEMORY",
+                "status": "PASS",
+                "selected_price": 100,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "a-gpu",
+                "product_variant_id": "a-gpu-var",
+                "category": "GPU",
+                "status": "PASS",
+                "selected_price": 500,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "a-psu",
+                "product_variant_id": null,
+                "category": "PSU",
+                "status": "PASS",
+                "selected_price": 120,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "a-case",
+                "product_variant_id": null,
+                "category": "CASE",
+                "status": "PASS",
+                "selected_price": 90,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "a-cooler",
+                "product_variant_id": null,
+                "category": "COOLER",
+                "status": "PASS",
+                "selected_price": 60,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "a-ssd",
+                "product_variant_id": null,
+                "category": "STORAGE",
+                "status": "PASS",
+                "selected_price": 80,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              }
+            ],
+            "total_price": 1400,
+            "currency": "MAD",
+            "unknown_pairwise_count": 11
+          },
+          {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "a-cpu",
+                "product_variant_id": null,
+                "category": "CPU",
+                "status": "PASS",
+                "selected_price": 300,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "a-mb",
+                "product_variant_id": null,
+                "category": "MOTHERBOARD",
+                "status": "PASS",
+                "selected_price": 150,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "a-ram",
+                "product_variant_id": null,
+                "category": "MEMORY",
+                "status": "PASS",
+                "selected_price": 100,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "a-gpu",
+                "product_variant_id": "a-gpu-var",
+                "category": "GPU",
+                "status": "PASS",
+                "selected_price": 500,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "a-psu",
+                "product_variant_id": null,
+                "category": "PSU",
+                "status": "PASS",
+                "selected_price": 120,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "a-case",
+                "product_variant_id": null,
+                "category": "CASE",
+                "status": "PASS",
+                "selected_price": 90,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "a-cooler",
+                "product_variant_id": null,
+                "category": "COOLER",
+                "status": "PASS",
+                "selected_price": 60,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "b-ssd",
+                "product_variant_id": null,
+                "category": "STORAGE",
+                "status": "PASS",
+                "selected_price": 80,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              }
+            ],
+            "total_price": 1400,
+            "currency": "MAD",
+            "unknown_pairwise_count": 11
+          },
+          {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "a-cpu",
+                "product_variant_id": null,
+                "category": "CPU",
+                "status": "PASS",
+                "selected_price": 300,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "a-mb",
+                "product_variant_id": null,
+                "category": "MOTHERBOARD",
+                "status": "PASS",
+                "selected_price": 150,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "RAM",
+                "product_id": "a-ram",
+                "product_variant_id": null,
+                "category": "MEMORY",
+                "status": "PASS",
+                "selected_price": 100,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "a-gpu",
+                "product_variant_id": "a-gpu-var",
+                "category": "GPU",
+                "status": "PASS",
+                "selected_price": 500,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "PSU",
+                "product_id": "a-psu",
+                "product_variant_id": null,
+                "category": "PSU",
+                "status": "PASS",
+                "selected_price": 120,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CASE",
+                "product_id": "a-case",
+                "product_variant_id": null,
+                "category": "CASE",
+                "status": "PASS",
+                "selected_price": 90,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "CPU_COOLER",
+                "product_id": "b-cooler",
+                "product_variant_id": null,
+                "category": "COOLER",
+                "status": "PASS",
+                "selected_price": 60,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              },
+              {
+                "component_role": "SSD_BOOT",
+                "product_id": "a-ssd",
+                "product_variant_id": null,
+                "category": "STORAGE",
+                "status": "PASS",
+                "selected_price": 80,
+                "currency": "MAD",
+                "offer_class": "SEED_UNVERIFIED",
+                "compatibility_note_count": 0
+              }
+            ],
+            "total_price": 1400,
+            "currency": "MAD",
+            "unknown_pairwise_count": 11
+          }
+        ]
+      }
+    },
+    {
+      "case": "REJECT verdicts are not traversed",
+      "output": {
+        "build_count": 0,
+        "builds": []
+      }
+    }
+  ],
+  "evaluation": {
+    "build": {
+      "status": "UNKNOWN",
+      "pairs": [
+        {
+          "check": "cpu_motherboard",
+          "role": "MOTHERBOARD",
+          "partner_role": "CPU",
+          "status": "UNKNOWN",
+          "reason": "CPU_SOCKET_UNKNOWN",
+          "evidence": [
+            {
+              "rule": "cpu_motherboard_socket",
+              "cpu_socket_id": null,
+              "motherboard_socket_id": null
+            },
+            {
+              "rule": "cpu_motherboard_support",
+              "source_status": null
+            }
+          ]
+        },
+        {
+          "check": "motherboard_memory",
+          "role": "RAM",
+          "partner_role": "MOTHERBOARD",
+          "status": "UNKNOWN",
+          "reason": "MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN",
+          "evidence": [
+            {
+              "rule": "motherboard_memory_type",
+              "motherboard_memory_type_id": null,
+              "ram_memory_type_id": null
+            }
+          ]
+        },
+        {
+          "check": "platform_memory",
+          "role": "RAM",
+          "partner_role": "CPU",
+          "status": "UNKNOWN",
+          "reason": "PLATFORM_MEMORY_SUPPORT_UNKNOWN",
+          "evidence": [
+            {
+              "rule": "platform_memory_support",
+              "platform_id": null,
+              "memory_type_id": null,
+              "source_status": null
+            }
+          ]
+        },
+        {
+          "check": "mb_memory_slots",
+          "role": "RAM",
+          "partner_role": "MOTHERBOARD",
+          "status": "UNKNOWN",
+          "reason": "RAM_SLOTS_UNKNOWN",
+          "evidence": [
+            {
+              "rule": "ram_motherboard_slots",
+              "ram_product_id": "a-ram",
+              "motherboard_product_id": "a-mb",
+              "ram_module_count": null,
+              "motherboard_dimm_slots": null
+            }
+          ]
+        },
+        {
+          "check": "mb_memory_capacity",
+          "role": "RAM",
+          "partner_role": "MOTHERBOARD",
+          "status": "UNKNOWN",
+          "reason": "RAM_CAPACITY_UNKNOWN",
+          "evidence": [
+            {
+              "rule": "ram_motherboard_capacity",
+              "ram_product_id": "a-ram",
+              "motherboard_product_id": "a-mb",
+              "ram_module_count": null,
+              "ram_capacity_per_module_gb": null,
+              "motherboard_max_memory_capacity_gb": null
+            }
+          ]
+        },
+        {
+          "check": "gpu_psu",
+          "role": "PSU",
+          "partner_role": "GPU",
+          "status": "UNKNOWN",
+          "reason": "GPU_PSU_WATTAGE_UNKNOWN",
+          "evidence": [
+            {
+              "rule": "gpu_psu_wattage",
+              "gpu_product_variant_id": "a-gpu-var",
+              "psu_product_id": "a-psu",
+              "source_status": null,
+              "gpu_value": null,
+              "limit_value": null
+            },
+            {
+              "rule": "gpu_psu_connectors",
+              "gpu_product_variant_id": "a-gpu-var",
+              "psu_product_id": "a-psu",
+              "required_connectors": null,
+              "available_connectors": null,
+              "source_status": null
+            }
+          ]
+        },
+        {
+          "check": "case_form_factor",
+          "role": "CASE",
+          "partner_role": "MOTHERBOARD",
+          "status": "UNKNOWN",
+          "reason": "CASE_FORM_FACTOR_UNKNOWN",
+          "evidence": [
+            {
+              "rule": "case_motherboard_form_factor",
+              "case_product_id": "a-case",
+              "motherboard_form_factor": null,
+              "source_status": null
+            }
+          ]
+        },
+        {
+          "check": "gpu_case",
+          "role": "CASE",
+          "partner_role": "GPU",
+          "status": "UNKNOWN",
+          "reason": "GPU_DIMENSIONS_UNKNOWN",
+          "evidence": [
+            {
+              "rule": "gpu_case_length",
+              "gpu_product_variant_id": "a-gpu-var",
+              "case_product_id": "a-case",
+              "source_status": null,
+              "gpu_value": null,
+              "limit_value": null
+            },
+            {
+              "rule": "gpu_case_thickness",
+              "gpu_product_variant_id": "a-gpu-var",
+              "case_product_id": "a-case",
+              "source_status": null,
+              "gpu_value": null,
+              "limit_value": null
+            }
+          ]
+        },
+        {
+          "check": "cooler_socket",
+          "role": "CPU_COOLER",
+          "partner_role": "CPU",
+          "status": "UNKNOWN",
+          "reason": "COOLER_SOCKET_SUPPORT_UNKNOWN",
+          "evidence": [
+            {
+              "rule": "cooler_socket_support",
+              "cooler_product_id": "a-cooler",
+              "cpu_socket_id": null,
+              "source_status": null
+            }
+          ]
+        },
+        {
+          "check": "case_radiator",
+          "role": "CPU_COOLER",
+          "partner_role": "CASE",
+          "status": "UNKNOWN",
+          "reason": "RADIATOR_SUPPORT_UNKNOWN",
+          "evidence": [
+            {
+              "rule": "case_radiator_support",
+              "case_product_id": "a-case",
+              "cooler_requires_radiator": null,
+              "radiator_size_mm": null,
+              "radiator_position": null,
+              "source_status": null
+            },
+            {
+              "rule": "cooler_case_height",
+              "cooler_product_id": "a-cooler",
+              "case_product_id": "a-case",
+              "scope": "air",
+              "source_status": null,
+              "cooler_height_mm": null,
+              "case_max_cpu_cooler_height_mm": null
+            }
+          ]
+        },
+        {
+          "check": "cooler_tdp",
+          "role": "CPU_COOLER",
+          "partner_role": "CPU",
+          "status": "UNKNOWN",
+          "reason": "COOLER_TDP_UNKNOWN",
+          "evidence": [
+            {
+              "rule": "cooler_tdp",
+              "cooler_product_id": "a-cooler",
+              "cpu_product_id": "a-cpu",
+              "cooler_max_tdp_watts": null,
+              "cpu_tdp_watts": null
+            }
+          ]
+        }
+      ],
+      "unknown_pairwise_count": 11
+    },
+    "replacement": {
+      "status": "UNKNOWN",
+      "pairs": [
+        {
+          "check": "gpu_psu",
+          "role": "PSU",
+          "partner_role": "GPU",
+          "status": "UNKNOWN",
+          "reason": "GPU_PSU_WATTAGE_UNKNOWN",
+          "evidence": [
+            {
+              "rule": "gpu_psu_wattage",
+              "gpu_product_variant_id": "a-gpu-var",
+              "psu_product_id": "a-psu-replacement",
+              "source_status": null,
+              "gpu_value": null,
+              "limit_value": null
+            },
+            {
+              "rule": "gpu_psu_connectors",
+              "gpu_product_variant_id": "a-gpu-var",
+              "psu_product_id": "a-psu-replacement",
+              "required_connectors": null,
+              "available_connectors": null,
+              "source_status": null
+            }
+          ]
+        }
+      ],
+      "unknown_pairwise_count": 1
+    },
+    "errors": [
+      {
+        "case": "replacement role mismatch",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "candidate.component_role",
+          "message": "\"candidate.component_role\" must be \"PSU\""
+        }
+      },
+      {
+        "case": "replacement is a REJECT verdict",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "candidate.status",
+          "message": "\"candidate.status\" must be an eligible verdict (PASS or UNKNOWN); a rejected candidate has no replacement verdict to preview"
+        }
+      }
+    ]
+  },
+  "pipeline": {
+    "sources": {
+      "candidate_pool": {
+        "input": {
+          "budget_amount": 100000,
+          "currency": "MAD",
+          "use_case": "office",
+          "required_roles": [
+            "CPU",
+            "MOTHERBOARD",
+            "RAM",
+            "GPU",
+            "PSU",
+            "CASE",
+            "CPU_COOLER",
+            "SSD_BOOT"
+          ]
+        },
+        "pool_size": 8,
+        "pool_ids": [
+          [
+            "CPU",
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+            null
+          ],
+          [
+            "GPU",
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+            "vvvvvvvv-vvvv-vvvv-vvvv-000000000001"
+          ],
+          [
+            "MOTHERBOARD",
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+            null
+          ],
+          [
+            "RAM",
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+            null
+          ],
+          [
+            "SSD_BOOT",
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+            null
+          ],
+          [
+            "PSU",
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+            null
+          ],
+          [
+            "CASE",
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+            null
+          ],
+          [
+            "CPU_COOLER",
+            "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+            null
+          ]
+        ]
+      },
+      "filter_result": {
+        "result_count": 8,
+        "results": [
+          {
+            "component_role": "CPU",
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+            "product_variant_id": null,
+            "category": "CPU",
+            "status": "UNKNOWN",
+            "reason": "CPU_SOCKET_UNKNOWN",
+            "unknown_pairwise_count": 4
+          },
+          {
+            "component_role": "GPU",
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+            "product_variant_id": "vvvvvvvv-vvvv-vvvv-vvvv-000000000001",
+            "category": "GPU",
+            "status": "UNKNOWN",
+            "reason": "GPU_DIMENSIONS_UNKNOWN",
+            "unknown_pairwise_count": 2
+          },
+          {
+            "component_role": "MOTHERBOARD",
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+            "product_variant_id": null,
+            "category": "MOTHERBOARD",
+            "status": "UNKNOWN",
+            "reason": "CPU_SOCKET_UNKNOWN",
+            "unknown_pairwise_count": 5
+          },
+          {
+            "component_role": "RAM",
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+            "product_variant_id": null,
+            "category": "MEMORY",
+            "status": "UNKNOWN",
+            "reason": "MOTHERBOARD_MEMORY_SUPPORT_UNKNOWN",
+            "unknown_pairwise_count": 4
+          },
+          {
+            "component_role": "SSD_BOOT",
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+            "product_variant_id": null,
+            "category": "STORAGE",
+            "status": "PASS",
+            "reason": null,
+            "unknown_pairwise_count": 0
+          },
+          {
+            "component_role": "PSU",
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+            "product_variant_id": null,
+            "category": "PSU",
+            "status": "UNKNOWN",
+            "reason": "GPU_PSU_WATTAGE_UNKNOWN",
+            "unknown_pairwise_count": 1
+          },
+          {
+            "component_role": "CASE",
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+            "product_variant_id": null,
+            "category": "CASE",
+            "status": "UNKNOWN",
+            "reason": "CASE_FORM_FACTOR_UNKNOWN",
+            "unknown_pairwise_count": 3
+          },
+          {
+            "component_role": "CPU_COOLER",
+            "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+            "product_variant_id": null,
+            "category": "COOLER",
+            "status": "UNKNOWN",
+            "reason": "COOLER_SOCKET_SUPPORT_UNKNOWN",
+            "unknown_pairwise_count": 3
+          }
+        ]
+      },
+      "price_keys": [
+        "[\"uuuuuuuu-uuuu-uuuu-uuuu-000000000001\",null,\"CPU\"]",
+        "[\"uuuuuuuu-uuuu-uuuu-uuuu-000000000004\",\"vvvvvvvv-vvvv-vvvv-vvvv-000000000001\",\"GPU\"]",
+        "[\"uuuuuuuu-uuuu-uuuu-uuuu-000000000002\",null,\"MOTHERBOARD\"]",
+        "[\"uuuuuuuu-uuuu-uuuu-uuuu-000000000003\",null,\"RAM\"]",
+        "[\"uuuuuuuu-uuuu-uuuu-uuuu-000000000008\",null,\"SSD_BOOT\"]",
+        "[\"uuuuuuuu-uuuu-uuuu-uuuu-000000000005\",null,\"PSU\"]",
+        "[\"uuuuuuuu-uuuu-uuuu-uuuu-000000000006\",null,\"CASE\"]",
+        "[\"uuuuuuuu-uuuu-uuuu-uuuu-000000000007\",null,\"CPU_COOLER\"]"
+      ]
+    },
+    "gpu_inputs": {
+      "use_case": "office",
+      "gpu_required_use_cases": [
+        "gaming"
+      ],
+      "integrated_gpu_present": {
+        "uuuuuuuu-uuuu-uuuu-uuuu-000000000001": true
+      }
+    },
+    "builds": {
+      "build_count": 2,
+      "builds": [
+        {
+          "components": [
+            {
+              "component_role": "CPU",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+              "product_variant_id": null,
+              "category": "CPU",
+              "status": "UNKNOWN",
+              "selected_price": 300,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            },
+            {
+              "component_role": "MOTHERBOARD",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+              "product_variant_id": null,
+              "category": "MOTHERBOARD",
+              "status": "UNKNOWN",
+              "selected_price": 150,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            },
+            {
+              "component_role": "RAM",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+              "product_variant_id": null,
+              "category": "MEMORY",
+              "status": "UNKNOWN",
+              "selected_price": 100,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            },
+            {
+              "component_role": "GPU",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000004",
+              "product_variant_id": "vvvvvvvv-vvvv-vvvv-vvvv-000000000001",
+              "category": "GPU",
+              "status": "UNKNOWN",
+              "selected_price": 500,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            },
+            {
+              "component_role": "PSU",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+              "product_variant_id": null,
+              "category": "PSU",
+              "status": "UNKNOWN",
+              "selected_price": 120,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            },
+            {
+              "component_role": "CASE",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+              "product_variant_id": null,
+              "category": "CASE",
+              "status": "UNKNOWN",
+              "selected_price": 90,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            },
+            {
+              "component_role": "CPU_COOLER",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+              "product_variant_id": null,
+              "category": "COOLER",
+              "status": "UNKNOWN",
+              "selected_price": 60,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            },
+            {
+              "component_role": "SSD_BOOT",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+              "product_variant_id": null,
+              "category": "STORAGE",
+              "status": "PASS",
+              "selected_price": 80,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            }
+          ],
+          "total_price": 1400,
+          "currency": "MAD",
+          "unknown_pairwise_count": 11
+        },
+        {
+          "components": [
+            {
+              "component_role": "CPU",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000001",
+              "product_variant_id": null,
+              "category": "CPU",
+              "status": "UNKNOWN",
+              "selected_price": 300,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            },
+            {
+              "component_role": "MOTHERBOARD",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000002",
+              "product_variant_id": null,
+              "category": "MOTHERBOARD",
+              "status": "UNKNOWN",
+              "selected_price": 150,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            },
+            {
+              "component_role": "RAM",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000003",
+              "product_variant_id": null,
+              "category": "MEMORY",
+              "status": "UNKNOWN",
+              "selected_price": 100,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            },
+            {
+              "component_role": "PSU",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000005",
+              "product_variant_id": null,
+              "category": "PSU",
+              "status": "UNKNOWN",
+              "selected_price": 120,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            },
+            {
+              "component_role": "CASE",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000006",
+              "product_variant_id": null,
+              "category": "CASE",
+              "status": "UNKNOWN",
+              "selected_price": 90,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            },
+            {
+              "component_role": "CPU_COOLER",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000007",
+              "product_variant_id": null,
+              "category": "COOLER",
+              "status": "UNKNOWN",
+              "selected_price": 60,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            },
+            {
+              "component_role": "SSD_BOOT",
+              "product_id": "uuuuuuuu-uuuu-uuuu-uuuu-000000000008",
+              "product_variant_id": null,
+              "category": "STORAGE",
+              "status": "PASS",
+              "selected_price": 80,
+              "currency": "MAD",
+              "offer_class": "SEED_UNVERIFIED",
+              "compatibility_note_count": 0
+            }
+          ],
+          "total_price": 900,
+          "currency": "MAD",
+          "unknown_pairwise_count": 9
+        }
+      ]
+    },
+    "errors": [
+      {
+        "case": "missing sources",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": null,
+          "message": "Engine 3 assembly requires a sources object"
+        }
+      },
+      {
+        "case": "missing filteringContext source",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "filteringContext",
+          "message": "Engine 3 assembly requires \"filteringContext\""
+        }
+      },
+      {
+        "case": "GPU-input loading without a scoring model",
+        "error": {
+          "threw": true,
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "scoringModel",
+          "message": "GPU-input loading requires the validated \"scoringModel\""
+        }
+      }
+    ]
+  }
+}

@@ -62,6 +62,11 @@ jobs:
       # pointing at one opaque "verify" step.
       - name: Extraction characterization (L2, frozen fixture)
         run: npm run check:characterization
+      # Step 4B PR 3's own fixture. `check:characterization` above is wired to
+      # the PR 2 document only, so a second batch needs its own entry or its
+      # behaviour is not checked anywhere.
+      - name: Extraction characterization (L2, assembly fixture)
+        run: npm run check:characterization:pr3
       - name: Extraction provenance (L3, manifest baseline)
         run: npm run verify:extraction
       # The PR 2 baseline is passed EXPLICITLY: "the commit before the move" is
@@ -69,6 +74,12 @@ jobs:
       # than inherited from whatever the manifest happens to say.
       - name: Extraction test ownership (immutable PR2 baseline)
         run: npm run verify:ownership -- --base=afccc671dae5abe6df80ad56dfcbc231d7947c7a
+      # The assembly batch's own immutable baseline. The inventory is shared,
+      # but the before-counts are read from the commit THAT batch moved from -
+      # inheriting PR 2's baseline would measure the wrong revision and prove
+      # nothing about the Engine 3 move.
+      - name: Extraction test ownership (assembly baseline)
+        run: npm run verify:ownership -- --inventory=pr3 --base=de659adaaf4bbde4b2e1673aae08314d07af000e
       # DB-free API contract/route tests (fastify.inject + stubs; no database).
       - run: npm run test:api
       # Contract ownership: exactly ONE versioned contract in contract/, and no

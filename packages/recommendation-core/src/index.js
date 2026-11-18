@@ -4,9 +4,10 @@
 // point (step 4B).
 //
 // Step 4B PR 1 shipped the boundary with an EMPTY surface on purpose. Step 4B
-// PR 2 adds exactly the namespaces whose modules moved: the pure candidate
+// PR 2 added exactly the namespaces whose modules moved: the pure candidate
 // contracts, the pure compatibility tree and the pure half of Engine 2D
-// filtering. Everything else is still in the runtime tree.
+// filtering. Step 4B PR 3 adds Engine 3's assembly stage, which is why ranking,
+// retention and scoring can follow it.
 //
 // The surface is namespaced and written by hand (RFC §11.4): no
 // `...require('./x')` spread, so a module that lands under src/ later cannot
@@ -17,12 +18,13 @@
 //   candidates   loadCandidates
 //   filtering    loadFilteringContext, CONTEXT_COMPAT_KEYS,
 //                filterCandidatesForRecommendation
-// Assembly, scoring, retention, ranking, explanation and offers/as-of have not
-// moved yet; they arrive in later extraction PRs, each adding its namespace
-// and updating test/export-surface.json in the same commit.
+// Scoring, retention, ranking, explanation and offers/as-of have not moved
+// yet; they arrive in later extraction PRs, each adding its namespace and
+// updating test/export-surface.json in the same commit.
 
 const candidates = require('./candidates');
 const filtering = require('./filtering');
 const compatibility = require('./compatibility');
+const assembly = require('./assembly');
 
-module.exports = { candidates, filtering, compatibility };
+module.exports = { assembly, candidates, filtering, compatibility };

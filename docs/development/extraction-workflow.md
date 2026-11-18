@@ -1,7 +1,13 @@
 # Extraction workflow — proving a recommendation-module move
 
-Status: current at `master` = `30b459b` (2026-11-17), after PR #33 (`7d5f3b6`) and PR #34 (`30b459b`).
-Every figure below was measured on that tree; re-measure before quoting it against a later commit.
+Status: the figures below were measured at `master` = `30b459b` (2026-11-17), after PR #33 (`7d5f3b6`) and
+PR #34 (`30b459b`), and they hold unchanged at `master` = `de659ad` (2026-11-17, PR #35). `de659ad` is the
+baseline PR #36 extracts FROM, not a revision that already contains the move: `master` at `de659ad` has no
+step 4B PR 3 assembly batch. That batch is the second this workflow was used for (sections 3.4, 3.10 and 4
+record what it needed beyond PR 2), and it exists only on the PR #36 branch `feat/core-extract-assembly`,
+measured at its implementation snapshot `89b0bb2` (not the branch head: the only commit since is the
+documentation-only `11ca631`, so the snapshot and the figures hold); `master` gains it when PR #36 merges.
+Re-measure before quoting any figure against a later commit.
 
 Scope: how to plan, capture, move and **prove** a module extraction out of `src/recommendation/` into
 `packages/recommendation-core/`. This document changes no engine behaviour and authorises no move: each
@@ -18,7 +24,7 @@ That is the ordering rule, and it is not a matter of taste:
 | Stage | Its relative imports | Can it move alone? |
 |---|---|---|
 | `candidates`, `compatibility`, `filtering` | — | already moved (batch `step-4b-pr2`) |
-| `assembly` | `../candidates/*`, `../filtering/*` | **yes** — both namespaces are already in the core |
+| `assembly` | `../candidates/*`, `../filtering/*` | moved on the PR #36 branch only (batch `step-4b-pr3`; absent from `master` at `de659ad`) — both namespaces were in the core first |
 | `ranking` | `../assembly` (the barrel), `../candidates/errors` | no — needs `assembly` first |
 | `retention` | `../assembly/prices`, `../candidates`, `../filtering/filter` | no — needs `assembly` first |
 | `scoring` | `../assembly/assemble`, `../candidates/*` | no — needs `assembly`, and 2 of its 8 files are SQL loaders |
@@ -210,7 +216,8 @@ npm run verify:extraction
 npm run verify:ownership -- --base=afccc671dae5abe6df80ad56dfcbc231d7947c7a
 ```
 
-CI pins the PR 2 baseline explicitly; a new batch passes its own (`--base=<baseline-sha>`, section 3.3).
+CI pins each batch's baseline explicitly and names the inventory it measures; a new batch passes its own
+(`--base=<baseline-sha> --inventory=<name>`, section 3.3).
 
 These three are DB-free by construction: they read Git objects, the working tree and the committed
 fixture. None connects, none reads `DATABASE_URL`, and none reads a credential. That is a property of
@@ -233,6 +240,7 @@ node scripts/gen-decision-index.js --check
 node scripts/verify-docs.js --offline
 node scripts/check-catalog-identity.js   # read-only; uses DATABASE_URL when configured
 node scripts/check-deferred-rules.js     # read-only; uses DATABASE_URL when configured
+npm run check:whitespace                 # scoped git diff --check (section 4)
 ```
 
 **Those last two are why the job must not be called DB-free.** They issue SELECTs only and write
@@ -251,7 +259,9 @@ What the package-level commands add beyond the engine suite:
 * `npm run verify:docs -- --offline` / `node scripts/verify-docs.js --offline` — the doc-claim gates. The
   `--offline` flag is what keeps them DB-free; `--live` adds read-only database checks and is not run here.
 
-`git diff --check` is **not** a step in `unit-and-docs`: run it locally before pushing (section 3.11).
+`npm run check:whitespace` is the `git diff --check` gate, scoped as section 4 describes. Like `git diff
+--check` it is **not** a step in `unit-and-docs` — run it locally before pushing (section 3.11) and quote
+its verdict in the PR.
 `npm run verify:replay` and `npm run test:api:db` belong to the `recurring-gates` job, not this one.
 
 The T0 rule (RFC §19.2) is about the extraction step: the three checks above, the local commands in this
@@ -283,16 +293,33 @@ run on a recommendation-only PR and is not a merge gate for one.
 * **The manifest gate generalises; the capture and audit scripts do not.** `verify-pr2-provenance.js` is
   manifest-driven and verifies every batch. `scripts/characterize-pr2.js` hardcodes its fixture path, its
   output document kind and the PR 2 modules it imports, and `scripts/audit-pr2-test-ownership.js`
-  hardcodes the PR 2 `INVENTORY` and `SPLIT_FACTS`. A new batch needs a new capture script (declared in
-  `capture_paths`) and an inventory for its own files; `--base=` changes only the revision, never the
-  inventory.
-* **`npm run check:characterization` is wired to the PR 2 fixture only.** A later batch's behavioural
-  check needs its own script entry and its own CI step, or it is not running anywhere.
-* **CI pins the PR 2 baseline explicitly** (`npm run verify:ownership -- --base=afccc671...`). A new
-  batch's ownership step must name its own baseline the same way.
+  hardcodes the `INVENTORY` and `SPLIT_FACTS`. A new batch needs a new capture script (declared in
+  `capture_paths`) and its own inventory rows; `--base=` changes only the revision, never the inventory.
+  PR 3 is the worked example of the second problem: its baseline is AFTER the PR 2 move, so the PR 2
+  baseline paths no longer exist there. The audit therefore takes `--inventory=pr2|pr3` — one named
+  inventory per batch, each measured against that batch's own baseline — and the two runs are separate CI
+  steps. Do not merge two batches' rows into one measured set; a single row set cannot be measured against
+  two different baselines.
+* **`npm run check:characterization` is wired to the PR 2 fixture only.** Each later batch needs its own
+  script entry and its own CI step (`npm run check:characterization:pr3` is the PR 3 one), or its
+  behaviour is not checked anywhere.
+* **CI pins one ownership command per batch, each with its own baseline and inventory**
+  (`--base=afccc671... --inventory=pr2`, `--base=de659ad... --inventory=pr3`). A new batch's ownership
+  step must name both the same way.
 * **`scripts/lib/ci-workflow.test.js` asserts that `ci.yml` has exactly two jobs**, `unit-and-docs` and
   `recurring-gates`. New evidence belongs in a **step** inside `unit-and-docs`; adding a third job fails
   that suite.
+* **A byte-identical move can carry a pre-existing blank line at EOF, and `git diff --check` reports it.**
+  `src/recommendation/assembly/assemble.js` and `prices.js` already ended with one at `de659ad`; the
+  destination is a NEW path, so Git reports `new blank line at EOF.` for bytes this PR provably did not
+  introduce. Identity wins: stripping the blank line in the destination would fail `npm run
+  verify:extraction`, which requires `identity_policy: byte-identical`, and section 3.6 forbids formatting
+  changes inside a move. The exception is therefore named, proved and narrow rather than suppressed —
+  `npm run check:whitespace` excuses a blank-at-EOF finding ONLY when the path is a manifest-declared
+  DESTINATION whose baseline source blob still equals the destination blob at `HEAD`, and prints the batch
+  and blob it relied on. Any other whitespace finding, any other error class, and any declared pair that has
+  drifted all fail the gate. Do not add a `.gitattributes` suppression and do not widen this rule: the
+  exemption exists because the evidence is checked in the same run, not because the warning is tiresome.
 * **Byte identity says nothing about callers.** Shims keep existing consumers working, but no gate proves
   that a consumer should stop importing the old path — that is review, or a later narrowing PR which is
   explicitly *not* byte-identical and must not be mixed into an extraction.

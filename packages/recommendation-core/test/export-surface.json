@@ -1,8 +1,9 @@
 {
   "package": "@morocco-pc/recommendation-core",
   "entry": "src/index.js",
-  "note": "Committed export surface of the pure core, pinned by test/index.test.js. Step 4B PR 1 shipped an empty surface; step 4B PR 2 adds the three namespaces whose modules moved (pure candidates, pure compatibility, pure filtering). An extraction PR adds its namespace to src/index.js and to this list in the same commit, so growing the surface is always a reviewable diff.",
+  "note": "Committed export surface of the pure core, pinned by test/index.test.js. Step 4B PR 1 shipped an empty surface; step 4B PR 2 added the three namespaces whose modules moved (pure candidates, pure compatibility, pure filtering); step 4B PR 3 adds Engine 3 assembly. An extraction PR adds its namespace to src/index.js and to this list in the same commit, so growing the surface is always a reviewable diff.",
   "exports": [
+    "assembly",
     "candidates",
     "compatibility",
     "filtering"

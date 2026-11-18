@@ -23,13 +23,14 @@ The repository's layout follows the architecture RFC
 architecture decisions A1-A6 are approved. **Three steps are implemented.** The database-guard package
 boundary: the write-target guard lives in `packages/database-guard/` (PR #27, merged 2026-11-11). The
 `recommendation-core` boundary harness (step 4B PR 1, PR #29, merged 2026-11-15 as `56cbb69`): a loadable
-`src/index.js` that exports nothing, a purity gate with its regression suites over every file under `src/`
+`src/index.js` whose surface grows one namespace per extraction batch, a purity gate with its regression suites over every file under `src/`
 (`npm run test:core`), the committed export snapshot at `test/export-surface.json`, and the hermetic runner
 `test/hermetic-run.js` that proves the suite passes with no `node_modules` reachable — `npm run test:core`
-and the hermetic run are both wired into `ci.yml`. **The harness is a boundary gate, and step 4B PR 2 has begun the extraction behind it**: the pure
-`candidates` modules, the Engine 1 `compatibility` tree and the pure half of `filtering` now live in
-`packages/recommendation-core/src/` behind identity re-export shims at their old paths, and
-`test/export-surface.json` records the three namespaces they publish. The loaders, assembly, scoring,
+and the hermetic run are both wired into `ci.yml`. **The harness is a boundary gate, and steps 4B PR 2-3 have begun the extraction behind it**: the pure
+`candidates` modules, the Engine 1 `compatibility` tree, the pure half of `filtering` and the pure Engine 3
+`assembly` stage now live in `packages/recommendation-core/src/` behind identity re-export shims at their
+old paths, and `test/export-surface.json` records the four namespaces they publish (added in batch order:
+PR 2 then PR 3). The loaders, scoring,
 retention, ranking, explanation and `offers/as-of` have NOT moved, `packages/recommendation-runtime/` still carries only its
 manifest and planning documentation, `apps/api/src/engine.js` still imports `src/recommendation/**`
 directly, and the RFC remains PROPOSED for the remaining work. B1-B8 are open. Do not start the extraction
@@ -157,7 +158,7 @@ Read the owning file before changing that layer:
 | `node scripts/gen-decision-index.js --check` | decision index freshness |
 | `npm run verify:replay -- --test-db` | replay every migration into an empty DB and diff by definition |
 | `node scripts/run-migrations.js --check` | pending migrations |
-| `git diff --check` | whitespace errors |
+| `npm run check:whitespace` | whitespace errors against a base ref (`git diff --check`); a blank-at-EOF finding is exempt ONLY for a manifest-proven byte-identical extraction destination |
 
 There is no build, lint or typecheck at the repository root — do not invent one. `apps/web` is its own
 package and the exception (see its `AGENTS.md`).

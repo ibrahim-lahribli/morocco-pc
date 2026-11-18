@@ -560,14 +560,19 @@ test('a symlink destination is rejected even when its blob matches the source fi
   assert.equal(/source src\/target\.js/.test(result.stderr), false, 'the valid side must not be reported');
 });
 
-test('the real PR 2 batch still verifies 21/21', () => {
+test('the real manifest still verifies both batches (21/21 and 7/7)', () => {
   const result = run([]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /## batch step-4b-pr2/);
   assert.match(result.stdout, /baseline: afccc671dae5abe6df80ad56dfcbc231d7947c7a/);
   assert.match(result.stdout, /commits touching the fixture since baseline: 1/);
-  assert.match(result.stdout, /blob-identical: 21 \/ 21/);
-  assert.match(result.stdout, /characterization verified for: step-4b-pr2/);
+  assert.match(result.stdout, /blob-identical in 'step-4b-pr2': 21 \/ 21/);
+  // PR 3 appended a batch without disturbing PR 2's: both are still checked.
+  assert.match(result.stdout, /## batch step-4b-pr3/);
+  assert.match(result.stdout, /baseline: de659adaaf4bbde4b2e1673aae08314d07af000e/);
+  assert.match(result.stdout, /blob-identical in 'step-4b-pr3': 7 \/ 7/);
+  assert.match(result.stdout, /blob-identical: 28 \/ 28/);
+  assert.match(result.stdout, /characterization verified for: step-4b-pr2, step-4b-pr3/);
   assert.match(result.stdout, /verify-pr2-provenance: PASS/);
 });
 

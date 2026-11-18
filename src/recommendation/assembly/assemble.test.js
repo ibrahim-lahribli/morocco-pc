@@ -1649,7 +1649,13 @@ test('expansion order pins the vocabulary mapping, not a copy of it', () => {
   }
 });
 
-const ASSEMBLE_SOURCE = fs.readFileSync(path.join(__dirname, 'assemble.js'), 'utf8');
+// Step 4B PR 3: the implementation moved into the core package, so this
+// structural assertion reads it at its new home instead of the shim that now
+// sits beside this test (a shim would pass a "no SQL" check vacuously).
+const ASSEMBLE_SOURCE = fs.readFileSync(
+  path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-core', 'src', 'assembly', 'assemble.js'),
+  'utf8'
+);
 
 test('assemble.js keeps its source boundary', () => {
   const forbidden = [
