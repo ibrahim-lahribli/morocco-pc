@@ -158,7 +158,7 @@ Read the owning file before changing that layer:
 | `node scripts/gen-decision-index.js --check` | decision index freshness |
 | `npm run verify:replay -- --test-db` | replay every migration into an empty DB and diff by definition |
 | `node scripts/run-migrations.js --check` | pending migrations |
-| `git diff --check` | whitespace errors |
+| `npm run check:whitespace` | whitespace errors against a base ref (`git diff --check`); a blank-at-EOF finding is exempt ONLY for a manifest-proven byte-identical extraction destination |
 
 There is no build, lint or typecheck at the repository root — do not invent one. `apps/web` is its own
 package and the exception (see its `AGENTS.md`).

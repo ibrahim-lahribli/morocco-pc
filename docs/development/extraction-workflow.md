@@ -236,6 +236,7 @@ node scripts/gen-decision-index.js --check
 node scripts/verify-docs.js --offline
 node scripts/check-catalog-identity.js   # read-only; uses DATABASE_URL when configured
 node scripts/check-deferred-rules.js     # read-only; uses DATABASE_URL when configured
+npm run check:whitespace                 # scoped git diff --check (section 4)
 ```
 
 **Those last two are why the job must not be called DB-free.** They issue SELECTs only and write
@@ -254,7 +255,9 @@ What the package-level commands add beyond the engine suite:
 * `npm run verify:docs -- --offline` / `node scripts/verify-docs.js --offline` — the doc-claim gates. The
   `--offline` flag is what keeps them DB-free; `--live` adds read-only database checks and is not run here.
 
-`git diff --check` is **not** a step in `unit-and-docs`: run it locally before pushing (section 3.11).
+`npm run check:whitespace` is the `git diff --check` gate, scoped as section 4 describes. Like `git diff
+--check` it is **not** a step in `unit-and-docs` — run it locally before pushing (section 3.11) and quote
+its verdict in the PR.
 `npm run verify:replay` and `npm run test:api:db` belong to the `recurring-gates` job, not this one.
 
 The T0 rule (RFC §19.2) is about the extraction step: the three checks above, the local commands in this
@@ -302,6 +305,17 @@ run on a recommendation-only PR and is not a merge gate for one.
 * **`scripts/lib/ci-workflow.test.js` asserts that `ci.yml` has exactly two jobs**, `unit-and-docs` and
   `recurring-gates`. New evidence belongs in a **step** inside `unit-and-docs`; adding a third job fails
   that suite.
+* **A byte-identical move can carry a pre-existing blank line at EOF, and `git diff --check` reports it.**
+  `src/recommendation/assembly/assemble.js` and `prices.js` already ended with one at `de659ad`; the
+  destination is a NEW path, so Git reports `new blank line at EOF.` for bytes this PR provably did not
+  introduce. Identity wins: stripping the blank line in the destination would fail `npm run
+  verify:extraction`, which requires `identity_policy: byte-identical`, and section 3.6 forbids formatting
+  changes inside a move. The exception is therefore named, proved and narrow rather than suppressed —
+  `npm run check:whitespace` excuses a blank-at-EOF finding ONLY when the path is a manifest-declared
+  DESTINATION whose baseline source blob still equals the destination blob at `HEAD`, and prints the batch
+  and blob it relied on. Any other whitespace finding, any other error class, and any declared pair that has
+  drifted all fail the gate. Do not add a `.gitattributes` suppression and do not widen this rule: the
+  exemption exists because the evidence is checked in the same run, not because the warning is tiresome.
 * **Byte identity says nothing about callers.** Shims keep existing consumers working, but no gate proves
   that a consumer should stop importing the old path — that is review, or a later narrowing PR which is
   explicitly *not* byte-identical and must not be mixed into an extraction.
