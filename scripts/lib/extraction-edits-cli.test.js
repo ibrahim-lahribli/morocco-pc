@@ -18,6 +18,7 @@ const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 
 const { REPO_ROOT } = require('./extraction-manifest');
+const { verifyFixtureMerges } = require('../verify-pr2-provenance');
 
 const SCRIPT = path.resolve(__dirname, '..', 'verify-pr2-provenance.js');
 const MANIFEST_REL = 'extraction-manifest.json';
@@ -547,6 +548,75 @@ test('a capture that lands through a merge is still one introduction', (t) => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /commits touching the fixture since baseline: 1 \(must be exactly 1\)/);
   assert.match(result.stdout, /fixture captured before the move: yes/);
+});
+
+test('a merge that invents a fixture state and a later merge that restores it fails: merge history is judged in full', (t) => {
+  const { repo, baseline, capture } = characterized(t);
+  const main = repo.mainBranch;
+  const capturedBlob = repo.blobOf(capture, FIXTURE);
+
+  // A docs-only side branch, so the first merge has a second parent.
+  repo.git(['checkout', '--quiet', '-b', 'side-docs']);
+  repo.write('docs/side.md', 'side\n');
+  repo.commit('side documentation');
+  repo.git(['checkout', '--quiet', main]);
+
+  // An evil merge: both parents still hold the captured bytes, but the merge
+  // result is written with third bytes. No non-merge commit touches the fixture.
+  repo.git(['merge', '--no-ff', '--no-commit', 'side-docs']);
+  repo.write(FIXTURE, JSON.stringify({
+    provenance: { baseline_sha: 'f'.repeat(40), command: CAPTURE_COMMAND },
+    result: 2,
+  }, null, 2) + '\n');
+  repo.git(['add', '-A']);
+  repo.commitStaged('merge the side branch and invent fixture bytes');
+  const evil = repo.head();
+  assert.notEqual(repo.blobOf(evil, FIXTURE), repo.blobOf(evil + '^1', FIXTURE));
+  assert.notEqual(repo.blobOf(evil, FIXTURE), repo.blobOf(evil + '^2', FIXTURE));
+
+  // A later merge puts the captured bytes back, matching one of its parents.
+  repo.git(['checkout', '--quiet', '-b', 'restore', capture]);
+  repo.write('docs/restore.md', 'restore\n');
+  repo.commit('restore branch work');
+  repo.git(['checkout', '--quiet', main]);
+  repo.git(['merge', '--no-ff', '--no-commit', 'restore']);
+  repo.write(FIXTURE, fixtureText(baseline));
+  repo.git(['add', '-A']);
+  repo.commitStaged('merge the restore branch and put the captured fixture back');
+
+  // The capture-to-HEAD comparison is clean and only the capture is a non-merge
+  // touch, so only the per-merge inspection can reject this history.
+  assert.equal(repo.blobOf('HEAD', FIXTURE), capturedBlob);
+
+  const result = repo.verify();
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /commits touching the fixture since baseline: 1 \(must be exactly 1\)/);
+  assert.match(result.stderr, /merge commit [0-9a-f]{10} introduced a fixture state that matches neither parent/);
+  assert.doesNotMatch(result.stdout, /verify-pr2-provenance: PASS/);
+});
+
+test('a fixture merge scan that cannot be enumerated fails closed instead of returning no merges', (t) => {
+  const { repo, baseline } = characterized(t);
+  const main = repo.mainBranch;
+
+  repo.git(['checkout', '--quiet', '-b', 'side-docs']);
+  repo.write('docs/side.md', 'side\n');
+  const side = repo.commit('side documentation');
+  repo.git(['checkout', '--quiet', main]);
+  repo.write('docs/main.md', 'main\n');
+  repo.commit('main documentation');
+  repo.git(['merge', '--no-ff', '-m', 'merge the documentation branch', 'side-docs']);
+
+  // The CLI's fixture-touch scan fails on this corruption before the merge scan
+  // runs, so the merge scan is exercised directly: it must report a failure,
+  // never an empty merge list that would pass.
+  repo.corruptTree(side);
+
+  const failures = [];
+  const proven = verifyFixtureMerges(repo.dir, 'batch-one', FIXTURE, baseline, failures);
+  assert.equal(proven, false);
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /the merge commits touching it since the baseline could not be listed/);
 });
 
 test('an unreadable history is a failure, not an empty history', (t) => {
