@@ -14,10 +14,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const retention = require('./index');
-const retain = require('./retain');
-const budgetFloor = require('./budget-floor');
-const targets = require('./targets');
+// Step 4B PR 5: this file moved with the implementation into the core package.
+// The module specifiers point at core's own tree; the assertions are unchanged.
+const retention = require('../src/retention');
+const retain = require('../src/retention/retain');
+const budgetFloor = require('../src/retention/budget-floor');
+const targets = require('../src/retention/targets');
 
 test('retention barrel exposes exactly its public API', () => {
   assert.deepEqual(Object.keys(retention), [
@@ -43,7 +45,7 @@ test('retention barrel exposes exactly its public API', () => {
 
 test('retention barrel re-exports by identity - no wrapper, no copy', () => {
   assert.strictEqual(retention.retainTopKPerRole, retain.retainTopKPerRole);
-  assert.strictEqual(retention.excludedCpuProductIds, require('./igpu-pool').excludedCpuProductIds);
+  assert.strictEqual(retention.excludedCpuProductIds, require('../src/retention/igpu-pool').excludedCpuProductIds);
   assert.strictEqual(retention.computeBudgetFloor, budgetFloor.computeBudgetFloor);
   assert.strictEqual(retention.BUDGET_FLOOR_ROLES, budgetFloor.BUDGET_FLOOR_ROLES);
   assert.strictEqual(retention.computeRoleTargets, targets.computeRoleTargets);
@@ -83,14 +85,14 @@ test('retention keeps its source boundary (pure composition, no DB, no SQL)', ()
   // complementary check below pins the real direction - the exact require list -
   // so stripping comments cannot hide an actual import.
   for (const file of ['index.js', 'retain.js', 'budget-floor.js', 'targets.js']) {
-    const source = stripComments(fs.readFileSync(path.join(__dirname, file), 'utf8'));
+    const source = stripComments(fs.readFileSync(path.join(__dirname, '..', 'src', 'retention', file), 'utf8'));
     for (const token of banned) {
       assert.ok(!source.includes(token), `${file} must not contain ${token}`);
     }
   }
   // ...and the prose really does carry the ban, so the comment cannot silently
   // stop naming what it forbids.
-  const retainHeader = fs.readFileSync(path.join(__dirname, 'retain.js'), 'utf8');
+  const retainHeader = fs.readFileSync(path.join(__dirname, '..', 'src', 'retention', 'retain.js'), 'utf8');
   for (const token of ['../assembly/assemble', '../orchestrator', '../persistence']) {
     assert.ok(retainHeader.includes(token), `retain.js must document the ban on ${token}`);
   }
@@ -104,7 +106,7 @@ function stripComments(source) {
 }
 
 test('retain.js imports exactly the composed sources and nothing else', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'retain.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'retention', 'retain.js'), 'utf8');
   const requires = [...source.matchAll(/require\('([^']+)'\)/g)]
     .map((match) => match[1])
     .sort();

@@ -32,13 +32,14 @@ describe('recommendation-core entry point', () => {
 
   it('exports the extracted namespaces as objects', () => {
     // Step 4B PR 1 shipped an empty surface on purpose; PR 2 added three
-    // namespaces whose modules moved, PR 3 added Engine 3 assembly and PR 4
-    // added Engine 5a ranking. This asserts the SHAPE (every export is a
-    // namespace object); the snapshot test below asserts the exact committed
-    // list, so growth is still a deliberate, reviewable edit.
+    // namespaces whose modules moved, PR 3 added Engine 3 assembly, PR 4
+    // added Engine 5a ranking and PR 5 added Engine 2D retention. This asserts
+    // the SHAPE (every export is a namespace object); the snapshot test below
+    // asserts the exact committed list, so growth is still a deliberate,
+    // reviewable edit.
     assert.equal(typeof core, 'object');
     assert.notEqual(core, null);
-    assert.deepEqual(Object.keys(core).sort(), ['assembly', 'candidates', 'compatibility', 'filtering', 'ranking']);
+    assert.deepEqual(Object.keys(core).sort(), ['assembly', 'candidates', 'compatibility', 'filtering', 'ranking', 'retention']);
     for (const name of Object.keys(core)) {
       assert.equal(typeof core[name], 'object', name + ' must be a namespace object');
       assert.notEqual(core[name], null);

@@ -13,8 +13,10 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { excludedCpuProductIds, GPU_POLICY_VALUES } = require('./igpu-pool');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+// Step 4B PR 5: this file moved with the implementation into the core package.
+// The module specifiers point at core's own tree; the assertions are unchanged.
+const { excludedCpuProductIds, GPU_POLICY_VALUES } = require('../src/retention/igpu-pool');
+const { CandidateSelectionError, ERROR_CODES } = require('../src/candidates/errors');
 
 const U = (n) => '00000000-0000-4000-8000-' + String(n).padStart(12, '0');
 
