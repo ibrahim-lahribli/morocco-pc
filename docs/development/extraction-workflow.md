@@ -2,13 +2,13 @@
 
 Status: the figures below were measured at `master` = `30b459b` (2026-11-17), after PR #33 (`7d5f3b6`) and
 PR #34 (`30b459b`), and they hold unchanged at `master` = `de659ad` (2026-11-17, PR #35). Both are
-historical measurement points, not the current head. **The current head is `e8d5af9` (2026-11-19):** PR #36
+historical measurement points, not the current head. **The current head is `43fd8c8` (2026-11-19):** PR #36
 merged the step 4B PR 3 assembly batch as `57bca1c`, PR #37 merged the metadata-only package-description
-correction as `07dfd22`, and branch `feat/core-ranking-extraction` carries the step 4B PR 4 ranking batch
-(`step-4b-pr4`, baseline `07dfd22`, not merged when this was written). `master` therefore contains both batches this workflow has been used for —
-`step-4b-pr2` and `step-4b-pr3` (7 assembly modules) — so the namespaces `candidates`,
-`compatibility`, `filtering`, `assembly` — and, on the PR 4 branch, `ranking` — are published from `packages/recommendation-core/src/`
-behind identity re-export shims at their old paths. The assembly batch was measured at its implementation
+correction as `07dfd22`, and PR #41 merged the step 4B PR 4 ranking batch
+(`step-4b-pr4`, baseline `07dfd22`) as `43fd8c8` on 2026-11-19 (PR #42 merged as `c3186bc` first). `master` therefore contains all three batches this workflow has been used for —
+`step-4b-pr2`, `step-4b-pr3` (7 assembly modules) and `step-4b-pr4` (4 ranking modules) — so the namespaces `candidates`,
+`compatibility`, `filtering`, `assembly` and `ranking` are published from `packages/recommendation-core/src/`
+behind identity re-export shims at their old paths. The ranking batch was measured on its branch at the implementation commit `64edd94` and was not re-measured after the merge, which moved no byte of it. The assembly batch was measured at its implementation
 snapshot `89b0bb2` (not the branch head: two later commits, `11ca631` and `2c19a87`, changed documentation
 only — `CONTEXT.md` and this file — and neither changed implementation nor the measured counts); those
 figures are carried onto `master` by the merge, which moved no byte of the batch, and were **not**
