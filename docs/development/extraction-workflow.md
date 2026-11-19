@@ -2,11 +2,12 @@
 
 Status: the figures below were measured at `master` = `30b459b` (2026-11-17), after PR #33 (`7d5f3b6`) and
 PR #34 (`30b459b`), and they hold unchanged at `master` = `de659ad` (2026-11-17, PR #35). Both are
-historical measurement points, not the current head. **The current head is `07dfd22` (2026-11-18):** PR #36
-merged the step 4B PR 3 assembly batch as `57bca1c`, and PR #37 merged the metadata-only package-description
-correction as `07dfd22`. `master` therefore contains both batches this workflow has been used for —
-`step-4b-pr2` and `step-4b-pr3` (7 assembly modules) — so the four namespaces `candidates`,
-`compatibility`, `filtering` and `assembly` are now published from `packages/recommendation-core/src/`
+historical measurement points, not the current head. **The current head is `e8d5af9` (2026-11-19):** PR #36
+merged the step 4B PR 3 assembly batch as `57bca1c`, PR #37 merged the metadata-only package-description
+correction as `07dfd22`, and branch `feat/core-ranking-extraction` carries the step 4B PR 4 ranking batch
+(`step-4b-pr4`, baseline `07dfd22`, not merged when this was written). `master` therefore contains both batches this workflow has been used for —
+`step-4b-pr2` and `step-4b-pr3` (7 assembly modules) — so the namespaces `candidates`,
+`compatibility`, `filtering`, `assembly` — and, on the PR 4 branch, `ranking` — are published from `packages/recommendation-core/src/`
 behind identity re-export shims at their old paths. The assembly batch was measured at its implementation
 snapshot `89b0bb2` (not the branch head: two later commits, `11ca631` and `2c19a87`, changed documentation
 only — `CONTEXT.md` and this file — and neither changed implementation nor the measured counts); those
@@ -30,7 +31,7 @@ That is the ordering rule, and it is not a matter of taste:
 |---|---|---|
 | `candidates`, `compatibility`, `filtering` | — | already moved (batch `step-4b-pr2`) |
 | `assembly` | `../candidates/*`, `../filtering/*` | moved (batch `step-4b-pr3`, PR #36 merged 2026-11-18 as `57bca1c`) — both namespaces were in the core first |
-| `ranking` | `../assembly` (the barrel), `../candidates/errors` | no — needs `assembly` first |
+| `ranking` | `../assembly` (the barrel), `../candidates/errors` | moved (batch `step-4b-pr4`, baseline `07dfd22`, branch `feat/core-ranking-extraction`) — both namespaces were in the core first |
 | `retention` | `../assembly/prices`, `../candidates`, `../filtering/filter` | no — needs `assembly` first |
 | `scoring` | `../assembly/assemble`, `../candidates/*` | no — needs `assembly`, and 2 of its 8 files are SQL loaders |
 | `explanation` | `../assembly`, `../ranking`, `../scoring/use-cases` | no — needs three stages first |
@@ -306,10 +307,10 @@ run on a recommendation-only PR and is not a merge gate for one.
   steps. Do not merge two batches' rows into one measured set; a single row set cannot be measured against
   two different baselines.
 * **`npm run check:characterization` is wired to the PR 2 fixture only.** Each later batch needs its own
-  script entry and its own CI step (`npm run check:characterization:pr3` is the PR 3 one), or its
+  script entry and its own CI step (`npm run check:characterization:pr3` is the PR 3 one, `:pr4` the PR 4 one), or its
   behaviour is not checked anywhere.
 * **CI pins one ownership command per batch, each with its own baseline and inventory**
-  (`--base=afccc671... --inventory=pr2`, `--base=de659ad... --inventory=pr3`). A new batch's ownership
+  (`--base=afccc671... --inventory=pr2`, `--base=de659ad... --inventory=pr3`, `--base=07dfd22... --inventory=pr4`). A new batch's ownership
   step must name both the same way.
 * **`scripts/lib/ci-workflow.test.js` asserts that `ci.yml` has exactly two jobs**, `unit-and-docs` and
   `recurring-gates`. New evidence belongs in a **step** inside `unit-and-docs`; adding a third job fails

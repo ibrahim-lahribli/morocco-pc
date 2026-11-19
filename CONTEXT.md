@@ -103,10 +103,19 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15)
   in the runtime tree and kept their counts — and `npm run test:core` is **361 tests: 359 pass / 0 fail /
   2 skipped / 0 cancelled**. The net +1 is the key-by-key `assembly` namespace test added to
   `test/surface.test.js`; no test moved between the two commands.
+- **Step 4B PR 4 — branch `feat/core-ranking-extraction` (not merged when this was measured).** The Engine 5a
+  ranking batch (`step-4b-pr4`, baseline `07dfd22`, 4 modules byte-identical, 32 / 32 across the three
+  batches) moves the ranking barrel and its three stage modules and publishes a fifth namespace. Measured at
+  the implementation commit `64edd94`: `npm run test:unit` **982 pass / 0 fail** (was 1052 — 70 ranking tests
+  moved out of `src/`), `npm run test:core` **432 tests: 430 pass / 0 fail / 2 skipped** (was 361: +70 moved,
+  +1 new `ranking` namespace assertion), `npm run verify:ownership -- --inventory=pr4` **92 tests / 265
+  assertions, unchanged** (3 moved, 1 stayed), `npm run check:whitespace` PASS (one blank line at EOF excused
+  only because the move is proved byte-identical).
 - **Current extraction state:** `packages/recommendation-core/` is part of merged `master` and publishes
-  four namespaces — `candidates`, `compatibility`, `filtering`, `assembly` — pinned key by key in
+  five namespaces once the PR 4 branch lands — four on `master` today (`candidates`, `compatibility`,
+  `filtering`, `assembly`) plus `ranking` from `feat/core-ranking-extraction` — pinned key by key in
   `test/surface.test.js` and in `test/export-surface.json`, behind identity re-export shims at the old
-  `src/recommendation/**` paths. Nothing else has moved: the loaders, `scoring`, `retention`, `ranking`,
+  `src/recommendation/**` paths. Nothing else has moved: the loaders, `scoring`, `retention`,
   `explanation` and `offers/as-of` still live in `src/recommendation/`,
   `packages/recommendation-runtime/` still carries only its manifest and `docs/LOADERS_AND_TRANSACTIONS.md`,
   and `apps/api/src/engine.js` still imports the `src/recommendation/**` barrels directly.
