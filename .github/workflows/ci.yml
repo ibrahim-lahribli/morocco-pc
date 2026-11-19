@@ -75,6 +75,10 @@ jobs:
       # the batch is unchecked.
       - name: Extraction characterization (L2, retention fixture)
         run: npm run check:characterization:pr5
+      # Step 4B PR 6's own fixture: the scoring stage. One entry per batch, or
+      # the batch is unchecked.
+      - name: Extraction characterization (L2, scoring fixture)
+        run: npm run check:characterization:pr6
       - name: Extraction provenance (L3, manifest baseline)
         run: npm run verify:extraction
       # The PR 2 baseline is passed EXPLICITLY: "the commit before the move" is
@@ -98,6 +102,12 @@ jobs:
       # batch moved, so they cannot supply its before-counts.
       - name: Extraction test ownership (retention baseline)
         run: npm run verify:ownership -- --inventory=pr5 --base=0f439e0400c6814d0a21d4ab527c462aef0f5639
+      # The scoring batch's own immutable baseline: the direct parent of its
+      # capture commit. The earlier four baselines predate the modules this
+      # batch moved (and the retain.test.js row that moved with them), so they
+      # cannot supply its before-counts.
+      - name: Extraction test ownership (scoring baseline)
+        run: npm run verify:ownership -- --inventory=pr6 --base=1a9d8cfbe2b7f3a3f7a1a17e80919575d52c326e
       # DB-free API contract/route tests (fastify.inject + stubs; no database).
       - run: npm run test:api
       # Contract ownership: exactly ONE versioned contract in contract/, and no

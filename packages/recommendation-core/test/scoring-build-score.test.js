@@ -19,8 +19,8 @@ const {
   computeBuildScore,
   computeBuildScores,
   computeBuildScoreContributions,
-} = require('./build-score');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+} = require('../src/scoring/build-score');
+const { CandidateSelectionError, ERROR_CODES } = require('../src/candidates/errors');
 
 const NOW_MS = Date.parse('2026-09-19T00:00:00.000Z');
 const P1 = '11111111-1111-4111-8111-111111111111';

@@ -133,13 +133,13 @@ test('--base without a value is an argument error', () => {
 
 // The PR 2 inventory is defined by the ABSENCE of a batch tag, not by a list of
 // the tags to exclude. This is the regression that keeps it that way: a batch
-// appended by a future extraction PR (step-4b-pr6) must not become a PR 2 row
+// appended by a future extraction PR (step-4b-pr7) must not become a PR 2 row
 // merely because the filter never named it.
 test('a batch tag the inventory has never seen cannot leak into PR 2', () => {
   const audit = require(SCRIPT);
 
   const future = {
-    batch: 'step-4b-pr6',
+    batch: 'step-4b-pr7',
     kind: 'moved',
     baseline: 'src/recommendation/scoring/scoring.test.js',
     current: 'packages/recommendation-core/test/scoring.test.js',
@@ -153,7 +153,7 @@ test('a batch tag the inventory has never seen cannot leak into PR 2', () => {
   assert.equal(
     audit.selectInventoryRows(rowsWithFuture, 'pr2').includes(future),
     false,
-    'a hypothetical future batch (step-4b-pr6) leaked into PR 2'
+    'a hypothetical future batch (step-4b-pr7) leaked into PR 2'
   );
   assert.deepEqual(
     audit.selectInventoryRows(rowsWithFuture, 'pr2'),

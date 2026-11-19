@@ -6,8 +6,8 @@
 // test/export-surface.json pins the ROOT keys; this pins the second level, so
 // growing a namespace is as reviewable as adding one. It also states the
 // negative half of the boundary in executable form: the runtime half of the
-// candidates and filtering stages must not be reachable from core, because
-// importing core must never pull in SQL.
+// candidates, filtering and scoring stages must not be reachable from core,
+// because importing core must never pull in SQL.
 //
 // DB-free and dependency-free: node:test + node:assert only.
 
@@ -97,6 +97,23 @@ const RETENTION_KEYS = [
   'BAND_CEILING_FACTOR',
 ];
 
+const SCORING_KEYS = [
+  'validateScoringModelConfiguration',
+  'SCORING_MODEL_CONFIGURATION_KEYS',
+  'OPTIONAL_CONFIGURATION_KEYS',
+  'listUseCases',
+  'validateUseCaseProfiles',
+  'USE_CASE_PROFILES_KEY',
+  'GPU_POLICIES',
+  'selectAssessmentRow',
+  'computeEffectiveScore',
+  'computeCandidateScore',
+  'computeCandidateScores',
+  'computeBuildScore',
+  'computeBuildScores',
+  'computeBuildScoreContributions',
+];
+
 describe('core namespaces', () => {
   it('candidates exposes the pure contract and nothing runtime', () => {
     assert.deepEqual(Object.keys(core.candidates).sort(), [...CANDIDATES_KEYS].sort());
@@ -134,6 +151,24 @@ describe('core namespaces', () => {
         runtimeOnly in core.filtering,
         false,
         runtimeOnly + ' executes SQL or carries a loader constant and must stay in the runtime tree'
+      );
+    }
+  });
+
+  it('scoring exposes the pure Engine 4 surface and nothing runtime', () => {
+    assert.deepEqual(Object.keys(core.scoring).sort(), [...SCORING_KEYS].sort());
+    // The two loaders and their SQL constants execute or carry SQL; they stay
+    // in the runtime scoring barrel and must never be reachable from core.
+    for (const runtimeOnly of [
+      'loadScoringModel',
+      'SELECT_SCORING_MODEL_SQL',
+      'loadComponentAssessments',
+      'SELECT_COMPONENT_ASSESSMENTS_SQL',
+    ]) {
+      assert.equal(
+        runtimeOnly in core.scoring,
+        false,
+        runtimeOnly + ' executes SQL or carries a query constant and must stay in the runtime tree'
       );
     }
   });

@@ -1,0 +1,872 @@
+{
+  "kind": "pr6-characterization",
+  "description": "Frozen input/output pairs for the step 4B PR 6 extraction surface: the scoring barrel contract, the Decision 3(a) configuration validator, the Decision 37 use-case profile validator and listUseCases, Decision 13 STEP 1 effective scores, STEP 2 candidate scores and STEP 3 build scores plus contributions. DB-free: every id, score and timestamp is a literal.",
+  "timestamp_policy": "No ambient clock is read while capturing: every id, score and timestamp is an input literal and nowMs is injected, so the document is byte-stable on its baseline commit. String order is recorded by code unit; nothing here reads a locale.",
+  "provenance": {
+    "baseline_sha": "1a9d8cfbe2b7f3a3f7a1a17e80919575d52c326e",
+    "baseline_commit_date": "2026-11-19T05:34:04Z",
+    "node_version": "v24.21.0",
+    "command": "node scripts/characterize-pr6.js",
+    "origin": "Captured from the PRE-MOVE implementation under src/recommendation/scoring/ before any module moved into packages/recommendation-core. The committed document is the baseline: do not regenerate it from the extracted code, because a fixture produced by the implementation under test proves nothing."
+  },
+  "barrel": {
+    "exports": [
+      "loadScoringModel",
+      "SELECT_SCORING_MODEL_SQL",
+      "validateScoringModelConfiguration",
+      "SCORING_MODEL_CONFIGURATION_KEYS",
+      "OPTIONAL_CONFIGURATION_KEYS",
+      "listUseCases",
+      "validateUseCaseProfiles",
+      "USE_CASE_PROFILES_KEY",
+      "GPU_POLICIES",
+      "loadComponentAssessments",
+      "SELECT_COMPONENT_ASSESSMENTS_SQL",
+      "selectAssessmentRow",
+      "computeEffectiveScore",
+      "computeCandidateScore",
+      "computeCandidateScores",
+      "computeBuildScore",
+      "computeBuildScores",
+      "computeBuildScoreContributions"
+    ],
+    "frozen": {
+      "SCORING_MODEL_CONFIGURATION_KEYS": true,
+      "OPTIONAL_CONFIGURATION_KEYS": true,
+      "GPU_POLICIES": true
+    },
+    "modules": {
+      "configuration": [
+        "validateScoringModelConfiguration",
+        "SCORING_MODEL_CONFIGURATION_KEYS",
+        "OPTIONAL_CONFIGURATION_KEYS",
+        "RESOLUTION_PROFILES_KEY",
+        "APPLY_ARCHETYPE_OBJECTIVES_KEY",
+        "TOP_K_BY_ROLE_KEY",
+        "validateResolutionProfiles"
+      ],
+      "use_cases": [
+        "USE_CASE_PROFILES_KEY",
+        "GPU_POLICIES",
+        "ARCHETYPE_STRATEGIES",
+        "PROFILE_FIELDS",
+        "REQUIRED_PROFILE_FIELDS",
+        "validateUseCaseProfiles",
+        "listUseCases"
+      ],
+      "effective_score": [
+        "selectAssessmentRow",
+        "computeEffectiveScore"
+      ],
+      "candidate_score": [
+        "computeCandidateScore",
+        "computeCandidateScores"
+      ],
+      "build_score": [
+        "computeBuildScore",
+        "computeBuildScores",
+        "computeBuildScoreContributions"
+      ]
+    }
+  },
+  "configuration": {
+    "keys": [
+      "version_note",
+      "role_weights",
+      "type_weights",
+      "neutral_baseline",
+      "no_evidence_penalty",
+      "unknown_compat_penalty",
+      "confidence_multipliers",
+      "staleness",
+      "candidate_caps",
+      "gpu_required_use_cases"
+    ],
+    "optional_keys": [
+      "use_case_profiles",
+      "resolution_profiles",
+      "apply_archetype_objectives"
+    ],
+    "idempotent": {
+      "ok": true,
+      "output": true
+    },
+    "cases": {
+      "valid-full": {
+        "ok": true,
+        "output": {
+          "version_note": "pr6 characterization shape",
+          "role_weights": {
+            "CPU": {
+              "PERFORMANCE": 0.4,
+              "VALUE": 0.3
+            },
+            "GPU": {
+              "PERFORMANCE": 0.5,
+              "VALUE": 0.25
+            },
+            "MOTHERBOARD": {
+              "QUALITY": 1
+            }
+          },
+          "type_weights": {
+            "PERFORMANCE": 0.5,
+            "VALUE": 0.25,
+            "QUALITY": 0.25
+          },
+          "neutral_baseline": 50,
+          "no_evidence_penalty": 10,
+          "unknown_compat_penalty": 5,
+          "confidence_multipliers": {
+            "CONFIRMED": 1,
+            "HIGH": 0.8,
+            "MEDIUM": 0.6,
+            "LOW": 0.3,
+            "UNVERIFIED": 0
+          },
+          "staleness": {
+            "max_age_days": 180,
+            "per_day_decay": 0.005
+          },
+          "candidate_caps": {
+            "top_k_per_role": 5,
+            "max_builds_per_query": 25
+          },
+          "gpu_required_use_cases": [
+            "GAMING",
+            "WORKSTATION"
+          ]
+        }
+      },
+      "missing-role-weights": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "role_weights",
+          "message": "Scoring model configuration requires \"role_weights\""
+        }
+      },
+      "missing-staleness": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "staleness",
+          "message": "Scoring model configuration requires \"staleness\""
+        }
+      },
+      "null-configuration": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "configuration",
+          "message": "Scoring model configuration requires \"configuration\""
+        }
+      },
+      "array-configuration": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "configuration",
+          "message": "Scoring model configuration must be a JSON object"
+        }
+      },
+      "non-numeric-neutral-baseline": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "neutral_baseline",
+          "message": "\"neutral_baseline\" must be a finite number"
+        }
+      },
+      "non-finite-per-day-decay": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "staleness.per_day_decay",
+          "message": "\"staleness.per_day_decay\" must be a finite number"
+        }
+      },
+      "zero-top-k": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "candidate_caps.top_k_per_role",
+          "message": "\"candidate_caps.top_k_per_role\" must be a positive integer"
+        }
+      },
+      "fractional-top-k": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "candidate_caps.top_k_per_role",
+          "message": "\"candidate_caps.top_k_per_role\" must be a positive integer"
+        }
+      },
+      "empty-confidence-multipliers": {
+        "ok": true,
+        "output": {
+          "version_note": "pr6 characterization shape",
+          "role_weights": {
+            "CPU": {
+              "PERFORMANCE": 0.4,
+              "VALUE": 0.3
+            },
+            "GPU": {
+              "PERFORMANCE": 0.5,
+              "VALUE": 0.25
+            },
+            "MOTHERBOARD": {
+              "QUALITY": 1
+            }
+          },
+          "type_weights": {
+            "PERFORMANCE": 0.5,
+            "VALUE": 0.25,
+            "QUALITY": 0.25
+          },
+          "neutral_baseline": 50,
+          "no_evidence_penalty": 10,
+          "unknown_compat_penalty": 5,
+          "confidence_multipliers": {},
+          "staleness": {
+            "max_age_days": 180,
+            "per_day_decay": 0.005
+          },
+          "candidate_caps": {
+            "top_k_per_role": 5,
+            "max_builds_per_query": 25
+          },
+          "gpu_required_use_cases": [
+            "GAMING",
+            "WORKSTATION"
+          ]
+        }
+      },
+      "empty-gpu-required-use-cases": {
+        "ok": true,
+        "output": {
+          "version_note": "pr6 characterization shape",
+          "role_weights": {
+            "CPU": {
+              "PERFORMANCE": 0.4,
+              "VALUE": 0.3
+            },
+            "GPU": {
+              "PERFORMANCE": 0.5,
+              "VALUE": 0.25
+            },
+            "MOTHERBOARD": {
+              "QUALITY": 1
+            }
+          },
+          "type_weights": {
+            "PERFORMANCE": 0.5,
+            "VALUE": 0.25,
+            "QUALITY": 0.25
+          },
+          "neutral_baseline": 50,
+          "no_evidence_penalty": 10,
+          "unknown_compat_penalty": 5,
+          "confidence_multipliers": {
+            "CONFIRMED": 1,
+            "HIGH": 0.8,
+            "MEDIUM": 0.6,
+            "LOW": 0.3,
+            "UNVERIFIED": 0
+          },
+          "staleness": {
+            "max_age_days": 180,
+            "per_day_decay": 0.005
+          },
+          "candidate_caps": {
+            "top_k_per_role": 5,
+            "max_builds_per_query": 25
+          },
+          "gpu_required_use_cases": []
+        }
+      },
+      "with-use-case-profiles": {
+        "ok": true,
+        "output": {
+          "version_note": "pr6 characterization shape",
+          "role_weights": {
+            "CPU": {
+              "PERFORMANCE": 0.4,
+              "VALUE": 0.3
+            },
+            "GPU": {
+              "PERFORMANCE": 0.5,
+              "VALUE": 0.25
+            },
+            "MOTHERBOARD": {
+              "QUALITY": 1
+            }
+          },
+          "type_weights": {
+            "PERFORMANCE": 0.5,
+            "VALUE": 0.25,
+            "QUALITY": 0.25
+          },
+          "neutral_baseline": 50,
+          "no_evidence_penalty": 10,
+          "unknown_compat_penalty": 5,
+          "confidence_multipliers": {
+            "CONFIRMED": 1,
+            "HIGH": 0.8,
+            "MEDIUM": 0.6,
+            "LOW": 0.3,
+            "UNVERIFIED": 0
+          },
+          "staleness": {
+            "max_age_days": 180,
+            "per_day_decay": 0.005
+          },
+          "candidate_caps": {
+            "top_k_per_role": 5,
+            "max_builds_per_query": 25
+          },
+          "gpu_required_use_cases": [
+            "GAMING",
+            "WORKSTATION"
+          ],
+          "use_case_profiles": {
+            "GAMING": {
+              "gpu_policy": "REQUIRED",
+              "spend_targets": {
+                "CPU": 0.17,
+                "GPU": 0.38,
+                "MOTHERBOARD": 0.1,
+                "RAM": 0.07,
+                "SSD_BOOT": 0.07,
+                "PSU": 0.07,
+                "CASE": 0.07,
+                "CPU_COOLER": 0.04
+              }
+            },
+            "WORKSTATION": {
+              "gpu_policy": "REQUIRED",
+              "spend_targets": {
+                "CPU": 0.24,
+                "GPU": 0.25,
+                "RAM": 0.1
+              }
+            },
+            "OFFICE": {
+              "gpu_policy": "IGPU_ALLOWED",
+              "spend_targets": {
+                "CPU": 0.2,
+                "GPU": 0.1
+              }
+            }
+          }
+        }
+      },
+      "invalid-use-case-profiles": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "use_case_profiles",
+          "message": "\"use_case_profiles\" must declare at least one use case"
+        }
+      }
+    }
+  },
+  "use_cases": {
+    "keys": {
+      "use_case_profiles": "use_case_profiles",
+      "profile_fields": [
+        "gpu_policy",
+        "spend_targets",
+        "role_weights",
+        "archetype_objectives"
+      ],
+      "required_profile_fields": [
+        "gpu_policy",
+        "spend_targets"
+      ]
+    },
+    "gpu_policies": [
+      "REQUIRED",
+      "IGPU_ALLOWED"
+    ],
+    "archetype_strategies": [
+      "PERFORMANCE",
+      "BALANCED",
+      "VALUE"
+    ],
+    "valid_profiles": {
+      "ok": true,
+      "output": {
+        "GAMING": {
+          "gpu_policy": "REQUIRED",
+          "spend_targets": {
+            "CPU": 0.17,
+            "GPU": 0.38,
+            "MOTHERBOARD": 0.1,
+            "RAM": 0.07,
+            "SSD_BOOT": 0.07,
+            "PSU": 0.07,
+            "CASE": 0.07,
+            "CPU_COOLER": 0.04
+          }
+        },
+        "WORKSTATION": {
+          "gpu_policy": "REQUIRED",
+          "spend_targets": {
+            "CPU": 0.24,
+            "GPU": 0.25,
+            "RAM": 0.1
+          }
+        },
+        "OFFICE": {
+          "gpu_policy": "IGPU_ALLOWED",
+          "spend_targets": {
+            "CPU": 0.2,
+            "GPU": 0.1
+          }
+        }
+      }
+    },
+    "list_with_profiles": {
+      "ok": true,
+      "output": {
+        "values": [
+          "GAMING",
+          "WORKSTATION",
+          "OFFICE"
+        ],
+        "frozen": true
+      }
+    },
+    "list_legacy": {
+      "ok": true,
+      "output": {
+        "values": [
+          "GAMING",
+          "WORKSTATION"
+        ],
+        "frozen": true
+      }
+    },
+    "list_without_either": {
+      "ok": false,
+      "error": {
+        "name": "CandidateSelectionError",
+        "code": "INVALID_INPUT",
+        "field": "configuration",
+        "message": "listUseCases found neither \"use_case_profiles\" nor \"gpu_required_use_cases\""
+      }
+    },
+    "invalid": {
+      "null-profiles": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "use_case_profiles",
+          "message": "\"use_case_profiles\" must be an object keyed by use case"
+        }
+      },
+      "empty-profiles": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "use_case_profiles",
+          "message": "\"use_case_profiles\" must declare at least one use case"
+        }
+      },
+      "bad-gpu-policy": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "use_case_profiles.GAMING.gpu_policy",
+          "message": "\"use_case_profiles.GAMING.gpu_policy\" must be one of REQUIRED, IGPU_ALLOWED"
+        }
+      },
+      "blank-name": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "use_case_profiles",
+          "message": "\"use_case_profiles\" keys must be non-blank use-case strings"
+        }
+      },
+      "missing-spend-targets": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "use_case_profiles.GAMING.spend_targets",
+          "message": "\"use_case_profiles.GAMING\" requires \"spend_targets\""
+        }
+      }
+    }
+  },
+  "effective_score": {
+    "selection": {
+      "first-matching-row-wins": {
+        "ok": true,
+        "output": {
+          "assessment_type": "PERFORMANCE",
+          "score": 80,
+          "confidence": "CONFIRMED",
+          "assessed_at": 1763000000000
+        }
+      },
+      "missing-type-yields-null": {
+        "ok": true,
+        "output": null
+      },
+      "null-rows-yield-null": {
+        "ok": true,
+        "output": null
+      },
+      "invalid-type-fails": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "assessment_type",
+          "message": "\"assessmentType\" must be a non-empty string"
+        }
+      }
+    },
+    "scores": {
+      "fresh-confirmed": {
+        "ok": true,
+        "output": 80
+      },
+      "no-row": {
+        "ok": true,
+        "output": 40
+      },
+      "null-score": {
+        "ok": true,
+        "output": 40
+      },
+      "exactly-max-age-days": {
+        "ok": true,
+        "output": 8
+      },
+      "one-day-younger-than-max": {
+        "ok": true,
+        "output": 8.399999999999999
+      },
+      "future-assessed-at-clamps-age": {
+        "ok": true,
+        "output": 80
+      },
+      "medium-confidence": {
+        "ok": true,
+        "output": 74
+      },
+      "unverified-confidence": {
+        "ok": true,
+        "output": 50
+      },
+      "unknown-confidence-fails": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "confidence",
+          "message": "\"SPECULATIVE\" has no configured confidence multiplier (DECISION REQUIRED A3: NULL/unknown confidence handling; fail-fast chosen)"
+        }
+      },
+      "missing-now-ms-fails": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "nowMs",
+          "message": "\"nowMs\" is required (injected decision timestamp; no clock reads)"
+        }
+      },
+      "null-now-ms-fails": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "nowMs",
+          "message": "\"nowMs\" is required (injected decision timestamp; no clock reads)"
+        }
+      },
+      "no-evidence-clamped-at-zero": {
+        "ok": true,
+        "output": 0
+      }
+    }
+  },
+  "candidate_score": {
+    "single": {
+      "cpu-performance-only": {
+        "ok": true,
+        "output": 62.85714285714286
+      },
+      "gpu-newest-value-row-wins": {
+        "ok": true,
+        "output": 56.666666666666664
+      },
+      "role-missing-from-weights-fails": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "role_weights.RAM",
+          "message": "\"role_weights\" requires the role \"RAM\" (DECISION REQUIRED A6: fail-fast chosen; renormalize-exclusion is the recorded alternative)"
+        }
+      },
+      "invalid-role-fails": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_COMPONENT_ROLE",
+          "field": "candidate.component_role",
+          "message": "\"candidate.component_role\" \"NOT_A_ROLE\" is not a canonical component role"
+        }
+      }
+    },
+    "batch": {
+      "ok": true,
+      "output": {
+        "scores": [
+          {
+            "product_id": "11111111-1111-4111-8111-111111111111",
+            "product_variant_id": null,
+            "component_role": "CPU",
+            "candidate_score": 62.85714285714286
+          },
+          {
+            "product_id": "22222222-2222-4222-8222-222222222222",
+            "product_variant_id": "variant-a",
+            "component_role": "GPU",
+            "candidate_score": 56.666666666666664
+          },
+          {
+            "product_id": "33333333-3333-4333-8333-333333333333",
+            "product_variant_id": null,
+            "component_role": "CPU",
+            "candidate_score": 46.057142857142864
+          },
+          {
+            "product_id": "44444444-4444-4444-8444-444444444444",
+            "product_variant_id": null,
+            "component_role": "MOTHERBOARD",
+            "candidate_score": 70
+          }
+        ]
+      }
+    },
+    "batch_frozen": {
+      "ok": true,
+      "output": {
+        "container": true,
+        "scores_array": true,
+        "entries": true
+      }
+    },
+    "empty_batch": {
+      "ok": true,
+      "output": {
+        "scores": []
+      }
+    },
+    "non_array_candidates_fails": {
+      "ok": false,
+      "error": {
+        "name": "CandidateSelectionError",
+        "code": "INVALID_FIELD_VALUE",
+        "field": "candidates",
+        "message": "\"candidates\" must be an array of candidate identities"
+      }
+    }
+  },
+  "build_score": {
+    "single": {
+      "full-build-no-unknown": {
+        "ok": true,
+        "output": 69.52380952380952
+      },
+      "full-build-two-unknown": {
+        "ok": true,
+        "output": 59.52380952380952
+      },
+      "gpu-build-two-unknown": {
+        "ok": true,
+        "output": 48.93617021276596
+      },
+      "missing-count-fails": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "unknownPairwiseCount",
+          "message": "\"unknownPairwiseCount\" is required (the Engine 3 build's \"unknown_pairwise_count\" or an explicit injected count, Decision 15)"
+        }
+      },
+      "negative-count-fails": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "unknownPairwiseCount",
+          "message": "\"unknownPairwiseCount\" must be a non-negative integer"
+        }
+      },
+      "unweighted-role-fails": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "role_weights.PSU",
+          "message": "\"role_weights\" requires the build role \"PSU\" (DECISION REQUIRED A6: fail-fast chosen)"
+        }
+      },
+      "empty-components-fails": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "build.components",
+          "message": "\"build.components\" must be a non-empty array"
+        }
+      }
+    },
+    "batch": {
+      "counts-from-builds": {
+        "ok": true,
+        "output": {
+          "scores": [
+            {
+              "build_index": 0,
+              "build_score": 69.52380952380952
+            },
+            {
+              "build_index": 1,
+              "build_score": 48.93617021276596
+            }
+          ]
+        }
+      },
+      "injected-counts-win": {
+        "ok": true,
+        "output": {
+          "scores": [
+            {
+              "build_index": 0,
+              "build_score": 64.52380952380952
+            },
+            {
+              "build_index": 1,
+              "build_score": 58.93617021276596
+            }
+          ]
+        }
+      },
+      "empty-batch": {
+        "ok": true,
+        "output": {
+          "scores": []
+        }
+      }
+    },
+    "contributions": {
+      "ok": true,
+      "output": {
+        "contributions": [
+          [
+            {
+              "role": "CPU",
+              "type": "PERFORMANCE",
+              "effective_score": 80,
+              "weight": 0.2
+            },
+            {
+              "role": "CPU",
+              "type": "VALUE",
+              "effective_score": 40,
+              "weight": 0.075
+            },
+            {
+              "role": "MOTHERBOARD",
+              "type": "QUALITY",
+              "effective_score": 70,
+              "weight": 0.25
+            }
+          ],
+          [
+            {
+              "role": "CPU",
+              "type": "PERFORMANCE",
+              "effective_score": 80,
+              "weight": 0.2
+            },
+            {
+              "role": "CPU",
+              "type": "VALUE",
+              "effective_score": 40,
+              "weight": 0.075
+            },
+            {
+              "role": "GPU",
+              "type": "PERFORMANCE",
+              "effective_score": 40,
+              "weight": 0.25
+            },
+            {
+              "role": "GPU",
+              "type": "VALUE",
+              "effective_score": 90,
+              "weight": 0.0625
+            }
+          ]
+        ]
+      }
+    },
+    "batch_frozen": {
+      "ok": true,
+      "output": {
+        "container": true,
+        "scores_array": true,
+        "entries": true
+      }
+    },
+    "contributions_frozen": {
+      "ok": true,
+      "output": {
+        "container": true,
+        "contributions_array": true,
+        "per_build": true
+      }
+    },
+    "configuration_summary": {
+      "frozen": false,
+      "container": "object",
+      "keys": [
+        "version_note",
+        "role_weights",
+        "type_weights",
+        "neutral_baseline",
+        "no_evidence_penalty",
+        "unknown_compat_penalty",
+        "confidence_multipliers",
+        "staleness",
+        "candidate_caps",
+        "gpu_required_use_cases"
+      ],
+      "children_frozen": false
+    }
+  }
+}

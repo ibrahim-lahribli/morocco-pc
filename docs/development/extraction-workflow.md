@@ -2,15 +2,16 @@
 
 Status: the figures below were measured at `master` = `30b459b` (2026-11-17), after PR #33 (`7d5f3b6`) and
 PR #34 (`30b459b`), and they hold unchanged at `master` = `de659ad` (2026-11-17, PR #35). Both are
-historical measurement points, not the current head. **The current head is `43fd8c8` (2026-11-19):** PR #36
+historical measurement points, not the current head. **The current head is `1a9d8cf` (2026-11-19):** PR #36
 merged the step 4B PR 3 assembly batch as `57bca1c`, PR #37 merged the metadata-only package-description
-correction as `07dfd22`, and PR #41 merged the step 4B PR 4 ranking batch
-(`step-4b-pr4`, baseline `07dfd22`) as `43fd8c8` on 2026-11-19 (PR #42 merged as `c3186bc` first). `master` therefore contains all three batches this workflow has been used for —
-`step-4b-pr2`, `step-4b-pr3` (7 assembly modules) and `step-4b-pr4` (4 ranking modules) — so the namespaces `candidates`,
-`compatibility`, `filtering`, `assembly` and `ranking` are published from `packages/recommendation-core/src/`
-behind identity re-export shims at their old paths. A fourth batch, `step-4b-pr5` (the 5 retention modules,
-baseline `0f439e0`), is implemented on branch `feat/core-retention-extraction` at `0bd7e6f` and adds a
-sixth namespace, `retention`; it is **not merged** and `master` does not carry it. The ranking batch was measured on its branch at the implementation commit `64edd94` and was not re-measured after the merge, which moved no byte of it. The retention batch was measured at `0bd7e6f`: `test:unit` **942**, `test:core` **473 tests (471 pass / 2 skipped)**, `verify:extraction` **37 / 37**, ownership `--inventory=pr5` **93 tests / 190 assertions, unchanged**. The assembly batch was measured at its implementation
+correction as `07dfd22`, PR #41 merged the step 4B PR 4 ranking batch
+(`step-4b-pr4`, baseline `07dfd22`) as `43fd8c8` on 2026-11-19 (PR #42 merged as `c3186bc` first), and PR #44
+merged the step 4B PR 5 retention batch (`step-4b-pr5`, baseline `0f439e0`) as `1a9d8cf` on 2026-11-19. `master` therefore contains all five batches this workflow has been used for —
+`step-4b-pr2`, `step-4b-pr3` (7 assembly modules), `step-4b-pr4` (4 ranking modules) and `step-4b-pr5` (5 retention modules) — so the namespaces `candidates`,
+`compatibility`, `filtering`, `assembly`, `ranking` and `retention` are published from `packages/recommendation-core/src/`
+behind identity re-export shims at their old paths. A sixth batch, `step-4b-pr6` (the 5 pure scoring modules,
+baseline `1a9d8cf`), is implemented on branch `feat/core-scoring-extraction` and adds a
+seventh namespace, `scoring`; it is **not merged** and `master` does not carry it. The ranking batch was measured on its branch at the implementation commit `64edd94` and was not re-measured after the merge, which moved no byte of it. The retention batch was measured at `0bd7e6f`: `test:unit` **942**, `test:core` **473 tests (471 pass / 2 skipped)**, `verify:extraction` **37 / 37**, ownership `--inventory=pr5` **93 tests / 190 assertions** at that commit (PR 6 later moved its one retained test, so the inventory now reports **40 tests / 123 assertions**). The scoring batch was measured at its branch head: `test:unit` **794**, `test:core` **622 tests (620 pass / 2 skipped)**, `test:scripts` **823**, `verify:extraction` **42 / 42**, ownership `--inventory=pr6` **184 → 184 tests and 402 → 402 assertions** (6 moved, 3 stayed). The assembly batch was measured at its implementation
 snapshot `89b0bb2` (not the branch head: two later commits, `11ca631` and `2c19a87`, changed documentation
 only — `CONTEXT.md` and this file — and neither changed implementation nor the measured counts); those
 figures are carried onto `master` by the merge, which moved no byte of the batch, and were **not**
@@ -34,9 +35,9 @@ That is the ordering rule, and it is not a matter of taste:
 | `candidates`, `compatibility`, `filtering` | — | already moved (batch `step-4b-pr2`) |
 | `assembly` | `../candidates/*`, `../filtering/*` | moved (batch `step-4b-pr3`, PR #36 merged 2026-11-18 as `57bca1c`) — both namespaces were in the core first |
 | `ranking` | `../assembly` (the barrel), `../candidates/errors` | moved (batch `step-4b-pr4`, baseline `07dfd22`, branch `feat/core-ranking-extraction`) — both namespaces were in the core first |
-| `retention` | `../assembly/prices`, `../candidates`, `../filtering/filter` | moved (batch `step-4b-pr5`, baseline `0f439e0`, branch `feat/core-retention-extraction`, implementation commit `0bd7e6f`) — all three dependency namespaces were in the core first |
-| `scoring` | `../assembly/assemble`, `../candidates/*` | no — needs `assembly`, and 2 of its 8 files are SQL loaders |
-| `explanation` | `../assembly`, `../ranking`, `../scoring/use-cases` | no — needs three stages first |
+| `retention` | `../assembly/prices`, `../candidates`, `../filtering/filter` | moved (batch `step-4b-pr5`, baseline `0f439e0`, PR #44 merged 2026-11-19 as `1a9d8cf`) — all three dependency namespaces were in the core first |
+| `scoring` | `../assembly/assemble`, `../candidates/*` | moved (batch `step-4b-pr6`, baseline `1a9d8cf`, branch `feat/core-scoring-extraction`) — the 5 pure modules only; `index.js` stays a runtime barrel and the 2 SQL loaders stay runtime |
+| `explanation` | `../assembly`, `../ranking`, `../scoring/use-cases` | no — the barrel-narrowing to the moved `scoring` namespace is still to do; `../scoring/use-cases` now resolves through the core |
 | `offers` | `../candidates/*`, `../assembly/prices` | `as-of.js` only; `select.js` is an SQL loader |
 | `query`, `persistence`, `orchestrator` | SQL, loaders, `pg` | no — runtime side |
 
