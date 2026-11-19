@@ -14,8 +14,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { selectAssessmentRow, computeEffectiveScore } = require('./effective-score');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const { selectAssessmentRow, computeEffectiveScore } = require('../src/scoring/effective-score');
+const { CandidateSelectionError, ERROR_CODES } = require('../src/candidates/errors');
 
 const NOW_MS = Date.parse('2026-09-19T00:00:00.000Z');
 const DAY_MS = 24 * 60 * 60 * 1000;

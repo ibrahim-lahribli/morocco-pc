@@ -210,6 +210,41 @@
           "destination": "packages/recommendation-core/src/retention/igpu-pool.js"
         }
       ]
+    },
+    {
+      "id": "step-4b-pr6",
+      "description": "Step 4B PR 6: the pure half of Engine 4 scoring moved into packages/recommendation-core/src/scoring/ - the Decision 3(a) configuration validator, the Decision 37 use-case vocabulary, and the STEP 1-3 effective/candidate/build score modules - leaving identity re-export shims at the old paths. Their whole dependency graph (../candidates/{errors,roles}, ../assembly/assemble, ./effective-score) already lives in the core package, so all 13 relative specifiers resolve unchanged from the destination: nothing here is a rewrite. The mixed runtime barrel (scoring/index.js) and its two SQL loaders stay in the runtime tree untouched, and a hand-written 14-key core barrel publishes only the pure surface. Five scoring contract suites moved with the modules, and the deferred retain.test.js moved too: its single scoring import (../scoring/candidate-score) is now a core module.",
+      "baseline_sha": "1a9d8cfbe2b7f3a3f7a1a17e80919575d52c326e",
+      "identity_policy": "byte-identical",
+      "characterization": {
+        "fixture": "packages/recommendation-core/test/fixtures/pr6-characterization.json",
+        "capture_command": "node scripts/characterize-pr6.js",
+        "capture_commit_subject": "test(core): freeze the scoring surface before anything moves",
+        "expect_touch_commits": 1,
+        "capture_paths": ["scripts/characterize-pr6.js"]
+      },
+      "modules": [
+        {
+          "source": "src/recommendation/scoring/configuration.js",
+          "destination": "packages/recommendation-core/src/scoring/configuration.js"
+        },
+        {
+          "source": "src/recommendation/scoring/use-cases.js",
+          "destination": "packages/recommendation-core/src/scoring/use-cases.js"
+        },
+        {
+          "source": "src/recommendation/scoring/effective-score.js",
+          "destination": "packages/recommendation-core/src/scoring/effective-score.js"
+        },
+        {
+          "source": "src/recommendation/scoring/candidate-score.js",
+          "destination": "packages/recommendation-core/src/scoring/candidate-score.js"
+        },
+        {
+          "source": "src/recommendation/scoring/build-score.js",
+          "destination": "packages/recommendation-core/src/scoring/build-score.js"
+        }
+      ]
     }
   ]
 }

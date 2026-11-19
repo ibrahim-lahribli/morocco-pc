@@ -11,19 +11,23 @@
 // verdicts), the real Engine 4 STEP 2 contract (computeCandidateScores
 // output drops in without adaptation), purity/determinism, and the fail-fast
 // gates. No database is used or required anywhere in this file.
+//
+// Step 4B PR 6: this file moved with the retention implementation into the
+// core package once the scoring modules it imports were also here. The module
+// specifiers point at core's own tree; the assertions are unchanged.
 // ---------------------------------------------------------------------------
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { retainTopKPerRole } = require('./retain');
-const { computeRoleTargets } = require('./targets');
-const { CANDIDATE_STATUSES } = require('../filtering/filter');
-const { ROLE_CATEGORIES } = require('../candidates/roles');
-const { createCandidate } = require('../candidates');
-const { computeCandidateScores } = require('../scoring/candidate-score');
-const { priceKey } = require('../assembly/prices');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const { retainTopKPerRole } = require('../src/retention/retain');
+const { computeRoleTargets } = require('../src/retention/targets');
+const { CANDIDATE_STATUSES } = require('../src/filtering/filter');
+const { ROLE_CATEGORIES } = require('../src/candidates/roles');
+const { createCandidate } = require('../src/candidates');
+const { computeCandidateScores } = require('../src/scoring/candidate-score');
+const { priceKey } = require('../src/assembly/prices');
+const { CandidateSelectionError, ERROR_CODES } = require('../src/candidates/errors');
 
 // ---------------------------------------------------------------------------
 // Fixtures: hand-built frozen Engine 2D verdicts and Engine 4 STEP 2 score

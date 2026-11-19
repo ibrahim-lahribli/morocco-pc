@@ -77,7 +77,7 @@ test('the committed manifest is valid and pins PR 2 as its first batch', () => {
   const loaded = loadManifest(manifestFile(REPO_ROOT));
   assert.deepEqual(loaded.errors, []);
   // One batch per extraction PR: PR 2 first, later batches appended after it.
-  assert.equal(loaded.batches.length, 4);
+  assert.equal(loaded.batches.length, 5);
 
   const pr2 = loaded.batches[0];
   assert.equal(pr2.id, 'step-4b-pr2');
@@ -124,6 +124,17 @@ test('the committed manifest is valid and pins PR 2 as its first batch', () => {
   assert.equal(pr5.characterization.capture_command, 'node scripts/characterize-pr5.js');
   assert.equal(pr5.characterization.expect_touch_commits, 1);
   assert.deepEqual(pr5.characterization.capture_paths, ['scripts/characterize-pr5.js']);
+
+  const pr6 = loaded.batches[4];
+  assert.equal(pr6.id, 'step-4b-pr6');
+  assert.equal(pr6.identity_policy, 'byte-identical');
+  assert.equal(pr6.modules.length, 5);
+  assert.equal(pr6.baseline_sha, '1a9d8cfbe2b7f3a3f7a1a17e80919575d52c326e');
+  assert.ok(pr6.characterization, 'PR 6 declares its characterization record');
+  assert.equal(pr6.characterization.fixture, 'packages/recommendation-core/test/fixtures/pr6-characterization.json');
+  assert.equal(pr6.characterization.capture_command, 'node scripts/characterize-pr6.js');
+  assert.equal(pr6.characterization.expect_touch_commits, 1);
+  assert.deepEqual(pr6.characterization.capture_paths, ['scripts/characterize-pr6.js']);
 });
 
 test('the manifest baseline is the fixture baseline, never the working tree', () => {

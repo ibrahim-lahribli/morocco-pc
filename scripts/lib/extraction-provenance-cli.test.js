@@ -560,7 +560,7 @@ test('a symlink destination is rejected even when its blob matches the source fi
   assert.equal(/source src\/target\.js/.test(result.stderr), false, 'the valid side must not be reported');
 });
 
-test('the real manifest still verifies every batch (21/21, 7/7, 4/4 and 5/5)', () => {
+test('the real manifest still verifies every batch (21/21, 7/7, 4/4, 5/5 and 5/5)', () => {
   const result = run([]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /## batch step-4b-pr2/);
@@ -581,10 +581,14 @@ test('the real manifest still verifies every batch (21/21, 7/7, 4/4 and 5/5)', (
   assert.match(result.stdout, /## batch step-4b-pr5/);
   assert.match(result.stdout, /baseline: 0f439e0400c6814d0a21d4ab527c462aef0f5639/);
   assert.match(result.stdout, /blob-identical in 'step-4b-pr5': 5 \/ 5/);
-  assert.match(result.stdout, /blob-identical: 37 \/ 37/);
+  // PR 6 appended a fifth batch: the scoring extraction, likewise additive.
+  assert.match(result.stdout, /## batch step-4b-pr6/);
+  assert.match(result.stdout, /baseline: 1a9d8cfbe2b7f3a3f7a1a17e80919575d52c326e/);
+  assert.match(result.stdout, /blob-identical in 'step-4b-pr6': 5 \/ 5/);
+  assert.match(result.stdout, /blob-identical: 42 \/ 42/);
   assert.match(
     result.stdout,
-    /characterization verified for: step-4b-pr2, step-4b-pr3, step-4b-pr4, step-4b-pr5/
+    /characterization verified for: step-4b-pr2, step-4b-pr3, step-4b-pr4, step-4b-pr5, step-4b-pr6/
   );
   assert.match(result.stdout, /verify-pr2-provenance: PASS/);
 });
