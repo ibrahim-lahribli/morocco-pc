@@ -1,0 +1,110 @@
+name: api-image
+
+# The API image is what Render/Fly actually run: apps/api/Dockerfile with the repository
+# root as context. Nothing in ci.yml builds it, and since the step 4B extraction the
+# image needs packages/recommendation-core at runtime (src/recommendation/ shims resolve
+# ../../../packages/recommendation-core/src at require time). A source-only test cannot
+# see a missing COPY, so this workflow builds the real image and starts it.
+#
+# Path-filtered like web.yml: an unrelated change pays nothing, and this job does not
+# duplicate the engine gates in ci.yml. The workflow file is its own trigger so an edit
+# to the gate runs the gate.
+
+on:
+  push:
+    paths:
+      - "apps/api/Dockerfile"
+      - ".dockerignore"
+      - "apps/api/**"
+      - "src/recommendation/**"
+      - "packages/recommendation-core/**"
+      - "packages/database-guard/**"
+      - "package.json"
+      - "package-lock.json"
+      - "render.yaml"
+      - "fly.toml"
+      - ".github/workflows/api-image.yml"
+  pull_request:
+    paths:
+      - "apps/api/Dockerfile"
+      - ".dockerignore"
+      - "apps/api/**"
+      - "src/recommendation/**"
+      - "packages/recommendation-core/**"
+      - "packages/database-guard/**"
+      - "package.json"
+      - "package-lock.json"
+      - "render.yaml"
+      - "fly.toml"
+      - ".github/workflows/api-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-image-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the deployment image (root context)
+        run: docker build -f apps/api/Dockerfile -t morocco-pc-api:ci .
+
+      - name: Confirm the extracted core is in the image
+        run: |
+          docker run --rm --entrypoint sh morocco-pc-api:ci -c '
+            set -e
+            test -f /app/packages/recommendation-core/package.json
+            for ns in assembly candidates compatibility filtering ranking retention; do
+              test -f "/app/packages/recommendation-core/src/$ns/index.js"
+            done
+            test ! -e /app/apps/web
+            find /app/packages/recommendation-core -type f | sort
+          '
+
+      - name: Confirm the engine graph resolves inside the container
+        run: |
+          docker run --rm --entrypoint node morocco-pc-api:ci -e "
+            const core = require('/app/packages/recommendation-core/src');
+            const expected = ['assembly','candidates','filtering','compatibility','ranking','retention'];
+            if (Object.keys(core).sort().join(',') !== expected.join(',')) {
+              console.error('core surface mismatch: ' + Object.keys(core).sort().join(','));
+              process.exit(1);
+            }
+            require('/app/apps/api/src/engine.js');
+            console.log('core surface OK; engine graph OK');
+          "
+
+      - name: Boot, health-check, clean up
+        run: |
+          set -uo pipefail
+          docker run -d --name api-image-ci -p 18080:3000 \
+            -e API_ALLOW_SHARED=1 -e ENGINE_VERSION=ci-image \
+            -e DATABASE_URL='postgresql://api:api@127.0.0.1:1/ci-image' \
+            morocco-pc-api:ci > /dev/null
+          ok=0
+          for _ in $(seq 1 60); do
+            if [ -z "$(docker ps -q -f 'name=^api-image-ci$')" ]; then
+              echo "::error::container exited before answering"
+              break
+            fi
+            code=$(curl -s -o /tmp/health.json -w '%{http_code}' http://127.0.0.1:18080/v1/health || true)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            sleep 1
+          done
+          docker logs api-image-ci > /tmp/api-ci.log 2>&1 || true
+          cat /tmp/health.json 2>/dev/null || true
+          cat /tmp/api-ci.log
+          docker rm -f api-image-ci > /dev/null 2>&1 || true
+          test "$ok" = "1"
+          jq -e '.status == "ok" and .engine_version == "ci-image"' /tmp/health.json > /dev/null
+          grep -q 'morocco-pc API listening' /tmp/api-ci.log
+          ! grep -q 'MODULE_NOT_FOUND' /tmp/api-ci.log
+          echo "health: $(cat /tmp/health.json)"
+          echo "note: the db field is expected to be \"down\" - no database is attached to this smoke container"

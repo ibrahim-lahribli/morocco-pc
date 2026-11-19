@@ -14,8 +14,8 @@ services:
     runtime: docker
 
     # Build context MUST be the repository root: apps/api/Dockerfile copies src/ (the engine) and
-    # packages/database-guard/src/index.js relative to it, so a context of ./apps/api builds an image with no
-    # engine inside. dockerfilePath is relative to the repo root, dockerContext too.
+    # packages/recommendation-core/src + packages/database-guard/src relative to it, so a context of
+    # ./apps/api builds an image with no engine inside. dockerfilePath is relative to the repo root, dockerContext too.
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: .
 

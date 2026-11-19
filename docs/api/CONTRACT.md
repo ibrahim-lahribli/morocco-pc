@@ -365,7 +365,10 @@ points the API at the main branch instead (measured 2026-10-18).
 ### Docker
 
 The build context is the **repository root**, because the API imports the engine
-from `src/recommendation/` and the guard from `packages/database-guard/src/`:
+from `src/recommendation/`, whose stage shims require the extracted
+`packages/recommendation-core/src/`, and the guard from
+`packages/database-guard/src/`. The image copies exactly those two packages;
+`packages/recommendation-core/test/` is not copied (tests are not runtime).
 
 ```
 docker build -f apps/api/Dockerfile -t morocco-pc-api .
