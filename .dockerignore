@@ -1,13 +1,21 @@
 # Build context is the repository ROOT (see apps/api/Dockerfile).
-# Everything here is excluded from the image; keep `packages/database-guard/` and
-# `src/recommendation/` available, since the API imports both.
+# Everything here is excluded from the image; keep `src/recommendation/` and
+# `packages/recommendation-core/` + `packages/database-guard/` available, since
+# the API requires all three at startup. The remaining excludes below are
+# context hygiene: none of these paths is COPY'd by the Dockerfile.
 
 node_modules
 .git
 .github
-.env
+.env*
 docs
 database
+apps/web
+scripts
+contract
+test
+render.yaml
+fly.toml
 apps/api/test
 *.md
 .gitignore

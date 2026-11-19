@@ -1,8 +1,8 @@
 # morocco-pc API image.
 #
 # BUILD CONTEXT IS THE REPOSITORY ROOT, not apps/api: the API imports the engine
-# from src/recommendation/ (a sibling of apps/) and the write-target guard from
-# packages/database-guard/. Build it with:
+# from src/recommendation/, whose stage shims require the extracted packages
+# (packages/recommendation-core, packages/database-guard) by relative path. Build it with:
 #
 #   docker build -f apps/api/Dockerfile -t morocco-pc-api .
 #
@@ -32,13 +32,24 @@ RUN npm ci --omit=dev
 COPY src ./src
 COPY apps/api ./apps/api
 
-# The one package the API reuses at runtime: database-guard owns the
-# "TEST_DATABASE_URL must not target the shared database" guard. Copied
-# explicitly rather than as the whole packages/ tree so the runtime dependency
-# stays visible and the image stays small. Path-only correction (owner decision
-# 1, 2026-11-11): the install, the user and the CMD are unchanged.
+# Runtime packages, copied explicitly rather than as the whole packages/ tree so
+# the runtime dependency stays visible and the image stays small. Both are
+# consumed by relative path only (no workspace, no npm link), so a file copy is
+# enough. Path-only correction (owner decision 1, 2026-11-11): the install, the
+# user and the CMD are unchanged.
+
+# database-guard owns the "TEST_DATABASE_URL must not target the shared database"
+# guard that db.js applies at startup.
 COPY packages/database-guard/package.json ./packages/database-guard/package.json
 COPY packages/database-guard/src ./packages/database-guard/src
+
+# recommendation-core owns the pure stages that src/recommendation/ now only
+# re-exports: every shim there requires
+# ../../../packages/recommendation-core/src/... at require time (retention uses an
+# explicit /index), and engine.js loads those barrels at module load. Its test/
+# tree is NOT copied - tests are not runtime.
+COPY packages/recommendation-core/package.json ./packages/recommendation-core/package.json
+COPY packages/recommendation-core/src ./packages/recommendation-core/src
 
 # node:22-alpine ships an unprivileged `node` user; never run as root.
 USER node
