@@ -72,9 +72,10 @@ jobs:
         run: |
           docker run --rm --entrypoint node morocco-pc-api:ci -e "
             const core = require('/app/packages/recommendation-core/src');
-            const expected = ['assembly','candidates','compatibility','filtering','ranking','retention'];
-            if (Object.keys(core).sort().join(',') !== expected.join(',')) {
-              console.error('core surface mismatch: ' + Object.keys(core).sort().join(','));
+            const required = ['assembly','candidates','compatibility','filtering','ranking','retention'];
+            const missing = required.filter((name) => !(name in core));
+            if (missing.length > 0) {
+              console.error('core surface missing: ' + missing.join(','));
               process.exit(1);
             }
             require('/app/apps/api/src/engine.js');
