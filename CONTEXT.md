@@ -80,20 +80,25 @@ adopted for the private beta as an explicit PROVISIONAL OVERRIDE of Decision 57 
 satisfaction of it — A1/A3/A4 are still `hypothesis` and OG-43 is open.
 
 ## 5. Measured numbers (2026-11-02; the offer-freshness date, the EU pass count and the R-14 parity
-DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `test:scripts` and `test:core` re-measured again 2026-11-19 on `master` = `e8d5af9`)
+DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `test:unit`, `test:scripts` and `test:core` re-measured again 2026-11-19 on `master` = `43fd8c8`, after PR #41 merged)
 
-- `npm run test:unit` **1052 pass / 0 fail / 0 cancelled**; `npm run test:scripts` **822 / 0 / 0**;
+- `npm run test:unit` **982 pass / 0 fail / 0 cancelled** (982 total); `npm run test:scripts` **823 pass / 0 / 0** (823 total);
   `npm run test:api` **193 / 0 / 0**; `npm run test:database-guard` **15 / 0 / 0**; `npm run test:core`
-  **361 tests: 359 pass / 0 fail / 2 skipped / 0 cancelled** (the two skipped cases need file symlinks,
-  which this platform refuses); `node packages/recommendation-core/test/hermetic-run.js` **PASS** — all
-  six re-measured 2026-11-15 on Node 24.21.0 and npm 11.19.0, on `master` = `afccc67` plus the step 4B PR 2
-  extraction (234 tests moved from `test:unit` to `test:core` and 18 were added — 26 static / 30
+  **432 tests: 430 pass / 0 fail / 2 skipped / 0 cancelled** (the two skipped cases need file symlinks,
+  which this platform refuses); `node packages/recommendation-core/test/hermetic-run.js` **PASS**. `test:unit`, `test:scripts` and `test:core` were re-measured 2026-11-19 on `master` = `43fd8c8`
+  (Node 24.21.0, npm 11.19.0); `test:api` and `test:database-guard` keep their 2026-11-15 figures. Two
+  extractions have moved tests since that baseline: step 4B PR 2 moved 234 tests from `test:unit` to `test:core`
+  and added 18 (26 static / 30
   effective-minimum assertions: the core surface 3, the characterization replay 12 and the ownership-split
-  filtering barrel 3 — which is why the two counts moved and no test disappeared).
+  filtering barrel 3 — which is why the two counts moved and no test disappeared). Step 4B PR 4 then
+  moved the 70 Engine 5a ranking tests from `test:unit` to `test:core` and added one `ranking` namespace
+  assertion, so on merged `master` (`43fd8c8`) `test:unit` reads **982** and `test:core` **432**.
   `npm run test:api:db` **17 / 0** (nightly only — it writes to the TEST branch, and was not re-measured
-  here). `test:scripts` therefore reads **822**, not the
+  here). `test:scripts` therefore read **822** at `e8d5af9`, not the
   750 recorded on 2026-11-15: five `*.test.js` files were added under `scripts/lib/` between `4ba4122`
-  and `e8d5af9` and none removed, so the suite grew rather than a count being reclassified.
+  and `e8d5af9` and none removed, so the suite grew rather than a count being reclassified. It reads **823**
+  on merged `master` (`43fd8c8`): PR #41 added the one remaining test (`a batch tag the inventory has never
+  seen cannot leak into PR 2` in `scripts/lib/test-ownership-audit-cli.test.js`).
 - **Step 4B PR 3 — merged** (PR #36 merged 2026-11-18 as `57bca1c`). The figures below are the **historical
   2026-11-17 measurement** taken on the batch's implementation snapshot `89b0bb2`, which was `master` =
   `de659ad` plus the assembly batch on its branch; they were **not** re-measured after the merge. The
@@ -105,17 +110,20 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   in the runtime tree and kept their counts — and `npm run test:core` is **361 tests: 359 pass / 0 fail /
   2 skipped / 0 cancelled**. The net +1 is the key-by-key `assembly` namespace test added to
   `test/surface.test.js`; no test moved between the two commands.
-- **Step 4B PR 4 — branch `feat/core-ranking-extraction` (not merged when this was measured).** The Engine 5a
+- **Step 4B PR 4 — merged** (PR #41 merged 2026-11-19 as `43fd8c8`). The Engine 5a
   ranking batch (`step-4b-pr4`, baseline `07dfd22`, 4 modules byte-identical, 32 / 32 across the three
-  batches) moves the ranking barrel and its three stage modules and publishes a fifth namespace. Measured at
+  batches) moved the ranking barrel and its three stage modules and published a fifth namespace. Measured at
   the implementation commit `64edd94`: `npm run test:unit` **982 pass / 0 fail** (was 1052 — 70 ranking tests
   moved out of `src/`), `npm run test:core` **432 tests: 430 pass / 0 fail / 2 skipped** (was 361: +70 moved,
   +1 new `ranking` namespace assertion), `npm run verify:ownership -- --inventory=pr4` **92 tests / 265
   assertions, unchanged** (3 moved, 1 stayed), `npm run check:whitespace` PASS (one blank line at EOF excused
-  only because the move is proved byte-identical).
+  only because the move is proved byte-identical). The branch-scoped ownership (92 tests / 265 assertions) and
+  whitespace figures above were not re-run after the merge, which moved no byte of the batch (the merged tree
+  `4c005f39` is identical to the branch head `73979f8`'s tree); the test-suite counts (`test:unit` 982,
+  `test:core` 432) were re-measured on merged `master` (`43fd8c8`) and are documented above.
 - **Current extraction state:** `packages/recommendation-core/` is part of merged `master` and publishes
-  five namespaces once the PR 4 branch lands — four on `master` today (`candidates`, `compatibility`,
-  `filtering`, `assembly`) plus `ranking` from `feat/core-ranking-extraction` — pinned key by key in
+  five namespaces, all on `master` since PR #41 merged as `43fd8c8` (`candidates`, `compatibility`,
+  `filtering`, `assembly` and `ranking`) — pinned key by key in
   `test/surface.test.js` and in `test/export-surface.json`, behind identity re-export shims at the old
   `src/recommendation/**` paths. Nothing else has moved: the loaders, `scoring`, `retention`,
   `explanation` and `offers/as-of` still live in `src/recommendation/`,
