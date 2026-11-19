@@ -1853,9 +1853,9 @@ Revision 10 changes this file, `CONTEXT.md` and `docs/development/extraction-wor
 
 On `master`, every old path under `src/recommendation/**` for the four merged namespaces is an identity re-export shim rather than the implementation; `ranking`'s shim exists only on the PR 4 branch. **What has not changed on `master`:** the loaders, `scoring`, `retention`, `explanation` and `offers/as-of` have not moved, `ranking` is still implementation there until PR #41 merges, `packages/recommendation-runtime/` holds only its manifest and `docs/LOADERS_AND_TRANSACTIONS.md`, `apps/api/src/engine.js` still imports the six `src/recommendation/**` barrels, and §19 step 4 is **in progress, not complete**.
 
-### 25.3 Fresh inventory measurement (CURRENT, 2026-11-18)
+### 25.3 Inventory measurement — 2026-11-18 snapshot (base `07dfd22`, historical)
 
-Measured against `master` = `07dfd22` with read-only Git commands, so another engineer can reproduce every figure without touching the working tree.
+**Historical snapshot, preserved as written.** Measured against `master` = `07dfd22` with read-only Git commands, so another engineer can reproduce every figure without touching the working tree. `07dfd22` was `master` on 2026-11-18 and is **not** the current base: that is `e8d5af9`, measured in §25.3.1. Nothing in this section is a statement about today's `master`.
 
 | Rule | Definition |
 |---|---|
@@ -1874,11 +1874,33 @@ Measured against `master` = `07dfd22` with read-only Git commands, so another en
 | Legacy tests `src/recommendation/**/*.test.js` | 53 | — | — |
 | `packages/` (all four package directories) | **60** paths = `AGENTS.md` 1 + `database-guard` 3 + `recommendation-core` 54 + `recommendation-runtime` 2 | — | — |
 
-**Current engine total: 81 non-test `.js` files and 18 230 lines, 17 DB-dependent files** — the 50 legacy implementation files (12 335 lines) plus the 31 core `src/` files (5 865 lines of moved modules and 30 lines of package entry point). The legacy tree's non-test total of 67 is *not* that number: 17 of those entries are shims.
+**Engine total at `07dfd22`: 81 non-test `.js` files and 18 230 lines, 17 DB-dependent files** — the 50 legacy implementation files (12 335 lines) plus the 31 core `src/` files (5 865 lines of moved modules and 30 lines of package entry point). The legacy tree's non-test total of 67 is *not* that number: 17 of those entries are shims.
 
-**Historical, preserved deliberately.** §6.1's table was measured on `master` = `a413f25` and reports **80 non-test modules and 18 297 non-test lines**. It stays as that revision's record. The 67-line difference from today is ordinary code change between `a413f25` and `07dfd22`, not an extraction effect: every moved module is byte-identical to its batch baseline under `npm run verify:extraction`, and the per-stage rows in §6.1 no longer describe today's `src/recommendation/`, which now holds 17 shims next to 50 implementation files.
+**Historical, preserved deliberately.** §6.1's table was measured on `master` = `a413f25` and reports **80 non-test modules and 18 297 non-test lines**. It stays as that revision's record. The 67-line difference is ordinary code change between `a413f25` and `07dfd22`, not an extraction effect: every moved module is byte-identical to its batch baseline under `npm run verify:extraction`, and the per-stage rows in §6.1 no longer describe today's `src/recommendation/`, which now holds 17 shims next to 50 implementation files.
 
-### 25.4 Current-status statements corrected forward
+### 25.3.1 Inventory measurement (CURRENT, 2026-11-19, base `e8d5af9`)
+
+Re-measured read-only by the **same six rules** as §25.3, against PR #41's base: `master` = `e8d5af9` (the merge of PR #40, verified as the pull request's `baseRefOid`). Every figure below comes from the documented commands (`git ls-tree -r --name-only <sha>` for the population, `git show <sha>:<path> | wc -l` per file), and the same measurement reproduces §25.3's `07dfd22` row exactly — 67 = 50 + 17, 12 335 + 210, 31 / 5 895, 6 512, 53, 60, 81 / 18 230 / 17 — which is what makes the differences below measurements rather than assumptions.
+
+| Tree | Files | Lines | DB-dependent |
+|---|---|---|---|
+| `src/recommendation/` — implementation + identity shims | 67 non-test `.js` = **50 implementation + 17 shims** | 12 335 implementation + 210 shim | **17** (15 outside `ingestion/`), all implementation, no shim |
+| `packages/recommendation-core/src/` — `assembly` 7 / `candidates` 6 / `compatibility` 14 / `filtering` 3 / root `index.js` 1 | **31** | **5 895** (2 408 / 656 / 1 853 / 948 / 30) | **0** |
+| `packages/recommendation-core/test/` | **23** paths, 19 of them `.js` and 17 of those `*.test.js`, plus `export-surface.json` and **three** characterization fixtures | 6 512 `.js` lines | n/a |
+| Legacy tests `src/recommendation/**/*.test.js` | 53 | — | — |
+| `packages/` (all four package directories) | **61** paths = `AGENTS.md` 1 + `database-guard` 3 + `recommendation-core` **55** + `recommendation-runtime` 2 | — | — |
+
+**Engine total at `e8d5af9`: 81 non-test `.js` files and 18 230 lines, 17 DB-dependent files** — identical to `07dfd22`.
+
+**What changed between the two bases, measured.** The implementation trees did not move: the same 50 legacy implementation files (12 335 lines), the same 31 core `src/` files (5 895 lines), the same 17 DB-dependent files (15 outside `ingestion/`), the same 53 legacy tests and the same 81 / 18 230 / 17 total. The two differences are in the **non-implementation** population and are a path change, not a module move: `packages/recommendation-core/test/` gained one path (22 → **23**) and `packages/` gained the same one (60 → **61**, `recommendation-core` 54 → **55**). It is `test/fixtures/pr4-characterization.json`, added by `5ff78a7` ("test(core): freeze the ranking surface before anything moves", merged as PR #39), with PR #38 (documentation) and PR #40 (a `.gitignore` entry) in the same range. One fixture file still changed a published count, which is why this row was re-measured rather than carried forward.
+
+**The PR branch is not the base.** Measured with the same rules on `feat/core-ranking-extraction` = `1581581`, this unmerged branch gives `src/recommendation/` 67 non-test `.js` = **46 implementation + 21 shims** (11 375 + 253 lines), `packages/recommendation-core/src/` **35** files / **6 856** lines (`ranking` 4 / 960, root `index.js` 31), `packages/recommendation-core/test/` **26** paths (22 `.js`, 20 `*.test.js`, 7 744 `.js` lines), legacy tests **50**, `packages/` **68** paths, and 81 non-test files / 18 231 lines / 17 DB-dependent. Those figures describe the branch only; `master`'s are the table above.
+
+**Line endings:** this section was appended to a CRLF file with 0 bare LF and 0 stray CR after writing, matching the convention §25.6 records.
+
+### 25.4 Historical record — what Revision 10 corrected from Revision 9
+
+**This table is a historical record of the Revision 9 → Revision 10 corrections, preserved as written. It is not a summary of the current revision, and none of its rows states this revision's status.** For the current state see §25.2 (which namespaces ship on `master`) and §25.3.1 (the per-tree inventory); the Revision 11 record is the Date paragraph and §25.2.
 
 | Location | Revision 9 wording | Revision 10 |
 |---|---|---|
@@ -1896,7 +1918,7 @@ Measured against `master` = `07dfd22` with read-only Git commands, so another en
 ### 25.5 Preservation and no-code-change confirmation
 
 - Revisions 1-9 are **preserved**: their log entries and the §6.1 table values are kept verbatim, and every §23 evidence row keeps its figures, dates and commit references. Revision 10 is appended as a new section and never inserted into a historical one, and it supersedes nothing retroactively — it records what happened after Revision 9 was written. The only edits to prior evidence rows are the two status labels §25.4 lists — the §23.1 `master` row for `4ba4122` and the §23.1 `packages/` row for `de659ad`, changed from **current** to **historical** because those commits are no longer the head; their figures and dates are untouched.
-- Historical snapshots stay distinguishable from current measurements: §6.1 carries the `a413f25` figures with an explicit note; §23.1 keeps every earlier `packages/` and `master` inventory as its own dated row; §25.3 is the only table that states today's per-tree numbers.
+- Historical snapshots stay distinguishable from current measurements: §6.1 carries the `a413f25` figures with an explicit note; §23.1 keeps every earlier `packages/` and `master` inventory as its own dated row; §25.3 is kept as the 2026-11-18 snapshot and §25.3.1 is the only table that states today's per-tree numbers.
 - Files changed by Revision 10: this file, `CONTEXT.md` and `docs/development/extraction-workflow.md` — **documentation only**. It does not modify any source file under `src/`, `apps/api/`, `apps/web/` or `packages/`; does not add, remove or change any `package.json`, lockfile, test, fixture or `extraction-manifest.json` batch; does not change `.github/workflows/`; does not modify a migration, seed or the audit log; does not connect to a database; and begins no roadmap step, including the ranking extraction.
 - Line endings: `docs/**` and `CONTEXT.md` are CRLF; the bytes of every unchanged line are preserved (§25.6).
 
