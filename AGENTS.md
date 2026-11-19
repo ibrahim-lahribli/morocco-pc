@@ -26,11 +26,12 @@ boundary: the write-target guard lives in `packages/database-guard/` (PR #27, me
 `src/index.js` whose surface grows one namespace per extraction batch, a purity gate with its regression suites over every file under `src/`
 (`npm run test:core`), the committed export snapshot at `test/export-surface.json`, and the hermetic runner
 `test/hermetic-run.js` that proves the suite passes with no `node_modules` reachable — `npm run test:core`
-and the hermetic run are both wired into `ci.yml`. **The harness is a boundary gate, and steps 4B PR 2-5 have begun the extraction behind it**: the pure
+and the hermetic run are both wired into `ci.yml`. **The harness is a boundary gate, and steps 4B PR 2-6 have begun the extraction behind it**: the pure
 `candidates` modules, the Engine 1 `compatibility` tree, the pure half of `filtering`, the pure Engine 3
-`assembly` stage, the Engine 5a `ranking` stage and the Engine 2D `retention` stage now live in `packages/recommendation-core/src/` behind identity re-export shims at their
-old paths, and `test/export-surface.json` records the six namespaces they publish (added in batch order:
-PR 2, PR 3, PR 4 then PR 5). The loaders, scoring,
+`assembly` stage, the Engine 5a `ranking` stage, the Engine 2D `retention` stage and the pure Engine 4
+scoring half now live in `packages/recommendation-core/src/` behind identity re-export shims at their
+old paths, and `test/export-surface.json` records the seven namespaces they publish (added in batch order:
+PR 2, PR 3, PR 4, PR 5 then PR 6). The loaders,
 explanation and `offers/as-of` have NOT moved, `packages/recommendation-runtime/` still carries only its
 manifest and planning documentation, `apps/api/src/engine.js` still imports `src/recommendation/**`
 directly, and the RFC remains PROPOSED for the remaining work. B1-B8 are open. Do not start the extraction
