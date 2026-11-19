@@ -145,6 +145,27 @@ const FILESYSTEM_EXCEPTIONS = new Map([
       reason: 'the scanner\'s own regression suite: builds fixture trees for it to scan; writes only under os.tmpdir()',
     },
   ],
+  [
+    'ranking-index.test.js',
+    {
+      specifiers: ['node:fs'],
+      reason: 'read-only: reads the moved ranking barrel source to assert a structural property',
+    },
+  ],
+  [
+    'ranking-rank.test.js',
+    {
+      specifiers: ['node:fs'],
+      reason: 'read-only: reads the moved rank source to assert a structural property',
+    },
+  ],
+  [
+    'ranking-select-diverse.test.js',
+    {
+      specifiers: ['node:fs'],
+      reason: 'read-only: reads the moved select-diverse source to assert a structural property',
+    },
+  ],
 ]);
 
 /**
@@ -201,6 +222,17 @@ const INVENTORY = [
   { batch: 'step-4b-pr3', kind: 'stayed', baseline: 'src/recommendation/assembly/pipeline.test.js', current: 'src/recommendation/assembly/pipeline.test.js' },
   { batch: 'step-4b-pr3', kind: 'stayed', baseline: 'src/recommendation/assembly/prices.test.js', current: 'src/recommendation/assembly/prices.test.js' },
 
+  // --- moved (step 4B PR 4): the Engine 5a ranking tests follow the code ---
+  // The three files whose imports all resolve inside the core package moved
+  // with their implementation; only the specifiers and each __dirname source
+  // read were repointed, so no test or assertion was lost.
+  { batch: 'step-4b-pr4', kind: 'moved', baseline: 'src/recommendation/ranking/index.test.js', current: 'packages/recommendation-core/test/ranking-index.test.js' },
+  { batch: 'step-4b-pr4', kind: 'moved', baseline: 'src/recommendation/ranking/rank.test.js', current: 'packages/recommendation-core/test/ranking-rank.test.js' },
+  { batch: 'step-4b-pr4', kind: 'moved', baseline: 'src/recommendation/ranking/select-diverse.test.js', current: 'packages/recommendation-core/test/ranking-select-diverse.test.js' },
+  // select-archetypes.test.js stays: it imports ../scoring/use-cases, a stage
+  // that has NOT moved, so it cannot follow the code into the pure package.
+  { batch: 'step-4b-pr4', kind: 'stayed', baseline: 'src/recommendation/ranking/select-archetypes.test.js', current: 'src/recommendation/ranking/select-archetypes.test.js' },
+
   // --- split: the same barrel contract, now asserted by two owners ---
   { kind: 'split', baseline: 'src/recommendation/filtering/index.test.js', current: 'src/recommendation/filtering/index.test.js' },
 
@@ -215,10 +247,37 @@ const INVENTORY = [
  * the default is the PR 2 set, so an existing run keeps its exact meaning.
  * Each batch is measured against ITS OWN baseline (-base), because a row's
  * baseline path stops existing once that batch has moved it.
+ *
+ * PR 2 is defined by the ABSENCE of a batch tag, never by a list of the tags to
+ * exclude. A row that belongs to a later batch carries `batch`; a batch this
+ * file has never seen (`step-4b-pr5`, say) carries one too. Naming the tags to
+ * exclude would silently adopt every future batch into PR 2 the day it was
+ * appended, which is the regression that
+ * scripts/lib/test-ownership-audit-cli.test.js pins. The rule is therefore:
+ * **PR 2 measures only untagged rows**, and selectInventoryRows is the single
+ * place that decides it.
  */
+const BATCH_INVENTORIES = {
+  pr3: 'step-4b-pr3',
+  pr4: 'step-4b-pr4',
+};
+
+/**
+ * The rows one named inventory measures. PR 2 is every UNTAGGED row; a batch
+ * inventory is every row tagged with that batch; an unknown name measures
+ * nothing rather than falling back to the whole inventory.
+ */
+function selectInventoryRows(rows, name) {
+  if (name === 'pr2') return rows.filter((row) => !row.batch);
+  const batch = BATCH_INVENTORIES[name];
+  if (!batch) return [];
+  return rows.filter((row) => row.batch === batch);
+}
+
 const INVENTORIES = {
-  pr2: INVENTORY.filter((row) => row.batch !== 'step-4b-pr3'),
-  pr3: INVENTORY.filter((row) => row.batch === 'step-4b-pr3'),
+  pr2: selectInventoryRows(INVENTORY, 'pr2'),
+  pr3: selectInventoryRows(INVENTORY, 'pr3'),
+  pr4: selectInventoryRows(INVENTORY, 'pr4'),
 };
 
 /**
@@ -689,7 +748,7 @@ function main(argv) {
   const options = parseArgs(argv);
   if (options.errors.length > 0) {
     process.stderr.write('audit-pr2-test-ownership: ' + options.errors.join('\n  ') + '\n');
-    process.stderr.write('usage: node scripts/audit-pr2-test-ownership.js [--base=<git-ref>] [--inventory=pr2|pr3]\n');
+    process.stderr.write('usage: node scripts/audit-pr2-test-ownership.js [--base=<git-ref>] [--inventory=pr2|pr3|pr4]\n');
     return 2;
   }
   if (!isGitRepository(REPO_ROOT)) {
@@ -1013,6 +1072,9 @@ if (require.main === module) {
 // counting/purity helpers can be exercised directly.
 module.exports = {
   DEFAULT_BASELINE_BATCH,
+  INVENTORIES,
+  INVENTORY,
+  selectInventoryRows,
   countDeclarations,
   deriveLoopExpansion,
   corePurityViolations,

@@ -20,9 +20,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { rankBuilds, TOP_N_PERSISTED, round2, buildSignature, deriveStatus } = require('./rank');
-const { EXPANSION_ORDER } = require('../assembly');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+// Step 4B PR 4: this file moved with the implementation into the core package.
+// The module specifiers point at core's own tree; the assertions are unchanged.
+const { rankBuilds, TOP_N_PERSISTED, round2, buildSignature, deriveStatus } = require('../src/ranking/rank');
+const { EXPANSION_ORDER } = require('../src/assembly');
+const { CandidateSelectionError, ERROR_CODES } = require('../src/candidates/errors');
 
 const CPU = 'cpu-1';
 const MB = 'mb-1';
@@ -587,7 +589,7 @@ test('invalid component status fails', () => {
 // Mirrors the assemble.test.js needle technique.
 // ---------------------------------------------------------------------------
 test('rank.js requires only assembly barrel + candidates/errors', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'rank.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../src/ranking/rank.js'), 'utf8');
   const requires = [...source.matchAll(/require\('([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(requires, ['../assembly', '../candidates/errors']);
 });
@@ -596,7 +598,7 @@ test('rank.js does not reach for pg / fs / dotenv / other engines', () => {
   // Strip comments so policy words in prose cannot self-match (DEVELOPMENT
   // NOTES, 2026-09-21: comment-stripping before substring bans).
   const source = fs
-    .readFileSync(path.join(__dirname, 'rank.js'), 'utf8')
+    .readFileSync(path.join(__dirname, '../src/ranking/rank.js'), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/(^|[^:])\/\/[^\\n]*/g, '$1');
   const banned = [

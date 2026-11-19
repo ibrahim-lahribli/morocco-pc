@@ -144,6 +144,37 @@
           "destination": "packages/recommendation-core/src/assembly/prices.js"
         }
       ]
+    },
+    {
+      "id": "step-4b-pr4",
+      "description": "Step 4B PR 4: the Engine 5a ranking stage moved into packages/recommendation-core/src/ranking/ - the barrel plus its three stage modules (ranking, diverse top-set selection and archetype selection) - leaving identity re-export shims at the old paths. Its only intra-tree dependencies (../assembly, ../candidates/errors) already live in the core package, so every relative specifier resolves unchanged from the destination: nothing here is a rewrite.",
+      "baseline_sha": "07dfd22be7170ede689da1a1637cfab1645cb209",
+      "identity_policy": "byte-identical",
+      "characterization": {
+        "fixture": "packages/recommendation-core/test/fixtures/pr4-characterization.json",
+        "capture_command": "node scripts/characterize-pr4.js",
+        "capture_commit_subject": "test(core): freeze the ranking surface before anything moves",
+        "expect_touch_commits": 1,
+        "capture_paths": ["scripts/characterize-pr4.js"]
+      },
+      "modules": [
+        {
+          "source": "src/recommendation/ranking/index.js",
+          "destination": "packages/recommendation-core/src/ranking/index.js"
+        },
+        {
+          "source": "src/recommendation/ranking/rank.js",
+          "destination": "packages/recommendation-core/src/ranking/rank.js"
+        },
+        {
+          "source": "src/recommendation/ranking/select-archetypes.js",
+          "destination": "packages/recommendation-core/src/ranking/select-archetypes.js"
+        },
+        {
+          "source": "src/recommendation/ranking/select-diverse.js",
+          "destination": "packages/recommendation-core/src/ranking/select-diverse.js"
+        }
+      ]
     }
   ]
 }
