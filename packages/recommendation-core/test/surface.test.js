@@ -74,6 +74,17 @@ const ASSEMBLY_KEYS = [
   'evaluateBuildReplacement',
 ];
 
+const RANKING_KEYS = [
+  'rankBuilds',
+  'TOP_N_PERSISTED',
+  'selectDiverseTop',
+  'MAX_PER_PAIR',
+  'selectArchetypes',
+  'PERFORMANCE_FLOOR',
+  'STRATEGIES',
+  'REASON_CODES',
+];
+
 describe('core namespaces', () => {
   it('candidates exposes the pure contract and nothing runtime', () => {
     assert.deepEqual(Object.keys(core.candidates).sort(), [...CANDIDATES_KEYS].sort());
@@ -87,6 +98,10 @@ describe('core namespaces', () => {
 
   it('assembly exposes the whole Engine 3 surface', () => {
     assert.deepEqual(Object.keys(core.assembly).sort(), [...ASSEMBLY_KEYS].sort());
+  });
+
+  it('ranking exposes the whole Engine 5a surface', () => {
+    assert.deepEqual(Object.keys(core.ranking).sort(), [...RANKING_KEYS].sort());
   });
 
   it('filtering exposes the pure half of Engine 2D and nothing runtime', () => {

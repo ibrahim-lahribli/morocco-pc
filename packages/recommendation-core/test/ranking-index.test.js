@@ -16,9 +16,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const ranking = require('./index');
-const rank = require('./rank');
-const selectDiverse = require('./select-diverse');
+// Step 4B PR 4: this file moved with the implementation into the core package.
+// The module specifiers point at core's own tree; the assertions are unchanged.
+const ranking = require('../src/ranking');
+const rank = require('../src/ranking/rank');
+const selectDiverse = require('../src/ranking/select-diverse');
 
 test('ranking barrel exposes exactly the E4 eight-export public API, in order', () => {
   assert.deepEqual(
@@ -48,7 +50,7 @@ test('ranking barrel re-exports by identity - no wrapper, no copy', () => {
   assert.strictEqual(ranking.TOP_N_PERSISTED, rank.TOP_N_PERSISTED);
   assert.strictEqual(ranking.selectDiverseTop, selectDiverse.selectDiverseTop);
   assert.strictEqual(ranking.MAX_PER_PAIR, selectDiverse.MAX_PER_PAIR);
-  const archetypes = require('./select-archetypes');
+  const archetypes = require('../src/ranking/select-archetypes');
   assert.strictEqual(ranking.selectArchetypes, archetypes.selectArchetypes);
   assert.strictEqual(ranking.PERFORMANCE_FLOOR, archetypes.PERFORMANCE_FLOOR);
   assert.strictEqual(ranking.STRATEGIES, archetypes.STRATEGIES);
@@ -66,7 +68,7 @@ test('MAX_PER_PAIR is a frozen code constant (Decision 20 section 3)', () => {
 });
 
 test('ranking is a boundary only: no logic, no extra imports, no DB/persistence', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../src/ranking/index.js'), 'utf8');
 
   // No logic of its own.
   for (const token of ['function ', 'if (', 'for (', 'await ', '=>', '.query(', 'async ']) {

@@ -14,9 +14,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { selectDiverseTop, MAX_PER_PAIR } = require('./select-diverse');
-const { rankBuilds, buildSignature } = require('./rank');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+// Step 4B PR 4: this file moved with the implementation into the core package.
+// The module specifiers point at core's own tree; the assertions are unchanged.
+const { selectDiverseTop, MAX_PER_PAIR } = require('../src/ranking/select-diverse');
+const { rankBuilds, buildSignature } = require('../src/ranking/rank');
+const { CandidateSelectionError, ERROR_CODES } = require('../src/candidates/errors');
 
 const CPU = 'cpu-1';
 const MB = 'mb-1';
@@ -362,7 +364,7 @@ test('integration: real rankBuilds output fed to selectDiverseTop end-to-end', (
 // Boundary test
 // ---------------------------------------------------------------------------
 test('boundary: select-diverse.js does not import banned modules', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'select-diverse.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../src/ranking/select-diverse.js'), 'utf8');
   const banned = [
     "require('pg')", "require('node:pg')", "require('dotenv')", "require('fs')",
     'new Pool', '.query(', '../orchestrator', '../persistence', '../query',

@@ -15,6 +15,7 @@
     "verify:docs": "node scripts/verify-docs.js",
     "check:characterization": "node scripts/characterize-pr2.js --check",
     "check:characterization:pr3": "node scripts/characterize-pr3.js --check",
+    "check:characterization:pr4": "node scripts/characterize-pr4.js --check",
     "check:whitespace": "node scripts/check-diff-whitespace.js",
     "verify:extraction": "node scripts/verify-pr2-provenance.js",
     "verify:ownership": "node scripts/audit-pr2-test-ownership.js",

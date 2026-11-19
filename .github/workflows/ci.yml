@@ -67,6 +67,10 @@ jobs:
       # behaviour is not checked anywhere.
       - name: Extraction characterization (L2, assembly fixture)
         run: npm run check:characterization:pr3
+      # Step 4B PR 4's own fixture: the ranking stage. Same reason as the
+      # assembly step above - one entry per batch, or the batch is unchecked.
+      - name: Extraction characterization (L2, ranking fixture)
+        run: npm run check:characterization:pr4
       - name: Extraction provenance (L3, manifest baseline)
         run: npm run verify:extraction
       # The PR 2 baseline is passed EXPLICITLY: "the commit before the move" is
@@ -80,6 +84,11 @@ jobs:
       # nothing about the Engine 3 move.
       - name: Extraction test ownership (assembly baseline)
         run: npm run verify:ownership -- --inventory=pr3 --base=de659adaaf4bbde4b2e1673aae08314d07af000e
+      # The ranking batch's own immutable baseline. Its fixture was captured at
+      # 07dfd22, so the before-counts are read from that commit: the PR 2 and
+      # PR 3 baselines predate the modules this batch moved.
+      - name: Extraction test ownership (ranking baseline)
+        run: npm run verify:ownership -- --inventory=pr4 --base=07dfd22be7170ede689da1a1637cfab1645cb209
       # DB-free API contract/route tests (fastify.inject + stubs; no database).
       - run: npm run test:api
       # Contract ownership: exactly ONE versioned contract in contract/, and no
