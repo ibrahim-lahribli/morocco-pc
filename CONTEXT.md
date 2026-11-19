@@ -117,8 +117,10 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   moved out of `src/`), `npm run test:core` **432 tests: 430 pass / 0 fail / 2 skipped** (was 361: +70 moved,
   +1 new `ranking` namespace assertion), `npm run verify:ownership -- --inventory=pr4` **92 tests / 265
   assertions, unchanged** (3 moved, 1 stayed), `npm run check:whitespace` PASS (one blank line at EOF excused
-  only because the move is proved byte-identical). These figures were not re-measured after the merge,
-  which moved no byte of the batch (the merged tree `4c005f39` is identical to the branch head `73979f8`'s tree).
+  only because the move is proved byte-identical). The branch-scoped ownership (92 tests / 265 assertions) and
+  whitespace figures above were not re-run after the merge, which moved no byte of the batch (the merged tree
+  `4c005f39` is identical to the branch head `73979f8`'s tree); the test-suite counts (`test:unit` 982,
+  `test:core` 432) were re-measured on merged `master` (`43fd8c8`) and are documented above.
 - **Current extraction state:** `packages/recommendation-core/` is part of merged `master` and publishes
   five namespaces, all on `master` since PR #41 merged as `43fd8c8` (`candidates`, `compatibility`,
   `filtering`, `assembly` and `ranking`) — pinned key by key in

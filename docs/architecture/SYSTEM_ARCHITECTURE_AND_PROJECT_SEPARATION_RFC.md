@@ -1845,7 +1845,7 @@ Revision 10 changes this file, `CONTEXT.md` and `docs/development/extraction-wor
 
 `master` is `07dfd22`. Revision 9 was written while PR #36 was still open for review (head `d4e7e5f`), which is why its status line, §11.6, §19.1 row 4 and the closing note say "open for review" and "moves". Those *current-status* sentences are corrected forward in this revision. The Revision 9 log entry and the §23.1 Revision 5/7 evidence rows are left as written; the §23.1 Revision 8 and Revision 9 rows keep their measurements, dates and commit references, and only their status labels changed from **current** to **historical** — the `master` row for `4ba4122` and the `packages/` row for `de659ad` — because those commits are no longer the head (§25.4).
 
-### 25.2 What is merged now, and what the PR 4 branch adds (CURRENT)
+### 25.2 What is merged now, and what remains (CURRENT)
 
 `packages/recommendation-core/` is part of `master`'s engine, not a branch: the §11.6 boundary harness plus the three extraction batches behind it. **All five namespaces are on `master` as of 2026-11-19.** `ranking` was implemented on the step 4B PR 4 branch (PR #41, `feat/core-ranking-extraction`, batch `step-4b-pr4`, baseline `07dfd22`), which **merged on 2026-11-19 as `43fd8c832bdb1c4c6762470dcca72f0742a790c4`**, after the documentation PR #42 merged as `c3186bc1a8a0d5e6882ff9609443c0b6d1466180`; `master` therefore carries the Engine 5a implementation at `packages/recommendation-core/src/ranking/` and an identity shim at `src/recommendation/ranking/`. The entry point `src/index.js` publishes the namespaces below, pinned key by key in `test/surface.test.js` and recorded in `test/export-surface.json`; the `Ships on` column is the distinction this section exists to make, and a row marked `master` is the only kind that describes the merged tree:
 
@@ -1857,7 +1857,7 @@ Revision 10 changes this file, `CONTEXT.md` and `docs/development/extraction-wor
 | `assembly` | `step-4b-pr3` (PR #36, merged 2026-11-18 as `57bca1c`) | 7 | `master` |
 | `ranking` | `step-4b-pr4` (baseline `07dfd22`, PR #41, merged 2026-11-19 as `43fd8c8`) | 4 | `master` |
 
-On `master`, every old path under `src/recommendation/**` for all five namespaces is an identity re-export shim rather than the implementation, `ranking`'s included since the PR #41 merge. In Revision 11 this row read **PR #41 branch only — UNMERGED** and `ranking`'s shim existed only on the branch; that wording is kept here as the record of what was true before 2026-11-19. **What has not changed on `master`:** the loaders, `scoring`, `retention`, `explanation` and `offers/as-of` have not moved, `packages/recommendation-runtime/` holds only its manifest and `docs/LOADERS_AND_TRANSACTIONS.md`, `apps/api/src/engine.js` still imports the six `src/recommendation/**` barrels, and §19 step 4 is **in progress, not complete** — the five namespaces above are what it has moved so far.
+On `master`, every old path under `src/recommendation/**` for all five namespaces is an identity re-export shim rather than the implementation, `ranking` has been included since the PR #41 merge. In Revision 11 this row read **PR #41 branch only — UNMERGED** and `ranking`'s shim existed only on the branch; that wording is kept here as the record of what was true before 2026-11-19. **What has not changed on `master`:** the loaders, `scoring`, `retention`, `explanation` and `offers/as-of` have not moved, `packages/recommendation-runtime/` holds only its manifest and `docs/LOADERS_AND_TRANSACTIONS.md`, `apps/api/src/engine.js` still imports the six `src/recommendation/**` barrels, and §19 step 4 is **in progress, not complete** — the five namespaces above are what it has moved so far.
 
 ### 25.3 Inventory measurement — 2026-11-18 snapshot (base `07dfd22`, historical)
 
@@ -1884,7 +1884,7 @@ On `master`, every old path under `src/recommendation/**` for all five namespace
 
 **Historical, preserved deliberately.** §6.1's table was measured on `master` = `a413f25` and reports **80 non-test modules and 18 297 non-test lines**. It stays as that revision's record. The 67-line difference is ordinary code change between `a413f25` and `07dfd22`, not an extraction effect: every moved module is byte-identical to its batch baseline under `npm run verify:extraction`, and the per-stage rows in §6.1 no longer describe today's `src/recommendation/`, which now holds 17 shims next to 50 implementation files.
 
-### 25.3.1 Inventory measurement (2026-11-19, base `e8d5af9`; the merge `43fd8c8` confirms it)
+### 25.3.1 Inventory measurement — PR #41 base snapshot (2026-11-19, `e8d5af9`; historical)
 
 Re-measured read-only by the **same six rules** as §25.3, against PR #41's base: `master` = `e8d5af9` (the merge of PR #40, verified as the pull request's `baseRefOid`). Every figure below comes from the documented commands (`git ls-tree -r --name-only <sha>` for the population, `git show <sha>:<path> | wc -l` per file), and the same measurement reproduces §25.3's `07dfd22` row exactly — 67 = 50 + 17, 12 335 + 210, 31 / 5 895, 6 512, 53, 60, 81 / 18 230 / 17 — which is what makes the differences below measurements rather than assumptions.
 
