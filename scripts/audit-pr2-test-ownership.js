@@ -247,11 +247,37 @@ const INVENTORY = [
  * the default is the PR 2 set, so an existing run keeps its exact meaning.
  * Each batch is measured against ITS OWN baseline (-base), because a row's
  * baseline path stops existing once that batch has moved it.
+ *
+ * PR 2 is defined by the ABSENCE of a batch tag, never by a list of the tags to
+ * exclude. A row that belongs to a later batch carries `batch`; a batch this
+ * file has never seen (`step-4b-pr5`, say) carries one too. Naming the tags to
+ * exclude would silently adopt every future batch into PR 2 the day it was
+ * appended, which is the regression that
+ * scripts/lib/test-ownership-audit-cli.test.js pins. The rule is therefore:
+ * **PR 2 measures only untagged rows**, and selectInventoryRows is the single
+ * place that decides it.
  */
+const BATCH_INVENTORIES = {
+  pr3: 'step-4b-pr3',
+  pr4: 'step-4b-pr4',
+};
+
+/**
+ * The rows one named inventory measures. PR 2 is every UNTAGGED row; a batch
+ * inventory is every row tagged with that batch; an unknown name measures
+ * nothing rather than falling back to the whole inventory.
+ */
+function selectInventoryRows(rows, name) {
+  if (name === 'pr2') return rows.filter((row) => !row.batch);
+  const batch = BATCH_INVENTORIES[name];
+  if (!batch) return [];
+  return rows.filter((row) => row.batch === batch);
+}
+
 const INVENTORIES = {
-  pr2: INVENTORY.filter((row) => row.batch !== 'step-4b-pr3' && row.batch !== 'step-4b-pr4'),
-  pr3: INVENTORY.filter((row) => row.batch === 'step-4b-pr3'),
-  pr4: INVENTORY.filter((row) => row.batch === 'step-4b-pr4'),
+  pr2: selectInventoryRows(INVENTORY, 'pr2'),
+  pr3: selectInventoryRows(INVENTORY, 'pr3'),
+  pr4: selectInventoryRows(INVENTORY, 'pr4'),
 };
 
 /**
@@ -1046,6 +1072,9 @@ if (require.main === module) {
 // counting/purity helpers can be exercised directly.
 module.exports = {
   DEFAULT_BASELINE_BATCH,
+  INVENTORIES,
+  INVENTORY,
+  selectInventoryRows,
   countDeclarations,
   deriveLoopExpansion,
   corePurityViolations,

@@ -131,6 +131,44 @@ test('--base without a value is an argument error', () => {
   assert.match(result.stderr, /usage: node scripts\/audit-pr2-test-ownership\.js/);
 });
 
+// The PR 2 inventory is defined by the ABSENCE of a batch tag, not by a list of
+// the tags to exclude. This is the regression that keeps it that way: a batch
+// appended by a future extraction PR (step-4b-pr5) must not become a PR 2 row
+// merely because the filter never named it.
+test('a batch tag the inventory has never seen cannot leak into PR 2', () => {
+  const audit = require(SCRIPT);
+
+  const future = {
+    batch: 'step-4b-pr5',
+    kind: 'moved',
+    baseline: 'src/recommendation/retention/retention.test.js',
+    current: 'packages/recommendation-core/test/retention.test.js',
+  };
+
+  for (const row of audit.INVENTORIES.pr2) {
+    assert.equal(row.batch, undefined, 'PR 2 carries only untagged rows: ' + (row.current || row.baseline));
+  }
+
+  const rowsWithFuture = [...audit.INVENTORY, future];
+  assert.equal(
+    audit.selectInventoryRows(rowsWithFuture, 'pr2').includes(future),
+    false,
+    'a hypothetical future batch (step-4b-pr5) leaked into PR 2'
+  );
+  assert.deepEqual(
+    audit.selectInventoryRows(rowsWithFuture, 'pr2'),
+    audit.INVENTORIES.pr2,
+    'a row PR 2 does not own must not change the PR 2 inventory'
+  );
+  for (const name of Object.keys(audit.INVENTORIES)) {
+    assert.deepEqual(
+      audit.selectInventoryRows([future], name),
+      [],
+      'an unknown batch must not be reachable from inventory ' + name
+    );
+  }
+});
+
 test('the audit delegates provenance instead of re-implementing it', () => {
   const result = run([]);
   assert.equal(result.status, 0, result.stderr);
