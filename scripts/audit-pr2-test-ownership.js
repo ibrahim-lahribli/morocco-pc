@@ -16,8 +16,12 @@
  * three Engine 5a ranking rows that moved with their code (and the one that
  * stayed). Step 4B PR 5 adds the four Engine 2D retention rows that moved and
  * the one that stayed: retain.test.js imports ../scoring/candidate-score, a
- * stage that has not moved. `--base` selects the revision the before-counts
- * come from; it never changes the inventory.
+ * stage that had not moved. Step 4B PR 6 adds the five Engine 4 scoring rows
+ * that moved and the three that stayed (the mixed barrel and its two loaders),
+ * and MOVES retain.test.js: its single scoring import is now in the core
+ * package, so the PR 5 stayed row is retired rather than repointed (a PR 5 row
+ * must not start validating a file PR 5 does not own). `--base` selects the
+ * revision the before-counts come from; it never changes the inventory.
  *
  * How it measures:
  *   * tests and assertions are counted from the TOKEN STREAM (the core package's
@@ -184,6 +188,20 @@ const FILESYSTEM_EXCEPTIONS = new Map([
       reason: 'read-only: reads the moved targets source to assert a structural property',
     },
   ],
+  [
+    'scoring-configuration.test.js',
+    {
+      specifiers: ['node:fs'],
+      reason: 'read-only: reads the moved configuration source to assert a structural property',
+    },
+  ],
+  [
+    'scoring-use-cases.test.js',
+    {
+      specifiers: ['node:fs'],
+      reason: 'read-only: reads the moved use-cases source to assert a structural property',
+    },
+  ],
 ]);
 
 /**
@@ -259,9 +277,33 @@ const INVENTORY = [
   { batch: 'step-4b-pr5', kind: 'moved', baseline: 'src/recommendation/retention/budget-floor.test.js', current: 'packages/recommendation-core/test/retention-budget-floor.test.js' },
   { batch: 'step-4b-pr5', kind: 'moved', baseline: 'src/recommendation/retention/targets.test.js', current: 'packages/recommendation-core/test/retention-targets.test.js' },
   { batch: 'step-4b-pr5', kind: 'moved', baseline: 'src/recommendation/retention/igpu-pool.test.js', current: 'packages/recommendation-core/test/retention-igpu-pool.test.js' },
-  // retain.test.js stays: it imports ../scoring/candidate-score, a stage that
-  // has NOT moved, so it cannot follow the code into the pure package.
-  { batch: 'step-4b-pr5', kind: 'stayed', baseline: 'src/recommendation/retention/retain.test.js', current: 'src/recommendation/retention/retain.test.js' },
+  // retain.test.js stayed in PR 5: it imports ../scoring/candidate-score, a
+  // stage that had NOT moved. Step 4B PR 6 moved that stage, so the file now
+  // follows the code and appears below as a PR 6 row. This row is RETIRED (not
+  // repointed): a PR 5 row must measure a file PR 5 owns, and the audit reads
+  // each row's `current` from the working tree, so keeping it here would either
+  // re-validate PR 5's old claim against a file it no longer controls or fail
+  // outright once the old path is gone.
+
+  // --- moved (step 4B PR 6): the Engine 4 scoring tests follow the code ---
+  // The five files whose imports all resolve inside the core package moved with
+  // their implementation; only the specifiers and the two __dirname source reads
+  // were repointed, so no test or assertion was lost.
+  { batch: 'step-4b-pr6', kind: 'moved', baseline: 'src/recommendation/scoring/configuration.test.js', current: 'packages/recommendation-core/test/scoring-configuration.test.js' },
+  { batch: 'step-4b-pr6', kind: 'moved', baseline: 'src/recommendation/scoring/use-cases.test.js', current: 'packages/recommendation-core/test/scoring-use-cases.test.js' },
+  { batch: 'step-4b-pr6', kind: 'moved', baseline: 'src/recommendation/scoring/effective-score.test.js', current: 'packages/recommendation-core/test/scoring-effective-score.test.js' },
+  { batch: 'step-4b-pr6', kind: 'moved', baseline: 'src/recommendation/scoring/candidate-score.test.js', current: 'packages/recommendation-core/test/scoring-candidate-score.test.js' },
+  { batch: 'step-4b-pr6', kind: 'moved', baseline: 'src/recommendation/scoring/build-score.test.js', current: 'packages/recommendation-core/test/scoring-build-score.test.js' },
+  // The deferred retention gap closes here: the one scoring import that held
+  // retain.test.js back is now a core module, so the file moves exactly as its
+  // four PR 5 siblings did.
+  { batch: 'step-4b-pr6', kind: 'moved', baseline: 'src/recommendation/retention/retain.test.js', current: 'packages/recommendation-core/test/retention-retain.test.js' },
+  // The mixed barrel and both loaders stay: index.js composes the loaders with
+  // the pure modules and keeps its 18-key runtime contract; the loaders execute
+  // SQL. None of them may enter the pure package.
+  { batch: 'step-4b-pr6', kind: 'stayed', baseline: 'src/recommendation/scoring/index.test.js', current: 'src/recommendation/scoring/index.test.js' },
+  { batch: 'step-4b-pr6', kind: 'stayed', baseline: 'src/recommendation/scoring/load-assessments.test.js', current: 'src/recommendation/scoring/load-assessments.test.js' },
+  { batch: 'step-4b-pr6', kind: 'stayed', baseline: 'src/recommendation/scoring/load-scoring-model.test.js', current: 'src/recommendation/scoring/load-scoring-model.test.js' },
 
   // --- split: the same barrel contract, now asserted by two owners ---
   { kind: 'split', baseline: 'src/recommendation/filtering/index.test.js', current: 'src/recommendation/filtering/index.test.js' },
@@ -291,6 +333,7 @@ const BATCH_INVENTORIES = {
   pr3: 'step-4b-pr3',
   pr4: 'step-4b-pr4',
   pr5: 'step-4b-pr5',
+  pr6: 'step-4b-pr6',
 };
 
 /**
@@ -310,6 +353,7 @@ const INVENTORIES = {
   pr3: selectInventoryRows(INVENTORY, 'pr3'),
   pr4: selectInventoryRows(INVENTORY, 'pr4'),
   pr5: selectInventoryRows(INVENTORY, 'pr5'),
+  pr6: selectInventoryRows(INVENTORY, 'pr6'),
 };
 
 /**
@@ -780,7 +824,7 @@ function main(argv) {
   const options = parseArgs(argv);
   if (options.errors.length > 0) {
     process.stderr.write('audit-pr2-test-ownership: ' + options.errors.join('\n  ') + '\n');
-    process.stderr.write('usage: node scripts/audit-pr2-test-ownership.js [--base=<git-ref>] [--inventory=pr2|pr3|pr4|pr5]\n');
+    process.stderr.write('usage: node scripts/audit-pr2-test-ownership.js [--base=<git-ref>] [--inventory=pr2|pr3|pr4|pr5|pr6]\n');
     return 2;
   }
   if (!isGitRepository(REPO_ROOT)) {

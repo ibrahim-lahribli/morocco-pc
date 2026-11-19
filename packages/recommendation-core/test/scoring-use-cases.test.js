@@ -19,9 +19,9 @@ const {
   listUseCases,
   USE_CASE_PROFILES_KEY,
   GPU_POLICIES,
-} = require('./use-cases');
-const { validateScoringModelConfiguration } = require('./configuration');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+} = require('../src/scoring/use-cases');
+const { validateScoringModelConfiguration } = require('../src/scoring/configuration');
+const { CandidateSelectionError, ERROR_CODES } = require('../src/candidates/errors');
 
 function profile(overrides = {}) {
   return {
@@ -310,7 +310,10 @@ test('an invalid use_case_profiles shape fails through the configuration validat
 });
 
 test('use-cases.js is a pure module with no database dependency', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'use-cases.js'), 'utf8');
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'scoring', 'use-cases.js'),
+    'utf8'
+  );
   const required = [...source.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
   assert.deepEqual(required, ['../candidates/errors']);
 

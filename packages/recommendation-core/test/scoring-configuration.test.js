@@ -18,8 +18,8 @@ const path = require('node:path');
 const {
   validateScoringModelConfiguration,
   SCORING_MODEL_CONFIGURATION_KEYS,
-} = require('./configuration');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+} = require('../src/scoring/configuration');
+const { CandidateSelectionError, ERROR_CODES } = require('../src/candidates/errors');
 
 /** Complete, valid Decision 3(a) configuration built fresh on every call. */
 function makeConfiguration(overrides = {}) {
@@ -444,7 +444,10 @@ test('the caller-owned configuration is never mutated or frozen', () => {
 });
 
 test('configuration.js is a pure validator with no database dependency', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'configuration.js'), 'utf8');
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'scoring', 'configuration.js'),
+    'utf8'
+  );
   const required = [...source.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
   // Decision 59 adds ../candidates/roles: the same PURE vocabulary constant
   // module the scoring score builders already import, so `top_k_by_role` is
