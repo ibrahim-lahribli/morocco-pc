@@ -297,6 +297,56 @@ Merge only when all of the following hold on the exact head commit being merged:
 `web` (`web.yml`) is path-filtered to `apps/web/**`, `contract/**` and the workflow file, so it does not
 run on a recommendation-only PR and is not a merge gate for one.
 
+### 3.13 Maintain a moved file: an authorized edit
+
+A merged batch's destinations are immutable by identity, so once an extraction has landed the only way to
+fix a moved file without breaking `verify:extraction` is a recorded edit. The batch's optional `edits`
+array is the record, and one edit is **two commits**:
+
+1. the **edit commit** — a single-parent commit that changes exactly the one destination (one `M`
+   record). No rename, no second file, no merge.
+2. the **record commit** — a single-parent commit that changes exactly `extraction-manifest.json`,
+   adding one event: `id` (kebab-case, unique in the manifest), `destination` (a declared move of this
+   batch), `edit_commit`, `previous_commit`, `previous_blob`, `new_blob`, `reason`, `approved_by`,
+   `approved_on` (`YYYY-MM-DD`) and `approval_ref`.
+
+The record commit is **derived, not declared**. A commit cannot contain its own SHA, so the event has no
+`record_commit` field (it is rejected as an unknown key). The verifier finds the single commit after the
+edit that introduces the event id and requires it to have one parent and to change only the manifest.
+
+`verify-pr2-provenance.js` then proves the history from the object graph:
+
+* the destination was ADDED once and that anchor carries the baseline source blob — every manifest
+  baseline predates its destinations, so the baseline can never be a first edit's parent;
+* the non-merge commits touching the destination since the baseline are exactly the anchor plus the
+  recorded edit commits: a change before, between or after the events fails;
+* each edit's sole parent is `previous_commit`, `previous_blob`/`new_blob` are the blobs actually there,
+  and the edit changed exactly that one destination;
+* the event is deeply equal at its record commit, at every later commit that touched the manifest, and in
+  the committed manifest at `HEAD` (modify-then-restore fails);
+* every history scan runs with `--full-history`, so a destination change made on a side branch and then
+  discarded by a merge is still detected — the destination's whole history is judged, not only the line
+  that happens to reach `HEAD`;
+* events for a destination form one ancestry chain: the first `previous_blob` is the baseline source
+  blob, each successor's `previous_blob` is its predecessor's `new_blob`, and the last `new_blob` is the
+  destination blob at `HEAD`; each record commit is an ancestor of — or the direct parent of — the next
+  edit's `previous_commit`, so `edit → record → edit` needs no intervening commit, while unrelated
+  intervening commits are also allowed;
+* `approved_on` must be a real Gregorian calendar date (`2024-02-29` yes, `2026-02-29` and `0000-01-01`
+  no), not merely a `YYYY-MM-DD`-shaped string.
+
+Forbidden history operations — each fails the gate by design, not by accident:
+
+* **squash-merging an edit PR**: the declared commits leave `HEAD`'s ancestry.
+* **rebasing or force-pushing after a record**: the recorded edit commit becomes unreachable.
+* **cherry-picking a recorded edit**: the chain's ancestry does not exist in the target history.
+* **amending or editing the manifest after the record**: deep equality fails at the later commit.
+
+Rebasing or rewriting *before* the record commit is fine — the event stores the final SHAs. A fix that
+touches two moved files is two edits with two commit pairs, not one wide event: one destination per
+event is the whole schema. `scripts/lib/extraction-edits-cli.test.js` builds a throwaway repository for
+each of these cases, positive and negative.
+
 ## 4. Limits of the current tooling — do not over-claim
 
 * **The manifest gate generalises; the capture and audit scripts do not.** `verify-pr2-provenance.js` is

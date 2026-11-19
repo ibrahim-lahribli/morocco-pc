@@ -154,7 +154,7 @@ Read the owning file before changing that layer:
 | `npm run test:api:db` | HTTP end-to-end against the TEST branch (nightly; writes) |
 | `npm run verify:docs` | doc-claim gates; `--offline` for a DB-free run, `--live` adds read-only DB checks |
 | `npm run check:characterization` | the PR 2 characterization fixture still reproduces the pre-move behaviour (`--check` never writes) |
-| `npm run verify:extraction` | manifest-driven extraction provenance: every declared move is blob-identical to its batch baseline (L3) and each characterized batch's fixture predates its move (L2) |
+| `npm run verify:extraction` | manifest-driven extraction provenance: every declared move is blob-identical to its batch baseline (L3) and each characterized batch's fixture predates its move (L2); a recorded post-extraction edit is proven from its two commits (edit, then manifest record) in `docs/development/extraction-workflow.md` §3.13 |
 | `npm run verify:ownership` | test-ownership audit against the PR 2 baseline; `--base=<git-ref>` selects another revision explicitly |
 | `node scripts/gen-decision-index.js --check` | decision index freshness |
 | `npm run verify:replay -- --test-db` | replay every migration into an empty DB and diff by definition |
