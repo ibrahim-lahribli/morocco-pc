@@ -121,11 +121,20 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   whitespace figures above were not re-run after the merge, which moved no byte of the batch (the merged tree
   `4c005f39` is identical to the branch head `73979f8`'s tree); the test-suite counts (`test:unit` 982,
   `test:core` 432) were re-measured on merged `master` (`43fd8c8`) and are documented above.
+- **Step 4B PR 5 — branch `feat/core-retention-extraction` (not merged when this was measured).** The
+  Engine 2D retention batch (`step-4b-pr5`, baseline `0f439e0`, 5 modules byte-identical, 37 / 37 across the
+  four batches) moves the retention barrel and its four stage modules and publishes a sixth namespace. Measured
+  at the implementation commit `0bd7e6f`: `npm run test:unit` **942 pass / 0 fail** (was 982 — 40 retention
+  tests moved out of `src/`), `npm run test:core` **473 tests: 471 pass / 0 fail / 2 skipped** (was 432: +40
+  moved, +1 new `retention` namespace assertion), `npm run verify:ownership -- --inventory=pr5` **93 tests /
+  190 assertions, unchanged** (4 moved, 1 stayed — `retain.test.js` imports `../scoring/candidate-score`,
+  which has not moved), `npm run verify:extraction` **PASS 37 / 37**, `npm run check:whitespace` PASS.
 - **Current extraction state:** `packages/recommendation-core/` is part of merged `master` and publishes
   five namespaces, all on `master` since PR #41 merged as `43fd8c8` (`candidates`, `compatibility`,
-  `filtering`, `assembly` and `ranking`) — pinned key by key in
+  `filtering`, `assembly` and `ranking`), plus `retention` from `feat/core-retention-extraction` — six
+  once that branch lands — pinned key by key in
   `test/surface.test.js` and in `test/export-surface.json`, behind identity re-export shims at the old
-  `src/recommendation/**` paths. Nothing else has moved: the loaders, `scoring`, `retention`,
+  `src/recommendation/**` paths. Nothing else has moved: the loaders, `scoring`,
   `explanation` and `offers/as-of` still live in `src/recommendation/`,
   `packages/recommendation-runtime/` still carries only its manifest and `docs/LOADERS_AND_TRANSACTIONS.md`,
   and `apps/api/src/engine.js` still imports the `src/recommendation/**` barrels directly.
