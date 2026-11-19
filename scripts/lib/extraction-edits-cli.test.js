@@ -24,6 +24,9 @@ const MANIFEST_REL = 'extraction-manifest.json';
 const SOURCE = 'src/a.js';
 const DESTINATION = 'packages/a.js';
 const SOURCE_TEXT = 'module.exports = 1;\n';
+const FIXTURE = 'test/fixtures/batch-one.json';
+const CAPTURE_COMMAND = 'node scripts/characterize-batch-one.js';
+const CAPTURE_SUBJECT = 'test(core): freeze the batch-one surface before anything moves';
 
 function makeRepo(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'extraction-edits-'));
@@ -91,10 +94,22 @@ function makeRepo(t) {
       };
       if (options.description !== undefined) batch.description = options.description;
       if (edits !== undefined) batch.edits = edits;
+      if (options.characterization !== undefined) batch.characterization = options.characterization;
       repo.write(
         MANIFEST_REL,
         JSON.stringify({ kind: 'extraction-manifest', version: 1, batches: [batch] }, null, 2) + '\n'
       );
+    },
+    /**
+     * Overwrite the root tree of `commit` so any path-limited history walk has
+     * to fail when it compares that commit's trees, while commit-only commands
+     * (ancestry, rev-parse) still work.
+     */
+    corruptTree(commit) {
+      const tree = git(['rev-parse', commit + '^{tree}']);
+      const objectPath = path.join(dir, '.git', 'objects', tree.slice(0, 2), tree.slice(2));
+      fs.chmodSync(objectPath, 0o644);
+      fs.writeFileSync(objectPath, 'corrupt\n');
     },
     verify() {
       return spawnSync(
@@ -117,6 +132,35 @@ function extracted(t) {
   repo.writeManifest(baseline);
   repo.commit('append the batch to the extraction manifest');
   return { repo, baseline };
+}
+
+function fixtureText(baseline) {
+  return JSON.stringify({ provenance: { baseline_sha: baseline, command: CAPTURE_COMMAND }, result: 1 }, null, 2) + '\n';
+}
+
+const CHARACTERIZATION = {
+  fixture: FIXTURE,
+  capture_command: CAPTURE_COMMAND,
+  capture_commit_subject: CAPTURE_SUBJECT,
+  expect_touch_commits: 1,
+};
+
+/**
+ * baseline -> capture -> move -> manifest batch declaring the characterization
+ * record. The capture commit's parent is the baseline and it adds only the
+ * fixture, so the fixture origin starts out proven.
+ */
+function characterized(t) {
+  const repo = makeRepo(t);
+  repo.write(SOURCE, SOURCE_TEXT);
+  const baseline = repo.commit('baseline');
+  repo.write(FIXTURE, fixtureText(baseline));
+  const capture = repo.commit(CAPTURE_SUBJECT);
+  repo.move(SOURCE, DESTINATION);
+  repo.commit('move the module into the core package');
+  repo.writeManifest(baseline, undefined, { characterization: CHARACTERIZATION });
+  repo.commit('append the batch to the extraction manifest');
+  return { repo, baseline, capture };
 }
 
 /** Change the destination and return the facts an event must carry. */
@@ -421,6 +465,110 @@ test('a merge that leaves the destination alone is not treated as an edit', (t) 
   const result = repo.verify();
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /destination history: proven for every destination/);
+});
+
+// ---------------------------------------------------------------------------
+// Characterization fixture history
+// ---------------------------------------------------------------------------
+
+test('an untouched characterized batch proves the fixture origin', (t) => {
+  const { repo } = characterized(t);
+
+  const result = repo.verify();
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /characterization fixture: test\/fixtures\/batch-one\.json \(read from HEAD\)/);
+  assert.match(result.stdout, /commits touching the fixture since baseline: 1 \(must be exactly 1\)/);
+  assert.match(result.stdout, /fixture captured before the move: yes/);
+  assert.match(result.stdout, /fixture unchanged since its capture commit: yes/);
+});
+
+test('a fixture regenerated on a side branch and discarded by -s ours fails: full history sees what the merge threw away', (t) => {
+  const { repo, capture } = characterized(t);
+  const main = repo.mainBranch;
+
+  repo.git(['checkout', '--quiet', '-b', 'side-fixture']);
+  repo.write(FIXTURE, JSON.stringify({ provenance: { baseline_sha: 'f'.repeat(40), command: CAPTURE_COMMAND } }) + '\n');
+  repo.commit('regenerate the fixture from the moved code');
+  repo.git(['checkout', '--quiet', main]);
+  repo.write('docs/main.md', 'main\n');
+  repo.commit('unrelated main work so the merge cannot fast-forward');
+  repo.git(['merge', '-s', 'ours', '--no-ff', '-m', 'merge the side branch, keeping the captured fixture', 'side-fixture']);
+
+  // HEAD still holds the captured fixture bytes; only the history remembers the touch.
+  assert.equal(repo.blobOf('HEAD', FIXTURE), repo.blobOf(capture, FIXTURE));
+
+  const result = repo.verify();
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /the fixture was touched by 2 commits since the baseline/);
+  assert.match(result.stderr, /a commit touching the fixture is not the pre-move capture/);
+});
+
+test('a docs-only merge leaves the fixture origin proven: full history does not invent touches', (t) => {
+  const { repo } = characterized(t);
+  const main = repo.mainBranch;
+
+  repo.git(['checkout', '--quiet', '-b', 'side-docs']);
+  repo.write('docs/side.md', 'side\n');
+  repo.commit('side documentation');
+  repo.git(['checkout', '--quiet', main]);
+  repo.write('docs/main.md', 'main\n');
+  repo.commit('main documentation');
+  repo.git(['merge', '--no-ff', '-m', 'merge the documentation branch', 'side-docs']);
+
+  const result = repo.verify();
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /commits touching the fixture since baseline: 1 \(must be exactly 1\)/);
+  assert.match(result.stdout, /verify-pr2-provenance: PASS/);
+});
+
+test('a capture that lands through a merge is still one introduction', (t) => {
+  const repo = makeRepo(t);
+  repo.write(SOURCE, SOURCE_TEXT);
+  const baseline = repo.commit('baseline');
+  const main = repo.mainBranch;
+
+  // The capture, the move and the manifest commit are all on one branch, merged
+  // into main. The merge is TREESAME to that branch for the fixture, so it must
+  // not be counted as a second touch.
+  repo.git(['checkout', '--quiet', '-b', 'capture-branch']);
+  repo.write(FIXTURE, fixtureText(baseline));
+  repo.commit(CAPTURE_SUBJECT);
+  repo.move(SOURCE, DESTINATION);
+  repo.commit('move the module into the core package');
+  repo.writeManifest(baseline, undefined, { characterization: CHARACTERIZATION });
+  repo.commit('append the batch to the extraction manifest');
+
+  repo.git(['checkout', '--quiet', main]);
+  repo.write('docs/main.md', 'main\n');
+  repo.commit('unrelated main work so the merge cannot fast-forward');
+  repo.git(['merge', '--no-ff', '-m', 'merge the capture branch into main', 'capture-branch']);
+
+  const result = repo.verify();
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /commits touching the fixture since baseline: 1 \(must be exactly 1\)/);
+  assert.match(result.stdout, /fixture captured before the move: yes/);
+});
+
+test('an unreadable history is a failure, not an empty history', (t) => {
+  const { repo } = characterized(t);
+  const main = repo.mainBranch;
+
+  repo.git(['checkout', '--quiet', '-b', 'side-docs']);
+  repo.write('docs/side.md', 'side\n');
+  const side = repo.commit('side documentation');
+  repo.git(['checkout', '--quiet', main]);
+  repo.write('docs/main.md', 'main\n');
+  repo.commit('main documentation');
+  repo.git(['merge', '--no-ff', '-m', 'merge the documentation branch', 'side-docs']);
+
+  // Make every path-limited history walk fail while HEAD and the ancestry stay intact.
+  repo.corruptTree(side);
+
+  const result = repo.verify();
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /the history of the fixture since the baseline could not be read, so its origin is unproven/);
+  assert.match(result.stderr, /its history since the baseline could not be read/);
+  assert.doesNotMatch(result.stdout, /verify-pr2-provenance: PASS/);
 });
 
 test('an event whose record was deleted afterwards fails, even if the working manifest still declares it', (t) => {

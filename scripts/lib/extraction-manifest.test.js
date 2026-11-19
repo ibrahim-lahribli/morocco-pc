@@ -295,6 +295,9 @@ test('a malformed edit record is rejected: shape is decided in one place', () =>
   const cases = [
     ['a non-array', 'edits', /edits must be an array/],
     ['an empty array', [], /edits must be a non-empty array/],
+    // The key is absent or a non-empty array; an explicit null is a
+    // half-written record, not "no edits".
+    ['an explicit null', null, /edits must be a non-empty array when present, not null/],
     ['a non-object event', ['edit-one'], /expected an object/],
     ['a destination outside the batch', [{ ...EDIT, destination: 'packages/b.js' }], /not a declared move of this batch/],
     ['a non-kebab id', [{ ...EDIT, id: 'Edit_One' }], /id must be a kebab-case identifier/],

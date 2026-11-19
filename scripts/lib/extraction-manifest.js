@@ -258,12 +258,16 @@ function validateCharacterization(raw, label, errors) {
  * scripts/verify-pr2-provenance.js. The record must still be unambiguous on its
  * own, because the verifier never searches for an event - it is handed one.
  *
- * `edits: []` is rejected rather than treated as "no edits": the key is either
- * absent or it describes at least one change, so a half-written record cannot
- * look like a complete one.
+ * `edits: []` and `edits: null` are rejected rather than treated as "no
+ * edits": the key is either absent or it describes at least one change, so a
+ * half-written record cannot look like a complete one.
  */
 function validateEdits(raw, label, destinations, seenIds, seenEditCommits, errors) {
-  if (raw === undefined || raw === null) return null;
+  if (raw === undefined) return null;
+  if (raw === null) {
+    errors.push(label + ': edits must be a non-empty array when present, not null (omit the key to declare no edits)');
+    return null;
+  }
   if (!Array.isArray(raw)) {
     errors.push(label + ': edits must be an array when present (omit the key to declare no edits)');
     return null;

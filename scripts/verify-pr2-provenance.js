@@ -38,6 +38,11 @@
  *     declared `capture_paths` - no added, modified, renamed or deleted path
  *     outside them - and each declared capture path was absent at the baseline
  *     and is a regular file at the capture commit.
+ *   * those fixture scans also run with `--full-history`, so a fixture modified
+ *     on a side branch and later discarded by a merge is still counted as a
+ *     touch instead of vanishing with the merge; merge commits are excluded
+ *     from the touch count (as for destinations), so a capture that lands
+ *     through a merge is still one introduction;
  *
  * Recorded edits (the only sanctioned way to change a moved file afterwards)
  *   A batch's optional `edits` array names changes that are allowed to break
@@ -50,6 +55,9 @@
  *   * every history scan runs with `--full-history`, so a change made on a side
  *     branch and later discarded by a merge is still seen: the destination's
  *     history is judged, not only the first-parent line;
+ *   * a history scan that cannot be enumerated is a FAILURE, never an empty
+ *     history: `commitList` returns null on a Git error and the caller reports
+ *     it instead of continuing as if nothing happened;
  *   * the non-merge commits that touched the destination since the baseline are
  *     exactly the anchor plus the declared edit commits: any change before,
  *     between or after the recorded events is unrecorded and fails;
@@ -560,7 +568,14 @@ function verifyDestinationHistory(repo, batch, module, events, sourceOid, lines,
       }
     }
 
-    const laterTouches = commitList(repo, ['--full-history', record + '..HEAD', '--', MANIFEST_REL]) || [];
+    const laterTouches = commitList(repo, ['--full-history', record + '..HEAD', '--', MANIFEST_REL]);
+    if (laterTouches === null) {
+      failures.push(
+        tag + ': the manifest history after its record commit could not be listed, ' +
+        'so a later modification or deletion of the event cannot be ruled out'
+      );
+      continue;
+    }
     for (const later of laterTouches) {
       const state = readManifestAt(repo, later);
       if (!state.ok) {
@@ -683,7 +698,7 @@ function verifyCharacterization(repo, batch, lines, failures) {
     );
   }
 
-  const touching = tryGit(repo, ['log', '--format=%H\t%s', batch.baseline_sha + '..HEAD', '--', record.fixture]);
+  const touching = tryGit(repo, ['log', '--full-history', '--no-merges', '--format=%H\t%s', batch.baseline_sha + '..HEAD', '--', record.fixture]);
   if (!touching.ok) {
     failures.push(
       'batch ' + label + ': the history of the fixture since the baseline could not be read, ' +
@@ -711,7 +726,7 @@ function verifyCharacterization(repo, batch, lines, failures) {
     }
   }
 
-  const added = tryGit(repo, ['log', '--diff-filter=A', '--format=%H', batch.baseline_sha + '..HEAD', '--', record.fixture]);
+  const added = tryGit(repo, ['log', '--full-history', '--no-merges', '--diff-filter=A', '--format=%H', batch.baseline_sha + '..HEAD', '--', record.fixture]);
   if (!added.ok) {
     failures.push(
       'batch ' + label + ': the commit that ADDED the fixture could not be resolved, so its origin is unproven'

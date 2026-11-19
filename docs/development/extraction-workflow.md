@@ -129,7 +129,10 @@ Rules the gate enforces on that commit (`scripts/verify-pr2-provenance.js`):
 * it changed nothing except the fixture and each declared `capture_path` (an `M`, `D`, `R` or `C` record
   fails even when the path is allowed — only additions are accepted);
 * each `capture_path` was **absent** at the baseline and is a regular file at the capture commit;
-* the fixture names the baseline SHA and the exact `capture_command`.
+* the fixture names the baseline SHA and the exact `capture_command`;
+* both fixture scans run with `--full-history`, so a fixture modified on a side branch and then
+  discarded by a merge still counts as a touch and fails the gate; merges themselves are excluded
+  from the touch count, so a capture that lands through a merge is still one introduction.
 
 The capture must be deterministic: no clock, no randomness, no database, no environment input, literal
 ids. `scripts/characterize-pr2.js` is the reference implementation of that discipline (its `--check`
@@ -324,9 +327,10 @@ edit that introduces the event id and requires it to have one parent and to chan
   and the edit changed exactly that one destination;
 * the event is deeply equal at its record commit, at every later commit that touched the manifest, and in
   the committed manifest at `HEAD` (modify-then-restore fails);
-* every history scan runs with `--full-history`, so a destination change made on a side branch and then
-  discarded by a merge is still detected — the destination's whole history is judged, not only the line
-  that happens to reach `HEAD`;
+* every history scan runs with `--full-history`, so a destination — or a characterization fixture —
+  changed on a side branch and then discarded by a merge is still detected: the whole history is
+  judged, not only the line that happens to reach `HEAD`; a history scan that cannot be enumerated is
+  a failure, never an empty history;
 * events for a destination form one ancestry chain: the first `previous_blob` is the baseline source
   blob, each successor's `previous_blob` is its predecessor's `new_blob`, and the last `new_blob` is the
   destination blob at `HEAD`; each record commit is an ancestor of — or the direct parent of — the next
