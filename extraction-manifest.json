@@ -175,6 +175,41 @@
           "destination": "packages/recommendation-core/src/ranking/select-diverse.js"
         }
       ]
+    },
+    {
+      "id": "step-4b-pr5",
+      "description": "Step 4B PR 5: the Engine 2D retention stage moved into packages/recommendation-core/src/retention/ - the barrel plus its four stage modules (per-role retention, the budget floor diagnostic, the E2 per-role price targets and the E6 iGPU eligibility set) - leaving identity re-export shims at the old paths. Its whole dependency graph (../candidates/{select,roles,errors}, ../filtering/filter, ../assembly/prices) already lives in the core package, so all 15 relative specifiers resolve unchanged from the destination: nothing here is a rewrite. Four contract suites moved with the modules; retain.test.js stays in the runtime suite because it imports ../scoring/candidate-score, which has not been extracted yet.",
+      "baseline_sha": "0f439e0400c6814d0a21d4ab527c462aef0f5639",
+      "identity_policy": "byte-identical",
+      "characterization": {
+        "fixture": "packages/recommendation-core/test/fixtures/pr5-characterization.json",
+        "capture_command": "node scripts/characterize-pr5.js",
+        "capture_commit_subject": "test(core): freeze the retention surface before anything moves",
+        "expect_touch_commits": 1,
+        "capture_paths": ["scripts/characterize-pr5.js"]
+      },
+      "modules": [
+        {
+          "source": "src/recommendation/retention/index.js",
+          "destination": "packages/recommendation-core/src/retention/index.js"
+        },
+        {
+          "source": "src/recommendation/retention/retain.js",
+          "destination": "packages/recommendation-core/src/retention/retain.js"
+        },
+        {
+          "source": "src/recommendation/retention/budget-floor.js",
+          "destination": "packages/recommendation-core/src/retention/budget-floor.js"
+        },
+        {
+          "source": "src/recommendation/retention/targets.js",
+          "destination": "packages/recommendation-core/src/retention/targets.js"
+        },
+        {
+          "source": "src/recommendation/retention/igpu-pool.js",
+          "destination": "packages/recommendation-core/src/retention/igpu-pool.js"
+        }
+      ]
     }
   ]
 }

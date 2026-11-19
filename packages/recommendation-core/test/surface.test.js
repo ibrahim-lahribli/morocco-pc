@@ -85,6 +85,18 @@ const RANKING_KEYS = [
   'REASON_CODES',
 ];
 
+const RETENTION_KEYS = [
+  'retainTopKPerRole',
+  'excludedCpuProductIds',
+  'BUDGET_FLOOR_ROLES',
+  'computeBudgetFloor',
+  'computeRoleTargets',
+  'resolutionMultiplier',
+  'RESOLUTION_MULTIPLIERS',
+  'BAND_TOLERANCE',
+  'BAND_CEILING_FACTOR',
+];
+
 describe('core namespaces', () => {
   it('candidates exposes the pure contract and nothing runtime', () => {
     assert.deepEqual(Object.keys(core.candidates).sort(), [...CANDIDATES_KEYS].sort());
@@ -102,6 +114,13 @@ describe('core namespaces', () => {
 
   it('ranking exposes the whole Engine 5a surface', () => {
     assert.deepEqual(Object.keys(core.ranking).sort(), [...RANKING_KEYS].sort());
+  });
+
+  it('retention exposes the whole Engine 2D retention surface', () => {
+    assert.deepEqual(Object.keys(core.retention).sort(), [...RETENTION_KEYS].sort());
+    // The GPU policy vocabulary is igpu-pool's own module export, not part of
+    // the stage barrel: the core namespace publishes the barrel's nine keys.
+    assert.equal('GPU_POLICY_VALUES' in core.retention, false);
   });
 
   it('filtering exposes the pure half of Engine 2D and nothing runtime', () => {

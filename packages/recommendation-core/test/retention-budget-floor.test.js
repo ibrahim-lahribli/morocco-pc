@@ -13,10 +13,12 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { BUDGET_FLOOR_ROLES, computeBudgetFloor } = require('./budget-floor');
-const { EXPANSION_ORDER } = require('../assembly/assemble');
-const { priceKey } = require('../assembly/prices');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+// Step 4B PR 5: this file moved with the implementation into the core package.
+// The module specifiers point at core's own tree; the assertions are unchanged.
+const { BUDGET_FLOOR_ROLES, computeBudgetFloor } = require('../src/retention/budget-floor');
+const { EXPANSION_ORDER } = require('../src/assembly/assemble');
+const { priceKey } = require('../src/assembly/prices');
+const { CandidateSelectionError, ERROR_CODES } = require('../src/candidates/errors');
 
 // ---------------------------------------------------------------------------
 // Fixtures. The deepFreeze / carrier builders are copied from retain.test.js

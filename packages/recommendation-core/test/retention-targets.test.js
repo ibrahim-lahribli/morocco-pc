@@ -13,14 +13,16 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+// Step 4B PR 5: this file moved with the implementation into the core package.
+// The module specifiers point at core's own tree; the assertions are unchanged.
 const {
   RESOLUTION_MULTIPLIERS,
   BAND_TOLERANCE,
   BAND_CEILING_FACTOR,
   resolutionMultiplier,
   computeRoleTargets,
-} = require('./targets');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+} = require('../src/retention/targets');
+const { CandidateSelectionError, ERROR_CODES } = require('../src/candidates/errors');
 
 const GAMING_SPEND = Object.freeze({
   CPU: 0.17, GPU: 0.38, MOTHERBOARD: 0.10,
@@ -159,7 +161,7 @@ test('computeRoleTargets fails fast on a bad budget, an empty map or a bad share
 });
 
 test('targets.js keeps its source boundary (pure, no DB, no upward imports)', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'targets.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'retention', 'targets.js'), 'utf8');
   const required = [...source.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
   assert.deepEqual(required, ['../candidates/errors']);
   for (const token of ["require('pg')", 'new Pool', 'Date.now', 'Math.random', "require('../assembly", "require('../orchestrator"]) {

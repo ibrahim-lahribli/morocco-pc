@@ -8,7 +8,9 @@ correction as `07dfd22`, and PR #41 merged the step 4B PR 4 ranking batch
 (`step-4b-pr4`, baseline `07dfd22`) as `43fd8c8` on 2026-11-19 (PR #42 merged as `c3186bc` first). `master` therefore contains all three batches this workflow has been used for —
 `step-4b-pr2`, `step-4b-pr3` (7 assembly modules) and `step-4b-pr4` (4 ranking modules) — so the namespaces `candidates`,
 `compatibility`, `filtering`, `assembly` and `ranking` are published from `packages/recommendation-core/src/`
-behind identity re-export shims at their old paths. The ranking batch was measured on its branch at the implementation commit `64edd94` and was not re-measured after the merge, which moved no byte of it. The assembly batch was measured at its implementation
+behind identity re-export shims at their old paths. A fourth batch, `step-4b-pr5` (the 5 retention modules,
+baseline `0f439e0`), is implemented on branch `feat/core-retention-extraction` at `0bd7e6f` and adds a
+sixth namespace, `retention`; it is **not merged** and `master` does not carry it. The ranking batch was measured on its branch at the implementation commit `64edd94` and was not re-measured after the merge, which moved no byte of it. The retention batch was measured at `0bd7e6f`: `test:unit` **942**, `test:core` **473 tests (471 pass / 2 skipped)**, `verify:extraction` **37 / 37**, ownership `--inventory=pr5` **93 tests / 190 assertions, unchanged**. The assembly batch was measured at its implementation
 snapshot `89b0bb2` (not the branch head: two later commits, `11ca631` and `2c19a87`, changed documentation
 only — `CONTEXT.md` and this file — and neither changed implementation nor the measured counts); those
 figures are carried onto `master` by the merge, which moved no byte of the batch, and were **not**
@@ -32,7 +34,7 @@ That is the ordering rule, and it is not a matter of taste:
 | `candidates`, `compatibility`, `filtering` | — | already moved (batch `step-4b-pr2`) |
 | `assembly` | `../candidates/*`, `../filtering/*` | moved (batch `step-4b-pr3`, PR #36 merged 2026-11-18 as `57bca1c`) — both namespaces were in the core first |
 | `ranking` | `../assembly` (the barrel), `../candidates/errors` | moved (batch `step-4b-pr4`, baseline `07dfd22`, branch `feat/core-ranking-extraction`) — both namespaces were in the core first |
-| `retention` | `../assembly/prices`, `../candidates`, `../filtering/filter` | no — needs `assembly` first |
+| `retention` | `../assembly/prices`, `../candidates`, `../filtering/filter` | moved (batch `step-4b-pr5`, baseline `0f439e0`, branch `feat/core-retention-extraction`, implementation commit `0bd7e6f`) — all three dependency namespaces were in the core first |
 | `scoring` | `../assembly/assemble`, `../candidates/*` | no — needs `assembly`, and 2 of its 8 files are SQL loaders |
 | `explanation` | `../assembly`, `../ranking`, `../scoring/use-cases` | no — needs three stages first |
 | `offers` | `../candidates/*`, `../assembly/prices` | `as-of.js` only; `select.js` is an SQL loader |
@@ -302,15 +304,17 @@ run on a recommendation-only PR and is not a merge gate for one.
   hardcodes the `INVENTORY` and `SPLIT_FACTS`. A new batch needs a new capture script (declared in
   `capture_paths`) and its own inventory rows; `--base=` changes only the revision, never the inventory.
   PR 3 is the worked example of the second problem: its baseline is AFTER the PR 2 move, so the PR 2
-  baseline paths no longer exist there. The audit therefore takes `--inventory=pr2|pr3` — one named
+  baseline paths no longer exist there. The audit therefore takes `--inventory=pr2|pr3|pr4|pr5` — one named
   inventory per batch, each measured against that batch's own baseline — and the two runs are separate CI
   steps. Do not merge two batches' rows into one measured set; a single row set cannot be measured against
   two different baselines.
 * **`npm run check:characterization` is wired to the PR 2 fixture only.** Each later batch needs its own
-  script entry and its own CI step (`npm run check:characterization:pr3` is the PR 3 one, `:pr4` the PR 4 one), or its
+  script entry and its own CI step (`npm run check:characterization:pr3` is the PR 3 one, `:pr4` the PR 4
+  one, `:pr5` the PR 5 one), or its
   behaviour is not checked anywhere.
 * **CI pins one ownership command per batch, each with its own baseline and inventory**
-  (`--base=afccc671... --inventory=pr2`, `--base=de659ad... --inventory=pr3`, `--base=07dfd22... --inventory=pr4`). A new batch's ownership
+  (`--base=afccc671... --inventory=pr2`, `--base=de659ad... --inventory=pr3`, `--base=07dfd22... --inventory=pr4`,
+  `--base=0f439e0... --inventory=pr5`). A new batch's ownership
   step must name both the same way.
 * **`scripts/lib/ci-workflow.test.js` asserts that `ci.yml` has exactly two jobs**, `unit-and-docs` and
   `recurring-gates`. New evidence belongs in a **step** inside `unit-and-docs`; adding a third job fails

@@ -12,8 +12,12 @@
  * The inventory below carries the PR 2 rows and, since step 4B PR 3, the seven
  * Engine 3 assembly rows: assembly's implementation moved into the core package
  * while its tests stayed in the runtime tree (they import ../ranking,
- * ../filtering/context-loader and ../offers/select). `--base` selects the
- * revision the before-counts come from; it never changes the inventory.
+ * ../filtering/context-loader and ../offers/select). Step 4B PR 4 added the
+ * three Engine 5a ranking rows that moved with their code (and the one that
+ * stayed). Step 4B PR 5 adds the four Engine 2D retention rows that moved and
+ * the one that stayed: retain.test.js imports ../scoring/candidate-score, a
+ * stage that has not moved. `--base` selects the revision the before-counts
+ * come from; it never changes the inventory.
  *
  * How it measures:
  *   * tests and assertions are counted from the TOKEN STREAM (the core package's
@@ -166,6 +170,20 @@ const FILESYSTEM_EXCEPTIONS = new Map([
       reason: 'read-only: reads the moved select-diverse source to assert a structural property',
     },
   ],
+  [
+    'retention-index.test.js',
+    {
+      specifiers: ['node:fs'],
+      reason: 'read-only: reads the moved retention sources to assert a structural property',
+    },
+  ],
+  [
+    'retention-targets.test.js',
+    {
+      specifiers: ['node:fs'],
+      reason: 'read-only: reads the moved targets source to assert a structural property',
+    },
+  ],
 ]);
 
 /**
@@ -233,6 +251,18 @@ const INVENTORY = [
   // that has NOT moved, so it cannot follow the code into the pure package.
   { batch: 'step-4b-pr4', kind: 'stayed', baseline: 'src/recommendation/ranking/select-archetypes.test.js', current: 'src/recommendation/ranking/select-archetypes.test.js' },
 
+  // --- moved (step 4B PR 5): the Engine 2D retention tests follow the code ---
+  // The four files whose imports all resolve inside the core package moved with
+  // their implementation; only the specifiers and each __dirname source read
+  // were repointed, so no test or assertion was lost.
+  { batch: 'step-4b-pr5', kind: 'moved', baseline: 'src/recommendation/retention/index.test.js', current: 'packages/recommendation-core/test/retention-index.test.js' },
+  { batch: 'step-4b-pr5', kind: 'moved', baseline: 'src/recommendation/retention/budget-floor.test.js', current: 'packages/recommendation-core/test/retention-budget-floor.test.js' },
+  { batch: 'step-4b-pr5', kind: 'moved', baseline: 'src/recommendation/retention/targets.test.js', current: 'packages/recommendation-core/test/retention-targets.test.js' },
+  { batch: 'step-4b-pr5', kind: 'moved', baseline: 'src/recommendation/retention/igpu-pool.test.js', current: 'packages/recommendation-core/test/retention-igpu-pool.test.js' },
+  // retain.test.js stays: it imports ../scoring/candidate-score, a stage that
+  // has NOT moved, so it cannot follow the code into the pure package.
+  { batch: 'step-4b-pr5', kind: 'stayed', baseline: 'src/recommendation/retention/retain.test.js', current: 'src/recommendation/retention/retain.test.js' },
+
   // --- split: the same barrel contract, now asserted by two owners ---
   { kind: 'split', baseline: 'src/recommendation/filtering/index.test.js', current: 'src/recommendation/filtering/index.test.js' },
 
@@ -250,7 +280,7 @@ const INVENTORY = [
  *
  * PR 2 is defined by the ABSENCE of a batch tag, never by a list of the tags to
  * exclude. A row that belongs to a later batch carries `batch`; a batch this
- * file has never seen (`step-4b-pr5`, say) carries one too. Naming the tags to
+ * file has never seen (`step-4b-pr6`, say) carries one too. Naming the tags to
  * exclude would silently adopt every future batch into PR 2 the day it was
  * appended, which is the regression that
  * scripts/lib/test-ownership-audit-cli.test.js pins. The rule is therefore:
@@ -260,6 +290,7 @@ const INVENTORY = [
 const BATCH_INVENTORIES = {
   pr3: 'step-4b-pr3',
   pr4: 'step-4b-pr4',
+  pr5: 'step-4b-pr5',
 };
 
 /**
@@ -278,6 +309,7 @@ const INVENTORIES = {
   pr2: selectInventoryRows(INVENTORY, 'pr2'),
   pr3: selectInventoryRows(INVENTORY, 'pr3'),
   pr4: selectInventoryRows(INVENTORY, 'pr4'),
+  pr5: selectInventoryRows(INVENTORY, 'pr5'),
 };
 
 /**
@@ -748,7 +780,7 @@ function main(argv) {
   const options = parseArgs(argv);
   if (options.errors.length > 0) {
     process.stderr.write('audit-pr2-test-ownership: ' + options.errors.join('\n  ') + '\n');
-    process.stderr.write('usage: node scripts/audit-pr2-test-ownership.js [--base=<git-ref>] [--inventory=pr2|pr3|pr4]\n');
+    process.stderr.write('usage: node scripts/audit-pr2-test-ownership.js [--base=<git-ref>] [--inventory=pr2|pr3|pr4|pr5]\n');
     return 2;
   }
   if (!isGitRepository(REPO_ROOT)) {
