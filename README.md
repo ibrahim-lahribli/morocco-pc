@@ -21,7 +21,7 @@ below.
 ```bash
 npm install
 npm run test:unit        # engine suite, no database needed (1052 tests)
-npm run test:scripts     # gate/CLI suites (750)
+npm run test:scripts     # gate/CLI suites (822)
 npm run test:api         # HTTP contract suites, DB-free (193)
 npm run test:db          # connectivity + table listing
 npm run start:api        # TEST branch, or API_ALLOW_SHARED=1
