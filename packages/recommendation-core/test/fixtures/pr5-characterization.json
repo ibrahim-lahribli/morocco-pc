@@ -1,0 +1,2481 @@
+{
+  "kind": "pr5-characterization",
+  "description": "Frozen input/output pairs for the step 4B PR 5 extraction surface: the retention barrel contract, retainTopKPerRole selection (K, targets, untargeted, exclusions, overrides, reservation, ties, malformed carriers), computeBudgetFloor, the E2 target map and the E6 iGPU exclusion set. DB-free: every id, score and price is a literal.",
+  "timestamp_policy": "No ambient clock is read while capturing: every id, score and price is an input literal, so the document is byte-stable on its baseline commit. String order is recorded by code unit; nothing here reads a locale.",
+  "provenance": {
+    "baseline_sha": "0f439e0400c6814d0a21d4ab527c462aef0f5639",
+    "baseline_commit_date": "2026-11-19T04:19:43Z",
+    "node_version": "v24.21.0",
+    "command": "node scripts/characterize-pr5.js",
+    "origin": "Captured from the PRE-MOVE implementation under src/recommendation/retention/ before any module moved into packages/recommendation-core. The committed document is the baseline: do not regenerate it from the extracted code, because a fixture produced by the implementation under test proves nothing."
+  },
+  "barrel": {
+    "keys": [
+      "retainTopKPerRole",
+      "excludedCpuProductIds",
+      "BUDGET_FLOOR_ROLES",
+      "computeBudgetFloor",
+      "computeRoleTargets",
+      "resolutionMultiplier",
+      "RESOLUTION_MULTIPLIERS",
+      "BAND_TOLERANCE",
+      "BAND_CEILING_FACTOR"
+    ],
+    "key_count": 9,
+    "arity": {
+      "retainTopKPerRole": 1,
+      "excludedCpuProductIds": 1,
+      "computeBudgetFloor": 1,
+      "computeRoleTargets": 1,
+      "resolutionMultiplier": 1
+    },
+    "budget_floor_roles": [
+      "CPU",
+      "MOTHERBOARD",
+      "RAM",
+      "PSU",
+      "CASE",
+      "CPU_COOLER",
+      "SSD_BOOT"
+    ],
+    "budget_floor_roles_frozen": true,
+    "resolution_multipliers": {
+      "1080p": 1,
+      "1440p": 1.25,
+      "2160p": 1.5
+    },
+    "resolution_multipliers_frozen": true,
+    "band_tolerance": 0.15,
+    "band_ceiling_factor": 2,
+    "identity": {
+      "retainTopKPerRole": true,
+      "excludedCpuProductIds": true,
+      "computeBudgetFloor": true,
+      "BUDGET_FLOOR_ROLES": true,
+      "computeRoleTargets": true,
+      "resolutionMultiplier": true,
+      "RESOLUTION_MULTIPLIERS": true,
+      "BAND_TOLERANCE": true,
+      "BAND_CEILING_FACTOR": true
+    },
+    "gpu_policy_values_is_public": false,
+    "gpu_policy_values": [
+      "REQUIRED",
+      "IGPU_ALLOWED"
+    ],
+    "gpu_policy_values_frozen": true
+  },
+  "retain": {
+    "scenarios": [
+      {
+        "id": "B1-k1-over-subscribed",
+        "description": "K=1 with three CPU candidates keeps only the best scorer per role",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 1,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-a",
+            "gpu-a",
+            "mb-a",
+            "ram-a",
+            "ssd-a",
+            "psu-a",
+            "case-a",
+            "cool-a"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-a",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-a",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-a",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ram-a",
+              "product_variant_id": null,
+              "component_role": "RAM",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ssd-a",
+              "product_variant_id": null,
+              "component_role": "SSD_BOOT",
+              "status": "PASS"
+            },
+            {
+              "product_id": "psu-a",
+              "product_variant_id": null,
+              "component_role": "PSU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "case-a",
+              "product_variant_id": null,
+              "component_role": "CASE",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cool-a",
+              "product_variant_id": null,
+              "component_role": "CPU_COOLER",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      },
+      {
+        "id": "B2-k3-uniform-prices",
+        "description": "K=3 with every bucket at or below K: returned whole, reservation never consulted",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 3,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-a",
+            "cpu-b",
+            "cpu-c",
+            "gpu-a",
+            "gpu-b",
+            "mb-a",
+            "mb-b",
+            "ram-a",
+            "ssd-a",
+            "psu-a",
+            "case-a",
+            "cool-a"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-a",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cpu-b",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cpu-c",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-a",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-b",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-a",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-b",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ram-a",
+              "product_variant_id": null,
+              "component_role": "RAM",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ssd-a",
+              "product_variant_id": null,
+              "component_role": "SSD_BOOT",
+              "status": "PASS"
+            },
+            {
+              "product_id": "psu-a",
+              "product_variant_id": null,
+              "component_role": "PSU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "case-a",
+              "product_variant_id": null,
+              "component_role": "CASE",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cool-a",
+              "product_variant_id": null,
+              "component_role": "CPU_COOLER",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      },
+      {
+        "id": "B3-k5-wide-bucket",
+        "description": "K=5 cuts a bucket of eight GPUs to min(K, eligible_count)",
+        "input": {
+          "verdicts": 9,
+          "scores": 9,
+          "topKPerRole": 5,
+          "priced": 9,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-a",
+            "gpu-1",
+            "gpu-2",
+            "gpu-3",
+            "gpu-4",
+            "gpu-5"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-a",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-1",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-2",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-3",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-4",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-5",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      },
+      {
+        "id": "B4-targeted-bands",
+        "description": "A declared roleTargets switches the CPU bucket to price-band picks (K=2)",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": [
+            "CPU",
+            "GPU",
+            "MOTHERBOARD",
+            "RAM",
+            "SSD_BOOT",
+            "PSU",
+            "CASE",
+            "CPU_COOLER"
+          ],
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-b",
+            "cpu-c",
+            "gpu-a",
+            "gpu-b",
+            "mb-a",
+            "mb-b",
+            "ram-a",
+            "ssd-a",
+            "psu-a",
+            "case-a",
+            "cool-a"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-b",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cpu-c",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-a",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-b",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-a",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-b",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ram-a",
+              "product_variant_id": null,
+              "component_role": "RAM",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ssd-a",
+              "product_variant_id": null,
+              "component_role": "SSD_BOOT",
+              "status": "PASS"
+            },
+            {
+              "product_id": "psu-a",
+              "product_variant_id": null,
+              "component_role": "PSU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "case-a",
+              "product_variant_id": null,
+              "component_role": "CASE",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cool-a",
+              "product_variant_id": null,
+              "component_role": "CPU_COOLER",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      },
+      {
+        "id": "B5-untargeted-null",
+        "description": "The same pool with roleTargets null keeps the pre-E2 top-(K-1) plus reservation rule",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": null,
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-a",
+            "cpu-c",
+            "gpu-a",
+            "gpu-b",
+            "mb-a",
+            "mb-b",
+            "ram-a",
+            "ssd-a",
+            "psu-a",
+            "case-a",
+            "cool-a"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-a",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cpu-c",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-a",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-b",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-a",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-b",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ram-a",
+              "product_variant_id": null,
+              "component_role": "RAM",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ssd-a",
+              "product_variant_id": null,
+              "component_role": "SSD_BOOT",
+              "status": "PASS"
+            },
+            {
+              "product_id": "psu-a",
+              "product_variant_id": null,
+              "component_role": "PSU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "case-a",
+              "product_variant_id": null,
+              "component_role": "CASE",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cool-a",
+              "product_variant_id": null,
+              "component_role": "CPU_COOLER",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      },
+      {
+        "id": "B6a-exclusions-array",
+        "description": "roleExclusions as an array drops cpu-b before ordering and the K cap",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": [
+            "CPU"
+          ],
+          "topKByRole": "absent"
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-a",
+            "cpu-c",
+            "gpu-a",
+            "gpu-b",
+            "mb-a",
+            "mb-b",
+            "ram-a",
+            "ssd-a",
+            "psu-a",
+            "case-a",
+            "cool-a"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-a",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cpu-c",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-a",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-b",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-a",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-b",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ram-a",
+              "product_variant_id": null,
+              "component_role": "RAM",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ssd-a",
+              "product_variant_id": null,
+              "component_role": "SSD_BOOT",
+              "status": "PASS"
+            },
+            {
+              "product_id": "psu-a",
+              "product_variant_id": null,
+              "component_role": "PSU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "case-a",
+              "product_variant_id": null,
+              "component_role": "CASE",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cool-a",
+              "product_variant_id": null,
+              "component_role": "CPU_COOLER",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      },
+      {
+        "id": "B6b-exclusions-set",
+        "description": "roleExclusions as a Set drops cpu-b and cpu-c",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": [
+            "CPU"
+          ],
+          "topKByRole": "absent"
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-a",
+            "gpu-a",
+            "gpu-b",
+            "mb-a",
+            "mb-b",
+            "ram-a",
+            "ssd-a",
+            "psu-a",
+            "case-a",
+            "cool-a"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-a",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-a",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-b",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-a",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-b",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ram-a",
+              "product_variant_id": null,
+              "component_role": "RAM",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ssd-a",
+              "product_variant_id": null,
+              "component_role": "SSD_BOOT",
+              "status": "PASS"
+            },
+            {
+              "product_id": "psu-a",
+              "product_variant_id": null,
+              "component_role": "PSU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "case-a",
+              "product_variant_id": null,
+              "component_role": "CASE",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cool-a",
+              "product_variant_id": null,
+              "component_role": "CPU_COOLER",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      },
+      {
+        "id": "B7a-override-gpu-one",
+        "description": "topKByRole { GPU: 1 } caps only the GPU bucket",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": {
+            "GPU": 1
+          }
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-a",
+            "cpu-b",
+            "gpu-a",
+            "mb-a",
+            "mb-b",
+            "ram-a",
+            "ssd-a",
+            "psu-a",
+            "case-a",
+            "cool-a"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-a",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cpu-b",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-a",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-a",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-b",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ram-a",
+              "product_variant_id": null,
+              "component_role": "RAM",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ssd-a",
+              "product_variant_id": null,
+              "component_role": "SSD_BOOT",
+              "status": "PASS"
+            },
+            {
+              "product_id": "psu-a",
+              "product_variant_id": null,
+              "component_role": "PSU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "case-a",
+              "product_variant_id": null,
+              "component_role": "CASE",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cool-a",
+              "product_variant_id": null,
+              "component_role": "CPU_COOLER",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      },
+      {
+        "id": "B7b-override-empty-map",
+        "description": "topKByRole {} is a no-op",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": {}
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-a",
+            "cpu-b",
+            "gpu-a",
+            "gpu-b",
+            "mb-a",
+            "mb-b",
+            "ram-a",
+            "ssd-a",
+            "psu-a",
+            "case-a",
+            "cool-a"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-a",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cpu-b",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-a",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-b",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-a",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-b",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ram-a",
+              "product_variant_id": null,
+              "component_role": "RAM",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ssd-a",
+              "product_variant_id": null,
+              "component_role": "SSD_BOOT",
+              "status": "PASS"
+            },
+            {
+              "product_id": "psu-a",
+              "product_variant_id": null,
+              "component_role": "PSU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "case-a",
+              "product_variant_id": null,
+              "component_role": "CASE",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cool-a",
+              "product_variant_id": null,
+              "component_role": "CPU_COOLER",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      },
+      {
+        "id": "B7c-override-null",
+        "description": "topKByRole null is a no-op",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": null
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-a",
+            "cpu-b",
+            "gpu-a",
+            "gpu-b",
+            "mb-a",
+            "mb-b",
+            "ram-a",
+            "ssd-a",
+            "psu-a",
+            "case-a",
+            "cool-a"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-a",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cpu-b",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-a",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-b",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-a",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-b",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ram-a",
+              "product_variant_id": null,
+              "component_role": "RAM",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ssd-a",
+              "product_variant_id": null,
+              "component_role": "SSD_BOOT",
+              "status": "PASS"
+            },
+            {
+              "product_id": "psu-a",
+              "product_variant_id": null,
+              "component_role": "PSU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "case-a",
+              "product_variant_id": null,
+              "component_role": "CASE",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cool-a",
+              "product_variant_id": null,
+              "component_role": "CPU_COOLER",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      },
+      {
+        "id": "B8a-reservation-k2",
+        "description": "K=2 reserves the cheapest CPU even when it is the lowest scorer",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-a",
+            "cpu-c",
+            "gpu-a",
+            "gpu-b",
+            "mb-a",
+            "mb-b",
+            "ram-a",
+            "ssd-a",
+            "psu-a",
+            "case-a",
+            "cool-a"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-a",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cpu-c",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-a",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-b",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-a",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-b",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ram-a",
+              "product_variant_id": null,
+              "component_role": "RAM",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ssd-a",
+              "product_variant_id": null,
+              "component_role": "SSD_BOOT",
+              "status": "PASS"
+            },
+            {
+              "product_id": "psu-a",
+              "product_variant_id": null,
+              "component_role": "PSU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "case-a",
+              "product_variant_id": null,
+              "component_role": "CASE",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cool-a",
+              "product_variant_id": null,
+              "component_role": "CPU_COOLER",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      },
+      {
+        "id": "B8b-reservation-k1",
+        "description": "K=1 fills the slot from the reservation alone",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 1,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-c",
+            "gpu-a",
+            "mb-a",
+            "ram-a",
+            "ssd-a",
+            "psu-a",
+            "case-a",
+            "cool-a"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-c",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "gpu-a",
+              "product_variant_id": null,
+              "component_role": "GPU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "mb-a",
+              "product_variant_id": null,
+              "component_role": "MOTHERBOARD",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ram-a",
+              "product_variant_id": null,
+              "component_role": "RAM",
+              "status": "PASS"
+            },
+            {
+              "product_id": "ssd-a",
+              "product_variant_id": null,
+              "component_role": "SSD_BOOT",
+              "status": "PASS"
+            },
+            {
+              "product_id": "psu-a",
+              "product_variant_id": null,
+              "component_role": "PSU",
+              "status": "PASS"
+            },
+            {
+              "product_id": "case-a",
+              "product_variant_id": null,
+              "component_role": "CASE",
+              "status": "PASS"
+            },
+            {
+              "product_id": "cool-a",
+              "product_variant_id": null,
+              "component_role": "CPU_COOLER",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      },
+      {
+        "id": "B9-tie-break-null-variant-first",
+        "description": "Equal scores fall to the canonical tie-break: variant NULL first",
+        "input": {
+          "verdicts": 2,
+          "scores": 2,
+          "topKPerRole": 1,
+          "priced": 2,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-a"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-a",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      }
+    ],
+    "gates": [
+      {
+        "id": "B10a-price-entry-missing",
+        "description": "An over-K bucket with an unpriced candidate fails fast",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 1,
+          "priced": 11,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "prices",
+          "message": "\"prices\" has no usable selected_price for the eligible verdict [\"cpu-c\",null,\"CPU\"] - the cheapest-per-role reservation (Decision 27) cannot rank it, and a missing price is never read as 0"
+        }
+      },
+      {
+        "id": "B10b-price-null",
+        "description": "selected_price null is a missing price, never 0",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 1,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "prices",
+          "message": "\"prices\" has no usable selected_price for the eligible verdict [\"cpu-c\",null,\"CPU\"] - the cheapest-per-role reservation (Decision 27) cannot rank it, and a missing price is never read as 0"
+        }
+      },
+      {
+        "id": "B10c-price-nan",
+        "description": "selected_price NaN is not a usable price",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 1,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "prices",
+          "message": "\"prices\" has no usable selected_price for the eligible verdict [\"cpu-c\",null,\"CPU\"] - the cheapest-per-role reservation (Decision 27) cannot rank it, and a missing price is never read as 0"
+        }
+      },
+      {
+        "id": "B11a-sources-null",
+        "description": "null sources is MISSING_REQUIRED_FIELD",
+        "input": {
+          "kind": "null"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": null,
+          "message": "Candidate retention requires a sources object"
+        }
+      },
+      {
+        "id": "B11b-sources-array",
+        "description": "an array sources object is INVALID_INPUT",
+        "input": {
+          "kind": "array"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": null,
+          "message": "Candidate retention requires an object carrying filterResult, candidateScores and topKPerRole"
+        }
+      },
+      {
+        "id": "B11c-prices-array",
+        "description": "an array price carrier is INVALID_INPUT",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": "object",
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "prices",
+          "message": "\"prices\" must be the Engine 2 Stage 1 price carrier (a null-prototype object keyed by priceKey)"
+        }
+      },
+      {
+        "id": "B11d-k-zero",
+        "description": "topKPerRole 0 is INVALID_FIELD_VALUE",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 0,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "topKPerRole",
+          "message": "\"topKPerRole\" must be a positive integer (candidate_caps.top_k_per_role, Decision 11 Rule 8)"
+        }
+      },
+      {
+        "id": "B11e-k-fraction",
+        "description": "topKPerRole 1.5 is INVALID_FIELD_VALUE",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 1.5,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "topKPerRole",
+          "message": "\"topKPerRole\" must be a positive integer (candidate_caps.top_k_per_role, Decision 11 Rule 8)"
+        }
+      },
+      {
+        "id": "B11f-duplicate-identity",
+        "description": "duplicate STEP 2 identities are refused",
+        "input": {
+          "verdicts": 12,
+          "scores": 13,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "candidateScores",
+          "message": "\"candidateScores.scores\" carries a duplicate candidate identity: [\"cpu-a\",null,\"CPU\"] (STEP 2 over the deduped 2C pool yields unique identities)"
+        }
+      },
+      {
+        "id": "B11g-eligible-without-score",
+        "description": "an eligible verdict without a score is refused",
+        "input": {
+          "verdicts": 12,
+          "scores": 11,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "candidateScores",
+          "message": "\"candidateScores\" has no candidate_score for the eligible verdict [\"cpu-c\",null,\"CPU\"] - an eligible candidate cannot be ranked without its Decision 13 STEP 2 score"
+        }
+      },
+      {
+        "id": "B11h-unknown-exclusion-role",
+        "description": "an exclusion key outside the role vocabulary is refused",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": [
+            "MEMORY"
+          ],
+          "topKByRole": "absent"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "roleExclusions.MEMORY",
+          "message": "\"roleExclusions.MEMORY\" is not a component role"
+        }
+      },
+      {
+        "id": "B11i-exclusion-bad-value",
+        "description": "a non-array/Set exclusion value is refused",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": [
+            "CPU"
+          ],
+          "topKByRole": "absent"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "roleExclusions.CPU",
+          "message": "\"roleExclusions.CPU\" must be an array or Set of product-id strings"
+        }
+      },
+      {
+        "id": "B11j-role-targets-array",
+        "description": "an array roleTargets holder is refused",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": [],
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "roleTargets",
+          "message": "\"roleTargets\" must be null or the computeRoleTargets map keyed by component role"
+        }
+      },
+      {
+        "id": "B11k-override-unknown-role",
+        "description": "a topKByRole key outside the role vocabulary is refused",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": {
+            "MEMORY": 1
+          }
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "topKByRole.MEMORY",
+          "message": "\"topKByRole.MEMORY\" is not a component role"
+        }
+      },
+      {
+        "id": "B11l-override-zero",
+        "description": "a non-positive topKByRole depth is refused",
+        "input": {
+          "verdicts": 12,
+          "scores": 12,
+          "topKPerRole": 2,
+          "priced": 12,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": {
+            "GPU": 0
+          }
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "topKByRole.GPU",
+          "message": "\"topKByRole.GPU\" must be a positive integer"
+        }
+      },
+      {
+        "id": "B13-lazy-price-read",
+        "description": "a bucket that fits K never reads the carrier",
+        "input": {
+          "verdicts": 1,
+          "scores": 1,
+          "topKPerRole": 3,
+          "priced": 0,
+          "roleTargets": "absent",
+          "roleExclusions": "absent",
+          "topKByRole": "absent"
+        },
+        "ok": true,
+        "output": {
+          "ids": [
+            "cpu-a"
+          ],
+          "entries": [
+            {
+              "product_id": "cpu-a",
+              "product_variant_id": null,
+              "component_role": "CPU",
+              "status": "PASS"
+            }
+          ],
+          "container_frozen": true,
+          "results_frozen": true,
+          "verdicts_frozen": true
+        }
+      }
+    ],
+    "shape": {
+      "container_frozen": true,
+      "results_frozen": true,
+      "verdicts_frozen": true
+    },
+    "immutability": {
+      "inputs_unchanged": true
+    },
+    "determinism": {
+      "identical_across_runs": true
+    }
+  },
+  "budget_floor": {
+    "scenarios": [
+      {
+        "id": "C1-valid",
+        "description": "A complete retained set at 7400 MAD is within a 15000 budget",
+        "input": {
+          "retained": 8,
+          "budgetAmount": 15000,
+          "currency": "MAD"
+        },
+        "ok": true,
+        "output": {
+          "cheapest_total": 7400,
+          "currency": "MAD",
+          "budget_amount": 15000,
+          "within_budget": true,
+          "cheapest_by_role": {
+            "CPU": 3000,
+            "GPU": 4000,
+            "MOTHERBOARD": 1500,
+            "RAM": 800,
+            "SSD_BOOT": 700,
+            "PSU": 600,
+            "CASE": 500,
+            "CPU_COOLER": 300
+          },
+          "missing_roles": [],
+          "cheapest_by_role_keys": [
+            "CPU",
+            "GPU",
+            "MOTHERBOARD",
+            "RAM",
+            "SSD_BOOT",
+            "PSU",
+            "CASE",
+            "CPU_COOLER"
+          ],
+          "frozen": true,
+          "missing_roles_frozen": true
+        }
+      },
+      {
+        "id": "C2-unaffordable",
+        "description": "The same floor against 5000 MAD is not within budget",
+        "input": {
+          "retained": 8,
+          "budgetAmount": 5000,
+          "currency": "MAD"
+        },
+        "ok": true,
+        "output": {
+          "cheapest_total": 7400,
+          "currency": "MAD",
+          "budget_amount": 5000,
+          "within_budget": false,
+          "cheapest_by_role": {
+            "CPU": 3000,
+            "GPU": 4000,
+            "MOTHERBOARD": 1500,
+            "RAM": 800,
+            "SSD_BOOT": 700,
+            "PSU": 600,
+            "CASE": 500,
+            "CPU_COOLER": 300
+          },
+          "missing_roles": [],
+          "cheapest_by_role_keys": [
+            "CPU",
+            "GPU",
+            "MOTHERBOARD",
+            "RAM",
+            "SSD_BOOT",
+            "PSU",
+            "CASE",
+            "CPU_COOLER"
+          ],
+          "frozen": true,
+          "missing_roles_frozen": true
+        }
+      },
+      {
+        "id": "C3-missing-role",
+        "description": "A missing PSU yields null/null, never 0/true",
+        "input": {
+          "retained": 6,
+          "budgetAmount": 15000,
+          "currency": "MAD"
+        },
+        "ok": true,
+        "output": {
+          "cheapest_total": null,
+          "currency": "MAD",
+          "budget_amount": 15000,
+          "within_budget": null,
+          "cheapest_by_role": {
+            "CPU": 3000,
+            "MOTHERBOARD": 1500,
+            "RAM": 800,
+            "SSD_BOOT": 700,
+            "CASE": 500,
+            "CPU_COOLER": 300
+          },
+          "missing_roles": [
+            "PSU"
+          ],
+          "cheapest_by_role_keys": [
+            "CPU",
+            "MOTHERBOARD",
+            "RAM",
+            "SSD_BOOT",
+            "CASE",
+            "CPU_COOLER"
+          ],
+          "frozen": true,
+          "missing_roles_frozen": true
+        }
+      },
+      {
+        "id": "C4-empty",
+        "description": "An empty retained set reports every required role missing",
+        "input": {
+          "retained": 0,
+          "budgetAmount": 15000,
+          "currency": "MAD"
+        },
+        "ok": true,
+        "output": {
+          "cheapest_total": null,
+          "currency": "MAD",
+          "budget_amount": 15000,
+          "within_budget": null,
+          "cheapest_by_role": {},
+          "missing_roles": [
+            "CPU",
+            "MOTHERBOARD",
+            "RAM",
+            "PSU",
+            "CASE",
+            "CPU_COOLER",
+            "SSD_BOOT"
+          ],
+          "cheapest_by_role_keys": [],
+          "frozen": true,
+          "missing_roles_frozen": true
+        }
+      },
+      {
+        "id": "C5-gpu-excluded-from-total",
+        "description": "A retained GPU still reports its cheapest price but is excluded from the total",
+        "input": {
+          "retained": 9,
+          "budgetAmount": 15000,
+          "currency": "MAD"
+        },
+        "ok": true,
+        "output": {
+          "cheapest_total": 7400,
+          "currency": "MAD",
+          "budget_amount": 15000,
+          "within_budget": true,
+          "cheapest_by_role": {
+            "CPU": 3000,
+            "GPU": 4000,
+            "MOTHERBOARD": 1500,
+            "RAM": 800,
+            "SSD_BOOT": 700,
+            "PSU": 600,
+            "CASE": 500,
+            "CPU_COOLER": 300
+          },
+          "missing_roles": [],
+          "cheapest_by_role_keys": [
+            "CPU",
+            "GPU",
+            "MOTHERBOARD",
+            "RAM",
+            "SSD_BOOT",
+            "PSU",
+            "CASE",
+            "CPU_COOLER"
+          ],
+          "frozen": true,
+          "missing_roles_frozen": true
+        }
+      },
+      {
+        "id": "C6-input-order-stable",
+        "description": "Reversing the retained order yields the identical floor",
+        "input": {
+          "retained": 8,
+          "budgetAmount": 15000,
+          "currency": "MAD"
+        },
+        "ok": true,
+        "output": {
+          "cheapest_total": 7400,
+          "currency": "MAD",
+          "budget_amount": 15000,
+          "within_budget": true,
+          "cheapest_by_role": {
+            "CPU": 3000,
+            "GPU": 4000,
+            "MOTHERBOARD": 1500,
+            "RAM": 800,
+            "SSD_BOOT": 700,
+            "PSU": 600,
+            "CASE": 500,
+            "CPU_COOLER": 300
+          },
+          "missing_roles": [],
+          "cheapest_by_role_keys": [
+            "CPU",
+            "GPU",
+            "MOTHERBOARD",
+            "RAM",
+            "SSD_BOOT",
+            "PSU",
+            "CASE",
+            "CPU_COOLER"
+          ],
+          "frozen": true,
+          "missing_roles_frozen": true
+        }
+      }
+    ],
+    "errors": [
+      {
+        "id": "C7a-sources-null",
+        "description": "null sources is MISSING_REQUIRED_FIELD",
+        "input": {
+          "kind": "null"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": null,
+          "message": "The budget floor requires a sources object"
+        }
+      },
+      {
+        "id": "C7b-retained-non-array",
+        "description": "a non-array retained value is INVALID_INPUT",
+        "input": {
+          "budgetAmount": 15000,
+          "currency": "MAD"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "retained",
+          "message": "\"retained\" must be the retention output results array"
+        }
+      },
+      {
+        "id": "C7c-prices-array",
+        "description": "an array price carrier is INVALID_INPUT",
+        "input": {
+          "budgetAmount": 15000,
+          "currency": "MAD"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "prices",
+          "message": "\"prices\" must be the Engine 2 Stage 1 price carrier (a null-prototype object keyed by priceKey)"
+        }
+      },
+      {
+        "id": "C7d-budget-zero",
+        "description": "budgetAmount 0 is INVALID_FIELD_VALUE",
+        "input": {
+          "budgetAmount": 0,
+          "currency": "MAD"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "budgetAmount",
+          "message": "\"budgetAmount\" must be a finite number greater than 0 (recommendation_query.budget_amount)"
+        }
+      },
+      {
+        "id": "C7e-budget-nan",
+        "description": "budgetAmount NaN is INVALID_FIELD_VALUE",
+        "input": {
+          "budgetAmount": null,
+          "currency": "MAD"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "budgetAmount",
+          "message": "\"budgetAmount\" must be a finite number greater than 0 (recommendation_query.budget_amount)"
+        }
+      },
+      {
+        "id": "C7f-currency-lowercase",
+        "description": "currency 'mad' is INVALID_FIELD_VALUE",
+        "input": {
+          "budgetAmount": 15000,
+          "currency": "mad"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "currency",
+          "message": "\"currency\" must be a 3-letter uppercase code (recommendation_query.currency)"
+        }
+      },
+      {
+        "id": "C7g-price-entry-missing",
+        "description": "a retained candidate with no carrier entry is refused",
+        "input": {
+          "budgetAmount": 15000,
+          "currency": "MAD"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "prices",
+          "message": "\"prices\" has no usable selected_price for the retained candidate [\"ssd-a\",null,\"SSD_BOOT\"] - the budget floor cannot be computed, and a missing price is never read as 0"
+        }
+      },
+      {
+        "id": "C7h-price-infinite",
+        "description": "an infinite selected_price is not a usable price",
+        "input": {
+          "budgetAmount": 15000,
+          "currency": "MAD"
+        },
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "prices",
+          "message": "\"prices\" has no usable selected_price for the retained candidate [\"ssd-a\",null,\"SSD_BOOT\"] - the budget floor cannot be computed, and a missing price is never read as 0"
+        }
+      }
+    ]
+  },
+  "targets": {
+    "scenarios": [
+      {
+        "id": "D1a-null",
+        "description": "null resolution is neutral",
+        "ok": true,
+        "output": 1
+      },
+      {
+        "id": "D1b-undefined",
+        "description": "absent resolution is neutral",
+        "ok": true,
+        "output": 1
+      },
+      {
+        "id": "D1c-1080p",
+        "description": "1080p maps to 1.0",
+        "ok": true,
+        "output": 1
+      },
+      {
+        "id": "D1d-1440p",
+        "description": "1440p maps to 1.25",
+        "ok": true,
+        "output": 1.25
+      },
+      {
+        "id": "D1e-2160p",
+        "description": "2160p maps to 1.5",
+        "ok": true,
+        "output": 1.5
+      },
+      {
+        "id": "D2-gaming-1440p",
+        "description": "The gaming spend map at 15000 and 1440p",
+        "ok": true,
+        "output": {
+          "keys": [
+            "CPU",
+            "GPU",
+            "MOTHERBOARD",
+            "RAM",
+            "SSD_BOOT",
+            "PSU",
+            "CASE",
+            "CPU_COOLER"
+          ],
+          "values": {
+            "CPU": {
+              "target": 3000,
+              "ceiling": 6000
+            },
+            "GPU": {
+              "target": 6562.5,
+              "ceiling": 13125
+            },
+            "MOTHERBOARD": {
+              "target": 1500,
+              "ceiling": 3000
+            },
+            "RAM": {
+              "target": 1500,
+              "ceiling": 3000
+            },
+            "SSD_BOOT": {
+              "target": 1200,
+              "ceiling": 2400
+            },
+            "PSU": {
+              "target": 900,
+              "ceiling": 1800
+            },
+            "CASE": {
+              "target": 900,
+              "ceiling": 1800
+            },
+            "CPU_COOLER": {
+              "target": 750,
+              "ceiling": 1500
+            }
+          },
+          "frozen": true,
+          "entries_frozen": true
+        }
+      },
+      {
+        "id": "D3a-gaming-1080p",
+        "description": "The same map at 1080p",
+        "ok": true,
+        "output": {
+          "keys": [
+            "CPU",
+            "GPU",
+            "MOTHERBOARD",
+            "RAM",
+            "SSD_BOOT",
+            "PSU",
+            "CASE",
+            "CPU_COOLER"
+          ],
+          "values": {
+            "CPU": {
+              "target": 3000,
+              "ceiling": 6000
+            },
+            "GPU": {
+              "target": 5250,
+              "ceiling": 10500
+            },
+            "MOTHERBOARD": {
+              "target": 1500,
+              "ceiling": 3000
+            },
+            "RAM": {
+              "target": 1500,
+              "ceiling": 3000
+            },
+            "SSD_BOOT": {
+              "target": 1200,
+              "ceiling": 2400
+            },
+            "PSU": {
+              "target": 900,
+              "ceiling": 1800
+            },
+            "CASE": {
+              "target": 900,
+              "ceiling": 1800
+            },
+            "CPU_COOLER": {
+              "target": 750,
+              "ceiling": 1500
+            }
+          },
+          "frozen": true,
+          "entries_frozen": true
+        }
+      },
+      {
+        "id": "D3b-gaming-null-resolution",
+        "description": "The same map at a null resolution",
+        "ok": true,
+        "output": {
+          "keys": [
+            "CPU",
+            "GPU",
+            "MOTHERBOARD",
+            "RAM",
+            "SSD_BOOT",
+            "PSU",
+            "CASE",
+            "CPU_COOLER"
+          ],
+          "values": {
+            "CPU": {
+              "target": 3000,
+              "ceiling": 6000
+            },
+            "GPU": {
+              "target": 5250,
+              "ceiling": 10500
+            },
+            "MOTHERBOARD": {
+              "target": 1500,
+              "ceiling": 3000
+            },
+            "RAM": {
+              "target": 1500,
+              "ceiling": 3000
+            },
+            "SSD_BOOT": {
+              "target": 1200,
+              "ceiling": 2400
+            },
+            "PSU": {
+              "target": 900,
+              "ceiling": 1800
+            },
+            "CASE": {
+              "target": 900,
+              "ceiling": 1800
+            },
+            "CPU_COOLER": {
+              "target": 750,
+              "ceiling": 1500
+            }
+          },
+          "frozen": true,
+          "entries_frozen": true
+        }
+      },
+      {
+        "id": "D4-zero-share-emitted",
+        "description": "A zero share is emitted as {target:0,ceiling:0}",
+        "ok": true,
+        "output": {
+          "keys": [
+            "CPU",
+            "GPU"
+          ],
+          "values": {
+            "CPU": {
+              "target": 0,
+              "ceiling": 0
+            },
+            "GPU": {
+              "target": 6250,
+              "ceiling": 12500
+            }
+          },
+          "frozen": true,
+          "entries_frozen": true
+        }
+      },
+      {
+        "id": "D5-omitted-role-absent",
+        "description": "A role omitted from spendTargets is absent from the result",
+        "ok": true,
+        "output": {
+          "keys": [
+            "CPU"
+          ],
+          "values": {
+            "CPU": {
+              "target": 2500,
+              "ceiling": 5000
+            }
+          },
+          "frozen": true,
+          "entries_frozen": true
+        }
+      }
+    ],
+    "errors": [
+      {
+        "id": "D6a-resolution-unknown",
+        "description": "resolution '8k' is INVALID_FIELD_VALUE",
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "resolution",
+          "message": "\"resolution\" must be null or one of 1080p, 1440p, 2160p"
+        }
+      },
+      {
+        "id": "D6b-spend-empty",
+        "description": "an empty spendTargets object is INVALID_INPUT",
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "spendTargets",
+          "message": "\"spendTargets\" must be a non-empty object keyed by component role (a profile's spend_targets)"
+        }
+      },
+      {
+        "id": "D6c-share-high",
+        "description": "a share above 1 is INVALID_FIELD_VALUE",
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "spendTargets.CPU",
+          "message": "\"spendTargets.CPU\" must be a share of budget in [0, 1]"
+        }
+      },
+      {
+        "id": "D6d-share-negative",
+        "description": "a negative share is INVALID_FIELD_VALUE",
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "spendTargets.CPU",
+          "message": "\"spendTargets.CPU\" must be a share of budget in [0, 1]"
+        }
+      },
+      {
+        "id": "D6e-budget-zero",
+        "description": "budgetAmount 0 is INVALID_FIELD_VALUE",
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "budgetAmount",
+          "message": "\"budgetAmount\" must be a finite number greater than 0 (recommendation_query.budget_amount)"
+        }
+      },
+      {
+        "id": "D6f-sources-null",
+        "description": "null sources is MISSING_REQUIRED_FIELD",
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": null,
+          "message": "Per-role price targets require a sources object"
+        }
+      },
+      {
+        "id": "D6g-blank-role",
+        "description": "a blank spendTargets key is INVALID_FIELD_VALUE",
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "spendTargets",
+          "message": "\"spendTargets\" keys must be non-blank component-role strings"
+        }
+      }
+    ]
+  },
+  "igpu_pool": {
+    "scenarios": [
+      {
+        "id": "E1a-required",
+        "description": "REQUIRED yields null",
+        "ok": true,
+        "output": null
+      },
+      {
+        "id": "E1b-null-policy",
+        "description": "A null policy yields null",
+        "ok": true,
+        "output": null
+      },
+      {
+        "id": "E1c-absent-policy",
+        "description": "An absent policy yields null",
+        "ok": true,
+        "output": null
+      },
+      {
+        "id": "E1d-absent-args",
+        "description": "Absent args yield null",
+        "ok": true,
+        "output": null
+      },
+      {
+        "id": "E2-allowed-policy-matrix",
+        "description": "IGPU_ALLOWED excludes CPUs without a verified iGPU",
+        "ok": true,
+        "output": [
+          "c2",
+          "c3",
+          "c4"
+        ]
+      },
+      {
+        "id": "E3-normalization-dedupe-sort",
+        "description": "Numeric ids are stringified, deduped and code-unit sorted",
+        "ok": true,
+        "output": [
+          "10",
+          "9"
+        ]
+      },
+      {
+        "id": "E4-ghost-spec-ignored",
+        "description": "A spec with no matching candidate changes nothing",
+        "ok": true,
+        "output": []
+      },
+      {
+        "id": "E6-shape",
+        "description": "The result is a frozen array and the context is not mutated",
+        "ok": true,
+        "output": {
+          "excluded": [
+            "c2"
+          ],
+          "frozen": true,
+          "context_unchanged": true
+        }
+      }
+    ],
+    "errors": [
+      {
+        "id": "E5a-unknown-policy",
+        "description": "gpuPolicy 'OPTIONAL' is INVALID_FIELD_VALUE",
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "gpuPolicy",
+          "message": "\"gpuPolicy\" must be \"REQUIRED\", \"IGPU_ALLOWED\" or null/absent"
+        }
+      },
+      {
+        "id": "E5b-allowed-without-context",
+        "description": "IGPU_ALLOWED without a context is INVALID_INPUT",
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "filteringContext",
+          "message": "\"filteringContext\" must be the Engine 2D context object"
+        }
+      },
+      {
+        "id": "E5c-cpu-not-array",
+        "description": "candidates.CPU that is not an array is INVALID_INPUT",
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "filteringContext.candidates.CPU",
+          "message": "\"filteringContext.candidates.CPU\" must be an array of CPU candidates"
+        }
+      },
+      {
+        "id": "E5d-specs-missing",
+        "description": "a missing specs map is INVALID_INPUT",
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "filteringContext.specs",
+          "message": "\"filteringContext.specs\" must be an object keyed by \"p:<product_id>\""
+        }
+      },
+      {
+        "id": "E5e-cpu-without-id",
+        "description": "a CPU row without product_id is INVALID_FIELD_VALUE",
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "filteringContext.candidates.CPU",
+          "message": "every CPU candidate must carry a product_id"
+        }
+      },
+      {
+        "id": "E5f-args-not-object",
+        "description": "a non-object args value is INVALID_INPUT",
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": null,
+          "message": "excludedCpuProductIds requires an object carrying gpuPolicy and filteringContext"
+        }
+      }
+    ]
+  },
+  "pipeline": {
+    "retained": {
+      "ids": [
+        "cpu-a",
+        "cpu-b",
+        "gpu-a",
+        "gpu-b",
+        "mb-a",
+        "mb-b",
+        "ram-a",
+        "ssd-a",
+        "psu-a",
+        "case-a",
+        "cool-a"
+      ],
+      "entries": [
+        {
+          "product_id": "cpu-a",
+          "product_variant_id": null,
+          "component_role": "CPU",
+          "status": "PASS"
+        },
+        {
+          "product_id": "cpu-b",
+          "product_variant_id": null,
+          "component_role": "CPU",
+          "status": "PASS"
+        },
+        {
+          "product_id": "gpu-a",
+          "product_variant_id": null,
+          "component_role": "GPU",
+          "status": "PASS"
+        },
+        {
+          "product_id": "gpu-b",
+          "product_variant_id": null,
+          "component_role": "GPU",
+          "status": "PASS"
+        },
+        {
+          "product_id": "mb-a",
+          "product_variant_id": null,
+          "component_role": "MOTHERBOARD",
+          "status": "PASS"
+        },
+        {
+          "product_id": "mb-b",
+          "product_variant_id": null,
+          "component_role": "MOTHERBOARD",
+          "status": "PASS"
+        },
+        {
+          "product_id": "ram-a",
+          "product_variant_id": null,
+          "component_role": "RAM",
+          "status": "PASS"
+        },
+        {
+          "product_id": "ssd-a",
+          "product_variant_id": null,
+          "component_role": "SSD_BOOT",
+          "status": "PASS"
+        },
+        {
+          "product_id": "psu-a",
+          "product_variant_id": null,
+          "component_role": "PSU",
+          "status": "PASS"
+        },
+        {
+          "product_id": "case-a",
+          "product_variant_id": null,
+          "component_role": "CASE",
+          "status": "PASS"
+        },
+        {
+          "product_id": "cool-a",
+          "product_variant_id": null,
+          "component_role": "CPU_COOLER",
+          "status": "PASS"
+        }
+      ],
+      "container_frozen": true,
+      "results_frozen": true,
+      "verdicts_frozen": true
+    },
+    "floor": {
+      "cheapest_total": 7000,
+      "currency": "MAD",
+      "budget_amount": 15000,
+      "within_budget": true,
+      "cheapest_by_role": {
+        "CPU": 1000,
+        "GPU": 1000,
+        "MOTHERBOARD": 1000,
+        "RAM": 1000,
+        "SSD_BOOT": 1000,
+        "PSU": 1000,
+        "CASE": 1000,
+        "CPU_COOLER": 1000
+      },
+      "missing_roles": [],
+      "cheapest_by_role_keys": [
+        "CPU",
+        "GPU",
+        "MOTHERBOARD",
+        "RAM",
+        "SSD_BOOT",
+        "PSU",
+        "CASE",
+        "CPU_COOLER"
+      ],
+      "frozen": true
+    }
+  }
+}
