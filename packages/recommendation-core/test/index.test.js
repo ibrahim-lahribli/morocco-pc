@@ -23,9 +23,9 @@ const CORE_ROOT = path.resolve(__dirname, '..');
 const ENTRY = path.join(CORE_ROOT, 'src', 'index.js');
 const MANIFEST = JSON.parse(fs.readFileSync(path.join(CORE_ROOT, 'package.json'), 'utf8'));
 
-// The RFC §11.4 subpaths, approved for this package (A2). "./package.json" is
-// the one addition: `exports` would otherwise hide the manifest from any
-// consumer that reads it.
+// The RFC §11.4 subpaths, approved for this package (A2). There is no
+// "./package.json" subpath: the manifest is repository metadata, not part of
+// the public interface, and an export of it would be an unauthorized addition.
 const APPROVED_SUBPATHS = [
   '.',
   './assembly',
@@ -35,7 +35,6 @@ const APPROVED_SUBPATHS = [
   './explanation',
   './filtering',
   './offers',
-  './package.json',
   './ranking',
   './retention',
   './scoring',
@@ -91,8 +90,7 @@ describe('recommendation-core entry point', () => {
 
 // The subpaths that must name a module, as static relative specifiers: the
 // purity scanner only accepts a specifier it can verify as a file under src/,
-// so these are literals and never built. "./package.json" is handled apart -
-// it is a file, not a module, and it deliberately sits outside src/.
+// so these are literals and never built.
 const APPROVED_TARGETS = {
   '.': '../src/index.js',
   './assembly': '../src/assembly/index.js',
@@ -133,8 +131,8 @@ describe('recommendation-core exports map', () => {
       const relative = path.relative(CORE_ROOT, resolved).split(path.sep).join('/');
       assert.equal(MANIFEST.exports[subpath], './' + relative, subpath + ' must name the file it resolves to');
     }
-    assert.equal(MANIFEST.exports['./package.json'], './package.json');
-    assert.ok(fs.existsSync(path.join(CORE_ROOT, 'package.json')));
+    assert.equal('./package.json' in MANIFEST.exports, false,
+      './package.json is repository metadata, not an approved public subpath');
   });
 
   it('publishes ./offers as the as-of module itself, with no core offers barrel', () => {

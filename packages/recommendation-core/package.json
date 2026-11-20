@@ -13,7 +13,6 @@
     "./explanation": "./src/explanation/index.js",
     "./filtering": "./src/filtering/index.js",
     "./offers": "./src/offers/as-of.js",
-    "./package.json": "./package.json",
     "./ranking": "./src/ranking/index.js",
     "./retention": "./src/retention/index.js",
     "./scoring": "./src/scoring/index.js"
