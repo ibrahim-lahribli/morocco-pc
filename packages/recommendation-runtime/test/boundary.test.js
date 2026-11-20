@@ -191,6 +191,62 @@ describe('boundary scanner: import rules', () => {
       temp.dispose();
     }
   });
+
+  it('reports module.require() in its direct, computed and invocation forms', () => {
+    assertReports("module.require('pg');", 'forbidden-module', 'database');
+    assertReports("module['require']('pg');", 'forbidden-module', 'database');
+    assertReports("module?.require('pg');", 'forbidden-module', 'database');
+    assertReports("module.require?.('pg');", 'forbidden-module', 'database');
+    assertReports("module.require.call(module, 'dotenv');", 'forbidden-module', 'environment');
+    assertReports("require.call(null, 'node:fs');", 'forbidden-module', 'filesystem');
+    assertReports("require['apply'](null, ['lodash']);", 'forbidden-module', 'third-party');
+    assertReports("require.bind(null, 'pg')();", 'forbidden-module', 'database');
+  });
+
+  it('reports a proxy or computed require as a dynamic import', () => {
+    assertReports("module[key]('pg');", 'dynamic-import', 'statically verifiable');
+    assertReports('require.call(null, specifier);', 'dynamic-import', 'statically verifiable');
+    assertReports('require.apply(null, specifiers);', 'dynamic-import', 'statically verifiable');
+    assertReports('module.require(name);', 'dynamic-import', 'statically verifiable');
+  });
+
+  it("does not treat an object's own require method or require.resolve as an import", () => {
+    assertClean("const shape = { require: () => 1 }; shape.require('pg');", 'own require method');
+    assertClean("const path = require.resolve('./util');", 'require.resolve');
+    assertClean('const load = module.require;', 'uncalled require value');
+  });
+
+  it('permits module.require and its proxies for a relative path inside src/', () => {
+    const temp = makeTempTree();
+    try {
+      assert.deepEqual(scanIn(temp, "const util = module.require('./util');"), []);
+      assert.deepEqual(scanIn(temp, "const util = module.require.call(module, './util');"), []);
+      assert.deepEqual(scanIn(temp, "const util = require['apply'](null, ['./util']);"), []);
+    } finally {
+      temp.dispose();
+    }
+  });
+
+  it('holds module.require and its proxies to the escape and cycle rules', () => {
+    const temp = makeTempTree();
+    try {
+      const outside = scanIn(temp, "const outside = require.call(null, '../outside');").find(
+        (violation) => violation.rule === 'import-outside-src'
+      );
+      assert.ok(outside, 'expected an escaping proxy import to be reported');
+      assert.ok(outside.detail.includes('outside.js'), outside.detail);
+      assert.ok(
+        scanIn(temp, "const barrel = module.require('./index');").some((violation) => violation.rule === 'root-cycle'),
+        'expected module.require of the entry point to be a barrel cycle'
+      );
+    } finally {
+      temp.dispose();
+    }
+  });
+
+  it('permits the core package root through module.require', () => {
+    assertClean("const core = module.require('../../recommendation-core');", 'module.require core root');
+  });
 });
 
 // --- connection ownership ---------------------------------------------------
@@ -208,6 +264,33 @@ describe('boundary scanner: connection ownership', () => {
     assertReports('await client.release.call(client);', 'client-release');
   });
 
+  it('reports .end() closing a client, pool or connection in every reachable form', () => {
+    assertReports('client.end();', 'connection-close', 'client.end');
+    assertReports('await pool.end();', 'connection-close', 'pool.end');
+    assertReports('db.end();', 'connection-close', 'db.end');
+    assertReports('connection.end();', 'connection-close', 'connection.end');
+    assertReports('database.end();', 'connection-close', 'database.end');
+    assertReports('this.client.end();', 'connection-close', 'client.end');
+    assertReports('options.pool.end();', 'connection-close', 'pool.end');
+    assertReports('pgPool.end();', 'connection-close', 'pgPool.end');
+    assertReports("client['end']();", 'connection-close');
+    assertReports('client?.end();', 'connection-close');
+    assertReports('client.end?.();', 'connection-close');
+    assertReports('client.end.call(client);', 'connection-close');
+    assertReports('pool.end.bind(pool)();', 'connection-close');
+  });
+
+  it('does not report .end() on a stream, socket or formatter', () => {
+    assertClean('stream.end();', 'stream.end');
+    assertClean('socket.end();', 'socket.end');
+    assertClean('formatter.end({});', 'formatter.end');
+    assertClean('response.end();', 'response.end');
+  });
+
+  it('does not report reading .end without calling it', () => {
+    assertClean('const end = client.end;', 'uncalled client.end');
+  });
+
   it('reports network globals', () => {
     assertReports("const res = fetch('https://example.test');", 'http-call');
     assertReports("globalThis.fetch('https://example.test');", 'http-call');
@@ -223,6 +306,7 @@ describe('boundary scanner: connection ownership', () => {
       [
         '// With a pg Pool, check a client out first (const client = await pool.connect())',
         '// and release it afterwards (client.release()). The runtime never reads process.env.',
+        '// module.require(\'pg\') and client.end() are forbidden here, as is new Date(...args).',
         '/* require(\'pg\'), new Pool, new Client and fetch() are forbidden here. */',
         'module.exports = {};',
       ].join('\n'),
@@ -276,11 +360,29 @@ describe('boundary scanner: the clock rule', () => {
     assertReports('const at = globalThis.Date();', 'clock-read');
   });
 
+  it('reports a Date built from undefined or void', () => {
+    assertReports('const at = new Date(undefined);', 'clock-read', 'undefined');
+    assertReports('const at = new Date(void 0);', 'clock-read', 'void 0');
+  });
+
+  it('reports a spread that can collapse to the zero-argument clock read', () => {
+    assertReports('const at = new Date(...[]);', 'clock-read', 'empty array');
+    assertReports('const at = new Date(...[,]);', 'clock-read', 'empty array');
+    assertReports('const at = new Date(...args);', 'clock-read', 'statically known');
+    assertReports('const at = new Date(...values.slice(0, 1));', 'clock-read', 'statically known');
+    assertReports('const at = new Date(...[undefined]);', 'clock-read');
+    assertReports("const at = new Date(...'');", 'clock-read', 'empty literal');
+  });
+
   it('permits new Date(value) — caller or database supplied time', () => {
     assertClean('const at = new Date(row.created_at).toISOString();', 'new Date(member)');
     assertClean('const ms = new Date(value).getTime();', 'new Date(value)');
     assertClean('const at = new Date(0);', 'new Date(0)');
     assertClean('const at = new Date(Date.parse(value));', 'new Date(Date.parse(value))');
+    assertClean('const at = new Date(options.now);', 'new Date(options.now)');
+    assertClean('const at = new Date(values[0]);', 'new Date(values[0])');
+    assertClean('const at = new Date(...[value]);', 'new Date(...[value])');
+    assertClean('const at = new Date(...[value, extra]);', 'new Date(...[value, extra])');
   });
 });
 

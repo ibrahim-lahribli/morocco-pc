@@ -16,7 +16,12 @@
 // progress, and no runtime module may move before it is accepted. The
 // namespaces arrive one batch at a time, each adding itself to
 // test/export-surface.json in the same commit:
-//   loaders       W1 — candidates, filtering, scoring, offers and query loaders
+//   loaders       W1 — candidates, scoring, offers and query loaders, the
+//                 filtering-context loader, and the filtering composition
+//                 `filterCandidatesForRecommendation`. That last name is
+//                 infrastructure composition owned at orchestrator/ (RFC §11.2),
+//                 not SQL, and is published here only because RFC §11.5 places
+//                 it under ./loaders.
 //   persistence   W2 — the three writers and the two validators
 //   orchestrator  W3 — run, snapshot, full-run, commit, swap-preview, swap-commit
 

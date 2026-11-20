@@ -34,7 +34,7 @@ A failing `ROLLBACK` never masks the original error.
   checks it out of its pool; the runtime never does.
 - The runtime **never creates, checks out, releases or closes** a client, and never reaches for a
   pool. `test/boundary.test.js` enforces this statically (`new Pool`, `new Client`,
-  `pool.connect()`, `.release()`).
+  `pool.connect()`, `.release()`, `.end()` on a client/pool/connection).
 - The runtime **never reads `process.env`** and never accepts a connection string; the caller decides
   which database it talks to.
 - Transactions are **never nested**. `runRecommendationFullRun` opens the snapshot, finishes it, runs
@@ -48,3 +48,35 @@ A failing `ROLLBACK` never masks the original error.
   and `new Date()` are boundary violations, while `new Date(value)` is permitted.
 - The only randomness is `randomUUID()` from `node:crypto`, used for persisted row ids. `Math.random`
   is unused.
+
+## W1 acceptance — behavioural transaction tests (required)
+
+The keyword parity check in `test/transaction-ownership.test.js` is a **static pre-check**, not final
+acceptance of the transaction contract. It can prove that a file mentions `BEGIN`/`COMMIT`/`ROLLBACK`
+and cannot prove when, on which path, or in which order. W1 must therefore add behavioural tests
+against a recording fake client (the `(sql, params)` style the existing `orchestrator/*.test.js`
+suites use, no database) that prove:
+
+- `snapshot.js` — `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` precedes the reads, `ROLLBACK` is
+  issued on **both** the success and the error path, and `COMMIT` is never issued.
+- `commit.js` (`runRecommendationCommit`) — one write transaction: `BEGIN`, the `FOR UPDATE` guard,
+  then `COMMIT` on success / `ROLLBACK` on failure; a failing `ROLLBACK` preserves the original error.
+- `swap-commit.js` — `commitSwapInTransaction` owns its own write transaction (`BEGIN` … `COMMIT`,
+  `ROLLBACK` on error); `commitSwap` owns none on the handle it is given.
+- `run.js` — no `BEGIN`/`COMMIT`/`ROLLBACK`, exactly one autocommit `SELECT CURRENT_TIMESTAMP AS now`.
+- `full-run.js` and `swap-preview.js` — never nest; the snapshot transaction closes before the write
+  transaction opens, on the same client.
+
+These are W1 work, not W0: they test the runtime once the modules have moved.
+
+## Step-5 ownership and prerequisites
+
+- **W1 has not started.** W0 ships the harness only; no runtime module has moved, and
+  `src/index.js` still exports `{}`.
+- **Root CI integration belongs to Agent 1.** The root `test:runtime` script and the
+  `.github/workflows/ci.yml` step are Agent 1's; W0 does not touch either.
+- **Step 4 acceptance belongs to Agent 2.** Step 4 (recommendation-core) is still in progress; W1
+  waits for Agent 2's final interface acceptance before moving any runtime module.
+- **Docker COPY ownership (review C7) must be resolved before W1.** `apps/api/Dockerfile` must be
+  updated to carry `packages/recommendation-runtime` when the API starts importing it; W0 does not
+  change the Dockerfile, and that change is a W1 prerequisite.

@@ -7,17 +7,27 @@ what is **not** split.
 
 ## What a publication split is
 
-Three stage barrels publish modules of two different kinds:
+Three stage barrels publish modules of three different kinds (RFC §6.1, §6.4, §11.2):
 
-| Stage | Pure members (no database) | Runtime members (execute SQL) |
-|---|---|---|
-| `candidates/index.js` | the role vocabulary, `ERROR_CODES`, `CandidateSelectionError`, `createCandidateSelectionInput`, `createCandidate`, the selection stages, `selectCandidatePool`, `compareCandidates` | `loadCandidates` |
-| `filtering/index.js` | `filterCandidates`, `CANDIDATE_STATUSES`, `buildIntegratedGpuPresentMap` | `loadFilteringContext`, `CONTEXT_COMPAT_KEYS`, `filterCandidatesForRecommendation` |
-| `scoring/index.js` | the configuration and use-case validators, `GPU_POLICIES`, `selectAssessmentRow`, `computeEffectiveScore`, `computeCandidateScore(s)`, `computeBuildScore(s)`, `computeBuildScoreContributions` | `loadScoringModel`, `SELECT_SCORING_MODEL_SQL`, `loadComponentAssessments`, `SELECT_COMPONENT_ASSESSMENTS_SQL` |
+| Stage | Core (pure) | Runtime loaders (SQL) | Runtime composition |
+|---|---|---|---|
+| `candidates/index.js` | the role vocabulary, `ERROR_CODES`, `CandidateSelectionError`, `createCandidateSelectionInput`, `createCandidate`, the selection stages, `selectCandidatePool`, `compareCandidates` | `loadCandidates` | — |
+| `filtering/index.js` | `filterCandidates`, `CANDIDATE_STATUSES`, `buildIntegratedGpuPresentMap` | `loadFilteringContext`, `CONTEXT_COMPAT_KEYS` | `filterCandidatesForRecommendation` |
+| `scoring/index.js` | the configuration and use-case validators, `GPU_POLICIES`, `selectAssessmentRow`, `computeEffectiveScore`, `computeCandidateScore(s)`, `computeBuildScore(s)`, `computeBuildScoreContributions` | `loadScoringModel`, `SELECT_SCORING_MODEL_SQL`, `loadComponentAssessments`, `SELECT_COMPONENT_ASSESSMENTS_SQL` | — |
 
 The split is by **publication**: `recommendation-core` publishes the pure half (one namespace per
-stage) and `recommendation-runtime` publishes the SQL half (`loaders`). Nothing is physically split
-out of the old barrel.
+stage) and `recommendation-runtime` publishes the database-facing half (`loaders`). Nothing is
+physically split out of the old barrel.
+
+**Composition is a third kind, and it is not a loader.** `filterCandidatesForRecommendation`
+composes the filtering-context loader with the pure filter. RFC §11.2 classifies
+`filtering/pipeline.js` as **infrastructure composition**, owned at
+`runtime/orchestrator/filtering-pipeline.js` (or a runtime loader entry point); RFC §11.5 separately
+publishes the same name from `./loaders`
+(`loaders.filterCandidatesForRecommendation`). Source ownership and the public subpath are different
+axes: the pipeline executes no SQL itself, and it is not a core member either. Do not call it "the
+SQL half" — the SQL half of `filtering` is `loadFilteringContext` plus the `CONTEXT_COMPAT_KEYS`
+vocabulary it exports.
 
 `offers/index.js` and `query/index.js` are runtime-only and need no split.
 

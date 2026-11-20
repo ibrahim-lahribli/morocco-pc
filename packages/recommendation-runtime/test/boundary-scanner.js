@@ -16,15 +16,22 @@
 //          violation because it ties the runtime to core's internal tree;
 //        * `node:crypto`, the one allowed built-in (uuid generation).
 //      Any other bare specifier (`pg`, `dotenv`, `node:fs`, ...) is a
-//      violation, and a computed specifier fails closed.
+//      violation, and a computed specifier fails closed. `module.require(...)`
+//      is the same import in another spelling, including its computed member
+//      (`module['require']`) and its `.call`/`.apply`/`.bind` proxies; an
+//      object's own `require` method is not an import.
 //   2. CONNECTION OWNERSHIP. `new Pool`/`new Client`, `pool.connect()`,
-//      `.release()` and HTTP globals are violations: the runtime receives one
-//      connected client and never creates, checks out, releases or closes one.
+//      `.release()`, `.end()` on a client/pool and HTTP globals are violations:
+//      the runtime receives one connected client and never creates, checks out,
+//      releases or closes one.
 //   3. ENVIRONMENT. `process.env` and database connection strings or
 //      connection parameters are violations: the caller's bootstrap reads them.
 //   4. CLOCK. Only `new Date(value)` is permitted. "Now" comes from the
 //      database (`SELECT CURRENT_TIMESTAMP`) or from the caller; `Date.now()`, a
-//      bare `Date()` and `new Date()` read the process clock.
+//      bare `Date()`, `new Date()`, `new Date(undefined)`, `new Date(void 0)` and
+//      a spread that is empty or of unknown length all read the process clock.
+//      A statically non-empty spread of a value (`new Date(...[value])`) is the
+//      same call as `new Date(value)` and stays permitted.
 //
 // Approach: a small tokenizer drops comments (the source comments themselves
 // discuss `process.env`, `pool.connect()` and `client.release()`), keeps
@@ -35,11 +42,12 @@
 // corpus uses regexes only in `const RE = /.../;` position.
 //
 // Known limitations (a static scan is a gate, not a sandbox): a specifier built
-// at runtime (`require(name)`) is reported rather than resolved; an
-// indirection through `eval`, `Function` or an aliased `require` is not
-// reconstructed; a connection created inside a dependency is out of scope,
-// which is why the package must also declare no dependencies (asserted in
-// test/boundary.test.js).
+// at runtime (`require(name)`, `require.call(null, name)`, `module[key]`) is
+// reported rather than resolved; an indirection through `eval`, `Function` or a
+// require aliased into a new variable is not reconstructed; a receiver-less
+// `this.end()` cannot be attributed to a client; a connection created inside a
+// dependency is out of scope, which is why the package must also declare no
+// dependencies (asserted in test/boundary.test.js).
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -64,6 +72,11 @@ const INVOCATION_METHODS = new Set(['call', 'apply', 'bind']);
 const GLOBAL_OBJECTS = new Set(['globalThis', 'window', 'self', 'global']);
 
 const HTTP_GLOBALS = new Set(['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource']);
+
+// A `.end()` call closes a connection when its receiver names one. The
+// exclusion list keeps ordinary streams and protocol helpers out of the rule.
+const CONNECTION_RECEIVER = /(?:client|pool|conn(?:ection)?|database|db)$/;
+const NON_CONNECTION_RECEIVER = /(?:stream|socket|formatter|writer|reader|encoder|decoder|parser|iterator|generator|queue|logger|span|timer|buffer|response)$/;
 
 // The only built-in the runtime may reach directly: uuid generation for
 // persisted row ids (persist-ranked, persist-rejections, swap-commit).
@@ -391,6 +404,93 @@ function hasAdjacentPair(segments, first, second) {
   return false;
 }
 
+/** The `(` that follows a call target, tolerating an optional `?.(` call. */
+function callOpenAfter(tokens, indexAfterChain) {
+  let open = indexAfterChain;
+  if (isPunct(tokens[open], '?.')) open++;
+  return isPunct(tokens[open], '(') ? open : null;
+}
+
+/**
+ * Split a parenthesised argument list or bracketed array literal into
+ * top-level ranges. Each range is inclusive; an empty range (`end < start`)
+ * is a hole between commas. Nested (), [], {}, and template interpolations do
+ * not split. Returns null when the delimiter is unbalanced.
+ */
+function readDelimited(tokens, openIndex) {
+  const open = tokens[openIndex];
+  if (!isPunct(open, '(') && !isPunct(open, '[')) return null;
+  const close = open.value === '(' ? ')' : ']';
+  const ranges = [];
+  let start = openIndex + 1;
+  let depth = 0;
+  for (let i = start; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token.type !== 'punct') continue;
+    const value = token.value;
+    if (value === '(' || value === '[' || value === '{' || value === '${') {
+      depth++;
+      continue;
+    }
+    if (value === ')' || value === ']' || value === '}') {
+      if (depth === 0) {
+        if (value !== close) return null;
+        if (i > start) ranges.push({ start, end: i - 1 });
+        else if (ranges.length > 0) ranges.push({ start, end: start - 1 });
+        return { ranges, closeIndex: i };
+      }
+      depth--;
+      continue;
+    }
+    if (value === ',' && depth === 0) {
+      ranges.push(i > start ? { start, end: i - 1 } : { start, end: start - 1 });
+      start = i + 1;
+    }
+  }
+  return null;
+}
+
+/** A range that is exactly one statically known string literal. */
+function isSingleStaticString(tokens, range) {
+  return Boolean(range) && range.end === range.start && isStaticallyKnownString(tokens[range.start]);
+}
+
+/**
+ * Why a `new Date(...)` argument is not a caller- or database-supplied value,
+ * or null when it is permitted.
+ */
+function classifyDateArgument(tokens, range) {
+  if (!range || range.end < range.start) {
+    return 'constructs a Date with no argument; `new Date(value)` from the caller is the permitted form';
+  }
+  const first = tokens[range.start];
+  if (isIdent(first, 'undefined')) {
+    return 'passes undefined as the Date value; use the caller- or database-supplied value';
+  }
+  if (isIdent(first, 'void')) {
+    return 'passes void 0 as the Date value; use the caller- or database-supplied value';
+  }
+  if (!isPunct(first, '...')) return null;
+
+  const operand = tokens[range.start + 1];
+  if (isStaticallyKnownString(operand) && operand.value === '') {
+    return 'spreads an empty literal, which is the zero-argument clock read';
+  }
+  if (isPunct(operand, '[')) {
+    const array = readDelimited(tokens, range.start + 1);
+    const element = array && array.ranges[0];
+    if (!element || element.end < element.start) {
+      return 'spreads an empty array, which is the zero-argument clock read';
+    }
+    const elementFirst = tokens[element.start];
+    if (isIdent(elementFirst, 'undefined') || isIdent(elementFirst, 'void') || isPunct(elementFirst, '...')) {
+      return 'spreads an array whose first value is undefined or another spread';
+    }
+    return null;
+  }
+  return 'spreads a value whose length is not statically known; it can collapse to the zero-argument clock read';
+}
+
 function lineOf(source, offset) {
   let line = 1;
   for (let i = 0; i < offset && i < source.length; i++) {
@@ -443,7 +543,11 @@ function classifyModule(specifier) {
 
 /**
  * Every statically known import, with the specifier token. A call whose
- * argument is not a static string is reported as `dynamic`.
+ * specifier is not a static string is reported as `dynamic`.
+ *
+ * `require` and `module.require` are the same import. Their `.call`/`.apply`/
+ * `.bind` proxies skip the `thisArg` (and `apply`'s array wrapper) to find the
+ * specifier. An object with its own `require` method is not a module import.
  *
  * @returns {Array<{kind: 'static'|'dynamic', token: object, call: string}>}
  */
@@ -451,20 +555,74 @@ function collectImports(tokens) {
   const out = [];
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
-    if (!isIdent(token)) continue;
-    if (token.value === 'require' || token.value === 'import') {
-      let open = i + 1;
-      if (isPunct(tokens[open], '?.')) open++;
-      // `import.meta`, `require.resolve(...)` and a bare `require` value are
-      // not import calls; `from` still covers `import x from 'y'`.
-      if (!isPunct(tokens[open], '(')) continue;
-      const argument = tokens[open + 1];
-      if (isStaticallyKnownString(argument)) out.push({ kind: 'static', token: argument, call: token.value });
-      else out.push({ kind: 'dynamic', token, call: token.value });
+    if (!isIdent(token) || isMemberDot(tokens[i - 1])) continue;
+    const chain = readMemberChain(tokens, i);
+    if (chain === null) continue;
+    const segments = chain.segments;
+
+    if (segments.length === 1 && segments[0] === 'import') {
+      const open = callOpenAfter(tokens, chain.end + 1);
+      if (open === null) continue; // `import.meta` and an import declaration
+      const args = readDelimited(tokens, open);
+      const specifier = args && args.ranges[0];
+      if (isSingleStaticString(tokens, specifier)) {
+        out.push({ kind: 'static', token: tokens[specifier.start], call: 'import' });
+      } else {
+        out.push({ kind: 'dynamic', token, call: 'import' });
+      }
+      i = chain.end;
       continue;
     }
-    if (token.value === 'from' && isStaticallyKnownString(tokens[i + 1])) {
+
+    if (segments.length === 1 && segments[0] === 'from' && isStaticallyKnownString(tokens[i + 1])) {
       out.push({ kind: 'static', token: tokens[i + 1], call: 'from' });
+      continue;
+    }
+
+    const target = calledTarget(segments);
+    const isRequire =
+      (target.length === 1 && target[0] === 'require') ||
+      (target.length === 2 && target[0] === 'module' && target[1] === 'require');
+    if (isRequire) {
+      const open = callOpenAfter(tokens, chain.end + 1);
+      if (open === null) {
+        i = chain.end;
+        continue; // a require value or `require.resolve(...)`, not an import call
+      }
+      const methods = segments.slice(target.length);
+      const method = methods.length > 0 ? methods[methods.length - 1] : null;
+      const args = readDelimited(tokens, open);
+      const ranges = args ? args.ranges : [];
+      let specifier = null;
+      if (method === null) {
+        specifier = ranges[0];
+      } else if (method === 'apply') {
+        const array = ranges[1] && isPunct(tokens[ranges[1].start], '[')
+          ? readDelimited(tokens, ranges[1].start)
+          : null;
+        specifier = array && array.ranges[0];
+      } else {
+        specifier = ranges[1];
+      }
+      const label = segments.slice(0, target.length + (method === null ? 0 : 1)).join('.');
+      if (isSingleStaticString(tokens, specifier)) {
+        out.push({ kind: 'static', token: tokens[specifier.start], call: label });
+      } else {
+        out.push({ kind: 'dynamic', token: chain.token, call: label });
+      }
+      i = chain.end;
+      continue;
+    }
+
+    // `module[key](...)` can be `module.require(...)`. Report it rather than
+    // resolve a member name the scanner cannot prove.
+    if (segments.length === 1 && segments[0] === 'module' && isPunct(tokens[chain.end + 1], '[')) {
+      const member = readDelimited(tokens, chain.end + 1);
+      const memberRange = member && member.ranges[0];
+      if (member && !isSingleStaticString(tokens, memberRange)) {
+        const open = callOpenAfter(tokens, member.closeIndex + 1);
+        if (open !== null) out.push({ kind: 'dynamic', token: chain.token, call: 'module[...]' });
+      }
     }
   }
   return out;
@@ -632,8 +790,8 @@ function scanSource(source, options) {
     if (members.length === 0) continue;
     const target = calledTarget(members);
     const after = tokens[chain.end + 1];
-    const hasCall = isPunct(after, '(');
-    const isEmptyCall = hasCall && isPunct(tokens[chain.end + 2], ')');
+    const callOpen = isPunct(after, '?.') ? chain.end + 2 : chain.end + 1;
+    const hasCall = isPunct(tokens[callOpen], '(');
     const previous = tokens[i - 1];
 
     if (target[0] === 'process' && target[1] === 'env') {
@@ -653,12 +811,17 @@ function scanSource(source, options) {
       // form, because it parses a value the caller supplied.
       const withNew = isIdent(previous, 'new');
       if (withNew) {
-        if (isEmptyCall || !hasCall) {
+        if (!hasCall) {
           report(
             'clock-read',
             'constructs a Date with no argument; `new Date(value)` from the caller is the permitted form',
             chain.token.offset
           );
+        } else {
+          const call = readDelimited(tokens, callOpen);
+          const argument = call && call.ranges[0];
+          const detail = classifyDateArgument(tokens, argument);
+          if (detail !== null) report('clock-read', detail, chain.token.offset);
         }
       } else if (hasCall) {
         report(
@@ -687,6 +850,18 @@ function scanSource(source, options) {
     if (hasCall && target[target.length - 1] === 'release') {
       report('client-release', 'releases or closes the client; the caller owns its lifetime', chain.token.offset);
       continue;
+    }
+
+    if (hasCall && target[target.length - 1] === 'end' && target.length >= 2) {
+      const receiver = target[target.length - 2].toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (CONNECTION_RECEIVER.test(receiver) && !NON_CONNECTION_RECEIVER.test(receiver)) {
+        report(
+          'connection-close',
+          'calls .end() on ' + target.join('.') + '; the runtime never closes the client or pool it was given',
+          chain.token.offset
+        );
+        continue;
+      }
     }
 
     if (hasCall && HTTP_GLOBALS.has(target[0])) {

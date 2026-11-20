@@ -33,6 +33,11 @@ orchestrator file against [`ORCHESTRATOR_ENTRY_POINTS.md`](ORCHESTRATOR_ENTRY_PO
 mixed barrels (`candidates`, `filtering`, `scoring`) are published in two halves - see
 [`MIXED_BARRELS.md`](MIXED_BARRELS.md).
 
+The filtering pipeline is the exception to the word "loaders": `filterCandidatesForRecommendation`
+is **infrastructure composition** owned at `orchestrator/` (RFC §11.2) and published under
+`./loaders` only because RFC §11.5 places it there; the SQL half of `filtering` is
+`filtering/context-loader` (`loadFilteringContext`, `CONTEXT_COMPAT_KEYS`).
+
 Write safety (unchanged): write-capable tests run against `TEST_DATABASE_URL` through
 `packages/database-guard/src/index.js`; a real-database write needs a recorded restore point. See
 `docs/database/recipes/` and the root `AGENTS.md` hard rules.
