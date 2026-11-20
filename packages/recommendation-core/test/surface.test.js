@@ -114,6 +114,10 @@ const SCORING_KEYS = [
   'computeBuildScoreContributions',
 ];
 
+const EXPLANATION_KEYS = ['explainSelection', 'deriveReasons', 'REASON_CODES', 'REASON_ORDER'];
+
+const OFFERS_KEYS = ['parseAsOf'];
+
 describe('core namespaces', () => {
   it('candidates exposes the pure contract and nothing runtime', () => {
     assert.deepEqual(Object.keys(core.candidates).sort(), [...CANDIDATES_KEYS].sort());
@@ -167,6 +171,24 @@ describe('core namespaces', () => {
     ]) {
       assert.equal(
         runtimeOnly in core.scoring,
+        false,
+        runtimeOnly + ' executes SQL or carries a query constant and must stay in the runtime tree'
+      );
+    }
+  });
+
+  it('explanation exposes the whole Engine 6 surface', () => {
+    assert.deepEqual(Object.keys(core.explanation).sort(), [...EXPLANATION_KEYS].sort());
+  });
+
+  it('offers exposes exactly parseAsOf and nothing runtime', () => {
+    assert.deepEqual(Object.keys(core.offers).sort(), [...OFFERS_KEYS].sort());
+    // selectOfferPrices executes SQL and SELECT_OFFER_PRICES_SQL carries the
+    // query; both stay in the runtime offers barrel and must never be
+    // reachable from core.
+    for (const runtimeOnly of ['selectOfferPrices', 'SELECT_OFFER_PRICES_SQL']) {
+      assert.equal(
+        runtimeOnly in core.offers,
         false,
         runtimeOnly + ' executes SQL or carries a query constant and must stay in the runtime tree'
       );

@@ -9,9 +9,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const explanation = require('./index');
-const explain = require('./explain');
-const reasons = require('./reasons');
+const explanation = require('../src/explanation');
+const explain = require('../src/explanation/explain');
+const reasons = require('../src/explanation/reasons');
 
 test('explanation barrel exposes the documented public API, in order', () => {
   assert.deepEqual(Object.keys(explanation), [
@@ -30,7 +30,7 @@ test('explanation barrel re-exports by identity - no wrapper, no copy', () => {
 });
 
 test('explanation barrel adds no logic of its own', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'explanation', 'index.js'), 'utf8');
   for (const token of ['function ', '.query(', "require('pg')", 'async']) {
     assert.ok(!source.includes(token), `explanation/index.js must not contain ${token}`);
   }
