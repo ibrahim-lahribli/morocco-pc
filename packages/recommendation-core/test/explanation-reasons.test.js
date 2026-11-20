@@ -20,9 +20,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { deriveReasons, REASON_CODES, REASON_ORDER } = require('./reasons');
-const { explainSelection } = require('./explain');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const { deriveReasons, REASON_CODES, REASON_ORDER } = require('../src/explanation/reasons');
+const { explainSelection } = require('../src/explanation/explain');
+const { CandidateSelectionError, ERROR_CODES } = require('../src/candidates/errors');
 
 const BUDGET = Object.freeze({ amount: 4000, currency: 'MAD' });
 
@@ -525,9 +525,9 @@ test('no argument is mutated', () => {
   );
 });
 
-// The implementation moved to the core package (step 4B PR 7); ./reasons.js and
-// ./build-facts.js are identity shims, so the source guards read the owner.
-const SOURCE_DIR = path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-core', 'src', 'explanation');
+// The implementation lives in this package; ../../src/recommendation/ holds only
+// identity shims, so the guards below read the owner.
+const SOURCE_DIR = path.join(__dirname, '..', 'src', 'explanation');
 
 test('reasons.js is pure: no DB client, no SQL, no clock, no randomness', () => {
   const source = fs.readFileSync(path.join(SOURCE_DIR, 'reasons.js'), 'utf8');

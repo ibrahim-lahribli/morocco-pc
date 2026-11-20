@@ -8,8 +8,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { explainSelection } = require('./explain');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const { explainSelection } = require('../src/explanation/explain');
+const { CandidateSelectionError, ERROR_CODES } = require('../src/candidates/errors');
 
 const BUDGET = Object.freeze({ amount: 3500, currency: 'MAD' });
 
