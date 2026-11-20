@@ -166,13 +166,31 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   run PASS, `npm run check:whitespace` PASS.
 - **Current extraction state:** `packages/recommendation-core/` is part of merged `master` and publishes
   seven namespaces there (`candidates`, `compatibility`, `filtering`, `assembly`, `ranking` and `retention`
-  since PR #44 merged as `1a9d8cf`, plus `scoring` since PR #45 merged as `0f86f53`), and branch
-  `feat/core-explanation-extraction` adds `explanation` and `offers` as the eighth and ninth — all pinned key
-  by key in `test/surface.test.js` and in `test/export-surface.json`, behind identity re-export shims at the
-  old `src/recommendation/**` paths. The RFC §11.4 `exports` map is declared on that branch. Nothing runtime
+  since PR #44 merged as `1a9d8cf`, plus `scoring` since PR #45 merged as `0f86f53`; `45133d5`, the tree the
+  CI gates were cut from, is the PR #47 merge), and branch `feat/core-explanation-extraction` adds
+  `explanation` and `offers` as the eighth and ninth — all pinned key by key in `test/surface.test.js` and in
+  `test/export-surface.json`, behind identity re-export shims at the old `src/recommendation/**` paths. The
+  RFC §11.4 `exports` map (11 subpaths, no `./package.json`) is declared on that branch. Nothing runtime
   has moved: the loaders, the three mixed barrels (`candidates`, `filtering`, `scoring`), the runtime-only
   `offers` barrel, `packages/recommendation-runtime/` (manifest and `docs/LOADERS_AND_TRANSACTIONS.md` only)
   and `apps/api/src/engine.js`'s barrel imports are unchanged.
+- **CI boundary gates (branch `ci/core-boundary-gates`, 2026-11-20).** The approved public interface is
+  RFC §11.4: the approved subpaths, `offers` at `src/offers/as-of.js` (there is no `offers/index.js`),
+  `errors` at `src/candidates/errors.js`, and no `./package.json` export.
+  `scripts/lib/core-package-surface.test.js` compares the declared `exports` map as a whole — a missing,
+  additional or incorrectly mapped subpath fails, a published namespace that exports nothing fails, every
+  target must exist inside the package and load the same object the root entry publishes, and
+  `core.offers === require('…/src/offers/as-of.js')` is asserted explicitly. It has no allow-list: any
+  unauthorized export such as `./package.json` is a failure; the extraction branch's removal of that export
+  (`ac06a6a`) is the coordinated change that makes it pass.
+  `.github/workflows/api-image.yml` reads the same map inside the container: every target must
+  resolve under `src/` (which rejects `./package.json` structurally), every root namespace needs its
+  declared subpath, and each subpath must load the object the entry publishes.
+  `scripts/lib/ci-workflow.test.js` pins that wiring and forbids a literal namespace list; the
+  assessment-age step stays nightly-only with `continue-on-error: true`, `set +e`, `::warning`, and never
+  passes `--strict`. The explanation batch's own provenance entries are named `unit-and-docs` steps too
+  (`check:characterization:pr7` and `verify:ownership -- --inventory=pr7 --base=2683713`), so its fixture
+  and moved-test counts are checked in CI; both require that batch to merge first.
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of
