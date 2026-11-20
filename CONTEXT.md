@@ -173,11 +173,16 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   `node --test "packages/recommendation-runtime/test/*.test.js"`; it is a named `unit-and-docs` step, and
   the package declares no dependencies and touches no database.
 - **Integrated measurement (2026-11-20).** On the combined tree (`master` `45133d5` + PR #49 `ac06a6a` +
-  PR #50 `89e761d` + this branch): `test:scripts` **893 / 0 / 0**, `test:unit` **726 / 0 / 0**,
-  `test:core` **697 tests: 695 pass / 0 fail / 2 skipped**, `test:api` **193 / 0 / 0**,
-  `test:database-guard` **15 / 0 / 0**, `test:runtime` **61 / 0 / 0**, hermetic run PASS,
+  PR #50 `89e761d` + this branch), measured from the **Node 22 `ci` log** (run 44820989559, head
+  `07c1254`): `test:scripts` **893 / 0 / 0**, `test:unit` **726 / 0 / 0**,
+  `test:core` **697 tests: 697 pass / 0 fail / 0 skipped / 0 cancelled**, `test:api` **193 / 0 / 0**,
+  `test:database-guard` **15 / 0 / 0**, `test:runtime` **61 / 0 / 0**, hermetic run **697 / 0 / 0**,
   `verify:extraction` PASS **47 / 47**, every `check:characterization` pr2–pr7 OK, and every
-  `verify:ownership` inventory PASS.
+  `verify:ownership` inventory PASS. The core's 697-test total is the same on Node 24 (Windows) and
+  Node 22 (Ubuntu); the split is not. On Ubuntu CI all 697 pass; on this Windows checkout the two
+  symlink/junction cases are SKIPPED (695 pass / 2 skipped), because the platform refuses the file
+  symlinks they need. CI is the authoritative figure for a merge decision; a local Windows run must
+  never be reported as 697 passed.
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of
