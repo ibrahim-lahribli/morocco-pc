@@ -133,15 +133,22 @@ Rules the gate enforces on that commit (`scripts/verify-pr2-provenance.js`):
 * both fixture scans run with `--full-history`, so a fixture modified on a side branch and then
   discarded by a merge still counts as a touch and fails the gate; merge commits are excluded
   from the touch count, so a capture that lands through a merge is still one introduction;
-* every merge commit in the fixture's full history since the baseline is inspected separately: the
-  fixture entry at the merge result (mode and object id, not decoded text) must equal the entry at
-  one of its parents. An ordinary treesame merge, or a merge that carries the capture, passes; a
-  merge that resolves the fixture to a state matching neither parent — a third state, a deletion,
-  an addition or a type change — fails, and a later merge that restores the captured bytes does
-  not erase that earlier unauthorized merge state;
-* a fixture history that cannot be enumerated, a merge whose parents or entries cannot be read, or
-  a commit listed as a merge with fewer than two parents is a failure, never an empty merge list
-  or a successful comparison.
+* counting non-merge touches alone is not enough: it is blind to merges by design, so a merge can
+  change the fixture without adding a touch. Every merge commit in the fixture's full history
+  since the baseline is therefore inspected separately, and the rule is relative to the capture
+  commit, located by ancestry (never by subject text, timestamps or log order):
+  * a merge that does not have the capture in its ancestry predates the capture, and the fixture
+    cannot exist without it (the capture is the only commit that added it), so that merge may
+    keep a parent's state — which is absent;
+  * a merge that has the capture in its ancestry must resolve the fixture entry (mode and object
+    id, not decoded text) to the captured entry. An ordinary treesame merge, or a merge that
+    carries the capture into another branch, passes; a merge that resolves the fixture to a third
+    state, changes its mode, or deletes it by selecting an absent parent fails — even when one
+    parent lacks it — and a later merge that restores the captured bytes does not erase that
+    earlier unauthorized merge state;
+* a fixture history that cannot be enumerated, a merge whose parents or entries cannot be read, an
+  ancestry that cannot be established, or a commit listed as a merge with fewer than two parents
+  is a failure, never an empty merge list or a successful comparison.
 
 The capture must be deterministic: no clock, no randomness, no database, no environment input, literal
 ids. `scripts/characterize-pr2.js` is the reference implementation of that discipline (its `--check`
@@ -339,9 +346,10 @@ edit that introduces the event id and requires it to have one parent and to chan
 * every history scan runs with `--full-history`, so a destination — or a characterization fixture —
   changed on a side branch and then discarded by a merge is still detected: the whole history is
   judged, not only the line that happens to reach `HEAD`; a history scan that cannot be enumerated is
-  a failure, never an empty history; and every merge in a fixture's history is inspected for a result
-  entry that matches no parent (section 3.4), so a later merge restoring the captured bytes does not
-  hide an earlier merge-introduced state;
+  a failure, never an empty history; and every merge in a fixture's history is inspected against the
+  capture (section 3.4), so a merge that invents a state matching no parent, or that deletes the
+  fixture after the capture by selecting an absent parent, is caught even when a later merge restores
+  the captured bytes;
 * events for a destination form one ancestry chain: the first `previous_blob` is the baseline source
   blob, each successor's `previous_blob` is its predecessor's `new_blob`, and the last `new_blob` is the
   destination blob at `HEAD`; each record commit is an ancestor of — or the direct parent of — the next

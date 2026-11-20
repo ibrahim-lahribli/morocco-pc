@@ -44,12 +44,15 @@
  *     from the touch count (as for destinations), so a capture that lands
  *     through a merge is still one introduction;
  *   * every merge commit in the fixture's full history since the baseline is
- *     then inspected directly: the fixture entry at the merge result (mode and
- *     object id, never decoded text) must equal the entry at one of its
- *     parents. An ordinary treesame merge, or one that carries the capture,
+ *     then inspected directly, and the rule is relative to the capture commit,
+ *     established by ancestry: a merge before the capture may have no fixture,
+ *     while a merge that has the capture in its ancestry must resolve the
+ *     fixture entry (mode and object id, never decoded text) to the captured
+ *     entry. An ordinary treesame merge, or one that carries the capture,
  *     therefore passes; a merge that resolves the fixture to a third state, or
- *     deletes or retypes it, fails, and a later merge that restores the
- *     captured bytes cannot erase that earlier unauthorized merge state;
+ *     deletes it by selecting an absent parent, fails, and a later merge that
+ *     restores the captured bytes cannot erase that earlier unauthorized merge
+ *     state;
  *
  * Recorded edits (the only sanctioned way to change a moved file afterwards)
  *   A batch's optional `edits` array names changes that are allowed to break
@@ -248,6 +251,30 @@ function commitParents(repo, sha) {
   if (!out.ok) return null;
   const [head, ...parents] = out.out.split(/\s+/).filter(Boolean);
   return head === sha ? parents : null;
+}
+
+/**
+ * Is `ancestor` in the history of `descendant`? 'ancestor', 'not-ancestor', or
+ * null when Git could not answer.
+ *
+ * `git merge-base --is-ancestor` exits 1 for "no" and 128 (or another non-zero
+ * status) for an error. `isAncestorOf` from the manifest library collapses both
+ * to `false`, which would turn an unreadable history into a legitimate
+ * pre-capture merge; the exit status is the only honest signal, so it is read
+ * here directly.
+ */
+function commitAncestry(repo, ancestor, descendant) {
+  if (!/^[0-9a-f]{40}$/.test(ancestor) || !/^[0-9a-f]{40}$/.test(descendant)) return null;
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], {
+      cwd: repo,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return 'ancestor';
+  } catch (err) {
+    return err && err.status === 1 ? 'not-ancestor' : null;
+  }
 }
 
 /** Order-independent comparison of two parsed JSON values. */
@@ -653,29 +680,53 @@ function entryState(entry) {
 }
 
 /**
- * A merge may KEEP one parent's fixture state; it may not invent a third.
+ * Every merge in the fixture's history must preserve the capture, once it
+ * exists.
  *
  * The non-merge scans count introductions and are blind to merges on purpose,
  * so an ordinary PR merge carrying a valid capture stays one introduction. That
- * blindness is also a hole: a merge can resolve the fixture to bytes matching
- * neither parent, and a later merge can put the captured bytes back, leaving
- * the touch count at one and the capture-to-HEAD diff clean. Every merge in the
- * fixture's full history since the baseline is therefore inspected directly:
- * the fixture entry at the merge result must equal the entry at one of its
- * parents. Each merge is judged on its own, so a later restoration cannot erase
- * an earlier unauthorized result.
+ * blindness is also a hole, and not only for a third state: a merge can resolve
+ * the fixture to ABSENT - the state of a parent branched from the pre-capture
+ * baseline - deleting the captured fixture, and a later merge can put the
+ * captured bytes back, leaving the touch count at one and the capture-to-HEAD
+ * diff clean. Comparing a merge result against "whichever parent it matches"
+ * cannot see that, because the absent parent is a legitimate comparable state.
  *
- * Fail-closed: an enumeration error, an unreadable parent, an unreadable entry
- * or a commit listed as a merge with fewer than two parents is a failure, never
- * an empty merge list or a silent comparison.
+ * Every merge in the fixture's full history since the baseline is therefore
+ * inspected directly, and the rule is relative to the CAPTURE, established by
+ * commit ancestry (never subject text, timestamps or log order):
+ *   * a merge that does not have the capture in its ancestry predates the
+ *     capture; the fixture cannot exist without it (the capture is the only
+ *     add in the range), so it may keep a parent's state - which is absent;
+ *   * a merge that HAS the capture in its ancestry must resolve the fixture to
+ *     the captured entry (mode and object id). It may keep the capture or carry
+ *     it into another branch, but it may never delete it or change it to any
+ *     other identity - even when one parent lacks it.
+ * Each merge is judged on its own, so a later restoration cannot erase an
+ * earlier unauthorized result.
+ *
+ * Fail-closed: an enumeration error, an unreadable parent, an unreadable entry,
+ * an ancestry that cannot be established, or a commit listed as a merge with
+ * fewer than two parents is a failure, never an empty merge list or a silent
+ * comparison.
  */
-function verifyFixtureMerges(repo, batchId, fixturePath, baseline, failures) {
+function verifyFixtureMerges(repo, batchId, fixturePath, baseline, capture, failures) {
   const label = 'batch ' + batchId + ': characterization fixture ' + fixturePath;
   const merges = commitList(repo, ['--full-history', '--merges', baseline + '..HEAD', '--', fixturePath]);
   if (merges === null) {
     failures.push(
       label + ': the merge commits touching it since the baseline could not be listed, ' +
       'so an unauthorized merge fixture state cannot be ruled out'
+    );
+    return false;
+  }
+
+  const capturedEntry = regularFileAt(repo, capture, fixturePath);
+  const capturedIdentity = capturedEntry.ok ? entryState(capturedEntry).identity : null;
+  if (capturedIdentity === null) {
+    failures.push(
+      label + ': the characterization fixture ' + describeEntryAt('its capture commit ' + capture, capturedEntry) +
+      ', so no captured entry can be required of the merges after it'
     );
     return false;
   }
@@ -701,6 +752,33 @@ function verifyFixtureMerges(repo, batchId, fixturePath, baseline, failures) {
     if (!resultState.readable) {
       failures.push(label + ': its entry at merge commit ' + merge.slice(0, 10) + ' could not be read');
       proven = false;
+      continue;
+    }
+
+    const ancestry = commitAncestry(repo, capture, merge);
+    if (ancestry === null) {
+      failures.push(
+        label + ': whether the capture commit ' + capture.slice(0, 10) + ' is in the history of merge commit ' +
+        merge.slice(0, 10) + ' could not be established'
+      );
+      proven = false;
+      continue;
+    }
+
+    if (ancestry === 'ancestor') {
+      if (resultState.identity !== capturedIdentity) {
+        failures.push(
+          label + ': merge commit ' + merge.slice(0, 10) + ' ' +
+          (resultState.identity === 'absent'
+            ? 'deleted the characterization fixture after its capture commit ' + capture.slice(0, 10) +
+              ' (it is absent at the merge result although the captured entry is in its ancestry)'
+            : 'resolved the characterization fixture to ' + resultState.identity + ' after its capture commit ' +
+              capture.slice(0, 10) + ' (the captured entry is ' + capturedIdentity + ')') +
+          '; a merge may keep or carry the captured entry but never delete or change it, and a later merge ' +
+          'that restores the captured bytes does not undo this'
+        );
+        proven = false;
+      }
       continue;
     }
 
@@ -753,10 +831,12 @@ function verifyFixtureMerges(repo, batchId, fixturePath, baseline, failures) {
  *   * that commit changes NOTHING except the fixture and any declared
  *     `capture_paths`; each declared path must have been absent at the baseline
  *     (nothing to alter) and be a regular file at the capture commit;
- *   * every merge commit in its full history since the baseline kept one
- *     parent's fixture entry (see verifyFixtureMerges), so a merge cannot
- *     introduce a state matching no parent even when a later merge restores the
- *     captured bytes;
+ *   * every merge commit in its full history since the baseline either has no
+ *     fixture before the capture, or resolves the fixture to the captured entry
+ *     (see verifyFixtureMerges), so a merge cannot delete or modify the fixture
+ *     after the capture - by selecting an absent parent or inventing a state
+ *     matching neither parent - even when a later merge restores the captured
+ *     bytes;
  *   * the fixture has not changed since.
  */
 function verifyCharacterization(repo, batch, lines, failures) {
@@ -911,14 +991,15 @@ function verifyCharacterization(repo, batch, lines, failures) {
   }
 
   // Merges are excluded from the touch count so an ordinary PR merge carrying
-  // the capture is still one introduction. They are judged separately instead:
-  // each merge result must keep one parent's fixture entry, which is what makes
-  // a merge-introduced third state fail even when a later merge restores the
-  // captured bytes.
-  const mergesProven = verifyFixtureMerges(repo, label, record.fixture, batch.baseline_sha, failures);
+  // the capture is still one introduction. They are judged separately instead,
+  // against the capture: once the capture is in a merge's ancestry, the merge
+  // result must be the captured entry. That rejects both a merge-introduced
+  // third state and a merge that selects an absent parent to delete the
+  // fixture, even when a later merge restores the captured bytes.
+  const mergesProven = verifyFixtureMerges(repo, label, record.fixture, batch.baseline_sha, capture, failures);
   lines.push(
     'fixture merge history: ' +
-    (mergesProven ? 'every merge kept a parent\'s fixture state' : '**NOT PROVEN** (see the failure list)')
+    (mergesProven ? 'every merge kept or carried the captured fixture entry' : '**NOT PROVEN** (see the failure list)')
   );
 
   const unchanged = tryGit(repo, ['diff', '--quiet', capture, 'HEAD', '--', record.fixture]);

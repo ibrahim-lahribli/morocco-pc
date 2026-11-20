@@ -591,12 +591,54 @@ test('a merge that invents a fixture state and a later merge that restores it fa
   const result = repo.verify();
   assert.equal(result.status, 1);
   assert.match(result.stdout, /commits touching the fixture since baseline: 1 \(must be exactly 1\)/);
-  assert.match(result.stderr, /merge commit [0-9a-f]{10} introduced a fixture state that matches neither parent/);
+  assert.match(result.stderr, /merge commit [0-9a-f]{10} resolved the characterization fixture to file 100644 [0-9a-f]{40} after its capture commit [0-9a-f]{10}/);
+  assert.doesNotMatch(result.stdout, /verify-pr2-provenance: PASS/);
+});
+
+test('a post-capture merge that selects an absent parent and a later merge that restores the capture fails', (t) => {
+  const { repo, baseline, capture } = characterized(t);
+  const main = repo.mainBranch;
+  const capturedBlob = repo.blobOf(capture, FIXTURE);
+
+  // A branch from the pre-capture baseline: it never contains the fixture.
+  repo.git(['checkout', '--quiet', '-b', 'pre-capture', baseline]);
+  repo.write('docs/pre.md', 'pre\n');
+  repo.commit('pre-capture documentation');
+
+  // Merge it and resolve the fixture to absent, deleting the captured fixture.
+  // The result matches the pre-capture parent's absent state.
+  repo.git(['checkout', '--quiet', main]);
+  repo.git(['merge', '--no-ff', '--no-commit', 'pre-capture']);
+  repo.remove(FIXTURE);
+  repo.git(['add', '-A']);
+  repo.commitStaged('merge the pre-capture branch and drop the fixture');
+  const deletion = repo.head();
+
+  // A later merge puts the captured bytes back, matching one of its parents.
+  repo.git(['checkout', '--quiet', '-b', 'restore', capture]);
+  repo.write('docs/restore.md', 'restore\n');
+  repo.commit('restore branch work');
+  repo.git(['checkout', '--quiet', main]);
+  repo.git(['merge', '--no-ff', '--no-commit', 'restore']);
+  repo.git(['checkout', capture, '--', FIXTURE]);
+  repo.git(['add', '-A']);
+  repo.commitStaged('merge the restore branch and put the captured fixture back');
+
+  // Only the capture is a non-merge touch and HEAD matches the capture, so only
+  // the per-merge inspection can reject this history.
+  assert.equal(repo.blobOf('HEAD', FIXTURE), capturedBlob);
+
+  const result = repo.verify();
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /commits touching the fixture since baseline: 1 \(must be exactly 1\)/);
+  assert.match(result.stderr, new RegExp(
+    'merge commit ' + deletion.slice(0, 10) + ' deleted the characterization fixture after its capture commit ' + capture.slice(0, 10)
+  ));
   assert.doesNotMatch(result.stdout, /verify-pr2-provenance: PASS/);
 });
 
 test('a fixture merge scan that cannot be enumerated fails closed instead of returning no merges', (t) => {
-  const { repo, baseline } = characterized(t);
+  const { repo, baseline, capture } = characterized(t);
   const main = repo.mainBranch;
 
   repo.git(['checkout', '--quiet', '-b', 'side-docs']);
@@ -613,7 +655,7 @@ test('a fixture merge scan that cannot be enumerated fails closed instead of ret
   repo.corruptTree(side);
 
   const failures = [];
-  const proven = verifyFixtureMerges(repo.dir, 'batch-one', FIXTURE, baseline, failures);
+  const proven = verifyFixtureMerges(repo.dir, 'batch-one', FIXTURE, baseline, capture, failures);
   assert.equal(proven, false);
   assert.equal(failures.length, 1);
   assert.match(failures[0], /the merge commits touching it since the baseline could not be listed/);
