@@ -33,6 +33,7 @@ const path = require('node:path');
 
 const WORKFLOW = path.resolve(__dirname, '../../.github/workflows/ci.yml');
 const IMAGE_WORKFLOW = path.resolve(__dirname, '../../.github/workflows/api-image.yml');
+const PACKAGE_JSON = path.resolve(__dirname, '../../package.json');
 const CORE_SNAPSHOT = path.resolve(
   __dirname,
   '../../packages/recommendation-core/test/export-surface.json'
@@ -128,29 +129,22 @@ test('the api-image gate validates the shipped exports map, not barrels', () => 
   const text = readImageWorkflow();
   const snapshot = JSON.parse(fs.readFileSync(CORE_SNAPSHOT, 'utf8'));
 
-  // The interface is the declared exports map. The in-container check reads
-  // package.json and validates every subpath target against it; there is no
-  // per-namespace barrel assumption (`./offers` is src/offers/as-of.js).
-  assert.ok(text.includes("const ROOT = '/app/packages/recommendation-core';"),
-    'the in-container check must resolve the package root');
-  assert.ok(text.includes('const map = manifest.exports;'),
-    'the in-container check must read the declared exports map');
-  assert.ok(text.includes('package must declare an exports map'),
-    'a package with no exports map must fail the container check');
-  assert.ok(text.includes("if (map['.'] !== './' + manifest.main)"),
-    'the root subpath must be checked against main');
-  assert.ok(text.includes('must resolve under src/'),
-    'a target outside src/ (including ./package.json) must fail');
-  assert.ok(text.includes('target is missing from the image'),
-    'a declared target that was not copied into the image must fail');
-  assert.ok(text.includes('core surface is empty'),
-    'an empty core surface must fail the container check');
-  assert.ok(text.includes('has no declared subpath'),
-    'a published namespace without a declared subpath must fail');
-  assert.ok(text.includes('exports nothing'),
-    'an empty namespace must fail the container check');
-  assert.ok(text.includes('is not the module its subpath declares'),
-    'a subpath must load the same object the entry publishes');
+  // The interface is the declared exports map, and the gate is the SAME module
+  // the host suite runs: the container mounts scripts/lib read-only and calls
+  // runContainerGate. No map logic is inlined here, so the two checks cannot
+  // drift. (scripts/ is excluded from the image; the mount is why.)
+  assert.ok(text.includes('-v "$GITHUB_WORKSPACE/scripts/lib:/core-check:ro"'),
+    'the container gate must mount the shared contract read-only');
+  assert.ok(text.includes("require('/core-check/core-approved-interface.js')"),
+    'the container gate must require the shared contract');
+  assert.ok(text.includes("runContainerGate('/app/packages/recommendation-core')"),
+    'the container gate must run the shared container gate');
+  assert.ok(text.includes('exports-map negatives OK ('),
+    'the container log must report the negative self-checks');
+  assert.ok(text.includes("result.negatives + '/6"),
+    'the gate must report six rejected tampered maps');
+  assert.equal(text.split('"scripts/lib/core-approved-interface.js"').length - 1, 2,
+    'a change to the shared contract must trigger the image workflow on push and PR');
 
   // The rest of the gate is intact: the core manifest, the engine graph, and
   // the fact that apps/web is not shipped.
@@ -174,4 +168,28 @@ test('the api-image gate validates the shipped exports map, not barrels', () => 
         'api-image.yml must not hardcode the namespace ' + quote + name + quote);
     }
   }
+});
+
+test('the runtime harness runs in unit-and-docs, with discovery before the runner', () => {
+  const pkg = JSON.parse(fs.readFileSync(PACKAGE_JSON, 'utf8'));
+  const script = pkg.scripts['test:runtime'];
+
+  // One command, quoted glob expanded by Node (the same mechanism test:core
+  // already proves on Node 22). assert-discovery.js exits 1 when a required
+  // suite is absent, so a glob that matches nothing cannot pass vacuously.
+  assert.equal(
+    script,
+    'node packages/recommendation-runtime/test/assert-discovery.js && node --test "packages/recommendation-runtime/test/*.test.js"'
+  );
+
+  const all = jobs(readWorkflow());
+  assert.deepEqual(Object.keys(all).sort(), ['recurring-gates', 'unit-and-docs'],
+    'the two-job architecture must not change');
+  assert.ok(all['unit-and-docs'].includes('npm run test:runtime'),
+    'unit-and-docs must run the runtime harness');
+  assert.equal(all['recurring-gates'].includes('test:runtime'), false,
+    'the nightly job must not duplicate the runtime harness');
+
+  // The package's own script keeps the same order: discovery guard, then runner.
+  assert.ok(script.indexOf('assert-discovery.js') < script.indexOf('node --test'));
 });

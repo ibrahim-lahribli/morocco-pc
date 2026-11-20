@@ -3,17 +3,17 @@
 // scripts/lib/core-package-surface.test.js - the core's public interface, checked
 // against the approved RFC §11.4 contract.
 //
-// There is no barrel-per-directory rule here. The approved interface names an
-// exact target per subpath: `./offers` is `src/offers/as-of.js` (there is no
-// `offers/index.js`), `./errors` is `src/candidates/errors.js`, and the root is
-// the hand-written entry point. A namespace is published only when the manifest
-// declares it AND the module it declares actually exposes its RFC exports, so a
-// directory or source file that merely exists never counts as a namespace.
+// The contract itself lives in ./core-approved-interface.js so the script gate
+// and the API-image gate (a read-only bind mount inside the container) enforce
+// ONE map, not two copies that can drift. There is no barrel-per-directory rule:
+// `./offers` is `src/offers/as-of.js` (there is no `offers/index.js`) and
+// `./errors` is `src/candidates/errors.js`.
 //
-// The manifest's `exports` map is the interface, so it is compared as a whole:
-// missing subpaths, additional subpaths (including `./package.json`, which RFC
-// §11.4 does not approve) and incorrectly mapped targets are all failures. There
-// is no allow-list and no exception.
+// The manifest's `exports` map is compared as a whole: missing subpaths,
+// additional subpaths (including `./package.json`) and incorrectly mapped
+// targets all fail, whether or not the target file exists. Containment is
+// filesystem-real (realpath), so a symlink cannot point an export outside the
+// package.
 //
 // This gate lives in scripts/lib, not packages/recommendation-core/test, because
 // the core-test purity audit forbids node:fs and dynamic require there, and the
@@ -22,7 +22,18 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
+
+const {
+  APPROVED_INTERFACE,
+  APPROVED_NAMESPACES,
+  approvedExportsMap,
+  exportsMapProblems,
+  namespaceProblems,
+  targetProblems,
+  runContainerGate,
+} = require('./core-approved-interface');
 
 const CORE_ROOT = path.resolve(__dirname, '../../packages/recommendation-core');
 const SNAPSHOT = path.join(CORE_ROOT, 'test/export-surface.json');
@@ -30,240 +41,18 @@ const MANIFEST = path.join(CORE_ROOT, 'package.json');
 
 const core = require(CORE_ROOT);
 
-// RFC §11.4, approved as written (A2). `requires` is the minimum set of names
-// the RFC gives for the subpath; exact key-by-key lists stay in the core's own
-// test/surface.test.js. A namespace entry (namespace !== null) must also be the
-// object the root entry publishes under that name.
-const APPROVED_INTERFACE = {
-  '.': {
-    target: './src/index.js',
-    namespace: null,
-    requires: {
-      functions: [],
-      values: ['assembly', 'candidates', 'compatibility', 'explanation', 'filtering', 'offers', 'ranking', 'retention', 'scoring'],
-    },
-  },
-  './assembly': {
-    target: './src/assembly/index.js',
-    namespace: 'assembly',
-    requires: {
-      functions: [
-        'validateEngine3Input',
-        'priceKey',
-        'validatePrices',
-        'lookupPrice',
-        'resolveGpuRequirement',
-        'assembleBuilds',
-        'buildGpuInputs',
-        'assembleBuildsForRecommendation',
-        'evaluateBuild',
-        'evaluateBuildReplacement',
-      ],
-      values: ['EXPANSION_ORDER'],
-    },
-  },
-  './candidates': {
-    target: './src/candidates/index.js',
-    namespace: 'candidates',
-    requires: {
-      functions: [
-        'createCandidateSelectionInput',
-        'createCandidate',
-        'selectCandidatePool',
-        'compareCandidates',
-        'CandidateSelectionError',
-      ],
-      values: ['COMPONENT_ROLES', 'ROLE_ORDER', 'ERROR_CODES'],
-    },
-  },
-  './compatibility': {
-    target: './src/compatibility/index.js',
-    namespace: 'compatibility',
-    requires: {
-      functions: ['createCompatibilityResult', 'aggregateCompatibilityResults'],
-      values: ['REASON_CODES'],
-    },
-  },
-  './errors': {
-    target: './src/candidates/errors.js',
-    namespace: null,
-    requires: {
-      functions: ['CandidateSelectionError'],
-      values: ['ERROR_CODES'],
-    },
-  },
-  './explanation': {
-    target: './src/explanation/index.js',
-    namespace: 'explanation',
-    requires: {
-      functions: ['explainSelection', 'deriveReasons'],
-      values: ['REASON_CODES', 'REASON_ORDER'],
-    },
-  },
-  './filtering': {
-    target: './src/filtering/index.js',
-    namespace: 'filtering',
-    requires: {
-      functions: ['filterCandidates', 'buildIntegratedGpuPresentMap'],
-      values: ['CANDIDATE_STATUSES'],
-    },
-  },
-  './offers': {
-    target: './src/offers/as-of.js',
-    namespace: 'offers',
-    requires: { functions: ['parseAsOf'], values: [] },
-  },
-  './ranking': {
-    target: './src/ranking/index.js',
-    namespace: 'ranking',
-    requires: {
-      functions: ['rankBuilds', 'selectArchetypes', 'selectDiverseTop'],
-      values: ['PERFORMANCE_FLOOR', 'STRATEGIES', 'REASON_CODES', 'TOP_N_PERSISTED', 'MAX_PER_PAIR'],
-    },
-  },
-  './retention': {
-    target: './src/retention/index.js',
-    namespace: 'retention',
-    requires: {
-      functions: [
-        'retainTopKPerRole',
-        'computeBudgetFloor',
-        'computeRoleTargets',
-        'excludedCpuProductIds',
-        'resolutionMultiplier',
-      ],
-      values: [],
-    },
-  },
-  './scoring': {
-    target: './src/scoring/index.js',
-    namespace: 'scoring',
-    requires: {
-      functions: [
-        'listUseCases',
-        'selectAssessmentRow',
-        'computeEffectiveScore',
-        'computeCandidateScore',
-        'computeCandidateScores',
-        'computeBuildScore',
-        'computeBuildScores',
-        'computeBuildScoreContributions',
-      ],
-      values: ['GPU_POLICIES'],
-    },
-  },
-};
-
-const APPROVED_NAMESPACES = Object.entries(APPROVED_INTERFACE)
-  .filter(([, entry]) => entry.namespace !== null)
-  .map(([, entry]) => entry.namespace)
-  .sort();
-
-// Pure: every problem with a package manifest's declared interface. Returns an
-// empty array only when the map is exactly the approved one.
-function exportsMapProblems(pkg) {
-  const problems = [];
-  if (pkg === null || typeof pkg !== 'object') {
-    problems.push('package.json must be an object');
-    return problems;
-  }
-  const map = pkg.exports;
-  if (map === undefined) {
-    problems.push('package.json must declare the RFC section 11.4 exports map');
-    return problems;
-  }
-  if (map === null || typeof map !== 'object' || Array.isArray(map)) {
-    problems.push('exports must be an object map');
-    return problems;
-  }
-
-  for (const subpath of Object.keys(APPROVED_INTERFACE)) {
-    if (!Object.prototype.hasOwnProperty.call(map, subpath)) {
-      problems.push('missing approved subpath ' + subpath);
-    }
-  }
-  for (const subpath of Object.keys(map)) {
-    if (!Object.prototype.hasOwnProperty.call(APPROVED_INTERFACE, subpath)) {
-      problems.push('unauthorized subpath ' + subpath);
-    }
-  }
-
-  for (const [subpath, entry] of Object.entries(APPROVED_INTERFACE)) {
-    if (!Object.prototype.hasOwnProperty.call(map, subpath)) continue;
-    const target = map[subpath];
-    if (typeof target !== 'string') {
-      problems.push(subpath + ' must map to one static target, not a condition');
-      continue;
-    }
-    if (!target.startsWith('./')) {
-      problems.push(subpath + ' must use a relative ./ target, got ' + target);
-      continue;
-    }
-    if (target.replace(/\\/g, '/') !== entry.target) {
-      problems.push(subpath + ' is mapped to ' + target + '; the approved target is ' + entry.target);
-    }
-  }
-
-  if (typeof map['.'] === 'string' && typeof pkg.main === 'string' && map['.'] !== './' + pkg.main) {
-    problems.push('exports["."] must name main (' + pkg.main + '), got ' + map['.']);
-  }
-
-  return problems;
-}
-
-// Pure: every problem with one namespace value against its RFC exports. A
-// namespace whose source file exists but exposes nothing fails here.
-function namespaceProblems(name, value, requires) {
-  const problems = [];
-  if (value === undefined) {
-    problems.push(name + ' is undefined');
-    return problems;
-  }
-  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
-    problems.push(name + ' must be an object or function, not ' + typeof value);
-    return problems;
-  }
-  const keys = Object.keys(value);
-  if (keys.length === 0) {
-    problems.push(name + ' is published but exports nothing');
-  }
-  const shape = requires || { functions: [], values: [] };
-  for (const key of shape.functions) {
-    if (!Object.prototype.hasOwnProperty.call(value, key)) {
-      problems.push(name + ' is missing required export ' + key);
-    } else if (value[key] === undefined) {
-      problems.push(name + '.' + key + ' is undefined');
-    } else if (typeof value[key] !== 'function') {
-      problems.push(name + '.' + key + ' must be a function, not ' + typeof value[key]);
-    }
-  }
-  for (const key of shape.values) {
-    if (!Object.prototype.hasOwnProperty.call(value, key)) {
-      problems.push(name + ' is missing required export ' + key);
-    } else if (value[key] === undefined || value[key] === null) {
-      problems.push(name + '.' + key + ' must be defined');
-    }
-  }
-  for (const key of keys) {
-    if (value[key] === undefined) problems.push(name + '.' + key + ' is undefined');
-  }
-  return problems;
-}
-
 function readManifest() {
   return JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
 }
 
 // A synthetic manifest that satisfies the approved interface. Negative tests
-// start from this, not from the working tree, so they still exercise the
-// validator on a branch where the real map is not declared yet.
+// start from this, not from the working tree, so the validator is exercised
+// even when the real map is not declared yet.
 function approvedManifest() {
   return {
     name: '@morocco-pc/recommendation-core',
     main: 'src/index.js',
-    exports: Object.fromEntries(
-      Object.entries(APPROVED_INTERFACE).map(([subpath, entry]) => [subpath, entry.target])
-    ),
+    exports: approvedExportsMap(),
   };
 }
 
@@ -283,17 +72,25 @@ describe('core package surface', () => {
     assert.deepEqual(namespaceProblems('root', core, APPROVED_INTERFACE['.'].requires), []);
   });
 
-  it('declares exactly the approved exports map, with every target present', () => {
+  it('declares exactly the approved eleven-subpath exports map', () => {
     const pkg = readManifest();
+    assert.equal(Object.keys(APPROVED_INTERFACE).length, 11,
+      'RFC section 11.4 approves exactly eleven subpaths');
     assert.deepEqual(exportsMapProblems(pkg), [], 'the declared interface must be the approved one');
 
     for (const [subpath, entry] of Object.entries(APPROVED_INTERFACE)) {
-      const resolved = path.resolve(CORE_ROOT, entry.target);
-      assert.ok(resolved.startsWith(CORE_ROOT + path.sep),
-        subpath + ' must stay inside the package, got ' + resolved);
-      assert.ok(fs.existsSync(resolved), subpath + ' target is missing: ' + entry.target);
       assert.equal(pkg.exports[subpath].replace(/\\/g, '/'), entry.target,
         subpath + ' must map to its approved target');
+    }
+  });
+
+  it('keeps every approved target inside the package on the real filesystem', () => {
+    for (const [subpath, entry] of Object.entries(APPROVED_INTERFACE)) {
+      assert.deepEqual(
+        targetProblems({ packageRoot: CORE_ROOT, subpath, target: entry.target }),
+        [],
+        subpath + ' must resolve to a file inside the package'
+      );
     }
   });
 
@@ -333,6 +130,12 @@ describe('core package surface', () => {
     assert.equal(errors.ERROR_CODES, core.candidates.ERROR_CODES);
     assert.equal(errors.CandidateSelectionError, core.candidates.CandidateSelectionError);
   });
+
+  it('the container gate accepts the shipped package and rejects its six tampered maps', () => {
+    const result = runContainerGate(CORE_ROOT);
+    assert.deepEqual(result.namespaces, APPROVED_NAMESPACES);
+    assert.equal(result.negatives, 6);
+  });
 });
 
 describe('core package surface rejects an interface that is not the approved one', () => {
@@ -348,6 +151,19 @@ describe('core package surface rejects an interface that is not the approved one
     });
     assert.ok(problems.some((problem) => problem.includes('unauthorized subpath ./package.json')),
       'expected an unauthorized-subpath problem, got: ' + JSON.stringify(problems));
+  });
+
+  it('rejects an unauthorized subpath even when its target is an existing valid file', () => {
+    const pkg = approvedManifest();
+    const existingTarget = APPROVED_INTERFACE['./errors'].target;
+    assert.ok(fs.existsSync(path.resolve(CORE_ROOT, existingTarget)),
+      'the fixture assumes the target exists');
+    const problems = exportsMapProblems({
+      ...pkg,
+      exports: { ...pkg.exports, './internal': existingTarget },
+    });
+    assert.ok(problems.includes('unauthorized subpath ./internal'),
+      'existence alone must never authorize a subpath: ' + JSON.stringify(problems));
   });
 
   it('rejects a missing approved subpath', () => {
@@ -366,6 +182,19 @@ describe('core package surface rejects an interface that is not the approved one
     });
     assert.ok(problems.some((problem) => problem.includes('is mapped to ./src/offers/index.js')),
       JSON.stringify(problems));
+  });
+
+  it('rejects a subpath remapped to a different existing file', () => {
+    const pkg = approvedManifest();
+    const existingTarget = APPROVED_INTERFACE['./candidates'].target;
+    assert.ok(fs.existsSync(path.resolve(CORE_ROOT, existingTarget)));
+    const problems = exportsMapProblems({
+      ...pkg,
+      exports: { ...pkg.exports, './assembly': existingTarget },
+    });
+    assert.ok(problems.includes(
+      './assembly is mapped to ' + existingTarget + '; the approved target is ./src/assembly/index.js'
+    ), JSON.stringify(problems));
   });
 
   it('rejects a conditional target instead of a static file', () => {
@@ -408,5 +237,71 @@ describe('core package surface rejects an interface that is not the approved one
       namespaceProblems('offers', { parseAsOf() {} }, APPROVED_INTERFACE['./offers'].requires),
       []
     );
+  });
+});
+
+describe('core package surface contains export targets on the real filesystem', () => {
+  it('fails closed on a target that does not exist', () => {
+    const problems = targetProblems({
+      packageRoot: CORE_ROOT,
+      subpath: './missing',
+      target: './src/this-file-does-not-exist.js',
+    });
+    assert.ok(problems.some((problem) => problem.includes('target is missing')), JSON.stringify(problems));
+  });
+
+  it('rejects a symlink that resolves outside the package', (t) => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-surface-escape-'));
+    try {
+      const pkgRoot = path.join(tempRoot, 'pkg');
+      const outside = path.join(tempRoot, 'outside');
+      fs.mkdirSync(pkgRoot);
+      fs.mkdirSync(outside);
+      fs.writeFileSync(path.join(outside, 'secret.js'), 'module.exports = {};\n');
+      try {
+        fs.symlinkSync(outside, path.join(pkgRoot, 'src'),
+          process.platform === 'win32' ? 'junction' : 'dir');
+      } catch (err) {
+        if (['EPERM', 'EACCES', 'ENOTSUP', 'EUNKNOWN'].includes(err.code)) {
+          t.skip('this platform refuses to create a directory link: ' + err.code);
+          return;
+        }
+        throw err;
+      }
+
+      const problems = targetProblems({ packageRoot: pkgRoot, subpath: './escape', target: './src/secret.js' });
+      assert.ok(problems.some((problem) => problem.includes('escapes the package')),
+        'a symlink target outside the package must fail: ' + JSON.stringify(problems));
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5 });
+    }
+  });
+
+  it('accepts a link whose real target stays inside the package', (t) => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'core-surface-inside-'));
+    try {
+      const pkgRoot = path.join(tempRoot, 'pkg');
+      const real = path.join(pkgRoot, 'src', 'real');
+      fs.mkdirSync(real, { recursive: true });
+      fs.writeFileSync(path.join(real, 'index.js'), 'module.exports = {};\n');
+      try {
+        fs.symlinkSync(real, path.join(pkgRoot, 'src', 'alias'),
+          process.platform === 'win32' ? 'junction' : 'dir');
+      } catch (err) {
+        if (['EPERM', 'EACCES', 'ENOTSUP', 'EUNKNOWN'].includes(err.code)) {
+          t.skip('this platform refuses to create a directory link: ' + err.code);
+          return;
+        }
+        throw err;
+      }
+
+      assert.deepEqual(
+        targetProblems({ packageRoot: pkgRoot, subpath: './alias', target: './src/alias/index.js' }),
+        [],
+        'a link that resolves inside the package must remain legitimate'
+      );
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5 });
+    }
   });
 });
