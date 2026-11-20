@@ -1,7 +1,15 @@
 'use strict';
 
-// scripts/lib/ci-workflow.test.js - the nightly assessment-age step CANNOT fail
-// the job, and can never run on push/PR.
+// scripts/lib/ci-workflow.test.js - workflow wiring that must not drift.
+//
+// Part 1: the nightly assessment-age step CANNOT fail the job, and can never
+// run on push/PR.
+//
+// Part 2: the api-image gate derives the core namespace list from the package
+// entry. A hardcoded list drifted once (scoring was missing while core already
+// published it), and a static list forces every extraction batch to edit this
+// shared workflow. Derivation is pinned here so a future edit cannot quietly
+// restore a literal list.
 //
 // Why this test exists: `check-assessment-age.js` reports a data property
 // (assessment staleness) that nobody agreed to gate. Wiring it into CI without
@@ -24,9 +32,18 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const WORKFLOW = path.resolve(__dirname, '../../.github/workflows/ci.yml');
+const IMAGE_WORKFLOW = path.resolve(__dirname, '../../.github/workflows/api-image.yml');
+const CORE_SNAPSHOT = path.resolve(
+  __dirname,
+  '../../packages/recommendation-core/test/export-surface.json'
+);
 
 function readWorkflow() {
   return fs.readFileSync(WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
+}
+
+function readImageWorkflow() {
+  return fs.readFileSync(IMAGE_WORKFLOW, 'utf8').replace(/\r\n/g, '\n');
 }
 
 // Split the workflow into job bodies so a step's JOB is asserted, not guessed
@@ -105,4 +122,45 @@ test('the assessment-age step cannot fail the job', () => {
   // an inline connection string.
   assert.match(nightly, /--target=env:DATABASE_URL/);
   assert.match(nightly, /DATABASE_URL: \$\{\{ secrets\.DATABASE_URL \}\}/);
+});
+
+test('the api-image gate derives the core namespaces from the package entry', () => {
+  const text = readImageWorkflow();
+  const snapshot = JSON.parse(fs.readFileSync(CORE_SNAPSHOT, 'utf8'));
+
+  // Host half: the list comes from the working-tree entry, and an empty
+  // surface fails closed instead of checking nothing.
+  assert.ok(
+    text.includes("Object.keys(require('./packages/recommendation-core/src'))"),
+    'the host check must derive namespaces from packages/recommendation-core/src'
+  );
+  assert.ok(text.includes('test -n "$namespaces"'),
+    'an empty derived namespace list must fail the step');
+  assert.ok(text.includes('-e NAMESPACES="$namespaces"'),
+    'the derived list must be passed into the container');
+
+  // Container half: derive from the loaded entry and reject empty namespaces.
+  assert.ok(text.includes('const required = Object.keys(core);'),
+    'the in-container check must derive namespaces from the loaded entry');
+  assert.ok(text.includes('core surface is empty'),
+    'an empty core surface must fail the container check');
+  assert.ok(text.includes('barrel missing'),
+    'a namespace without a barrel must fail the container check');
+
+  // The rest of the gate is intact: the core manifest, the engine graph, and
+  // the fact that apps/web is not shipped.
+  assert.ok(text.includes('test -f /app/packages/recommendation-core/package.json'));
+  assert.ok(text.includes("require('/app/apps/api/src/engine.js');"));
+  assert.ok(text.includes('test ! -e /app/apps/web'));
+
+  // No literal namespace list. Quoting a published name is exactly the drift
+  // this test exists to prevent (scoring was missing from the old six).
+  assert.equal(/const required = \[/.test(text), false,
+    'the in-container namespace list must not be a literal array');
+  for (const name of snapshot.exports) {
+    for (const quote of ["'", '"']) {
+      assert.equal(text.includes(quote + name + quote), false,
+        'api-image.yml must not hardcode the namespace ' + quote + name + quote);
+    }
+  }
 });
