@@ -3,8 +3,11 @@ name: api-image
 # The API image is what Render/Fly actually run: apps/api/Dockerfile with the repository
 # root as context. Nothing in ci.yml builds it, and since the step 4B extraction the
 # image needs packages/recommendation-core at runtime (src/recommendation/ shims resolve
-# ../../../packages/recommendation-core/src at require time). A source-only test cannot
-# see a missing COPY, so this workflow builds the real image and starts it.
+# ../../../packages/recommendation-core/src at require time). The step 5 runtime package
+# (packages/recommendation-runtime) is shipped too, ahead of W1: the loaders and the write
+# transaction will move there, so the image must already carry the path and prove it
+# loads. A source-only test cannot see a missing COPY, so this workflow builds the real
+# image and starts it.
 #
 # Path-filtered like web.yml: an unrelated change pays nothing, and this job does not
 # duplicate the engine gates in ci.yml. The workflow file is its own trigger so an edit
@@ -19,6 +22,7 @@ on:
       - "src/recommendation/**"
       - "packages/recommendation-core/**"
       - "packages/database-guard/**"
+      - "packages/recommendation-runtime/**"
       - "scripts/lib/core-approved-interface.js"
       - "package.json"
       - "package-lock.json"
@@ -33,6 +37,7 @@ on:
       - "src/recommendation/**"
       - "packages/recommendation-core/**"
       - "packages/database-guard/**"
+      - "packages/recommendation-runtime/**"
       - "scripts/lib/core-approved-interface.js"
       - "package.json"
       - "package-lock.json"
@@ -67,6 +72,47 @@ jobs:
             test ! -e /app/apps/web
             find /app/packages/recommendation-core -type f | sort
           '
+
+      - name: Confirm the runtime package is in the image
+        run: |
+          # C7. The runtime package is shipped BEFORE W1 moves a module into it,
+          # so this step proves the packaging slot now and will keep proving it
+          # after the move. It fails if the Dockerfile stops copying the package
+          # (the file/dir is absent), if .dockerignore swallows it, or if the
+          # package's entry point is deleted. test/ and docs/ must stay out:
+          # they are not runtime and would ship repository tooling.
+          docker run --rm --entrypoint sh morocco-pc-api:ci -c '
+            set -e
+            test -f /app/packages/recommendation-runtime/package.json
+            test -f /app/packages/recommendation-runtime/src/index.js
+            test ! -e /app/packages/recommendation-runtime/test
+            test ! -e /app/packages/recommendation-runtime/docs
+            find /app/packages/recommendation-runtime -type f | sort
+          '
+
+      - name: Confirm the runtime package loads by path
+        run: |
+          # Loadability, NOT a surface assertion. At W0 the package entry is
+          # empty (`module.exports = {}`), so asserting its export keys today
+          # would pin emptiness and force this gate to change at W1. The exact
+          # runtime surface is a W1 contract: when it exists it gets the same
+          # shared-contract treatment as the core (`scripts/lib/core-approved-
+          # interface.js` style), not a second ad-hoc list here. What must hold
+          # NOW is that the copied path is loadable from inside the image and
+          # that the manifest is the package's own - i.e. the COPY actually
+          # worked and the root `npm ci` is not being mistaken for linkage.
+          docker run --rm --entrypoint node morocco-pc-api:ci -e "
+            const manifest = require('/app/packages/recommendation-runtime/package.json');
+            if (manifest.name !== '@morocco-pc/recommendation-runtime') {
+              throw new Error('unexpected runtime package: ' + manifest.name);
+            }
+            if (manifest.private !== true) {
+              throw new Error('runtime package must stay private');
+            }
+            const runtime = require('/app/packages/recommendation-runtime');
+            console.log('runtime package OK (' + manifest.name +
+              '; root exports: ' + Object.keys(runtime).length + ')');
+          "
 
       - name: Confirm the shipped core matches its declared interface
         run: |

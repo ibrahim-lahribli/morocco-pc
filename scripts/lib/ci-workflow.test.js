@@ -154,10 +154,13 @@ test('the api-image gate validates the shipped exports map, not barrels', () => 
 
   // No barrel-per-namespace assumption and no literal namespace list. Either
   // one is exactly the drift this test exists to prevent. Comments may explain
-  // the removed assumption; executable lines may not contain it.
+  // the removed assumption; executable lines may not contain it. The ONE
+  // legitimate entry-point reference is the runtime package's own
+  // `src/index.js`, which is a package entry, not a per-namespace barrel.
   const code = text.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
-  assert.equal(code.includes('/index.js'), false,
-    'api-image.yml must not assume src/<namespace>/index.js');
+  const indexRefs = code.split('\n').filter((line) => line.includes('/index.js')).map((l) => l.trim());
+  assert.deepEqual(indexRefs, ['test -f /app/packages/recommendation-runtime/src/index.js'],
+    'the only explicit entry-point path is the runtime package entry, never a namespace barrel');
   assert.equal(code.includes('for ns in $NAMESPACES'), false,
     'the namespace loop was replaced by the declared exports map');
   assert.equal(/const required = \[/.test(text), false,
@@ -168,6 +171,71 @@ test('the api-image gate validates the shipped exports map, not barrels', () => 
         'api-image.yml must not hardcode the namespace ' + quote + name + quote);
     }
   }
+});
+
+test('the api-image gate ships the runtime package and proves it loads (C7)', () => {
+  const workflow = readImageWorkflow();
+  const dockerfile = fs
+    .readFileSync(path.resolve(__dirname, '../../apps/api/Dockerfile'), 'utf8')
+    .replace(/\r\n/g, '\n');
+  const ignore = fs
+    .readFileSync(path.resolve(__dirname, '../../.dockerignore'), 'utf8')
+    .replace(/\r\n/g, '\n');
+
+  // The exact COPY pair, in this spelling: package.json (cheap layer) then src.
+  // Anything broader would ship test/ and docs/, anything narrower would not
+  // make `/app/packages/recommendation-runtime` loadable.
+  assert.ok(dockerfile.includes(
+    'COPY packages/recommendation-runtime/package.json ./packages/recommendation-runtime/package.json'
+  ), 'the Dockerfile must copy the runtime manifest');
+  assert.ok(dockerfile.includes(
+    'COPY packages/recommendation-runtime/src ./packages/recommendation-runtime/src'
+  ), 'the Dockerfile must copy the runtime src tree');
+  assert.equal(dockerfile.includes('COPY packages/recommendation-runtime/test'), false,
+    'the runtime tests must not be copied into the image');
+  assert.equal(dockerfile.includes('COPY packages/recommendation-runtime/docs'), false,
+    'the runtime docs must not be copied into the image');
+
+  // Placement: after the dependency install (packages are source, not install
+  // inputs) and after the core copy it sits beside. `npm ci` must not be asked
+  // to resolve the package: the root manifest declares no workspace and no
+  // local dependency, so the install is unchanged by this COPY pair.
+  const installAt = dockerfile.indexOf('RUN npm ci --omit=dev');
+  const runtimeAt = dockerfile.indexOf('COPY packages/recommendation-runtime/package.json');
+  assert.ok(installAt >= 0, 'the Dockerfile installs dependencies');
+  assert.ok(runtimeAt > installAt, 'the runtime copy must follow npm ci, not precede it');
+
+  // .dockerignore must keep `src` in and `test`/`docs` out. It already lists
+  // `test` and `docs`; pinning them here makes the "compatible by accident"
+  // state intentional, so a later edit cannot silently ship the harness.
+  for (const excluded of ['test', 'docs']) {
+    assert.ok(
+      ignore.split('\n').map((l) => l.trim()).includes(excluded),
+      '.dockerignore must keep excluding ' + excluded
+    );
+  }
+
+  // A runtime change must rebuild the image: both the push and pull_request
+  // path filters need the package, and the workflow file itself stays a trigger.
+  assert.equal(workflow.split('"packages/recommendation-runtime/**"').length - 1, 2,
+    'a runtime change must trigger api-image on push and PR');
+
+  // The presence gate fails closed on absence, and the load gate actually
+  // requires the package. Both are needed: a successful build proves only that
+  // COPY did not error, not that the path is there or loadable.
+  assert.ok(workflow.includes('test -f /app/packages/recommendation-runtime/package.json'));
+  assert.ok(workflow.includes('test -f /app/packages/recommendation-runtime/src/index.js'));
+  assert.ok(workflow.includes('test ! -e /app/packages/recommendation-runtime/test'));
+  assert.ok(workflow.includes("require('/app/packages/recommendation-runtime')"));
+  assert.ok(workflow.includes("require('/app/packages/recommendation-runtime/package.json')"));
+
+  // It must NOT pin the runtime surface at W0. The package entry is empty and
+  // the surface is a W1 contract; asserting keys now would fail the moment W1
+  // publishes one, or worse, enshrine emptiness as the interface.
+  assert.equal(/Object\.keys\(runtime\)\s*\.\s*(sort|deepEqual)/.test(workflow), false,
+    'the W0 gate must not assert the runtime export keys');
+  assert.equal(/assert\.deepEqual\(runtime/.test(workflow), false,
+    'the W0 gate must not assert the runtime surface');
 });
 
 test('the runtime harness runs in unit-and-docs, with discovery before the runner', () => {
