@@ -89,6 +89,24 @@ describe('recommendation-core entry point', () => {
   });
 });
 
+// The subpaths that must name a module, as static relative specifiers: the
+// purity scanner only accepts a specifier it can verify as a file under src/,
+// so these are literals and never built. "./package.json" is handled apart -
+// it is a file, not a module, and it deliberately sits outside src/.
+const APPROVED_TARGETS = {
+  '.': '../src/index.js',
+  './assembly': '../src/assembly/index.js',
+  './candidates': '../src/candidates/index.js',
+  './compatibility': '../src/compatibility/index.js',
+  './errors': '../src/candidates/errors.js',
+  './explanation': '../src/explanation/index.js',
+  './filtering': '../src/filtering/index.js',
+  './offers': '../src/offers/as-of.js',
+  './ranking': '../src/ranking/index.js',
+  './retention': '../src/retention/index.js',
+  './scoring': '../src/scoring/index.js',
+};
+
 describe('recommendation-core exports map', () => {
   it('declares exactly the approved subpaths', () => {
     assert.deepEqual(Object.keys(MANIFEST.exports).sort(), [...APPROVED_SUBPATHS].sort());
@@ -102,28 +120,30 @@ describe('recommendation-core exports map', () => {
     // `main` stays for path requires (require('..'), the Docker image, the
     // hermetic copy); "." is the same file for bare-specifier consumers.
     assert.equal(path.resolve(CORE_ROOT, MANIFEST.exports['.']), path.resolve(CORE_ROOT, MANIFEST.main));
-    assert.equal(require.resolve(path.resolve(CORE_ROOT, MANIFEST.exports['.'])), ENTRY);
+    assert.equal(require.resolve('../src/index.js'), ENTRY);
   });
 
-  it('resolves every target to an existing file inside the package', () => {
-    for (const [subpath, target] of Object.entries(MANIFEST.exports)) {
-      const resolved = require.resolve(path.resolve(CORE_ROOT, target));
+  it('maps every module subpath to its statically resolved file', () => {
+    for (const [subpath, specifier] of Object.entries(APPROVED_TARGETS)) {
+      const resolved = require.resolve(specifier);
       assert.ok(
         resolved.startsWith(CORE_ROOT + path.sep),
         subpath + ' must stay inside the package, got ' + resolved
       );
-      assert.ok(fs.existsSync(resolved), subpath + ' must point at an existing file');
+      const relative = path.relative(CORE_ROOT, resolved).split(path.sep).join('/');
+      assert.equal(MANIFEST.exports[subpath], './' + relative, subpath + ' must name the file it resolves to');
     }
+    assert.equal(MANIFEST.exports['./package.json'], './package.json');
+    assert.ok(fs.existsSync(path.join(CORE_ROOT, 'package.json')));
   });
 
   it('publishes ./offers as the as-of module itself, with no core offers barrel', () => {
-    const asOf = require(path.resolve(CORE_ROOT, MANIFEST.exports['./offers']));
-    assert.equal(core.offers, asOf, 'the root namespace and ./offers must be the same object');
+    assert.equal(core.offers, require('../src/offers/as-of'), 'the root namespace and ./offers must be the same object');
     assert.equal(fs.existsSync(path.join(CORE_ROOT, 'src', 'offers', 'index.js')), false);
   });
 
   it('./errors exposes exactly the error contract', () => {
-    const errors = require(path.resolve(CORE_ROOT, MANIFEST.exports['./errors']));
+    const errors = require('../src/candidates/errors');
     assert.deepEqual(Object.keys(errors).sort(), ['CandidateSelectionError', 'ERROR_CODES']);
     assert.equal(errors.ERROR_CODES, core.candidates.ERROR_CODES);
     assert.equal(errors.CandidateSelectionError, core.candidates.CandidateSelectionError);
