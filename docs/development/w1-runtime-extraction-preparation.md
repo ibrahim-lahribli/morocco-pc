@@ -47,8 +47,11 @@ W3) and nothing has shipped from them.
 `[inspected]` On `master` (`45133d5`) and in this checkout, `src/recommendation/**` still contains every
 loader, every persistence writer and every orchestrator module — no implementation has moved.
 
-`[inspected]` PR #50: state `open`, base `master` `45133d5`, head `75f7823`, 12 files changed,
-`mergeable: clean`, 0 review comments, 0 reviews.
+`[inspected]` PR #50 was **merged by the repository owner during this review**, at
+2026-11-20T22:55:21Z, as `6fd31220fe2cbb421a56e28ada302f209f219691`; PR #49 merged immediately before
+it as `2569647`. `origin/master` is now `6fd3122` and contains `75f7823`, so the runtime tree described
+above is on `master`, not only on the branch. `[inspected]` PR #51, this dossier's branch, is now
+**behind** `master` and unmerged.
 
 ### 1.2 Deviation: this checkout is not the W0 branch
 
@@ -76,6 +79,10 @@ Result on `node v24.21.0`, Windows: discovery printed `recommendation-runtime: 4
 discovered`, exit 0; the suite reported **tests 61, suites 13, pass 61, fail 0**, exit 0. The
 previously reported `61 / 61 pass / 13 suites` is therefore **reproduced** — but on Node **24**, not the
 Node 22 the gate requires. Node 22 execution remains CI-only evidence.
+
+`[measured]` Re-measured on the merged `master` `6fd3122` with the same commands and the same Node:
+discovery 4 suites; **tests 85, suites 17, pass 85, fail 0**, exit 0. The W0 corrections are on
+`master`.
 
 `[measured]` A partial export of `packages/**` alone (without the repository root `package.json`) fails
 one assertion, `boundary.test.js` → "reports a package file outside src/ and a file outside the
@@ -124,14 +131,21 @@ restrictions are what keep them from mattering.
 
 | Commit | Tree state | `unit-and-docs` | Runtime step | `image` |
 |---|---|---|---|---|
-| `89e761d` (former PR #50 head) | no `test:runtime` script, no runtime step in `ci.yml` | `success` (runs 44756114202 / 44756123305) | **did not exist** — runtime tests did not run | not applicable |
-| `75f7823` (current PR #50 head) | scanner + fixtures only; still no root script, still no runtime step | pending at the time of writing — see section 13 gate 2 | **does not exist in CI** | not applicable |
+| `45133d5` (former `master`, base of PR #51) | no `test:runtime` script, no runtime step in `ci.yml` | `success` (runs 44756114202 / 44756123305) | **did not exist** | not applicable |
+| `75f7823` (PR #50 head, now inside `master`) | scanner + fixtures only | **success** — runs 44832300705 (pull_request) and 44832308785 (push) | **does not exist in CI** — the 85/17 suite is executed by no workflow | not applicable |
+| `6fd3122` (current `master`, merge of #50) | the 12 runtime files are on `master` | merged after a green head | **no `test:runtime` script and no runtime step in `ci.yml`** | not applicable |
 | `7e27be6` (PR #48 head) | runtime step present at `ci.yml:56`, runtime test dir absent | **failure** at step 6 `npm run test:scripts`; steps 7–30 **skipped** | **never executed** (skipped) | failure (reported: core exports map missing on master) |
 | `07c1254` (`integration/pr48-pr49-pr50`) | all three merged | `success` | **step 10 "Runtime package harness (step 5)" success** | success |
 
-`[inspected]` At `75f7823` neither the root `package.json` nor `ci.yml` mentions runtime, so a green
-`unit-and-docs` on this head proves the repository's other gates still pass — it is **not** evidence for
-gate 2, and the 85/17 suite has never run on Node 22.
+`[inspected]` At `75f7823` neither the root `package.json` nor `ci.yml` mentions runtime, so the green
+`unit-and-docs` on that head proves the repository's other gates still pass — it is **not** evidence for
+gate 2, and the 85/17 suite has never run on Node 22 under CI.
+
+`[inspected]` On the merged `master` `6fd3122`, `.github/workflows/ci.yml` runs `test:unit`,
+`test:scripts`, `test:database-guard`, `test:core` and `test:api` and contains **no** runtime step,
+while the root `package.json` defines **no** `test:runtime` script. The suite that now ships on
+`master` is therefore executed by nothing: gate 2 remains open, and it is now the only thing between a
+merged harness and a gated one.
 
 `[inspected]` At `7e27be6` the root `package.json` defines
 `"test:runtime": "node packages/recommendation-runtime/test/assert-discovery.js && node --test \"packages/recommendation-runtime/test/*.test.js\""`
@@ -145,6 +159,19 @@ remains `[previously reported]`; the mechanism (discovery guard + runner) is `[C
 
 `[inspected]` `integration/pr48-pr49-pr50` is a scratch branch and is not a merge target. **Gate 2
 therefore stays OPEN.**
+
+### 2.1 Merge sequence — resolved during this review
+
+`[inspected]` The merge order recorded in the previous revision was **#49 → #50 → rebase #48**. The first
+two resolved on 2026-11-20 while this revision was being written: PR #49 merged as `2569647` and PR #50
+merged as `6fd3122` at 22:55:21Z, after its head `75f7823` had passed `unit-and-docs` (runs 44832300705
+and 44832308785) and the merge commit's own `unit-and-docs` run 44832844277 succeeded. **Rebase #48 is
+still outstanding.**
+
+`[inspected]` PR #48's body lists #49→#50 as blockers but does not record that its `test:runtime` step
+cannot pass without #50's files; the skipped steps hid that. `[owner]` No merge, approval or force-push
+was performed by Agent 3, and **PR #51 has not been rebased** onto the new `master`: its base is still
+`45133d5`, it is reported `behind`, and rebasing or merging it is the owner's call.
 
 ---
 
@@ -167,22 +194,27 @@ nothing about runtime. The green `image` job on `07c1254` therefore says nothing
 
 **PROPOSED — NOT APPROVED. `[unresolved]` — belongs to the RFC A2/A6 owner.**
 
-`[inspected]` The §11.2 table contains **24 rows** whose target column includes runtime, and that table
-is identical on `master` (`45133d5`, this PR's base) and on `feat/core-explanation-extraction`
-(`880bb18`), so the row count is not revision-dependent. Three of those rows are the mixed barrels and
-are **split rather than moved**, leaving 21 moving rows. One of those 21 rows names **two** files
-(`persistence/validate-selected.js`, `validate-rejections.js`), so the moved set is **22 files**.
+`[inspected]` The §11.2 table contains **24 rows** whose target column includes runtime. That count was
+re-measured in this review on the **merged** `master` `6fd3122` (after PR #49's Revision 15 landed) and
+it matches the count on `45133d5` (this PR's base) and on `feat/core-explanation-extraction` `880bb18`:
+the row set did not change when #49 merged, and the row count is not revision-dependent. Three of those
+rows are the mixed barrels and are **split rather than moved**, leaving 21 moving rows. One of those 21
+rows names **two** files (`persistence/validate-selected.js`, `validate-rejections.js`), so the moved set
+is **22 files**.
 
 The "Counts" paragraph *is* revision-dependent, which is why this document cites sections and never
 lines:
 
-| Revision | §11.2 "Counts" bold figure | Its own parenthetical sums to |
-|---|---|---|
-| `master` `45133d5` | **24** modules ("2 candidates/filtering/offers loaders + 1 filtering pipeline + 3 candidates + 5 orchestrator + 5 persistence + 3 query + 2 scoring loaders") | **21** |
-| `feat/core-explanation-extraction` `880bb18` | **21** modules ("3 loaders for candidates/filtering/offers + 1 filtering pipeline + 7 orchestrator + 5 persistence + 3 query + 2 scoring loaders") | **21** |
+| Revision | §11.2 "Counts" bold figure | Its own parenthetical sums to | Runtime-targeting rows |
+|---|---|---|---|
+| `45133d5` (former `master`, base of PR #51) | **24** modules ("2 candidates/filtering/offers loaders + 1 filtering pipeline + 3 candidates + 5 orchestrator + 5 persistence + 3 query + 2 scoring loaders") | **21** | **24** |
+| `feat/core-explanation-extraction` `880bb18` | **21** modules ("3 loaders for candidates/filtering/offers + 1 filtering pipeline + 7 orchestrator + 5 persistence + 3 query + 2 scoring loaders") | **21** | **24** |
+| `6fd3122` (**current `master`**, #49 + #50 merged) | **21** modules — PR #49's Revision 15 rewrote the figure | **21** | **24** |
 
 Both parentheticals sum to 21, **one short of the 22 files the table moves**. The programme table's
-"the 24 runtime modules" phrase sits at **line 1524 on `master` and line 1527 on the branch**.
+"the 24 runtime modules" phrase sits at **line 1524 on `45133d5` and line 1527 on `6fd3122` and on the
+branch**. The bold figure is therefore revision-dependent and the row count is not; that asymmetry is
+the whole of question A1.
 
 `[derived]` The five quantities this dossier uses, with the evidence that produces each:
 
@@ -781,8 +813,8 @@ Statuses unchanged: **0 of 7 gates closed**. Documentation approval closes **no*
 
 | # | Gate | Status | Owner | Evidence today | Would close it |
 |---|---|---|---|---|---|
-| 1 | Step 4 final acceptance | **OPEN** | Agent 2 | `[inspected]` PR #49 is unmerged (`master` is still `45133d5`); no written acceptance exists in the PR trail | Agent 2's written acceptance of the nine core namespaces, the 11-key `exports` map and the identity shims |
-| 2 | Runtime tests in CI on the merge path | **OPEN** | Agent 1 | `[CI verified]` green only on scratch `07c1254`; at `7e27be6` the step was skipped behind a step-6 failure; at `75f7823` the step does not exist in `ci.yml` | a green Node 22 `unit-and-docs` in which the runtime step runs, on `master` or a PR head that will merge |
+| 1 | Step 4 final acceptance | **OPEN** | Agent 2 | `[inspected]` PR #49 is now **merged** (`2569647`, and `master` = `6fd3122`), so merge order no longer blocks it — but no written acceptance exists in the PR trail, and a merge is not an acceptance | Agent 2's written acceptance of the nine core namespaces, the 11-key `exports` map and the identity shims |
+| 2 | Runtime tests in CI on the merge path | **OPEN** | Agent 1 | `[inspected]` the suite is now **on `master`** (`6fd3122`; 85 tests / 17 suites re-measured from an export) and `ci.yml` still has no runtime step and root `package.json` no `test:runtime` script, so nothing runs it; `[CI verified]` the only green execution is scratch `07c1254`, and at `7e27be6` the step was skipped behind a step-6 failure | a root `test:runtime` script plus a runtime step in `unit-and-docs`, green on Node 22 on `master` or a PR head that will merge |
 | 3 | C7 image validation | **OPEN** | Agent 1 | `[inspected]` no runtime COPY, no runtime assertion, green `image` proves nothing here | the COPY pair + a container assertion + a green `image` run |
 | 4 | RFC count resolved | **OPEN** | A2/A6 | `[inspected]` 24 rows / 3 split barrels / 21 rows / 22 files; bold figure 24 on `master`, 21 on the branch, both parentheticals 21; no written answer (decision request A1–A5) | the A2/A6 owner's written answer on A1–A5 |
 | 5 | Full-extraction scope and W1/W2/W3 labels | **OPEN** | A2/A6 | `[inspected]` the frozen W0 entry point names loaders/persistence/orchestrator as W1/W2/W3; "full extraction" is unreconciled (B1–B5) | the A2/A6 owner's written answer on B1–B5 |
