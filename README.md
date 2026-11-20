@@ -20,8 +20,10 @@ below.
 
 ```bash
 npm install
-npm run test:unit        # engine suite, no database needed (982 tests)
-npm run test:scripts     # gate/CLI suites (823)
+npm run test:unit        # engine suite, no database needed (726 tests)
+npm run test:core        # extracted pure core, no database needed (697 tests: 697 pass on Node 22 CI)
+npm run test:runtime     # runtime package harness, no database needed (85 tests)
+npm run test:scripts     # gate/CLI suites (894)
 npm run test:api         # HTTP contract suites, DB-free (193)
 npm run test:db          # connectivity + table listing
 npm run start:api        # TEST branch, or API_ALLOW_SHARED=1

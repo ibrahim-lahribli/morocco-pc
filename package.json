@@ -9,6 +9,7 @@
     "test:scripts": "node --test \"scripts/lib/*.test.js\"",
     "test:database-guard": "node --test \"packages/database-guard/test/*.test.js\"",
     "test:core": "node --test \"packages/recommendation-core/test/*.test.js\"",
+    "test:runtime": "node packages/recommendation-runtime/test/assert-discovery.js && node --test \"packages/recommendation-runtime/test/*.test.js\"",
     "seed": "node scripts/run-seeds.js",
     "gen:decisions": "node scripts/gen-decision-index.js",
     "gen:schema": "node scripts/gen-schema-reference.js",
