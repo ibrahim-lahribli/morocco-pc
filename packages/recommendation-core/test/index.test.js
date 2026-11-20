@@ -21,6 +21,24 @@ const snapshot = require('./export-surface.json');
 
 const CORE_ROOT = path.resolve(__dirname, '..');
 const ENTRY = path.join(CORE_ROOT, 'src', 'index.js');
+const MANIFEST = JSON.parse(fs.readFileSync(path.join(CORE_ROOT, 'package.json'), 'utf8'));
+
+// The RFC §11.4 subpaths, approved for this package (A2). There is no
+// "./package.json" subpath: the manifest is repository metadata, not part of
+// the public interface, and an export of it would be an unauthorized addition.
+const APPROVED_SUBPATHS = [
+  '.',
+  './assembly',
+  './candidates',
+  './compatibility',
+  './errors',
+  './explanation',
+  './filtering',
+  './offers',
+  './ranking',
+  './retention',
+  './scoring',
+];
 
 describe('recommendation-core entry point', () => {
   it('is loadable through its declared main entry point', () => {
@@ -33,14 +51,15 @@ describe('recommendation-core entry point', () => {
   it('exports the extracted namespaces as objects', () => {
     // Step 4B PR 1 shipped an empty surface on purpose; PR 2 added three
     // namespaces whose modules moved, PR 3 added Engine 3 assembly, PR 4
-    // added Engine 5a ranking, PR 5 added Engine 2D retention and PR 6 added
-    // Engine 4 scoring. This asserts
+    // added Engine 5a ranking, PR 5 added Engine 2D retention, PR 6 added
+    // Engine 4 scoring and PR 7 added Engine 6 explanation plus offers/as-of.
+    // This asserts
     // the SHAPE (every export is a namespace object); the snapshot test below
     // asserts the exact committed list, so growth is still a deliberate,
     // reviewable edit.
     assert.equal(typeof core, 'object');
     assert.notEqual(core, null);
-    assert.deepEqual(Object.keys(core).sort(), ['assembly', 'candidates', 'compatibility', 'filtering', 'ranking', 'retention', 'scoring']);
+    assert.deepEqual(Object.keys(core).sort(), ['assembly', 'candidates', 'compatibility', 'explanation', 'filtering', 'offers', 'ranking', 'retention', 'scoring']);
     for (const name of Object.keys(core)) {
       assert.equal(typeof core[name], 'object', name + ' must be a namespace object');
       assert.notEqual(core[name], null);
@@ -64,8 +83,67 @@ describe('recommendation-core entry point', () => {
     assert.equal(snapshot.entry, 'src/index.js');
     assert.ok(Array.isArray(snapshot.exports), 'snapshot.exports must be an array');
     assert.deepEqual([...new Set(snapshot.exports)], snapshot.exports, 'snapshot must not repeat an export');
-    const manifest = JSON.parse(fs.readFileSync(path.join(CORE_ROOT, 'package.json'), 'utf8'));
-    assert.equal(manifest.name, snapshot.package);
-    assert.equal(manifest.main, snapshot.entry);
+    assert.equal(MANIFEST.name, snapshot.package);
+    assert.equal(MANIFEST.main, snapshot.entry);
+  });
+});
+
+// The subpaths that must name a module, as static relative specifiers: the
+// purity scanner only accepts a specifier it can verify as a file under src/,
+// so these are literals and never built.
+const APPROVED_TARGETS = {
+  '.': '../src/index.js',
+  './assembly': '../src/assembly/index.js',
+  './candidates': '../src/candidates/index.js',
+  './compatibility': '../src/compatibility/index.js',
+  './errors': '../src/candidates/errors.js',
+  './explanation': '../src/explanation/index.js',
+  './filtering': '../src/filtering/index.js',
+  './offers': '../src/offers/as-of.js',
+  './ranking': '../src/ranking/index.js',
+  './retention': '../src/retention/index.js',
+  './scoring': '../src/scoring/index.js',
+};
+
+describe('recommendation-core exports map', () => {
+  it('declares exactly the approved subpaths', () => {
+    assert.deepEqual(Object.keys(MANIFEST.exports).sort(), [...APPROVED_SUBPATHS].sort());
+    for (const [subpath, target] of Object.entries(MANIFEST.exports)) {
+      assert.equal(typeof target, 'string', subpath + ' must map to one static target, not a condition');
+      assert.ok(target.startsWith('./'), subpath + ' must use a relative "./" target');
+    }
+  });
+
+  it('points "." at the same file as main', () => {
+    // `main` stays for path requires (require('..'), the Docker image, the
+    // hermetic copy); "." is the same file for bare-specifier consumers.
+    assert.equal(path.resolve(CORE_ROOT, MANIFEST.exports['.']), path.resolve(CORE_ROOT, MANIFEST.main));
+    assert.equal(require.resolve('../src/index.js'), ENTRY);
+  });
+
+  it('maps every module subpath to its statically resolved file', () => {
+    for (const [subpath, specifier] of Object.entries(APPROVED_TARGETS)) {
+      const resolved = require.resolve(specifier);
+      assert.ok(
+        resolved.startsWith(CORE_ROOT + path.sep),
+        subpath + ' must stay inside the package, got ' + resolved
+      );
+      const relative = path.relative(CORE_ROOT, resolved).split(path.sep).join('/');
+      assert.equal(MANIFEST.exports[subpath], './' + relative, subpath + ' must name the file it resolves to');
+    }
+    assert.equal('./package.json' in MANIFEST.exports, false,
+      './package.json is repository metadata, not an approved public subpath');
+  });
+
+  it('publishes ./offers as the as-of module itself, with no core offers barrel', () => {
+    assert.equal(core.offers, require('../src/offers/as-of'), 'the root namespace and ./offers must be the same object');
+    assert.equal(fs.existsSync(path.join(CORE_ROOT, 'src', 'offers', 'index.js')), false);
+  });
+
+  it('./errors exposes exactly the error contract', () => {
+    const errors = require('../src/candidates/errors');
+    assert.deepEqual(Object.keys(errors).sort(), ['CandidateSelectionError', 'ERROR_CODES']);
+    assert.equal(errors.ERROR_CODES, core.candidates.ERROR_CODES);
+    assert.equal(errors.CandidateSelectionError, core.candidates.CandidateSelectionError);
   });
 });

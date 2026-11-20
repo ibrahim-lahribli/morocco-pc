@@ -1,0 +1,802 @@
+{
+  "kind": "pr7-characterization",
+  "description": "Frozen input/output pairs for the step 4B PR 7 extraction surface: the Engine 6 explanation barrel and its three implementation modules (build-facts, explain, reasons) plus offers/as-of. Covers the fixed Decision 22 template, the mandatory BIOS and UNKNOWN clauses, dominance selection and its tie order, the eight E7 reason codes and their canonical order, the read-path availability table and the Decision 38 as-of matrix. DB-free: every id, score and timestamp is a literal.",
+  "timestamp_policy": "No ambient clock is read while capturing: every id, score, price and timestamp is an input literal, so the document is byte-stable on its baseline commit. String order is recorded by code unit; nothing here reads a locale.",
+  "provenance": {
+    "baseline_sha": "268371300a2c70cc32a819f072b63f0b29d3b83d",
+    "baseline_commit_date": "2026-11-20T01:14:35Z",
+    "node_version": "v24.21.0",
+    "command": "node scripts/characterize-pr7.js",
+    "origin": "Captured from the PRE-MOVE implementation under src/recommendation/explanation/ and src/recommendation/offers/as-of.js before any module moved into packages/recommendation-core. The committed document is the baseline: do not regenerate it from the extracted code, because a fixture produced by the implementation under test proves nothing."
+  },
+  "barrel": {
+    "exports": [
+      "explainSelection",
+      "deriveReasons",
+      "REASON_CODES",
+      "REASON_ORDER"
+    ],
+    "frozen": {
+      "REASON_CODES": true,
+      "REASON_ORDER": true,
+      "REASON_ORDER_VALUE": [
+        "STRATEGY",
+        "BUDGET_USED_PCT",
+        "GPU_SHARE",
+        "DOMINANT_ROLE",
+        "BIOS_UPDATE_REQUIRED",
+        "UNKNOWN_SPEC",
+        "INPUT_APPLIED",
+        "LIMITED_CATALOG"
+      ],
+      "barrel": false
+    },
+    "modules": {
+      "build_facts": [
+        "STATUS_VALUES",
+        "CONDITIONAL_SOURCE_STATUS",
+        "componentsByRole",
+        "dominantContribution",
+        "biosRequirements",
+        "unknownRoles"
+      ],
+      "explain": [
+        "explainSelection"
+      ],
+      "reasons": [
+        "deriveReasons",
+        "REASON_CODES",
+        "REASON_ORDER"
+      ]
+    }
+  },
+  "explain": {
+    "pass-two-components": {
+      "ok": true,
+      "output": [
+        {
+          "persisted_rank": 1,
+          "build_score": 87.5,
+          "total_price": 3000,
+          "compatibility_status": "PASS",
+          "signature": "CPU:11111111-1111-4111-8111-111111111111|GPU::",
+          "explanation": "Ranked 1: best weighted score 87.5; PASS compatibility; 3000 MAD of 4000 MAD budget; CPU PERFORMANCE dominant",
+          "build": {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "CPU-product",
+                "product_variant_id": null,
+                "category": "x",
+                "status": "PASS",
+                "price": {
+                  "selected_price": 100,
+                  "currency": "MAD",
+                  "store_id": null,
+                  "price_checked_at": null
+                },
+                "compatibility_notes": []
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "MOTHERBOARD-product",
+                "product_variant_id": null,
+                "category": "x",
+                "status": "PASS",
+                "price": {
+                  "selected_price": 100,
+                  "currency": "MAD",
+                  "store_id": null,
+                  "price_checked_at": null
+                },
+                "compatibility_notes": []
+              }
+            ],
+            "total_price": 3000,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0
+          }
+        }
+      ]
+    },
+    "unknown-status-and-roles": {
+      "ok": true,
+      "output": [
+        {
+          "persisted_rank": 1,
+          "build_score": 87.5,
+          "total_price": 3000,
+          "compatibility_status": "UNKNOWN",
+          "signature": "CPU:11111111-1111-4111-8111-111111111111|GPU::",
+          "explanation": "Ranked 1: best weighted score 87.5; UNKNOWN compatibility; 3000 MAD of 4000 MAD budget; UNKNOWN: MOTHERBOARD, GPU",
+          "build": {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "CPU-product",
+                "product_variant_id": null,
+                "category": "x",
+                "status": "PASS",
+                "price": {
+                  "selected_price": 100,
+                  "currency": "MAD",
+                  "store_id": null,
+                  "price_checked_at": null
+                },
+                "compatibility_notes": []
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "GPU-product",
+                "product_variant_id": null,
+                "category": "x",
+                "status": "UNKNOWN",
+                "price": {
+                  "selected_price": 100,
+                  "currency": "MAD",
+                  "store_id": null,
+                  "price_checked_at": null
+                },
+                "compatibility_notes": []
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "MOTHERBOARD-product",
+                "product_variant_id": null,
+                "category": "x",
+                "status": "UNKNOWN",
+                "price": {
+                  "selected_price": 100,
+                  "currency": "MAD",
+                  "store_id": null,
+                  "price_checked_at": null
+                },
+                "compatibility_notes": []
+              }
+            ],
+            "total_price": 3000,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0
+          }
+        }
+      ]
+    },
+    "bios-conditional-dedup": {
+      "ok": true,
+      "output": [
+        {
+          "persisted_rank": 2,
+          "build_score": 71,
+          "total_price": 3000,
+          "compatibility_status": "PASS",
+          "signature": "CPU:11111111-1111-4111-8111-111111111111|GPU::",
+          "explanation": "Ranked 2: best weighted score 71; PASS compatibility; 3000 MAD of 4000 MAD budget; CPU PERFORMANCE dominant; requires BIOS >= 1.2.3; requires BIOS >= 2.0.0",
+          "build": {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "CPU-product",
+                "product_variant_id": null,
+                "category": "x",
+                "status": "PASS",
+                "price": {
+                  "selected_price": 100,
+                  "currency": "MAD",
+                  "store_id": null,
+                  "price_checked_at": null
+                },
+                "compatibility_notes": []
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "MOTHERBOARD-product",
+                "product_variant_id": null,
+                "category": "x",
+                "status": "PASS",
+                "price": {
+                  "selected_price": 100,
+                  "currency": "MAD",
+                  "store_id": null,
+                  "price_checked_at": null
+                },
+                "compatibility_notes": [
+                  {
+                    "source_status": "CONDITIONAL",
+                    "min_bios_version": "1.2.3"
+                  },
+                  {
+                    "source_status": "VERIFIED",
+                    "min_bios_version": "9.9.9"
+                  }
+                ]
+              },
+              {
+                "component_role": "GPU",
+                "product_id": "GPU-product",
+                "product_variant_id": null,
+                "category": "x",
+                "status": "PASS",
+                "price": {
+                  "selected_price": 100,
+                  "currency": "MAD",
+                  "store_id": null,
+                  "price_checked_at": null
+                },
+                "compatibility_notes": [
+                  {
+                    "source_status": "CONDITIONAL",
+                    "min_bios_version": "2.0.0"
+                  },
+                  {
+                    "source_status": "CONDITIONAL",
+                    "min_bios_version": "1.2.3"
+                  }
+                ]
+              }
+            ],
+            "total_price": 3000,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0
+          }
+        }
+      ]
+    },
+    "dominant-tie-first-wins": {
+      "ok": true,
+      "output": [
+        {
+          "persisted_rank": 1,
+          "build_score": 87.5,
+          "total_price": 3000,
+          "compatibility_status": "PASS",
+          "signature": "CPU:11111111-1111-4111-8111-111111111111|GPU::",
+          "explanation": "Ranked 1: best weighted score 87.5; PASS compatibility; 3000 MAD of 4000 MAD budget; CPU PERFORMANCE dominant",
+          "build": {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "CPU-product",
+                "product_variant_id": null,
+                "category": "x",
+                "status": "PASS",
+                "price": {
+                  "selected_price": 100,
+                  "currency": "MAD",
+                  "store_id": null,
+                  "price_checked_at": null
+                },
+                "compatibility_notes": []
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "MOTHERBOARD-product",
+                "product_variant_id": null,
+                "category": "x",
+                "status": "PASS",
+                "price": {
+                  "selected_price": 100,
+                  "currency": "MAD",
+                  "store_id": null,
+                  "price_checked_at": null
+                },
+                "compatibility_notes": []
+              }
+            ],
+            "total_price": 3000,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0
+          }
+        }
+      ]
+    },
+    "empty-selection": {
+      "ok": true,
+      "output": []
+    },
+    "multi-entry-order": {
+      "ok": true,
+      "output": [
+        {
+          "persisted_rank": 1,
+          "build_score": 87.5,
+          "total_price": 3000,
+          "compatibility_status": "PASS",
+          "signature": "CPU:11111111-1111-4111-8111-111111111111|GPU::",
+          "explanation": "Ranked 1: best weighted score 87.5; PASS compatibility; 3000 MAD of 3500 USD budget; CPU PERFORMANCE dominant",
+          "build": {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "CPU-product",
+                "product_variant_id": null,
+                "category": "x",
+                "status": "PASS",
+                "price": {
+                  "selected_price": 100,
+                  "currency": "MAD",
+                  "store_id": null,
+                  "price_checked_at": null
+                },
+                "compatibility_notes": []
+              },
+              {
+                "component_role": "MOTHERBOARD",
+                "product_id": "MOTHERBOARD-product",
+                "product_variant_id": null,
+                "category": "x",
+                "status": "PASS",
+                "price": {
+                  "selected_price": 100,
+                  "currency": "MAD",
+                  "store_id": null,
+                  "price_checked_at": null
+                },
+                "compatibility_notes": []
+              }
+            ],
+            "total_price": 3000,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0
+          }
+        },
+        {
+          "persisted_rank": 3,
+          "build_score": 87.5,
+          "total_price": 1200,
+          "compatibility_status": "PASS",
+          "signature": "CPU:11111111-1111-4111-8111-111111111111|GPU::",
+          "explanation": "Ranked 3: best weighted score 87.5; PASS compatibility; 1200 MAD of 3500 USD budget",
+          "build": {
+            "components": [
+              {
+                "component_role": "CPU",
+                "product_id": "CPU-product",
+                "product_variant_id": null,
+                "category": "x",
+                "status": "PASS",
+                "price": {
+                  "selected_price": 100,
+                  "currency": "MAD",
+                  "store_id": null,
+                  "price_checked_at": null
+                },
+                "compatibility_notes": []
+              }
+            ],
+            "total_price": 1200,
+            "currency": "MAD",
+            "unknown_pairwise_count": 0
+          }
+        }
+      ]
+    },
+    "output-frozen": {
+      "ok": true,
+      "output": {
+        "container": true,
+        "entries": true,
+        "input_explanation_untouched": null
+      }
+    },
+    "errors": {
+      "selected-not-array": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "selected",
+          "message": "\"selected\" must be an array"
+        }
+      },
+      "misaligned-contributions": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "contributions",
+          "message": "\"contributions\" must stay index-aligned with \"builds\""
+        }
+      },
+      "build-not-in-builds": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "selected[0].build",
+          "message": "\"selected[0].build\" is not one of the supplied \"builds\" (contributions are aligned with \"builds\")"
+        }
+      },
+      "budget-missing-amount": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "budget.amount",
+          "message": "\"budget.amount\" is required"
+        }
+      },
+      "budget-invalid-currency": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "budget.currency",
+          "message": "\"budget.currency\" must match /^[A-Z]{3}$/"
+        }
+      },
+      "entry-bad-rank": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "selected[0].persisted_rank",
+          "message": "\"selected[0].persisted_rank\" must be a positive integer"
+        }
+      },
+      "entry-bad-score": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "selected[0].build_score",
+          "message": "\"selected[0].build_score\" must be a finite number in [0, 100]"
+        }
+      },
+      "entry-invalid-status": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "selected[0].compatibility_status",
+          "message": "\"selected[0].compatibility_status\" must be exactly \"PASS\" or \"UNKNOWN\""
+        }
+      },
+      "component-status-out-of-vocabulary": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "selected[0].build",
+          "message": "\"selected[0].build\" is not one of the supplied \"builds\" (contributions are aligned with \"builds\")"
+        }
+      }
+    }
+  },
+  "reasons": {
+    "full-surface": {
+      "ok": true,
+      "output": [
+        {
+          "code": "STRATEGY",
+          "value": "BALANCED"
+        },
+        {
+          "code": "BUDGET_USED_PCT",
+          "value": 75
+        },
+        {
+          "code": "GPU_SHARE",
+          "value": 0.6666666666666666
+        },
+        {
+          "code": "DOMINANT_ROLE",
+          "value": "CPU"
+        },
+        {
+          "code": "BIOS_UPDATE_REQUIRED",
+          "value": [
+            "1.2.3"
+          ]
+        },
+        {
+          "code": "UNKNOWN_SPEC",
+          "value": [
+            "MOTHERBOARD"
+          ]
+        },
+        {
+          "code": "INPUT_APPLIED",
+          "value": {
+            "use_case": "GAMING",
+            "resolution": "1440p",
+            "priority": 3,
+            "gpu_policy": "REQUIRED"
+          }
+        },
+        {
+          "code": "LIMITED_CATALOG",
+          "value": [
+            "NO_VALUE_CANDIDATE"
+          ]
+        }
+      ]
+    },
+    "read-path-three-codes": {
+      "ok": true,
+      "output": [
+        {
+          "code": "BUDGET_USED_PCT",
+          "value": 75
+        },
+        {
+          "code": "GPU_SHARE",
+          "value": 0.5
+        }
+      ]
+    },
+    "igpu-null-gpu-share": {
+      "ok": true,
+      "output": [
+        {
+          "code": "BUDGET_USED_PCT",
+          "value": 75
+        },
+        {
+          "code": "GPU_SHARE",
+          "value": null
+        }
+      ]
+    },
+    "no-optional-inputs": {
+      "ok": true,
+      "output": [
+        {
+          "code": "BUDGET_USED_PCT",
+          "value": 75
+        },
+        {
+          "code": "GPU_SHARE",
+          "value": null
+        }
+      ]
+    },
+    "empty-contributions": {
+      "ok": true,
+      "output": [
+        {
+          "code": "BUDGET_USED_PCT",
+          "value": 75
+        },
+        {
+          "code": "GPU_SHARE",
+          "value": null
+        }
+      ]
+    },
+    "profile-without-policy": {
+      "ok": true,
+      "output": [
+        {
+          "code": "BUDGET_USED_PCT",
+          "value": 75
+        },
+        {
+          "code": "GPU_SHARE",
+          "value": null
+        },
+        {
+          "code": "INPUT_APPLIED",
+          "value": {
+            "use_case": "OFFICE",
+            "resolution": null,
+            "priority": null,
+            "gpu_policy": null
+          }
+        }
+      ]
+    },
+    "output-frozen": {
+      "ok": true,
+      "output": {
+        "container": true,
+        "entries": true,
+        "array_values": true,
+        "order": [
+          "STRATEGY",
+          "BUDGET_USED_PCT",
+          "GPU_SHARE",
+          "DOMINANT_ROLE",
+          "BIOS_UPDATE_REQUIRED",
+          "UNKNOWN_SPEC",
+          "INPUT_APPLIED",
+          "LIMITED_CATALOG"
+        ]
+      }
+    },
+    "errors": {
+      "non-object-args": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": null,
+          "message": "deriveReasons requires a single { build, contributions, profile, budget, inputs, strategy, catalogReasonCodes } object"
+        }
+      },
+      "missing-build": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_INPUT",
+          "field": "build",
+          "message": "\"build\" must be an Engine 3 build object"
+        }
+      },
+      "null-total-price": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "MISSING_REQUIRED_FIELD",
+          "field": "build.total_price",
+          "message": "\"build.total_price\" is required"
+        }
+      },
+      "invalid-strategy": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "strategy",
+          "message": "\"strategy\" must be one of PERFORMANCE, BALANCED, VALUE"
+        }
+      },
+      "invalid-priority": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "inputs.priority",
+          "message": "\"inputs.priority\" must be an integer in [1, 5] or null"
+        }
+      },
+      "invalid-catalog-code": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "catalogReasonCodes[0]",
+          "message": "\"catalogReasonCodes[0]\" must be one of EMPTY_RANKED, NO_PERFORMANCE_CANDIDATE, NO_BALANCED_CANDIDATE, NO_VALUE_CANDIDATE"
+        }
+      },
+      "invalid-gpu-policy": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "profile.gpu_policy",
+          "message": "\"profile.gpu_policy\" must be one of REQUIRED, IGPU_ALLOWED"
+        }
+      },
+      "invalid-budget-currency": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "budget.currency",
+          "message": "\"budget.currency\" must match /^[A-Z]{3}$/"
+        }
+      },
+      "gpu-without-price": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "build.GPU.selected_price",
+          "message": "\"build.GPU.selected_price\" (or its nested \"price.selected_price\") must be a finite number (or a plain-decimal NUMERIC string) greater than 0"
+        }
+      }
+    }
+  },
+  "as_of": {
+    "accepted": {
+      "undefined-option": {
+        "ok": true,
+        "output": null
+      },
+      "null-options": {
+        "ok": true,
+        "output": null
+      },
+      "zulu": {
+        "ok": true,
+        "output": {
+          "nowMs": 1793491200000,
+          "iso": "2026-11-01T00:00:00.000Z"
+        }
+      },
+      "offset": {
+        "ok": true,
+        "output": {
+          "nowMs": 1793487600000,
+          "iso": "2026-10-31T23:00:00.000Z"
+        }
+      },
+      "milliseconds": {
+        "ok": true,
+        "output": {
+          "nowMs": 1793491200123,
+          "iso": "2026-11-01T00:00:00.123Z"
+        }
+      },
+      "one-digit-fraction": {
+        "ok": true,
+        "output": {
+          "nowMs": 1793491200500,
+          "iso": "2026-11-01T00:00:00.500Z"
+        }
+      },
+      "leap-day": {
+        "ok": true,
+        "output": {
+          "nowMs": 1709251199000,
+          "iso": "2024-02-29T23:59:59.000Z"
+        }
+      }
+    },
+    "rejected": {
+      "date-only": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "asOf",
+          "message": "\"asOf\" must be an ISO timestamp with an explicit timezone and millisecond-or-less precision"
+        }
+      },
+      "no-timezone": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "asOf",
+          "message": "\"asOf\" must be an ISO timestamp with an explicit timezone and millisecond-or-less precision"
+        }
+      },
+      "minute-precision": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "asOf",
+          "message": "\"asOf\" must be an ISO timestamp with an explicit timezone and millisecond-or-less precision"
+        }
+      },
+      "space-separator": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "asOf",
+          "message": "\"asOf\" must be an ISO timestamp with an explicit timezone and millisecond-or-less precision"
+        }
+      },
+      "impossible-february": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "asOf",
+          "message": "\"asOf\" must be an ISO timestamp with an explicit timezone and millisecond-or-less precision"
+        }
+      },
+      "nan-string": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "asOf",
+          "message": "\"asOf\" must be an ISO timestamp with an explicit timezone and millisecond-or-less precision"
+        }
+      },
+      "numeric-value": {
+        "ok": false,
+        "error": {
+          "name": "CandidateSelectionError",
+          "code": "INVALID_FIELD_VALUE",
+          "field": "asOf",
+          "message": "\"asOf\" must be an ISO timestamp with an explicit timezone and millisecond-or-less precision"
+        }
+      }
+    }
+  }
+}

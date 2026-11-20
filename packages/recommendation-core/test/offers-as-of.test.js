@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseAsOf } = require('./as-of');
+const { parseAsOf } = require('../src/offers/as-of');
 
 test('asOf normalizes offset timestamps and preserves absent input', () => {
   assert.equal(parseAsOf(undefined), null);
