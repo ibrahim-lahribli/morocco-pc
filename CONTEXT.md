@@ -146,14 +146,20 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   `npm run verify:extraction` **PASS 42 / 42**, `node packages/recommendation-core/test/hermetic-run.js`
   PASS, `npm run check:whitespace` PASS.
 - **Current extraction state:** `packages/recommendation-core/` is part of merged `master` and publishes
-  six namespaces, all on `master` since PR #44 merged as `1a9d8cf` (`candidates`, `compatibility`,
-  `filtering`, `assembly`, `ranking` and `retention`), plus `scoring` from
-  `feat/core-scoring-extraction` — seven once that branch lands — pinned key by key in
-  `test/surface.test.js` and in `test/export-surface.json`, behind identity re-export shims at the old
-  `src/recommendation/**` paths. Nothing else has moved: the loaders,
+  seven namespaces (`candidates`, `compatibility`, `filtering`, `assembly`, `ranking`, `retention` and
+  `scoring`, the last merged with PR #45 as `45133d5`), pinned key by key in `test/surface.test.js` and
+  `test/export-surface.json`, behind identity re-export shims at the old `src/recommendation/**` paths.
+  Nothing else has moved: the loaders,
   `explanation` and `offers/as-of` still live in `src/recommendation/`,
   `packages/recommendation-runtime/` still carries only its manifest and `docs/LOADERS_AND_TRANSACTIONS.md`,
   and `apps/api/src/engine.js` still imports the `src/recommendation/**` barrels directly.
+- **CI boundary gates (2026-11-20):** the api-image gate derives its namespace list from
+  `packages/recommendation-core/src/index.js` instead of a hardcoded six, `scripts/lib/core-package-surface.test.js`
+  proves the entry, the committed snapshot and the barrel directories agree, and
+  `scripts/lib/ci-workflow.test.js` pins the derivation. Re-measured with this change:
+  `npm run test:scripts` **862 pass / 0 fail / 0 skipped**, `npm run test:core` **622 tests: 620 pass /
+  0 fail / 2 skipped**, `node packages/recommendation-core/test/hermetic-run.js` **PASS**,
+  `npm run verify:ownership` **PASS**.
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of

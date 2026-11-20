@@ -58,10 +58,15 @@ jobs:
 
       - name: Confirm the extracted core is in the image
         run: |
-          docker run --rm --entrypoint sh morocco-pc-api:ci -c '
+          # Derive the namespace list from the package entry: a hardcoded list
+          # drifted once (scoring was missing) and every extraction batch would
+          # otherwise have to edit this shared workflow.
+          namespaces=$(node -e "process.stdout.write(Object.keys(require('./packages/recommendation-core/src')).join(' '))")
+          test -n "$namespaces"
+          docker run --rm -e NAMESPACES="$namespaces" --entrypoint sh morocco-pc-api:ci -c '
             set -e
             test -f /app/packages/recommendation-core/package.json
-            for ns in assembly candidates compatibility filtering ranking retention; do
+            for ns in $NAMESPACES; do
               test -f "/app/packages/recommendation-core/src/$ns/index.js"
             done
             test ! -e /app/apps/web
@@ -71,15 +76,30 @@ jobs:
       - name: Confirm the engine graph resolves inside the container
         run: |
           docker run --rm --entrypoint node morocco-pc-api:ci -e "
+            const fs = require('node:fs');
             const core = require('/app/packages/recommendation-core/src');
-            const required = ['assembly','candidates','compatibility','filtering','ranking','retention'];
-            const missing = required.filter((name) => !(name in core));
+            const required = Object.keys(core);
+            if (required.length === 0) {
+              console.error('core surface is empty');
+              process.exit(1);
+            }
+            const invalid = required.filter((name) => {
+              const ns = core[name];
+              const loaded = ns !== null && (typeof ns === 'object' || typeof ns === 'function');
+              return !loaded || (typeof ns === 'object' && Object.keys(ns).length === 0);
+            });
+            if (invalid.length > 0) {
+              console.error('core namespace empty or unloadable: ' + invalid.join(','));
+              process.exit(1);
+            }
+            const missing = required.filter((name) =>
+              !fs.existsSync('/app/packages/recommendation-core/src/' + name + '/index.js'));
             if (missing.length > 0) {
-              console.error('core surface missing: ' + missing.join(','));
+              console.error('core namespace barrel missing: ' + missing.join(','));
               process.exit(1);
             }
             require('/app/apps/api/src/engine.js');
-            console.log('core surface OK; engine graph OK');
+            console.log('core surface OK (' + required.join(',') + '); engine graph OK');
           "
 
       - name: Boot, health-check, clean up
