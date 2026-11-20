@@ -145,15 +145,34 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   tests and 402 → 402 assertions** (6 moved, 3 stayed: `scoring/index.test.js` and the two loader tests),
   `npm run verify:extraction` **PASS 42 / 42**, `node packages/recommendation-core/test/hermetic-run.js`
   PASS, `npm run check:whitespace` PASS.
+- **Step 4B PR 7 — branch `feat/core-explanation-extraction` (not merged when this was measured).** The final
+  pure-logic batch (`step-4b-pr7`, baseline `2683713`, 5 modules byte-identical — the Engine 6 files `build-facts`,
+  `explain`, `reasons`, `index` and `offers/as-of` — 47 / 47 across the six batches) moves those modules and their
+  four test suites into the core, publishes `explanation` (4 keys) and `offers` (`parseAsOf` only; `selectOfferPrices`
+  and `SELECT_OFFER_PRICES_SQL` stay in the runtime barrel), and declares the RFC §11.4 `exports` map (11 subpaths —
+  the root, the nine namespaces and `./errors`; `./package.json` is NOT published, removed as an unapproved addition;
+  `main` retained for path requires). The repository-level gate `scripts/lib/core-package-exports.test.js` installs the
+  package into a throwaway consumer outside the repository and proves through Node's resolver that every approved
+  subpath resolves to its intended file and to the root's namespace object, `./offers` is `src/offers/as-of.js` (there
+  is deliberately no core `offers/index.js`), and six private or unapproved specifiers throw
+  `ERR_PACKAGE_PATH_NOT_EXPORTED`. Two barrel imports were narrowed before the capture (`build-facts.js` →
+  `../assembly/assemble`, `reasons.js` → `../ranking/select-archetypes`); `rank.js` and `select-diverse.js` keep
+  `../assembly` because their tests pin the specifier. The five old paths are identity shims; the runtime `offers`
+  barrel and the three mixed barrels are untouched. Measured at the branch head: `npm run test:unit` **726 pass / 0
+  fail**, `npm run test:core` **697 tests: 695 pass / 0 fail / 2 skipped**, `npm run test:scripts` **867 pass / 0 fail**
+  (858 + 9 package-boundary resolution tests), `npm run test:api` **193 pass**, `npm run test:database-guard` **15 pass**,
+  `npm run verify:ownership -- --inventory=pr7` **105 → 105 tests and 180 → 180 assertions** (4 moved, 1 stayed),
+  `npm run verify:extraction` **PASS 47 / 47** across six batches, `npm run check:characterization:pr7` OK, hermetic
+  run PASS, `npm run check:whitespace` PASS.
 - **Current extraction state:** `packages/recommendation-core/` is part of merged `master` and publishes
-  six namespaces, all on `master` since PR #44 merged as `1a9d8cf` (`candidates`, `compatibility`,
-  `filtering`, `assembly`, `ranking` and `retention`), plus `scoring` from
-  `feat/core-scoring-extraction` — seven once that branch lands — pinned key by key in
-  `test/surface.test.js` and in `test/export-surface.json`, behind identity re-export shims at the old
-  `src/recommendation/**` paths. Nothing else has moved: the loaders,
-  `explanation` and `offers/as-of` still live in `src/recommendation/`,
-  `packages/recommendation-runtime/` still carries only its manifest and `docs/LOADERS_AND_TRANSACTIONS.md`,
-  and `apps/api/src/engine.js` still imports the `src/recommendation/**` barrels directly.
+  seven namespaces there (`candidates`, `compatibility`, `filtering`, `assembly`, `ranking` and `retention`
+  since PR #44 merged as `1a9d8cf`, plus `scoring` since PR #45 merged as `0f86f53`), and branch
+  `feat/core-explanation-extraction` adds `explanation` and `offers` as the eighth and ninth — all pinned key
+  by key in `test/surface.test.js` and in `test/export-surface.json`, behind identity re-export shims at the
+  old `src/recommendation/**` paths. The RFC §11.4 `exports` map is declared on that branch. Nothing runtime
+  has moved: the loaders, the three mixed barrels (`candidates`, `filtering`, `scoring`), the runtime-only
+  `offers` barrel, `packages/recommendation-runtime/` (manifest and `docs/LOADERS_AND_TRANSACTIONS.md` only)
+  and `apps/api/src/engine.js`'s barrel imports are unchanged.
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of

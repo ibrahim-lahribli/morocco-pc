@@ -245,6 +245,43 @@
           "destination": "packages/recommendation-core/src/scoring/build-score.js"
         }
       ]
+    },
+    {
+      "id": "step-4b-pr7",
+      "description": "Step 4B PR 7: the four pure Engine 6 explanation modules (build-facts, explain, reasons, index) and offers/as-of.js moved into packages/recommendation-core/src/explanation/ and packages/recommendation-core/src/offers/, leaving identity re-export shims at the old paths. Two barrel imports were narrowed BEFORE this baseline (../assembly -> ../assembly/assemble, ../ranking -> ../ranking/select-archetypes), so every relative specifier resolves unchanged from the destination: nothing here is a rewrite. offers/select.js and the runtime offers barrel stay in the runtime tree untouched; the core entry point publishes `explanation` and `offers` (the as-of module itself, with no core offers/index.js). Four explanation/as-of suites moved with the modules.",
+      "baseline_sha": "268371300a2c70cc32a819f072b63f0b29d3b83d",
+      "identity_policy": "byte-identical",
+      "characterization": {
+        "fixture": "packages/recommendation-core/test/fixtures/pr7-characterization.json",
+        "capture_command": "node scripts/characterize-pr7.js",
+        "capture_commit_subject": "test(core): freeze the explanation and as-of surface before anything moves",
+        "expect_touch_commits": 1,
+        "capture_paths": [
+          "scripts/characterize-pr7.js"
+        ]
+      },
+      "modules": [
+        {
+          "source": "src/recommendation/explanation/build-facts.js",
+          "destination": "packages/recommendation-core/src/explanation/build-facts.js"
+        },
+        {
+          "source": "src/recommendation/explanation/explain.js",
+          "destination": "packages/recommendation-core/src/explanation/explain.js"
+        },
+        {
+          "source": "src/recommendation/explanation/reasons.js",
+          "destination": "packages/recommendation-core/src/explanation/reasons.js"
+        },
+        {
+          "source": "src/recommendation/explanation/index.js",
+          "destination": "packages/recommendation-core/src/explanation/index.js"
+        },
+        {
+          "source": "src/recommendation/offers/as-of.js",
+          "destination": "packages/recommendation-core/src/offers/as-of.js"
+        }
+      ]
     }
   ]
 }

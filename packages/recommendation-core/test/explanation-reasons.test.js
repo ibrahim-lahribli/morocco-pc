@@ -20,9 +20,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { deriveReasons, REASON_CODES, REASON_ORDER } = require('./reasons');
-const { explainSelection } = require('./explain');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const { deriveReasons, REASON_CODES, REASON_ORDER } = require('../src/explanation/reasons');
+const { explainSelection } = require('../src/explanation/explain');
+const { CandidateSelectionError, ERROR_CODES } = require('../src/candidates/errors');
 
 const BUDGET = Object.freeze({ amount: 4000, currency: 'MAD' });
 
@@ -525,20 +525,24 @@ test('no argument is mutated', () => {
   );
 });
 
+// The implementation lives in this package; ../../src/recommendation/ holds only
+// identity shims, so the guards below read the owner.
+const SOURCE_DIR = path.join(__dirname, '..', 'src', 'explanation');
+
 test('reasons.js is pure: no DB client, no SQL, no clock, no randomness', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'reasons.js'), 'utf8');
+  const source = fs.readFileSync(path.join(SOURCE_DIR, 'reasons.js'), 'utf8');
   for (const token of ['.query(', "require('pg')", 'Date.now', 'new Date', 'Math.random', 'process.env']) {
     assert.ok(!source.includes(token), 'reasons.js must not contain ' + token);
   }
 });
 
 test('build-facts.js is pure and is the single owner of the shared derivations', () => {
-  const facts = fs.readFileSync(path.join(__dirname, 'build-facts.js'), 'utf8');
+  const facts = fs.readFileSync(path.join(SOURCE_DIR, 'build-facts.js'), 'utf8');
   for (const token of ['.query(', "require('pg')", 'Date.now', 'new Date', 'Math.random']) {
     assert.ok(!facts.includes(token), 'build-facts.js must not contain ' + token);
   }
-  const explainSource = fs.readFileSync(path.join(__dirname, 'explain.js'), 'utf8');
-  const reasonsSource = fs.readFileSync(path.join(__dirname, 'reasons.js'), 'utf8');
+  const explainSource = fs.readFileSync(path.join(SOURCE_DIR, 'explain.js'), 'utf8');
+  const reasonsSource = fs.readFileSync(path.join(SOURCE_DIR, 'reasons.js'), 'utf8');
   for (const owner of [explainSource, reasonsSource]) {
     assert.ok(owner.includes("require('./build-facts')"), 'both entry points must consume build-facts');
     assert.ok(!owner.includes('function dominantContribution'), 'no second dominance implementation');
