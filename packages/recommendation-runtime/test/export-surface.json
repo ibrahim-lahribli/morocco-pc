@@ -1,0 +1,6 @@
+{
+  "package": "@morocco-pc/recommendation-runtime",
+  "entry": "src/index.js",
+  "note": "Committed export surface of the runtime package, pinned by test/index.test.js. Step 5 W0 ships an empty surface on purpose: the harness exists before any module moves. W1 adds loaders, W2 adds persistence and W3 adds orchestrator; each batch adds its namespace to src/index.js and to this list in the same commit, so growing the surface is always a reviewable diff.",
+  "exports": []
+}
