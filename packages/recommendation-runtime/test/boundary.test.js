@@ -203,6 +203,13 @@ describe('boundary scanner: import rules', () => {
     assertReports("require.bind(null, 'pg')();", 'forbidden-module', 'database');
   });
 
+  it('reports optional computed module access in both forms', () => {
+    assertReports("module?.[key]('pg');", 'dynamic-import', 'statically verifiable');
+    assertReports("module?.[key]?.('pg');", 'dynamic-import', 'statically verifiable');
+    assertReports("module?.['req' + 'uire']('pg');", 'dynamic-import', 'statically verifiable');
+    assertReports("module?.['require']('pg');", 'forbidden-module', 'database');
+  });
+
   it('reports a proxy or computed require as a dynamic import', () => {
     assertReports("module[key]('pg');", 'dynamic-import', 'statically verifiable');
     assertReports('require.call(null, specifier);', 'dynamic-import', 'statically verifiable');
@@ -212,6 +219,10 @@ describe('boundary scanner: import rules', () => {
 
   it("does not treat an object's own require method or require.resolve as an import", () => {
     assertClean("const shape = { require: () => 1 }; shape.require('pg');", 'own require method');
+    assertClean(
+      "const shape = { require: () => 1 }; shape?.['require']('pg');",
+      'optional computed own require method'
+    );
     assertClean("const path = require.resolve('./util');", 'require.resolve');
     assertClean('const load = module.require;', 'uncalled require value');
   });
@@ -222,6 +233,7 @@ describe('boundary scanner: import rules', () => {
       assert.deepEqual(scanIn(temp, "const util = module.require('./util');"), []);
       assert.deepEqual(scanIn(temp, "const util = module.require.call(module, './util');"), []);
       assert.deepEqual(scanIn(temp, "const util = require['apply'](null, ['./util']);"), []);
+      assert.deepEqual(scanIn(temp, "const util = module?.['require']('./util');"), []);
     } finally {
       temp.dispose();
     }

@@ -34,7 +34,9 @@ A failing `ROLLBACK` never masks the original error.
   checks it out of its pool; the runtime never does.
 - The runtime **never creates, checks out, releases or closes** a client, and never reaches for a
   pool. `test/boundary.test.js` enforces this statically (`new Pool`, `new Client`,
-  `pool.connect()`, `.release()`, `.end()` on a client/pool/connection).
+  `pool.connect()`, `.release()`, `.end()` on a client/pool/connection). Receiver detection for
+  `.end()` is name-based — no alias or data-flow analysis — and the scan deliberately exempts
+  stream/socket/response receivers rather than widen the rule into false positives.
 - The runtime **never reads `process.env`** and never accepts a connection string; the caller decides
   which database it talks to.
 - Transactions are **never nested**. `runRecommendationFullRun` opens the snapshot, finishes it, runs

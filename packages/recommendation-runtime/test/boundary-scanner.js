@@ -42,12 +42,16 @@
 // corpus uses regexes only in `const RE = /.../;` position.
 //
 // Known limitations (a static scan is a gate, not a sandbox): a specifier built
-// at runtime (`require(name)`, `require.call(null, name)`, `module[key]`) is
-// reported rather than resolved; an indirection through `eval`, `Function` or a
-// require aliased into a new variable is not reconstructed; a receiver-less
-// `this.end()` cannot be attributed to a client; a connection created inside a
-// dependency is out of scope, which is why the package must also declare no
-// dependencies (asserted in test/boundary.test.js).
+// at runtime (`require(name)`, `require.call(null, name)`, `module[key]` /
+// `module?.[key]`) is reported rather than resolved; an indirection through
+// `eval`, `Function` or a require aliased into a new variable is not
+// reconstructed; `.end()` receiver detection is name-based — there is no alias
+// or data-flow analysis, so `const c = client; c.end()` is missed and stream,
+// socket and HTTP-response receivers are deliberately exempt rather than risk
+// false positives on ordinary stream methods; a receiver-less `this.end()`
+// cannot be attributed to a client; a connection created inside a dependency is
+// out of scope, which is why the package must also declare no dependencies
+// (asserted in test/boundary.test.js).
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -411,6 +415,13 @@ function callOpenAfter(tokens, indexAfterChain) {
   return isPunct(tokens[open], '(') ? open : null;
 }
 
+/** The `[` that follows a member chain, tolerating an optional `?.[`. */
+function bracketOpenAfter(tokens, indexAfterChain) {
+  let open = indexAfterChain;
+  if (isPunct(tokens[open], '?.')) open++;
+  return isPunct(tokens[open], '[') ? open : null;
+}
+
 /**
  * Split a parenthesised argument list or bracketed array literal into
  * top-level ranges. Each range is inclusive; an empty range (`end < start`)
@@ -614,14 +625,18 @@ function collectImports(tokens) {
       continue;
     }
 
-    // `module[key](...)` can be `module.require(...)`. Report it rather than
-    // resolve a member name the scanner cannot prove.
-    if (segments.length === 1 && segments[0] === 'module' && isPunct(tokens[chain.end + 1], '[')) {
-      const member = readDelimited(tokens, chain.end + 1);
-      const memberRange = member && member.ranges[0];
-      if (member && !isSingleStaticString(tokens, memberRange)) {
-        const open = callOpenAfter(tokens, member.closeIndex + 1);
-        if (open !== null) out.push({ kind: 'dynamic', token: chain.token, call: 'module[...]' });
+    // `module[key](...)` and `module?.[key](...)` can be
+    // `module.require(...)`. Report it rather than resolve a member name the
+    // scanner cannot prove.
+    if (segments.length === 1 && segments[0] === 'module') {
+      const bracket = bracketOpenAfter(tokens, chain.end + 1);
+      if (bracket !== null) {
+        const member = readDelimited(tokens, bracket);
+        const memberRange = member && member.ranges[0];
+        if (member && !isSingleStaticString(tokens, memberRange)) {
+          const open = callOpenAfter(tokens, member.closeIndex + 1);
+          if (open !== null) out.push({ kind: 'dynamic', token: chain.token, call: 'module[...]' });
+        }
       }
     }
   }
