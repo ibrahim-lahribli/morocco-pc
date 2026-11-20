@@ -58,48 +58,59 @@ jobs:
 
       - name: Confirm the extracted core is in the image
         run: |
-          # Derive the namespace list from the package entry: a hardcoded list
-          # drifted once (scoring was missing) and every extraction batch would
-          # otherwise have to edit this shared workflow.
-          namespaces=$(node -e "process.stdout.write(Object.keys(require('./packages/recommendation-core/src')).join(' '))")
-          test -n "$namespaces"
-          docker run --rm -e NAMESPACES="$namespaces" --entrypoint sh morocco-pc-api:ci -c '
+          docker run --rm --entrypoint sh morocco-pc-api:ci -c '
             set -e
             test -f /app/packages/recommendation-core/package.json
-            for ns in $NAMESPACES; do
-              test -f "/app/packages/recommendation-core/src/$ns/index.js"
-            done
+            test -d /app/packages/recommendation-core/src
             test ! -e /app/apps/web
             find /app/packages/recommendation-core -type f | sort
           '
 
-      - name: Confirm the engine graph resolves inside the container
+      - name: Confirm the shipped core matches its declared interface
         run: |
+          # The interface is package.json `exports` (RFC section 11.4), not a
+          # barrel per directory: `./offers` is src/offers/as-of.js and there is
+          # no offers/index.js. Every declared target must exist in the image and
+          # resolve under src/ (which rejects an unauthorized ./package.json
+          # target), every published namespace must have a declared subpath and
+          # expose something, and each subpath must load the same object the
+          # entry publishes. No namespace list is hardcoded here.
           docker run --rm --entrypoint node morocco-pc-api:ci -e "
             const fs = require('node:fs');
-            const core = require('/app/packages/recommendation-core/src');
-            const required = Object.keys(core);
-            if (required.length === 0) {
-              console.error('core surface is empty');
-              process.exit(1);
+            const path = require('node:path');
+            const ROOT = '/app/packages/recommendation-core';
+            const SRC = path.join(ROOT, 'src');
+            const fail = (message) => { console.error('core surface: ' + message); process.exit(1); };
+            const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+            const map = manifest.exports;
+            if (!map || typeof map !== 'object' || Array.isArray(map)) fail('package must declare an exports map');
+            if (map['.'] !== './' + manifest.main) fail('exports root must name main');
+            for (const [subpath, target] of Object.entries(map)) {
+              if (typeof target !== 'string' || !target.startsWith('./')) fail(subpath + ' must map to a relative target');
+              const resolved = path.resolve(ROOT, target);
+              if (!resolved.startsWith(ROOT + path.sep)) fail(subpath + ' escapes the package');
+              if (!resolved.startsWith(SRC + path.sep)) fail(subpath + ' must resolve under src/');
+              if (!fs.existsSync(resolved)) fail(subpath + ' target is missing from the image');
             }
-            const invalid = required.filter((name) => {
+            const core = require(SRC);
+            const namespaces = Object.keys(core);
+            if (namespaces.length === 0) fail('core surface is empty');
+            for (const name of namespaces) {
               const ns = core[name];
-              const loaded = ns !== null && (typeof ns === 'object' || typeof ns === 'function');
-              return !loaded || (typeof ns === 'object' && Object.keys(ns).length === 0);
-            });
-            if (invalid.length > 0) {
-              console.error('core namespace empty or unloadable: ' + invalid.join(','));
-              process.exit(1);
+              if (ns === null || typeof ns !== 'object') fail(name + ' is not a namespace object');
+              if (Object.keys(ns).length === 0) fail(name + ' exports nothing');
+              const target = map['./' + name];
+              if (typeof target !== 'string') fail(name + ' has no declared subpath');
+              if (require(path.resolve(ROOT, target)) !== ns) fail(name + ' is not the module its subpath declares');
             }
-            const missing = required.filter((name) =>
-              !fs.existsSync('/app/packages/recommendation-core/src/' + name + '/index.js'));
-            if (missing.length > 0) {
-              console.error('core namespace barrel missing: ' + missing.join(','));
-              process.exit(1);
+            for (const [subpath, target] of Object.entries(map)) {
+              if (subpath === '.') continue;
+              const loaded = require(path.resolve(ROOT, target));
+              if (loaded === null || (typeof loaded !== 'object' && typeof loaded !== 'function')) fail(subpath + ' loads nothing');
+              if (typeof loaded === 'object' && Object.keys(loaded).length === 0) fail(subpath + ' exports nothing');
             }
             require('/app/apps/api/src/engine.js');
-            console.log('core surface OK (' + required.join(',') + '); engine graph OK');
+            console.log('core surface OK (' + namespaces.join(',') + '); engine graph OK');
           "
 
       - name: Boot, health-check, clean up
