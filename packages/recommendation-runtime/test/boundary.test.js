@@ -14,11 +14,22 @@
 //   4. SQL, `.query()` and `node:crypto` are permitted — they are the runtime's
 //      job — and the package declares no dependencies at all;
 //   5. the scanner that proves (1)-(3) actually fires, and does not fire on
-//      comments, strings, SQL or caller-supplied time.
+//      comments, strings, SQL or caller-supplied time;
+//   6. the bounded syntactic mechanisms are correct in BOTH directions: a
+//      require copied into a variable is still an import, a shadowed `require`
+//      parameter is not, a computed member reached through `.call`/`.apply`/
+//      `.bind` is reported, and an object's own `require`/`release`/`end`
+//      methods are neither an import nor a connection lifecycle call.
 //
 // Point (5) is why the scanner lives in ./boundary-scanner.js and is exercised
 // against synthetic sources here: proving the gate works must not mean putting
 // violations into the package's own source.
+//
+// The alias and shadow fixtures also record the ACCEPTED gaps (section 3 of the
+// scanner header): `const c = client; c.end()` and `const p = process; p.env`
+// are asserted CLEAN on purpose, because there is no data-flow analysis. The
+// matching W1 coding restrictions (R-CONN-1, R-ENV-1, R-REQ-1, R-SHADOW-1) are
+// what keep those gaps from mattering in extracted code.
 //
 // DB-free and dependency-free: node:test + node:assert only.
 //   npm test                       (from the package)
@@ -259,6 +270,134 @@ describe('boundary scanner: import rules', () => {
   it('permits the core package root through module.require', () => {
     assertClean("const core = module.require('../../recommendation-core');", 'module.require core root');
   });
+
+  it('reports a loader module as a forbidden module', () => {
+    // Positive: `node:module` is exactly the module the runtime may not hold.
+    assertReports("const { createRequire } = require('node:module');", 'forbidden-module', 'loader');
+    assertReports("const moduleApi = require('module');", 'forbidden-module', 'loader');
+  });
+});
+
+// --- require aliases (bounded, not data-flow) -------------------------------
+
+describe('boundary scanner: require aliases', () => {
+  it('reports a require copied into a local variable and then called', () => {
+    // Positive: `load` is an alias of `require`; the call is still an import.
+    assertReports("const load = require;\nload('pg');", 'forbidden-module', 'database');
+    assertReports("const load = module.require;\nload('dotenv');", 'forbidden-module', 'environment');
+  });
+
+  it('follows an alias chain to a fixpoint', () => {
+    // Positive: `b` is an alias of an alias.
+    assertReports("const a = require;\nconst b = a;\nb('node:fs');", 'forbidden-module', 'filesystem');
+  });
+
+  it('treats a computed specifier through an alias as a dynamic import', () => {
+    // Positive: the scanner cannot resolve `name`, so it fails closed.
+    assertReports('const load = require;\nload(name);', 'dynamic-import', 'statically verifiable');
+  });
+
+  it('holds an aliased require to the invocation-proxy rules', () => {
+    // Positive: `.call` on the alias is still the loader.
+    assertReports("const load = require;\nload.call(null, 'pg');", 'forbidden-module', 'database');
+  });
+
+  it('does not report an alias that is never called', () => {
+    // Negative: holding the value is not an import; only the call is.
+    assertClean('const load = module.require;', 'uncalled module.require alias');
+    assertClean('const load = require;\nmodule.exports = { load };', 'uncalled require alias');
+  });
+
+  it('does not treat an unrelated declaration as a require alias', () => {
+    // Negative: `load` is a local function, not the loader.
+    assertClean("const load = (name) => name;\nload('pg');", 'local function shadowing the alias shape');
+  });
+});
+
+// --- shadowed names (bounded scope, not a scope analyzer) -------------------
+
+describe('boundary scanner: shadowed names', () => {
+  it('does not report a function parameter named require', () => {
+    // Negative: the parameter is the caller's value, not the module loader.
+    assertClean("function execute(require) {\n  require('local-value');\n}", 'require parameter');
+  });
+
+  it('does not report a locally declared require', () => {
+    // Negative: the binding replaces the loader inside the file.
+    assertClean(
+      "const require = (name) => name;\nrequire('local-value');\nmodule.exports = require;",
+      'local require declaration'
+    );
+  });
+
+  it('does not report a destructured parameter named require', () => {
+    // Negative: the destructured binding shadows the loader in the body.
+    assertClean("function execute({ require }) {\n  return require('local-value');\n}", 'destructured require parameter');
+  });
+
+  it('does not report a require shadowed in a nested scope', () => {
+    // Negative: the innermost binding wins inside its own body.
+    assertClean(
+      'function outer() {\n  function inner(require) {\n    return require(\'local-value\');\n  }\n  return inner;\n}',
+      'nested require parameter'
+    );
+  });
+
+  it('does not report module.require on a shadowed module parameter', () => {
+    // Negative: `module` is the parameter, not Node's module object.
+    assertClean("function execute(module) {\n  return module.require('local-value');\n}", 'module parameter');
+  });
+
+  it('still reports the real require outside the shadowing body', () => {
+    // Positive: the shadow range ends with the enclosing braces.
+    assertReports("function execute(require) {\n  require('local-value');\n}\nrequire('pg');", 'forbidden-module', 'database');
+  });
+});
+
+// --- computed module access through invocation proxies ---------------------
+
+describe('boundary scanner: computed module access through proxies', () => {
+  it('reports module[key] reached through call, apply and bind', () => {
+    // Positive: each proxy still invokes a member the scanner cannot resolve.
+    assertReports("module[key].call(module, 'pg');", 'dynamic-import', 'statically verifiable');
+    assertReports("module[key].apply(module, ['pg']);", 'dynamic-import', 'statically verifiable');
+    assertReports("module[key].bind(module, 'pg')();", 'dynamic-import', 'statically verifiable');
+  });
+
+  it('reports optional computed module access through the same proxies', () => {
+    // Positive: the optional form must not slip past the computed-member rule.
+    assertReports("module?.[key].call(module, 'pg');", 'dynamic-import', 'statically verifiable');
+    assertReports("module?.[key]?.call(module, 'pg');", 'dynamic-import', 'statically verifiable');
+  });
+
+  it('does not report a computed member of an unrelated object', () => {
+    // Negative: only `module` is the loader container.
+    assertClean("registry[key].call(registry, 'pg');", 'computed member of an unrelated object');
+    assertClean("registry[key].apply(registry, ['pg']);", 'computed apply of an unrelated object');
+  });
+});
+
+// --- code evaluation ---------------------------------------------------------
+
+describe('boundary scanner: runtime loader construction and code evaluation', () => {
+  it('reports createRequire and mainModule.require in every reachable form', () => {
+    // Positive: each one builds a loader the import rules cannot inspect.
+    assertReports('module.createRequire(__filename)(\'pg\');', 'code-evaluation', 'createRequire');
+    assertReports('const req = createRequire(__filename);', 'code-evaluation', 'createRequire');
+    assertReports("process.mainModule.require('pg');", 'code-evaluation', 'mainModule.require');
+    assertReports("globalThis.require('pg');", 'code-evaluation', 'global');
+  });
+
+  it('reports eval and Function calls', () => {
+    // Positive: text evaluation leaves the boundary unverifiable.
+    assertReports("eval('require(\\'pg\\')');", 'code-evaluation', 'eval');
+    assertReports("const load = new Function('return require')();", 'code-evaluation', 'Function');
+  });
+
+  it('does not report an ordinary call that merely ends in require', () => {
+    // Negative: `shape.require` is an object-owned method, not a loader.
+    assertClean("const shape = { require: () => 1 };\nshape.require('pg');", 'object-owned require method');
+  });
 });
 
 // --- connection ownership ---------------------------------------------------
@@ -297,6 +436,56 @@ describe('boundary scanner: connection ownership', () => {
     assertClean('socket.end();', 'socket.end');
     assertClean('formatter.end({});', 'formatter.end');
     assertClean('response.end();', 'response.end');
+  });
+
+  it('does not report an object-owned require, release or end method', () => {
+    // Negative: the method names are not lifecycle operations on a receiver
+    // that does not name a connection. `.release()` used to fire on any
+    // receiver — that was a false positive and is now gated like `.end()`.
+    const source = [
+      'const object = {',
+      '  require() {',
+      '    return 1;',
+      '  },',
+      '  release() {',
+      '    return 1;',
+      '  },',
+      '  end() {',
+      '    return 1;',
+      '  },',
+      '};',
+      'object.require();',
+      'object.release();',
+      'object.end();',
+    ].join('\n');
+    assertClean(source, 'object-owned require/release/end methods');
+  });
+
+  it('does not report a bare release() call', () => {
+    // Negative: with no receiver the callee is not attributed to a connection.
+    assertClean('release();', 'bare release');
+  });
+
+  it('still reports .release() on a connection receiver', () => {
+    // Positive: the gate is a receiver check, not a blanket exemption.
+    assertReports('await pool.release();', 'client-release', 'pool.release');
+    assertReports('this.client.release();', 'client-release');
+  });
+
+  it('documents the alias limitation rather than hiding it', () => {
+    // Negative by design: no data-flow analysis, so these are NOT detected.
+    // The W1 coding restriction R-CONN-1 / R-ENV-1 in the scanner header is
+    // what keeps the limit from mattering.
+    assertClean('const clientAlias = client;\nclientAlias.end();', 'aliased client (documented gap)');
+    assertClean(
+      'const processAlias = process;\nconst host = processAlias.env.DATABASE_HOST;\nmodule.exports = host;',
+      'aliased process (documented gap)'
+    );
+  });
+
+  it('reports process.env even when its result is aliased', () => {
+    // Positive: the read itself is the violation, before any aliasing.
+    assertReports('const env = process.env;\nmodule.exports = env.DATABASE_HOST;', 'process-env');
   });
 
   it('does not report reading .end without calling it', () => {

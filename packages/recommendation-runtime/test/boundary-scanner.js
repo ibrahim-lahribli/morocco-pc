@@ -6,7 +6,13 @@
 // The runtime sits on the OPPOSITE boundary to the core's purity gate: SQL and
 // `.query()` are its job, so they are permitted here. What it must never do is
 // own a connection, read the environment, or reach past the core's public entry
-// point. This scanner proves exactly that:
+// point.
+//
+// ---------------------------------------------------------------------------
+// 1. WHAT THIS SCANNER GUARANTEES
+// ---------------------------------------------------------------------------
+// It is a token-level gate over the text of one file at a time. For every file
+// under packages/recommendation-runtime/src/ it proves, or refuses to pass:
 //
 //   1. IMPORTS. A runtime source file may require
 //        * a relative path inside its own src/ — but not the package root from
@@ -16,14 +22,11 @@
 //          violation because it ties the runtime to core's internal tree;
 //        * `node:crypto`, the one allowed built-in (uuid generation).
 //      Any other bare specifier (`pg`, `dotenv`, `node:fs`, ...) is a
-//      violation, and a computed specifier fails closed. `module.require(...)`
-//      is the same import in another spelling, including its computed member
-//      (`module['require']`) and its `.call`/`.apply`/`.bind` proxies; an
-//      object's own `require` method is not an import.
+//      violation, and a computed specifier fails closed.
 //   2. CONNECTION OWNERSHIP. `new Pool`/`new Client`, `pool.connect()`,
-//      `.release()`, `.end()` on a client/pool and HTTP globals are violations:
-//      the runtime receives one connected client and never creates, checks out,
-//      releases or closes one.
+//      `.release()` and `.end()` on a client/pool/connection receiver, and HTTP
+//      globals are violations: the runtime receives one connected client and
+//      never creates, checks out, releases or closes one.
 //   3. ENVIRONMENT. `process.env` and database connection strings or
 //      connection parameters are violations: the caller's bootstrap reads them.
 //   4. CLOCK. Only `new Date(value)` is permitted. "Now" comes from the
@@ -32,7 +35,18 @@
 //      a spread that is empty or of unknown length all read the process clock.
 //      A statically non-empty spread of a value (`new Date(...[value])`) is the
 //      same call as `new Date(value)` and stays permitted.
+//   5. CODE EVALUATION. `eval`, `Function`, `module.createRequire`,
+//      `createRequire` called as a function, `process.mainModule.require` and
+//      `globalThis.require`/`global.require` are violations: each one either
+//      constructs a module loader or executes text, both of which leave the
+//      import rules above unverifiable.
+//   6. The package declares no dependencies at all (asserted in
+//      test/boundary.test.js, because a connection created inside a dependency
+//      is invisible to this scan).
 //
+// ---------------------------------------------------------------------------
+// 2. WHAT IT DETECTS SYNTACTICALLY
+// ---------------------------------------------------------------------------
 // Approach: a small tokenizer drops comments (the source comments themselves
 // discuss `process.env`, `pool.connect()` and `client.release()`), keeps
 // string, template and regex literals as content, and the rules match token
@@ -41,17 +55,85 @@
 // otherwise it starts a literal. That is the ordinary heuristic, and this
 // corpus uses regexes only in `const RE = /.../;` position.
 //
-// Known limitations (a static scan is a gate, not a sandbox): a specifier built
-// at runtime (`require(name)`, `require.call(null, name)`, `module[key]` /
-// `module?.[key]`) is reported rather than resolved; an indirection through
-// `eval`, `Function` or a require aliased into a new variable is not
-// reconstructed; `.end()` receiver detection is name-based — there is no alias
-// or data-flow analysis, so `const c = client; c.end()` is missed and stream,
-// socket and HTTP-response receivers are deliberately exempt rather than risk
-// false positives on ordinary stream methods; a receiver-less `this.end()`
-// cannot be attributed to a client; a connection created inside a dependency is
-// out of scope, which is why the package must also declare no dependencies
-// (asserted in test/boundary.test.js).
+// On top of that it does three bounded, explicitly non-semantic things:
+//
+//   * INVOCATION PROXIES. `require`, `module.require` and a require alias,
+//     invoked directly or through `.call`/`.apply`/`.bind`, resolve to the same
+//     import (the `thisArg` and `apply`'s array wrapper are skipped). A computed
+//     member that is then invoked — `module[key]('pg')`, `module?.[key]('pg')`,
+//     `module[key].call(module, 'pg')`, `module[key].apply(module, ['pg'])`,
+//     `module[key].bind(module, 'pg')()` — is reported as `dynamic-import`
+//     rather than resolved. `.call` after a computed member is intercepted like
+//     any other proxy, and the helper segment is dropped before the rules read
+//     the name.
+//   * REQUIRE ALIASES. A declaration whose initialiser is exactly `require`,
+//     `module.require`, or another known alias is recorded, iterated to a
+//     fixpoint, and its call sites are treated as imports:
+//     `const load = require; load('pg')` is a forbidden module and
+//     `const load = module.require; load(name)` is a dynamic import.
+//     Scope of the mechanism: single-assignment declarations in this file only.
+//     It does not follow reassignment, destructuring (`const { require } = x`),
+//     property reads (`config.require`), a require passed as an argument, or a
+//     value returned from a helper. Those escape the rule and are covered by
+//     the W1 coding restriction in section 4.
+//   * SHADOWING. A function parameter named `require`, `module`, `process` or
+//     `Date`, or a `const`/`let`/`var` declaration of one of those names
+//     (including a simple destructured binding), suppresses the rules for that
+//     name inside the enclosing braces only. Scope of the mechanism: the
+//     immediately enclosing function body or block, found by brace matching.
+//     It does not model hoisting, TDZ, closures over an outer shadow, or a
+//     parameter default that itself mentions the name; a name that is shadowed
+//     in a nested function but used at the top level is a false negative only
+//     inside the nested body.
+//
+// ---------------------------------------------------------------------------
+// 3. WHAT IT CANNOT DETERMINE SEMANTICALLY
+// ---------------------------------------------------------------------------
+// There is no scope analyzer and no data-flow analysis. Named examples, with
+// the exact result:
+//
+//     const c = client; c.end();            -> NOT detected (alias, not `client`)
+//     const env = process.env; env.X;       -> detected once, at `process.env`
+//     const p = process; p.env.X;           -> NOT detected (alias)
+//     const load = require.bind(null); load('pg')
+//                                           -> NOT detected (initialiser is a
+//                                              `.bind` call, not the bare value)
+//     require(pick());                      -> detected, as `dynamic-import`
+//     shape.require('pg')                   -> NOT an import (object-owned method)
+//     object.release() / object.end()       -> NOT a connection-close
+//     stream.end() / socket.end()           -> NOT a connection-close
+//     client.end() inside a function whose parameter is named `client`
+//                                           -> NOT detected (parameter shadow)
+//     a specifier built at runtime          -> reported, never resolved
+//     eval('require("pg")')                 -> detected, as `code-evaluation`
+//     a connection created inside a dependency
+//                                           -> out of scope entirely
+//
+// A static scan is a gate, not a sandbox. It fails closed on everything it can
+// see and is honest about everything it cannot.
+//
+// ---------------------------------------------------------------------------
+// 4. WHICH LIMITATIONS REQUIRE A W1 CODING RESTRICTION
+// ---------------------------------------------------------------------------
+// The following are accepted W0 limits, not open defects. W1 must keep them
+// from mattering, by construction, in the extracted code:
+//
+//   R-CONN-1. Never alias a client or pool into a new variable before closing
+//             it. Close only through the injected parameter name.
+//   R-ENV-1.  Never read `process` (directly or via an alias); the caller owns
+//             the environment.
+//   R-REQ-1.  Never hold `require` in a variable, never bind it, never pass it
+//             to a helper. Call `require('literal')` at the point of use.
+//   R-REQ-2.  Never construct a loader at runtime (`createRequire`, `eval`,
+//             `Function`, `process.mainModule`).
+//   R-SHADOW-1. Do not name a parameter or local `require`, `module`,
+//             `process`, `client`, `pool`, `db` or `Date`.
+//   R-SPEC-1. Import specifiers are string literals, never concatenated or
+//             interpolated.
+//
+// Each restriction is asserted by a fixture in test/boundary.test.js that the
+// scanner reports, so the restriction is enforced as a rule on anything the
+// scanner can see.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -77,10 +159,15 @@ const GLOBAL_OBJECTS = new Set(['globalThis', 'window', 'self', 'global']);
 
 const HTTP_GLOBALS = new Set(['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource']);
 
-// A `.end()` call closes a connection when its receiver names one. The
-// exclusion list keeps ordinary streams and protocol helpers out of the rule.
+// A `.end()` / `.release()` call closes a connection when its receiver names
+// one. The exclusion list keeps ordinary streams and protocol helpers out of
+// the rule.
 const CONNECTION_RECEIVER = /(?:client|pool|conn(?:ection)?|database|db)$/;
 const NON_CONNECTION_RECEIVER = /(?:stream|socket|formatter|writer|reader|encoder|decoder|parser|iterator|generator|queue|logger|span|timer|buffer|response)$/;
+
+// Names a declaration or a parameter may shadow without changing the meaning of
+// the rules: see section 2, "SHADOWING".
+const SHADOWABLE_NAMES = new Set(['require', 'module', 'process', 'Date']);
 
 // The only built-in the runtime may reach directly: uuid generation for
 // persisted row ids (persist-ranked, persist-rejections, swap-commit).
@@ -98,6 +185,7 @@ const MODULE_CATEGORIES = [
     pattern: /^(node:)?(http2?|https|net|tls|dgram|dns)$|^undici$|^axios$|^node-fetch$|^got$/,
   },
   { category: 'process', pattern: /^(node:)?(child_process|worker_threads|cluster)$/ },
+  { category: 'loader', pattern: /^(node:)?module$/ },
   { category: 'test', pattern: /^(node:)?(test|node:test)$/ },
 ];
 
@@ -422,6 +510,88 @@ function bracketOpenAfter(tokens, indexAfterChain) {
   return isPunct(tokens[open], '[') ? open : null;
 }
 
+/** The index of the `)` that closes the `(` at `openIndex`, or -1. */
+function matchingParen(tokens, openIndex) {
+  let depth = 0;
+  for (let i = openIndex; i < tokens.length; i++) {
+    if (isPunct(tokens[i], '(')) depth++;
+    else if (isPunct(tokens[i], ')')) {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** The index of the `}` that closes the `{` at `openIndex`, or tokens.length-1. */
+function matchingBrace(tokens, openIndex) {
+  let depth = 0;
+  for (let i = openIndex; i < tokens.length; i++) {
+    if (isPunct(tokens[i], '{')) depth++;
+    else if (isPunct(tokens[i], '}')) {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return tokens.length - 1;
+}
+
+/** The index of the `(` that opens the `)` at `closeIndex`, or -1. */
+function matchingParenBackwards(tokens, closeIndex) {
+  let depth = 0;
+  for (let i = closeIndex; i >= 0; i--) {
+    if (isPunct(tokens[i], ')')) depth++;
+    else if (isPunct(tokens[i], '(')) {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** Index of the `;` that ends the statement starting at `start`, at depth 0. */
+function endOfStatement(tokens, start) {
+  let depth = 0;
+  for (let i = start; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token.type !== 'punct') continue;
+    if (token.value === '(' || token.value === '[' || token.value === '{' || token.value === '${') depth++;
+    else if (token.value === ')' || token.value === ']' || token.value === '}') {
+      if (depth === 0) return i - 1; // the `}` closes the enclosing block
+      depth--;
+    } else if (token.value === ';' && depth === 0) return i;
+  }
+  return tokens.length - 1;
+}
+
+/**
+ * True when the `name(...)` at `index` is an object-literal or class METHOD
+ * definition (`{ require() { ... } }`), not a call. A shorthand method has the
+ * same token shape as a call; the `{` body after the parameter list is what
+ * distinguishes them. Without this, an object's own `require` method would be
+ * reported as a dynamic import.
+ */
+function isMethodDefinition(tokens, index, openIndex) {
+  const before = tokens[index - 1];
+  if (!isPunct(before, '{') && !isPunct(before, ',')) return false;
+  const close = matchingParen(tokens, openIndex);
+  if (close === -1) return false;
+  return isPunct(tokens[close + 1], '{');
+}
+
+/** The names bound by the parameter list between `open` and `close`. */
+function collectBoundNames(tokens, open, close) {
+  const names = [];
+  for (let i = open + 1; i < close; i++) {
+    const token = tokens[i];
+    if (!isIdent(token)) continue;
+    if (isMemberDot(tokens[i - 1])) continue; // a property in a default value
+    if (isPunct(tokens[i + 1], ':')) continue; // `{ key: local }` property key
+    names.push(token.value);
+  }
+  return names;
+}
+
 /**
  * Split a parenthesised argument list or bracketed array literal into
  * top-level ranges. Each range is inclusive; an empty range (`end < start`)
@@ -517,6 +687,158 @@ function formatViolation(violation) {
   return file + line + ' ' + violation.rule + ' — ' + violation.detail;
 }
 
+// --- bounded alias and shadow analysis --------------------------------------
+
+/**
+ * The names declared as `require` aliases in this file.
+ *
+ * A declaration qualifies when it is `const|let|var NAME = <expr>` and <expr>
+ * is exactly `require`, `module.require` (with optional `?.`), or another name
+ * already known to be an alias. Iterated to a fixpoint, so
+ * `const a = require; const b = a;` records both.
+ *
+ * This is single-assignment tracking, not data flow: reassignment, a require
+ * passed as an argument, a returned require and a destructured require are not
+ * followed. See the header, section 2.
+ */
+function computeRequireAliases(tokens) {
+  const declarations = [];
+  for (let i = 0; i + 2 < tokens.length; i++) {
+    if (!isIdent(tokens[i]) || !['const', 'let', 'var'].includes(tokens[i].value)) continue;
+    const name = tokens[i + 1];
+    if (!isIdent(name) || !isPunct(tokens[i + 2], '=')) continue;
+
+    let source = null;
+    const value = i + 3;
+    if (isIdent(tokens[value], 'require') && !isMemberDot(tokens[value + 1]) && !isPunct(tokens[value + 1], '(')) {
+      source = 'require';
+    } else if (
+      isIdent(tokens[value], 'module') &&
+      isMemberDot(tokens[value + 1]) &&
+      isIdent(tokens[value + 2], 'require') &&
+      !isMemberDot(tokens[value + 3]) &&
+      !isPunct(tokens[value + 3], '(')
+    ) {
+      source = 'module.require';
+    } else if (isIdent(tokens[value])) {
+      source = tokens[value].value;
+    }
+    if (source !== null) declarations.push({ name: name.value, source });
+  }
+
+  const aliases = new Set();
+  let changed = true;
+  let rounds = 0;
+  while (changed && rounds <= declarations.length) {
+    changed = false;
+    rounds++;
+    for (const declaration of declarations) {
+      if (aliases.has(declaration.name)) continue;
+      if (declaration.source === 'require' || declaration.source === 'module.require' || aliases.has(declaration.source)) {
+        aliases.add(declaration.name);
+        changed = true;
+      }
+    }
+  }
+  return aliases;
+}
+
+/**
+ * Which of SHADOWABLE_NAMES are shadowed, and over which token range.
+ *
+ * Three bindings are modelled: a function parameter, an arrow-function
+ * parameter, and a `const|let|var` declaration (including a simple destructured
+ * pattern). Each shadows the name from the binding to the end of the enclosing
+ * block, found by brace matching.
+ *
+ * @returns {Map<string, Array<[number, number]>>} token-index ranges
+ */
+function computeShadowRanges(tokens) {
+  const ranges = new Map();
+  const openBraces = [];
+
+  function add(name, start, end) {
+    if (!SHADOWABLE_NAMES.has(name)) return;
+    if (!ranges.has(name)) ranges.set(name, []);
+    ranges.get(name).push([start, end]);
+  }
+
+  function enclosingEnd() {
+    if (openBraces.length === 0) return tokens.length - 1;
+    return matchingBrace(tokens, openBraces[openBraces.length - 1]);
+  }
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (isPunct(token, '{')) {
+      openBraces.push(i);
+      continue;
+    }
+    if (isPunct(token, '}')) {
+      openBraces.pop();
+      continue;
+    }
+
+    if (isIdent(token, 'function')) {
+      let j = i + 1;
+      if (isPunct(tokens[j], '*')) j++;
+      if (isIdent(tokens[j])) j++;
+      if (!isPunct(tokens[j], '(')) continue;
+      const close = matchingParen(tokens, j);
+      if (close === -1) continue;
+      const body = close + 1;
+      if (!isPunct(tokens[body], '{')) continue;
+      const end = matchingBrace(tokens, body);
+      for (const name of collectBoundNames(tokens, j, close)) add(name, body, end);
+      continue;
+    }
+
+    if (isPunct(token, '=>')) {
+      const names = [];
+      if (isPunct(tokens[i - 1], ')')) {
+        const open = matchingParenBackwards(tokens, i - 1);
+        if (open !== -1) names.push(...collectBoundNames(tokens, open, i - 1));
+      } else if (isIdent(tokens[i - 1])) {
+        names.push(tokens[i - 1].value);
+      }
+      let start = i + 1;
+      let end;
+      if (isPunct(tokens[start], '{')) end = matchingBrace(tokens, start);
+      else end = endOfStatement(tokens, start);
+      for (const name of names) add(name, start, end);
+      continue;
+    }
+
+    if (isIdent(token) && ['const', 'let', 'var'].includes(token.value)) {
+      const binding = tokens[i + 1];
+      const end = enclosingEnd();
+      if (isIdent(binding)) {
+        add(binding.value, i + 1, end);
+      } else if (isPunct(binding, '{') || isPunct(binding, '[')) {
+        const close = isPunct(binding, '{') ? matchingBrace(tokens, i + 1) : -1;
+        const last = close === -1 ? tokens.length : close;
+        for (let k = i + 1; k < last; k++) {
+          if (isIdent(tokens[k]) && (isPunct(tokens[k - 1], '{') || isPunct(tokens[k - 1], ',') || isPunct(tokens[k - 1], '['))) {
+            if (isPunct(tokens[k + 1], ':')) continue; // `{ require: local }`
+            add(tokens[k].value, i + 1, end);
+          }
+        }
+      }
+    }
+  }
+
+  return ranges;
+}
+
+function isShadowedAt(shadows, name, index) {
+  const ranges = shadows.get(name);
+  if (!ranges) return false;
+  for (const [start, end] of ranges) {
+    if (index >= start && index <= end) return true;
+  }
+  return false;
+}
+
 // --- resolution -------------------------------------------------------------
 
 function realpathOrNull(target) {
@@ -552,18 +874,35 @@ function classifyModule(specifier) {
   return 'third-party';
 }
 
+function receiverName(segments) {
+  if (segments.length < 2) return '';
+  return segments[segments.length - 2].toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function isConnectionReceiver(segments) {
+  const receiver = receiverName(segments);
+  if (receiver === '') return false;
+  return CONNECTION_RECEIVER.test(receiver) && !NON_CONNECTION_RECEIVER.test(receiver);
+}
+
 /**
  * Every statically known import, with the specifier token. A call whose
  * specifier is not a static string is reported as `dynamic`.
  *
- * `require` and `module.require` are the same import. Their `.call`/`.apply`/
- * `.bind` proxies skip the `thisArg` (and `apply`'s array wrapper) to find the
- * specifier. An object with its own `require` method is not a module import.
+ * `require`, `module.require` and a require alias are the same import. Their
+ * `.call`/`.apply`/`.bind` proxies skip the `thisArg` (and `apply`'s array
+ * wrapper) to find the specifier. An object with its own `require` method is
+ * not a module import, and a shadowed `require`/`module` is not the real one.
  *
+ * @param {Array} tokens
+ * @param {{shadows: Map, aliases: Set}} context
  * @returns {Array<{kind: 'static'|'dynamic', token: object, call: string}>}
  */
-function collectImports(tokens) {
+function collectImports(tokens, context) {
+  const shadows = (context && context.shadows) || new Map();
+  const aliases = (context && context.aliases) || new Set();
   const out = [];
+
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     if (!isIdent(token) || isMemberDot(tokens[i - 1])) continue;
@@ -591,14 +930,21 @@ function collectImports(tokens) {
     }
 
     const target = calledTarget(segments);
+    const requireShadowed = isShadowedAt(shadows, 'require', i);
+    const moduleShadowed = isShadowedAt(shadows, 'module', i);
     const isRequire =
-      (target.length === 1 && target[0] === 'require') ||
-      (target.length === 2 && target[0] === 'module' && target[1] === 'require');
+      (!requireShadowed && target.length === 1 && target[0] === 'require') ||
+      (!moduleShadowed && target.length === 2 && target[0] === 'module' && target[1] === 'require') ||
+      (target.length === 1 && aliases.has(target[0]) && !isShadowedAt(shadows, target[0], i));
     if (isRequire) {
       const open = callOpenAfter(tokens, chain.end + 1);
       if (open === null) {
         i = chain.end;
         continue; // a require value or `require.resolve(...)`, not an import call
+      }
+      if (target.length === 1 && target[0] === 'require' && isMethodDefinition(tokens, i, open)) {
+        i = chain.end;
+        continue; // `{ require() { ... } }` declares a method, it does not import
       }
       const methods = segments.slice(target.length);
       const method = methods.length > 0 ? methods[methods.length - 1] : null;
@@ -625,17 +971,38 @@ function collectImports(tokens) {
       continue;
     }
 
-    // `module[key](...)` and `module?.[key](...)` can be
-    // `module.require(...)`. Report it rather than resolve a member name the
-    // scanner cannot prove.
-    if (segments.length === 1 && segments[0] === 'module') {
+    // `module[key](...)` and `module?.[key](...)` can be `module.require(...)`.
+    // Report it rather than resolve a member name the scanner cannot prove, and
+    // do the same when the computed member is reached through an invocation
+    // proxy (`module[key].call(module, 'pg')`, `.apply`, `.bind(...)()`).
+    if (segments.length === 1 && segments[0] === 'module' && !moduleShadowed) {
       const bracket = bracketOpenAfter(tokens, chain.end + 1);
       if (bracket !== null) {
         const member = readDelimited(tokens, bracket);
         const memberRange = member && member.ranges[0];
         if (member && !isSingleStaticString(tokens, memberRange)) {
-          const open = callOpenAfter(tokens, member.closeIndex + 1);
-          if (open !== null) out.push({ kind: 'dynamic', token: chain.token, call: 'module[...]' });
+          const direct = callOpenAfter(tokens, member.closeIndex + 1);
+          if (direct !== null) {
+            out.push({ kind: 'dynamic', token: chain.token, call: 'module[...]' });
+            i = member.closeIndex;
+            continue;
+          }
+          // `module[key].call(...)`, `module?.[key].call(...)` and
+          // `module?.[key]?.call(...)` all reach the same computed member.
+          let cursor = member.closeIndex + 1;
+          if (isPunct(tokens[cursor], '?.') || isPunct(tokens[cursor], '.')) cursor++;
+          if (isIdent(tokens[cursor]) && INVOCATION_METHODS.has(tokens[cursor].value)) {
+            const proxyOpen = callOpenAfter(tokens, cursor + 1);
+            if (proxyOpen !== null) {
+              out.push({
+                kind: 'dynamic',
+                token: chain.token,
+                call: 'module[...].' + tokens[cursor].value,
+              });
+              i = cursor;
+              continue;
+            }
+          }
         }
       }
     }
@@ -671,6 +1038,8 @@ function scanSource(source, options) {
   const realSrcRoot = realpathOrNull(srcRoot);
   const realEntry = realpathOrNull(entry);
   const tokens = lex(source);
+  const shadows = computeShadowRanges(tokens);
+  const aliases = computeRequireAliases(tokens);
   const violations = [];
 
   function report(rule, detail, offset) {
@@ -700,7 +1069,7 @@ function scanSource(source, options) {
     }
   }
 
-  for (const entryPoint of collectImports(tokens)) {
+  for (const entryPoint of collectImports(tokens, { shadows, aliases })) {
     if (entryPoint.kind === 'dynamic') {
       report(
         'dynamic-import',
@@ -809,17 +1178,44 @@ function scanSource(source, options) {
     const hasCall = isPunct(tokens[callOpen], '(');
     const previous = tokens[i - 1];
 
-    if (target[0] === 'process' && target[1] === 'env') {
+    if (hasCall && (isIdent(token, 'eval') || isIdent(token, 'Function'))) {
+      report(
+        'code-evaluation',
+        'calls ' + token.value + '(); executing text leaves the import boundary unverifiable',
+        chain.token.offset
+      );
+      continue;
+    }
+
+    if (hasCall && (target[target.length - 1] === 'createRequire' || hasAdjacentPair(target, 'mainModule', 'require'))) {
+      report(
+        'code-evaluation',
+        'calls ' + target.join('.') + '(); constructing a module loader at runtime bypasses the import boundary',
+        chain.token.offset
+      );
+      continue;
+    }
+
+    if (hasCall && isGlobalRoot && target.length === 1 && target[0] === 'require') {
+      report(
+        'code-evaluation',
+        'calls ' + chain.segments.slice(0, 2).join('.') + '(); the module loader is reached through a global',
+        chain.token.offset
+      );
+      continue;
+    }
+
+    if (target[0] === 'process' && target[1] === 'env' && !isShadowedAt(shadows, 'process', i)) {
       report('process-env', 'reads process.env; the runtime receives a connected client and nothing else', chain.token.offset);
       continue;
     }
 
-    if (target[0] === 'Date' && target[1] === 'now' && target.length === 2) {
+    if (target[0] === 'Date' && target[1] === 'now' && target.length === 2 && !isShadowedAt(shadows, 'Date', i)) {
       report('clock-read', 'reads Date.now(); the runtime takes "now" from the database or the caller', chain.token.offset);
       continue;
     }
 
-    if (target[0] === 'Date' && target.length === 1) {
+    if (target[0] === 'Date' && target.length === 1 && !isShadowedAt(shadows, 'Date', i)) {
       // Two forms reach the Date FUNCTION, which returns the current time
       // however it is called: `Date(...)` and the zero-argument construction
       // `new Date()` / `new Date`. `new Date(value)` is the only permitted
@@ -862,21 +1258,20 @@ function scanSource(source, options) {
       continue;
     }
 
-    if (hasCall && target[target.length - 1] === 'release') {
-      report('client-release', 'releases or closes the client; the caller owns its lifetime', chain.token.offset);
+    // `.release()` and `.end()` close a connection only when the receiver names
+    // one; an object's own `release`/`end` method is not a lifecycle operation.
+    if (hasCall && isConnectionReceiver(target) && (target[target.length - 1] === 'release' || target[target.length - 1] === 'end')) {
+      const last = target[target.length - 1];
+      report(
+        last === 'release' ? 'client-release' : 'connection-close',
+        'calls .' +
+          last +
+          '() on ' +
+          target.join('.') +
+          '; the runtime never releases or closes the client or pool it was given',
+        chain.token.offset
+      );
       continue;
-    }
-
-    if (hasCall && target[target.length - 1] === 'end' && target.length >= 2) {
-      const receiver = target[target.length - 2].toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (CONNECTION_RECEIVER.test(receiver) && !NON_CONNECTION_RECEIVER.test(receiver)) {
-        report(
-          'connection-close',
-          'calls .end() on ' + target.join('.') + '; the runtime never closes the client or pool it was given',
-          chain.token.offset
-        );
-        continue;
-      }
     }
 
     if (hasCall && HTTP_GLOBALS.has(target[0])) {
@@ -974,6 +1369,8 @@ module.exports = {
   scanSource,
   scanFile,
   listSourceFiles,
+  computeRequireAliases,
+  computeShadowRanges,
   formatViolation,
   SOURCE_EXTENSIONS,
 };
