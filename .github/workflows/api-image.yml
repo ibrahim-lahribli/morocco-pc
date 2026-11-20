@@ -19,6 +19,7 @@ on:
       - "src/recommendation/**"
       - "packages/recommendation-core/**"
       - "packages/database-guard/**"
+      - "scripts/lib/core-approved-interface.js"
       - "package.json"
       - "package-lock.json"
       - "render.yaml"
@@ -32,6 +33,7 @@ on:
       - "src/recommendation/**"
       - "packages/recommendation-core/**"
       - "packages/database-guard/**"
+      - "scripts/lib/core-approved-interface.js"
       - "package.json"
       - "package-lock.json"
       - "render.yaml"
@@ -70,48 +72,26 @@ jobs:
         run: |
           # The interface is package.json `exports` (RFC section 11.4), not a
           # barrel per directory: `./offers` is src/offers/as-of.js and there is
-          # no offers/index.js. Every declared target must exist in the image and
-          # resolve under src/ (which rejects an unauthorized ./package.json
-          # target), every published namespace must have a declared subpath and
-          # expose something, and each subpath must load the same object the
-          # entry publishes. No namespace list is hardcoded here.
-          docker run --rm --entrypoint node morocco-pc-api:ci -e "
-            const fs = require('node:fs');
-            const path = require('node:path');
-            const ROOT = '/app/packages/recommendation-core';
-            const SRC = path.join(ROOT, 'src');
-            const fail = (message) => { console.error('core surface: ' + message); process.exit(1); };
-            const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-            const map = manifest.exports;
-            if (!map || typeof map !== 'object' || Array.isArray(map)) fail('package must declare an exports map');
-            if (map['.'] !== './' + manifest.main) fail('exports root must name main');
-            for (const [subpath, target] of Object.entries(map)) {
-              if (typeof target !== 'string' || !target.startsWith('./')) fail(subpath + ' must map to a relative target');
-              const resolved = path.resolve(ROOT, target);
-              if (!resolved.startsWith(ROOT + path.sep)) fail(subpath + ' escapes the package');
-              if (!resolved.startsWith(SRC + path.sep)) fail(subpath + ' must resolve under src/');
-              if (!fs.existsSync(resolved)) fail(subpath + ' target is missing from the image');
-            }
-            const core = require(SRC);
-            const namespaces = Object.keys(core);
-            if (namespaces.length === 0) fail('core surface is empty');
-            for (const name of namespaces) {
-              const ns = core[name];
-              if (ns === null || typeof ns !== 'object') fail(name + ' is not a namespace object');
-              if (Object.keys(ns).length === 0) fail(name + ' exports nothing');
-              const target = map['./' + name];
-              if (typeof target !== 'string') fail(name + ' has no declared subpath');
-              if (require(path.resolve(ROOT, target)) !== ns) fail(name + ' is not the module its subpath declares');
-            }
-            for (const [subpath, target] of Object.entries(map)) {
-              if (subpath === '.') continue;
-              const loaded = require(path.resolve(ROOT, target));
-              if (loaded === null || (typeof loaded !== 'object' && typeof loaded !== 'function')) fail(subpath + ' loads nothing');
-              if (typeof loaded === 'object' && Object.keys(loaded).length === 0) fail(subpath + ' exports nothing');
-            }
-            require('/app/apps/api/src/engine.js');
-            console.log('core surface OK (' + namespaces.join(',') + '); engine graph OK');
-          "
+          # no offers/index.js. The gate is the SAME module the host-side suite
+          # runs (scripts/lib/core-approved-interface.js), mounted read-only:
+          # scripts/ is excluded from the image, and shipping repository tooling
+          # in the production image would be worse than mounting one file. The
+          # module compares the WHOLE eleven-key map (missing, additional and
+          # remapped subpaths fail, ./package.json included), realpaths every
+          # target so a symlink cannot escape the package, and self-tests six
+          # tampered maps (including an unauthorized subpath that points at an
+          # existing valid file, so existence alone never passes).
+          # Local runs from Git Bash: prefix with MSYS_NO_PATHCONV=1 and use an
+          # absolute host path for the mount.
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/scripts/lib:/core-check:ro" \
+            --entrypoint node morocco-pc-api:ci -e "
+              const gate = require('/core-check/core-approved-interface.js');
+              const result = gate.runContainerGate('/app/packages/recommendation-core');
+              require('/app/apps/api/src/engine.js');
+              console.log('core surface OK (' + result.namespaces.join(',') +
+                '); exports-map negatives OK (' + result.negatives + '/6); engine graph OK');
+            "
 
       - name: Boot, health-check, clean up
         run: |

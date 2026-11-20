@@ -47,6 +47,14 @@ jobs:
       # copy, empties NODE_PATH, runs the package's own test command there and
       # removes the copy even if the run fails.
       - run: node packages/recommendation-core/test/hermetic-run.js
+      # Step 5's package harness (the runtime package). `assert-discovery.js`
+      # runs first and exits 1 when a required suite is absent, because
+      # `node --test` exits 0 when a glob matches nothing - a gate that passes
+      # because it discovered no tests is worse than no gate. The quoted glob is
+      # expanded by Node (same mechanism as test:core) and matches only the
+      # four *.test.js suites, never the helpers.
+      - name: Runtime package harness (step 5)
+        run: npm run test:runtime
       # --- Step 4B extraction evidence (PR 3) -------------------------------
       # Three guarantees that used to live only in a review write-up are gates
       # now. All three are READ-ONLY and DB-free; they read Git history, which is
