@@ -190,7 +190,7 @@ nothing about runtime. The green `image` job on `07c1254` therefore says nothing
 
 ---
 
-## 4. Inventory counts — five quantities, never interchangeable
+## 4. Inventory counts — eight quantities, never interchangeable
 
 **PROPOSED — NOT APPROVED. `[unresolved]` — belongs to the RFC A2/A6 owner.**
 
@@ -254,7 +254,7 @@ treatment), then the evidence table 5.1b carries exports, imports and dependents
 the `packages/recommendation-core` shim, `runtime` = SQL-executing or composition code still in
 `src/recommendation`, `legacy barrel` = a published namespace barrel.
 
-| # | Source path (unique) | Owner today | Role | Wave | Proposed destination | Status | Compatibility treatment |
+| # | Source path (unique) | Owner layer today | Role | Wave | Proposed destination | Status | Compatibility treatment |
 |---|---|---|---|---|---|---|---|
 | 1 | `candidates/loader.js` | runtime | implementation (SQL loader) | W1 | `runtime/src/loaders/candidates.js` | confirmed by RFC §11.2 target | identity shim at old path |
 | 2 | `filtering/context-loader.js` | runtime | implementation (SQL loader) | W1 | `runtime/src/loaders/filtering-context.js` | confirmed | identity shim |
@@ -266,7 +266,7 @@ the `packages/recommendation-core` shim, `runtime` = SQL-executing or compositio
 | 8 | `query/catalog-version.js` | runtime | implementation (SQL loader) | W1 | `runtime/src/loaders/catalog-version.js` | confirmed (same caveat) | identity shim |
 | 9 | `offers/index.js` | legacy barrel | namespace barrel (runtime-only, **not** mixed) | W1 candidate | **`[unresolved]`** — §11.2 gives no path | unresolved (C1) | shim only if the file moves |
 | 10 | `query/index.js` | legacy barrel | namespace barrel (runtime-only, no split) | W1 candidate | **`[unresolved]`** — §11.2 gives no path | unresolved (C2) | shim only if the file moves |
-| 11 | `orchestrator/index.js` | legacy barrel | namespace barrel (public entry surface) | W3 | **`[unresolved]`** — §11.2 gives no path | unresolved (C3) | shim only if the file moves |
+| 11 | `orchestrator/index.js` | legacy barrel | namespace barrel (public entry surface) | W3 (barrel) | **`[unresolved]`** — §11.2 gives no path | unresolved (C3) | shim only if the file moves |
 | 12 | `persistence/persist-ranked.js` | runtime | implementation (writer, uses `node:crypto`) | W2 | `runtime/src/persistence/persist-ranked.js` | confirmed | identity shim |
 | 13 | `persistence/persist-pass-facts.js` | runtime | implementation (writer) | W2 | `runtime/src/persistence/persist-pass-facts.js` | confirmed | identity shim |
 | 14 | `persistence/persist-rejections.js` | runtime | implementation (writer, uses `node:crypto`) | W2 | `runtime/src/persistence/persist-rejections.js` | confirmed | identity shim |
@@ -279,7 +279,7 @@ the `packages/recommendation-core` shim, `runtime` = SQL-executing or compositio
 | 21 | `orchestrator/swap-preview.js` | runtime | implementation (one function owns a read-only transaction) | W3 | `runtime/src/orchestrator/swap-preview.js` | confirmed | identity shim |
 | 22 | `orchestrator/swap-commit.js` | runtime | implementation (one function owns a write transaction) | W3 | `runtime/src/orchestrator/swap-commit.js` | confirmed | identity shim |
 
-Wave totals: **W1 = 8 files**, **W2 = 5**, **W3 = 6**, **barrel/unresolved = 3** (9, 10, 11) → **22**.
+Wave totals: **W1 = 8 files** (rows 1–8), **W2 = 5** (rows 12–16), **W3 = 6 implementation files** (rows 17–22), and **3 barrels whose destination is unresolved** (rows 9, 10, 11 — row 11 is also the W3 barrel) → **22**.
 No file appears twice, and no row counts a public name rather than a physical file.
 
 ### 5.1b Evidence per row (exports, imports, dependents)
