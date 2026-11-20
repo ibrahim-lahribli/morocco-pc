@@ -491,16 +491,25 @@ not authorised and no implementation has started.
 
 ## 11. Gate ledger
 
-| # | Gate | Status | Owner | Evidence still needed |
-|---|---|---|---|---|
-| 1 | Step 4 final acceptance | **OPEN** | Agent 2 | written acceptance |
-| 2 | Runtime tests in CI, green on the merge path | **OPEN** | Agent 1 | Node 22 `unit-and-docs` where step 10 runs, on master or a merging PR |
-| 3 | C7 image validation | **OPEN** | Agent 1 | runtime COPY + container assertion + green `image` |
-| 4 | RFC count resolved | **OPEN** | A2/A6 | authoritative 22/21/24 + the four destination rulings |
-| 5 | Full-extraction scope and W1/W2/W3 labels | **OPEN** | A2/A6 | approved phase definitions |
-| 6 | Provenance, transaction, compatibility, test-ownership contracts | **OPEN** | review | approved designs with negative-test evidence |
-| 7 | Explicit written W1 authorization | **OPEN** | authority | authorization text |
+Statuses are unchanged: **0 of 7 gates closed**. Each row now carries the evidence that exists today
+and the single thing that would close it. Evidence labels follow section 0.
+
+| # | Gate | Status | Owner | Evidence today | Would close it |
+|---|---|---|---|---|---|
+| 1 | Step 4 final acceptance | **OPEN** | Agent 2 | `[inspected]` PR #49 is unmerged (`master` is still `45133d5`); no written acceptance exists anywhere in the PR trail | Agent 2's written acceptance of the nine core namespaces, the 11-key `exports` map and the identity shims |
+| 2 | Runtime tests in CI on the merge path | **OPEN** | Agent 1 | `[CI verified]` green only on the scratch branch `07c1254` (step 10 "Runtime package harness (step 5)" success). At `7e27be6` the step was **skipped** behind a failure at step 6; at `89e761d` the step does not exist | a green Node 22 `unit-and-docs` in which step 10 runs, on `master` or on a PR head that will merge |
+| 3 | C7 image validation | **OPEN** | Agent 1 | `[inspected]` `apps/api/Dockerfile` copies only `database-guard` and `recommendation-core`; `api-image.yml` asserts nothing about runtime, so the green `image` job proves nothing here | Agent 1's COPY pair + a container assertion on the packaged runtime + a green `image` run |
+| 4 | RFC count resolved | **OPEN** | A2/A6 | `[inspected]` §11.2 enumerates 22 runtime rows, its arithmetic says 21, RFC §5 line 1527 says 24; no written answer (see `w1-rfc-decision-request.md` A1-A4) | the A2/A6 owner's written answer on A1-A4 |
+| 5 | Full-extraction scope and W1/W2/W3 labels | **OPEN** | A2/A6 | `[inspected]` the frozen W0 entry point names loaders/persistence/orchestrator as W1/W2/W3; "full extraction" is not reconciled with that in any approved text (see B1-B5) | the A2/A6 owner's written answer on B1-B5 |
+| 6 | Provenance, transaction, compatibility and test-ownership contracts | **OPEN** | review | `[proposed]` declared-rewrite policy with 14 negative cases, the verified transaction table, the `step-5-w1` inventory and the shim/export plan are designs only; nothing is implemented | review approval of those designs, with the negative-test matrix implemented and passing |
+| 7 | Explicit written W1 authorization | **OPEN** | authority | no authorization exists; this document is preparation only | the project authority's explicit written authorization |
+
+Approving this documentation closes **no** gate. Gate 4 and gate 5 close only on the written answers
+requested in [`w1-rfc-decision-request.md`](w1-rfc-decision-request.md); gates 1, 2, 3 and 6 close on
+the evidence named above; gate 7 closes only on the authority's authorization.
 
 **Verdict: `W1 NOT READY — GATES OPEN`.** 0 of 7 gates closed. W0 is frozen and independently
 re-measured at `89e761d` (61 tests / 13 suites / 61 pass / 0 fail on a full exported tree outside the
-repository).
+repository). **No runtime implementation has moved**: `src/recommendation/**` still contains every
+loader, every persistence writer and every orchestrator module, and the runtime package still holds
+only its harness.
