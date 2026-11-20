@@ -26,6 +26,18 @@ The pure stages never touch the database. Everything below is the responsibility
 - **Environment and credentials** are read by the API/CLI bootstrap, not by these modules: the
   runtime receives a connected client and never reads `process.env`.
 
+The step 5 harness enforces this boundary before any module moves:
+`test/boundary.test.js` statically rejects a pool, an environment read, a deep reach into core and
+any clock read other than `new Date(value)`, and `test/transaction-ownership.test.js` checks each
+orchestrator file against [`ORCHESTRATOR_ENTRY_POINTS.md`](ORCHESTRATOR_ENTRY_POINTS.md). The three
+mixed barrels (`candidates`, `filtering`, `scoring`) are published in two halves - see
+[`MIXED_BARRELS.md`](MIXED_BARRELS.md).
+
+The filtering pipeline is the exception to the word "loaders": `filterCandidatesForRecommendation`
+is **infrastructure composition** owned at `orchestrator/` (RFC §11.2) and published under
+`./loaders` only because RFC §11.5 places it there; the SQL half of `filtering` is
+`filtering/context-loader` (`loadFilteringContext`, `CONTEXT_COMPAT_KEYS`).
+
 Write safety (unchanged): write-capable tests run against `TEST_DATABASE_URL` through
 `packages/database-guard/src/index.js`; a real-database write needs a recorded restore point. See
 `docs/database/recipes/` and the root `AGENTS.md` hard rules.
