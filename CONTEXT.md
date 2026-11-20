@@ -190,7 +190,9 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   assessment-age step stays nightly-only with `continue-on-error: true`, `set +e`, `::warning`, and never
   passes `--strict`. The explanation batch's own provenance entries are named `unit-and-docs` steps too
   (`check:characterization:pr7` and `verify:ownership -- --inventory=pr7 --base=2683713`), so its fixture
-  and moved-test counts are checked in CI; both require that batch to merge first.
+  and moved-test counts are checked in CI; both require that batch to merge first. On the combined
+  PR #48 + PR #49 merge (`integration/pr48-pr49`) the same suites measure `test:scripts` **885 pass / 0 fail**
+  and `test:core` unchanged at **697 tests: 695 pass / 2 skipped**; README carries the combined count.
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of
