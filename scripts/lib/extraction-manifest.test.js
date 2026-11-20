@@ -266,8 +266,117 @@ test('a characterization record is optional, and malformed when wrong', () => {
   assert.deepEqual(declared.batches[0].characterization.capture_paths, ['scripts/x.js']);
 });
 
-test('a later batch can be appended without disturbing batch one', () => {
-  const { batches, errors } = validateManifest(document([
+const EDIT = {
+  id: 'edit-one',
+  destination: 'packages/a.js',
+  edit_commit: '1'.repeat(40),
+  previous_commit: '3'.repeat(40),
+  previous_blob: '4'.repeat(40),
+  new_blob: '5'.repeat(40),
+  reason: 'round the score to 6 decimals before comparing',
+  approved_by: 'Owner',
+  approved_on: '2026-11-20',
+  approval_ref: 'docs/RECOMMENDATION_ENGINE_DECISIONS.md#Decision-66',
+};
+
+test('edits are optional, and a well-formed chain is normalised', () => {
+  const absent = validateManifest(document([batch()]));
+  assert.deepEqual(absent.errors, []);
+  assert.equal(absent.batches[0].edits, null);
+
+  const present = validateManifest(document([batch({ edits: [EDIT] })]));
+  assert.deepEqual(present.errors, []);
+  assert.deepEqual(present.batches[0].edits, [EDIT]);
+});
+
+test('a malformed edit record is rejected: shape is decided in one place', () => {
+  const sameId = { ...EDIT, edit_commit: '6'.repeat(40) };
+  const sameCommit = { ...EDIT, id: 'edit-two' };
+  const cases = [
+    ['a non-array', 'edits', /edits must be an array/],
+    ['an empty array', [], /edits must be a non-empty array/],
+    // The key is absent or a non-empty array; an explicit null is a
+    // half-written record, not "no edits".
+    ['an explicit null', null, /edits must be a non-empty array when present, not null/],
+    ['a non-object event', ['edit-one'], /expected an object/],
+    ['a destination outside the batch', [{ ...EDIT, destination: 'packages/b.js' }], /not a declared move of this batch/],
+    ['a non-kebab id', [{ ...EDIT, id: 'Edit_One' }], /id must be a kebab-case identifier/],
+    ['a duplicate id across batches', [EDIT, sameId], /duplicate edit id/],
+    ['a duplicate edit commit', [EDIT, sameCommit], /already claimed by/],
+    ['a short previous_commit', [{ ...EDIT, previous_commit: 'abc' }], /previous_commit must be a full/],
+    ['a short blob', [{ ...EDIT, previous_blob: 'abc' }], /previous_blob must be a full/],
+    ['identical blobs', [{ ...EDIT, new_blob: EDIT.previous_blob }], /the same blob/],
+    ['an empty reason', [{ ...EDIT, reason: '   ' }], /reason must be a non-empty string/],
+    ['no approver', [{ ...EDIT, approved_by: '' }], /approved_by must be a non-empty string/],
+    ['a non-ISO approval date', [{ ...EDIT, approved_on: '20-11-2026' }], /approved_on must be a real calendar date/],
+    ['an impossible approval date', [{ ...EDIT, approved_on: '2026-02-31' }], /approved_on must be a real calendar date/],
+    ['no approval reference', [{ ...EDIT, approval_ref: '' }], /approval_ref must be a non-empty string/],
+    ['an unknown event key', [{ ...EDIT, notes: 'extra' }], /unknown key "notes"/],
+    // The record commit is derived from history; declaring it would be a SHA
+    // self-reference no commit can satisfy.
+    ['a declared record_commit', [{ ...EDIT, record_commit: '2'.repeat(40) }], /unknown key "record_commit"/],
+  ];
+  for (const [name, edits, pattern] of cases) {
+    const { errors } = validateManifest(document([batch({ edits })]));
+    assert.ok(errors.some((error) => pattern.test(error)), name + ': ' + errors.join(' | '));
+  }
+});
+
+test('approved_on names a real Gregorian day, not merely a date-shaped string', () => {
+  const validate = (date) =>
+    validateManifest(document([batch({ edits: [{ ...EDIT, approved_on: date }] })]));
+
+  for (const date of ['2026-11-20', '2024-02-29', '2000-02-29', '1900-02-28', '2026-12-31', '0001-01-01']) {
+    assert.deepEqual(validate(date).errors, [], date + ' must be accepted');
+  }
+
+  for (const date of [
+    '2026-02-29', // not a leap year
+    '1900-02-29', // century, not a leap year
+    '2026-02-31',
+    '2026-04-31',
+    '2026-13-01',
+    '2026-00-00',
+    '2026-11-00',
+    '0000-01-01', // the Gregorian calendar has no year 0
+    '2026-1-1',
+    '26-11-20',
+    '2026-11-20T00:00:00Z',
+    '',
+  ]) {
+    const { errors } = validate(date);
+    assert.ok(
+      errors.some((error) => /approved_on must be a real calendar date in YYYY-MM-DD form/.test(error)),
+      date + ' must be rejected: ' + errors.join(' | ')
+    );
+  }
+});
+
+test('unknown keys and a non-string description are rejected, not ignored', () => {
+  const topLevel = validateManifest(document([batch()], { extra: true }));
+  assert.ok(topLevel.errors.some((error) => /manifest: unknown key "extra"/.test(error)), topLevel.errors.join(' | '));
+
+  const batchLevel = validateManifest(document([batch({ extra: true })]));
+  assert.ok(batchLevel.errors.some((error) => /unknown key "extra"/.test(error)), batchLevel.errors.join(' | '));
+
+  const moduleLevel = validateManifest(document([batch({
+    modules: [{ source: 'src/a.js', destination: 'packages/a.js', mode: '100644' }],
+  })]));
+  assert.ok(moduleLevel.errors.some((error) => /unknown key "mode"/.test(error)), moduleLevel.errors.join(' | '));
+
+  const recordLevel = validateManifest(document([batch({
+    characterization: {
+      fixture: 'f.json',
+      capture_command: 'node x.js',
+      capture_commit_subject: 'capture',
+      expect_touch_commits: 1,
+      capture_tool: 'x',
+    },
+  })]));
+  assert.ok(recordLevel.errors.some((error) => /unknown key "capture_tool"/.test(error)), recordLevel.errors.join(' | '));
+});
+
+test('a later batch can be appended without disturbing batch one', () => {  const { batches, errors } = validateManifest(document([
     batch(),
     {
       id: 'step-4b-pr3',

@@ -129,7 +129,26 @@ Rules the gate enforces on that commit (`scripts/verify-pr2-provenance.js`):
 * it changed nothing except the fixture and each declared `capture_path` (an `M`, `D`, `R` or `C` record
   fails even when the path is allowed — only additions are accepted);
 * each `capture_path` was **absent** at the baseline and is a regular file at the capture commit;
-* the fixture names the baseline SHA and the exact `capture_command`.
+* the fixture names the baseline SHA and the exact `capture_command`;
+* both fixture scans run with `--full-history`, so a fixture modified on a side branch and then
+  discarded by a merge still counts as a touch and fails the gate; merge commits are excluded
+  from the touch count, so a capture that lands through a merge is still one introduction;
+* counting non-merge touches alone is not enough: it is blind to merges by design, so a merge can
+  change the fixture without adding a touch. Every merge commit in the fixture's full history
+  since the baseline is therefore inspected separately, and the rule is relative to the capture
+  commit, located by ancestry (never by subject text, timestamps or log order):
+  * a merge that does not have the capture in its ancestry predates the capture, and the fixture
+    cannot exist without it (the capture is the only commit that added it), so that merge may
+    keep a parent's state — which is absent;
+  * a merge that has the capture in its ancestry must resolve the fixture entry (mode and object
+    id, not decoded text) to the captured entry. An ordinary treesame merge, or a merge that
+    carries the capture into another branch, passes; a merge that resolves the fixture to a third
+    state, changes its mode, or deletes it by selecting an absent parent fails — even when one
+    parent lacks it — and a later merge that restores the captured bytes does not erase that
+    earlier unauthorized merge state;
+* a fixture history that cannot be enumerated, a merge whose parents or entries cannot be read, an
+  ancestry that cannot be established, or a commit listed as a merge with fewer than two parents
+  is a failure, never an empty merge list or a successful comparison.
 
 The capture must be deterministic: no clock, no randomness, no database, no environment input, literal
 ids. `scripts/characterize-pr2.js` is the reference implementation of that discipline (its `--check`
@@ -296,6 +315,60 @@ Merge only when all of the following hold on the exact head commit being merged:
 
 `web` (`web.yml`) is path-filtered to `apps/web/**`, `contract/**` and the workflow file, so it does not
 run on a recommendation-only PR and is not a merge gate for one.
+
+### 3.13 Maintain a moved file: an authorized edit
+
+A merged batch's destinations are immutable by identity, so once an extraction has landed the only way to
+fix a moved file without breaking `verify:extraction` is a recorded edit. The batch's optional `edits`
+array is the record, and one edit is **two commits**:
+
+1. the **edit commit** — a single-parent commit that changes exactly the one destination (one `M`
+   record). No rename, no second file, no merge.
+2. the **record commit** — a single-parent commit that changes exactly `extraction-manifest.json`,
+   adding one event: `id` (kebab-case, unique in the manifest), `destination` (a declared move of this
+   batch), `edit_commit`, `previous_commit`, `previous_blob`, `new_blob`, `reason`, `approved_by`,
+   `approved_on` (`YYYY-MM-DD`) and `approval_ref`.
+
+The record commit is **derived, not declared**. A commit cannot contain its own SHA, so the event has no
+`record_commit` field (it is rejected as an unknown key). The verifier finds the single commit after the
+edit that introduces the event id and requires it to have one parent and to change only the manifest.
+
+`verify-pr2-provenance.js` then proves the history from the object graph:
+
+* the destination was ADDED once and that anchor carries the baseline source blob — every manifest
+  baseline predates its destinations, so the baseline can never be a first edit's parent;
+* the non-merge commits touching the destination since the baseline are exactly the anchor plus the
+  recorded edit commits: a change before, between or after the events fails;
+* each edit's sole parent is `previous_commit`, `previous_blob`/`new_blob` are the blobs actually there,
+  and the edit changed exactly that one destination;
+* the event is deeply equal at its record commit, at every later commit that touched the manifest, and in
+  the committed manifest at `HEAD` (modify-then-restore fails);
+* every history scan runs with `--full-history`, so a destination — or a characterization fixture —
+  changed on a side branch and then discarded by a merge is still detected: the whole history is
+  judged, not only the line that happens to reach `HEAD`; a history scan that cannot be enumerated is
+  a failure, never an empty history; and every merge in a fixture's history is inspected against the
+  capture (section 3.4), so a merge that invents a state matching no parent, or that deletes the
+  fixture after the capture by selecting an absent parent, is caught even when a later merge restores
+  the captured bytes;
+* events for a destination form one ancestry chain: the first `previous_blob` is the baseline source
+  blob, each successor's `previous_blob` is its predecessor's `new_blob`, and the last `new_blob` is the
+  destination blob at `HEAD`; each record commit is an ancestor of — or the direct parent of — the next
+  edit's `previous_commit`, so `edit → record → edit` needs no intervening commit, while unrelated
+  intervening commits are also allowed;
+* `approved_on` must be a real Gregorian calendar date (`2024-02-29` yes, `2026-02-29` and `0000-01-01`
+  no), not merely a `YYYY-MM-DD`-shaped string.
+
+Forbidden history operations — each fails the gate by design, not by accident:
+
+* **squash-merging an edit PR**: the declared commits leave `HEAD`'s ancestry.
+* **rebasing or force-pushing after a record**: the recorded edit commit becomes unreachable.
+* **cherry-picking a recorded edit**: the chain's ancestry does not exist in the target history.
+* **amending or editing the manifest after the record**: deep equality fails at the later commit.
+
+Rebasing or rewriting *before* the record commit is fine — the event stores the final SHAs. A fix that
+touches two moved files is two edits with two commit pairs, not one wide event: one destination per
+event is the whole schema. `scripts/lib/extraction-edits-cli.test.js` builds a throwaway repository for
+each of these cases, positive and negative.
 
 ## 4. Limits of the current tooling — do not over-claim
 
