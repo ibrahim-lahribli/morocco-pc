@@ -145,32 +145,39 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   tests and 402 → 402 assertions** (6 moved, 3 stayed: `scoring/index.test.js` and the two loader tests),
   `npm run verify:extraction` **PASS 42 / 42**, `node packages/recommendation-core/test/hermetic-run.js`
   PASS, `npm run check:whitespace` PASS.
-- **Current extraction state:** `packages/recommendation-core/` is part of merged `master` and publishes
-  seven namespaces there (`candidates`, `compatibility`, `filtering`, `assembly`, `ranking` and `retention`
-  since PR #44 merged as `1a9d8cf`, plus `scoring` since PR #45 merged as `0f86f53`; `45133d5`, the tree the
-  CI gates were cut from, is the PR #47 merge), pinned key by key in `test/surface.test.js` and
-  `test/export-surface.json`, behind identity re-export shims at the old `src/recommendation/**` paths.
-  Nothing else has moved: the loaders,
-  `explanation` and `offers/as-of` still live in `src/recommendation/`,
-  `packages/recommendation-runtime/` still carries only its manifest and `docs/LOADERS_AND_TRANSACTIONS.md`,
-  and `apps/api/src/engine.js` still imports the `src/recommendation/**` barrels directly.
-- **CI boundary gates (branch `ci/core-boundary-gates`, 2026-11-20).** The approved public interface is
-  RFC §11.4: the approved subpaths, `offers` at `src/offers/as-of.js` (there is no `offers/index.js`),
-  `errors` at `src/candidates/errors.js`, and no `./package.json` export.
-  `scripts/lib/core-package-surface.test.js` compares the declared `exports` map as a whole — a missing,
-  additional or incorrectly mapped subpath fails, a published namespace that exports nothing fails, every
-  target must exist inside the package and load the same object the root entry publishes, and
-  `core.offers === require('…/src/offers/as-of.js')` is asserted explicitly. It has no allow-list: any
-  unauthorized export such as `./package.json` is a failure, so it fails on the extraction branch as
-  merged until that branch drops its unauthorized `./package.json` export (removal coordinated on that
-  PR). `.github/workflows/api-image.yml` reads the same map inside the container: every target must
-  resolve under `src/` (which rejects `./package.json` structurally), every root namespace needs its
-  declared subpath, and each subpath must load the object the entry publishes.
-  `scripts/lib/ci-workflow.test.js` pins that wiring and forbids a literal namespace list; the
+- **Current extraction state:** `packages/recommendation-core/` publishes **nine** namespaces —
+  `candidates`, `compatibility`, `filtering`, `assembly`, `ranking` and `retention` (PR #44, `1a9d8cf`),
+  `scoring` (PR #45, `0f86f53`), and `explanation` + `offers` (PR #49 head `ac06a6a`, PR #50 head
+  `89e761d`; the CI gates below were cut at `45133d5`, the PR #47 merge). `test/surface.test.js` and
+  `test/export-surface.json` pin them key by key, behind identity re-export shims at the old
+  `src/recommendation/**` paths. `package.json` declares the RFC §11.4 `exports` map as **exactly 11
+  static subpaths**: `.` → `src/index.js`, the nine namespaces → `src/<ns>/index.js`, `./errors` →
+  `src/candidates/errors.js`, and `./offers` → `src/offers/as-of.js` (there is no `offers/index.js`), with
+  no `./package.json` export. The loaders, the three mixed barrels and the orchestrator still live in
+  `src/recommendation/`; `packages/recommendation-runtime/` carries the step 5 W0 harness only (no runtime
+  module has moved); and `apps/api/src/engine.js` still imports the `src/recommendation/**` barrels.
+- **CI boundary gates (2026-11-20).** One contract, `scripts/lib/core-approved-interface.js`, is enforced
+  by both sides: `scripts/lib/core-package-surface.test.js` compares the declared `exports` map as a
+  whole (a missing, additional or wrongly mapped subpath fails; `./package.json` is rejected by name even
+  when its file exists), checks every namespace's RFC exports, and **realpaths** every target so it must
+  stay inside the package — a symlink escape fails and a nonexistent target fails closed.
+  `.github/workflows/api-image.yml` bind-mounts that same module read-only and calls
+  `runContainerGate`, which self-tests **six** tampered maps inside the container (including an
+  unauthorized subpath pointing at an existing valid file) before requiring `engine.js`.
+  `scripts/lib/ci-workflow.test.js` pins this wiring and forbids a literal namespace list; the
   assessment-age step stays nightly-only with `continue-on-error: true`, `set +e`, `::warning`, and never
-  passes `--strict`. The explanation batch's own provenance entries are named `unit-and-docs` steps too
-  (`check:characterization:pr7` and `verify:ownership -- --inventory=pr7 --base=2683713`), so its fixture
-  and moved-test counts are checked in CI; both require that batch to merge first.
+  passes `--strict`. The explanation batch's provenance steps (`check:characterization:pr7` and
+  `verify:ownership -- --inventory=pr7 --base=2683713`) run by name in `unit-and-docs`.
+- **Runtime harness CI (2026-11-20).** `npm run test:runtime` runs `assert-discovery.js` (exit 1 when a
+  required suite is absent, so a glob that matches nothing cannot pass vacuously) and then
+  `node --test "packages/recommendation-runtime/test/*.test.js"`; it is a named `unit-and-docs` step, and
+  the package declares no dependencies and touches no database.
+- **Integrated measurement (2026-11-20).** On the combined tree (`master` `45133d5` + PR #49 `ac06a6a` +
+  PR #50 `89e761d` + this branch): `test:scripts` **893 / 0 / 0**, `test:unit` **726 / 0 / 0**,
+  `test:core` **697 tests: 695 pass / 0 fail / 2 skipped**, `test:api` **193 / 0 / 0**,
+  `test:database-guard` **15 / 0 / 0**, `test:runtime` **61 / 0 / 0**, hermetic run PASS,
+  `verify:extraction` PASS **47 / 47**, every `check:characterization` pr2–pr7 OK, and every
+  `verify:ownership` inventory PASS.
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of
