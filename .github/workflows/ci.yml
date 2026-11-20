@@ -79,6 +79,11 @@ jobs:
       # the batch is unchecked.
       - name: Extraction characterization (L2, scoring fixture)
         run: npm run check:characterization:pr6
+      # Step 4B PR 7's own fixture: the explanation / offers-as-of batch. One
+      # entry per batch, or the batch is unchecked. The script and fixture land
+      # with that batch, so this step requires it to merge first.
+      - name: Extraction characterization (L2, explanation fixture)
+        run: npm run check:characterization:pr7
       - name: Extraction provenance (L3, manifest baseline)
         run: npm run verify:extraction
       # The PR 2 baseline is passed EXPLICITLY: "the commit before the move" is
@@ -108,6 +113,12 @@ jobs:
       # cannot supply its before-counts.
       - name: Extraction test ownership (scoring baseline)
         run: npm run verify:ownership -- --inventory=pr6 --base=1a9d8cfbe2b7f3a3f7a1a17e80919575d52c326e
+      # The explanation batch's own immutable baseline (the direct parent of its
+      # capture commit). The earlier baselines predate the modules this batch
+      # moved, so they cannot supply its before-counts. Requires that batch to
+      # merge first: the pr7 inventory arrives with it.
+      - name: Extraction test ownership (explanation baseline)
+        run: npm run verify:ownership -- --inventory=pr7 --base=268371300a2c70cc32a819f072b63f0b29d3b83d
       # DB-free API contract/route tests (fastify.inject + stubs; no database).
       - run: npm run test:api
       # Contract ownership: exactly ONE versioned contract in contract/, and no

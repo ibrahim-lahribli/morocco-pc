@@ -161,13 +161,16 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   additional or incorrectly mapped subpath fails, a published namespace that exports nothing fails, every
   target must exist inside the package and load the same object the root entry publishes, and
   `core.offers === require('…/src/offers/as-of.js')` is asserted explicitly. It has no allow-list: any
-  unauthorized export such as `./package.json` is a failure, so it stays red until the extraction branch
-  declares exactly the RFC map. `.github/workflows/api-image.yml` reads the same map inside the container:
-  every target must resolve under `src/` (which rejects `./package.json` structurally), every root
-  namespace needs its declared subpath, and each subpath must load the object the entry publishes.
+  unauthorized export such as `./package.json` is a failure, so it fails on the extraction branch as
+  merged until that branch drops its unauthorized `./package.json` export (removal coordinated on that
+  PR). `.github/workflows/api-image.yml` reads the same map inside the container: every target must
+  resolve under `src/` (which rejects `./package.json` structurally), every root namespace needs its
+  declared subpath, and each subpath must load the object the entry publishes.
   `scripts/lib/ci-workflow.test.js` pins that wiring and forbids a literal namespace list; the
   assessment-age step stays nightly-only with `continue-on-error: true`, `set +e`, `::warning`, and never
-  passes `--strict`.
+  passes `--strict`. The explanation batch's own provenance entries are named `unit-and-docs` steps too
+  (`check:characterization:pr7` and `verify:ownership -- --inventory=pr7 --base=2683713`), so its fixture
+  and moved-test counts are checked in CI; both require that batch to merge first.
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of
