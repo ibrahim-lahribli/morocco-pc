@@ -146,20 +146,28 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   `npm run verify:extraction` **PASS 42 / 42**, `node packages/recommendation-core/test/hermetic-run.js`
   PASS, `npm run check:whitespace` PASS.
 - **Current extraction state:** `packages/recommendation-core/` is part of merged `master` and publishes
-  seven namespaces (`candidates`, `compatibility`, `filtering`, `assembly`, `ranking`, `retention` and
-  `scoring`, the last merged with PR #45 as `45133d5`), pinned key by key in `test/surface.test.js` and
+  seven namespaces there (`candidates`, `compatibility`, `filtering`, `assembly`, `ranking` and `retention`
+  since PR #44 merged as `1a9d8cf`, plus `scoring` since PR #45 merged as `0f86f53`; `45133d5`, the tree the
+  CI gates were cut from, is the PR #47 merge), pinned key by key in `test/surface.test.js` and
   `test/export-surface.json`, behind identity re-export shims at the old `src/recommendation/**` paths.
   Nothing else has moved: the loaders,
   `explanation` and `offers/as-of` still live in `src/recommendation/`,
   `packages/recommendation-runtime/` still carries only its manifest and `docs/LOADERS_AND_TRANSACTIONS.md`,
   and `apps/api/src/engine.js` still imports the `src/recommendation/**` barrels directly.
-- **CI boundary gates (2026-11-20):** the api-image gate derives its namespace list from
-  `packages/recommendation-core/src/index.js` instead of a hardcoded six, `scripts/lib/core-package-surface.test.js`
-  proves the entry, the committed snapshot and the barrel directories agree, and
-  `scripts/lib/ci-workflow.test.js` pins the derivation. Re-measured with this change:
-  `npm run test:scripts` **862 pass / 0 fail / 0 skipped**, `npm run test:core` **622 tests: 620 pass /
-  0 fail / 2 skipped**, `node packages/recommendation-core/test/hermetic-run.js` **PASS**,
-  `npm run verify:ownership` **PASS**.
+- **CI boundary gates (branch `ci/core-boundary-gates`, 2026-11-20).** The approved public interface is
+  RFC §11.4: the approved subpaths, `offers` at `src/offers/as-of.js` (there is no `offers/index.js`),
+  `errors` at `src/candidates/errors.js`, and no `./package.json` export.
+  `scripts/lib/core-package-surface.test.js` compares the declared `exports` map as a whole — a missing,
+  additional or incorrectly mapped subpath fails, a published namespace that exports nothing fails, every
+  target must exist inside the package and load the same object the root entry publishes, and
+  `core.offers === require('…/src/offers/as-of.js')` is asserted explicitly. It has no allow-list: any
+  unauthorized export such as `./package.json` is a failure, so it stays red until the extraction branch
+  declares exactly the RFC map. `.github/workflows/api-image.yml` reads the same map inside the container:
+  every target must resolve under `src/` (which rejects `./package.json` structurally), every root
+  namespace needs its declared subpath, and each subpath must load the object the entry publishes.
+  `scripts/lib/ci-workflow.test.js` pins that wiring and forbids a literal namespace list; the
+  assessment-age step stays nightly-only with `continue-on-error: true`, `set +e`, `::warning`, and never
+  passes `--strict`.
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of
