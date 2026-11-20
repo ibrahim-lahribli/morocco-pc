@@ -202,6 +202,20 @@ const FILESYSTEM_EXCEPTIONS = new Map([
       reason: 'read-only: reads the moved use-cases source to assert a structural property',
     },
   ],
+  [
+    'explanation-index.test.js',
+    {
+      specifiers: ['node:fs'],
+      reason: 'read-only: reads the moved explanation barrel source to assert a structural property',
+    },
+  ],
+  [
+    'explanation-reasons.test.js',
+    {
+      specifiers: ['node:fs'],
+      reason: 'read-only: reads the moved explanation sources to assert their purity and single ownership',
+    },
+  ],
 ]);
 
 /**
@@ -305,6 +319,18 @@ const INVENTORY = [
   { batch: 'step-4b-pr6', kind: 'stayed', baseline: 'src/recommendation/scoring/load-assessments.test.js', current: 'src/recommendation/scoring/load-assessments.test.js' },
   { batch: 'step-4b-pr6', kind: 'stayed', baseline: 'src/recommendation/scoring/load-scoring-model.test.js', current: 'src/recommendation/scoring/load-scoring-model.test.js' },
 
+  // --- moved (step 4B PR 7): the Engine 6 and as-of tests follow the code ---
+  // The four files whose imports all resolve inside the core package moved with
+  // their implementation; only the specifiers and the two __dirname source
+  // reads were repointed, so no test or assertion was lost.
+  { batch: 'step-4b-pr7', kind: 'moved', baseline: 'src/recommendation/explanation/explain.test.js', current: 'packages/recommendation-core/test/explanation-explain.test.js' },
+  { batch: 'step-4b-pr7', kind: 'moved', baseline: 'src/recommendation/explanation/reasons.test.js', current: 'packages/recommendation-core/test/explanation-reasons.test.js' },
+  { batch: 'step-4b-pr7', kind: 'moved', baseline: 'src/recommendation/explanation/index.test.js', current: 'packages/recommendation-core/test/explanation-index.test.js' },
+  { batch: 'step-4b-pr7', kind: 'moved', baseline: 'src/recommendation/offers/as-of.test.js', current: 'packages/recommendation-core/test/offers-as-of.test.js' },
+  // offers/select.test.js stays: selectOfferPrices executes SQL, so the mixed
+  // runtime barrel's contract test cannot follow the pure as-of half into core.
+  { batch: 'step-4b-pr7', kind: 'stayed', baseline: 'src/recommendation/offers/select.test.js', current: 'src/recommendation/offers/select.test.js' },
+
   // --- split: the same barrel contract, now asserted by two owners ---
   { kind: 'split', baseline: 'src/recommendation/filtering/index.test.js', current: 'src/recommendation/filtering/index.test.js' },
 
@@ -334,6 +360,7 @@ const BATCH_INVENTORIES = {
   pr4: 'step-4b-pr4',
   pr5: 'step-4b-pr5',
   pr6: 'step-4b-pr6',
+  pr7: 'step-4b-pr7',
 };
 
 /**
@@ -354,6 +381,7 @@ const INVENTORIES = {
   pr4: selectInventoryRows(INVENTORY, 'pr4'),
   pr5: selectInventoryRows(INVENTORY, 'pr5'),
   pr6: selectInventoryRows(INVENTORY, 'pr6'),
+  pr7: selectInventoryRows(INVENTORY, 'pr7'),
 };
 
 /**
@@ -824,7 +852,7 @@ function main(argv) {
   const options = parseArgs(argv);
   if (options.errors.length > 0) {
     process.stderr.write('audit-pr2-test-ownership: ' + options.errors.join('\n  ') + '\n');
-    process.stderr.write('usage: node scripts/audit-pr2-test-ownership.js [--base=<git-ref>] [--inventory=pr2|pr3|pr4|pr5|pr6]\n');
+    process.stderr.write('usage: node scripts/audit-pr2-test-ownership.js [--base=<git-ref>] [--inventory=pr2|pr3|pr4|pr5|pr6|pr7]\n');
     return 2;
   }
   if (!isGitRepository(REPO_ROOT)) {
