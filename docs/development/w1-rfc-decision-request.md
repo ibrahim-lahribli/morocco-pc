@@ -20,31 +20,42 @@ would use if the owner confirms it; it is **not authoritative** and must not be 
 Owner:            RFC A2/A6 architecture owner
 Closes gates:     4 (count resolved), 5 (scope + wave labels)
 Blocks:           W1 destination table, extraction manifest batch, test ownership inventory
-Answer format:    one line per row, e.g. "A1 = 22 files; A2 = yes; A3 = yes (2)"
+Answer format:    one line per row, e.g. "A1 = 22 file moves; A2 = rows only; A4 = yes (2)"
 ```
 
 ---
 
 ## A. Inventory count
 
-`[inspected]` Three different figures exist in the RFC today:
+`[inspected]` The §11.2 table is identical on `master` (`45133d5`, base of PR #51) and on
+`feat/core-explanation-extraction` (`880bb18`): **24 rows** have runtime in their target column.
+Three of those rows are the mixed barrels `candidates/index.js`, `filtering/index.js` and
+`scoring/index.js`, which are split rather than moved; one of the remaining 21 rows names two files
+(`persistence/validate-selected.js`, `validate-rejections.js`). That is **22 moved files**.
 
-| Source | Figure | Note |
-|---|---|---|
-| §11.2 table rows targeting runtime | **22 files** | counted row by row |
-| §11.2 "Counts" paragraph | **21** | arithmetic: 3 loaders + 1 pipeline + 7 orchestrator + 5 persistence + 3 query + 2 scoring; omits the `offers/index.js` row |
-| §5 programme table (line 1527) | **24** | "the 24 runtime modules" |
+The "Counts" paragraph differs by revision, so this request cites sections, not lines:
 
-22 moved files + 2 prospective namespace barrels (`loaders/index.js`, `persistence/index.js`) = 24
-publication units, which is the only reading found so far that reconciles two of the three figures.
-The third (21) appears to be an arithmetic slip, not a scoping decision.
+| Revision | §11.2 bold figure | Its own parenthetical sums to | Programme table phrase |
+|---|---|---|---|
+| `master` `45133d5` | **24** modules | 21 | "the 24 runtime modules" at line **1524** |
+| `feat/core-explanation-extraction` `880bb18` | **21** modules | 21 | "the 24 runtime modules" at line **1527** |
+
+So the figures are not three opinions about one quantity: **24 is a row count**, **22 is a file
+count**, and **21 is what each parenthetical sums to**, one short of the 22 moved files. 22 moves + 2
+prospective namespace barrels = 24 publication units, which coincides with the row count by
+coincidence, not by derivation.
 
 | # | Question | Current evidence | Proposed answer (not authoritative) | Answer required | Owner |
 |---|---|---|---|---|---|
-| A1 | Is the authoritative count **21, 22 or 24**? | §11.2 enumerates 22 runtime rows; §11.2 arithmetic says 21; §5 line 1527 says 24 | **22 files**, with 24 as the publication-unit count | | A2/A6 |
-| A2 | Is `offers/index.js` **inside** the moved set? | §11.2 has a row for it ("whole barrel → runtime; **not** mixed") but the arithmetic that produces 21 does not count it | **Yes** — it is one of the 22 | | A2/A6 |
-| A3 | Are the **two new barrels** (`loaders/index.js`, `persistence/index.js`) counted in the figure? | Neither exists yet; §11.5 publishes `./loaders` and `./persistence`, so barrels are implied but never counted | **Yes**, as publication units separate from the 22 moved files | | A2/A6 |
-| A4 | Which figure must `extraction-manifest.json` and the W1 report use? | The manifest records moves, not units, so it needs the file count | **22 moves**, reported alongside "24 publication units" | | A2/A6 |
+| A1 | Which figure is authoritative: **rows (24), file moves (22) or publication units (24)**? | §11.2 has 24 runtime rows; the moved set is 22 files; publication units would be 24 | **22 file moves**, reported with 24 rows and 24 publication units as separate quantities | | A2/A6 |
+| A2 | Are the **three split barrels** (`candidates/index.js`, `filtering/index.js`, `scoring/index.js`) counted inside the 24? | Three rows carry target "core + runtime" and are split, not moved | **Yes as rows, no as moves** — they are why the row count exceeds the file count | | A2/A6 |
+| A3 | Is `offers/index.js` **inside** the moved set? | §11.2 has its own row ("whole barrel → runtime; **not** mixed") | **Yes** — one of the 22 files | | A2/A6 |
+| A4 | Are the **two new barrels** (`loaders/index.js`, `persistence/index.js`) counted in any figure? | Neither exists yet; §11.5 publishes `./loaders` and `./persistence`, so they are implied but never counted | **Yes**, as 2 publication units on top of the 22 moves | | A2/A6 |
+| A5 | Which figure must `extraction-manifest.json` and the W1 report use? | The manifest records moves, not rows or units | **22 moves**, with rows/units stated alongside | | A2/A6 |
+
+`[unresolved] Note for the owner:` both parentheticals are one short of the 22 files. Either a moved
+file is missing from the arithmetic in each revision, or one of the 22 is not meant to move. That is
+the underlying question behind A1 and A2.
 
 ---
 

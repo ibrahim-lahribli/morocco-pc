@@ -154,21 +154,41 @@ be shown to exercise the runtime package (today it does not). Not verified, not 
 
 **PROPOSED — NOT APPROVED. `[unresolved]` — belongs to the RFC A2/A6 owner.**
 
-`[inspected]` The §11.2 table has **22** rows whose target project is runtime. Its "Counts" paragraph
-says **21**, with the arithmetic "3 loaders for candidates/filtering/offers + 1 filtering pipeline +
-7 orchestrator + 5 persistence + 3 query + 2 scoring loaders". That sum is arithmetically 21 and it
-omits exactly one declared row: `offers/index.js` (the "whole barrel → runtime; **not** mixed" row).
-`[inspected]` §5 of the RFC (line 1527) says "the 24 runtime modules".
+`[inspected]` The §11.2 table contains **24 rows** whose target column includes runtime, and that
+table is identical on `master` (`45133d5`, the base of this PR) and on
+`feat/core-explanation-extraction` (`880bb18`, where §11.4 landed), so the row count is not
+revision-dependent. Three of those rows are the mixed barrels (`candidates/index.js`,
+`filtering/index.js`, `scoring/index.js`, target "core + runtime") and are **split rather than
+moved**, leaving 21 moving rows. One of those 21 rows names **two** files
+(`persistence/validate-selected.js`, `validate-rejections.js`), so the moved set is **22 files** —
+the inventory in section 5.
+
+The "Counts" paragraph *is* revision-dependent, which is why this document cites sections and never
+lines:
+
+| Revision | §11.2 "Counts" bold figure | Its own parenthetical sums to |
+|---|---|---|
+| `master` `45133d5` | **24** modules ("2 candidates/filtering/offers loaders + 1 filtering pipeline + 3 candidates + 5 orchestrator + 5 persistence + 3 query + 2 scoring loaders") | **21** |
+| `feat/core-explanation-extraction` `880bb18` | **21** modules ("3 loaders for candidates/filtering/offers + 1 filtering pipeline + 7 orchestrator + 5 persistence + 3 query + 2 scoring loaders") | **21** |
+
+Both parentheticals sum to 21 and are therefore **one short of the 22 files the table moves**. The
+programme table's "the 24 runtime modules" phrase sits at **line 1524 on `master` and line 1527 on
+the branch** — a line citation that is correct on exactly one revision.
 
 Therefore:
 
-- **22 files** are proposed to move.
-- **24** = 22 moved files + 2 new namespace barrels (`loaders/index.js`, `persistence/index.js`).
-- **21** is an arithmetic slip, not a scoping decision, as far as this inspection can tell.
+- **24** is a **row** count: it includes the three split barrels and counts
+  `validate-selected.js` + `validate-rejections.js` as one row.
+- **22** is the **file-move** count (section 5).
+- **21** is what both parentheticals sum to, short by one moved file in each revision.
+- **24 publication units** = 22 moved files + 2 prospective namespace barrels (`loaders/index.js`,
+  `persistence/index.js`). This coincides with the row count but for a different reason; the
+  coincidence is not evidence for either figure.
 
 `[unresolved]` Whether the three runtime-only barrels (`offers/index.js`, `query/index.js`,
 `orchestrator/index.js`) move at all, and to which path, is **not stated** in §11.2 — the rows give a
-target project but no destination. Until that is answered, neither count can be encoded.
+target project but no destination. Until that is answered, the file count cannot become a destination
+table.
 
 ---
 
@@ -475,8 +495,9 @@ entry is proposed here.
 from merge order alone.
 
 **To the RFC A2/A6 owner (count, scope, transaction).**
-1. §11.2 enumerates 22 runtime rows; its arithmetic says 21 (it omits `offers/index.js`); RFC §5
-   (line 1527) says 24. Confirm the authoritative figure and whether the 2 new barrels are counted.
+1. §11.2 has **24 rows** targeting runtime: 3 are split barrels and one row names two files, so
+   **22 files** move. Its bold figure says **24** on `master` and **21** on the PR #49 branch, while
+   both parentheticals sum to 21. Confirm the authoritative figure and whether the 2 new barrels count.
 2. §11.2 gives no destination for `offers/index.js`, `query/index.js` or `orchestrator/index.js`, and
    two options for `filtering/pipeline.js`. Please rule on all four.
 3. Confirm the W1/W2/W3 labels (loaders / persistence / orchestrator) and that "full runtime
@@ -499,7 +520,7 @@ and the single thing that would close it. Evidence labels follow section 0.
 | 1 | Step 4 final acceptance | **OPEN** | Agent 2 | `[inspected]` PR #49 is unmerged (`master` is still `45133d5`); no written acceptance exists anywhere in the PR trail | Agent 2's written acceptance of the nine core namespaces, the 11-key `exports` map and the identity shims |
 | 2 | Runtime tests in CI on the merge path | **OPEN** | Agent 1 | `[CI verified]` green only on the scratch branch `07c1254` (step 10 "Runtime package harness (step 5)" success). At `7e27be6` the step was **skipped** behind a failure at step 6; at `89e761d` the step does not exist | a green Node 22 `unit-and-docs` in which step 10 runs, on `master` or on a PR head that will merge |
 | 3 | C7 image validation | **OPEN** | Agent 1 | `[inspected]` `apps/api/Dockerfile` copies only `database-guard` and `recommendation-core`; `api-image.yml` asserts nothing about runtime, so the green `image` job proves nothing here | Agent 1's COPY pair + a container assertion on the packaged runtime + a green `image` run |
-| 4 | RFC count resolved | **OPEN** | A2/A6 | `[inspected]` §11.2 enumerates 22 runtime rows, its arithmetic says 21, RFC §5 line 1527 says 24; no written answer (see `w1-rfc-decision-request.md` A1-A4) | the A2/A6 owner's written answer on A1-A4 |
+| 4 | RFC count resolved | **OPEN** | A2/A6 | `[inspected]` §11.2 has 24 runtime-targeting rows (3 split barrels, 1 two-file row) -> 22 file moves; its bold figure says 24 on `master` and 21 on the PR #49 branch while both parentheticals sum to 21; no written answer (see `w1-rfc-decision-request.md` A1-A5) | the A2/A6 owner's written answer on A1-A5 |
 | 5 | Full-extraction scope and W1/W2/W3 labels | **OPEN** | A2/A6 | `[inspected]` the frozen W0 entry point names loaders/persistence/orchestrator as W1/W2/W3; "full extraction" is not reconciled with that in any approved text (see B1-B5) | the A2/A6 owner's written answer on B1-B5 |
 | 6 | Provenance, transaction, compatibility and test-ownership contracts | **OPEN** | review | `[proposed]` declared-rewrite policy with 14 negative cases, the verified transaction table, the `step-5-w1` inventory and the shim/export plan are designs only; nothing is implemented | review approval of those designs, with the negative-test matrix implemented and passing |
 | 7 | Explicit written W1 authorization | **OPEN** | authority | no authorization exists; this document is preparation only | the project authority's explicit written authorization |
