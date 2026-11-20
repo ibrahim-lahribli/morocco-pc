@@ -4,6 +4,20 @@
   "private": true,
   "description": "Pure recommendation logic (selection, filtering, assembly, scoring, retention, ranking). Step 4B PR 1 shipped the boundary harness; step 4B PR 2 moved the pure candidates modules, the Engine 1 compatibility tree and the pure filtering half here, step 4B PR 3 moved the pure Engine 3 assembly stage, step 4B PR 4 moved the Engine 5a ranking stage, step 4B PR 5 moved the Engine 2D retention stage, and step 4B PR 6 moved the pure half of Engine 4 scoring, so the entry point exports the candidates, compatibility, filtering, assembly, ranking, retention and scoring namespaces and nothing runtime. The runtime loaders, explanation and offers/as-of have not moved yet.",
   "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./assembly": "./src/assembly/index.js",
+    "./candidates": "./src/candidates/index.js",
+    "./compatibility": "./src/compatibility/index.js",
+    "./errors": "./src/candidates/errors.js",
+    "./explanation": "./src/explanation/index.js",
+    "./filtering": "./src/filtering/index.js",
+    "./offers": "./src/offers/as-of.js",
+    "./package.json": "./package.json",
+    "./ranking": "./src/ranking/index.js",
+    "./retention": "./src/retention/index.js",
+    "./scoring": "./src/scoring/index.js"
+  },
   "engines": {
     "node": ">=22"
   },
