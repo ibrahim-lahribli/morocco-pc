@@ -7,7 +7,7 @@ runtime test ownership, coordination). This document is preparation and evidence
 module, rewrites no import, creates no shim, changes no transaction, does not touch
 `extraction-manifest.json` or its verifier, and does not touch root `package.json`, CI, the Dockerfile,
 `.dockerignore` or `api-image.yml`. Nothing in it becomes authoritative until the owners named in
-section 11 approve it in writing.
+section 13 approve it in writing.
 
 Every section is headed `PROPOSED — NOT APPROVED`. Every claim carries one of these labels:
 
@@ -15,11 +15,15 @@ Every section is headed `PROPOSED — NOT APPROVED`. Every claim carries one of 
 |---|---|
 | `[inspected]` | read directly from this checkout or from a Git object in this repository |
 | `[measured]` | produced by a command run in this session, with the command and result recorded |
+| `[derived]` | computed from `[inspected]` data by a script whose rule is stated inline |
 | `[CI verified]` | read from a GitHub Actions run/job/step for the exact commit SHA named |
 | `[previously reported]` | claimed by a PR author or a prior report; not independently reproduced here |
 | `[owner]` | requires another owner's decision (Agent 1, Agent 2, RFC A2/A6 owner, project authority) |
 | `[proposed]` | designed here; unapproved |
 | `[unresolved]` | no acceptable answer exists yet |
+
+**This document is not an authorization.** Nothing here authorizes a module move, and approval of this
+dossier is not approval of W1.
 
 ---
 
@@ -29,12 +33,12 @@ Every section is headed `PROPOSED — NOT APPROVED`. Every claim carries one of 
 
 ### 1.1 Baseline state
 
-`[inspected]` Branch `feat/runtime-harness` = `89e761d8280cf597319004289684baecca1819fa`, which matches
-the reported W0 baseline exactly. Its runtime tree holds **12 files**
-(`docs/LOADERS_AND_TRANSACTIONS.md`, `docs/MIXED_BARRELS.md`, `docs/ORCHESTRATOR_ENTRY_POINTS.md`,
+`[inspected]` The W0 harness landed at `feat/runtime-harness` = `89e761d`, and the W0 review
+corrections are now at `75f7823` (section 1.5). The runtime tree holds **12 files**:
+`docs/LOADERS_AND_TRANSACTIONS.md`, `docs/MIXED_BARRELS.md`, `docs/ORCHESTRATOR_ENTRY_POINTS.md`,
 `package.json`, `src/index.js`, `test/assert-discovery.js`, `test/boundary-scanner.js`,
 `test/boundary.test.js`, `test/export-surface.json`, `test/index.test.js`, `test/surface.test.js`,
-`test/transaction-ownership.test.js`).
+`test/transaction-ownership.test.js`.
 
 `[inspected]` `src/index.js` is `module.exports = {}`, and `test/export-surface.json` declares
 `"exports": []`. The header comment names the planned waves (loaders W1, persistence W2, orchestrator
@@ -43,29 +47,29 @@ W3) and nothing has shipped from them.
 `[inspected]` On `master` (`45133d5`) and in this checkout, `src/recommendation/**` still contains every
 loader, every persistence writer and every orchestrator module — no implementation has moved.
 
-`[inspected]` PR #50: state `open`, base `master` `45133d5`, head `89e761d`, 12 files changed,
-`mergeable: clean`, 0 review comments.
+`[inspected]` PR #50: state `open`, base `master` `45133d5`, head `75f7823`, 12 files changed,
+`mergeable: clean`, 0 review comments, 0 reviews.
 
 ### 1.2 Deviation: this checkout is not the W0 branch
 
 `[inspected]` `git status -sb` reports
-`## feat/core-explanation-extraction...origin/feat/core-explanation-extraction [behind 1]` with a clean
-tree; `HEAD` is `880bb18`, one commit behind that branch's remote head `ac06a6a` (PR #49). The runtime
-package in this checkout therefore contains only `package.json` and `docs/`, and no harness suite exists
-here.
+`## feat/core-explanation-extraction...origin/feat/core-explanation-extraction [behind 1]` with two
+untracked documentation copies; `HEAD` is `880bb18`, one commit behind that branch's remote head
+`ac06a6a` (PR #49). The runtime package in this checkout therefore contains only `package.json` and
+`docs/`, and no harness suite exists here.
 
 Consequence: the harness cannot be executed from this working tree, and switching branches in a shared
 checkout is out of scope. Section 1.3 measures it from an exported tree instead.
 
 ### 1.3 Suite re-measurement (independent of the author's report)
 
-`[measured]` Command, from a temp directory outside the repository:
+`[measured]` Command, from a temp directory inside the repository and outside the working tree:
 
 ```
-git archive 89e761d | tar -x -C "$T"
-cd "$T/packages/recommendation-runtime"
+git archive 89e761d | tar -x -C .agent3-tmp/w0
+cd .agent3-tmp/w0/packages/recommendation-runtime
 node test/assert-discovery.js
-node --test --test-reporter=tap "test/*.test.js"
+node --test "test/*.test.js"
 ```
 
 Result on `node v24.21.0`, Windows: discovery printed `recommendation-runtime: 4 test suite(s)
@@ -77,15 +81,40 @@ Node 22 the gate requires. Node 22 execution remains CI-only evidence.
 one assertion, `boundary.test.js` → "reports a package file outside src/ and a file outside the
 package": `require('../../../package.json')` from `src/probe-fixture.js` resolves to the **repository
 root** manifest, so the exported tree must include it. This is a coupling to the repository layout, not
-a defect in the gate, and it is not to be "fixed" without authorization. It does mean that any future
-hermetic or relocated execution of the runtime suite must export the repository root manifest too.
+a defect in the gate, and it is not to be "fixed" without authorization.
 
 ### 1.4 What must not change
 
-The scanner, its fixtures, `assert-discovery.js`, and the documented `.end()` limitation
-(name-based receiver detection, no alias/data-flow analysis, stream/socket/response receivers
-deliberately exempt) are frozen W0 artifacts. No expansion of scanner scope without a concrete
-reproducible bypass.
+`[inspected]` `src/index.js`, `test/export-surface.json`, `test/index.test.js`, `test/surface.test.js`,
+`test/transaction-ownership.test.js`, `assert-discovery.js`, the package manifest and the three W0
+documents are frozen W0 artifacts. The scanner may only change for a reproducible defect (section 1.5);
+its scope may not grow into a scope or data-flow analyzer.
+
+### 1.5 W0 review corrections — what the scanner now guarantees
+
+`[measured]` Two files changed at `75f7823` (`test/boundary-scanner.js`, `test/boundary.test.js`), and
+the suite is now **tests 85, suites 17, pass 85, fail 0** on `node v24.21.0`, exit 0
+(`node test/assert-discovery.js` → `4 test suite(s) discovered`). Five reproducible defects were
+corrected, each with a fixture in both directions:
+
+| # | Defect (reproducible) | Correction | Suite delta |
+|---|---|---|---|
+| 1 | `object.release()` was reported as a client close on **any** receiver — the rule had no receiver check, unlike `.end()` | `.release()` is gated exactly like `.end()`: connection receiver allow-list (`client`, `pool`, `db`, `connection`, `database`, `pgPool`, `this.client`, …), stream/socket/formatter/response exempt, bare `release()` not attributed | +3 tests |
+| 2 | `module[key].call(module,'pg')` / `.apply` / `.bind(...)()` slipped past the computed-member rule | a computed, non-static member followed by an invocation proxy is `dynamic-import`, including `module?.[key].call(...)` and `module?.[key]?.call(...)` | +3 tests |
+| 3 | `function execute(require) { require('local-value') }` was a **false positive** | bounded shadowing: a function parameter, arrow parameter or `const|let|var` binding named `require`/`module`/`process`/`Date` suppresses the rule inside the enclosing braces only | +6 tests |
+| 4 | `const load = require; load('pg')` and the `module.require` form were **missed** | bounded alias table (`require`, `module.require`, aliases of aliases) iterated to a fixpoint; call sites are imports; `.call` on an alias is held to the proxy rules | +6 tests |
+| 5 | `createRequire`, `process.mainModule.require`, `globalThis.require`, `eval` and `Function` were invisible | new `code-evaluation` rule, plus `node:module` classified as a `loader` module | +6 tests |
+
+`[inspected]` The scanner header now has four required sections — what it guarantees (six numbered
+properties), what it detects syntactically (proxies, aliases, shadowing, each with its exact scope), what
+it cannot determine semantically (a named list with the exact result for each example), and which
+limitations require a W1 coding restriction (six numbered restrictions `R-CONN-1`, `R-ENV-1`,
+`R-REQ-1`, `R-REQ-2`, `R-SHADOW-1`, `R-SPEC-1`).
+
+`[inspected]` Accepted gaps, asserted CLEAN in the suite on purpose: `const c = client; c.end()`,
+`const p = process; p.env.X`, `const load = require.bind(null); load('pg')`, and any `require` held in a
+variable that is passed to a helper. These are limits of a token scan, not defects; the W1 coding
+restrictions are what keep them from mattering.
 
 ---
 
@@ -95,41 +124,33 @@ reproducible bypass.
 
 | Commit | Tree state | `unit-and-docs` | Runtime step | `image` |
 |---|---|---|---|---|
-| `89e761d` (PR #50 head) | no `test:runtime` script, no runtime step in `ci.yml` | `success` (runs 44756114202 / 44756123305) | **did not exist** — runtime tests did not run | not applicable |
+| `89e761d` (former PR #50 head) | no `test:runtime` script, no runtime step in `ci.yml` | `success` (runs 44756114202 / 44756123305) | **did not exist** — runtime tests did not run | not applicable |
+| `75f7823` (current PR #50 head) | scanner + fixtures only; still no root script, still no runtime step | pending at the time of writing — see section 13 gate 2 | **does not exist in CI** | not applicable |
 | `7e27be6` (PR #48 head) | runtime step present at `ci.yml:56`, runtime test dir absent | **failure** at step 6 `npm run test:scripts`; steps 7–30 **skipped** | **never executed** (skipped) | failure (reported: core exports map missing on master) |
 | `07c1254` (`integration/pr48-pr49-pr50`) | all three merged | `success` | **step 10 "Runtime package harness (step 5)" success** | success |
 
-`[inspected]` At `89e761d` neither the root `package.json` nor `ci.yml` mentions runtime, so the green
-`unit-and-docs` there is **not** evidence for gate 2.
+`[inspected]` At `75f7823` neither the root `package.json` nor `ci.yml` mentions runtime, so a green
+`unit-and-docs` on this head proves the repository's other gates still pass — it is **not** evidence for
+gate 2, and the 85/17 suite has never run on Node 22.
 
 `[inspected]` At `7e27be6` the root `package.json` defines
 `"test:runtime": "node packages/recommendation-runtime/test/assert-discovery.js && node --test \"packages/recommendation-runtime/test/*.test.js\""`
 — character-identical to the required command — but `packages/recommendation-runtime/` at that commit
-contains only `docs/LOADERS_AND_TRANSACTIONS.md` and `package.json`. The step would fail closed on the
-missing `assert-discovery.js`; because `test:scripts` fails first, that failure mode is **unmeasured**.
+contains only `docs/LOADERS_AND_TRANSACTIONS.md` and `package.json`.
 
 `[CI verified]` `07c1254` is the only green execution of the command: `ci` run 44820989559, job
 `unit-and-docs` (ubuntu-latest, `node-version: '22'`), step 10 success; `image` run 44820989313
-success. The step's internal test counts were not read from the job log, so the 61/13 figure there
+success. The step's internal test counts were not read from the job log, so the harness count there
 remains `[previously reported]`; the mechanism (discovery guard + runner) is `[CI verified]`.
 
 `[inspected]` `integration/pr48-pr49-pr50` is a scratch branch and is not a merge target. **Gate 2
-therefore stays OPEN**: it needs a green `unit-and-docs` on `master` (or on a PR head that will merge)
-in which step 10 actually runs.
-
-### 2.1 Merge sequence
-
-`[owner]` Unchanged and unapproved here: **#49 → #50 → rebase #48**. `[inspected]` master's
-`packages/recommendation-core/package.json` has no `exports` key, which independently explains PR #48's
-`test:scripts` and image failures. `[inspected]` PR #48's own body lists #49→#50 as blockers but does
-not record that its `test:runtime` step cannot pass without #50's files; the skipped steps hid that.
-No merge, approval or force-push is performed by Agent 3.
+therefore stays OPEN.**
 
 ---
 
 ## 3. C7 (Docker integration) — status
 
-**PROPOSED — NOT APPROVED.**
+**PROPOSED — NOT APPROVED.** Requirements are in section 12; this section records the current state.
 
 `[inspected]` `apps/api/Dockerfile` copies `packages/database-guard` and `packages/recommendation-core`
 only; there is no `packages/recommendation-runtime` COPY. `.github/workflows/api-image.yml` asserts
@@ -138,30 +159,19 @@ nothing about runtime. The green `image` job on `07c1254` therefore says nothing
 `[inspected]` `.dockerignore` excludes `docs`, `*.md`, `test`, `scripts`, `database`, `contract` and
 `apps/web`; a `package.json` + `src` COPY of the runtime package is therefore compatible with it.
 
-`[owner]` C7 stays with Agent 1. The proposed COPY pair (from the assignment) is:
-
-```dockerfile
-COPY packages/recommendation-runtime/package.json ./packages/recommendation-runtime/package.json
-COPY packages/recommendation-runtime/src ./packages/recommendation-runtime/src
-```
-
-Placement must follow `database-guard`/`recommendation-core` (after `npm ci`), and the image gate must
-be shown to exercise the runtime package (today it does not). Not verified, not edited by Agent 3.
+`[owner]` C7 stays with Agent 1. Whether C7 must land **before** W1 remains unresolved (section 14).
 
 ---
 
-## 4. RFC count reconciliation
+## 4. Inventory counts — five quantities, never interchangeable
 
 **PROPOSED — NOT APPROVED. `[unresolved]` — belongs to the RFC A2/A6 owner.**
 
-`[inspected]` The §11.2 table contains **24 rows** whose target column includes runtime, and that
-table is identical on `master` (`45133d5`, the base of this PR) and on
-`feat/core-explanation-extraction` (`880bb18`, where §11.4 landed), so the row count is not
-revision-dependent. Three of those rows are the mixed barrels (`candidates/index.js`,
-`filtering/index.js`, `scoring/index.js`, target "core + runtime") and are **split rather than
-moved**, leaving 21 moving rows. One of those 21 rows names **two** files
-(`persistence/validate-selected.js`, `validate-rejections.js`), so the moved set is **22 files** —
-the inventory in section 5.
+`[inspected]` The §11.2 table contains **24 rows** whose target column includes runtime, and that table
+is identical on `master` (`45133d5`, this PR's base) and on `feat/core-explanation-extraction`
+(`880bb18`), so the row count is not revision-dependent. Three of those rows are the mixed barrels and
+are **split rather than moved**, leaving 21 moving rows. One of those 21 rows names **two** files
+(`persistence/validate-selected.js`, `validate-rejections.js`), so the moved set is **22 files**.
 
 The "Counts" paragraph *is* revision-dependent, which is why this document cites sections and never
 lines:
@@ -171,115 +181,253 @@ lines:
 | `master` `45133d5` | **24** modules ("2 candidates/filtering/offers loaders + 1 filtering pipeline + 3 candidates + 5 orchestrator + 5 persistence + 3 query + 2 scoring loaders") | **21** |
 | `feat/core-explanation-extraction` `880bb18` | **21** modules ("3 loaders for candidates/filtering/offers + 1 filtering pipeline + 7 orchestrator + 5 persistence + 3 query + 2 scoring loaders") | **21** |
 
-Both parentheticals sum to 21 and are therefore **one short of the 22 files the table moves**. The
-programme table's "the 24 runtime modules" phrase sits at **line 1524 on `master` and line 1527 on
-the branch** — a line citation that is correct on exactly one revision.
+Both parentheticals sum to 21, **one short of the 22 files the table moves**. The programme table's
+"the 24 runtime modules" phrase sits at **line 1524 on `master` and line 1527 on the branch**.
 
-Therefore:
+`[derived]` The five quantities this dossier uses, with the evidence that produces each:
 
-- **24** is a **row** count: it includes the three split barrels and counts
-  `validate-selected.js` + `validate-rejections.js` as one row.
-- **22** is the **file-move** count (section 5).
-- **21** is what both parentheticals sum to, short by one moved file in each revision.
-- **24 publication units** = 22 moved files + 2 prospective namespace barrels (`loaders/index.js`,
-  `persistence/index.js`). This coincides with the row count but for a different reason; the
-  coincidence is not evidence for either figure.
-
-`[unresolved]` Whether the three runtime-only barrels (`offers/index.js`, `query/index.js`,
-`orchestrator/index.js`) move at all, and to which path, is **not stated** in §11.2 — the rows give a
-target project but no destination. Until that is answered, the file count cannot become a destination
-table.
-
----
-
-## 5. A. Destination inventory (22 rows)
-
-**PROPOSED — NOT APPROVED.**
-
-Column meanings: *imports* = relative specifiers the file requires today; *dependents* = who requires
-it today (`[inspected]`); *tx* = transaction involvement; *provenance* = what the move needs from the
-manifest.
-
-| # | Source (today) | Proposed destination | Owner kind | Imports today | Dependents today | Tx | Provenance |
-|---|---|---|---|---|---|---|---|
-| 1 | `candidates/loader.js` | `runtime/src/loaders/candidates.js` | loader | `./input`, `./candidate`, `./roles`, `./errors` | `candidates/index.js:17` | none | rewrite needed |
-| 2 | `filtering/context-loader.js` | `runtime/src/loaders/filtering-context.js` | loader | `../candidates/{roles,input,candidate,errors}` | `filtering/index.js:35`, `filtering/pipeline.js:45`, `assembly/gpu-input.test.js:27`, `assembly/pipeline.test.js:33` | none | rewrite needed |
-| 3 | `filtering/pipeline.js` | `runtime/src/orchestrator/filtering-pipeline.js` — **`[unresolved]`**: §11.2 allows "or a runtime loader entry point" | composition | `./context-loader`, `./filter` | `filtering/index.js:36` | none | rewrite needed |
-| 4 | `scoring/load-scoring-model.js` | `runtime/src/loaders/scoring-model.js` | loader | `../candidates/errors`, `./configuration` | `scoring/index.js:56` | none | rewrite needed |
-| 5 | `scoring/load-assessments.js` | `runtime/src/loaders/assessments.js` | loader | `../candidates/errors` | `scoring/index.js:71` | none | rewrite needed |
-| 6 | `offers/select.js` | `runtime/src/loaders/offer-selection.js` | loader | `../candidates/{input,candidate,errors}`, `../assembly/prices`, `./as-of` | `offers/index.js:10`, `assembly/pipeline.test.js:32` | none | rewrite needed |
-| 7 | `query/load-query-input.js` | `runtime/src/loaders/query-input.js` | loader | `../candidates/{errors,input}` | `query/index.js:28` | none | rewrite needed |
-| 8 | `query/catalog-version.js` | `runtime/src/loaders/catalog-version.js` | loader | `../candidates/errors` | `query/index.js:34` | none | rewrite needed |
-| 9 | `offers/index.js` | **`[unresolved]`** (barrel; §11.2 gives no path) | barrel | `./select` | `orchestrator/run.js:141`, `swap-preview.js:77`, `apps/api` via barrel? (no) | none | unknown |
-| 10 | `query/index.js` | **`[unresolved]`** (barrel) | barrel | `./load-query-input`, `./catalog-version` | `orchestrator/run.js:139`, `swap-preview.js:75`, `apps/api/src/engine.js:35` | none | unknown |
-| 11 | `orchestrator/index.js` | **`[unresolved]`** (barrel) | barrel | `./run`, `./snapshot`, `./full-run`, `./swap-preview`, `./swap-commit` | `apps/api/src/engine.js:31`, `orchestrator/index.test.js` | none | unknown |
-| 12 | `persistence/persist-ranked.js` | `runtime/src/persistence/persist-ranked.js` | writer | `node:crypto`, `./validate-selected` | `orchestrator/commit.js:110`, `commit.test.js:39` | writes inside commit's tx | rewrite needed |
-| 13 | `persistence/persist-pass-facts.js` | `runtime/src/persistence/persist-pass-facts.js` | writer | `../candidates/errors` | `orchestrator/commit.js:112`, `commit.test.js:47`, `full-run.test.js:430` | writes inside commit's tx | rewrite needed |
-| 14 | `persistence/persist-rejections.js` | `runtime/src/persistence/persist-rejections.js` | writer | `node:crypto`, `../candidates/errors`, `./validate-rejections` | `orchestrator/commit.js:111`, `commit.test.js:43` | writes inside commit's tx | rewrite needed |
-| 15 | `persistence/validate-selected.js` | `runtime/src/persistence/validate-selected.js` | validator | `../candidates/errors`, `../candidates/roles` | `persist-ranked.js:41` | none (payload shape) | rewrite needed |
-| 16 | `persistence/validate-rejections.js` | `runtime/src/persistence/validate-rejections.js` | validator | `../candidates/errors` | `persist-rejections.js:89` | none (payload shape) | rewrite needed |
-| 17 | `orchestrator/run.js` | `runtime/src/orchestrator/run.js` | orchestrator | `../offers/as-of`, `../query`, `../candidates`, `../offers`, `../filtering`, `../scoring`, `../retention`, `../assembly`, `../candidates/errors` | `snapshot.js:48`, `swap-commit.js:79` (`SELECT_NOW_SQL`), `orchestrator/index.js` | **none** (one autocommit `SELECT CURRENT_TIMESTAMP`) | rewrite needed |
-| 18 | `orchestrator/snapshot.js` | `runtime/src/orchestrator/snapshot.js` | orchestrator | `../candidates/errors`, `./run` | `full-run.js:46`, `orchestrator/index.js`, `scripts/measure-api-pass-phases.js:64` | **owns read-only tx** | rewrite needed |
-| 19 | `orchestrator/full-run.js` | `runtime/src/orchestrator/full-run.js` | composition | `../ranking`, `./commit`, `./snapshot`, `../explanation` | `orchestrator/index.js` | **none** (composes) | rewrite needed |
-| 20 | `orchestrator/commit.js` | `runtime/src/orchestrator/commit.js` | orchestrator | `../candidates/errors`, `../persistence/persist-ranked`, `persist-rejections`, `persist-pass-facts` | `full-run.js:45`, `orchestrator/index.js`, `scripts/measure-api-pass-phases.js:65`, `scripts/test-orchestrator-commit.js:42` | **owns write tx** | rewrite needed |
-| 21 | `orchestrator/swap-preview.js` | `runtime/src/orchestrator/swap-preview.js` | orchestrator | `../query`, `../candidates`, `../offers`, `../filtering`, `../assembly`, `../candidates/errors` | `swap-commit.js:78` (`composeSwap`), `orchestrator/index.js` | one fn owns read-only tx, one owns none | rewrite needed |
-| 22 | `orchestrator/swap-commit.js` | `runtime/src/orchestrator/swap-commit.js` | orchestrator | `node:crypto`, `../assembly`, `../scoring`, `../candidates/errors`, `./swap-preview`, `./run` | `orchestrator/index.js` | one fn owns write tx, one owns none | rewrite needed |
-
-`[inspected]` Four old-path consumers must keep working unchanged: `apps/api/src/engine.js` (barrels
-only), `apps/api/test/unit/import-boundary.test.js` (barrel names), `scripts/measure-api-pass-phases.js`
-(deep `orchestrator/snapshot`, `orchestrator/commit`) and `scripts/test-orchestrator-commit.js` (deep
-`orchestrator/commit`). `verify-docs` `engine-layout` also requires `persistence/persist-ranked.js` to
-exist at the old path.
-
-`[inspected]` `eager-horizon-hare.md` and `silver-shore-roach.md`, named in the assignment as the
-inventory and refinement references, are **not present in this repository** (glob: 0 matches). This
-table is therefore derived from the §11.2 table and from the source imports, not from those files.
-
----
-
-## 6. B. Dependency graph and the three mixed-barrel splits
-
-**PROPOSED — NOT APPROVED.**
-
-### 6.1 Direction and prohibition findings
-
-`[inspected]` A grep of the whole tree for these four edges returned:
-
-| Prohibition | Finding |
-|---|---|
-| no loaders → orchestrator | **holds** today: no loader requires an orchestrator module |
-| runtime → API | **holds**: every `apps/api` mention under `src/`, `packages/` is a comment, not a `require` |
-| core → runtime | **holds**: no file under `packages/recommendation-core` and no file under `src/recommendation` mentions `recommendation-runtime` |
-| no import from `core/src/**` | **DOES NOT HOLD** at the three mixed barrels: `candidates/index.js:16` and `filtering/index.js:34` require `../../../packages/recommendation-core/src/<ns>` deep paths, and `scoring/index.js` uses the same pattern for its pure half |
-
-`[inspected]` The runtime order is strictly: `orchestrator/index.js` → {run, snapshot, full-run,
-swap-preview, swap-commit}; `full-run` → {snapshot, commit}; `snapshot` → `run`; `swap-commit` →
-{swap-preview, run}; `commit` → persistence writers; loaders → core shims only. There is no cycle, and
-no loader sits above an orchestrator.
-
-The deep `core/src/**` imports in the barrels are **step 6 material**, not W1: the barrels must stay
-byte-identical until the API stops importing them. W1 may not add a new deep core path; the runtime
-package must reach core through the package root (`require('../../../recommendation-core')`, already
-permitted by the boundary scanner) until step 6 lands.
-
-### 6.2 The three mixed-barrel splits (publication, not filesystem)
-
-`[inspected]` from the barrel sources and the W0 `docs/MIXED_BARRELS.md`:
-
-| Stage | Core publishes (pure) | Runtime publishes (SQL) | Runtime composition |
+| Term | Value | How it is produced | Appears in |
 |---|---|---|---|
-| `candidates/index.js` | role vocabulary, `ERROR_CODES`, `CandidateSelectionError`, input/candidate factories, selection stages, `selectCandidatePool`, `compareCandidates` | `loadCandidates` (`./loader`) | — |
-| `filtering/index.js` | `filterCandidates`, `CANDIDATE_STATUSES`, `buildIntegratedGpuPresentMap` | `loadFilteringContext`, `CONTEXT_COMPAT_KEYS` (`./context-loader`) | `filterCandidatesForRecommendation` (`./pipeline`) |
-| `scoring/index.js` | configuration and use-case validators, `GPU_POLICIES`, `selectAssessmentRow`, `effective-score`, `candidate-score`, `build-score` | `loadScoringModel` + `SELECT_SCORING_MODEL_SQL`, `loadComponentAssessments` + `SELECT_COMPONENT_ASSESSMENTS_SQL` | — |
+| RFC runtime-targeting **rows** | **24** | count of §11.2 rows whose target column includes runtime | §4, §6 |
+| Mixed **barrels** | **3** | `candidates/index.js`, `filtering/index.js`, `scoring/index.js` — target "core + runtime", split not moved | §6.2 |
+| Remaining RFC **rows** | **21** | 24 − 3 | §4 |
+| Proposed physical **file moves** | **22** | 21 rows, one of which names two files | §5.1 |
+| Numbered **inventory rows** | **22** | one per unique physical path (section 5.1); a file appears once even when it publishes several names | §5.1 |
+| Prospective **publication barrels** | **2** | `runtime/src/loaders/index.js`, `runtime/src/persistence/index.js` — neither exists; implied by RFC §11.5 | §5.2, §10 |
+| Publication **units** | **24** | 22 moves + 2 prospective barrels. Coincides with the row count for a different reason; the coincidence is not evidence for either figure | §5.2 |
+| Compatibility **shims** | **22** (proposed) | one identity shim per moved file, counted separately and never inside the move total | §9 |
 
-Rules the split must keep: one owner per name (no runtime public name may equal a core name — enforced
-by `test/surface.test.js`); no runtime module re-exports a core name; the old barrel's own test is not
-touched; SQL constants travel with their loader. The old barrels stay composite and byte-identical
-until step 6; only their required modules become shims.
+`[unresolved]` The parenthetical arithmetic of both revisions is one short of 22. Either a moved file
+is missing from the arithmetic or one of the 22 is not meant to move. This is question A1/A2 in the
+decision request and is **not** explained away here.
 
 ---
 
-## 7. C. Provenance: a fail-closed `declared-rewrite` policy
+## 5. Source-file inventory
+
+**PROPOSED — NOT APPROVED.**
+
+`[derived]` Every path in this section was resolved from the working tree at `880bb18` by a script that
+reads each file's `module.exports` object literal, collects its `require('…')` specifiers, and resolves
+every `require` in `src/`, `apps/`, `scripts/`, `packages/` and `test/` against the target path
+(extension and `/index.js` resolution, `node_modules`, `.next` and `dist` skipped). Dependents are
+therefore **resolved**, not string-matched: `require('./loader')` counts as a dependent of
+`candidates/loader.js`.
+
+### 5.1 The 22 unique physical paths
+
+Columns 1–8 of the required ten (path, owner, role, wave, destination, confirmation, compatibility
+treatment), then the evidence table 5.1b carries exports, imports and dependents keyed by the same `#`.
+"Owner today" is the current owner of the *file*: `core` = the pure implementation already moved behind
+the `packages/recommendation-core` shim, `runtime` = SQL-executing or composition code still in
+`src/recommendation`, `legacy barrel` = a published namespace barrel.
+
+| # | Source path (unique) | Owner today | Role | Wave | Proposed destination | Status | Compatibility treatment |
+|---|---|---|---|---|---|---|---|
+| 1 | `candidates/loader.js` | runtime | implementation (SQL loader) | W1 | `runtime/src/loaders/candidates.js` | confirmed by RFC §11.2 target | identity shim at old path |
+| 2 | `filtering/context-loader.js` | runtime | implementation (SQL loader) | W1 | `runtime/src/loaders/filtering-context.js` | confirmed | identity shim |
+| 3 | `filtering/pipeline.js` | runtime | composition (no SQL, no logic) | W1 | **`[unresolved]`** — §11.2 permits `runtime/orchestrator/filtering-pipeline.js` **or** a runtime loader entry point | unresolved (C4) | identity shim either way |
+| 4 | `scoring/load-scoring-model.js` | runtime | implementation (SQL loader) | W1 | `runtime/src/loaders/scoring-model.js` | confirmed | identity shim |
+| 5 | `scoring/load-assessments.js` | runtime | implementation (SQL loader) | W1 | `runtime/src/loaders/assessments.js` | confirmed | identity shim |
+| 6 | `offers/select.js` | runtime | implementation (SQL loader) | W1 | `runtime/src/loaders/offer-selection.js` | confirmed (row exists; path is this dossier's proposal) | identity shim |
+| 7 | `query/load-query-input.js` | runtime | implementation (SQL loader) | W1 | `runtime/src/loaders/query-input.js` | confirmed (same caveat) | identity shim |
+| 8 | `query/catalog-version.js` | runtime | implementation (SQL loader) | W1 | `runtime/src/loaders/catalog-version.js` | confirmed (same caveat) | identity shim |
+| 9 | `offers/index.js` | legacy barrel | namespace barrel (runtime-only, **not** mixed) | W1 candidate | **`[unresolved]`** — §11.2 gives no path | unresolved (C1) | shim only if the file moves |
+| 10 | `query/index.js` | legacy barrel | namespace barrel (runtime-only, no split) | W1 candidate | **`[unresolved]`** — §11.2 gives no path | unresolved (C2) | shim only if the file moves |
+| 11 | `orchestrator/index.js` | legacy barrel | namespace barrel (public entry surface) | W3 | **`[unresolved]`** — §11.2 gives no path | unresolved (C3) | shim only if the file moves |
+| 12 | `persistence/persist-ranked.js` | runtime | implementation (writer, uses `node:crypto`) | W2 | `runtime/src/persistence/persist-ranked.js` | confirmed | identity shim |
+| 13 | `persistence/persist-pass-facts.js` | runtime | implementation (writer) | W2 | `runtime/src/persistence/persist-pass-facts.js` | confirmed | identity shim |
+| 14 | `persistence/persist-rejections.js` | runtime | implementation (writer, uses `node:crypto`) | W2 | `runtime/src/persistence/persist-rejections.js` | confirmed | identity shim |
+| 15 | `persistence/validate-selected.js` | runtime | implementation (validator) | W2 | `runtime/src/persistence/validate-selected.js` | confirmed | identity shim |
+| 16 | `persistence/validate-rejections.js` | runtime | implementation (validator) | W2 | `runtime/src/persistence/validate-rejections.js` | confirmed | identity shim |
+| 17 | `orchestrator/run.js` | runtime | implementation (orchestration, no transaction) | W3 | `runtime/src/orchestrator/run.js` | confirmed | identity shim |
+| 18 | `orchestrator/snapshot.js` | runtime | implementation (**owns** the read-only transaction) | W3 | `runtime/src/orchestrator/snapshot.js` | confirmed | identity shim |
+| 19 | `orchestrator/full-run.js` | runtime | composition (sequences snapshot → commit) | W3 | `runtime/src/orchestrator/full-run.js` | confirmed | identity shim |
+| 20 | `orchestrator/commit.js` | runtime | implementation (**owns** the write transaction) | W3 | `runtime/src/orchestrator/commit.js` | confirmed | identity shim |
+| 21 | `orchestrator/swap-preview.js` | runtime | implementation (one function owns a read-only transaction) | W3 | `runtime/src/orchestrator/swap-preview.js` | confirmed | identity shim |
+| 22 | `orchestrator/swap-commit.js` | runtime | implementation (one function owns a write transaction) | W3 | `runtime/src/orchestrator/swap-commit.js` | confirmed | identity shim |
+
+Wave totals: **W1 = 8 files**, **W2 = 5**, **W3 = 6**, **barrel/unresolved = 3** (9, 10, 11) → **22**.
+No file appears twice, and no row counts a public name rather than a physical file.
+
+### 5.1b Evidence per row (exports, imports, dependents)
+
+`[derived]` Paths in *dependents* are shortened: `c/` = `src/recommendation/`, `p/` =
+`packages/`, `api/` = `apps/api/`, `sc/` = `scripts/`. Test files are listed because they are
+dependents that must keep resolving.
+
+| # | Exports today | Imports today | Dependents today |
+|---|---|---|---|
+| 1 | `loadCandidates` | `./input`, `./candidate`, `./roles`, `./errors` | `c/candidates/index.js` |
+| 2 | `loadFilteringContext`, `CONTEXT_COMPAT_KEYS` | `../candidates/{roles,input,candidate,errors}` | `c/filtering/{index.js,index.test.js,integration.test.js,pipeline.js,pipeline.test.js,context-loader.test.js,igpu-map.test.js}`, `c/assembly/{pipeline.test.js,gpu-input.test.js}` |
+| 3 | `filterCandidatesForRecommendation` | `./context-loader`, `./filter` | `c/filtering/{index.js,index.test.js,pipeline.test.js}` |
+| 4 | `loadScoringModel`, `SELECT_SCORING_MODEL_SQL` | `../candidates/errors`, `./configuration` | `c/scoring/{index.js,index.test.js,load-scoring-model.test.js}` |
+| 5 | `loadComponentAssessments`, `SELECT_COMPONENT_ASSESSMENTS_SQL` | `../candidates/errors` | `c/scoring/{index.js,index.test.js,load-assessments.test.js}` |
+| 6 | `selectOfferPrices`, `SELECT_OFFER_PRICES_SQL` | `../candidates/{input,candidate,errors}`, `../assembly/prices`, `./as-of` | `c/offers/{index.js,select.test.js}`, `c/assembly/pipeline.test.js` |
+| 7 | `loadQueryInput`, `SELECT_QUERY_INPUT_SQL`, `REQUIRED_ROLES` | `../candidates/{errors,input}` | `c/query/{index.js,load-query-input.test.js}` |
+| 8 | `catalogVersion`, `CATALOG_VERSION_SQL`, `CATALOG_COVERED_TABLES`, `CATALOG_VERSION_RE`, `buildCatalogVersionSql`, `fingerprintArm` | `../candidates/errors` | `c/query/{index.js,catalog-version.test.js}` |
+| 9 | `selectOfferPrices`, `SELECT_OFFER_PRICES_SQL` | `./select` | `c/orchestrator/{run.js,run.test.js,swap-preview.js,swap-preview.test.js,swap-commit.test.js}`, `sc/measure-api-pass-phases.js` |
+| 10 | `loadQueryInput`, `SELECT_QUERY_INPUT_SQL`, `REQUIRED_ROLES`, `catalogVersion`, `CATALOG_VERSION_SQL`, `CATALOG_COVERED_TABLES` | `./load-query-input`, `./catalog-version` | `c/orchestrator/{run.js,swap-preview.js,swap-preview.test.js,swap-commit.test.js}`, `api/src/engine.js`, `sc/measure-api-pass-phases.js` |
+| 11 | `runRecommendation`, `runRecommendationSnapshot`, `runRecommendationFullRun`, `evaluateSwapPreview`, `evaluateSwapPreviewSnapshot`, `commitSwap`, `commitSwapInTransaction`, `readCommittedSwap` | `./run`, `./snapshot`, `./full-run`, `./swap-preview`, `./swap-commit` | `api/src/engine.js`, `sc/{eval-scenarios.js,measure-orchestrator.js,verify-pool-independence.js}`, `c/orchestrator/index.test.js` |
+| 12 | `persistRanked` | `node:crypto`, `./validate-selected` | `c/orchestrator/{commit.js,commit.test.js}`, `c/persistence/persist-ranked.test.js` |
+| 13 | `persistPassFacts`, `validatePassFacts`, `UPDATE_RECOMMENDATION_QUERY_FLOOR_SQL`, `UPDATE_RECOMMENDATION_RESULT_FACTS_SQL` | `../candidates/errors` | `c/orchestrator/{commit.js,commit.test.js,full-run.test.js}`, `c/persistence/persist-pass-facts.test.js` |
+| 14 | `persistRejections`, `INSERT_BUILD_REJECTION_SQL`, `DELETE_BUILD_REJECTION_SQL` | `node:crypto`, `../candidates/errors`, `./validate-rejections` | `c/orchestrator/{commit.js,commit.test.js}`, `c/persistence/persist-rejections.test.js` |
+| 15 | `validateSelected` | `../candidates/errors`, `../candidates/roles` | `c/persistence/{persist-ranked.js,persist-ranked.test.js,validate-selected.test.js}` |
+| 16 | `validateRejections`, `REJECT_STATUS` | `../candidates/errors` | `c/persistence/{persist-rejections.js,persist-rejections.test.js}` |
+| 17 | `runRecommendation`, `SELECT_NOW_SQL` | `../offers/as-of`, `../query`, `../candidates`, `../offers`, `../filtering`, `../scoring`, `../retention`, `../assembly`, `../candidates/errors` | `c/orchestrator/{index.js,index.test.js,run.test.js,snapshot.js,snapshot.test.js,swap-commit.js,swap-commit.test.js}`, `sc/measure-api-pass-phases.js` |
+| 18 | `runRecommendationSnapshot`, `BEGIN_SQL`, `ROLLBACK_SQL` | `../candidates/errors`, `./run` | `c/orchestrator/{full-run.js,full-run.test.js,index.js,index.test.js,run.test.js,snapshot.test.js}`, `sc/measure-api-pass-phases.js` |
+| 19 | `runRecommendationFullRun` | `../ranking`, `./commit`, `./snapshot`, `../explanation` | `c/orchestrator/{index.js,index.test.js,full-run.test.js}`, `sc/test-orchestrator-full-run.js` |
+| 20 | `runRecommendationCommit`, `BEGIN_SQL`, `COMMIT_SQL`, `ROLLBACK_SQL`, `LOCK_RECOMMENDATION_QUERY_SQL`, `EXISTING_BUILD_CANDIDATES_SQL` | `../candidates/errors`, `../persistence/{persist-ranked,persist-rejections,persist-pass-facts}` | `c/orchestrator/{full-run.js,full-run.test.js,commit.test.js}`, `sc/{measure-api-pass-phases.js,test-orchestrator-commit.js}` |
+| 21 | `composeSwap`, `evaluateSwapPreview`, `evaluateSwapPreviewSnapshot`, `BEGIN_SQL`, `ROLLBACK_SQL`, `ELIGIBILITY_CHECK`, `NO_ELIGIBLE_OFFER`, `PRODUCT_NOT_CANDIDATE`, `INCOMPATIBLE` | `../query`, `../candidates`, `../offers`, `../filtering`, `../assembly`, `../candidates/errors` | `c/orchestrator/{index.js,index.test.js,swap-commit.js,swap-preview.test.js}` |
+| 22 | `commitSwap`, `commitSwapInTransaction`, `readCommittedSwap`, `BEGIN_SQL`, `COMMIT_SQL`, `ROLLBACK_SQL`, `INSERT_BUILD_CANDIDATE_SQL`, `INSERT_BUILD_COMPONENT_SQL`, `INSERT_RECOMMENDATION_SWAP_SQL`, `SELECT_COMMITTED_SWAP_SQL` | `node:crypto`, `../assembly`, `../scoring`, `../candidates/errors`, `./swap-preview`, `./run` | `c/orchestrator/{index.js,index.test.js,swap-commit.test.js}` |
+
+### 5.2 Reconciliation table
+
+`[derived]` Each category is a separate accounting line; the totals at the bottom are the only figures
+that may be quoted as "the move".
+
+| Category | Count | Exact evidence |
+|---|---|---|
+| Non-barrel source files that move (unique paths) | **19** | eighteen implementations (rows 1, 2, 4–8, 12–22) plus one composition module (row 3) |
+| Mixed-barrel sources (split, **not** moved) | **3** | `c/candidates/index.js`, `c/filtering/index.js`, `c/scoring/index.js` — stay byte-identical until step 6 |
+| Namespace barrels to be **created** | **2** | `runtime/src/loaders/index.js`, `runtime/src/persistence/index.js` (RFC §11.5 publishes `./loaders` and `./persistence`; neither exists) |
+| Unresolved legacy barrels | **3** | `c/offers/index.js`, `c/query/index.js`, `c/orchestrator/index.js` — rows 9, 10, 11; no destination in §11.2 |
+| Compatibility shims (proposed) | **22** | one identity shim per moved file (section 9); a shim is a *component*, never counted as a move |
+| Deferred files (explicitly out of W1) | **0** | no file is dropped from the 22; the three barrels are unresolved, not deferred |
+| **Total proposed file moves** | **22** | 19 non-barrel files + 3 barrels whose destination is unresolved (C1–C3). Every one of the 22 has a numbered row in 5.1 |
+
+`[unresolved]` **The arithmetic does not close, and is not forced to.** 24 rows − 3 split barrels = 21
+rows; one of those rows names two files, so the move set is 22. The inventory therefore must contain
+22 unique paths. Row 3 (`filtering/pipeline.js`) is a composition module, not a pure implementation, so
+a strict "implementation file" count is 18 + 1 composition + 3 barrels = 22. The category table above
+labels that split explicitly rather than hiding it: **19 non-barrel files move (18 implementations +
+1 composition), 3 barrels are unresolved, 3 mixed barrels stay, 2 publication barrels are created.**
+The sum that matters for the manifest is the **22**, and every one of them has a numbered row in 5.1.
+
+### 5.3 The four destinations the RFC does not fix
+
+`[unresolved]` None of these is decided here; each is question C1–C4 in the decision request.
+
+| # | Row | Source path | Responsibility today | Proposed physical destination | Proposed public namespace | Kind | Wave | Shim needed | Exact decision needed |
+|---|---|---|---|---|---|---|---|---|---|
+| C1 | 9 | `c/offers/index.js` | publishes the offer-price loader (`selectOfferPrices`, `SELECT_OFFER_PRICES_SQL`) | `runtime/src/offers/index.js` **or** folded into `loaders/index.js` | `.` + `./loaders`, or `./loaders` only | barrel | W1 | only if it moves | does the barrel move at all, and to which path |
+| C2 | 10 | `c/query/index.js` | publishes the query-input loader and the catalog-version loader | `runtime/src/query/index.js` **or** folded into `loaders/index.js` | `.` + `./loaders`, or `./loaders` only | barrel | W1 | only if it moves | same, for query |
+| C3 | 11 | `c/orchestrator/index.js` | the eight public orchestrator entry points | `runtime/src/orchestrator/index.js` **or** becomes the package root namespace builder | `.` + `./orchestrator`, or `.` only | barrel | W3 | only if it moves | which surface the package root publishes |
+| C4 | 3 | `c/filtering/pipeline.js` | composes `loadFilteringContext` → `filterCandidates`; owns no SQL and no logic | `runtime/src/orchestrator/filtering-pipeline.js` **or** `runtime/src/loaders/filtering-pipeline.js` | `./loaders` → `filterCandidatesForRecommendation` either way (RFC §11.5) | composition | W1 | yes | physical destination only; the public namespace is already fixed |
+
+`[inspected]` The answer to C1–C3 decides whether the package publishes three subpaths with private
+barrels or four subpaths with no internal barrels at all. That is why section 10 keeps the export map a
+proposal.
+
+### 5.4 Physical ownership is not public export
+
+`[proposed]` A file's physical destination and its public export path are two independent decisions,
+and the dossier records them separately. The clearest case is row 3: the RFC §11.2 places the
+`filtering/pipeline.js` **composition responsibility** with the orchestrator, while RFC §11.5 places
+`filterCandidatesForRecommendation` on the **`./loaders`** public namespace. Both statements can hold at
+once — physical ownership `runtime/src/orchestrator/`, public export `require('…/runtime/loaders')
+.filterCandidatesForRecommendation` — and collapsing them into one "destination" would silently pick a
+side the RFC leaves open.
+
+| Row | Physical destination (proposed) | Public export path (proposed) | Subject to |
+|---|---|---|---|
+| 3 | `runtime/src/orchestrator/filtering-pipeline.js` (**unresolved**) | `./loaders` → `filterCandidatesForRecommendation` | C4 (physical) / approved (public) |
+| 1, 2, 4, 5, 6, 7, 8 | `runtime/src/loaders/*` | `./loaders` | gate 5 |
+| 12–16 | `runtime/src/persistence/*` | `./persistence` | gate 5 |
+| 17–22 | `runtime/src/orchestrator/*` | `./orchestrator` (and `.` for the eight entry points, per C3) | C3 (root surface) |
+| 9, 10 | unresolved | `./loaders` (if moved) | C1 / C2 |
+| 11 | unresolved | `./orchestrator` (if moved) | C3 |
+
+---
+
+## 6. Dependency analysis and the three mixed barrels
+
+**PROPOSED — NOT APPROVED. No core file and no core import is modified here.**
+
+### 6.1 Four edge kinds, kept apart
+
+`[inspected]` The graph below distinguishes what exists **today** from what the extraction would
+introduce. Solid arrows are current source evidence; the dashed one is proposed architecture.
+
+| Edge kind | Example today | Evidence |
+|---|---|---|
+| physical module dependency | `orchestrator/commit.js` → `persistence/persist-ranked.js` | resolved `require` in row 20 |
+| public namespace re-export | `orchestrator/index.js` → `./run`, `./snapshot`, … | row 11's five requires |
+| legacy compatibility dependency | `c/filtering/index.js` → `p/recommendation-core/src/filtering` (deep) | barrel source, line 34 |
+| runtime → core public dependency (proposed) | `runtime/src/loaders/filtering-context.js` → `require('…/recommendation-core')` | **does not exist**; today the loader imports `../candidates/roles` etc. |
+
+Current graph (all edges `[inspected]`, all directions verified by resolution):
+
+```
+apps/api/src/engine.js ──► recommendation/orchestrator/index.js ──► {run, snapshot, full-run, swap-preview, swap-commit}
+                                │                                          │
+                                │                                          ├── run.js ──► {offers/index, query/index, candidates/index,
+                                │                                          │              filtering/index, scoring/index, retention, assembly}
+                                │                                          ├── snapshot.js ──► run.js
+                                │                                          ├── full-run.js ──► {snapshot.js, commit.js, ranking, explanation}
+                                │                                          ├── swap-preview.js ──► {query/index, candidates/index, offers/index,
+                                │                                          │                        filtering/index, assembly}
+                                │                                          └── swap-commit.js ──► {swap-preview.js, run.js, assembly, scoring}
+                                └── commit.js ──► persistence/{persist-ranked, persist-rejections, persist-pass-facts}
+                                                      └─► {validate-selected, validate-rejections}
+
+loaders (rows 1,2,4,5,6,7,8) ──► core shims (candidates/index, and for offers ../assembly/prices, ./as-of)
+barrels ──► packages/recommendation-core/src/** (deep; step 6 drift, unchanged)
+```
+
+Proposed addition (W1, unapproved): `runtime/src/loaders/*` → `require('../../../recommendation-core')`
+(package root, the only core form the boundary gate permits).
+
+### 6.2 The three mixed barrels, one by one
+
+`[inspected]` verbatim imports, from the file text at `880bb18`:
+
+- `c/candidates/index.js`: `const core = require('../../../packages/recommendation-core/src/candidates');`
+  and `const { loadCandidates } = require('./loader');`
+- `c/filtering/index.js`: `const core = require('../../../packages/recommendation-core/src/filtering');`,
+  `const { loadFilteringContext, CONTEXT_COMPAT_KEYS } = require('./context-loader');`,
+  `const { filterCandidatesForRecommendation } = require('./pipeline');`
+- `c/scoring/index.js`: **seven** pre-moved requires (`./load-scoring-model`, `./configuration`,
+  `./use-cases`, `./load-assessments`, `./effective-score`, `./candidate-score`, `./build-score`) —
+  it is the only mixed barrel that still imports its whole tree relatively. `[inspected]` Its pure half
+  reaches core through the PR 4–6 shims at the old paths, not through a deep `core/src/**` require.
+
+| Barrel | Core responsibility | Runtime responsibility | Composition responsibility | Private `core/src/**` import | Approved public Core import | Legacy-only dependency | Proposed future package dependency | Owner approval |
+|---|---|---|---|---|---|---|---|---|
+| `candidates/index.js` | role vocabulary, `ERROR_CODES`, `CandidateSelectionError`, factories, `selectCandidatePool`, `compareCandidates` | `loadCandidates` | — | **yes** (line 16) | none yet — core root only after step 6 | `./loader` | `require('…/recommendation-core')` + `./loader` shim → later the runtime loader | step 6 owner |
+| `filtering/index.js` | `filterCandidates`, `CANDIDATE_STATUSES`, `buildIntegratedGpuPresentMap` | `loadFilteringContext`, `CONTEXT_COMPAT_KEYS` | `filterCandidatesForRecommendation` | **yes** (line 34) | none yet | `./context-loader`, `./pipeline` | same shape | step 6 owner |
+| `scoring/index.js` | configuration + use-case validators, `GPU_POLICIES`, effective/candidate/build score | `loadScoringModel` + SQL constant, `loadComponentAssessments` + SQL constant | — | **no** (relative pure imports that are already core shims) | none yet | seven relative requires, three of which are already shims | same shape | step 6 owner |
+
+`[inspected]` Rules the split must keep: one owner per public name (no runtime name may equal a core
+name — enforced by `test/surface.test.js`); no runtime module re-exports a core name; the old barrel's
+own test is not edited; SQL constants travel with their loader.
+
+### 6.3 Direction, cycles and the W1 order
+
+`[inspected]` Verified by the resolved graph in 6.1:
+
+| Prohibition | Verdict | Evidence |
+|---|---|---|
+| no loader → orchestrator | **holds** | no row 1–8 file requires an `orchestrator/*` file |
+| runtime → API | **holds** | no `require` of `apps/api` anywhere under `src/` or `packages/` |
+| core → runtime | **holds** | no file under `packages/recommendation-core` mentions `recommendation-runtime` |
+| no `core/src/**` import | **does not hold** | the two barrels at 6.2 deep-import `core/src/**`; row 4/5 import `../candidates/errors`, which today resolves to a core shim |
+
+`[inspected]` No cycle exists today: `orchestrator/index.js` fans out to five modules that never import
+it back; `full-run → snapshot → run`, `swap-commit → {swap-preview, run}`, `commit → persistence`, and
+`persistence/{persist-ranked, persist-rejections} → validate-*`. The only cycles the extraction could
+create are (a) a `loaders/index.js` that a loader imports (the new barrel must import loaders, never the
+reverse) and (b) `orchestrator/index.js` requiring the package root — both are prohibited by the W0
+boundary test's `root-cycle` rule, which the extracted tree must also pass.
+
+`[proposed]` The order that keeps every edge pointing the same way: W1 loaders (rows 1–8, plus the two
+publication barrels) → W2 persistence (12–16) → W3 orchestrator (17–22 and row 11). W1 adds no
+orchestrator edge, W2 adds only `commit → persistence` edges that already exist, and W3 closes over
+everything below it. A different order (orchestrator before loaders) would contradict 6.1.
+
+---
+
+## 7. Provenance: the `declared-rewrite` policy
 
 **PROPOSED — NOT APPROVED. Design only — no verifier change, no manifest entry, no whitespace
 exemption before approval.**
@@ -289,248 +437,382 @@ exemption before approval.**
 `[inspected]` `scripts/lib/extraction-manifest.js` implements exactly one `identity_policy`
 (`byte-identical`) and refuses any other value. Post-move changes are recorded through `edits[]`, a
 two-commit procedure (edit commit touching only the destination, then a record commit touching only the
-manifest), with the record commit derived from history rather than declared. There is **no** mechanism
-to declare an import rewrite, so a W1 move whose specifiers must change cannot be represented today.
+manifest), with the record commit derived from history. There is **no** mechanism to declare an import
+rewrite, so a W1 move whose specifiers must change cannot be represented today.
 
-### 7.2 Policy shape
+### 7.2 The eight steps the verifier must perform
 
-`[proposed]` A second policy, selected per batch or per module, that reconstructs the expected
-destination bytes from the **baseline source blob** and refuses anything that does not match exactly:
+`[proposed]` In order, with no step skippable:
 
-```json
-{
-  "id": "step-5-w1",
-  "baseline_sha": "<40 hex>",
-  "identity_policy": "declared-rewrite",
-  "modules": [
-    {
-      "source": "src/recommendation/candidates/loader.js",
-      "destination": "packages/recommendation-runtime/src/loaders/candidates.js",
-      "rewrites": [
-        { "id": "cand-input", "find": "require('./input')",   "replace": "require('../../../recommendation-core/candidates')", "count": 1 },
-        { "id": "cand-roles", "find": "require('./roles')",   "replace": "require('../../../recommendation-core/candidates')", "count": 1 }
-      ]
-    }
-  ]
-}
-```
+1. **Authorize the source.** The batch names an immutable `baseline_sha`. The verifier resolves
+   `baseline_sha:source_path` to a blob and refuses if the object is missing or is not a blob.
+2. **Identify the original content.** `sha256(baseline_blob)` is compared with the digest the manifest
+   records; a mismatch means history moved under the declaration.
+3. **Declare the destination.** Every `modules[]` entry names exactly one `source` and one
+   `destination`; both are repository-relative, normalized, and inside the workspace root.
+4. **Declare the rewrites.** `rewrites[]` is ordered; each rule has an `id`, a `find`, a `replace` and
+   an expected `count`. A rule without a count is invalid, not a default of 1.
+5. **Check the rewrite counts.** Each rule must match its baseline input exactly `count` times; zero
+   matches and extra matches are both errors. Rules are applied sequentially, so a later rule sees the
+   bytes the earlier ones produced.
+6. **Reconstruct the bytes.** `expected = apply(rewrites, baseline_blob)` as bytes, never as a parsed
+   AST and never with line-ending or whitespace normalization.
+7. **Compare against the destination.** `sha256(expected) == sha256(destination_blob)`, byte for byte.
+   There is no path where a rule that did not fire is ignored.
+8. **Reject missing and extra files.** Every declared destination must exist and match; every file the
+   batch *added* under the batch's declared destination roots must be declared; every declared source
+   must still exist at `baseline_sha`; deletions outside the declared set are refused.
 
-Design constraints:
+`[proposed]` **What provenance does not establish:** byte equality with a declared rewrite proves the
+move is what the manifest says it is. It does **not** prove behavioural equivalence, that the rewritten
+imports resolve, or that the module still passes its tests. Those are separate requirements — the
+characterization fixture, the suite, and the recording-fake-client tests of section 8 — and a green
+`verify:extraction` must never be reported as "the move is behaviourally safe".
 
-1. `rewrites` is **ordered** and applied sequentially to the baseline bytes; each rule declares an
-   exact match `count`.
-2. A rule that matches zero times, or more than `count`, is an error — never a partial success.
-3. Candidate rules must be **non-overlapping** and each must fail if its own match count is not exact.
-4. The verifier computes `sha256(apply(rewrites, baseline_blob))` and requires equality with
-   `sha256(destination_blob)`, plus `sha256(baseline_blob)` equality with the recorded baseline.
-   There is no path where an unmatched rule is ignored.
-5. Byte-exact comparison only. No whitespace normalisation, no line-ending tolerance, no
-   `git diff --ignore-*`. A CRLF/LF change is a mismatch, deliberately.
-6. The manifest stays fail-closed on unknown keys and unknown policies, and `rewrites` is rejected
-   unless the policy is `declared-rewrite`.
-7. Every rule must name a target inside the batch's declared destination set; a rule that points at a
-   file not declared in `modules` fails.
+### 7.3 Path security requirements (D1)
 
-### 7.3 Negative-test matrix (each must fail closed)
+`[proposed]` Every path in a manifest entry — source, destination, rewrite target — must satisfy all
+twelve checks, in this order:
 
-| Case | Fixture | Expected |
+| # | Requirement | Rejection |
 |---|---|---|
-| ambiguous | one rule whose `find` occurs twice with `count: 1` | FAIL (`count` mismatch) |
-| duplicate | the same `id` twice in one module | FAIL (schema) |
-| duplicate module | the same `source` or `destination` twice in a batch | FAIL (schema) |
-| overlapping | two rules whose match ranges intersect | FAIL (overlap detected) |
-| unmatched | `find` absent from the baseline blob | FAIL |
-| extra | a rule surviving after the ordered application produced the expected bytes | FAIL |
-| modified destination | destination edited after the move | FAIL (sha256) |
-| reordered | two independent rules swapped, producing different bytes | FAIL (sha256) |
-| source drift | baseline blob edited in history | FAIL (baseline sha) |
-| destination drift | destination edited in a later commit | FAIL (destination sha) |
-| binary | destination contains NUL / non-UTF-8 bytes | FAIL (binary refusal) |
-| CRLF/LF | destination or baseline line endings changed | FAIL (byte mismatch) |
-| unauthorized target | rewrite pointing outside the declared destinations | FAIL (scope) |
-| policy absent | `rewrites` present without `identity_policy: declared-rewrite` | FAIL (schema) |
+| 1 | repository-relative, no leading drive or volume | absolute path |
+| 2 | no leading `/` or `\` | root-anchored path |
+| 3 | no `..` segment after POSIX normalization | parent-directory traversal |
+| 4 | `.` and empty segments collapsed before comparison, not after | non-canonical path |
+| 5 | `\` normalized to `/` before comparison | separator ambiguity |
+| 6 | case-sensitivity policy stated once: comparison is **case-sensitive** on every platform, so a Windows checkout cannot mask a case mismatch | case-only duplicate |
+| 7 | the source real path must equal the resolved path (no symlink at the source) | symlink source |
+| 8 | the destination real path must equal the resolved path, or must not exist yet | symlink destination |
+| 9 | both real paths are contained in the workspace root after `realpath` | symlink escape |
+| 10 | the destination must not be inside `node_modules/`, `.git/`, `.next/` or `dist/` | generated-tree target |
+| 11 | the destination must not already be tracked at the baseline (a move creates it) | pre-existing destination |
+| 12 | a shim and an implementation may never share a destination path | shim/implementation collision |
+
+### 7.4 Manifest integrity requirements (D2)
+
+`[proposed]` These are refused as batch errors, never as warnings:
+
+| # | Rejection | Why |
+|---|---|---|
+| 1 | duplicate `source` strings | two rules would rewrite the same baseline blob |
+| 2 | duplicate `destination` strings | two modules would claim one file |
+| 3 | normalized-path collision (`a//b`, `a/./b`, `a\b` → same path) | passes a naive string check, fails a real one |
+| 4 | missing source blob at `baseline_sha` | the move cannot be authorized |
+| 5 | missing destination file at the batch's head | the move did not happen |
+| 6 | changed baseline blob | history rewritten under the declaration |
+| 7 | undeclared destination file inside a declared destination root | the batch smuggles a file |
+| 8 | undeclared implementation file (a new file outside the destination roots) | the batch adds code it did not declare |
+| 9 | unauthorized deletion (a source removed without a declared destination) | a module disappears |
+| 10 | unauthorized modification (a tracked file outside `modules[]` changed by the batch) | the batch edits what it did not declare |
+| 11 | a shim represented as an implementation move (identity shim in `modules[]` with `rewrites: []` and a destination ≠ a real move) | the shim is a component, not a move |
+| 12 | `rewrites` present with any `identity_policy` other than `declared-rewrite`, or an unknown key anywhere | schema fail-closed |
+
+### 7.5 Negative-test matrix — 24 cases, each must fail closed
+
+`[proposed]` The 14 cases from the previous revision are preserved (1–14) and 10 are added (15–24).
+
+| # | Case | Fixture | Expected failure |
+|---|---|---|---|
+| 1 | ambiguous | one rule whose `find` occurs twice with `count: 1` | count mismatch |
+| 2 | duplicate rule | the same `id` twice in one module | schema |
+| 3 | duplicate module | the same `source` or `destination` twice in a batch | schema |
+| 4 | overlapping | two rules whose match ranges intersect | overlap detected |
+| 5 | unmatched | `find` absent from the baseline blob | count = 0 |
+| 6 | extra | a rule whose `find` appears after the expected bytes were produced | count mismatch |
+| 7 | modified destination | destination edited after the move | destination sha256 |
+| 8 | reordered | two independent rules swapped, different bytes | byte mismatch |
+| 9 | source drift | baseline blob edited in history | baseline sha256 |
+| 10 | destination drift | destination edited in a later commit | destination sha256 |
+| 11 | binary | destination contains NUL / non-UTF-8 | binary refusal |
+| 12 | CRLF/LF | destination or baseline line endings changed | byte mismatch |
+| 13 | unauthorized target | rewrite pointing outside the declared destinations | scope |
+| 14 | policy absent | `rewrites` without `identity_policy: declared-rewrite` | schema |
+| 15 | parent traversal | `destination: "../../outside.js"` | path check 3 |
+| 16 | absolute path | `destination: "C:/repo/x.js"` or `"/x.js"` | path checks 1–2 |
+| 17 | symlink escape | destination directory is a symlink to a sibling of the workspace | path check 9 |
+| 18 | symlink source | the source path is a symlink to another tracked file | path check 7 |
+| 19 | duplicate normalized destination | `a/b.js` and `a//b.js` in two modules | D2 check 3 |
+| 20 | extra destination file | an undeclared file under the destination root | D2 check 7 |
+| 21 | missing source | `source` not present at `baseline_sha` | D2 check 4 |
+| 22 | missing destination | declared module absent at head | D2 check 5 |
+| 23 | modified source baseline | a different blob at the same path | D2 check 6 |
+| 24 | shim as implementation | shim listed in `modules[]` as a move | D2 check 11 |
 
 `[owner]` Adopting the policy is a review decision (gate 6). Agent 3 does not edit the manifest schema,
-the verifier, or `check:whitespace` and does not introduce an exemption.
+the verifier, or `check:whitespace`, and introduces no exemption.
 
 ---
 
-## 8. D. Transaction contract and behavioural test plan
+## 8. Transaction behavioural contract
 
-**PROPOSED — NOT APPROVED. No transaction behaviour changes.**
+**PROPOSED — NOT APPROVED. No transaction behaviour changes; this is a specification for tests that
+do not exist yet.**
 
-### 8.1 Contract verified against source
+### 8.1 Ownership verified against source
 
-`[inspected]` `snapshot.js:1-45` documents and implements `BEGIN ISOLATION LEVEL REPEATABLE READ READ
-ONLY` … `ROLLBACK` on both paths, never `COMMIT`, `BEGIN` outside `try`; `run.js` has no transaction
-control and issues one `SELECT CURRENT_TIMESTAMP AS now` (`run.js:152`); `swap-commit.js:534-552`
-implements `commitSwapInTransaction` (`BEGIN` … `COMMIT`, `ROLLBACK` on error, original error wins);
-`commitSwap` (`swap-commit.js:244`) takes the caller's handle; `full-run.js:72,125` calls
-`runRecommendationSnapshot` then `runRecommendationCommit` sequentially on one client.
+`[inspected]` Constants and control flow read from `880bb18`:
 
 | Module / API | Transaction ownership | Evidence |
 |---|---|---|
-| `snapshot.js` / `runRecommendationSnapshot` | owns the read-only repeatable-read transaction | `snapshot.js:1-45` |
-| `commit.js` / `runRecommendationCommit` | owns the write transaction | `W0 docs/ORCHESTRATOR_ENTRY_POINTS.md` + `commit.js` |
-| `commitSwap` | caller-owned; opens none | `swap-commit.js:244` |
-| `commitSwapInTransaction` | owns the write transaction | `swap-commit.js:534-552` |
-| `run.js` / `runRecommendation` | owns none | `run.js:117,152` |
-| `full-run.js` | owns none; sequences the two | `full-run.js:72,125` |
+| `orchestrator/snapshot.js` / `runRecommendationSnapshot` | **owns** the read-only transaction; `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` (`BEGIN_SQL`, line 51), `ROLLBACK` (`ROLLBACK_SQL`, line 54) on **both** paths, `COMMIT` never, `BEGIN` outside the `try` (line 91) | file header + body |
+| `orchestrator/run.js` / `runRecommendation` | owns **none**; exactly one `SELECT CURRENT_TIMESTAMP AS now` (`SELECT_NOW_SQL`, line 152) | header lines 117, 212, 250 |
+| `orchestrator/commit.js` / `runRecommendationCommit` | **owns** the write transaction: plain `BEGIN` (Decision 18-D9), `LOCK_RECOMMENDATION_QUERY_SQL` + `EXISTING_BUILD_CANDIDATES_SQL` guards, the three writers, `COMMIT` on success, `ROLLBACK` on error; pass-facts validation happens **before** `BEGIN` (line 191) | header + constants 118–138 |
+| `orchestrator/swap-preview.js` / `evaluateSwapPreviewSnapshot` | **owns** a read-only transaction, `BEGIN` … `ROLLBACK` always (lines 518, 528); `evaluateSwapPreview` and `composeSwap` own none | header lines 251, 272, 280 |
+| `orchestrator/swap-commit.js` / `commitSwapInTransaction` | **owns** the write transaction, `BEGIN` (line 536) … `COMMIT` (549) / `ROLLBACK` (542); `commitSwap` owns none and runs on the caller's handle; `readCommittedSwap` issues one `SELECT_COMMITTED_SWAP_SQL` | lines 216, 244, 502, 534 |
+| `orchestrator/full-run.js` | owns **none**; sequences `runRecommendationSnapshot` → `runRecommendationCommit` on one client | line 71 |
 
-### 8.2 Recording-fake-client cases (W1 work, not W0)
+### 8.2 Success traces
 
-`[proposed]` Each case asserts the exact ordered `(sql, params)` sequence against a recording fake:
+`[proposed]` Notation: `→` is one `client.query(sql, params)` call in order; `[…]` is the constrained
+argument shape; "prohibited" means the fake client must record a failure if the statement occurs.
 
-1. **snapshot success** — `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` precedes every read;
-   final statement is `ROLLBACK`; `COMMIT` never appears.
-2. **snapshot failure after `BEGIN`** — `ROLLBACK` still issued exactly once; the pass error is
-   rethrown unchanged.
-3. **snapshot `BEGIN` failure** — no `ROLLBACK` attempted.
-4. **rollback failure** — the failing `ROLLBACK` does not mask the original error.
-5. **commit success** — one `BEGIN`, the `recommendation_query` `FOR UPDATE` guard, REPLACE-style
-   writers, `COMMIT`; no second `BEGIN`.
-6. **commit failure** — `ROLLBACK`, original error preserved.
-7. **`commitSwapInTransaction`** — own `BEGIN`…`COMMIT`; `commitSwap` issues no `BEGIN`/`COMMIT`/
-   `ROLLBACK` on the handle it is given.
-8. **`run`** — no transaction statements at all; exactly one `SELECT CURRENT_TIMESTAMP AS now`.
-9. **client identity** — every statement of one pass goes to the same client object; the runtime never
-   creates, releases or closes one.
-10. **no nesting** — no `BEGIN` occurs while another transaction is open in the recorded stream.
-11. **`full-run` ordering** — the snapshot's `ROLLBACK` index precedes the commit's `BEGIN` index on
-    the same client.
+| Operation | Initial state | Expected ordered SQL | Arguments | Result / final state |
+|---|---|---|---|---|
+| read-only snapshot | client connected, no transaction | `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` → stage reads → `ROLLBACK` | `BEGIN`/`ROLLBACK` take no params; each stage read carries its constant SQL and array params | frozen pass result; transaction closed by `ROLLBACK`; **`COMMIT` is prohibited** |
+| full recommendation run (W3 orchestration) | client connected, inside the caller's read transaction (opened by `snapshot.js`) | the stage reads of 8.1's `run.js`, beginning with `SELECT CURRENT_TIMESTAMP AS now` | the timestamp read takes no params | frozen pass; **no `BEGIN`/`COMMIT`/`ROLLBACK` may appear in `run.js`'s trace** |
+| write commit | client connected, no transaction | `BEGIN` → `LOCK_RECOMMENDATION_QUERY_SQL` → `EXISTING_BUILD_CANDIDATES_SQL` → writer INSERT/DELETE/UPDATE statements → `COMMIT` | `BEGIN` no params; lock/guard/replace statements take `[queryId]`-shaped arrays | committed pass; transaction closed by `COMMIT`; a second `BEGIN` is prohibited |
+| swap preview snapshot | client connected, no transaction | `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` → preview reads → `ROLLBACK` | `[sourceResultId]`-shaped where the SQL declares `$1` | preview envelope; `COMMIT` prohibited |
+| swap commit in transaction | client connected, no transaction | `BEGIN` → `SELECT_COMMITTED_SWAP_SQL`-shaped reads/writes → `COMMIT` | `[sourceResultId]` and identifier arrays | committed swap; `COMMIT` exactly once |
+| swap commit (caller-owned) | client connected, **inside** the caller's transaction | the same statements, **no** `BEGIN`, **no** `COMMIT`, **no** `ROLLBACK` | as above | result; transaction left open for the caller |
+| `readCommittedSwap` | any | one `SELECT_COMMITTED_SWAP_SQL` | `[sourceResultId]` | row or null; no transaction control |
 
-These replace the static keyword parity check as *acceptance*; the parity check stays as a pre-check.
+### 8.3 Failure traces
 
-### 8.3 Documentation wording correction (proposal only)
+`[proposed]` Each case names the exact statement that fails and the exact sequence after it.
 
-`[inspected]` `packages/recommendation-runtime/docs/LOADERS_AND_TRANSACTIONS.md` currently says:
+| # | Failure point | Expected trace | Assertion that detects drift |
+|---|---|---|---|
+| 1 | `BEGIN` fails (snapshot, commit, swap-commit) | `BEGIN` throws; **no `ROLLBACK` attempted** (there is no transaction to end) | the trace has length 1; the original error is rethrown unchanged |
+| 2 | first read fails inside the transaction | `BEGIN` → failing read → `ROLLBACK` | `ROLLBACK` exactly once, last |
+| 3 | a later read fails | `BEGIN` → reads → failing read → `ROLLBACK` | the successful reads still appear, in order, before `ROLLBACK` |
+| 4 | a writer fails inside commit | `BEGIN` → guards → failing write → `ROLLBACK` | no `COMMIT`; `ROLLBACK` last |
+| 5 | `COMMIT` fails | `BEGIN` → guards → writes → `COMMIT` throws → `ROLLBACK` attempted | the `COMMIT` error wins over any `ROLLBACK` error |
+| 6 | `ROLLBACK` fails | original error surfaces, rollback error discarded | the thrown value is the pass error, byte-identical message/code |
+| 7 | error preservation | every path above | `Object.is(thrown, originalError)`, not a wrapper |
+| 8 | cleanup failure / partial operation | a writer that throws after a partial INSERT | `ROLLBACK` issued; no retry; no `COMMIT`; the error is the writer's |
+| 9 | pass-facts validation failure in commit | **no `BEGIN` at all** (validation precedes it, line 191) | the trace is empty; a `BEGIN` here is a regression |
+
+### 8.4 What the recording fake client must assert
+
+`[proposed]` The specification distinguishes four things, and a test that only asserts "some calls
+happened" is not acceptable:
+
+1. **Operations expected** — the exact ordered `(sql, params)` list, compared element by element. Not a
+   subset, not a count.
+2. **Operations prohibited** — a per-operation list (`COMMIT` prohibited for the snapshot; `BEGIN`,
+   `COMMIT` and `ROLLBACK` prohibited for `run.js` and for `commitSwap`). Any prohibited statement is a
+   failure, whether or not the expected list also matched.
+3. **Ordering** — the index of every statement is asserted, so a reordering fails even when the
+   multiset of statements is identical.
+4. **Identity and ownership** — every statement of one pass goes to the **same** client object (the
+   fake records `this`/receiver), and the client is never created, released or closed by the runtime.
+   `full-run` additionally asserts that the snapshot's `ROLLBACK` index precedes the commit's `BEGIN`
+   index on the same client.
+
+### 8.5 Documentation wording correction (proposal only)
+
+`[inspected]` `packages/recommendation-runtime/docs/LOADERS_AND_TRANSACTIONS.md` says:
 
 > "**The read snapshot** is opened by the caller: `orchestrator/run.js` runs stages 1-10 inside a
 > caller-owned `REPEATABLE READ READ ONLY` transaction"
 
-`[proposed]` Correction: the **caller supplies the dedicated client**; `orchestrator/snapshot.js` **owns**
-the transaction (`BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` … `ROLLBACK` both paths, never
-`COMMIT`), and `orchestrator/run.js` owns no transaction control at all. The change is one sentence in
-a W0-owned document and needs its owner's approval; Agent 3 has not edited it.
+`[proposed]` Correction: the **caller supplies the dedicated client**; `orchestrator/snapshot.js`
+**owns** the transaction, `orchestrator/run.js` owns no transaction control at all. The change is one
+sentence in a W0-owned document and needs its owner's approval; Agent 3 has not edited it.
 
 ---
 
-## 9. E. Test ownership, shims and exports
+## 9. Compatibility shim plan (path by path)
 
-**PROPOSED — NOT APPROVED.**
+**PROPOSED — NOT APPROVED. No shim is created here.**
 
-### 9.1 `step-5-w1` inventory (loaders batch)
+`[proposed]` Every moved file keeps an old-path identity re-export, mirroring the core's pattern. A shim
+exports the **same object** (`module.exports = require('<new path>')` or an explicit identity
+re-export), adds no behaviour, no default and no eager side effect, and is a *compatibility component*
+— it is never counted as a move and never recorded in `modules[]`.
 
-Move with their module (8 suites):
+`[derived]` Consumers below are the resolved dependents from 5.1b; "required" is yes whenever a
+dependent still exists at W1 time, which is every row (no consumer is being edited in W1).
 
-`candidates/loader.test.js`, `filtering/context-loader.test.js`, `filtering/pipeline.test.js`,
-`scoring/load-assessments.test.js`, `scoring/load-scoring-model.test.js`, `offers/select.test.js`,
-`query/catalog-version.test.js`, `query/load-query-input.test.js`.
+| Old path (shim) | New implementation path | Consumers that must keep resolving | Shim required | Duration | Deprecation expected | Responsible owner | Identity assertion |
+|---|---|---|---|---|---|---|---|
+| `c/candidates/loader.js` | `runtime/src/loaders/candidates.js` | `c/candidates/index.js` | yes | until step 6 | yes, at step 6 | Agent 3 / step 6 owner | `require(old) === require(new)` |
+| `c/filtering/context-loader.js` | `runtime/src/loaders/filtering-context.js` | `c/filtering/{index.js,pipeline.js}` + 7 test files | yes | until step 6 | yes | same | same |
+| `c/filtering/pipeline.js` | **destination unresolved (C4)** | `c/filtering/{index.js,pipeline.test.js}` | yes | until step 6 | yes | same | same |
+| `c/scoring/load-scoring-model.js` | `runtime/src/loaders/scoring-model.js` | `c/scoring/{index.js,load-scoring-model.test.js}` | yes | until step 6 | yes | same | same |
+| `c/scoring/load-assessments.js` | `runtime/src/loaders/assessments.js` | `c/scoring/{index.js,load-assessments.test.js}` | yes | until step 6 | yes | same | same |
+| `c/offers/select.js` | `runtime/src/loaders/offer-selection.js` | `c/offers/index.js`, `c/offers/select.test.js`, `c/assembly/pipeline.test.js` | yes | until step 6 | yes | same | same |
+| `c/query/load-query-input.js` | `runtime/src/loaders/query-input.js` | `c/query/{index.js,load-query-input.test.js}` | yes | until step 6 | yes | same | same |
+| `c/query/catalog-version.js` | `runtime/src/loaders/catalog-version.js` | `c/query/{index.js,catalog-version.test.js}` | yes | until step 6 | yes | same | same |
+| `c/persistence/persist-ranked.js` | `runtime/src/persistence/persist-ranked.js` | `c/orchestrator/{commit.js,commit.test.js}`, `c/persistence/persist-ranked.test.js` | yes | until step 6 | yes | same | same |
+| `c/persistence/persist-pass-facts.js` | `runtime/src/persistence/persist-pass-facts.js` | `c/orchestrator/{commit.js,commit.test.js,full-run.test.js}`, `c/persistence/persist-pass-facts.test.js` | yes | until step 6 | yes | same | same |
+| `c/persistence/persist-rejections.js` | `runtime/src/persistence/persist-rejections.js` | `c/orchestrator/{commit.js,commit.test.js}`, `c/persistence/persist-rejections.test.js` | yes | until step 6 | yes | same | same |
+| `c/persistence/validate-selected.js` | `runtime/src/persistence/validate-selected.js` | `c/persistence/{persist-ranked.js,persist-ranked.test.js,validate-selected.test.js}` | yes | until step 6 | yes | same | same |
+| `c/persistence/validate-rejections.js` | `runtime/src/persistence/validate-rejections.js` | `c/persistence/{persist-rejections.js,persist-rejections.test.js}` | yes | until step 6 | yes | same | same |
+| `c/orchestrator/run.js` | `runtime/src/orchestrator/run.js` | `c/orchestrator/{index.js,snapshot.js,swap-commit.js}` + 4 test files, `sc/measure-api-pass-phases.js` | yes | until step 6 | yes | same | same |
+| `c/orchestrator/snapshot.js` | `runtime/src/orchestrator/snapshot.js` | `c/orchestrator/{index.js,full-run.js}` + 4 test files, `sc/measure-api-pass-phases.js` | yes | until step 6 | yes | same | same |
+| `c/orchestrator/full-run.js` | `runtime/src/orchestrator/full-run.js` | `c/orchestrator/{index.js,full-run.test.js}`, `sc/test-orchestrator-full-run.js` | yes | until step 6 | yes | same | same |
+| `c/orchestrator/commit.js` | `runtime/src/orchestrator/commit.js` | `c/orchestrator/{full-run.js,commit.test.js}`, `sc/{measure-api-pass-phases.js,test-orchestrator-commit.js}` | yes | until step 6 | yes | same | same |
+| `c/orchestrator/swap-preview.js` | `runtime/src/orchestrator/swap-preview.js` | `c/orchestrator/{index.js,swap-commit.js,swap-preview.test.js}` | yes | until step 6 | yes | same | same |
+| `c/orchestrator/swap-commit.js` | `runtime/src/orchestrator/swap-commit.js` | `c/orchestrator/{index.js,swap-commit.test.js}` | yes | until step 6 | yes | same | same |
+| `c/offers/index.js` | **unresolved (C1)** | `c/orchestrator/{run.js,swap-preview.js}` + 3 test files, `sc/measure-api-pass-phases.js` | only if it moves | — | — | same | same |
+| `c/query/index.js` | **unresolved (C2)** | `api/src/engine.js`, `c/orchestrator/{run.js,swap-preview.js}` + 2 test files, `sc/measure-api-pass-phases.js` | only if it moves | — | — | same | same |
+| `c/orchestrator/index.js` | **unresolved (C3)** | `api/src/engine.js`, `sc/{eval-scenarios.js,measure-orchestrator.js,verify-pool-independence.js}` | only if it moves | — | — | same | same |
 
-Stay with the composite barrels (3 suites):
+`[inspected]` One consumer is a documentation gate, not code: `verify-docs` `engine-layout` requires
+`src/recommendation/persistence/persist-ranked.js` to exist at its old path, which the shim preserves.
 
-`filtering/index.test.js` (pinned `SPLIT_FACTS.runtimeBarrel` row, 7 assertions),
-`filtering/integration.test.js`, `scoring/index.test.js`.
-
-Also staying, as evidence of old-path compatibility: `apps/api/test/unit/import-boundary.test.js` and the
-`orchestrator/*.test.js` suites that exercise the barrels.
-
-`[proposed]` Before/after test and assertion counts are **not** recorded here: the ownership gate
-measures them at the capture commit (`scripts/audit-pr2-test-ownership.js`), and inventing them now
-would be exactly the stale-figure defect the gate exists to prevent. The inventory row shape is
-`{ current, kind: move|stay|split, batch: 'step-5-w1', before: {tests, assertions} }`, measured at the
-baseline.
-
-### 9.2 Discovery and surface
-
-`[inspected]` `test/assert-discovery.js` pins four required suites as a **floor** ("Later waves add test
-files; this list is the floor, not the ceiling"), so moved suites are picked up by the existing glob
-without editing the guard. `[proposed]` W1 grows `test/export-surface.json` from `[]` to `['loaders']`
-in the same commit that populates the namespace, and `test/surface.test.js` continues to assert no
-overlap with core.
-
-### 9.3 Old-path shims
-
-`[proposed]` Every moved file keeps an identity shim at its old path, mirroring the core's pattern (for
-example `src/recommendation/candidates/loader.js` becoming a three-level re-export of
-`../../../packages/recommendation-runtime/src/loaders/candidates.js`). Guarantees a shim must satisfy:
-
-1. It exports the **same object** the new module exports (identity, not a copy).
-2. It adds no behaviour, no default values, no re-shaping, and no eager side effects.
-3. `verify-docs` `engine-layout` still finds `persistence/persist-ranked.js`.
-4. `apps/api` and `scripts/` consumers keep working with no edit at W1 (they are step 6 material).
-5. The old barrel keeps its current contents and requires byte for byte.
-
-### 9.4 Runtime package `exports` subpaths
-
-`[proposed]` Per RFC §11.5: `.` → `src/index.js` (also `main`), `./loaders`, `./orchestrator`,
-`./persistence`. No `./package.json`, no deep `./src/**` subpaths. The exact key set must be approved
-with the scope decision (gate 5) before it is written.
-
-### 9.5 Deferred
-
-`[owner]` The `docs/TEST_MAP.md` runtime row is **not** written until scope is approved. No decision-log
-entry is proposed here.
+`[proposed]` The identity test each shim needs, at W1: for every shim, `assert.strictEqual(require(old),
+require(new))` on the exported object, plus one exported-name equality check, plus a `require`-cache
+check (the module is evaluated once).
 
 ---
 
-## 10. Coordination messages (drafts — not sent)
+## 10. Proposed export map
 
-**PROPOSED — NOT APPROVED. Posting any of these requires explicit approval.**
+**PROPOSED — NOT APPROVED. `package.json` is untouched and no export exists.**
 
-**To Agent 1 (CI, Docker).**
-1. `test:runtime` is wired correctly, but at `7e27be6` it never ran: `unit-and-docs` failed at step 6
-   and steps 7–30 were skipped, so the 404/failure mode is unmeasured. At that SHA
-   `packages/recommendation-runtime/` contains only `docs/` and `package.json`.
-2. #48's `test:runtime` step therefore has a hard dependency on **#50** that is not in its blocker list.
-3. Gate 2 needs a green Node 22 `unit-and-docs` in which step 10 actually executes, on `master` or on a
-   PR head that will merge — `07c1254` is a scratch branch and does not close it.
-4. C7: neither `apps/api/Dockerfile` nor `api-image.yml` references `recommendation-runtime`, so the
-   green `image` job proves nothing about it. Please land the COPY pair and a container assertion that
-   the packaged runtime resolves and exports its subpaths; `.dockerignore` already permits it.
+`[proposed]` Four horizons, never merged into one table without the header:
 
-**To Agent 2 (Step 4 acceptance).** Written acceptance is requested for the nine core namespaces, the
-11-key `exports` map and the identity shims at `ac06a6a`, on the basis of the `verify:extraction`
-47/47 and `verify:ownership` 105→105 evidence already recorded in PR #49. Gate 1 cannot be inferred
-from merge order alone.
+| Name | Horizon | Intended consumer | Implementation available? | Core dependency | Public / internal | Cycle risk | In wave |
+|---|---|---|---|---|---|---|---|
+| `loaders.loadCandidates` | W1 | `candidates/index.js` shim, API | after row 1 moves | `errors`, `roles` (via core) | public | none (loader imports no barrel) | W1 |
+| `loaders.loadFilteringContext` | W1 | `filtering/index.js` shim | after row 2 | `candidates/*` via core | public | none | W1 |
+| `loaders.filterCandidatesForRecommendation` | W1 | `filtering/index.js` shim | after row 3 (destination C4) | `filterCandidates` via core | public | none | W1 |
+| `loaders.loadScoringModel` + `SELECT_SCORING_MODEL_SQL` | W1 | `scoring/index.js` shim | after row 4 | none | public | none | W1 |
+| `loaders.loadComponentAssessments` + `SELECT_COMPONENT_ASSESSMENTS_SQL` | W1 | `scoring/index.js` shim | after row 5 | none | public | none | W1 |
+| `loaders.selectOfferPrices` + SQL | W1 | `offers/index.js` shim | after row 6 | `assembly/prices`, `as-of` | public | none | W1 |
+| `loaders.loadQueryInput` + SQL, `REQUIRED_ROLES` | W1 | `query/index.js` shim | after row 7 | `candidates/input` via core | public | none | W1 |
+| `loaders.catalogVersion` + SQL, `CATALOG_COVERED_TABLES` | W1 | `query/index.js` shim | after row 8 | none | public | none | W1 |
+| `persistence.persistRanked` | W2 | `commit.js` shim | after row 12 | none | public | `commit → persistence` (exists) | W2 |
+| `persistence.persistRejections` + SQL | W2 | `commit.js` shim | after row 14 | none | public | same | W2 |
+| `persistence.persistPassFacts` + SQL | W2 | `commit.js` shim | after row 13 | none | public | same | W2 |
+| `persistence.validateSelected`, `validateRejections`, `REJECT_STATUS` | W2 | writers | after rows 15–16 | `candidates/{errors,roles}` via core | public | none | W2 |
+| `orchestrator.runRecommendation` | W3 | `orchestrator/index.js` shim, API | after row 17 | loaders' barrels | public | must not import `.` (root-cycle) | W3 |
+| `orchestrator.runRecommendationSnapshot` | W3 | API, `full-run` | after row 18 | none | public | none | W3 |
+| `orchestrator.runRecommendationFullRun` | W3 | API | after row 19 | persistence (W2) | public | needs W2 first | W3 |
+| `orchestrator.runRecommendationCommit` | W3 | `full-run`, scripts | after row 20 | persistence (W2) | public | needs W2 first | W3 |
+| `orchestrator.evaluateSwapPreview{,Snapshot}`, `commitSwap`, `commitSwapInTransaction`, `readCommittedSwap` | W3 | API, scripts | after rows 21–22 | persistence (W2) | public | none | W3 |
+| `offers.*`, `query.*` subpaths | W1 if the barrels move (C1/C2) | old-path consumers | after the barrel decision | none | public or absent | none | W1 |
+| individual loaders under `runtime/src/loaders/*` | W1 | internal | yes | — | **internal** | none | W1 |
 
-**To the RFC A2/A6 owner (count, scope, transaction).**
-1. §11.2 has **24 rows** targeting runtime: 3 are split barrels and one row names two files, so
-   **22 files** move. Its bold figure says **24** on `master` and **21** on the PR #49 branch, while
-   both parentheticals sum to 21. Confirm the authoritative figure and whether the 2 new barrels count.
-2. §11.2 gives no destination for `offers/index.js`, `query/index.js` or `orchestrator/index.js`, and
-   two options for `filtering/pipeline.js`. Please rule on all four.
-3. Confirm the W1/W2/W3 labels (loaders / persistence / orchestrator) and that "full runtime
-   extraction" spans all three rather than redefining W1 as the whole move.
-4. Confirm the transaction attribution in `LOADERS_AND_TRANSACTIONS.md` (section 8.3) so the wording
-   defect is corrected by its owner.
-
-**To the project authority.** Gate ledger (section 11) with the evidence each gate still needs. W1 is
-not authorised and no implementation has started.
+`[proposed]` Package `exports` keys (RFC §11.5, gate 5): `.`, `./loaders`, `./orchestrator`,
+`./persistence`. No `./package.json`, no deep `./src/**`. Nothing is published incomplete: a namespace
+appears in `test/export-surface.json` in the same commit that populates it, so a half-built
+`./orchestrator` cannot look approved.
 
 ---
 
-## 11. Gate ledger
+## 11. Test ownership and discovery
 
-Statuses are unchanged: **0 of 7 gates closed**. Each row now carries the evidence that exists today
-and the single thing that would close it. Evidence labels follow section 0.
+**PROPOSED — NOT APPROVED. No root test script and no CI file is modified.**
+
+### 11.1 The eleven suites
+
+`[inspected]` Current paths and globs from the repository root manifest (`test:unit` =
+`node --test "src/**/*.test.js"`, `test:core`, `test:api`, `test:scripts`) and from the runtime package
+(`test` = `node test/assert-discovery.js && node --test "test/*.test.js"`).
+
+| # | Current test path | Proposed owner | Proposed destination | App level? | Core-owned? | Runtime-owned? | Integration? | Executions | Future root command |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | `src/recommendation/candidates/loader.test.js` | runtime | `packages/recommendation-runtime/test/loaders/candidates.test.js` | no | no | yes | no (fake db) | once | `test:runtime` (needs a deeper glob, 11.2) |
+| 2 | `src/recommendation/filtering/context-loader.test.js` | runtime | `…/test/loaders/filtering-context.test.js` | no | no | yes | no | once | `test:runtime` |
+| 3 | `src/recommendation/filtering/pipeline.test.js` | runtime | `…/test/loaders/filtering-pipeline.test.js` | no | no | yes | no | once | `test:runtime` |
+| 4 | `src/recommendation/scoring/load-assessments.test.js` | runtime | `…/test/loaders/assessments.test.js` | no | no | yes | no | once | `test:runtime` |
+| 5 | `src/recommendation/scoring/load-scoring-model.test.js` | runtime | `…/test/loaders/scoring-model.test.js` | no | no | yes | no | once | `test:runtime` |
+| 6 | `src/recommendation/offers/select.test.js` | runtime | `…/test/loaders/offer-selection.test.js` | no | no | yes | no | once | `test:runtime` |
+| 7 | `src/recommendation/query/catalog-version.test.js` | runtime | `…/test/loaders/catalog-version.test.js` | no | no | yes | no | once | `test:runtime` |
+| 8 | `src/recommendation/query/load-query-input.test.js` | runtime | `…/test/loaders/query-input.test.js` | no | no | yes | no | once | `test:runtime` |
+| 9 | `src/recommendation/filtering/index.test.js` | **stays** app-level | `src/recommendation/filtering/index.test.js` | yes | no | no | no (barrel contract) | once | `test:unit` |
+| 10 | `src/recommendation/filtering/integration.test.js` | **stays** app-level | unchanged | yes | no | no | yes (barrel + DB-shaped fake) | once | `test:unit` |
+| 11 | `src/recommendation/scoring/index.test.js` | **stays** app-level | unchanged | yes | no | no | no (barrel contract) | once | `test:unit` |
+
+`[inspected]` Characterization fixtures (`scripts/characterize-pr2…pr7.js`) and the
+`check:characterization*` scripts are **not** in this set and must remain active: they are the
+pre-move behaviour proof and are referenced by `verify:extraction`.
+
+### 11.2 Discovery risks found by reading the globs
+
+1. **Silent disappearance.** `test:unit` is `src/**/*.test.js`. A suite moved out of `src/` is no
+   longer matched by it. Unless `test:runtime` picks the file up in the same commit, the suite stops
+   running and the repository still reports green. This is the exact failure mode `assert-discovery.js`
+   exists to prevent at package level, but the root glob has no equivalent guard.
+2. **Depth.** `test:runtime` is `packages/recommendation-runtime/test/*.test.js` — **one level**.
+   A suite placed in `test/loaders/` (as 11.1 proposes) would **not** be discovered, and
+   `assert-discovery.js` would still pass, because it only requires the four named harness files. So
+   either the destination is flat (`test/<name>.test.js`) or the root command must gain a recursive
+   glob plus a discovery assertion for the new directory. Decision required before W1's first move.
+3. **Duplicate execution.** If a moved suite is *copied* rather than moved, both `test:unit` and
+   `test:runtime` run it, `npm run test:unit` counts change, and the ownership audit sees two
+   claimants. The move must be a move.
+4. **Zero-test success.** `node --test` exits 0 on a glob that matches nothing (measured on Node
+   24.22.1 for the package guard). Any new root command needs its own discovery assertion.
+5. **Double ownership of integration suites.** `filtering/integration.test.js` exercises the barrel and
+   the loader together. It stays app-level and must keep running while the loader moves; if it is
+   classified as "moves with the module", the barrel loses its only cross-stage check.
+
+---
+
+## 12. C7 — Docker requirements (documentation only)
+
+**PROPOSED — NOT APPROVED. Agent 1 owns the Dockerfile and the image workflow; nothing here is a
+change.**
+
+| Requirement | Statement |
+|---|---|
+| Does the image copy runtime today? | **No.** `apps/api/Dockerfile` copies `packages/database-guard` and `packages/recommendation-core` only |
+| Required package files | `packages/recommendation-runtime/package.json`, `packages/recommendation-runtime/src/**` (the runtime's `exports`/`main` target). `test/`, `docs/` are excluded by `.dockerignore` and are not needed at runtime |
+| Required package metadata | `name`, `version`, `main`, `engines.node >=22`; the `exports` map only if W1 publishes subpaths |
+| Required destination directory | `./packages/recommendation-runtime/` — the same depth as `database-guard`/`recommendation-core`, so `require('../../../recommendation-core')` from a runtime loader resolves inside the image exactly as it does in the repo |
+| Expected Node resolution | Node walks `node_modules` then package-relative paths; the runtime must resolve core through the **relative repository path** it uses today, which only works if both packages sit at the same relative depth |
+| Proposed container import assertion | `node -e "require('./packages/recommendation-runtime')"` (or the published subpath) after the COPY, plus one namespace-name assertion — a `docker run --entrypoint` assertion in `api-image.yml` |
+| Required namespace availability | `loaders` in W1, `persistence` after W2, `orchestrator` after W3; the assertion must name the wave it expects, so W1 cannot silently assert a W3 surface |
+| Dependency requirements | none: the package declares no dependencies and the image must not need one |
+| Ownership boundary | Agent 1 owns the COPY pair, the `.dockerignore` interaction and the workflow assertion; Agent 3 owns this requirement list only |
+
+`[owner]` Whether C7 must land **before** W1 or may land with W1 stays unresolved (section 14, gate 3).
+
+---
+
+## 13. Gate ledger
+
+Statuses unchanged: **0 of 7 gates closed**. Documentation approval closes **no** gate.
 
 | # | Gate | Status | Owner | Evidence today | Would close it |
 |---|---|---|---|---|---|
-| 1 | Step 4 final acceptance | **OPEN** | Agent 2 | `[inspected]` PR #49 is unmerged (`master` is still `45133d5`); no written acceptance exists anywhere in the PR trail | Agent 2's written acceptance of the nine core namespaces, the 11-key `exports` map and the identity shims |
-| 2 | Runtime tests in CI on the merge path | **OPEN** | Agent 1 | `[CI verified]` green only on the scratch branch `07c1254` (step 10 "Runtime package harness (step 5)" success). At `7e27be6` the step was **skipped** behind a failure at step 6; at `89e761d` the step does not exist | a green Node 22 `unit-and-docs` in which step 10 runs, on `master` or on a PR head that will merge |
-| 3 | C7 image validation | **OPEN** | Agent 1 | `[inspected]` `apps/api/Dockerfile` copies only `database-guard` and `recommendation-core`; `api-image.yml` asserts nothing about runtime, so the green `image` job proves nothing here | Agent 1's COPY pair + a container assertion on the packaged runtime + a green `image` run |
-| 4 | RFC count resolved | **OPEN** | A2/A6 | `[inspected]` §11.2 has 24 runtime-targeting rows (3 split barrels, 1 two-file row) -> 22 file moves; its bold figure says 24 on `master` and 21 on the PR #49 branch while both parentheticals sum to 21; no written answer (see `w1-rfc-decision-request.md` A1-A5) | the A2/A6 owner's written answer on A1-A5 |
-| 5 | Full-extraction scope and W1/W2/W3 labels | **OPEN** | A2/A6 | `[inspected]` the frozen W0 entry point names loaders/persistence/orchestrator as W1/W2/W3; "full extraction" is not reconciled with that in any approved text (see B1-B5) | the A2/A6 owner's written answer on B1-B5 |
-| 6 | Provenance, transaction, compatibility and test-ownership contracts | **OPEN** | review | `[proposed]` declared-rewrite policy with 14 negative cases, the verified transaction table, the `step-5-w1` inventory and the shim/export plan are designs only; nothing is implemented | review approval of those designs, with the negative-test matrix implemented and passing |
+| 1 | Step 4 final acceptance | **OPEN** | Agent 2 | `[inspected]` PR #49 is unmerged (`master` is still `45133d5`); no written acceptance exists in the PR trail | Agent 2's written acceptance of the nine core namespaces, the 11-key `exports` map and the identity shims |
+| 2 | Runtime tests in CI on the merge path | **OPEN** | Agent 1 | `[CI verified]` green only on scratch `07c1254`; at `7e27be6` the step was skipped behind a step-6 failure; at `75f7823` the step does not exist in `ci.yml` | a green Node 22 `unit-and-docs` in which the runtime step runs, on `master` or a PR head that will merge |
+| 3 | C7 image validation | **OPEN** | Agent 1 | `[inspected]` no runtime COPY, no runtime assertion, green `image` proves nothing here | the COPY pair + a container assertion + a green `image` run |
+| 4 | RFC count resolved | **OPEN** | A2/A6 | `[inspected]` 24 rows / 3 split barrels / 21 rows / 22 files; bold figure 24 on `master`, 21 on the branch, both parentheticals 21; no written answer (decision request A1–A5) | the A2/A6 owner's written answer on A1–A5 |
+| 5 | Full-extraction scope and W1/W2/W3 labels | **OPEN** | A2/A6 | `[inspected]` the frozen W0 entry point names loaders/persistence/orchestrator as W1/W2/W3; "full extraction" is unreconciled (B1–B5) | the A2/A6 owner's written answer on B1–B5 |
+| 6 | Provenance, transaction, compatibility and test-ownership contracts | **OPEN** | review | `[proposed]` declared-rewrite policy with 24 negative cases, verified transaction table, 22-row shim map, export map and test inventory are designs only | review approval of those designs **and** the negative-test matrix implemented and passing |
 | 7 | Explicit written W1 authorization | **OPEN** | authority | no authorization exists; this document is preparation only | the project authority's explicit written authorization |
 
-Approving this documentation closes **no** gate. Gate 4 and gate 5 close only on the written answers
-requested in [`w1-rfc-decision-request.md`](w1-rfc-decision-request.md); gates 1, 2, 3 and 6 close on
-the evidence named above; gate 7 closes only on the authority's authorization.
-
 **Verdict: `W1 NOT READY — GATES OPEN`.** 0 of 7 gates closed. W0 is frozen and independently
-re-measured at `89e761d` (61 tests / 13 suites / 61 pass / 0 fail on a full exported tree outside the
-repository). **No runtime implementation has moved**: `src/recommendation/**` still contains every
-loader, every persistence writer and every orchestrator module, and the runtime package still holds
-only its harness.
+re-measured: `89e761d` = 61 tests / 13 suites / 61 pass / 0 fail, and the W0 correction head `75f7823` =
+85 tests / 17 suites / 85 pass / 0 fail, both on a full exported tree with `node v24.21.0`. **No runtime
+implementation has moved**: `src/recommendation/**` still contains every loader, every persistence
+writer and every orchestrator module, and the runtime package still holds only its harness.
+
+---
+
+## 14. Outstanding decisions
+
+`[owner]` Nothing in this section is decided here, and no other agent is being contacted by this
+document.
+
+| Decision | Owner | Question | Where asked |
+|---|---|---|---|
+| A1–A5 | RFC A2/A6 owner | which figure is authoritative; are the three split barrels counted; is `offers/index.js` in the moved set; are the two new barrels counted; which figure the manifest records | decision request §A |
+| B1–B5 | RFC A2/A6 owner | are W1/W2/W3 loaders/persistence/orchestrator, and does "full extraction" span all three | decision request §B |
+| C1–C4 | RFC A2/A6 owner | the physical destination of `offers/index.js`, `query/index.js`, `orchestrator/index.js`, `filtering/pipeline.js` | decision request §C, dossier §5.3 |
+| D1–D5 | RFC A2/A6 owner | transaction ownership confirmation + the `LOADERS_AND_TRANSACTIONS.md` sentence | decision request §D, dossier §8.5 |
+| Gate 1 | Agent 2 | written Step 4 acceptance | ledger |
+| Gate 2 | Agent 1 | runtime step in `unit-and-docs`, recursive glob and discovery assertion | dossier §11.2 |
+| Gate 3 | Agent 1 | C7 COPY pair, container assertion, and whether C7 precedes W1 | dossier §12 |
+| Gate 6 | review | provenance policy, transaction traces, shim map, export map | dossier §7, §8, §9, §10 |
+| Gate 7 | project authority | explicit written W1 authorization | ledger |
+
+**W1 has not started and remains unauthorized unless explicit project-owner authorization is
+independently established.**

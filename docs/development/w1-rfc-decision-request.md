@@ -9,6 +9,22 @@ of that ledger stays closed until these are answered and the remaining evidence 
 Companion document: [`w1-runtime-extraction-preparation.md`](w1-runtime-extraction-preparation.md)
 (inventory, dependency graph, provenance design, transaction plan, ownership and exports plan).
 
+**This request is not an authorization.** Answering it authorizes no module move: approval of the
+preparation dossier and approval of W1 are different acts, and W1 stays blocked until gate 7 (the
+project authority's explicit written authorization) is closed in writing.
+
+Every line in this document carries one label, so a fact is never read as a proposal:
+
+| Label | Meaning |
+|---|---|
+| `[inspected]` | read from this repository at the revision named; a fact |
+| `[interpretation]` | a reading of a source or RFC statement that the owner may reject; not a fact |
+| `[proposal]` | designed by Agent 3, unapproved; never to be encoded before a written answer |
+| `[unresolved]` | no acceptable answer exists yet, and the dossier does not invent one |
+
+The "proposed answer" column is a `[proposal]`. The "Current evidence" column is `[inspected]` unless a
+row says otherwise. No answer field below is filled in, and none will be: only the owner writes there.
+
 ## How to answer
 
 Write the answer in the **Answer required** column (or reply in the PR with the same numbering). A
@@ -44,6 +60,11 @@ So the figures are not three opinions about one quantity: **24 is a row count**,
 count**, and **21 is what each parenthetical sums to**, one short of the 22 moved files. 22 moves + 2
 prospective namespace barrels = 24 publication units, which coincides with the row count by
 coincidence, not by derivation.
+
+`[inspected]` The dossier lists all eight quantities separately (rows, mixed barrels, remaining rows,
+file moves, inventory rows, publication barrels, publication units, shims) in its §4 table, and each of
+the 22 unique physical paths in its §5.1. The reconciliation does not close arithmetically, and the
+dossier says so rather than manufacturing the missing file: see `[unresolved]` in its §5.2.
 
 | # | Question | Current evidence | Proposed answer (not authoritative) | Answer required | Owner |
 |---|---|---|---|---|---|
@@ -92,6 +113,12 @@ Note for C1–C3: whichever option is chosen decides whether the runtime package
 subpaths (`.`, `./loaders`, `./orchestrator`, `./persistence`) plus private barrels, or only the three
 subpaths with no internal barrels at all.
 
+`[inspected]` The dossier §5.3 records each of these four modules with its current responsibility,
+proposed physical destination, proposed public namespace, barrel/implementation kind, wave, shim need
+and the exact decision required — and chooses none of them. `[interpretation]` C4 is the weakest case of
+the four: §11.5 already fixes the public name and namespace, so if the answer is (a) the only open
+question is the directory.
+
 ---
 
 ## D. Transaction contract
@@ -107,6 +134,12 @@ transaction behaviour is to change in W1.
 | D3 | `commit.js` (`runRecommendationCommit`) **owns** the write transaction | `commit.js`: `BEGIN`, the `recommendation_query` `FOR UPDATE` guard, REPLACE-style writers, `COMMIT` on success / `ROLLBACK` on failure | **Confirmed** | | A2/A6 |
 | D4 | `commitSwapInTransaction` **owns** its write transaction; `commitSwap` owns none | `swap-commit.js`: `BEGIN` … `COMMIT`, `ROLLBACK` on error, original error preserved; `commitSwap` runs on the caller's handle | **Confirmed** | | A2/A6 |
 | D5 | Documentation correction: `LOADERS_AND_TRANSACTIONS.md` says the read snapshot "is opened by the caller: `orchestrator/run.js` runs stages 1-10 inside a caller-owned … transaction" | Contradicts D1/D2: the caller supplies the **client**, `snapshot.js` opens the transaction | **Correction approved** — attribute ownership to `snapshot.js`; the caller supplies the client and owns no transaction | | A2/A6 |
+
+`[inspected]` The dossier §8 turns these five confirmations into an executable specification: a success
+trace and a failure trace per operation (nine failure points, including BEGIN, first read, later read,
+write, COMMIT, ROLLBACK, error preservation, cleanup and partial operation), plus the four things a
+recording fake client must assert — expected statements, prohibited statements, ordering, and client
+identity/ownership. A test that only asserts "some calls happened" is explicitly rejected there.
 
 ---
 
