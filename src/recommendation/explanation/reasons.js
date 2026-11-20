@@ -104,7 +104,7 @@ const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors')
 // only because the assembly stage carries a boundary pin against ../scoring;
 // Engine 6 has no such pin. The scoring BARREL is deliberately NOT used here:
 // it re-exports the pg-backed loaders, and Engine 6 must stay DB-free.
-const { STRATEGIES, REASON_CODES: ARCHETYPE_REASON_CODES } = require('../ranking');
+const { STRATEGIES, REASON_CODES: ARCHETYPE_REASON_CODES } = require('../ranking/select-archetypes');
 const { GPU_POLICIES } = require('../scoring/use-cases');
 const {
   componentsByRole,

@@ -43,7 +43,7 @@
  */
 'use strict';
 
-const { EXPANSION_ORDER } = require('../assembly');
+const { EXPANSION_ORDER } = require('../assembly/assemble');
 const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
 
 /** The only two statuses a persisted build / component may carry. */
