@@ -178,8 +178,10 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   `test:core` **697 tests: 697 pass / 0 fail / 0 skipped / 0 cancelled**, `test:api` **193 / 0 / 0**,
   `test:database-guard` **15 / 0 / 0**, `test:runtime` **85 / 0 / 0**, hermetic run **697 / 0 / 0**,
   `verify:extraction` PASS **47 / 47**, every `check:characterization` pr2–pr7 OK, and every
-  `verify:ownership` inventory PASS. `test:scripts` grew from 893 by the one new C7 wiring assertion,
-  and `test:runtime` grew from 61 at PR #50's `89e761d` to 85 at its merged head. The core's 697-test
+  `verify:ownership` inventory PASS. `test:scripts` grew from **867** pass / 27 suites on `master`
+  `6fd3122` to **894** pass / 30 suites here (the new `core-package-surface.test.js` contract plus the
+  added CI-wiring assertions), and `test:runtime` grew from 61 at PR #50's `89e761d` to 85 at its merged
+  head. The core's 697-test
   total is the same on Node 24 (Windows) and Node 22 (Ubuntu); the split is not. On Ubuntu CI all 697
   pass; on this Windows checkout the two symlink/junction cases are SKIPPED (695 pass / 2 skipped),
   because the platform refuses the file symlinks they need. CI is the authoritative figure for a merge
@@ -191,9 +193,10 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   loadability by path, and deliberately does NOT pin the W0 empty surface. Root `npm ci` is not
   linkage: the root manifest has no `workspaces` and no dependency on the package, so a bare
   `require('@morocco-pc/recommendation-runtime')` stays `MODULE_NOT_FOUND` and only
-  `/app/packages/recommendation-runtime` resolves. Negative proof: an otherwise identical image built
-  without the COPY pair still builds, then the presence gate exits 1 and `require` raises
-  `MODULE_NOT_FOUND`.
+  `/app/packages/recommendation-runtime` resolves. Negative proof: **UNVERIFIED** —
+  `api-image.yml` has no negative-build step and the image run's log contains no `c7-neg` evidence, so
+  the absent-COPY failure mode (the presence gate exits 1 and `require` raises `MODULE_NOT_FOUND`) is a
+  design argument, not a measurement.
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of
