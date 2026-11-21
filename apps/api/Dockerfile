@@ -2,7 +2,9 @@
 #
 # BUILD CONTEXT IS THE REPOSITORY ROOT, not apps/api: the API imports the engine
 # from src/recommendation/, whose stage shims require the extracted packages
-# (packages/recommendation-core, packages/database-guard) by relative path. Build it with:
+# (packages/recommendation-core, packages/database-guard) by relative path, and
+# the step 5 runtime package (packages/recommendation-runtime) is the package
+# those shims will move behind. Build it with:
 #
 #   docker build -f apps/api/Dockerfile -t morocco-pc-api .
 #
@@ -33,10 +35,13 @@ COPY src ./src
 COPY apps/api ./apps/api
 
 # Runtime packages, copied explicitly rather than as the whole packages/ tree so
-# the runtime dependency stays visible and the image stays small. Both are
-# consumed by relative path only (no workspace, no npm link), so a file copy is
-# enough. Path-only correction (owner decision 1, 2026-11-11): the install, the
-# user and the CMD are unchanged.
+# the runtime dependency stays visible and the image stays small. They are
+# consumed by relative path only: the root package.json declares no `workspaces`
+# and no dependency on any of them, so `npm ci` neither installs nor links them
+# and a bare `require('@morocco-pc/...')` will NOT resolve in this image. A file
+# copy is what makes `/app/packages/<name>` loadable by path. Path-only
+# correction (owner decision 1, 2026-11-11): the install, the user and the CMD
+# are unchanged.
 
 # database-guard owns the "TEST_DATABASE_URL must not target the shared database"
 # guard that db.js applies at startup.
@@ -50,6 +55,19 @@ COPY packages/database-guard/src ./packages/database-guard/src
 # tree is NOT copied - tests are not runtime.
 COPY packages/recommendation-core/package.json ./packages/recommendation-core/package.json
 COPY packages/recommendation-core/src ./packages/recommendation-core/src
+
+# recommendation-runtime owns the database-backed execution half: the loaders,
+# the read snapshot and the write transaction. At W0 it ships the package
+# harness only, so nothing in apps/api imports it yet. The slot is created NOW,
+# before W1 moves a module into it, for three reasons: the first import must not
+# be the commit that discovers the image never carried the package; the COPY
+# pair is the only thing that makes `/app/packages/recommendation-runtime`
+# loadable by path (no workspace, no npm link); and the image gate can then
+# prove presence and loadability while the surface is still empty, instead of
+# pinning an empty surface. test/ and docs/ are NOT copied - tests and
+# documentation are not runtime.
+COPY packages/recommendation-runtime/package.json ./packages/recommendation-runtime/package.json
+COPY packages/recommendation-runtime/src ./packages/recommendation-runtime/src
 
 # node:22-alpine ships an unprivileged `node` user; never run as root.
 USER node

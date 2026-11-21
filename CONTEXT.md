@@ -145,34 +145,58 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   tests and 402 → 402 assertions** (6 moved, 3 stayed: `scoring/index.test.js` and the two loader tests),
   `npm run verify:extraction` **PASS 42 / 42**, `node packages/recommendation-core/test/hermetic-run.js`
   PASS, `npm run check:whitespace` PASS.
-- **Step 4B PR 7 — branch `feat/core-explanation-extraction` (not merged when this was measured).** The final
-  pure-logic batch (`step-4b-pr7`, baseline `2683713`, 5 modules byte-identical — the Engine 6 files `build-facts`,
-  `explain`, `reasons`, `index` and `offers/as-of` — 47 / 47 across the six batches) moves those modules and their
-  four test suites into the core, publishes `explanation` (4 keys) and `offers` (`parseAsOf` only; `selectOfferPrices`
-  and `SELECT_OFFER_PRICES_SQL` stay in the runtime barrel), and declares the RFC §11.4 `exports` map (11 subpaths —
-  the root, the nine namespaces and `./errors`; `./package.json` is NOT published, removed as an unapproved addition;
-  `main` retained for path requires). The repository-level gate `scripts/lib/core-package-exports.test.js` installs the
-  package into a throwaway consumer outside the repository and proves through Node's resolver that every approved
-  subpath resolves to its intended file and to the root's namespace object, `./offers` is `src/offers/as-of.js` (there
-  is deliberately no core `offers/index.js`), and six private or unapproved specifiers throw
-  `ERR_PACKAGE_PATH_NOT_EXPORTED`. Two barrel imports were narrowed before the capture (`build-facts.js` →
-  `../assembly/assemble`, `reasons.js` → `../ranking/select-archetypes`); `rank.js` and `select-diverse.js` keep
-  `../assembly` because their tests pin the specifier. The five old paths are identity shims; the runtime `offers`
-  barrel and the three mixed barrels are untouched. Measured at the branch head: `npm run test:unit` **726 pass / 0
-  fail**, `npm run test:core` **697 tests: 695 pass / 0 fail / 2 skipped**, `npm run test:scripts` **867 pass / 0 fail**
-  (858 + 9 package-boundary resolution tests), `npm run test:api` **193 pass**, `npm run test:database-guard` **15 pass**,
-  `npm run verify:ownership -- --inventory=pr7` **105 → 105 tests and 180 → 180 assertions** (4 moved, 1 stayed),
-  `npm run verify:extraction` **PASS 47 / 47** across six batches, `npm run check:characterization:pr7` OK, hermetic
-  run PASS, `npm run check:whitespace` PASS.
-- **Current extraction state:** `packages/recommendation-core/` is part of merged `master` and publishes
-  seven namespaces there (`candidates`, `compatibility`, `filtering`, `assembly`, `ranking` and `retention`
-  since PR #44 merged as `1a9d8cf`, plus `scoring` since PR #45 merged as `0f86f53`), and branch
-  `feat/core-explanation-extraction` adds `explanation` and `offers` as the eighth and ninth — all pinned key
-  by key in `test/surface.test.js` and in `test/export-surface.json`, behind identity re-export shims at the
-  old `src/recommendation/**` paths. The RFC §11.4 `exports` map is declared on that branch. Nothing runtime
-  has moved: the loaders, the three mixed barrels (`candidates`, `filtering`, `scoring`), the runtime-only
-  `offers` barrel, `packages/recommendation-runtime/` (manifest and `docs/LOADERS_AND_TRANSACTIONS.md` only)
-  and `apps/api/src/engine.js`'s barrel imports are unchanged.
+- **Current extraction state:** `packages/recommendation-core/` publishes **nine** namespaces —
+  `candidates`, `compatibility`, `filtering`, `assembly`, `ranking` and `retention` (PR #44, `1a9d8cf`),
+  `scoring` (PR #45, `0f86f53`), and `explanation` + `offers` (PR #49 merged as `2569647`, PR #50 merged
+  as `6fd3122`; the CI gates below were cut at `45133d5`, the PR #47 merge). `test/surface.test.js` and
+  `test/export-surface.json` pin them key by key, behind identity re-export shims at the old
+  `src/recommendation/**` paths. `package.json` declares the RFC §11.4 `exports` map as **exactly 11
+  static subpaths**: `.` → `src/index.js`, the nine namespaces → `src/<ns>/index.js`, `./errors` →
+  `src/candidates/errors.js`, and `./offers` → `src/offers/as-of.js` (there is no `offers/index.js`), with
+  no `./package.json` export. The loaders, the three mixed barrels and the orchestrator still live in
+  `src/recommendation/`; `packages/recommendation-runtime/` carries the step 5 W0 harness only (no runtime
+  module has moved); and `apps/api/src/engine.js` still imports the `src/recommendation/**` barrels.
+- **CI boundary gates (2026-11-20).** One contract, `scripts/lib/core-approved-interface.js`, is enforced
+  by both sides: `scripts/lib/core-package-surface.test.js` compares the declared `exports` map as a
+  whole (a missing, additional or wrongly mapped subpath fails; `./package.json` is rejected by name even
+  when its file exists), checks every namespace's RFC exports, and **realpaths** every target so it must
+  stay inside the package — a symlink escape fails and a nonexistent target fails closed.
+  `.github/workflows/api-image.yml` bind-mounts that same module read-only and calls
+  `runContainerGate`, which self-tests **six** tampered maps inside the container (including an
+  unauthorized subpath pointing at an existing valid file) before requiring `engine.js`.
+  `scripts/lib/ci-workflow.test.js` pins this wiring and forbids a literal namespace list; the
+  assessment-age step stays nightly-only with `continue-on-error: true`, `set +e`, `::warning`, and never
+  passes `--strict`. The explanation batch's provenance steps (`check:characterization:pr7` and
+  `verify:ownership -- --inventory=pr7 --base=2683713`) run by name in `unit-and-docs`.
+- **Runtime harness CI (2026-11-20).** `npm run test:runtime` runs `assert-discovery.js` (exit 1 when a
+  required suite is absent, so a glob that matches nothing cannot pass vacuously) and then
+  `node --test "packages/recommendation-runtime/test/*.test.js"`; it is a named `unit-and-docs` step, and
+  the package declares no dependencies and touches no database.
+- **Integrated measurement (2026-11-20).** On the rebased tree (`master` `6fd3122`, the PR #49 +
+  PR #50 merge, plus this branch at `36641c1`), measured from the **Node 22 `ci` log** (run 44833739534,
+  head `36641c1`): `test:scripts` **894 / 0 / 0**, `test:unit` **726 / 0 / 0**,
+  `test:core` **697 tests: 697 pass / 0 fail / 0 skipped / 0 cancelled**, `test:api` **193 / 0 / 0**,
+  `test:database-guard` **15 / 0 / 0**, `test:runtime` **85 / 0 / 0**, hermetic run **697 / 0 / 0**,
+  `verify:extraction` PASS **47 / 47**, every `check:characterization` pr2–pr7 OK, and every
+  `verify:ownership` inventory PASS. `test:scripts` grew from **867** pass / 27 suites on `master`
+  `6fd3122` to **894** pass / 30 suites here (the new `core-package-surface.test.js` contract plus the
+  added CI-wiring assertions), and `test:runtime` grew from 61 at PR #50's `89e761d` to 85 at its merged
+  head. The core's 697-test
+  total is the same on Node 24 (Windows) and Node 22 (Ubuntu); the split is not. On Ubuntu CI all 697
+  pass; on this Windows checkout the two symlink/junction cases are SKIPPED (695 pass / 2 skipped),
+  because the platform refuses the file symlinks they need. CI is the authoritative figure for a merge
+  decision; a local Windows run must never be reported as 697 passed.
+- **C7 — runtime package in the API image (2026-11-20).** `apps/api/Dockerfile` copies
+  `packages/recommendation-runtime/package.json` and `src/` after `npm ci`, `.dockerignore` keeps
+  `test`/`docs` out, and `api-image` triggers on `packages/recommendation-runtime/**` on push and PR.
+  The image gate asserts presence (`package.json`, `src/index.js`, no `test/` or `docs/`) and
+  loadability by path, and deliberately does NOT pin the W0 empty surface. Root `npm ci` is not
+  linkage: the root manifest has no `workspaces` and no dependency on the package, so a bare
+  `require('@morocco-pc/recommendation-runtime')` stays `MODULE_NOT_FOUND` and only
+  `/app/packages/recommendation-runtime` resolves. Negative proof: **UNVERIFIED** —
+  `api-image.yml` has no negative-build step and the image run's log contains no `c7-neg` evidence, so
+  the absent-COPY failure mode (the presence gate exits 1 and `require` raises `MODULE_NOT_FOUND`) is a
+  design argument, not a measurement.
 - Doc gates: `gen-decision-index --check` **0**, `verify-docs --offline` **0**,
   `gen-schema-reference --check` **0**.
 - `check-catalog-identity.js` **PASS on all three**: shared 113 of 113, TEST 113 of 113 and EU 113 of

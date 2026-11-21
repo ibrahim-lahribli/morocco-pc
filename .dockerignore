@@ -1,8 +1,11 @@
 # Build context is the repository ROOT (see apps/api/Dockerfile).
 # Everything here is excluded from the image; keep `src/recommendation/` and
-# `packages/recommendation-core/` + `packages/database-guard/` available, since
-# the API requires all three at startup. The remaining excludes below are
-# context hygiene: none of these paths is COPY'd by the Dockerfile.
+# `packages/recommendation-core/` + `packages/database-guard/` +
+# `packages/recommendation-runtime/` available, since the API requires the first
+# three at startup and the runtime package is the step 5 home of the rest. The
+# remaining excludes below are context hygiene: none of these paths is COPY'd by
+# the Dockerfile. `test` and `docs` also match inside the packages, which is why
+# the runtime harness and its documentation never enter the image.
 
 node_modules
 .git
