@@ -1,0 +1,110 @@
+[
+  {
+    "type": "dependency",
+    "from": "scripts/generate-presets.js",
+    "to": "apps/api/src/engine.js",
+    "rule": {
+      "severity": "warn",
+      "name": "scripts-no-app-internals"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "scripts/generate-presets.js",
+    "to": "apps/api/src/meta.js",
+    "rule": {
+      "severity": "warn",
+      "name": "scripts-no-app-internals"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "scripts/generate-presets.js",
+    "to": "apps/api/src/repository.js",
+    "rule": {
+      "severity": "warn",
+      "name": "scripts-no-app-internals"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "scripts/lib/deployed-role-cli.test.js",
+    "to": "apps/api/src/db.js",
+    "rule": {
+      "severity": "warn",
+      "name": "scripts-no-app-internals"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "scripts/measure-api-pass-phases.js",
+    "to": "apps/api/src/engine.js",
+    "rule": {
+      "severity": "warn",
+      "name": "scripts-no-app-internals"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "scripts/measure-api-pass-phases.js",
+    "to": "apps/api/src/repository.js",
+    "rule": {
+      "severity": "warn",
+      "name": "scripts-no-app-internals"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "scripts/rehearse-api-role.js",
+    "to": "apps/api/src/engine.js",
+    "rule": {
+      "severity": "warn",
+      "name": "scripts-no-app-internals"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "scripts/rehearse-api-role.js",
+    "to": "apps/api/src/repository.js",
+    "rule": {
+      "severity": "warn",
+      "name": "scripts-no-app-internals"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "scripts/smoke-api-role.js",
+    "to": "apps/api/src/app.js",
+    "rule": {
+      "severity": "warn",
+      "name": "scripts-no-app-internals"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "scripts/smoke-api-role.js",
+    "to": "apps/api/src/db.js",
+    "rule": {
+      "severity": "warn",
+      "name": "scripts-no-app-internals"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "scripts/smoke-api-role.js",
+    "to": "apps/api/src/engine.js",
+    "rule": {
+      "severity": "warn",
+      "name": "scripts-no-app-internals"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "scripts/smoke-api-role.js",
+    "to": "apps/api/src/repository.js",
+    "rule": {
+      "severity": "warn",
+      "name": "scripts-no-app-internals"
+    }
+  }
+]

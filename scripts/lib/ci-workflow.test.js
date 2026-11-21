@@ -261,3 +261,27 @@ test('the runtime harness runs in unit-and-docs, with discovery before the runne
   // The package's own script keeps the same order: discovery guard, then runner.
   assert.ok(script.indexOf('assert-discovery.js') < script.indexOf('node --test'));
 });
+
+test('the boundary lint runs in unit-and-docs, backed by a committed baseline', () => {
+  const pkg = JSON.parse(fs.readFileSync(PACKAGE_JSON, 'utf8'));
+  const script = pkg.scripts['lint:boundaries'];
+  assert.ok(script, 'package.json declares lint:boundaries');
+  assert.ok(script.includes('depcruise'), 'the script runs dependency-cruiser');
+  assert.ok(script.includes('--ignore-known'), 'the script applies the known-violations baseline');
+
+  // Removing the CI step (or moving it to the nightly job) must fail here, not
+  // silently drop the boundary ratchet from every push and PR.
+  const all = jobs(readWorkflow());
+  assert.ok(all['unit-and-docs'].includes('npm run lint:boundaries'),
+    'unit-and-docs must run the boundary lint');
+  assert.equal(all['recurring-gates'].includes('lint:boundaries'), false,
+    'the nightly job must not duplicate the boundary lint');
+
+  // The baseline is what lets CI pass today; without it every known violation
+  // would fail, and an empty file would silently disable the ratchet.
+  const baseline = JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, '../../.dependency-cruiser-known-violations.json'), 'utf8')
+  );
+  assert.ok(Array.isArray(baseline) && baseline.length > 0,
+    'the known-violations baseline must be committed and non-empty');
+});

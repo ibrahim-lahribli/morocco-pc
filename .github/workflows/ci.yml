@@ -30,6 +30,13 @@ jobs:
       - run: npm ci
       - run: npm run test:unit
       - run: npm run test:scripts
+      # Layer boundaries (dependency-cruiser): the web app never imports the API,
+      # the API reaches the engine only through engine.js, the engine never reads
+      # the schema, the pure core has no third-party or outward edges, ingestion
+      # stays inside its stage, and the runtime package never imports pg/dotenv.
+      # Violations that predate the rules live in the committed baseline; only a
+      # NEW one fails, so this is a ratchet, not a cleanup backlog.
+      - run: npm run lint:boundaries
       # The extracted database guard's own suite. It left scripts/lib/ in step 3a,
       # so `test:scripts` no longer covers it: a run without this step would drop
       # coverage silently instead of moving it.

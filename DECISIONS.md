@@ -5,7 +5,7 @@ decision request; this file records the answers, it does not implement them.
 
 | ID | decision | reversible? |
 |---|---|---|
-| E1 | Extracted/runtime code imports core via declared exports subpaths (`@morocco-pc/recommendation-core/<subpath>`); add any missing subpath to the exports map. | reversible |
+| E1 | Direction is enforced, specifier form is not: core is depended on one-way (no outward edges), and `.dependency-cruiser.js` polices direction — a deep path is not itself a violation. | reversible |
 | E2 | Module-alias scanner limitation accepted. | reversible |
 | E3 | R-SHADOW-1 covers globals only; injected `db`/`client`/`pool` parameters are allowed. | reversible |
 | A1–A5 | Report "files moved"; the manifest records moves; `offers/index.js` is in the moved set. | baseline SHA in a committed batch = irreversible |
