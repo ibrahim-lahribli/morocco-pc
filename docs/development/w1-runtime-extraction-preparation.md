@@ -118,10 +118,19 @@ it cannot determine semantically (a named list with the exact result for each ex
 limitations require a W1 coding restriction (six numbered restrictions `R-CONN-1`, `R-ENV-1`,
 `R-REQ-1`, `R-REQ-2`, `R-SHADOW-1`, `R-SPEC-1`).
 
-`[inspected]` Accepted gaps, asserted CLEAN in the suite on purpose: `const c = client; c.end()`,
-`const p = process; p.env.X`, `const load = require.bind(null); load('pg')`, and any `require` held in a
-variable that is passed to a helper. These are limits of a token scan, not defects; the W1 coding
-restrictions are what keep them from mattering.
+`[inspected]` Accepted gaps, asserted CLEAN in the suite on purpose: `const c = client; c.end()` and
+`const p = process; p.env.X`, plus any `require` held in a variable that is passed to a helper. These
+are limits of a token scan, not defects; the W1 coding restrictions are what keep them from mattering.
+
+`[measured]` **Correction (2026-11-21).** This paragraph previously also listed
+`const load = require.bind(null); load('pg')` as an accepted gap, copying the scanner header's §3
+example. **That is wrong.** Reproduced against `test/boundary-scanner.js` at `23f43c2b`, the scanner
+reports it as `dynamic-import` **and** `forbidden-module`, because the `.bind` proxy is resolved back to
+the `require` call site. It is therefore enforced, not a gap, and is no longer listed as one. Two other
+header examples are also inaccurate — `client.end()` under a parameter named `client` **is** detected
+(`connection-close`), because `client` is not in `SHADOWABLE_NAMES`. The header itself is not corrected
+here (it lives in `test/boundary-scanner.js`, outside this PR's scope); the defect is recorded with E2
+in `w1-rfc-decision-request.md`.
 
 ---
 
@@ -129,49 +138,65 @@ restrictions are what keep them from mattering.
 
 **PROPOSED — NOT APPROVED.**
 
-| Commit | Tree state | `unit-and-docs` | Runtime step | `image` |
-|---|---|---|---|---|
-| `45133d5` (former `master`, base of PR #51) | no `test:runtime` script, no runtime step in `ci.yml` | `success` (runs 44756114202 / 44756123305) | **did not exist** | not applicable |
-| `75f7823` (PR #50 head, now inside `master`) | scanner + fixtures only | **success** — runs 44832300705 (pull_request) and 44832308785 (push) | **does not exist in CI** — the 85/17 suite is executed by no workflow | not applicable |
-| `6fd3122` (current `master`, merge of #50) | the 12 runtime files are on `master` | merged after a green head | **no `test:runtime` script and no runtime step in `ci.yml`** | not applicable |
-| `7e27be6` (PR #48 head) | runtime step present at `ci.yml:56`, runtime test dir absent | **failure** at step 6 `npm run test:scripts`; steps 7–30 **skipped** | **never executed** (skipped) | failure (reported: core exports map missing on master) |
-| `07c1254` (`integration/pr48-pr49-pr50`) | all three merged | `success` | **step 10 "Runtime package harness (step 5)" success** | success |
+| Commit | Role | Tree state | `unit-and-docs` | Runtime step | `image` |
+|---|---|---|---|---|---|
+| `45133d5` | former `master`; base of PR #51 | no `test:runtime` script, no runtime step in `ci.yml` | `success` (runs 44756114202 / 44756123305) | **did not exist** | not applicable |
+| `75f7823` | **intermediate** #50 head (not the merged head) | scanner + fixtures only | **success** — runs 44832300705 (pull_request) / 44832308785 (push) | **does not exist in CI** — executed by no workflow | not applicable |
+| `706e40b1` | **#50 merged head** | the 12 runtime files, merged as `6fd3122` | green before merge; merge commit run 44832844277 `success` | **does not exist in CI** | not applicable |
+| `6fd3122` | **current `master`** (merge of #50) | the 12 runtime files are on `master` | `success` (run 44832844277) | **no `test:runtime` script and no runtime step in `ci.yml`** | not applicable |
+| `7e27be6` | **historical** #48 head (superseded) | runtime step present at `ci.yml:56`, runtime test dir absent | **failure** at step 6 `npm run test:scripts`; steps 7–30 **skipped** | **never executed** (skipped) | failure (core exports map missing on master) |
+| `23f43c2b` | **audited current** #48 head | runtime step at `ci.yml:56-57`, `test:runtime` at `package.json:12`, runtime suite present | **success** — run 44834047676, steps 5–30 executed | **step 10 success: 85 tests / 17 suites / 85 pass / 0 fail** | **success** — run 44834047614 |
+| `07c1254` | scratch integration branch | all three merged | `success` | **step 10 success** | success |
 
 `[inspected]` At `75f7823` neither the root `package.json` nor `ci.yml` mentions runtime, so the green
 `unit-and-docs` on that head proves the repository's other gates still pass — it is **not** evidence for
-gate 2, and the 85/17 suite has never run on Node 22 under CI.
+gate 2. The 85/17 suite had never run on Node 22 under CI at that head; it now has, at `23f43c2b`.
 
 `[inspected]` On the merged `master` `6fd3122`, `.github/workflows/ci.yml` runs `test:unit`,
 `test:scripts`, `test:database-guard`, `test:core` and `test:api` and contains **no** runtime step,
-while the root `package.json` defines **no** `test:runtime` script. The suite that now ships on
-`master` is therefore executed by nothing: gate 2 remains open, and it is now the only thing between a
-merged harness and a gated one.
+while the root `package.json` defines **no** `test:runtime` script. The suite that ships on `master` is
+therefore executed by nothing **on `master` itself**.
 
-`[inspected]` At `7e27be6` the root `package.json` defines
+`[CI verified]` **PR-head evidence is not post-merge evidence.** At the audited #48 head `23f43c2b` the
+harness is wired and green: `ci` run `44834047676` (pull_request) succeeded with steps 5–30 executed,
+and step 10 "Runtime package harness (step 5)" logged `# tests 85`, `# suites 17`, `# pass 85`,
+`# fail 0`; `api-image` run `44834047614` succeeded; push run `44834041407` succeeded. That closes the
+**technical-evidence** half of gate 2 and nothing else: the change sits on an open PR branch, not on
+`master`, so it is not integrated. A green PR-head run is not a merged gate and is not an approval.
+
+`[inspected]` At `7e27be6` — the **historical** #48 head, not the current one — the root `package.json` defines
 `"test:runtime": "node packages/recommendation-runtime/test/assert-discovery.js && node --test \"packages/recommendation-runtime/test/*.test.js\""`
 — character-identical to the required command — but `packages/recommendation-runtime/` at that commit
 contains only `docs/LOADERS_AND_TRANSACTIONS.md` and `package.json`.
 
-`[CI verified]` `07c1254` is the only green execution of the command: `ci` run 44820989559, job
-`unit-and-docs` (ubuntu-latest, `node-version: '22'`), step 10 success; `image` run 44820989313
-success. The step's internal test counts were not read from the job log, so the harness count there
-remains `[previously reported]`; the mechanism (discovery guard + runner) is `[CI verified]`.
+`[CI verified]` Two green executions of the command now exist. `07c1254` (scratch): `ci` run 44820989559,
+job `unit-and-docs` (ubuntu-latest, `node-version: '22'`), step 10 success; `image` run 44820989313
+success — its internal counts were never read from the job log and remain `[previously reported]`.
+`23f43c2b` (audited #48 head): run `44834047676`, step 10 success, counts read from the TAP log
+(**85 / 17 / 85 / 0**). The mechanism (discovery guard + runner) is `[CI verified]` in both.
 
-`[inspected]` `integration/pr48-pr49-pr50` is a scratch branch and is not a merge target. **Gate 2
-therefore stays OPEN.**
+`[inspected]` `integration/pr48-pr49-pr50` is a scratch branch and is not a merge target. **Gate 2 is
+therefore PARTIAL**: the step exists and is green on an open PR head, and is absent from `master`. It is
+not closed, and it is no longer `OPEN` in the sense of "no evidence exists".
 
 ### 2.1 Merge sequence — resolved during this review
 
 `[inspected]` The merge order recorded in the previous revision was **#49 → #50 → rebase #48**. The first
-two resolved on 2026-11-20 while this revision was being written: PR #49 merged as `2569647` and PR #50
-merged as `6fd3122` at 22:55:21Z, after its head `75f7823` had passed `unit-and-docs` (runs 44832300705
-and 44832308785) and the merge commit's own `unit-and-docs` run 44832844277 succeeded. **Rebase #48 is
-still outstanding.**
+two resolved on 2026-11-20: PR #49 merged as `2569647` and PR #50 merged as `6fd3122` at 22:55:21Z,
+after its **merged** head `706e40b1` had been verified (the merge commit's own `unit-and-docs` run
+44832844277 succeeded); `75f7823` was an intermediate head, not the merged one. **Rebase #48 is still
+outstanding.**
 
 `[inspected]` PR #48's body lists #49→#50 as blockers but does not record that its `test:runtime` step
-cannot pass without #50's files; the skipped steps hid that. `[owner]` No merge, approval or force-push
-was performed by Agent 3, and **PR #51 has not been rebased** onto the new `master`: its base is still
-`45133d5`, it is reported `behind`, and rebasing or merging it is the owner's call.
+cannot pass without #50's files; the skipped steps hid that. Its description still cites head `96efc65`
+and the two failed runs; the audited head is `23f43c2b` (section 2), and correcting that body is a
+separate action this document does not perform.
+
+`[inspected]` **PR #51 was rebased onto `6fd3122` on 2026-11-21** as part of this correction. Before it,
+the branch was based on `45133d5` and reported `behind`; the pre-rebase head was `cc6f0f28` and is now
+historical. The rebase was clean — seven commits replayed with no conflict — and the branch's diff
+against `master` remains exactly these two documentation files. `[owner]` No merge and no approval was
+performed: rebasing a documentation branch is not an authorisation, and gate 7 is untouched.
 
 ---
 
@@ -179,14 +204,46 @@ was performed by Agent 3, and **PR #51 has not been rebased** onto the new `mast
 
 **PROPOSED — NOT APPROVED.** Requirements are in section 12; this section records the current state.
 
-`[inspected]` `apps/api/Dockerfile` copies `packages/database-guard` and `packages/recommendation-core`
-only; there is no `packages/recommendation-runtime` COPY. `.github/workflows/api-image.yml` asserts
-nothing about runtime. The green `image` job on `07c1254` therefore says nothing about runtime.
+`[inspected]` **State at the audited #48 head `23f43c2b`** (PR #48 open, base `6fd3122`).
+`apps/api/Dockerfile:69-70` ships the runtime package:
 
-`[inspected]` `.dockerignore` excludes `docs`, `*.md`, `test`, `scripts`, `database`, `contract` and
-`apps/web`; a `package.json` + `src` COPY of the runtime package is therefore compatible with it.
+```dockerfile
+COPY packages/recommendation-runtime/package.json ./packages/recommendation-runtime/package.json
+COPY packages/recommendation-runtime/src ./packages/recommendation-runtime/src
+```
 
-`[owner]` C7 stays with Agent 1. Whether C7 must land **before** W1 remains unresolved (section 14).
+Both instructions sit **after** `RUN npm ci --omit=dev` (`:31`) and **beside** the existing
+`database-guard` (`:48-49`) and `recommendation-core` (`:56-57`) pairs. `.dockerignore` excludes `test`,
+`docs` and `*.md` at any depth, so the pair ships the manifest and `src/` and nothing else.
+
+`[CI verified]` `api-image` run `44834047614` (job `image`, success) asserted, in six executed steps:
+
+| Step | What it asserted |
+|---|---|
+| Confirm the extracted core is in the image | `recommendation-core/package.json` and `src/` present; `apps/web` absent |
+| Confirm the runtime package is in the image | `package.json` and `src/index.js` **present**; `test/` and `docs/` **absent** |
+| Confirm the runtime package loads by path | `require('/app/packages/recommendation-runtime')` resolves; `private === true`; logs `runtime package OK (@morocco-pc/recommendation-runtime; root exports: 0)` |
+| Confirm the shipped core matches its declared interface | `core surface OK (assembly,candidates,compatibility,explanation,filtering,offers,ranking,retention,scoring); exports-map negatives OK (6/6); engine graph OK` |
+| Build the deployment image | the image builds from the repository root |
+| Boot, health-check, clean up | `{"status":"ok","db":"down","engine_version":"ci-image"}`; `! grep -q 'MODULE_NOT_FOUND'` passes |
+
+`[inspected]` **The limit, stated precisely.** These checks establish **presence and loadability**: the
+COPY worked, `.dockerignore` did not swallow the package, the entry point exists and resolves by path.
+They do **not** establish a W1 runtime API contract. At W0 the entry is `module.exports = {}`, so the
+gate deliberately asserts no export keys — pinning emptiness would force the gate to change at W1. The
+exact runtime surface is a W1 contract and gets the same shared-contract treatment as the core.
+
+`[UNVERIFIED]` The C7 decision comment (`7052829377` §5) additionally claims the failure mode was
+"verified on `morocco-pc-api:c7-neg`". **That claim is UNVERIFIED**: `grep -c "c7-neg"` over the
+`44834047614` log returns **0**, `api-image.yml` has no negative-build step, and PR #48's body states
+Docker was unavailable on the author's machine. It is a design argument, not a measurement, and is
+recorded as such — not repeated as a test that ran.
+
+`[inspected]` At the **merged** `master` `6fd3122` none of this exists yet: no runtime COPY, no runtime
+assertion, no `test:runtime` script. C7 is evidenced on the #48 branch only.
+
+`[owner]` C7 stays with Agent 1. Whether C7 must land **before** W1 remains unresolved (section 14);
+the timing decision recorded in `7052829377` §1 is Agent 1's, and this document does not ratify it.
 
 ---
 
@@ -201,6 +258,24 @@ the row set did not change when #49 merged, and the row count is not revision-de
 rows are the mixed barrels and are **split rather than moved**, leaving 21 moving rows. One of those 21
 rows names **two** files (`persistence/validate-selected.js`, `validate-rejections.js`), so the moved set
 is **22 files**.
+
+`[measured]` The whole §11.2 table holds **49 rows**: **24** runtime-targeting (three of them
+core+runtime), **23** core-only, **1** ingestion (target "neither", 8 modules) and **1** test-file row
+(63 files, "follow their module"). On the core side the table's own "Counts" paragraph reports **47**
+file-level moves, which equals the `blob-identical: 47 / 47` total `npm run verify:extraction` reports
+across the six batches.
+
+`[derived]` **Rows, modules, physical files and publication units are four different quantities**, and
+the RFC uses the words interchangeably in different places (`33 files` at `:78`, `:380` and `:496`;
+`47` in the §11.2 "Counts"; `24 runtime modules` at `:1527`). No single figure is wrong for every
+quantity: 24 is a **row** count, 21 is a **row** count minus the three split barrels, 22 is a
+**physical-file** count, and 47 is the **core** file count. The stale figure is `33`, which is not a
+count of anything in the current table.
+
+`[unresolved]` The **24 publication units** figure (22 moves + 2 prospective barrels) depends on a
+counting convention the RFC never states — whether a split barrel's new half counts as a unit, and
+whether a new barrel counts once or once per published subpath. **No owner-approved convention exists,
+so this document declares no figure authoritative**; that is question A1/A4 in the decision request.
 
 The "Counts" paragraph *is* revision-dependent, which is why this document cites sections and never
 lines:
@@ -220,9 +295,11 @@ the whole of question A1.
 
 | Term | Value | How it is produced | Appears in |
 |---|---|---|---|
+| RFC §11.2 **total rows** | **49** | every row of the table: 24 runtime-targeting + 23 core-only + 1 ingestion ("neither") + 1 test-file row | §4 |
 | RFC runtime-targeting **rows** | **24** | count of §11.2 rows whose target column includes runtime | §4, §6 |
 | Mixed **barrels** | **3** | `candidates/index.js`, `filtering/index.js`, `scoring/index.js` — target "core + runtime", split not moved | §6.2 |
 | Remaining RFC **rows** | **21** | 24 − 3 | §4 |
+| Core file-level **moves** | **47** | §11.2 "Counts"; equals `verify:extraction`'s `blob-identical: 47 / 47` | §4 |
 | Proposed physical **file moves** | **22** | 21 rows, one of which names two files | §5.1 |
 | Numbered **inventory rows** | **22** | one per unique physical path (section 5.1); a file appears once even when it publishes several names | §5.1 |
 | Prospective **publication barrels** | **2** | `runtime/src/loaders/index.js`, `runtime/src/persistence/index.js` — neither exists; implied by RFC §11.5 | §5.2, §10 |
@@ -602,7 +679,7 @@ argument shape; "prohibited" means the fake client must record a failure if the 
 | Operation | Initial state | Expected ordered SQL | Arguments | Result / final state |
 |---|---|---|---|---|
 | read-only snapshot | client connected, no transaction | `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` → stage reads → `ROLLBACK` | `BEGIN`/`ROLLBACK` take no params; each stage read carries its constant SQL and array params | frozen pass result; transaction closed by `ROLLBACK`; **`COMMIT` is prohibited** |
-| full recommendation run (W3 orchestration) | client connected, inside the caller's read transaction (opened by `snapshot.js`) | the stage reads of 8.1's `run.js`, beginning with `SELECT CURRENT_TIMESTAMP AS now` | the timestamp read takes no params | frozen pass; **no `BEGIN`/`COMMIT`/`ROLLBACK` may appear in `run.js`'s trace** |
+| full recommendation run (W3 orchestration) | client connected, **no transaction open**; the function opens and closes **two sequential transactions** on the one client | `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` → stage reads → `ROLLBACK` (**snapshot**) → pure stages, **no SQL** → `BEGIN` → guards → writers → `COMMIT` (**commit**) | the timestamp read takes no params; guard statements take `[queryId]` | frozen pass; **no `BEGIN`/`COMMIT`/`ROLLBACK` may appear in `run.js`'s trace**, and the snapshot's `ROLLBACK` index precedes the commit's `BEGIN` index |
 | write commit | client connected, no transaction | `BEGIN` → `LOCK_RECOMMENDATION_QUERY_SQL` → `EXISTING_BUILD_CANDIDATES_SQL` → writer INSERT/DELETE/UPDATE statements → `COMMIT` | `BEGIN` no params; lock/guard/replace statements take `[queryId]`-shaped arrays | committed pass; transaction closed by `COMMIT`; a second `BEGIN` is prohibited |
 | swap preview snapshot | client connected, no transaction | `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` → preview reads → `ROLLBACK` | `[sourceResultId]`-shaped where the SQL declares `$1` | preview envelope; `COMMIT` prohibited |
 | swap commit in transaction | client connected, no transaction | `BEGIN` → `SELECT_COMMITTED_SWAP_SQL`-shaped reads/writes → `COMMIT` | `[sourceResultId]` and identifier arrays | committed swap; `COMMIT` exactly once |
@@ -641,6 +718,25 @@ happened" is not acceptable:
    fake records `this`/receiver), and the client is never created, released or closed by the runtime.
    `full-run` additionally asserts that the snapshot's `ROLLBACK` index precedes the commit's `BEGIN`
    index on the same client.
+
+`[inspected]` **Static ownership is not behavioural proof.** `test/transaction-ownership.test.js` lexes
+each file's string tokens and asserts which transaction keywords may appear in which file. It proves
+*that `snapshot.js` may contain `ROLLBACK` and `run.js` may contain none*. It proves **nothing** about
+ordering, arity, error precedence, exactly-once rollback, or receiver identity. No behavioural
+transaction test exists, and none has ever run.
+
+`[inspected]` **Three real behaviours the nine failure points do not cover**, found by reading the
+sources at `6fd3122`:
+
+| # | Case | Real behaviour | Why the matrix misses it |
+|---|---|---|---|
+| 10 | **success-path `ROLLBACK` failure** | `snapshot.js:99-101` and `swap-preview.js` roll back in `finally`; when the pass succeeded and `ROLLBACK` throws, the rollback error is **thrown and the successful result discarded** | failure point 6 assumes an original error exists, so this path is untested |
+| 11 | **refusal path** | `commitSwap` returns `{committed:false, reason:…}` rather than throwing, so `commitSwapInTransaction` issues **`COMMIT` with zero writes** | the matrix has no "refused but committed" trace |
+| 12 | **`readCommittedSwap` malformed result** | a `null`/`undefined` query result is coerced to `rows = []` and reported as `{found:false}` — a broken client reads as "no swap committed" instead of failing | the matrix records the read but not its failure mode |
+
+`[unresolved]` Cases 10–12 are recorded as **missing behavioural coverage**, not as defects: cases 10
+and 11 match the documented error policy, and case 12 is caught downstream by the UNIQUE index on
+`recommendation_source_id`. They are unverified, and this document does not claim otherwise.
 
 ### 8.5 Documentation wording correction (proposal only)
 
@@ -770,11 +866,23 @@ pre-move behaviour proof and are referenced by `verify:extraction`.
    longer matched by it. Unless `test:runtime` picks the file up in the same commit, the suite stops
    running and the repository still reports green. This is the exact failure mode `assert-discovery.js`
    exists to prevent at package level, but the root glob has no equivalent guard.
-2. **Depth.** `test:runtime` is `packages/recommendation-runtime/test/*.test.js` — **one level**.
-   A suite placed in `test/loaders/` (as 11.1 proposes) would **not** be discovered, and
-   `assert-discovery.js` would still pass, because it only requires the four named harness files. So
-   either the destination is flat (`test/<name>.test.js`) or the root command must gain a recursive
-   glob plus a discovery assertion for the new directory. Decision required before W1's first move.
+2. **Depth — verified, not hypothetical.** `test:runtime` is
+   `packages/recommendation-runtime/test/*.test.js`: **one level**. A suite placed in `test/loaders/`
+   (as 11.1 proposes) would **not** be discovered, and `assert-discovery.js` would still pass, because
+   it calls `fs.readdirSync(__dirname)` — **non-recursive** — and only checks the four fixed names in
+   its `REQUIRED` list. A nested file is invisible to the guard *and* to the glob, so the guard would
+   even print a smaller "N test suite(s) discovered" and still exit 0. This is a silent-omission
+   failure, not a cosmetic one.
+
+   `[measured]` **Node 22 supports the recursive form here**, so the correction needs no new mechanism:
+   `test:unit` is `node --test "src/**/*.test.js"` and discovers 726 tests across
+   `src/recommendation/orchestrator/` and deeper on the same `node-version: '22'` CI runner. The
+   convention is already load-bearing in this repository.
+
+   `[proposed]` **Future action (not implemented in this task):** change the root runtime command to
+   `packages/recommendation-runtime/test/**/*.test.js` **and** make `assert-discovery.js` walk
+   recursively (or assert each expected subdirectory) in the same commit. Until then W1 must keep its
+   runtime suites flat at `test/<name>.test.js`.
 3. **Duplicate execution.** If a moved suite is *copied* rather than moved, both `test:unit` and
    `test:runtime` run it, `npm run test:unit` counts change, and the ownership audit sees two
    claimants. The move must be a move.
@@ -793,33 +901,50 @@ change.**
 
 | Requirement | Statement |
 |---|---|
-| Does the image copy runtime today? | **No.** `apps/api/Dockerfile` copies `packages/database-guard` and `packages/recommendation-core` only |
+| Does the image copy runtime today? | **Yes, on the #48 branch only.** `apps/api/Dockerfile:69-70` adds the `package.json` + `src` pair after `npm ci --omit=dev`, beside `database-guard` (`:48-49`) and `recommendation-core` (`:56-57`). On `master` `6fd3122` it is still absent |
 | Required package files | `packages/recommendation-runtime/package.json`, `packages/recommendation-runtime/src/**` (the runtime's `exports`/`main` target). `test/`, `docs/` are excluded by `.dockerignore` and are not needed at runtime |
 | Required package metadata | `name`, `version`, `main`, `engines.node >=22`; the `exports` map only if W1 publishes subpaths |
 | Required destination directory | `./packages/recommendation-runtime/` — the same depth as `database-guard`/`recommendation-core`, so `require('../../../recommendation-core')` from a runtime loader resolves inside the image exactly as it does in the repo |
 | Expected Node resolution | Node walks `node_modules` then package-relative paths; the runtime must resolve core through the **relative repository path** it uses today, which only works if both packages sit at the same relative depth |
-| Proposed container import assertion | `node -e "require('./packages/recommendation-runtime')"` (or the published subpath) after the COPY, plus one namespace-name assertion — a `docker run --entrypoint` assertion in `api-image.yml` |
+| Container assertion — **shipped form** | `require('/app/packages/recommendation-runtime')` plus `private === true`, in `api-image.yml`; logs `root exports: 0`. Asserted by `api-image` run `44834047614` |
+| Container assertion — **still open** | a namespace-name assertion naming the wave it expects (`loaders` at W1). Deliberately not written at W0: the entry is `module.exports = {}` and pinning emptiness would force the gate to change at W1 |
 | Required namespace availability | `loaders` in W1, `persistence` after W2, `orchestrator` after W3; the assertion must name the wave it expects, so W1 cannot silently assert a W3 surface |
 | Dependency requirements | none: the package declares no dependencies and the image must not need one |
 | Ownership boundary | Agent 1 owns the COPY pair, the `.dockerignore` interaction and the workflow assertion; Agent 3 owns this requirement list only |
 
 `[owner]` Whether C7 must land **before** W1 or may land with W1 stays unresolved (section 14, gate 3).
+The COPY pair and the presence/loadability assertions exist on the #48 branch; the W1 surface assertion
+does not exist and is a W1 deliverable, not a W0 one.
 
 ---
 
 ## 13. Gate ledger
 
-Statuses unchanged: **0 of 7 gates closed**. Documentation approval closes **no** gate.
+**Statuses: 0 of 7 gates closed.** Gates 2 and 3 moved from `OPEN` to `PARTIAL` / `CONDITIONAL` on
+2026-11-21; a status change is not a closure. Documentation approval closes **no** gate.
 
 | # | Gate | Status | Owner | Evidence today | Would close it |
 |---|---|---|---|---|---|
 | 1 | Step 4 final acceptance | **OPEN** | Agent 2 | `[inspected]` PR #49 is now **merged** (`2569647`, and `master` = `6fd3122`), so merge order no longer blocks it — but no written acceptance exists in the PR trail, and a merge is not an acceptance | Agent 2's written acceptance of the nine core namespaces, the 11-key `exports` map and the identity shims |
-| 2 | Runtime tests in CI on the merge path | **OPEN** | Agent 1 | `[inspected]` the suite is now **on `master`** (`6fd3122`; 85 tests / 17 suites re-measured from an export) and `ci.yml` still has no runtime step and root `package.json` no `test:runtime` script, so nothing runs it; `[CI verified]` the only green execution is scratch `07c1254`, and at `7e27be6` the step was skipped behind a step-6 failure | a root `test:runtime` script plus a runtime step in `unit-and-docs`, green on Node 22 on `master` or a PR head that will merge |
-| 3 | C7 image validation | **OPEN** | Agent 1 | `[inspected]` no runtime COPY, no runtime assertion, green `image` proves nothing here | the COPY pair + a container assertion + a green `image` run |
+| 2 | Runtime tests in CI on the merge path | **PARTIAL** | Agent 1 | `[CI verified]` at audited #48 head `23f43c2b`: `test:runtime` at `package.json:12`, step at `ci.yml:56-57`, `ci` run `44834047676` step 10 = **85 tests / 17 suites / 85 pass / 0 fail**. `[inspected]` `master` `6fd3122` still has no script and no step, so the change is **not integrated**; discovery is one level deep (§11.2 item 2) | merge #48, then a green `ci` on `master` **and** a recursive glob plus a recursive discovery guard |
+| 3 | C7 image validation | **CONDITIONAL** | Agent 1 | `[inspected]` `Dockerfile:69-70` COPY pair; `[CI verified]` `api-image` run `44834047614` asserts presence, `test/`+`docs/` absence, path loadability, `private`, and the core interface (6/6 negatives). `[UNVERIFIED]` the `c7-neg` negative build | merge #48 and a green `api-image` on `master`; then either drop the `c7-neg` claim or add a real negative step |
 | 4 | RFC count resolved | **OPEN** | A2/A6 | `[inspected]` 24 rows / 3 split barrels / 21 rows / 22 files; bold figure 24 on `master`, 21 on the branch, both parentheticals 21; no written answer (decision request A1–A5) | the A2/A6 owner's written answer on A1–A5 |
 | 5 | Full-extraction scope and W1/W2/W3 labels | **OPEN** | A2/A6 | `[inspected]` the frozen W0 entry point names loaders/persistence/orchestrator as W1/W2/W3; "full extraction" is unreconciled (B1–B5) | the A2/A6 owner's written answer on B1–B5 |
 | 6 | Provenance, transaction, compatibility and test-ownership contracts | **OPEN** | review | `[proposed]` declared-rewrite policy with 24 negative cases, verified transaction table, 22-row shim map, export map and test inventory are designs only | review approval of those designs **and** the negative-test matrix implemented and passing |
 | 7 | Explicit written W1 authorization | **OPEN** | authority | no authorization exists; this document is preparation only | the project authority's explicit written authorization |
+
+`[derived]` **Four dimensions, never collapsed into one cell.** A gate can be strong on one and empty on
+another, and a single status word hides that:
+
+| Gate | Technical evidence | Integration | Formal acceptance | Authorization |
+|---|---|---|---|---|
+| 1 · Step 4 acceptance | met — #49 merged, 697 core tests | merged | **absent** | n/a |
+| 2 · Runtime tests in CI | **partial** — green at `23f43c2b` (85/17); absent from `master`; discovery one level deep | **not merged** | **absent** | n/a |
+| 3 · C7 image validation | **conditional** — COPY + six assertions green at `23f43c2b`; `c7-neg` UNVERIFIED | **not merged** | **absent** | n/a |
+| 4 · RFC count | partial — 49/24/3/21/22 measured; RFC self-inconsistent (`33` at `:78`, `:380`, `:496`) | n/a | **absent** (A1–A5 blank) | n/a |
+| 5 · Scope and wave labels | partial | n/a | **absent** (B1–B5 blank) | n/a |
+| 6 · Provenance, transaction, shim contracts | partial — designs only; static is not behavioural (§8.4) | n/a | **absent** | n/a |
+| 7 · W1 authorization | n/a | n/a | n/a | **absent** |
 
 **Verdict: `W1 NOT READY — GATES OPEN`.** 0 of 7 gates closed. W0 is frozen and independently
 re-measured: `89e761d` = 61 tests / 13 suites / 61 pass / 0 fail, and the W0 correction head `75f7823` =
@@ -844,6 +969,9 @@ document.
 | Gate 2 | Agent 1 | runtime step in `unit-and-docs`, recursive glob and discovery assertion | dossier §11.2 |
 | Gate 3 | Agent 1 | C7 COPY pair, container assertion, and whether C7 precedes W1 | dossier §12 |
 | Gate 6 | review | provenance policy, transaction traces, shim map, export map | dossier §7, §8, §9, §10 |
+| E1 | A2/A6 owner | which core import specifier W1 may use: relative package root or bare package name | decision request §E |
+| E2 | A2/A6 owner | accept the module-object alias limitation or authorise a separate alias mechanism (+ two header corrections) | decision request §E |
+| E3 | A2/A6 owner | does `R-SHADOW-1` cover injected `client`/`pool`/`db` parameters or only globals | decision request §E |
 | Gate 7 | project authority | explicit written W1 authorization | ledger |
 
 **W1 has not started and remains unauthorized unless explicit project-owner authorization is

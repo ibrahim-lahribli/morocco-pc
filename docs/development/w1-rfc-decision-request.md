@@ -3,8 +3,9 @@
 **Status: OPEN REQUEST. PROPOSED — NOT APPROVED. No answer exists yet.**
 
 This is a decision request to the RFC A2/A6 architecture owner, not a decision. It asks for written
-answers to four question groups that currently block gates 4 and 5 of the W1 ledger. Every other row
-of that ledger stays closed until these are answered and the remaining evidence arrives.
+answers to four question groups (A–D) that block gates 4 and 5 of the W1 ledger, and it records a fifth
+group (E, added 2026-11-21) that blocks W1's first move without closing any gate row. Every other row of
+that ledger stays closed until these are answered and the remaining evidence arrives.
 
 Companion document: [`w1-runtime-extraction-preparation.md`](w1-runtime-extraction-preparation.md)
 (inventory, dependency graph, provenance design, transaction plan, ownership and exports plan).
@@ -36,6 +37,8 @@ would use if the owner confirms it; it is **not authoritative** and must not be 
 Owner:            RFC A2/A6 architecture owner
 Closes gates:     4 (count resolved), 5 (scope + wave labels)
 Blocks:           W1 destination table, extraction manifest batch, test ownership inventory
+Also records:     E1–E3 (core import specifier, module-object alias policy, `db` shadowing) —
+                  these block W1's first move but close no gate row
 Answer format:    one line per row, e.g. "A1 = 22 file moves; A2 = rows only; A4 = yes (2)"
 ```
 
@@ -143,9 +146,29 @@ identity/ownership. A test that only asserts "some calls happened" is explicitly
 
 ---
 
+## E. Scanner and import-contract decisions (added 2026-11-21)
+
+`[inspected]` Three questions were raised by the 2026-11-21 corrective audit and are **not** answered by
+A–D. They block W1's first move but close no gate row on their own: they decide what the W1 code is
+allowed to look like, not what the inventory contains.
+
+| # | Question | Current evidence | Options | Answer required | Owner |
+|---|---|---|---|---|---|
+| E1 | Which **core import specifier** may a runtime module use? | Three sources disagree. `test/boundary-scanner.js:20` documents "the core package by its package-ROOT specifier (RFC §11.4), which resolves through core's `main`". The implementation rejects that form: `require('@morocco-pc/recommendation-core')` → `forbidden-module`, while `require('../../../recommendation-core')` is clean, because `expectedCore` is computed as a **relative** path. `apps/api/Dockerfile:39-43` and dossier §12 state that only the relative path resolves in the image, since the root manifest declares no `workspaces` | (a) **relative** `../../../recommendation-core` — works today, is what the scanner enforces, needs no packaging change; (b) **bare** `@morocco-pc/recommendation-core` — requires `workspaces` or `file:` linkage, an `exports`-aware resolver in the scanner, and an image change; (c) hybrid: relative in source, bare only after a packaging wave | | A2/A6 |
+| E2 | What is the **module-object alias policy**? | `const m = module; m.require('node:fs')` → **no violation**; `const load = m.require; load('pg')` → **no violation**; `m['require']('pg')` → **no violation**. The alias collector accepts only a bare identifier or the literal pair `module` `.` `require`, so a member expression never becomes an alias. Undocumented. The scanner header also carries two inaccurate examples: `require.bind(null)` and `client.end()` under a `client` parameter are both **detected**, not missed | (a) accept as a documented limitation, covered by `R-REQ-1` (never hold `require`; call it at the point of use); (b) add a separate module-object alias set, correct the two header examples, and extend `R-SHADOW-1`'s scope | | A2/A6 |
+| E3 | Does **`R-SHADOW-1`** apply to injected database-client parameters? | The rule says "do not name a parameter or local `require`, `module`, `process`, `client`, `pool`, `db` or `Date`". The code W1 must move already violates it: `swap-preview.js` (`const db = args.db`), `run.js:214` (`readTransactionTimestamp(db)`), `swap-commit.js` (`const db = args.db`), and the loader signatures (`loadQueryInput(queryId, db)`). The scanner does not enforce `db` at all — `function f(db) { db.query('SELECT 1'); }` is clean | (a) restrict `R-SHADOW-1` to **globals** (`require`, `module`, `process`, `Date`) and leave `client`/`pool`/`db` as ordinary parameter names; (b) keep the wording and rename the moved code's parameters — which changes signatures W1 is meant to move byte-identically; (c) keep the wording and add enforcement for `db`/`client` | | A2/A6 |
+
+`[unresolved]` All three are recorded with their alternatives and no answer. **E1 cannot be settled by
+this dossier**: it decides whether W1's first moved file imports by relative path or by package name,
+and the two choices imply different packaging work. E2 and E3 decide what the boundary gate is allowed
+to claim, not what it currently proves.
+
+---
+
 ## What these answers unlock, and what they do not
 
 Answering A–D unlocks: the final destination table, the `step-5-w1` manifest batch shape, the test
-ownership inventory's `current` paths, and the package `exports` key set. It **does not** authorise W1:
-gates 1, 2, 3, 6 and 7 remain open, and gate 7 is the project authority's explicit written
-authorisation. No module moves on the strength of this document.
+ownership inventory's `current` paths, and the package `exports` key set. Answering E1 unlocks the
+import form W1's first moved file may use; E2 and E3 unlock the boundary gate's claim and the parameter
+naming rule. None of it authorises W1: gates 1, 2, 3, 6 and 7 remain open, and gate 7 is the
+project authority's explicit written authorisation. No module moves on the strength of this document.
