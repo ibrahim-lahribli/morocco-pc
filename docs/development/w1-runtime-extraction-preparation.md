@@ -44,14 +44,14 @@ corrections are now at `75f7823` (section 1.5). The runtime tree holds **12 file
 `"exports": []`. The header comment names the planned waves (loaders W1, persistence W2, orchestrator
 W3) and nothing has shipped from them.
 
-`[inspected]` On `master` (`45133d5`) and in this checkout, `src/recommendation/**` still contains every
+`[inspected]` On the historical `master` `45133d5` and in this checkout at `880bb18`, `src/recommendation/**` still contains every
 loader, every persistence writer and every orchestrator module — no implementation has moved.
 
 `[inspected]` PR #50 was **merged by the repository owner during this review**, at
 2026-11-20T22:55:21Z, as `6fd31220fe2cbb421a56e28ada302f209f219691`; PR #49 merged immediately before
 it as `2569647`. `origin/master` is now `6fd3122` and contains `75f7823`, so the runtime tree described
-above is on `master`, not only on the branch. `[inspected]` PR #51, this dossier's branch, is now
-**behind** `master` and unmerged.
+above is on `master`, not only on the branch. `[inspected]` PR #51, this dossier's branch, was rebased
+onto `6fd3122` on 2026-11-21 (section 2.1): it is **0 commits behind** `master` and unmerged.
 
 ### 1.2 Deviation: this checkout is not the W0 branch
 
@@ -140,7 +140,7 @@ in `w1-rfc-decision-request.md`.
 
 | Commit | Role | Tree state | `unit-and-docs` | Runtime step | `image` |
 |---|---|---|---|---|---|
-| `45133d5` | former `master`; base of PR #51 | no `test:runtime` script, no runtime step in `ci.yml` | `success` (runs 44756114202 / 44756123305) | **did not exist** | not applicable |
+| `45133d5` | **historical** `master` (merge of #47); PR #51's base before the 2026-11-21 rebase | no `test:runtime` script, no runtime step in `ci.yml` | `success` (runs 44756114202 / 44756123305) | **did not exist** | not applicable |
 | `75f7823` | **intermediate** #50 head (not the merged head) | scanner + fixtures only | **success** — runs 44832300705 (pull_request) / 44832308785 (push) | **does not exist in CI** — executed by no workflow | not applicable |
 | `706e40b1` | **#50 merged head** | the 12 runtime files, merged as `6fd3122` | green before merge; merge commit run 44832844277 `success` | **does not exist in CI** | not applicable |
 | `6fd3122` | **current `master`** (merge of #50) | the 12 runtime files are on `master` | `success` (run 44832844277) | **no `test:runtime` script and no runtime step in `ci.yml`** | not applicable |
@@ -193,7 +193,8 @@ and the two failed runs; the audited head is `23f43c2b` (section 2), and correct
 separate action this document does not perform.
 
 `[inspected]` **PR #51 was rebased onto `6fd3122` on 2026-11-21** as part of this correction. Before it,
-the branch was based on `45133d5` and reported `behind`; the pre-rebase head was `cc6f0f28` and is now
+the branch was based on `45133d5` (the then-current `master`, the merge of #47) and reported `behind`;
+the pre-rebase head was `cc6f0f28` and is now
 historical. The rebase was clean — seven commits replayed with no conflict — and the branch's diff
 against `master` remains exactly these two documentation files. `[owner]` No merge and no approval was
 performed: rebasing a documentation branch is not an authorisation, and gate 7 is untouched.
@@ -253,7 +254,8 @@ the timing decision recorded in `7052829377` §1 is Agent 1's, and this document
 
 `[inspected]` The §11.2 table contains **24 rows** whose target column includes runtime. That count was
 re-measured in this review on the **merged** `master` `6fd3122` (after PR #49's Revision 15 landed) and
-it matches the count on `45133d5` (this PR's base) and on `feat/core-explanation-extraction` `880bb18`:
+it matches the count on the historical `master` `45133d5` (PR #51's pre-rebase base) and on
+`feat/core-explanation-extraction` `880bb18`:
 the row set did not change when #49 merged, and the row count is not revision-dependent. Three of those
 rows are the mixed barrels and are **split rather than moved**, leaving 21 moving rows. One of those 21
 rows names **two** files (`persistence/validate-selected.js`, `validate-rejections.js`), so the moved set
@@ -282,7 +284,7 @@ lines:
 
 | Revision | §11.2 "Counts" bold figure | Its own parenthetical sums to | Runtime-targeting rows |
 |---|---|---|---|
-| `45133d5` (former `master`, base of PR #51) | **24** modules ("2 candidates/filtering/offers loaders + 1 filtering pipeline + 3 candidates + 5 orchestrator + 5 persistence + 3 query + 2 scoring loaders") | **21** | **24** |
+| `45133d5` (**historical** `master`, PR #51's pre-rebase base) | **24** modules ("2 candidates/filtering/offers loaders + 1 filtering pipeline + 3 candidates + 5 orchestrator + 5 persistence + 3 query + 2 scoring loaders") | **21** | **24** |
 | `feat/core-explanation-extraction` `880bb18` | **21** modules ("3 loaders for candidates/filtering/offers + 1 filtering pipeline + 7 orchestrator + 5 persistence + 3 query + 2 scoring loaders") | **21** | **24** |
 | `6fd3122` (**current `master`**, #49 + #50 merged) | **21** modules — PR #49's Revision 15 rewrote the figure | **21** | **24** |
 
@@ -928,7 +930,7 @@ does not exist and is a W1 deliverable, not a W0 one.
 | 1 | Step 4 final acceptance | **OPEN** | Agent 2 | `[inspected]` PR #49 is now **merged** (`2569647`, and `master` = `6fd3122`), so merge order no longer blocks it — but no written acceptance exists in the PR trail, and a merge is not an acceptance | Agent 2's written acceptance of the nine core namespaces, the 11-key `exports` map and the identity shims |
 | 2 | Runtime tests in CI on the merge path | **PARTIAL** | Agent 1 | `[CI verified]` at audited #48 head `23f43c2b`: `test:runtime` at `package.json:12`, step at `ci.yml:56-57`, `ci` run `44834047676` step 10 = **85 tests / 17 suites / 85 pass / 0 fail**. `[inspected]` `master` `6fd3122` still has no script and no step, so the change is **not integrated**; discovery is one level deep (§11.2 item 2) | merge #48, then a green `ci` on `master` **and** a recursive glob plus a recursive discovery guard |
 | 3 | C7 image validation | **CONDITIONAL** | Agent 1 | `[inspected]` `Dockerfile:69-70` COPY pair; `[CI verified]` `api-image` run `44834047614` asserts presence, `test/`+`docs/` absence, path loadability, `private`, and the core interface (6/6 negatives). `[UNVERIFIED]` the `c7-neg` negative build | merge #48 and a green `api-image` on `master`; then either drop the `c7-neg` claim or add a real negative step |
-| 4 | RFC count resolved | **OPEN** | A2/A6 | `[inspected]` 24 rows / 3 split barrels / 21 rows / 22 files; bold figure 24 on `master`, 21 on the branch, both parentheticals 21; no written answer (decision request A1–A5) | the A2/A6 owner's written answer on A1–A5 |
+| 4 | RFC count resolved | **OPEN** | A2/A6 | `[inspected]` 24 rows / 3 split barrels / 21 rows / 22 files; bold figure 24 on `45133d5`, 21 on `6fd3122` and on the branch `880bb18`, both parentheticals 21; no written answer (decision request A1–A5) | the A2/A6 owner's written answer on A1–A5 |
 | 5 | Full-extraction scope and W1/W2/W3 labels | **OPEN** | A2/A6 | `[inspected]` the frozen W0 entry point names loaders/persistence/orchestrator as W1/W2/W3; "full extraction" is unreconciled (B1–B5) | the A2/A6 owner's written answer on B1–B5 |
 | 6 | Provenance, transaction, compatibility and test-ownership contracts | **OPEN** | review | `[proposed]` declared-rewrite policy with 24 negative cases, verified transaction table, 22-row shim map, export map and test inventory are designs only | review approval of those designs **and** the negative-test matrix implemented and passing |
 | 7 | Explicit written W1 authorization | **OPEN** | authority | no authorization exists; this document is preparation only | the project authority's explicit written authorization |

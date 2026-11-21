@@ -5,7 +5,7 @@
 This is a decision request to the RFC A2/A6 architecture owner, not a decision. It asks for written
 answers to four question groups (A–D) that block gates 4 and 5 of the W1 ledger, and it records a fifth
 group (E, added 2026-11-21) that blocks W1's first move without closing any gate row. Every other row of
-that ledger stays closed until these are answered and the remaining evidence arrives.
+that ledger stays open until these are answered and the remaining evidence arrives.
 
 Companion document: [`w1-runtime-extraction-preparation.md`](w1-runtime-extraction-preparation.md)
 (inventory, dependency graph, provenance design, transaction plan, ownership and exports plan).
@@ -46,7 +46,8 @@ Answer format:    one line per row, e.g. "A1 = 22 file moves; A2 = rows only; A4
 
 ## A. Inventory count
 
-`[inspected]` The §11.2 table is identical on `master` (`45133d5`, base of PR #51) and on
+`[inspected]` The §11.2 table is identical on the current `master` (`6fd3122`), on the historical
+`master` `45133d5` (PR #51's base before its 2026-11-21 rebase) and on
 `feat/core-explanation-extraction` (`880bb18`): **24 rows** have runtime in their target column.
 Three of those rows are the mixed barrels `candidates/index.js`, `filtering/index.js` and
 `scoring/index.js`, which are split rather than moved; one of the remaining 21 rows names two files
@@ -56,7 +57,8 @@ The "Counts" paragraph differs by revision, so this request cites sections, not 
 
 | Revision | §11.2 bold figure | Its own parenthetical sums to | Programme table phrase |
 |---|---|---|---|
-| `master` `45133d5` | **24** modules | 21 | "the 24 runtime modules" at line **1524** |
+| `45133d5` (**historical** `master`, PR #51's pre-rebase base) | **24** modules | 21 | "the 24 runtime modules" at line **1524** |
+| `6fd3122` (**current** `master`, #49 + #50 merged) | **21** modules | 21 | "the 24 runtime modules" at line **1527** |
 | `feat/core-explanation-extraction` `880bb18` | **21** modules | 21 | "the 24 runtime modules" at line **1527** |
 
 So the figures are not three opinions about one quantity: **24 is a row count**, **22 is a file
@@ -136,7 +138,7 @@ transaction behaviour is to change in W1.
 | D2 | `run.js` owns **no** transaction | `run.js`: no `BEGIN`/`COMMIT`/`ROLLBACK`; one autocommit `SELECT CURRENT_TIMESTAMP AS now` | **Confirmed** | | A2/A6 |
 | D3 | `commit.js` (`runRecommendationCommit`) **owns** the write transaction | `commit.js`: `BEGIN`, the `recommendation_query` `FOR UPDATE` guard, REPLACE-style writers, `COMMIT` on success / `ROLLBACK` on failure | **Confirmed** | | A2/A6 |
 | D4 | `commitSwapInTransaction` **owns** its write transaction; `commitSwap` owns none | `swap-commit.js`: `BEGIN` … `COMMIT`, `ROLLBACK` on error, original error preserved; `commitSwap` runs on the caller's handle | **Confirmed** | | A2/A6 |
-| D5 | Documentation correction: `LOADERS_AND_TRANSACTIONS.md` says the read snapshot "is opened by the caller: `orchestrator/run.js` runs stages 1-10 inside a caller-owned … transaction" | Contradicts D1/D2: the caller supplies the **client**, `snapshot.js` opens the transaction | **Correction approved** — attribute ownership to `snapshot.js`; the caller supplies the client and owns no transaction | | A2/A6 |
+| D5 | Documentation correction: `LOADERS_AND_TRANSACTIONS.md` says the read snapshot "is opened by the caller: `orchestrator/run.js` runs stages 1-10 inside a caller-owned … transaction" | Contradicts D1/D2: the caller supplies the **client**, `snapshot.js` opens the transaction | **Proposed, not approved** — attribute ownership to `snapshot.js`; the caller supplies the client and owns no transaction | | A2/A6 |
 
 `[inspected]` The dossier §8 turns these five confirmations into an executable specification: a success
 trace and a failure trace per operation (nine failure points, including BEGIN, first read, later read,
