@@ -81,7 +81,7 @@ function stepBlock(jobText) {
 
 test('the assessment-age step runs in the nightly job only, never on push or PR', () => {
   const all = jobs(readWorkflow());
-  assert.deepEqual(Object.keys(all).sort(), ['recurring-gates', 'unit-and-docs']);
+  assert.deepEqual(Object.keys(all).sort(), ['ephemeral-eval', 'recurring-gates', 'unit-and-docs']);
 
   const nightly = stepBlock(all['recurring-gates']);
   assert.ok(nightly, 'recurring-gates carries the Assessment age step');
@@ -251,8 +251,8 @@ test('the runtime harness runs in unit-and-docs, with discovery before the runne
   );
 
   const all = jobs(readWorkflow());
-  assert.deepEqual(Object.keys(all).sort(), ['recurring-gates', 'unit-and-docs'],
-    'the two-job architecture must not change');
+  assert.deepEqual(Object.keys(all).sort(), ['ephemeral-eval', 'recurring-gates', 'unit-and-docs'],
+    'the three-job architecture must not change');
   assert.ok(all['unit-and-docs'].includes('npm run test:runtime'),
     'unit-and-docs must run the runtime harness');
   assert.equal(all['recurring-gates'].includes('test:runtime'), false,
@@ -284,4 +284,49 @@ test('the boundary lint runs in unit-and-docs, backed by a committed baseline', 
   );
   assert.ok(Array.isArray(baseline) && baseline.length > 0,
     'the known-violations baseline must be committed and non-empty');
+});
+
+test('the ephemeral-eval job runs the golden harness on a throwaway postgres', () => {
+  const all = jobs(readWorkflow());
+  const job = all['ephemeral-eval'];
+  assert.ok(job, 'ci.yml carries the ephemeral-eval job');
+
+  // The service container is pinned: major version (Neon runs PostgreSQL 18)
+  // and a readiness gate, so migrations never race a booting database.
+  assert.match(job, /image: postgres:18/);
+  assert.match(job, /pg_isready/);
+
+  // Provisioning order: migrations through the test-db path (which never
+  // appends to the tracked database/migration-applies.jsonl audit log), then
+  // the full seed tail, then the harness under an explicit pin - after seed
+  // 029 the default seed-minimal-v1@1.0.0 pin is INACTIVE and fails closed.
+  const migrate = job.indexOf('node scripts/run-migrations.js --test-db');
+  const seed = job.indexOf('node scripts/run-seeds.js');
+  const evalRun = job.indexOf(
+    'npm run eval:scenarios -- --model=launch-v2@2.5.0 --no-baseline --no-volatile');
+  assert.ok(migrate > -1, 'the job applies migrations 001-023 via --test-db');
+  assert.ok(seed > migrate, 'the seeds follow the migrations');
+  assert.ok(evalRun > seed, 'the harness follows the seeds');
+
+  // One container, two host spellings: database-guard's getWriteTestDbUrl()
+  // requires TEST_DATABASE_URL and DATABASE_URL to name DIFFERENT hosts, and
+  // the ephemeral job must point at the service container, never at a secret -
+  // that absence is what lets fork PRs run the harness.
+  assert.match(job,
+    /TEST_DATABASE_URL: postgres:\/\/postgres:ephemeral@localhost:5432\/morocco_eval/);
+  assert.match(job,
+    /DATABASE_URL: postgres:\/\/postgres:ephemeral@127\.0\.0\.1:5432\/morocco_eval/);
+  assert.equal(job.includes('secrets.DATABASE_URL'), false,
+    'the ephemeral job must not read the shared DATABASE_URL secret');
+  assert.equal(job.includes('secrets.TEST_DATABASE_URL'), false,
+    'the ephemeral job must not read the TEST_DATABASE_URL secret');
+
+  // Push/PR only - the nightly job keeps its own TEST-branch gates.
+  assert.match(job, /if: github\.event_name != 'schedule'/);
+
+  // No other job duplicates the harness.
+  assert.equal(all['unit-and-docs'].includes('eval:scenarios'), false,
+    'unit-and-docs must not run the golden harness');
+  assert.equal(all['recurring-gates'].includes('eval:scenarios'), false,
+    'the nightly job must not run the golden harness');
 });
