@@ -7,7 +7,19 @@
 // run produced for every stage behind that seam. Both were captured on the TEST
 // branch at the manifest's `as_of` with `launch-v2@2.5.0`, each scenario twice,
 // and every field that differed between the two captures was removed (only
-// `query_id`, which is pinned to "<ID>"). See test/golden/CHANGELOG.md.
+// `query_id`, which is pinned to "<ID>").
+//
+// Capture source: Neon project "morocco-pc" (aws-us-east-2), branch "test"
+// (br-odd-breeze-axklg9xd), endpoint ep-dry-mountain-ax6b5wu6, as_of
+// 2026-10-08T20:00:00.000Z, model pin launch-v2@2.5.0, catalog 113 products /
+// 116 offers / 319 assessments (measured read-only 2026-11-21). Captured on
+// TEST with 116 offers; the 2 extra are manual ingestion residue (record
+// ff400777), no golden metric changes. Reproduce with
+// `node test/golden/capture.js --check`.
+//
+// These are captured outputs and are never regenerated automatically. A genuine
+// capture bug may justify a re-capture, REPORTED as such; changing an assertion
+// to match new output is never allowed.
 //
 // This file checks SHAPE only — that the pairs exist, pair up, and carry the
 // keys the replay needs. The behavioural assertion is
