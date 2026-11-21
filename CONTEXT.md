@@ -8,6 +8,7 @@ exists, where it runs, and the numbers as of **2026-11-02**. It carries no histo
 
 Open work is [`docs/OPEN_POINTS.md`](docs/OPEN_POINTS.md). Programmes and sprints are
 [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Extraction-programme decisions are recorded in [`DECISIONS.md`](DECISIONS.md).
 
 ## 1. The four layers (PostgreSQL, 44 tables, 23 migrations)
 
