@@ -372,3 +372,71 @@ test('the ephemeral-eval job runs the guarded DB suite after the golden harness'
   assert.ok(all['recurring-gates'].includes('npm run test:api:db'),
     'the nightly TEST-branch DB suite must remain wired');
 });
+
+// The loader parity suite is the ONLY thing that compares the real loaders to
+// the frozen loader fixtures, and it needs a fresh seeded database. Its wiring
+// is therefore as load-bearing as the harness it follows: it must sit in the
+// ephemeral job, after the harness and before the DB API suite, carry no
+// secret, and stay out of the DB-free job. The script itself must keep pointing
+// at the one file, and no DB-free script may start globbing test/golden.
+function namedStep(jobText, name) {
+  const lines = jobText.split('\n');
+  const start = lines.findIndex((line) => line.includes('- name: ' + name));
+  if (start < 0) return null;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^ {6}- /.test(lines[i])) { end = i; break; }
+  }
+  return lines.slice(start, end).join('\n');
+}
+
+test('the ephemeral-eval job runs the loader parity suite after the harness', () => {
+  const all = jobs(readWorkflow());
+  assert.deepEqual(Object.keys(all).sort(), ['ephemeral-eval', 'recurring-gates', 'unit-and-docs'],
+    'the three-job architecture must not change');
+  const job = all['ephemeral-eval'];
+  assert.ok(job, 'ci.yml carries the ephemeral-eval job');
+
+  // Exactly one occurrence, and only in the ephemeral job.
+  assert.equal(job.split('npm run test:loaders:ephemeral').length - 1, 1,
+    'ephemeral-eval must run the loader parity suite exactly once');
+  assert.equal(all['unit-and-docs'].includes('test:loaders:ephemeral'), false,
+    'unit-and-docs is DB-free and must not run the loader parity suite');
+  assert.equal(all['recurring-gates'].includes('test:loaders:ephemeral'), false,
+    'the nightly job must not run the loader parity suite');
+
+  // Order: the harness (which refuses unmarked query rows) first, then the
+  // loader suite (which creates and deletes its own), then the DB API suite.
+  const harness = job.indexOf('npm run eval:scenarios');
+  const loaders = job.indexOf('npm run test:loaders:ephemeral');
+  const dbRun = job.indexOf('npm run test:api:db');
+  assert.ok(harness > -1 && loaders > harness,
+    'the loader suite must follow the golden harness');
+  assert.ok(dbRun > -1 && dbRun > loaders,
+    'the loader suite must precede the DB-backed API suite');
+
+  // The step targets the service container only: no secret, no shared opt-in.
+  // Comments may explain an absence; executable lines may not reintroduce it.
+  const step = namedStep(job, 'Loader identity and order (ephemeral)');
+  assert.ok(step, 'ephemeral-eval carries the Loader identity and order step');
+  const code = step.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
+  assert.equal(code.includes('secrets.'), false,
+    'the loader step must not read any DB secret');
+  assert.equal(code.includes('API_ALLOW_SHARED'), false,
+    'the loader step must never opt into the shared database');
+  assert.ok(code.includes('run: npm run test:loaders:ephemeral'),
+    'the step runs the package script, not an inline node invocation');
+
+  // The script names exactly one file (so it cannot pass by discovering
+  // nothing), that file exists, and no DB-free suite reaches into test/golden.
+  const pkg = JSON.parse(fs.readFileSync(PACKAGE_JSON, 'utf8'));
+  assert.equal(pkg.scripts['test:loaders:ephemeral'], 'node --test "test/golden/loaders.test.js"',
+    'test:loaders:ephemeral must run exactly the one golden loader suite');
+  assert.ok(fs.existsSync(path.resolve(__dirname, '../../test/golden/loaders.test.js')),
+    'test/golden/loaders.test.js must exist');
+  for (const name of ['test:unit', 'test:scripts', 'test:core', 'test:api',
+    'test:runtime', 'test:database-guard', 'test:coverage']) {
+    assert.equal(String(pkg.scripts[name]).includes('test/golden'), false,
+      name + ' must not include test/golden');
+  }
+});
