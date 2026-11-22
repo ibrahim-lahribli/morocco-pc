@@ -50,8 +50,10 @@
 
 'use strict';
 
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
-const { validateScoringModelConfiguration } = require('./configuration');
+const core = require('../core-entry');
+
+const { CandidateSelectionError, ERROR_CODES } = core.candidates;
+const { validateScoringModelConfiguration } = core.scoring;
 
 /**
  * Single Decision 11 query (Rule 2). Parameterized only ($1 = pinned model id).

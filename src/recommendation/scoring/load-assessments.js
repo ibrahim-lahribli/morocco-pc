@@ -66,7 +66,9 @@
 
 'use strict';
 
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const core = require('../core-entry');
+
+const { CandidateSelectionError, ERROR_CODES } = core.candidates;
 
 /**
  * Single Engine 4 assessment query. Parameterized only ($1 = product ids).

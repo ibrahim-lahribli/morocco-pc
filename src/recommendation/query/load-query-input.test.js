@@ -310,7 +310,10 @@ test('resolution is carried verbatim as a sibling of input, never inside it', as
 test('load-query-input.js keeps its source boundary', () => {
   const source = fs.readFileSync(path.join(__dirname, 'load-query-input.js'), 'utf8');
   const required = [...source.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
-  assert.deepEqual(required, ['../candidates/errors', '../candidates/input']);
+  // Step 5 W1 C1: the two core imports became one location-independent
+  // '../core-entry' require, so the same bytes resolve the core package root
+  // from src/recommendation/<dir>/ and from the runtime package's <dir>/.
+  assert.deepEqual(required, ['../core-entry']);
 
   const banned = [
     "require('pg')",

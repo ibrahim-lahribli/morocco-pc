@@ -87,7 +87,9 @@
 
 'use strict';
 
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const core = require('../core-entry');
+
+const { CandidateSelectionError, ERROR_CODES } = core.candidates;
 
 /**
  * The catalog tables a read-path loader SELECTs (Decision 47 item 3), in the

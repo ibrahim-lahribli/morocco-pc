@@ -72,8 +72,13 @@
 
 'use strict';
 
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
-const { createCandidateSelectionInput } = require('../candidates/input');
+const core = require('../core-entry');
+
+const {
+  CandidateSelectionError,
+  ERROR_CODES,
+  createCandidateSelectionInput,
+} = core.candidates;
 
 /**
  * Decision 10 Rule 1 loader constant, canonical component_role order.
