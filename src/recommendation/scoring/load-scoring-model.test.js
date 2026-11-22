@@ -423,7 +423,13 @@ test('a database client without query() is rejected without a query', async () =
 });
 
 test('load-scoring-model.js keeps its source boundary', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'load-scoring-model.js'), 'utf8');
+  // Step 5 W1 made this path an identity shim: the implementation now lives in
+  // the runtime package. These structural assertions read the REAL source, so
+  // they cannot pass vacuously against a two-line re-export.
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-runtime', 'src', 'scoring', 'load-scoring-model.js'),
+    'utf8'
+  );
   const required = [...source.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
   // Step 5 W1 C1: the two core imports became one location-independent
   // '../core-entry' require, so the same bytes resolve the core package root

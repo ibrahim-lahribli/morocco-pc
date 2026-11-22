@@ -295,6 +295,31 @@
           "destination": "packages/recommendation-runtime/src/offers/select.js"
         }
       ]
+    },
+    {
+      "id": "step-5-w1-query-scoring",
+      "description": "Step 5 W1 PR 1: the two query loaders (the pinned recommendation_query lookup and the Decision 47 catalog content digest) and the two scoring loaders (the pinned scoring_model lookup and the candidate-scoped component_assessment read) moved out of src/recommendation/{query,scoring}/ into packages/recommendation-runtime/src/{query,scoring}/, leaving identity re-export shims at the old paths. All four execute SQL, so they belong to the runtime package, not the pure core. The move is byte-identical because the import specifiers were made location-independent BEFORE this baseline: commit 'refactor(query,scoring): reach core through the core-entry adapter' rewrote each module's core requires into one '../core-entry' require, so the same bytes resolve the core package root from either depth (the runtime tree answers the same specifier with its own packages/recommendation-runtime/src/core-entry.js). Behaviour is pinned by the four L1 suites that stayed at the old paths - they inject a fake client and now exercise the modules through the shims - and by the four DB-free suites added under packages/recommendation-runtime/test/ in this batch. No characterization fixture is recorded: a module whose whole contract is exercised through an injected client needs no captured surface beyond the suites that already run in CI.",
+      "baseline_sha": "7cd170d42cd6781c66e2adae8339ea37d9e69d24",
+      "identity_policy": "byte-identical",
+      "characterization": null,
+      "modules": [
+        {
+          "source": "src/recommendation/query/load-query-input.js",
+          "destination": "packages/recommendation-runtime/src/query/load-query-input.js"
+        },
+        {
+          "source": "src/recommendation/query/catalog-version.js",
+          "destination": "packages/recommendation-runtime/src/query/catalog-version.js"
+        },
+        {
+          "source": "src/recommendation/scoring/load-scoring-model.js",
+          "destination": "packages/recommendation-runtime/src/scoring/load-scoring-model.js"
+        },
+        {
+          "source": "src/recommendation/scoring/load-assessments.js",
+          "destination": "packages/recommendation-runtime/src/scoring/load-assessments.js"
+        }
+      ]
     }
   ]
 }
