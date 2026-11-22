@@ -206,6 +206,13 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: ephemeral
           POSTGRES_DB: morocco_eval
+          # Neon parity, not a preference. The stock image clusters en_US.utf8,
+          # whose collation ignores punctuation at the primary level and orders
+          # 'g-skill-...' AFTER 'gigabyte-...'; the catalogue keyset walk asserts
+          # code-unit slug order and Neon serves it. Measured 2026-11-22: the
+          # DB suite is 16 passed / 1 failed (catalog.db.test.js) on the image
+          # default and 17 / 0 on C.UTF-8.
+          POSTGRES_INITDB_ARGS: "--locale=C.UTF-8"
         ports:
           - 5432:5432
         options: >-
@@ -233,6 +240,12 @@ jobs:
         run: node scripts/run-seeds.js
       - name: Golden scenario harness (ephemeral)
         run: npm run eval:scenarios -- --model=launch-v2@2.5.0 --no-baseline --no-volatile
+      # After the harness, never before: eval-scenarios.js refuses to start while
+      # any unmarked recommendation_query row exists, and this suite creates such
+      # rows (and deletes them by id). Job env already pins the localhost/127.0.0.1
+      # pair; API_ALLOW_SHARED is deliberately absent.
+      - name: DB-backed API tests (ephemeral)
+        run: npm run test:api:db
 
   recurring-gates:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
