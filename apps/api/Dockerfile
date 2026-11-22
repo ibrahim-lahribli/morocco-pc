@@ -4,7 +4,10 @@
 # from src/recommendation/, whose stage shims require the extracted packages
 # (packages/recommendation-core, packages/database-guard) by relative path, and
 # the step 5 runtime package (packages/recommendation-runtime) is the package
-# those shims will move behind. Build it with:
+# those shims now move behind: src/recommendation/offers/select.js IS such a
+# shim (step 5 W1), and the API reaches the moved implementation through it
+# (engine.js -> orchestrator -> offers -> shim ->
+# packages/recommendation-runtime/src/offers/select.js). Build it with:
 #
 #   docker build -f apps/api/Dockerfile -t morocco-pc-api .
 #
@@ -38,8 +41,13 @@ COPY apps/api ./apps/api
 # the runtime dependency stays visible and the image stays small. They are
 # consumed by relative path only: the root package.json declares no `workspaces`
 # and no dependency on any of them, so `npm ci` neither installs nor links them
-# and a bare `require('@morocco-pc/...')` will NOT resolve in this image. A file
-# copy is what makes `/app/packages/<name>` loadable by path. Path-only
+# and a bare `require('@morocco-pc/...')` does NOT resolve in this image. A file
+# copy is what makes `/app/packages/<name>` loadable by path. That is now the
+# RULE the tree is built to keep, not a warning about a future move: the runtime
+# reaches the core through a relative package-ROOT specifier
+# (../../recommendation-core, resolved through core's `main`), the old tree
+# reaches the runtime through a relative shim path, and no bare specifier sits
+# on any load path. The fact did not change - only the framing. Path-only
 # correction (owner decision 1, 2026-11-11): the install, the user and the CMD
 # are unchanged.
 
@@ -57,15 +65,18 @@ COPY packages/recommendation-core/package.json ./packages/recommendation-core/pa
 COPY packages/recommendation-core/src ./packages/recommendation-core/src
 
 # recommendation-runtime owns the database-backed execution half: the loaders,
-# the read snapshot and the write transaction. At W0 it ships the package
-# harness only, so nothing in apps/api imports it yet. The slot is created NOW,
-# before W1 moves a module into it, for three reasons: the first import must not
-# be the commit that discovers the image never carried the package; the COPY
+# the read snapshot and the write transaction. Step 5 W1 put the first module on
+# the API load path, so this package is no longer a slot waiting for an import:
+#   apps/api/src/engine.js -> orchestrator/ -> offers/ -> the identity shim at
+#   src/recommendation/offers/select.js
+#     -> packages/recommendation-runtime/src/offers/select.js
+# W0 shipped the slot before that move for three reasons: the first import must
+# not be the commit that discovers the image never carried the package; the COPY
 # pair is the only thing that makes `/app/packages/recommendation-runtime`
-# loadable by path (no workspace, no npm link); and the image gate can then
-# prove presence and loadability while the surface is still empty, instead of
-# pinning an empty surface. test/ and docs/ are NOT copied - tests and
-# documentation are not runtime.
+# loadable by path (no workspace, no npm link); and the image gate could prove
+# presence and loadability while the surface was still empty, instead of pinning
+# an empty surface. test/ and docs/ are NOT copied - tests and documentation are
+# not runtime.
 COPY packages/recommendation-runtime/package.json ./packages/recommendation-runtime/package.json
 COPY packages/recommendation-runtime/src ./packages/recommendation-runtime/src
 

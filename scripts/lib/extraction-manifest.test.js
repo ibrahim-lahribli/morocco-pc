@@ -77,7 +77,7 @@ test('the committed manifest is valid and pins PR 2 as its first batch', () => {
   const loaded = loadManifest(manifestFile(REPO_ROOT));
   assert.deepEqual(loaded.errors, []);
   // One batch per extraction PR: PR 2 first, later batches appended after it.
-  assert.equal(loaded.batches.length, 6);
+  assert.equal(loaded.batches.length, 7);
 
   const pr2 = loaded.batches[0];
   assert.equal(pr2.id, 'step-4b-pr2');

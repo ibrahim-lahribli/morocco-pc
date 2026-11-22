@@ -282,6 +282,19 @@
           "destination": "packages/recommendation-core/src/offers/as-of.js"
         }
       ]
+    },
+    {
+      "id": "step-5-w1-offers",
+      "description": "Step 5 W1: the Engine 2 stage 1 offer pre-selection query (selectOfferPrices, the single parameterized store_offer query) moved out of src/recommendation/offers/ into packages/recommendation-runtime/src/offers/, leaving an identity re-export shim at the old path. It is database-backed, so it belongs to the runtime package, not the pure core. The move is byte-identical because the import specifiers were made location-independent BEFORE this baseline: commit 'refactor(offers): reach core through the core-entry adapter' added src/recommendation/core-entry.js and rewrote the module's five requires into one '../core-entry' require, so the same bytes resolve the core package root from either depth (the runtime tree answers the same specifier with its own packages/recommendation-runtime/src/core-entry.js). Behaviour is pinned by the L1 suite src/recommendation/offers/select.test.js - the Decision 65 selection tests among them - which needs an injected fake client, and by the DB-free packages/recommendation-runtime/test/offers-select.test.js added in this batch. No characterization fixture is recorded: a module whose whole contract is exercised through an injected client needs no captured surface beyond the suites that already run in CI.",
+      "baseline_sha": "0b553d28df18789c4c9d9b68744dde3bfd3ecca5",
+      "identity_policy": "byte-identical",
+      "characterization": null,
+      "modules": [
+        {
+          "source": "src/recommendation/offers/select.js",
+          "destination": "packages/recommendation-runtime/src/offers/select.js"
+        }
+      ]
     }
   ]
 }
