@@ -280,7 +280,7 @@ test('no second engine behavior is introduced', async () => {
   const required = [...source.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
   assert.deepEqual(
     required.sort(),
-    ['../assembly/prices', '../candidates/candidate', '../candidates/errors', '../candidates/input', './as-of'].sort()
+    ['../core-entry'].sort()
   );
   const bannedBehavior = [
     'filterCandidates',

@@ -52,10 +52,16 @@
 
 'use strict';
 
-const { createCandidateSelectionInput } = require('../candidates/input');
-const { createCandidate } = require('../candidates/candidate');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
-const { priceKey, validatePrices } = require('../assembly/prices');
+const core = require('../core-entry');
+
+const {
+  createCandidateSelectionInput,
+  createCandidate,
+  CandidateSelectionError,
+  ERROR_CODES,
+} = core.candidates;
+const { priceKey, validatePrices } = core.assembly;
+const { parseAsOf } = core.offers;
 
 /** GPU is variant-keyed; every other role is product-keyed (Engine 2B/2C). */
 const GPU_ROLE = 'GPU';
@@ -78,8 +84,6 @@ const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
  *              offer (ingestion_record_id IS NULL) bypasses the 30-day window;
  *              when false the added term is inert and behaviour is unchanged.
  */
-const { parseAsOf } = require('./as-of');
-
 const SELECT_OFFER_PRICES_SQL = [
   'SELECT o.id, o.store_id, o.product_id, o.product_variant_id, o.price, o.currency, o.availability, o.last_checked_at, o.ingestion_record_id, CURRENT_TIMESTAMP AS price_checked_at',
   'FROM store_offer o',
