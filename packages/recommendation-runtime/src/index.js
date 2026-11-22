@@ -12,10 +12,12 @@
 // nothing else. A module that appears under src/ cannot become a public export
 // by accident.
 //
-// Deliberately empty right now. Step 4 (recommendation-core) is still in
-// progress, and no runtime module may move before it is accepted. The
-// namespaces arrive one batch at a time, each adding itself to
-// test/export-surface.json in the same commit:
+// Deliberately empty right now, and still empty after step 5 W1 moved the first
+// module in: a module lands under src/ (offers/select.js, behind an identity
+// shim at its old path) before its namespace is published, because the surface
+// grows one namespace per batch rather than one file per move. The namespaces
+// arrive one batch at a time, each adding itself to test/export-surface.json in
+// the same commit:
 //   loaders       W1 — candidates, scoring, offers and query loaders, the
 //                 filtering-context loader, and the filtering composition
 //                 `filterCandidatesForRecommendation`. That last name is
