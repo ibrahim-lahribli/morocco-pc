@@ -6,6 +6,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { selectOfferPrices, SELECT_OFFER_PRICES_SQL } = require('./select');
+
+/**
+ * Step 5 W1 made this path an identity shim: the implementation now lives in
+ * the runtime package. The structural assertions below read the REAL source, so
+ * they cannot pass vacuously against a two-line re-export.
+ */
+const SELECT_SOURCE = path.join(
+  __dirname, '..', '..', '..', 'packages', 'recommendation-runtime', 'src', 'offers', 'select.js'
+);
 const { priceKey, validatePrices } = require('../assembly/prices');
 const { ERROR_CODES, CandidateSelectionError } = require('../candidates/errors');
 
@@ -262,7 +271,7 @@ test('SQL contains required clauses and no forbidden tokens', async () => {
   for (const token of forbidden) {
     assert.ok(!lowered.includes(token), `SQL must not contain ${token}`);
   }
-  const source = fs.readFileSync(path.join(__dirname, 'select.js'), 'utf8');
+  const source = fs.readFileSync(SELECT_SOURCE, 'utf8');
   assert.ok(!source.includes('price_history'));
   assert.ok(!source.includes('statement_timestamp'));
   assert.ok(!source.includes('clock_timestamp'));
@@ -276,7 +285,7 @@ test('query is parameterized with product ids and currency', async () => {
 });
 
 test('no second engine behavior is introduced', async () => {
-  const source = fs.readFileSync(path.join(__dirname, 'select.js'), 'utf8');
+  const source = fs.readFileSync(SELECT_SOURCE, 'utf8');
   const required = [...source.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
   assert.deepEqual(
     required.sort(),
