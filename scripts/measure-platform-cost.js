@@ -28,10 +28,11 @@
  * Decision 16 handoff, so this measures the real rules rather than a
  * re-implementation of them.
  *
- * The retention call mirrors `orchestrator/run.js` exactly - `resolveRoleTargets`
- * (E2) and `resolveGpuPolicy` (E6) are not exported there, so they are mirrored
- * here from the same configuration keys, and the script says so rather than
- * quietly measuring a different retention.
+ * The retention call mirrors `orchestrator/compute.js` exactly - `resolveRoleTargets`
+ * (E2) and `resolveGpuPolicy` (E6) now live there and ARE exported, so the copies
+ * below are a mirror kept in step by hand rather than a necessity. They are still
+ * mirrored because this script composes its own pass instead of calling the seam;
+ * the script says so rather than quietly measuring a different retention.
  *
  * Approximations, stated rather than hidden:
  *   - the clock is `Date.now()` instead of the orchestrator's transaction
@@ -105,7 +106,7 @@ const INPUT = {
   required_roles: ['CPU', 'GPU', 'MOTHERBOARD', 'RAM', 'SSD_BOOT', 'PSU', 'CASE', 'CPU_COOLER'],
 };
 
-/** Mirrors orchestrator/run.js resolveGpuPolicy (not exported there). */
+/** Mirrors orchestrator/compute.js resolveGpuPolicy, which IS exported there - keep in step. */
 function gpuPolicyFor(configuration) {
   const profiles = configuration && configuration.use_case_profiles;
   if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles)) return null;
@@ -116,7 +117,7 @@ function gpuPolicyFor(configuration) {
     : null;
 }
 
-/** Mirrors orchestrator/run.js resolveVramFloorGb (not exported there). */
+/** Mirrors orchestrator/compute.js resolveVramFloorGb, which IS exported there - keep in step. */
 function vramFloorFor(configuration) {
   const profiles = configuration && configuration.resolution_profiles;
   if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles)) return null;
@@ -126,7 +127,7 @@ function vramFloorFor(configuration) {
   return typeof floor === 'number' && Number.isInteger(floor) && floor >= 1 ? floor : null;
 }
 
-/** Mirrors orchestrator/run.js resolveRoleTargets (not exported there). */
+/** Mirrors orchestrator/compute.js resolveRoleTargets, which IS exported there - keep in step. */
 function roleTargetsFor(configuration) {
   const profiles = configuration && configuration.use_case_profiles;
   if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles)) return null;
@@ -545,7 +546,7 @@ async function main() {
         Object.freeze({ ...build, build_score: buildScores.scores[index].build_score })
       );
       const rankedResult = ranking.rankBuilds({ builds: scoredBuilds });
-      // Decision 58: mirror resolveArchetypeObjectives (not exported there).
+      // Decision 58: mirror resolveArchetypeObjectives (exported by compute.js - keep in step).
       const objectivesOptIn = configuration.apply_archetype_objectives === true;
       const useCaseProfile = configuration.use_case_profiles
         && configuration.use_case_profiles[USE_CASE];
