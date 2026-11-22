@@ -28,6 +28,7 @@
     "verify:pi1": "node scripts/verify-pool-independence.js",
     "check:contract": "node scripts/check-openapi-contract.js",
     "eval:scenarios": "node scripts/eval-scenarios.js",
+    "test:loaders:ephemeral": "node --test \"test/golden/loaders.test.js\"",
     "start:api": "node apps/api/src/server.js",
     "test:api": "node --test \"apps/api/test/unit/*.test.js\"",
     "test:coverage": "node --test --experimental-test-coverage --test-coverage-include=\"src/**\" \"src/**/*.test.js\"",
