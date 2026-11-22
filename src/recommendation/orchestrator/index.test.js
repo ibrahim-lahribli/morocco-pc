@@ -115,14 +115,25 @@ test('no orchestrator source writes, commits, or reaches for a driver', () => {
 });
 
 test('orchestrator modules import exactly their collaborators', () => {
+  // run.js keeps every loader and the pure filter; the assemble-and-score half
+  // moved to ./compute, so `../assembly` and `../retention` are no longer its
+  // collaborators - ./compute is. The pin is exact, not a subset: the seam is
+  // the only new edge, and no stage internal was imported to replace them.
   assert.deepEqual(requiresOf('run.js'), [
-    '../assembly',
     '../candidates',
     '../candidates/errors',
     '../filtering',
     '../offers',
     '../offers/as-of',
     '../query',
+    '../scoring',
+    './compute',
+  ]);
+  // ./compute is pure composition: the three stage barrels it calls through and
+  // the shared error vocabulary. No loader, no query module, no as-of parser.
+  assert.deepEqual(requiresOf('compute.js'), [
+    '../assembly',
+    '../candidates/errors',
     '../retention',
     '../scoring',
   ]);

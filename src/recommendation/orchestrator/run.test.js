@@ -1087,8 +1087,15 @@ test('the same database state yields deeply equal results', async () => {
   assert.deepEqual(second, first);
 });
 
-test('run.js calls its collaborators in the Decision 17.3 order, each exactly once', () => {
-  const source = stripComments(fs.readFileSync(path.join(__dirname, 'run.js'), 'utf8'));
+test('the orchestrator calls its collaborators in the Decision 17.3 order, each exactly once', () => {
+  // Decision 17.3's order now SPANS TWO FILES: run.js keeps every loader and the
+  // pure filter, and ./compute owns the assemble-and-score half it is called
+  // into. The list below is the EXECUTION order, so the two sources are merged
+  // in that order and `compute.computeFromLoaded(` marks the seam. Each name
+  // must still appear exactly once, in this order - the pin is not relaxed.
+  const runSource = stripComments(fs.readFileSync(path.join(__dirname, 'run.js'), 'utf8'));
+  const computeSource = stripComments(fs.readFileSync(path.join(__dirname, 'compute.js'), 'utf8'));
+  const source = runSource + '\n' + computeSource;
   const sequence = [
     'query.loadQueryInput(',
     'await readTransactionTimestamp(',
@@ -1099,6 +1106,7 @@ test('run.js calls its collaborators in the Decision 17.3 order, each exactly on
     'filtering.loadFilteringContext(',
     'filtering.filterCandidates(',
     'scoring.loadComponentAssessments(',
+    'compute.computeFromLoaded(',
     'scoring.computeCandidateScores(',
     'retention.retainTopKPerRole(',
     'assembly.assembleBuildsForRecommendation(',
