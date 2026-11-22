@@ -24,7 +24,7 @@
  * Decision 59: the pinned model's OPTIONAL `candidate_caps.top_k_by_role` is
  * passed through as well. This script reports ONE model's retention, so it has
  * to read that model's depth or it prints a figure the engine never uses - at
- * `launch-v2@2.4.0` the CPU bucket is capped at 10, not at the uniform 5.
+ * `launch-v2@2.5.0` the CPU bucket is capped at 10, not at the uniform 5.
  *
  * Usage:
  *   node scripts/measure-retention-bands.js [--use-case GAMING]
