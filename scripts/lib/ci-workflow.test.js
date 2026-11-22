@@ -330,3 +330,45 @@ test('the ephemeral-eval job runs the golden harness on a throwaway postgres', (
   assert.equal(all['recurring-gates'].includes('eval:scenarios'), false,
     'the nightly job must not run the golden harness');
 });
+
+test('the ephemeral-eval job runs the guarded DB suite after the golden harness', () => {
+  const all = jobs(readWorkflow());
+  assert.deepEqual(Object.keys(all).sort(), ['ephemeral-eval', 'recurring-gates', 'unit-and-docs'],
+    'the three-job architecture must not change');
+  const job = all['ephemeral-eval'];
+  assert.ok(job, 'ci.yml carries the ephemeral-eval job');
+
+  // The guarded launcher, not a raw glob: run-db-tests.js is what fails fast on
+  // a missing/shared target and refuses a zero-test run.
+  const dbRun = job.indexOf('npm run test:api:db');
+  assert.ok(dbRun > -1, 'ephemeral-eval must run the DB-backed API suite');
+
+  // Order is load-bearing: eval-scenarios.js preflight FAILS while any unmarked
+  // recommendation_query row exists, and the DB suite creates such rows.
+  const evalRun = job.indexOf('npm run eval:scenarios');
+  assert.ok(evalRun > -1 && dbRun > evalRun,
+    'the DB suite must follow the golden harness, never precede it');
+
+  // The job targets the service container through the pinned env pair only.
+  // Comments may explain the absence; executable lines may not reintroduce it.
+  const code = job.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
+  assert.equal(code.includes('API_ALLOW_SHARED'), false,
+    'the ephemeral job must never opt into the shared database');
+  assert.equal(code.includes('secrets.'), false,
+    'the ephemeral job must not read any DB secret');
+
+  // Locale parity with Neon: the stock image clusters en_US.utf8, whose
+  // collation ignores punctuation at the primary level and orders
+  // 'g-skill-...' AFTER 'gigabyte-...'. The catalogue keyset walk asserts
+  // code-unit slug order (and Neon serves it), so a fresh ephemeral DB
+  // provisioned with the image default fails catalog.db.test.js. Measured
+  // 2026-11-22: 16 passed / 1 failed on en_US.utf8, 17/0 on C.UTF-8.
+  assert.match(job, /POSTGRES_INITDB_ARGS: "--locale=C\.UTF-8"/,
+    'the ephemeral cluster must init with C.UTF-8 collation to match Neon');
+
+  // Placement: the DB-free job never runs it; the nightly TEST-branch run stays.
+  assert.equal(all['unit-and-docs'].includes('test:api:db'), false,
+    'unit-and-docs is DB-free and must not run the DB suite');
+  assert.ok(all['recurring-gates'].includes('npm run test:api:db'),
+    'the nightly TEST-branch DB suite must remain wired');
+});
