@@ -183,6 +183,57 @@ jobs:
           fi
           node scripts/check-deferred-rules.js
 
+  # Golden scenario harness on a THROWAWAY Postgres (Task 4b). The harness
+  # (scripts/eval-scenarios.js) refuses to run while any unmarked
+  # recommendation_query row exists on its target, and the shared dev DB keeps
+  # collecting them from the deployed origin - so it could never gate a push/PR.
+  # A fresh service container per run has no unmarked rows by construction, and
+  # carries NO secrets, so fork PRs run it too. Provenance: migrations 001-023
+  # through run-migrations.js --test-db (the test-db path never appends to the
+  # tracked database/migration-applies.jsonl audit log), then the full seed tail
+  # through run-seeds.js. After seed 029 the newest active scoring model is
+  # launch-v2@2.5.0 and seed-minimal-v1@1.0.0 is INACTIVE, so the default pin
+  # would fail closed - the run pins launch-v2@2.5.0 explicitly, the pin
+  # scenarios.json carries scoped approved assertions for. --no-baseline
+  # --no-volatile keep CI from writing test/golden files.
+  ephemeral-eval:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ephemeral
+          POSTGRES_DB: morocco_eval
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d morocco_eval"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # One container, two host spellings: database-guard's getWriteTestDbUrl()
+      # requires TEST_DATABASE_URL and DATABASE_URL to name DIFFERENT hosts
+      # (normalized hostname compare), so the write target is provably not the
+      # shared database. localhost vs 127.0.0.1 satisfies it against a
+      # throwaway container and nothing else.
+      TEST_DATABASE_URL: postgres://postgres:ephemeral@localhost:5432/morocco_eval
+      DATABASE_URL: postgres://postgres:ephemeral@127.0.0.1:5432/morocco_eval
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Apply migrations 001-023 (ephemeral)
+        run: node scripts/run-migrations.js --test-db
+      - name: Apply all seeds (ephemeral)
+        run: node scripts/run-seeds.js
+      - name: Golden scenario harness (ephemeral)
+        run: npm run eval:scenarios -- --model=launch-v2@2.5.0 --no-baseline --no-volatile
+
   recurring-gates:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
