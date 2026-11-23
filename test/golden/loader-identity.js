@@ -509,13 +509,29 @@ function canonicalFilterResult(result, labelMap) {
   };
 }
 
-/** Assessment rows: the seed-time assessed_at is the only excluded field. */
+/**
+ * Assessment rows: the seed-time assessed_at is the ONLY excluded field, named
+ * as such. The row's key set is asserted first, so a field added later fails
+ * loudly instead of being dropped by a whitelist (a wildcard exclusion).
+ */
+const ASSESSMENT_ROW_FIELDS = Object.freeze([
+  'assessment_type',
+  'score',
+  'confidence',
+  'assessed_at',
+]);
+
 function canonicalAssessmentRows(rows) {
-  return rows.map((row) => ({
-    assessment_type: row.assessment_type,
-    score: row.score,
-    confidence: row.confidence,
-  }));
+  return rows.map((row) => {
+    assert.deepEqual(Object.keys(row).sort(), [...ASSESSMENT_ROW_FIELDS].sort(),
+      'assessment row fields changed: name the new exclusion instead of absorbing it');
+    const out = {};
+    for (const [field, value] of Object.entries(row)) {
+      if (field === 'assessed_at') continue;
+      out[field] = value;
+    }
+    return out;
+  });
 }
 
 /** Group by a label, preserving each group's member order. */
