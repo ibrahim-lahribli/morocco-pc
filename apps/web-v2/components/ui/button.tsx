@@ -20,6 +20,8 @@ export const buttonVariants = cva(
         primary: "bg-primary text-on-primary shadow-level-1 hover:bg-primary-hover",
         secondary:
           "border border-indicative-border bg-accent-soft text-accent-ink hover:bg-indicative-border",
+        /* The quiet filled control: a light-blue surface, no border. */
+        soft: "bg-surface-sunken text-foreground hover:bg-border",
         outline: "border border-outline bg-surface text-foreground hover:bg-surface-muted",
         ghost: "text-primary hover:bg-primary-soft",
         cta: "bg-accent text-on-accent shadow-level-1 hover:bg-accent-strong",

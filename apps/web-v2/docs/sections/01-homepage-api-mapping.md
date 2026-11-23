@@ -106,14 +106,14 @@ No `resolution`, no `budget`, no `limit` — and unknown query parameters are re
 }
 ```
 
-| Field                         | Homepage use                                                                                                                                                                                           |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `presets[].budget_amount`     | the served preset budget, rendered as the card's `builds.budgetLabel` line via `formatPrice(value, currency)`; also the ladder key — responses arrive ordered by it                                    |
-| `presets[].recommendation_id` | the key for the detail read and the card's identity                                                                                                                                                    |
-| `presets[].build_score`       | the configuration score (`builds.scoreLabel`); `null` means "pass assembled nothing" → render "—", never `0`                                                                                           |
-| `presets[].price_status`      | preset-level summary of its rank-1 build at generation time; **not the card badge source** once a detail is rendered (the build's own status wins — §4); `null` means "no build to make a claim about" |
-| `catalog_version`             | part of the query key, so a price update invalidates the render                                                                                                                                        |
-| `generated_at`                | **not rendered** in Step 1 (no "as of" copy approved)                                                                                                                                                  |
+| Field                         | Homepage use                                                                                                                                                                                                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `presets[].budget_amount`     | the served tier: the ladder key (responses arrive ordered by it), the handoff written into the card's configurator link, and the cap-note amount — since Step 3.5 it is **not** rendered as a card line                                                            |
+| `presets[].recommendation_id` | the key for the detail read and the card's identity                                                                                                                                                                                                                |
+| `presets[].build_score`       | **not rendered** since Step 3.5; only the hero preview shows a score, and it reads `builds[0].build_score` (`hero.preview.score`), never `0` for `null`                                                                                                            |
+| `presets[].price_status`      | preset-level summary of its rank-1 build at generation time; **not the card badge source** once a detail is rendered (the build's own status wins — §4); `null` means "no build to make a claim about". No homepage card renders either status since Step 3.5 (§6) |
+| `catalog_version`             | part of the query key, so a price update invalidates the render                                                                                                                                                                                                    |
+| `generated_at`                | **not rendered** in Step 1 (no "as of" copy approved)                                                                                                                                                                                                              |
 
 **Deterministic selection (owner decision: 12,000 MAD ceiling).** For each use case,
 select the highest row with `budget_amount <= 12_000`: filter the ascending list
@@ -129,8 +129,9 @@ use case with `budget_amount <= visitorBudget` (empty state when none,
 `builds.budgetCap` when the budget exceeds the top tier).
 
 **What a preset is not.** It carries **no title, no components, no total price**. It is a
-pointer to a persisted recommendation. The card's spec pills, total price, rationale and
-compatibility status therefore require §4.
+pointer to a persisted recommendation. The card's compact spec line and total price therefore
+require §4; its configurator handoff is the only place the served `budget_amount` reaches the
+card after Step 3.5.
 
 **Failures and states**
 
@@ -203,18 +204,18 @@ compatibility status therefore require §4.
 
 **Field mapping to the card**
 
-| Card element      | Field                            | Rule                                                                                                                                                                                                                             |
-| ----------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Title             | —                                | **ours**: the use-case label (`builds.category.*`); the API carries no title and the H3 copy is open (Q-16)                                                                                                                      |
-| Total price       | `builds[0].total_price`          | `formatPrice(value, detail.currency)`; `null` → render no price, keeping the `builds.budgetLabel` line — never relabel the budget as a price                                                                                     |
-| Price badge       | `builds[0].price_status`         | the only badge source: `verified` → `builds.badge.verified`; `indicative` → `builds.badge.indicative`; `null` or no complete build → **no badge** — never `presets[].price_status` as a stand-in, never "indicatif" as a default |
-| Compatibility     | `builds[0].compatibility_status` | **not rendered on the homepage card** in Step 1 (§6 carries the score and price badges only); never turn an unknown verdict into an OK claim                                                                                     |
-| Score overlay     | `builds[0].build_score`          | `builds.scoreLabel` + "{n}/100", never FPS or a benchmark; `null` → "—"                                                                                                                                                          |
-| Spec pills        | `builds[0].components[]`         | first four by role order `CPU`, `GPU`, `RAM`, `SSD_BOOT`, showing `name` (not `variant`, which may be `null`)                                                                                                                    |
-| Rationale         | `builds[0].explanation`          | if present, one clamped line; `null` → omit the block                                                                                                                                                                            |
-| Pattern/archetype | `builds[0].strategy_key`         | not rendered in Step 1; reserved for Step 2                                                                                                                                                                                      |
-| Disclaimer        | `disclaimer`                     | rendered once under the price row, not per card                                                                                                                                                                                  |
-| `budget_floor`    | `budget_floor.*`                 | **not rendered** — never used as a build price or as proof an assembly exists (§6)                                                                                                                                               |
+| Card element      | Field                            | Rule                                                                                                                                                                                                                                                                                |
+| ----------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Title             | —                                | **ours**: the use-case label (`builds.category.*`); the API carries no title and the H3 copy is open (Q-16)                                                                                                                                                                         |
+| Total price       | `builds[0].total_price`          | `formatPrice(value, detail.currency)`; `null` → render no price at all. Since Step 3.5 a card with no price shows no budget line either, so a missing detail never relabels the served tier as a price                                                                              |
+| Price badge       | `builds[0].price_status`         | **not rendered on a card** since Step 3.5: `toBuildCardView` still derives `badge` from the build's own status (never `presets[].price_status`) and `tests/homepage/builds.test.ts` pins it, but `FeaturedBuildCard` and `CompactBuildRow` carry no badge and no replacement for it |
+| Compatibility     | `builds[0].compatibility_status` | **not rendered on the homepage card** (Step 3.5 removed the badges with it); never turn an unknown verdict into an OK claim                                                                                                                                                         |
+| Score overlay     | `builds[0].build_score`          | hero preview only (`hero.preview.score`, "{n}/100", never FPS or a benchmark); `null` → omit the line. No configuration card shows a score                                                                                                                                          |
+| Compact spec line | `builds[0].components[]`         | `lib/format/spec` `compactSpec(role, name, units)`: first four by role order `CPU`, `GPU`, `RAM`, `SSD_BOOT`, shown as one `·`-joined text line (`componentSummary`), never as pills and never as `variant` (which may be `null`)                                                   |
+| Rationale         | `builds[0].explanation`          | **not rendered** since Step 3.5; `view.rationale` is still derived and nothing in this package consumes it                                                                                                                                                                          |
+| Pattern/archetype | `builds[0].strategy_key`         | not rendered in Step 1; reserved for Step 2                                                                                                                                                                                                                                         |
+| Disclaimer        | `disclaimer`                     | not rendered on the homepage; the configurator summary panel owns it (`Configurator.summary.disclaimerLabel`)                                                                                                                                                                       |
+| `budget_floor`    | `budget_floor.*`                 | **not rendered** — never used as a build price or as proof an assembly exists (§6)                                                                                                                                                                                                  |
 
 **Deliberate non-mappings**
 

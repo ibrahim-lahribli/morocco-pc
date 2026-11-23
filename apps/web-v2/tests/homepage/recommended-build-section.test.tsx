@@ -124,7 +124,7 @@ describe("RecommendedBuildSection", () => {
     await waitFor(() => expect(screen.getByText("Ryzen 3 3200G")).toBeInTheDocument());
   });
 
-  it("shows no badge when the build list is empty, even if the preset claims verified", async () => {
+  it("renders no badge and no placeholder for an empty build list, even when the preset claims verified", async () => {
     get.mockImplementation(async (path: string, init?: Init) => {
       if (path === "/v1/meta/options") return meta;
       if (path === "/v1/presets") {
@@ -140,7 +140,11 @@ describe("RecommendedBuildSection", () => {
 
     expect(screen.queryByText(fr.Homepage.builds.badge.verified)).not.toBeInTheDocument();
     expect(screen.queryByText(fr.Homepage.builds.badge.indicative)).not.toBeInTheDocument();
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    // The score placeholder is gone with the score line: an empty build list
+    // leaves nothing to price, so the card keeps only its title and its action.
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+    expect(screen.queryByText(/11\s500/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: fr.Homepage.builds.cta }).length).toBeGreaterThan(0);
   });
 
   it("shows the cap note when the budget is above the highest served tier", async () => {

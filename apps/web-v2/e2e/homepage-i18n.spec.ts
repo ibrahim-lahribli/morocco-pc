@@ -30,22 +30,24 @@ const BREAKPOINTS = [
 ] as const;
 
 /**
- * Where the price digits sit inside their own card.
+ * Where the price digits and the card action sit inside their own card.
  *
  * Absolute `x` cannot be compared across locales: in RTL the first card is on
  * the right, so the same logical position lands at a *larger* `x`. And a `<dd>`
  * is a block, so its border box spans its wrapper and mirrors nothing either.
  * A Range over the text gives the glyph box; measuring from the card's start
  * and end edges then survives the mirrored layout, and the assertion becomes
- * the design rule itself: the price hugs the end edge, whichever side that is.
+ * the design rule itself: on the bottom row the price hugs the start edge and
+ * the action hugs the end edge, whichever side each of those is.
  */
 function priceRow(page: Page) {
   return page.evaluate(() => {
     const card = document.querySelector("#configurations article");
     const values = card === null ? [] : [...card.querySelectorAll("dd")];
     const price = values.at(-1);
+    const action = card?.querySelector("a[href*='/configurateur']") ?? null;
 
-    if (card === null || price === undefined) {
+    if (card === null || price === undefined || action === null) {
       return null;
     }
 
@@ -53,10 +55,13 @@ function priceRow(page: Page) {
     range.selectNodeContents(price);
     const text = range.getBoundingClientRect();
     const box = card.getBoundingClientRect();
+    const actionBox = action.getBoundingClientRect();
 
     return {
-      fromStart: text.x - box.x,
-      fromEnd: box.right - text.right,
+      priceFromStart: text.x - box.x,
+      priceFromEnd: box.right - text.right,
+      actionFromStart: actionBox.x - box.x,
+      actionFromEnd: box.right - actionBox.right,
       cardWidth: box.width,
     };
   });
@@ -102,14 +107,21 @@ test.describe("Arabic homepage", () => {
     expect(frHeading!.x).toBeLessThan(arHeading!.x);
     expect(frCardHeading!.x).toBeLessThan(arCardHeading!.x);
 
-    // The price hugs the end edge of its card: right in French, left in Arabic.
-    // A physical left/right assertion would pass in neither direction.
+    // On the bottom row the price hugs the start edge and the action hugs the
+    // end edge: left/right in French, right/left in Arabic. A physical
+    // left/right assertion would pass in neither direction.
     expect(frPrice).not.toBeNull();
     expect(arPrice).not.toBeNull();
-    expect(frPrice!.fromEnd, "fr: the price is not at the end edge").toBeLessThan(
+    expect(frPrice!.priceFromStart, "fr: the price is not at the start edge").toBeLessThan(
       frPrice!.cardWidth * 0.35,
     );
-    expect(arPrice!.fromStart, "ar: the price is not at the end edge").toBeLessThan(
+    expect(arPrice!.priceFromEnd, "ar: the price is not at the start edge").toBeLessThan(
+      arPrice!.cardWidth * 0.35,
+    );
+    expect(frPrice!.actionFromEnd, "fr: the action is not at the end edge").toBeLessThan(
+      frPrice!.cardWidth * 0.35,
+    );
+    expect(arPrice!.actionFromStart, "ar: the action is not at the end edge").toBeLessThan(
       arPrice!.cardWidth * 0.35,
     );
 

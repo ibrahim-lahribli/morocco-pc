@@ -96,7 +96,6 @@
       }
     },
     "builds": {
-      "eyebrow": "Configurations prêtes à monter",
       "title": "Des PC adaptés à votre budget",
       "intro": "Configurations équilibrées et testées pour le marché marocain.",
       "category": {
@@ -110,12 +109,11 @@
       },
       "priceLabel": "Prix de la configuration",
       "priceLabelIndicative": "Prix indicatif boutiques",
+      "unitGb": "Go",
+      "unitTb": "To",
       "compactCta": "Détails",
-      "budgetLabel": "Budget visé",
-      "scoreLabel": "Score de configuration",
-      "scoreValue": "{score}/100",
       "scoreHelp": "Score calculé à partir des évaluations des composants et des inconnues de compatibilité. Ce n'est ni un FPS ni un benchmark.",
-      "cta": "Voir la configuration",
+      "cta": "Voir la config",
       "empty": {
         "title": "Aucune configuration disponible pour cet usage",
         "body": "Aucune configuration complète n'est disponible dans les budgets pré-générés pour le moment."

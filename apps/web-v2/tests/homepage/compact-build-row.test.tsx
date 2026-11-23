@@ -59,17 +59,17 @@ describe("CompactBuildRow", () => {
     );
   });
 
-  it("renders the badge when the build has a price status", () => {
-    renderRow({ badge: "indicative" });
-
-    expect(screen.getByText(fr.Homepage.builds.badge.indicative)).toBeInTheDocument();
-  });
-
-  it("renders no badge when the build has no price status", () => {
-    renderRow({ badge: null });
+  it("renders no price-status badge, even when the build carries one", () => {
+    renderRow({ badge: "verified" });
 
     expect(screen.queryByText(fr.Homepage.builds.badge.verified)).not.toBeInTheDocument();
     expect(screen.queryByText(fr.Homepage.builds.badge.indicative)).not.toBeInTheDocument();
+  });
+
+  it("renders no budget line", () => {
+    renderRow();
+
+    expect(screen.queryByText(/Budget/)).not.toBeInTheDocument();
   });
 
   it("renders no image or media slot", () => {

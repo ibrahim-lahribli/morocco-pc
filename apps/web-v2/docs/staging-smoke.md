@@ -99,7 +99,7 @@ then `GET /v1/recommendations/366d0fae…` (Gaming), `…/20417fa9…` (Office),
 `…/3b157941…` (Workstation) — the ids the 12 000 DH selection rule picks.
 `NEXT_PUBLIC_HOMEPAGE_SUBMIT` stays off, so the finder issues no request.
 
-The first card renders as `featured` with four spec pills; cards 2–3 are the approved
+The first card renders as `featured` with one compact spec line; cards 2–3 are the approved
 `compact` variant, so their shorter text is design, not missing data.
 
 ## 6. Response compatibility — PASS, no contract change

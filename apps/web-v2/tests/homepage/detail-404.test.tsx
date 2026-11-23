@@ -83,7 +83,7 @@ afterEach(() => {
 });
 
 describe("a preset whose detail does not exist", () => {
-  it("keeps the budget line, offers no retry and writes nothing to the console", async () => {
+  it("keeps the title and its action, offers no retry and writes nothing to the console", async () => {
     const warn = vi.spyOn(console, "warn");
 
     get.mockImplementation(async (path: string, init?: Init) => {
@@ -98,8 +98,15 @@ describe("a preset whose detail does not exist", () => {
 
     renderSection();
 
-    // The card keeps the served budget line: a missing detail is not a missing preset.
-    await waitFor(() => expect(screen.getByText(/12\s000/)).toBeInTheDocument());
+    // The card keeps its own use-case title and its configurator handoff: a
+    // missing detail is not a missing preset. It shows no price — nothing was
+    // read to price it with, and the budget line no longer exists on a card.
+    await waitFor(() => expect(screen.getByText("PC Gaming")).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: fr.Homepage.builds.cta })).toHaveAttribute(
+      "href",
+      "/configurateur?use_case=GAMING&budget=12000",
+    );
+    expect(screen.queryByText(/11\s500/)).not.toBeInTheDocument();
 
     // A 404 is not a network failure, so it renders no failure line and no retry —
     // and, since it is an expected state rather than a fault, nothing is logged.

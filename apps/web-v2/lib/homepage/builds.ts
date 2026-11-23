@@ -14,6 +14,7 @@
  * - A preset carries no title, no components and no total price. Everything a
  *   card shows beyond its budget comes from the detail read.
  */
+import { compactSpec, type SpecUnits } from "@/lib/format/spec";
 import type { BuildComponent, Preset, PresetBuild, PresetDetail } from "@/lib/api/types";
 
 /** The generic homepage ceiling, in MAD. A selection bound, never a price. */
@@ -64,14 +65,18 @@ export function resolvePriceBadge(builds: readonly PresetBuild[]): PriceBadgeSta
   return status === "verified" || status === "indicative" ? status : null;
 }
 
-/** Up to four component names, by role order, skipping roles the build lacks. */
-export function specPillNames(components: readonly BuildComponent[]): string[] {
+/**
+ * Up to four compact component specs, by role order, skipping roles the build
+ * lacks or whose name yields nothing honest. The formatting itself lives in
+ * `lib/format/spec` so the configurator can reuse it.
+ */
+export function specPillNames(components: readonly BuildComponent[], units: SpecUnits): string[] {
   const byRole = new Map<string, string>();
 
   for (const component of components) {
-    if (!byRole.has(component.role) && component.name.trim() !== "") {
-      byRole.set(component.role, component.name);
-    }
+    if (byRole.has(component.role)) continue;
+    const compact = compactSpec(component.role, component.name, units);
+    if (compact !== "") byRole.set(component.role, compact);
   }
 
   return PILL_ROLES.map((role) => byRole.get(role))
@@ -98,11 +103,15 @@ export interface BuildCardView {
  *
  * `detail === undefined` covers three different situations that render the same
  * way: the detail is still loading, it 404'd, or it errored. In all three the
- * card keeps the preset's budget line and shows no components, score or badge.
+ * card shows its category and its action, with no components, score or price.
  */
-export function toBuildCardView(preset: Preset, detail: PresetDetail | undefined): BuildCardView {
+export function toBuildCardView(
+  preset: Preset,
+  detail: PresetDetail | undefined,
+  units: SpecUnits,
+): BuildCardView {
   const build = detail?.builds[0];
-  const pills = build === undefined ? [] : specPillNames(build.components);
+  const pills = build === undefined ? [] : specPillNames(build.components, units);
 
   return {
     recommendationId: preset.recommendation_id,

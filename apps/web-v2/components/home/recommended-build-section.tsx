@@ -83,7 +83,6 @@ export function RecommendedBuildSection() {
       <div className="max-w-2xl">
         <SectionHeading
           id="configurations-title"
-          eyebrow={t("eyebrow")}
           title={t("title")}
           intro={t("intro")}
           from="base"
@@ -99,10 +98,10 @@ export function RecommendedBuildSection() {
       */}
       <div
         className={cn(
-          "mt-5 lg:mt-8",
+          "mt-3 lg:mt-8",
           slots.length === 1
             ? "flex flex-col lg:max-w-2xl"
-            : "flex flex-col gap-4 lg:grid lg:grid-cols-3",
+            : "flex flex-col gap-3 lg:grid lg:grid-cols-3",
         )}
       >
         {slots.map((slot, index) => (
@@ -142,7 +141,10 @@ function BuildSlot({ useCase, currency, budgetAmount, featured, className }: Bui
 
   const { preset, capped } = selectSlotPreset(ladder, budgetAmount);
   const detailQuery = useRecommendationDetail(preset?.recommendation_id ?? null, catalogVersion);
-  const view = preset === null ? null : toBuildCardView(preset, detailQuery.data);
+  const view =
+    preset === null
+      ? null
+      : toBuildCardView(preset, detailQuery.data, { gb: t("unitGb"), tb: t("unitTb") });
 
   // A 404 means the served preset has no detail yet: the card keeps its budget
   // line and its empty state rather than claiming a network failure. Any other

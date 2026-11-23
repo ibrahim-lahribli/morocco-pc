@@ -49,7 +49,13 @@ export function HeroRigPreview({ eyebrow, caption, details }: HeroRigPreviewProp
     preset?.recommendation_id ?? null,
     ladderQuery.data?.catalog_version ?? null,
   );
-  const view = preset === null ? null : toBuildCardView(preset, detailQuery.data);
+  const view =
+    preset === null
+      ? null
+      : toBuildCardView(preset, detailQuery.data, {
+          gb: tBuilds("unitGb"),
+          tb: tBuilds("unitTb"),
+        });
   const pending = ladderQuery.isPending || (view !== null && detailQuery.isPending);
 
   if (pending) {

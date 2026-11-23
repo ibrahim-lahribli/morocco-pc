@@ -17,13 +17,18 @@ test.describe("recommended configurations", () => {
     await expect(section.getByRole("heading", { name: CARD_TITLES.OFFICE })).toBeVisible();
     await expect(section.getByRole("heading", { name: CARD_TITLES.WORKSTATION })).toBeVisible();
 
-    await expect(section.getByText(/Budget visé · 12\s000\sDH/)).toHaveCount(3);
+    // No budget line and no score anymore: the served tier shows up as the
+    // build's own price (budget − 500 in the stub), never as a relabelled budget.
+    await expect(section.getByText(/11\s?500\s?DH/)).toHaveCount(3);
+    await expect(section.getByText(/Budget visé/)).toHaveCount(0);
 
     // The 15 000 row exists in the stub ladder and must never be the selected tier.
     await expect(section.getByText(/15\s000/)).toHaveCount(0);
   });
 
-  test("takes each badge from the served build, never from the preset", async ({ page }) => {
+  test("renders no price badge, only the indicative price label on the featured card", async ({
+    page,
+  }) => {
     await stubHomepageApi(page);
     await page.goto("/fr");
 
@@ -34,13 +39,13 @@ test.describe("recommended configurations", () => {
     const office = section.locator("article", {
       has: page.getByRole("heading", { name: CARD_TITLES.OFFICE }),
     });
-    const workstation = section.locator("article", {
-      has: page.getByRole("heading", { name: CARD_TITLES.WORKSTATION }),
-    });
 
-    await expect(gaming.getByText("Prix vérifié")).toBeVisible();
-    await expect(office.getByText("Prix indicatif")).toBeVisible();
-    await expect(workstation.getByText(/Prix (vérifié|indicatif)/)).toHaveCount(0);
+    // Badges are gone from every card, even where the served build reports a
+    // status; the featured card keeps the plain text label instead.
+    await expect(section.getByText(/^Prix vérifié$/)).toHaveCount(0);
+    await expect(section.getByText(/^Prix indicatif$/)).toHaveCount(0);
+    await expect(gaming.getByText("Prix indicatif boutiques")).toBeVisible();
+    await expect(office.getByText(/11\s?500\s?DH/)).toBeVisible();
   });
 
   test("keeps the other slots when one use case has no preset", async ({ page }) => {
@@ -84,7 +89,10 @@ test.describe("recommended configurations", () => {
 
     await expect(section.getByRole("heading", { name: CARD_TITLES.OFFICE })).toBeVisible();
     await expect(section.getByRole("heading", { name: CARD_TITLES.GAMING })).toHaveCount(0);
-    await expect(section.getByText(/Budget visé · 8\s000\sDH/)).toHaveCount(1);
+    // The narrowed slot carries its own 8 000 tier into the price (7 500 in the
+    // stub) — the budget string the card used to print no longer exists.
+    await expect(section.getByText(/7\s?500\s?DH/)).toHaveCount(1);
+    await expect(section.getByText(/Budget visé/)).toHaveCount(0);
 
     // The CTA leaves for the configurator, carrying the same two answers the
     // cards just narrowed to.
@@ -163,7 +171,7 @@ test.describe("recommended configurations", () => {
     await expect(
       section.getByText(/Configuration pré-générée la plus élevée disponible : 15\s?000\s?DH/),
     ).toBeVisible();
-    await expect(section.getByText(/Budget visé · 15\s?000\s?DH/)).toBeVisible();
+    await expect(section.getByText(/14\s?500\s?DH/)).toBeVisible();
     expect(posts).toEqual([]);
   });
 
@@ -212,25 +220,32 @@ test.describe("recommended configurations", () => {
     await expect(section.getByRole("heading", { name: CARD_TITLES.GAMING })).toBeVisible();
   });
 
-  test("aligns a card's score and price on one line", async ({ page }) => {
+  test("puts the price and its action on one row, with no score line", async ({ page }) => {
     await stubHomepageApi(page);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/fr");
     await waitForSettledCards(page);
 
-    // The first card's two values: the score, in the label size, and the price,
-    // in the price size. They share one 28px line box, so both the box and the
-    // text sit on the same line.
-    const boxes = await page.locator('[data-slot="build-card"] dl dd').evaluateAll((values) =>
-      values.slice(0, 2).map((value) => {
-        const box = value.getBoundingClientRect();
-        return { top: box.top, bottom: box.bottom };
-      }),
-    );
+    const gaming = page.locator('[data-slot="build-card"]', {
+      has: page.getByRole("heading", { name: CARD_TITLES.GAMING }),
+    });
 
-    expect(boxes).toHaveLength(2);
-    expect(Math.abs(boxes[0]!.top - boxes[1]!.top)).toBeLessThanOrEqual(1);
-    expect(Math.abs(boxes[0]!.bottom - boxes[1]!.bottom)).toBeLessThanOrEqual(1);
+    // One value only: the score dt/dd pair is gone, so the card has exactly one
+    // price and no score text.
+    await expect(gaming.locator("dl dd")).toHaveCount(1);
+    await expect(gaming.getByText(/Score de configuration/)).toHaveCount(0);
+
+    const price = gaming.locator("dl dd");
+    const cta = gaming.getByRole("link", { name: "Voir la config" });
+
+    const [priceBox, ctaBox] = await Promise.all([price.boundingBox(), cta.boundingBox()]);
+    expect(priceBox, "the price is rendered").not.toBeNull();
+    expect(ctaBox, "the action is rendered").not.toBeNull();
+
+    // Price left, action right, on the same row: their boxes overlap vertically.
+    expect(priceBox!.x).toBeLessThan(ctaBox!.x);
+    expect(priceBox!.y).toBeLessThan(ctaBox!.y + ctaBox!.height);
+    expect(ctaBox!.y).toBeLessThan(priceBox!.y + priceBox!.height);
   });
 
   test("keeps an erroring slot visible and usable alongside filled cards", async ({ page }) => {
@@ -302,7 +317,7 @@ test.describe("recommended configurations", () => {
     const gaming = page.locator("#configurations article", {
       has: page.getByRole("heading", { name: CARD_TITLES.GAMING }),
     });
-    const cta = gaming.getByRole("link", { name: "Voir la configuration" });
+    const cta = gaming.getByRole("link", { name: "Voir la config" });
 
     await expect(cta).toHaveAttribute("href", "/fr/configurateur?use_case=GAMING&budget=12000");
     await cta.click();
@@ -330,7 +345,7 @@ test.describe("recommended configurations", () => {
     // The card serves the 15 000 tier and says so; the link must carry that tier,
     // never the 20 000 the visitor typed.
     await expect(gaming.getByText(/Configuration pré-générée la plus élevée/)).toBeVisible();
-    await expect(gaming.getByRole("link", { name: "Voir la configuration" })).toHaveAttribute(
+    await expect(gaming.getByRole("link", { name: "Voir la config" })).toHaveAttribute(
       "href",
       "/fr/configurateur?use_case=GAMING&budget=15000",
     );

@@ -3,15 +3,16 @@ import { cn } from "@/lib/utils";
 export interface SectionHeadingProps {
   /** The heading id; the owning `<section aria-labelledby>` points here. */
   id: string;
-  /** The small indigo label above the title. */
-  eyebrow: string;
+  /** The small indigo label above the title. Omitted where the design has none. */
+  eyebrow?: string;
   title: string;
   /** The supporting line under the title. */
   intro?: string;
   /**
    * The width from which the eyebrow and the intro appear. `base` matches the
-   * configurations frame, which carries both on mobile; `md` matches the trust
-   * and guides frames, whose mobile headers are a bare title.
+   * configurations frame, which carries the intro on mobile and therefore sets
+   * it small enough to hold one line on a phone; `md` matches the trust and
+   * guides frames, whose mobile headers are a bare title.
    */
   from?: "base" | "md";
   /** `center` matches the trust frame's centred header. */
@@ -56,20 +57,23 @@ export function SectionHeading({
       )}
     >
       <div className={cn(centered && "mx-auto max-w-2xl text-center")}>
-        <p
-          className={cn(
-            "text-label-md font-semibold tracking-wide text-primary uppercase",
-            from === "md" && "hidden md:block",
-          )}
-        >
-          {eyebrow}
-        </p>
+        {eyebrow ? (
+          <p
+            className={cn(
+              "text-label-md font-semibold tracking-wide text-primary uppercase",
+              from === "md" && "hidden md:block",
+            )}
+          >
+            {eyebrow}
+          </p>
+        ) : null}
 
         <h2
           id={id}
           tabIndex={focusableHeading ? -1 : undefined}
           className={cn(
-            "mt-1 text-headline-md text-balance text-foreground lg:text-headline-lg",
+            eyebrow && "mt-1",
+            "text-headline-md text-balance text-foreground lg:text-headline-lg",
             focusableHeading && "focus:outline-none",
           )}
         >
@@ -79,7 +83,8 @@ export function SectionHeading({
         {intro ? (
           <p
             className={cn(
-              "mt-1.5 max-w-prose text-body-md text-muted",
+              "max-w-prose text-muted",
+              from === "base" ? "mt-0.5 text-body-sm" : "mt-1.5 text-body-md",
               centered && "mx-auto",
               from === "md" && "hidden md:block",
             )}

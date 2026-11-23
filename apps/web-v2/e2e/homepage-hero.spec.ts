@@ -94,9 +94,10 @@ test.describe("hero preview", () => {
 
     const section = page.locator("#configurations");
     await expect(section.getByRole("heading", { name: CARD_TITLES.OFFICE })).toBeVisible();
-    // The office card's own score is 61,5; the hero must still be the Gaming build,
-    // so neither its score nor its price may be replaced by the office answer.
-    await expect(section.getByText(/61,5/)).toBeVisible();
+    // The office build's own score is 61,5; the hero must still be the Gaming
+    // build. Since Step 3.5 no card renders a score at all, so the section can
+    // not leak the office answer into the hero's line.
+    await expect(section.getByText(/61,5/)).toHaveCount(0);
     await expect(preview.getByText("Score de configuration : 72,5/100")).toBeVisible();
     await expect(preview.getByText(/11\s?500\s?DH/)).toBeVisible();
     await expect(preview.getByText(/7\s?500\s?DH/)).toHaveCount(0);

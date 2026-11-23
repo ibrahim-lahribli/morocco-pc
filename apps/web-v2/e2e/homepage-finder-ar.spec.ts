@@ -30,7 +30,10 @@ test.describe("Arabic finder", () => {
 
     await expect(section.locator("article")).toHaveCount(1);
     await expect(section.getByRole("heading", { name: OFFICE_CARD })).toBeVisible();
-    await expect(section.getByText(/الميزانية المستهدفة/)).toBeVisible();
+    // The narrowed card prices its own 8 000 tier (7 500 in the stub); the
+    // budget line was removed from the cards with Step 3.5.
+    await expect(section.getByText(/7\s?500/)).toBeVisible();
+    await expect(section.getByText(/الميزانية المستهدفة/)).toHaveCount(0);
     expect(posts).toEqual([]);
   });
 

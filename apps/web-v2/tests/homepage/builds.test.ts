@@ -9,6 +9,9 @@ import {
   toBuildCardView,
 } from "@/lib/homepage/builds";
 
+/** The French units the cards pass in. */
+const UNITS = { gb: "Go", tb: "To" };
+
 const preset = (budget_amount: number, extra: Partial<Preset> = {}): Preset => ({
   budget_amount,
   recommendation_id: `rec-${budget_amount}`,
@@ -82,86 +85,105 @@ describe("toBuildCardView", () => {
   const verifiedPreset = preset(12_000, { price_status: "verified" });
 
   it("never takes the badge from the preset when there is no build", () => {
-    expect(toBuildCardView(verifiedPreset, undefined).badge).toBeNull();
-    expect(toBuildCardView(verifiedPreset, { builds: [] } as never).badge).toBeNull();
+    expect(toBuildCardView(verifiedPreset, undefined, UNITS).badge).toBeNull();
+    expect(toBuildCardView(verifiedPreset, { builds: [] } as never, UNITS).badge).toBeNull();
   });
 
   it("keeps the budget line but renders no price when total_price is null", () => {
-    const view = toBuildCardView(verifiedPreset, {
-      currency: "MAD",
-      builds: [
-        {
-          total_price: null,
-          build_score: 70,
-          price_status: "verified",
-          components: [],
-          explanation: null,
-        },
-      ],
-    } as never);
+    const view = toBuildCardView(
+      verifiedPreset,
+      {
+        currency: "MAD",
+        builds: [
+          {
+            total_price: null,
+            build_score: 70,
+            price_status: "verified",
+            components: [],
+            explanation: null,
+          },
+        ],
+      } as never,
+      UNITS,
+    );
 
     expect(view.totalPrice).toBeNull();
     expect(view.budgetAmount).toBe(12_000);
   });
 
   it("takes the build's own status when a build exists", () => {
-    const view = toBuildCardView(preset(12_000, { price_status: null }), {
-      currency: "MAD",
-      builds: [
-        {
-          total_price: 11_500,
-          build_score: 70,
-          price_status: "indicative",
-          components: [],
-          explanation: null,
-        },
-      ],
-    } as never);
+    const view = toBuildCardView(
+      preset(12_000, { price_status: null }),
+      {
+        currency: "MAD",
+        builds: [
+          {
+            total_price: 11_500,
+            build_score: 70,
+            price_status: "indicative",
+            components: [],
+            explanation: null,
+          },
+        ],
+      } as never,
+      UNITS,
+    );
 
     expect(view.badge).toBe("indicative");
   });
 
   it("orders the spec pills by role and caps them at four", () => {
-    const names = specPillNames([
-      { role: "PSU", name: "PSU 650W" },
-      { role: "SSD_BOOT", name: "NVMe 1TB" },
-      { role: "GPU", name: "RTX 4060" },
-      { role: "CASE", name: "Case" },
-      { role: "RAM", name: "32 Go" },
-      { role: "CPU", name: "Ryzen 5 5600" },
-    ] as never);
+    const names = specPillNames(
+      [
+        { role: "PSU", name: "PSU 650W" },
+        { role: "SSD_BOOT", name: "1 To NVMe" },
+        { role: "GPU", name: "RTX 4060" },
+        { role: "CASE", name: "Case" },
+        { role: "RAM", name: "32 Go" },
+        { role: "CPU", name: "Ryzen 5 5600" },
+      ] as never,
+      UNITS,
+    );
 
-    expect(names).toEqual(["Ryzen 5 5600", "RTX 4060", "32 Go", "NVMe 1TB"]);
+    expect(names).toEqual(["Ryzen 5 5600", "RTX 4060", "32 Go", "1 To NVMe"]);
   });
 
   it("joins the spec pills into a plain-text component summary", () => {
-    const view = toBuildCardView(preset(12_000), {
-      currency: "MAD",
-      builds: [
-        {
-          total_price: 11_500,
-          build_score: 70,
-          price_status: "indicative",
-          components: [
-            { role: "CPU", name: "Ryzen 5 5600" },
-            { role: "GPU", name: "RTX 4060" },
-            { role: "RAM", name: "32 Go DDR4" },
-            { role: "SSD_BOOT", name: "NVMe 1 To" },
-          ],
-          explanation: null,
-        },
-      ],
-    } as never);
+    const view = toBuildCardView(
+      preset(12_000),
+      {
+        currency: "MAD",
+        builds: [
+          {
+            total_price: 11_500,
+            build_score: 70,
+            price_status: "indicative",
+            components: [
+              { role: "CPU", name: "Ryzen 5 5600" },
+              { role: "GPU", name: "RTX 4060" },
+              { role: "RAM", name: "32 Go DDR4" },
+              { role: "SSD_BOOT", name: "NVMe 1 To" },
+            ],
+            explanation: null,
+          },
+        ],
+      } as never,
+      UNITS,
+    );
 
-    expect(view.componentSummary).toBe("Ryzen 5 5600 · RTX 4060 · 32 Go DDR4 · NVMe 1 To");
+    expect(view.componentSummary).toBe("Ryzen 5 5600 · RTX 4060 · 32 Go DDR4 · 1 To NVMe");
   });
 
   it("reports an empty component summary when there is no build", () => {
-    expect(toBuildCardView(verifiedPreset, undefined).componentSummary).toBe("");
-    expect(toBuildCardView(verifiedPreset, { builds: [] } as never).componentSummary).toBe("");
+    expect(toBuildCardView(verifiedPreset, undefined, UNITS).componentSummary).toBe("");
+    expect(toBuildCardView(verifiedPreset, { builds: [] } as never, UNITS).componentSummary).toBe(
+      "",
+    );
   });
 
   it("reports an empty build list as no complete build", () => {
-    expect(toBuildCardView(verifiedPreset, { builds: [] } as never).hasCompleteBuild).toBe(false);
+    expect(toBuildCardView(verifiedPreset, { builds: [] } as never, UNITS).hasCompleteBuild).toBe(
+      false,
+    );
   });
 });

@@ -51,18 +51,18 @@ Generated from `messages/ar.json`; regenerate after any copy change. Key and
 | `Homepage.finder.error.budgetRange`          | أدخل ميزانية بين {min} و{max} درهم.                                                                                      |
 | `Homepage.finder.error.submit`               | فشل البحث. حاول مرة أخرى.                                                                                                |
 | `Homepage.finder.error.rateLimited`          | عدد كبير من البحوث. حاول بعد {seconds} ثانية.                                                                            |
-| `Homepage.builds.eyebrow`                    | تجميعات جاهزة للتركيب                                                                                                    |
-| `Homepage.builds.title`                      | ثلاثة استخدامات، ثلاث تجميعات                                                                                            |
-| `Homepage.builds.intro`                      | اطّلع على نموذج تجميعة للألعاب والدراسة والعمل.                                                                          |
+| `Homepage.builds.title`                      | حواسيب تناسب ميزانيتك                                                                                                    |
+| `Homepage.builds.intro`                      | تجميعات متوازنة ومُختبرة للسوق المغربي.                                                                                  |
 | `Homepage.builds.category.gaming`            | حاسوب للألعاب                                                                                                            |
 | `Homepage.builds.category.office`            | حاسوب للمكتبيات                                                                                                          |
 | `Homepage.builds.category.workstation`       | حاسوب للإبداع والعمل                                                                                                     |
 | `Homepage.builds.badge.verified`             | سعر مُوثَّق                                                                                                              |
 | `Homepage.builds.badge.indicative`           | سعر إرشادي                                                                                                               |
 | `Homepage.builds.priceLabel`                 | سعر التجميعة                                                                                                             |
-| `Homepage.builds.budgetLabel`                | الميزانية المستهدفة                                                                                                      |
-| `Homepage.builds.scoreLabel`                 | درجة التجميعة                                                                                                            |
-| `Homepage.builds.scoreValue`                 | {score}/100                                                                                                              |
+| `Homepage.builds.priceLabelIndicative`       | سعر إرشادي للمتاجر                                                                                                       |
+| `Homepage.builds.unitGb`                     | GB                                                                                                                       |
+| `Homepage.builds.unitTb`                     | TB                                                                                                                       |
+| `Homepage.builds.compactCta`                 | التفاصيل                                                                                                                 |
 | `Homepage.builds.scoreHelp`                  | درجة محسوبة من تقييمات المكوّنات ومن حالات التوافق غير المعروفة. ليست معدل إطارات ولا اختبار أداء.                       |
 | `Homepage.builds.cta`                        | عرض التجميعة                                                                                                             |
 | `Homepage.builds.empty.title`                | لا توجد تجميعة متاحة لهذا الاستخدام                                                                                      |

@@ -25,9 +25,9 @@
  *   VERIFY_BASE_URL=http://localhost:3220 node scripts/verify-real-api.mjs
  *
  * What it proves, in order:
- *   1. the initial Gaming recommendation renders the SERVED score, price, badge
- *      and component pills (cross-checked against the JSON the browser received,
- *      not against a second API call);
+ *   1. the initial Gaming recommendation renders the SERVED price and the
+ *      compact component line (cross-checked against the JSON the browser received,
+ *      not against a second API call) and no badge;
  *   2. the request set is exactly one meta read, one ladder per use case and one
  *      detail per rendered card, with no duplicate, no 4xx/5xx and no console
  *      error;
@@ -159,7 +159,8 @@ async function readCards(page) {
         title: (article.querySelector("h3")?.textContent ?? "").trim(),
         badge: (article.querySelector("[data-slot='badge']")?.textContent ?? "").trim(),
         values,
-        pills: [...article.querySelectorAll("ul li")].map((li) => (li.textContent ?? "").trim()),
+        summary: (article.querySelector("h3 + p")?.textContent ?? "").trim(),
+        text: (article.textContent ?? "").trim(),
         cta: article.querySelector("a[href*='/configurateur']")?.getAttribute("href") ?? null,
       };
     }),
@@ -253,24 +254,23 @@ try {
       continue;
     }
     check(
-      `${useCase} card score`,
-      card.values[0]?.text.includes(formatScore(build.build_score, "fr")),
-      `saw "${card.values[0]?.text}"`,
+      `${useCase} card price is the served rank-1 total`,
+      normalize(card.text).includes(normalize(formatPrice(build.total_price, CURRENCY_LABEL.fr))),
+      `saw "${normalize(card.text)}"`,
     );
+    check(`${useCase} card renders no badge`, card.badge === "", `saw "${card.badge}"`);
+    const servedPillRoles = [
+      ...new Set(
+        build.components
+          .map((component) => component.role)
+          .filter((role) => ["CPU", "GPU", "RAM", "SSD_BOOT"].includes(role)),
+      ),
+    ].slice(0, 4);
+    const summarySegments = card.summary.split(" · ").filter((segment) => segment !== "");
     check(
-      `${useCase} card price`,
-      card.values[1]?.label === formatPrice(build.total_price, CURRENCY_LABEL.fr),
-      `saw "${card.values[1]?.label}"`,
-    );
-    const badge = build.price_status === "verified" ? "Prix vérifié" : "Prix indicatif";
-    check(`${useCase} card badge`, card.badge === badge, `saw "${card.badge}"`);
-    const expectedPills = build.components
-      .filter((component) => ["CPU", "GPU", "RAM", "SSD_BOOT"].includes(component.role))
-      .map((component) => component.name);
-    check(
-      `${useCase} card pills are the served component names`,
-      expectedPills.every((name) => card.pills.includes(name)),
-      `rendered [${card.pills.join(" | ")}]`,
+      `${useCase} card compact line has one segment per served role`,
+      summarySegments.length === servedPillRoles.length,
+      `saw [${card.summary}]`,
     );
     check(
       `${useCase} card CTA carries the served tier`,
@@ -336,7 +336,7 @@ try {
   //    approved contract: use_case + served tier, no pass id, so the panel is
   //    honestly empty until the visitor submits — it invents no build).
   await fr.page.getByRole("spinbutton", { name: "Budget exact en dirhams" }).fill("12000");
-  await fr.page.getByRole("link", { name: "Voir la configuration" }).first().click();
+  await fr.page.getByRole("link", { name: "Voir la config" }).first().click();
   await fr.page.waitForURL(/\/fr\/configurateur\?use_case=GAMING&budget=12000$/, {
     timeout: 20_000,
   });
