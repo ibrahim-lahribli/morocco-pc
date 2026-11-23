@@ -673,6 +673,71 @@ function compareScenario(fixture, observed) {
 // Statement-order invariant
 // ---------------------------------------------------------------------------
 
+// The classes one orchestrated pass issues on the context side, i.e. what
+// `loadFilteringContext` produces (specs, then the socket->platform lookup, then
+// the compatibility buckets). Used only to locate the FIRST context statement in
+// the observed sequence.
+const CONTEXT_CLASSES = new Set([
+  'spec:cpu',
+  'spec:motherboard',
+  'spec:ram',
+  'spec:psu',
+  'spec:case',
+  'spec:cooler',
+  'spec:gpu',
+  'platform_by_socket',
+  'support:cpu_motherboard',
+  'support:cooler_socket',
+  'support:case_form_factor',
+  'support:case_radiator',
+  'platform_memory',
+  'motherboard_memory',
+]);
+
+/**
+ * The statement SEQUENCE, not just each class's row order. Every per-class check
+ * above would still pass after a reordering that changed which loader observed
+ * which rows first, so the order the loaders issue their statements in is
+ * asserted here: query -> scoring model -> candidates -> ambiguity guard ->
+ * offers -> filtering context -> assessments (orchestrator/run.js).
+ *
+ * `seen` is the first-seen class order of one pass (Map insertion order from
+ * order.classify).
+ */
+function assertStatementSequence(seen, scenarioId) {
+  const at = (key) => {
+    const index = seen.indexOf(key);
+    assert.ok(index >= 0, scenarioId + ': statement class never issued: ' + key);
+    return index;
+  };
+  const firstOf = (predicate, label) => {
+    const index = seen.findIndex(predicate);
+    assert.ok(index >= 0, scenarioId + ': no ' + label + ' statement was issued');
+    return index;
+  };
+
+  const expected = [
+    ['query', at('query')],
+    ['scoring model', at('model')],
+    [
+      'candidate',
+      firstOf((key) => key.startsWith('candidates_product:') || key === 'candidates_gpu', 'candidate'),
+    ],
+    ['candidate integrity guard', at('candidates_integrity')],
+    ['offers', at('offers')],
+    ['filtering context', firstOf((key) => CONTEXT_CLASSES.has(key), 'filtering-context')],
+    ['assessments', at('assessments')],
+  ];
+
+  for (let i = 1; i < expected.length; i += 1) {
+    assert.ok(
+      expected[i - 1][1] < expected[i][1],
+      scenarioId + ': ' + expected[i - 1][0] + ' must be issued before ' + expected[i][0]
+        + ', first seen at index ' + expected[i - 1][1] + ' vs ' + expected[i][1]
+    );
+  }
+}
+
 function checkStatementOrder(statements, scenarioId) {
   const classes = order.classify(statements);
   assert.equal(classes.has('now'), false, scenarioId + ': an asOf run issued SELECT CURRENT_TIMESTAMP AS now');
@@ -686,6 +751,7 @@ function checkStatementOrder(statements, scenarioId) {
     assert.equal((classes.get(key) || []).length, 1,
       scenarioId + ': expected exactly one ' + key + ' statement, seen ' + (classes.get(key) || []).length);
   }
+  assertStatementSequence([...classes.keys()], scenarioId);
 }
 
 // ---------------------------------------------------------------------------
