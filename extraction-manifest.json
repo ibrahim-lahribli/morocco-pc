@@ -320,6 +320,23 @@
           "destination": "packages/recommendation-runtime/src/scoring/load-assessments.js"
         }
       ]
+    },
+    {
+      "id": "step-5-w1-candidates-filtering",
+      "description": "Step 5 W1 PR 2: the two remaining loaders that feed Engine 2 - the Engine 2B candidate loader (loadCandidates, which derives a candidate's category from canonical spec-table presence and issues one statement per required role plus the canonical-category ambiguity guard) and the Engine 2D filtering-context loader (loadFilteringContext with its CONTEXT_COMPAT_KEYS vocabulary, which loads candidate-scoped specs, the socket->platform map and the seven compatibility buckets) - moved out of src/recommendation/{candidates,filtering}/ into packages/recommendation-runtime/src/{candidates,filtering}/, leaving identity re-export shims at the old paths. Both execute SQL, so they belong to the runtime package, not the pure core. The move is byte-identical because the import specifiers were made location-independent BEFORE this baseline: commit 'refactor(candidates,filtering): reach core through the core-entry adapter' rewrote each module's four relative core requires into one '../core-entry' require, so the same bytes resolve the core package root from either depth (the runtime tree answers the same specifier with its own packages/recommendation-runtime/src/core-entry.js). Behaviour is pinned by the L1 suites that stayed at the old paths - src/recommendation/candidates/loader.test.js and src/recommendation/filtering/context-loader.test.js, which inject a fake client and now exercise the modules through the shims - and by the two DB-free suites added under packages/recommendation-runtime/test/ in this batch, which additionally freeze every statement's SQL text, its parameter array and the statement SEQUENCE (no test pinned that order before). No characterization fixture is recorded: a module whose whole contract is exercised through an injected client needs no captured surface beyond the suites that already run in CI.",
+      "baseline_sha": "0fe97e860175d68bc192d9d751b0f0f595483b66",
+      "identity_policy": "byte-identical",
+      "characterization": null,
+      "modules": [
+        {
+          "source": "src/recommendation/candidates/loader.js",
+          "destination": "packages/recommendation-runtime/src/candidates/loader.js"
+        },
+        {
+          "source": "src/recommendation/filtering/context-loader.js",
+          "destination": "packages/recommendation-runtime/src/filtering/context-loader.js"
+        }
+      ]
     }
   ]
 }
