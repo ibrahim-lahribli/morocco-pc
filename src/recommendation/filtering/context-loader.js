@@ -61,10 +61,15 @@
  * reused; no new error hierarchy.
  */
 
-const { COMPONENT_ROLES } = require('../candidates/roles');
-const { createCandidateSelectionInput } = require('../candidates/input');
-const { createCandidate } = require('../candidates/candidate');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const core = require('../core-entry');
+
+const {
+  COMPONENT_ROLES,
+  createCandidateSelectionInput,
+  createCandidate,
+  CandidateSelectionError,
+  ERROR_CODES,
+} = core.candidates;
 
 /** GPU is variant-keyed; every other role is product-keyed (Engine 2B/2C). */
 const GPU_ROLE = 'GPU';

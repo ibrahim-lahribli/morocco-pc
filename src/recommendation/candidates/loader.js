@@ -31,10 +31,16 @@
  * recommendation tables, and never filters on budget or use_case.
  */
 
-const { createCandidateSelectionInput } = require('./input');
-const { createCandidate } = require('./candidate');
-const { ROLE_CATEGORIES, ROLE_ORDER } = require('./roles');
-const { CandidateSelectionError, ERROR_CODES } = require('./errors');
+const core = require('../core-entry');
+
+const {
+  createCandidateSelectionInput,
+  createCandidate,
+  ROLE_CATEGORIES,
+  ROLE_ORDER,
+  CandidateSelectionError,
+  ERROR_CODES,
+} = core.candidates;
 
 /** Canonical lifecycle policy: only ACTIVE products are recommendation candidates. */
 const LIFECYCLE_ACTIVE = 'ACTIVE';
