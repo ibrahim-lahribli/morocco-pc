@@ -272,6 +272,8 @@ fly deploy --app morocco-pc-api
 ```
 
 
+For the Render path the order is load-bearing: apply seed 029 on EU first, then run the Blueprint Manual sync and confirm its diff shows `SCORING_MODEL_PIN` moving from `launch-v2@2.4.0` to `launch-v2@2.5.0`, deploy if the sync did not, and confirm the startup log line names `scoring_model: launch-v2@2.5.0`.
+
 The production role now exists on this database (applied 2026-10-23, audit target
 `db:2d66f26d7ddc`, restore point `br-late-rice-b906upai`, self-check 20/20, smoke test
 green as `morocco_pc_api`). The deploy therefore SHOULD set `DATABASE_URL` to the ROLE's
