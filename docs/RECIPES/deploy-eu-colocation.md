@@ -20,7 +20,7 @@ measurement runs.
 | Database region | Neon `aws-eu-central-1` (Frankfurt) | Fly's `fra` and Render's `frankfurt` are the same metro. Neon's only other EU region is `aws-eu-west-2` (London). |
 | Replay source | the **TEST branch**, not the shared database | Both carry the API's contract (ledger 23 on each since 2026-10-29), so either replays an API that can serve. The branch stays the source because the shared dev database accumulates local test rows. |
 | Host | **Fly.io `fra`** (recommended); Render `frankfurt` as the alternative | See the comparison below. Both build `apps/api/Dockerfile` with the repository root as context. |
-| Contract version at deploy | v1.6 | The served OpenAPI document names it; `/v1/docs/json` is the check. Eight paths as of 2026-10-23 — the price history is the eighth. |
+| Contract version at deploy | 1.10.0 | The served OpenAPI document names it; `/v1/docs/json` is the check. Eight paths as of 2026-10-23 — the price history is the eighth. |
 
 Hosting facts verified 2026-10-17 on vendor pages (re-check at checkout; Fly prices vary by
 region and Render's page bundles pricing into a comparison article):
@@ -271,6 +271,8 @@ fly secrets set \
 fly deploy --app morocco-pc-api
 ```
 
+
+For the Render path the order is load-bearing: apply seed 029 on EU first, then run the Blueprint Manual sync and confirm its diff shows `SCORING_MODEL_PIN` moving from `launch-v2@2.4.0` to `launch-v2@2.5.0`, deploy if the sync did not, and confirm the startup log line names `scoring_model: launch-v2@2.5.0`.
 
 The production role now exists on this database (applied 2026-10-23, audit target
 `db:2d66f26d7ddc`, restore point `br-late-rice-b906upai`, self-check 20/20, smoke test
