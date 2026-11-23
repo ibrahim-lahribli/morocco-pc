@@ -18,6 +18,16 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const path = require('node:path');
+
+/**
+ * Step 5 W1 made this path an identity shim: the implementation now lives in
+ * the runtime package. The structural assertion below reads the REAL source, so
+ * it cannot pass vacuously against a two-line re-export.
+ */
+const PIPELINE_SOURCE = path.join(
+  __dirname, '..', '..', '..', 'packages', 'recommendation-runtime', 'src', 'filtering', 'pipeline.js'
+);
 
 const pipeline = require('./pipeline');
 const { filterCandidatesForRecommendation } = pipeline;
@@ -374,7 +384,7 @@ test('pipeline: delegates - identical to the explicit two-stage composition', as
 // ---------------------------------------------------------------------------
 
 test('pipeline: dependency boundary - only the sibling loader and the core entry are imported', () => {
-  const source = fs.readFileSync(require.resolve('./pipeline'), 'utf8');
+  const source = fs.readFileSync(PIPELINE_SOURCE, 'utf8');
 
   // Every require target: the sibling loader and the core-entry adapter that
   // carries the pure filter (step 5 W1 commit A, PR #64).

@@ -12,10 +12,11 @@
 // nothing else. A module that appears under src/ cannot become a public export
 // by accident.
 //
-// Deliberately empty right now, and still empty after step 5 W1 moved seven
+// Deliberately empty right now, and still empty after step 5 W1 moved ten
 // modules in (offers/select.js, then the two query and two scoring loaders,
-// then the candidate and filtering-context loaders, each behind an identity
-// shim at its old path): a module lands under src/
+// then the candidate and filtering-context loaders, then the offers and query
+// barrels and the filtering composition, each behind an identity shim at its
+// old path): a module lands under src/
 // before its namespace is published, because the surface grows one namespace
 // per batch rather than one file per move. The namespaces arrive one batch at a
 // time, each adding itself to test/export-surface.json in the same commit:

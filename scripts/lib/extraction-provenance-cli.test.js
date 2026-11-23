@@ -604,7 +604,12 @@ test('the real manifest still verifies every batch (21/21, 7/7, 4/4, 5/5, 5/5, 5
   assert.match(result.stdout, /## batch step-5-w1-candidates-filtering/);
   assert.match(result.stdout, /baseline: 0fe97e860175d68bc192d9d751b0f0f595483b66/);
   assert.match(result.stdout, /blob-identical in 'step-5-w1-candidates-filtering': 2 \/ 2/);
-  assert.match(result.stdout, /blob-identical: 54 \/ 54/);
+  // Step 5 W1 PR 3 appended a tenth batch: the filtering composition and the
+  // two runtime-only loaders barrels, which close the W1 loaders namespace.
+  assert.match(result.stdout, /## batch step-5-w1-final-loaders/);
+  assert.match(result.stdout, /baseline: 629d3e8d08230ecbbeb3387adffd339be33b344c/);
+  assert.match(result.stdout, /blob-identical in 'step-5-w1-final-loaders': 3 \/ 3/);
+  assert.match(result.stdout, /blob-identical: 57 \/ 57/);
   assert.match(
     result.stdout,
     /characterization verified for: step-4b-pr2, step-4b-pr3, step-4b-pr4, step-4b-pr5, step-4b-pr6, step-4b-pr7/

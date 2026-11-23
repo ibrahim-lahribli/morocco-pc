@@ -304,7 +304,12 @@ test('no second engine behavior is introduced', async () => {
   for (const token of bannedBehavior) {
     assert.ok(!source.includes(token), `select.js must not contain ${token}`);
   }
-  const barrel = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
+  // Step 5 W1 moved the barrel itself: the published surface is the runtime's,
+  // and the old path is a two-line re-export.
+  const barrel = fs.readFileSync(
+    path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-runtime', 'src', 'offers', 'index.js'),
+    'utf8'
+  );
   assert.ok(barrel.includes('selectOfferPrices'));
 });
 

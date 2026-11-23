@@ -337,6 +337,27 @@
           "destination": "packages/recommendation-runtime/src/filtering/context-loader.js"
         }
       ]
+    },
+    {
+      "id": "step-5-w1-final-loaders",
+      "description": "Step 5 W1 PR 3: the three remaining modules of the W1 loaders namespace - the Engine 2D filtering composition (filterCandidatesForRecommendation, which composes the already-extracted filtering-context loader with the pure core filter) and the two runtime-only public barrels of the loaders (offers/index.js publishing selectOfferPrices and SELECT_OFFER_PRICES_SQL, query/index.js publishing the two query loaders with their SQL constants, REQUIRED_ROLES and the Decision 47 catalog vocabulary) - moved out of src/recommendation/{filtering,offers,query}/ into packages/recommendation-runtime/src/{filtering,offers,query}/, leaving identity re-export shims at the old paths. The pipeline executes no SQL itself but is infrastructure composition owned at runtime/ (RFC 11.2), not a core member; both barrels publish SQL-executing members, so neither is a mixed barrel. The move is byte-identical relative to THIS batch's baseline, which is commit A on the branch: 'refactor(filtering): reach the core filter through the core-entry adapter' rewrote the pipeline's one core require into '../core-entry' so the same bytes resolve the core package root from either depth (the runtime tree answers the same specifier with its own packages/recommendation-runtime/src/core-entry.js). The two barrels needed no specifier change: their siblings (./select, ./load-query-input, ./catalog-version) had already moved into the same runtime directories in the earlier W1 batches, so each require resolves unchanged from the new depth. Behaviour is pinned by the L1 suites that stayed at the old paths - src/recommendation/filtering/pipeline.test.js, src/recommendation/offers/select.test.js and src/recommendation/query/*.test.js, which now exercise the modules through the shims - and by the three DB-free suites added under packages/recommendation-runtime/test/ in this batch: a recording fake client that pins the composition's single loader call, the identity of the client passed through, the statement sequence and that the pure filter issues no query; plus an export-key and function-identity comparison of each barrel against its old path. No characterization fixture is recorded: a module whose whole contract is exercised through an injected client needs no captured surface beyond the suites that already run in CI.",
+      "baseline_sha": "629d3e8d08230ecbbeb3387adffd339be33b344c",
+      "identity_policy": "byte-identical",
+      "characterization": null,
+      "modules": [
+        {
+          "source": "src/recommendation/filtering/pipeline.js",
+          "destination": "packages/recommendation-runtime/src/filtering/pipeline.js"
+        },
+        {
+          "source": "src/recommendation/offers/index.js",
+          "destination": "packages/recommendation-runtime/src/offers/index.js"
+        },
+        {
+          "source": "src/recommendation/query/index.js",
+          "destination": "packages/recommendation-runtime/src/query/index.js"
+        }
+      ]
     }
   ]
 }
