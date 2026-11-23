@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { CARD_TITLES, stubHomepageApi } from "./support/homepage-api";
+import { stubHomepageApi } from "./support/homepage-api";
 import { waitForSettledCards } from "./support/homepage-ready";
 
 /**
@@ -105,42 +105,6 @@ test.describe("homepage finder", () => {
     await expect(page.getByText(/1080p|1440p/)).toHaveCount(0);
   });
 
-  test("pathways and the closing call to action both lead back to the finder", async ({ page }) => {
-    const { posts } = await stubHomepageApi(page);
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto("/fr");
-
-    await page.getByRole("button", { name: "Études & bureautique", exact: true }).click();
-    await expect(page.getByRole("radio", { name: USAGE_OFFICE })).toBeChecked();
-    await expect(page.locator("#finder-usage")).toBeFocused();
-
-    await page.getByRole("button", { name: "Trouver mon PC en 1 minute" }).click();
-    await expect(page.locator("#finder-budget")).toBeFocused();
-
-    expect(posts).toEqual([]);
-  });
-
-  test("narrows the cards to the pathway's use case", async ({ page }) => {
-    const { posts } = await stubHomepageApi(page);
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto("/fr");
-    await waitForSettledCards(page);
-
-    const section = page.locator("#configurations");
-    await expect(section.locator("article")).toHaveCount(3);
-
-    await page.getByRole("button", { name: "Études & bureautique", exact: true }).click();
-
-    // The tile writes the same store field the radio group does, so the cards
-    // must follow it: a count of 3 here would mean the tile moved the radio and
-    // nothing else.
-    await expect(page.getByRole("radio", { name: USAGE_OFFICE })).toBeChecked();
-    await expect(section.locator("article")).toHaveCount(1);
-    await expect(section.getByRole("heading", { name: CARD_TITLES.OFFICE })).toBeVisible();
-    await expect(section.getByRole("heading", { name: CARD_TITLES.GAMING })).toHaveCount(0);
-    expect(posts).toEqual([]);
-  });
-
   test("hands the answers to the configurator and never posts", async ({ page }) => {
     const { posts } = await stubHomepageApi(page);
     await page.goto("/fr");
@@ -157,40 +121,6 @@ test.describe("homepage finder", () => {
     await expect(page.getByRole("radio", { name: /Études et bureautique/ })).toBeChecked();
     await expect(page.getByRole("spinbutton", { name: "Budget (DH)" })).toHaveValue("8000");
     expect(posts).toEqual([]);
-  });
-  test("offers the same three tiles on a phone and keeps the focus move", async ({ page }) => {
-    const { posts } = await stubHomepageApi(page);
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/fr");
-    await waitForSettledCards(page);
-
-    const section = page.locator("#pathways");
-    await expect(section).toBeVisible();
-    await expect(section.getByRole("button")).toHaveCount(3);
-    await expect(section.getByRole("button", { name: "Gaming 1080p" })).toHaveCount(0);
-
-    // One column on a phone: three different rows, not three squeezed cells.
-    const tops = await section
-      .getByRole("button")
-      .evaluateAll((buttons) =>
-        buttons.map((button) => Math.round(button.getBoundingClientRect().top)),
-      );
-    expect(new Set(tops).size).toBe(3);
-
-    await section.getByRole("button", { name: "Études & bureautique" }).click();
-    await expect(page.getByRole("radio", { name: USAGE_OFFICE })).toBeChecked();
-    await expect(page.locator("#finder-usage")).toBeFocused();
-    await expect(page.locator("#configurations article")).toHaveCount(1);
-    expect(posts).toEqual([]);
-
-    // From `sm` the three tiles share one row again.
-    await page.setViewportSize({ width: 1280, height: 900 });
-    const wideTops = await section
-      .getByRole("button")
-      .evaluateAll((buttons) =>
-        buttons.map((button) => Math.round(button.getBoundingClientRect().top)),
-      );
-    expect(new Set(wideTops).size).toBe(1);
   });
 });
 

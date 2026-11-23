@@ -49,7 +49,6 @@ const CONTROLS = [
   "#finder-usage label:has(input[type='radio'])",
   "#homepage-custom-budget",
   "#finder-budget button[aria-expanded]",
-  "#pathways button",
   "#configurations a",
   "#configurations button",
   `${FINAL_CTA} a`,

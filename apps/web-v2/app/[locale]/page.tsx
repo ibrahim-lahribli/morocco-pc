@@ -4,7 +4,6 @@ import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 
 import { BudgetUsageFinder } from "@/components/home/budget-usage-finder";
-import { DiscoveryPathways } from "@/components/home/discovery-pathways";
 import { FeaturedGuides } from "@/components/home/featured-guides";
 import { FinalRecommendationCTA } from "@/components/home/final-recommendation-cta";
 import { HomepageHero } from "@/components/home/homepage-hero";
@@ -57,7 +56,6 @@ export default async function Homepage({ params }: { params: Promise<{ locale: s
       </HomepageHero>
 
       <RecommendedBuildSection />
-      <DiscoveryPathways />
       <TrustHighlights />
       <FeaturedGuides />
       <FinalRecommendationCTA />

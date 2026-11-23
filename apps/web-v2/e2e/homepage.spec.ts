@@ -46,31 +46,24 @@ test.describe("homepage shell", () => {
 
   // Document order, not pixel position: §1.1/§7/§16.1 order a reader must be able to trust
   // at every breakpoint, with or without layout.
-  test("renders discovery pathways between the configurations and the trust section", async ({
-    page,
-  }) => {
+  test("renders the trust section after the configurations", async ({ page }) => {
     await stubHomepageApi(page);
     await page.goto("/fr");
 
     const order = await page.evaluate(() => {
-      const elements = ["configurations", "pathways", "confiance"].map((id) =>
-        document.getElementById(id),
-      );
+      const configurations = document.getElementById("configurations");
+      const trust = document.getElementById("confiance");
+      if (!configurations || !trust) return null;
 
-      const [configurations, pathways, trust] = elements;
-      if (!configurations || !pathways || !trust) return null;
-
-      return (
-        Boolean(
-          configurations.compareDocumentPosition(pathways) & Node.DOCUMENT_POSITION_FOLLOWING,
-        ) && Boolean(pathways.compareDocumentPosition(trust) & Node.DOCUMENT_POSITION_FOLLOWING)
+      return Boolean(
+        configurations.compareDocumentPosition(trust) & Node.DOCUMENT_POSITION_FOLLOWING,
       );
     });
 
     expect(order).toBe(true);
   });
 
-  test("gives the four section headings one size per breakpoint", async ({ page }) => {
+  test("gives the three section headings one size per breakpoint", async ({ page }) => {
     await stubHomepageApi(page);
 
     for (const [width, expected] of [
@@ -82,18 +75,13 @@ test.describe("homepage shell", () => {
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
       const sizes = await page.evaluate(() =>
-        ["configurations-title", "pathways-title", "confiance-title", "guides-title"].map((id) => {
+        ["configurations-title", "confiance-title", "guides-title"].map((id) => {
           const element = document.getElementById(id);
           return element === null ? null : parseFloat(getComputedStyle(element).fontSize);
         }),
       );
 
-      expect(sizes, `section headings at ${width}px`).toEqual([
-        expected,
-        expected,
-        expected,
-        expected,
-      ]);
+      expect(sizes, `section headings at ${width}px`).toEqual([expected, expected, expected]);
     }
   });
 

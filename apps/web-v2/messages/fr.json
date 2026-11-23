@@ -126,33 +126,22 @@
       "loading": "Chargement des configurations…",
       "budgetCap": "Configuration pré-générée la plus élevée disponible : {amount}"
     },
-    "pathways": {
-      "eyebrow": "Catégories & usages",
-      "gaming": "Gaming",
-      "office": "Études & bureautique",
-      "workstation": "Création & travail professionnel",
-      "gaming1080": "Gaming 1080p",
-      "gaming1440": "Gaming 1440p"
-    },
     "trust": {
       "eyebrow": "Transparence & rigueur",
       "title": "Pourquoi faire confiance à Morocco-PC ?",
       "intro": "Nous ne vendons aucun composant en direct. Notre seul objectif est de vous éviter les erreurs d'achat et les dépenses superflues.",
       "pillars": {
         "compatibility": {
-          "title": "Compatibilité analysée",
-          "body": "Les composants sont contrôlés selon les caractéristiques et les règles de compatibilité disponibles (socket, mémoire, dimensions et alimentation). Certaines données peuvent rester inconnues.",
-          "foot": "Les statuts reflètent les contrôles réellement effectués"
+          "title": "Compatibilité vérifiée",
+          "body": "Composants analysés pour repérer les incompatibilités possibles."
         },
         "prices": {
-          "title": "Prix indicatifs en dirhams (MAD / DH)",
-          "body": "Les montants proviennent des offres enregistrées et leur provenance est indiquée. Ils peuvent différer des prix actuellement pratiqués en boutique.",
-          "foot": "Prix non actualisés en temps réel"
+          "title": "Prix indicatifs en dirhams (DH)",
+          "body": "Estimations basées sur les offres des distributeurs au Maroc."
         },
         "free": {
-          "title": "100 % Gratuit & sans compte",
-          "body": "Obtenez vos recommandations en toute liberté, sans avoir besoin de créer un compte ni laisser de coordonnées personnelles ou numéro de téléphone.",
-          "foot": "Libre accès immédiat"
+          "title": "Gratuit et sans compte",
+          "body": "Accédez aux recommandations sans inscription."
         }
       },
       "methodologyLink": "Comment fonctionnent nos recommandations ?"

@@ -176,7 +176,6 @@ try {
             const titleNodes = heroField("[data-testid='hero-preview-title']");
 
             const cards = [...document.querySelectorAll("#configurations article")];
-            const tiles = [...document.querySelectorAll("#pathways button")].filter(visible);
             const languages = [...document.querySelectorAll("a[hreflang]")].filter(visible);
             const nav = document.querySelector("[data-slot='mobile-nav']");
 
@@ -198,9 +197,6 @@ try {
               heroDomPrice: priceNodes.length === 1 ? text(priceNodes[0]) : null,
               heroTitleCount: titleNodes.length,
               heroTitle: titleNodes.length === 1 ? text(titleNodes[0]) : null,
-              pathwaysVisible: visible(document.querySelector("#pathways")),
-              pathwayTiles: tiles.length,
-              pathwayRows: rowsOf(tiles),
               cards: cards.length,
               cardRows: rowsOf(cards),
               // The cards' own prices, kept separate so a card value can never be
@@ -213,7 +209,6 @@ try {
               navVisible: visible(nav),
               localeControls: languages.length,
               smallestLocaleControl: smallest(languages),
-              smallestTile: smallest(tiles),
             };
           })
         : null;
@@ -299,13 +294,6 @@ try {
           }
         }
 
-        if (metrics.pathwayTiles === 0) cellFail("no discovery tile is visible");
-        const expectedTileRows = width < 640 ? 3 : 1;
-        if (metrics.pathwayRows !== expectedTileRows) {
-          cellFail(
-            `discovery tiles use ${metrics.pathwayRows} row(s), expected ${expectedTileRows}`,
-          );
-        }
         if (metrics.cards !== 3)
           cellFail(`#configurations holds ${metrics.cards} cards, expected 3`);
         // The cards stack until `lg` (1024px), so 768px is still three rows.
@@ -320,9 +308,6 @@ try {
           if (metrics.smallestLocaleControl < 44) {
             cellFail(`locale control is ${metrics.smallestLocaleControl}px, under 44px on a phone`);
           }
-        }
-        if (metrics.smallestTile !== null && metrics.smallestTile < 44) {
-          cellFail(`a discovery tile is ${metrics.smallestTile}px, under 44px`);
         }
 
         for (const message of consoleErrors) cellFail(`browser error — ${message}`);
@@ -378,7 +363,6 @@ try {
       console.log(
         `${String(width).padStart(4)} ${locale}  overflow=${metrics?.overflow ?? "?"}  ` +
           `hero=${heroCell}  state=${metrics?.heroState ?? "?"}  ` +
-          `tiles=${metrics?.pathwayTiles ?? "?"}/${metrics?.pathwayRows ?? "?"} row(s)  ` +
           `cards=${metrics?.cards ?? "?"}/${metrics?.cardRows ?? "?"} row(s)  ` +
           `cardPrices=[${(metrics?.cardPrices ?? []).join(" | ")}]  ` +
           `footerClear=${clearance?.clear ?? "n/a"}  dir=${metrics?.dir ?? "?"}  ` +
