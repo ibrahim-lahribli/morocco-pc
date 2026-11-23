@@ -238,6 +238,15 @@ jobs:
         run: node scripts/run-migrations.js --test-db
       - name: Apply all seeds (ephemeral)
         run: node scripts/run-seeds.js
+      # Task 4b's other half: the frozen golden pairs carry the LOADER outputs as
+      # inputs, so the harness below replays only assemble -> score. This step
+      # re-runs the five real loaders over the same fixture inputs and compares
+      # their output to the committed halves. It is read-only (BEGIN READ ONLY,
+      # rolled back) and identity-aware: seeds mint UUIDs, so byte parity is
+      # impossible on a fresh database and 'strict' is reserved for the capture
+      # DB. It must run BEFORE the harness, which creates unmarked query rows.
+      - name: Golden loader parity (ephemeral)
+        run: node scripts/check-golden-loader-parity.js
       - name: Golden scenario harness (ephemeral)
         run: npm run eval:scenarios -- --model=launch-v2@2.5.0 --no-baseline --no-volatile
       # The real loaders against the frozen loader fixtures, on the SAME fresh

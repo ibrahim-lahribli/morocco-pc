@@ -150,6 +150,7 @@ Read the owning file before changing that layer:
 | `npm run test:core` | the pure core's boundary harness (`packages/recommendation-core/test/*.test.js`): loader, export snapshot, purity scan, hermetic reachability fixtures |
 | `node packages/recommendation-core/test/hermetic-run.js` | RFC §11.6 hermetic run: copies the package outside the repo, refuses if any `node_modules` is reachable, runs the suite there with `NODE_PATH` emptied |
 | `npm run test:api` | HTTP API unit tests (DB-free, `fastify.inject`) |
+| `node scripts/check-golden-loader-parity.js` | golden loader parity: re-runs the five DB loaders over the frozen `test/golden/fixtures` inputs and compares their output to the committed halves; identity-aware by default (`--strict` only on the capture DB); needs a database, and wired into `ephemeral-eval` |
 | `npm run check:contract` | one versioned `contract/openapi-*.json`; fails on any second copy |
 | `node scripts/check-openapi-compatibility.js --base=origin/master` | contract compatibility against a Git ref (ADDITIVE passes, unapproved BREAKING fails) |
 | `npm run test:api:db` | HTTP end-to-end against the TEST branch (nightly; writes) |
