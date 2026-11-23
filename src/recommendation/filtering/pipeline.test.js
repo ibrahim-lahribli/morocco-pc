@@ -373,12 +373,13 @@ test('pipeline: delegates - identical to the explicit two-stage composition', as
 //    SQL text or Engine 1 piece anywhere in the orchestration module.
 // ---------------------------------------------------------------------------
 
-test('pipeline: dependency boundary - only the two sibling stages are imported', () => {
+test('pipeline: dependency boundary - only the sibling loader and the core entry are imported', () => {
   const source = fs.readFileSync(require.resolve('./pipeline'), 'utf8');
 
-  // Every require target: exactly the two already-validated stages.
+  // Every require target: the sibling loader and the core-entry adapter that
+  // carries the pure filter (step 5 W1 commit A, PR #64).
   const requires = [...source.matchAll(/require\((['"])(.+?)\1\)/g)].map((m) => m[2]);
-  assert.deepEqual([...requires].sort(), ['./context-loader', './filter']);
+  assert.deepEqual([...requires].sort(), ['../core-entry', './context-loader']);
 
   // The orchestration layer owns none of the forbidden concerns: they all
   // belong to the composed stages or to later engines.

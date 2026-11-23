@@ -37,13 +37,14 @@
  * error is translated.
  *
  * Dependencies: the caller supplies the Engine 2C candidate-pool result and
- * the database client. This module creates no connection of its own and
- * imports nothing besides the two sibling stages, so it stays unit-testable
- * with a fake db.
+ * the database client. This module creates no connection of its own; it
+ * imports the sibling context loader and reaches the pure filter through the
+ * core-entry adapter, so it stays unit-testable with a fake db.
  */
 
+const core = require('../core-entry');
 const { loadFilteringContext } = require('./context-loader');
-const { filterCandidates } = require('./filter');
+const { filterCandidates } = core.filtering;
 
 /**
  * Run the Engine 2D hard-compatibility filtering stage for one Engine 2C
