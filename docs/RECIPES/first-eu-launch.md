@@ -37,7 +37,7 @@ as DONE without the evidence its step names.
 git status --porcelain && git --no-pager log --oneline -1     # note the sha
 ```
 
-The EU-targeted reads below need `TARGET_DATABASE_URL` from `.env.eu`. That file is NOT loaded by
+The EU-targeted reads below need `EU_DATABASE_URL` from `.env.eu`. That file is NOT loaded by
 `DOTENV_CONFIG_PATH=.env.eu node scripts/x.js` — that form silently does nothing, because the
 variable is read only by the `dotenv/config` PRELOAD (measured 2026-10-23). Use the preload form:
 
@@ -50,15 +50,15 @@ export APP="https://morocco-pc-api.fly.dev"
 # unmarked test passes — so scoring-model-pins and the row counts DIFF and the command exits 1.
 # RESULT: DIFF here is the EXPECTED answer: read the per-check table, never the exit code alone.
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-target-parity.js \
-  --a=env:TEST_DATABASE_URL --b=env:TARGET_DATABASE_URL
+  --a=env:TEST_DATABASE_URL --b=env:EU_DATABASE_URL
 
 # No app session yet: expected RESULT: INCONCLUSIVE (exit 0, and NOT a pass).
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-deployed-role.js \
-  --target=env:TARGET_DATABASE_URL
+  --target=env:EU_DATABASE_URL
 
 # No retailer evidence anywhere: expected RESULT: INCONCLUSIVE.
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-offer-provenance.js \
-  --target=env:TARGET_DATABASE_URL
+  --target=env:EU_DATABASE_URL
 ```
 
 **STOP if the parity gate is not `RESULT: MATCH`.** A DIFF means the deploy target is not the
@@ -72,7 +72,7 @@ Follow §8.2 and §8.3. The checklist form, with what each step must print:
 
 - [ ] `fly auth login`, then `fly apps create morocco-pc-api` (once; if the name is taken, change
       `app` in `fly.toml` and the `--app` values in the commands below).
-- [ ] `fly secrets set DATABASE_URL="$TARGET_DATABASE_URL" \
+- [ ] `fly secrets set DATABASE_URL="$EU_DATABASE_URL" \
       ENGINE_VERSION="$(git rev-parse --short HEAD)" --app morocco-pc-api`
       — the OWNER url for this first deploy, by choice: see "Why this order" item 1.
 - [ ] `fly deploy --app morocco-pc-api`; `fly status` shows one machine running.
@@ -86,7 +86,7 @@ Follow §8.2 and §8.3. The checklist form, with what each step must print:
       whose builds match, and `served_by.engine_version` is the sha you just deployed.
 - [ ] **The before-evidence for §2** — the check must now SEE the app and name the wrong credential:
 
-      `DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-deployed-role.js --target=env:TARGET_DATABASE_URL`
+      `DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-deployed-role.js --target=env:EU_DATABASE_URL`
 
       Expected: `RESULT: FAIL - … authenticated as another role: neondb_owner (… connection)`, exit
       1. That FAIL is the check WORKING. Record the line and the start times it prints.
@@ -100,7 +100,7 @@ and compare the printed start times with the deploy time before treating a sessi
 
 Follow §8.5 steps 0–5. Its preconditions again, because each one is a real stop:
 
-- [ ] Smoke test GREEN first: `node scripts/smoke-api-role.js --confirm-shared --target-env=TARGET_DATABASE_URL`.
+- [ ] Smoke test GREEN first: `node scripts/smoke-api-role.js --confirm-shared --target-env=EU_DATABASE_URL`.
       A red smoke test is a grant problem, and rotating onto it turns a working app into a failing one.
 - [ ] Build the role's URL without printing it, and confirm `user: morocco_pc_api` (§8.5 step 1).
 - [ ] `fly secrets set DATABASE_URL="$ROLE_DATABASE_URL" --app morocco-pc-api`, then
@@ -160,7 +160,7 @@ If the answer is **"align shared"**:
       `SELECT name, version, is_active FROM scoring_model ORDER BY name, version;`
       → two rows: `launch-v2@1.0.0 active`, `seed-minimal-v1@1.0.0 inactive` (a row that any
       pass references is KEPT by 017, and the parity gate would then name it).
-- [ ] `node scripts/check-target-parity.js --a=env:DATABASE_URL --b=env:TARGET_DATABASE_URL` →
+- [ ] `node scripts/check-target-parity.js --a=env:DATABASE_URL --b=env:EU_DATABASE_URL` →
       `scoring-model-pins` MATCH. Explain any other DIFF it names rather than waving it through.
 - [ ] `node scripts/check-offer-freshness.js --fail-days=14` on shared (the seed run re-stamps the
       offer window) → record the new first-expiry date; it is a 30-day obligation, not a one-off.
