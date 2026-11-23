@@ -73,8 +73,9 @@ These are W1 work, not W0: they test the runtime once the modules have moved.
 
 ## Step-5 ownership and prerequisites
 
-- **W1 has not started.** W0 ships the harness only; no runtime module has moved, and
-  `src/index.js` still exports `{}`.
+- **W1 is in progress.** Five modules have moved (the Engine 2 offer query, then the two query and
+  two scoring loaders, each behind an identity shim at its old path); the candidates and filtering
+  loaders are next, and `src/index.js` still exports `{}` until the `loaders` namespace is published.
 - **Root CI integration belongs to Agent 1.** The root `test:runtime` script and the
   `.github/workflows/ci.yml` step are Agent 1's; W0 does not touch either.
 - **Step 4 acceptance belongs to Agent 2.** Step 4 (recommendation-core) is still in progress; W1
