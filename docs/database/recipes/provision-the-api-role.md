@@ -33,7 +33,7 @@ copy. Restore point `br-late-rice-b906upai` was created first (branch of main, n
 compute), audit target `db:2d66f26d7ddc`, HEAD `a12f3eb`: 8 statements, self-check
 20/20, then `smoke-api-role.js --confirm-shared --target-env=TARGET_DATABASE_URL`
 green (health `db:"ok"`, POST 201 with 1 build, 52 statements, no `42501`, all six
-Layer 4 counts back to 0). The target variable is `TARGET_DATABASE_URL` from
+Layer 4 counts back to 0). The target variable is `EU_DATABASE_URL` from
 `.env.eu`; its password was generated into its own file
 (`$HOME/.morocco-pc/api-role-eu.password`) because each database has its own role
 password. **TEST deliberately keeps the create-and-drop rehearsal** — no standing

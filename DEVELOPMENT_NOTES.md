@@ -1468,8 +1468,7 @@ on this box.
   restore point `pre-p1-replay` (`br-delicate-frog-b9d7n793`, no compute). Created through the Neon
   API: `list_regions` is HTTP 404 for this organization key, so the region id was passed explicitly
   and verified from the create response. No URL is recorded in the repository.
-- **Credentials** live in a gitignored `.env.eu` (`TARGET_DATABASE_URL` pooled, `TARGET_DIRECT_URL`
-  direct) - deliberately NOT the shared `.env`, because `run-seeds.js` and the write-capable tests
+- **Credentials** live in a gitignored `.env.eu` (`EU_DATABASE_URL` pooled, the file's only key) - deliberately NOT the shared `.env`, because `run-seeds.js` and the write-capable tests
   read `DATABASE_URL` from there and would otherwise be silently retargeted at a non-dev database.
   Values are single-quoted: the URLs carry `&`, and an unquoted `&` in a sourced file backgrounds the
   assignment (the same trap as `.env.frontend-dev`).
@@ -1962,7 +1961,7 @@ Operational trap, same class as the empty-env `TEST_DATABASE_URL` one:
 `DOTENV_CONFIG_PATH=.env.eu node scripts/<x>.js` does NOT load `.env.eu`. That variable is read only
 by the `dotenv/config` PRELOAD entry (`node -r dotenv/config`); `require('dotenv').config()` inside a
 script ignores it and reads `.env`. The failure is silent and looks exactly like a key that is not
-in the file: `TARGET_DATABASE_URL is not set` while it is on the file's first line.
+in the file: `EU_DATABASE_URL is not set` while it is on the file's first line.
 
 Naming note: the WRITE scripts take `--target-env=NAME` (it selects the database a write lands on)
 and the read-only gates take `--target=env:NAME`. Two spellings, one meaning — do not "unify" them

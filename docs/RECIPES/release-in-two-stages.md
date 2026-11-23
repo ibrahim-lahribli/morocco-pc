@@ -50,22 +50,22 @@ it is the only thing that proves the deploy actually changed the code.
 
 ```bash
 # Export the EU variables into THIS shell first (values are never printed). A bare
-# DATABASE_URL="$TARGET_DIRECT_URL" prefix without this export is the documented trap: the outer
+# DATABASE_URL="$EU_DATABASE_URL" prefix without this export is the documented trap: the outer
 # shell has no such variable, so the prefix exports an empty value.
 set -a; . ./.env.eu; set +a
 
 # (a) EU's LEDGER — expect "no pending" and exit 0. Point DATABASE_URL at the EU direct host for a
 #     read-only check; --check writes nothing, so no restore point is needed.
-DATABASE_URL="$TARGET_DIRECT_URL" node scripts/run-migrations.js --check
+DATABASE_URL="$EU_DATABASE_URL" node scripts/run-migrations.js --check
 
 # (b) nothing in master is waiting for a migration that EU has not seen:
 #     compare the two ledgers side by side (RESULT: MATCH on the ledger line is what matters).
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-target-parity.js \
-  --a=env:DATABASE_URL --b=env:TARGET_DATABASE_URL
+  --a=env:DATABASE_URL --b=env:EU_DATABASE_URL
 
 # (c) the app presents the API role TODAY (so a red result after the deploy is attributable):
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-deployed-role.js \
-  --target=env:TARGET_DATABASE_URL
+  --target=env:EU_DATABASE_URL
 
 # (d) the shelf baseline: 17 / 18 / 17 keys and a non-null generated_at.
 curl -sS "$APP/v1/presets?use_case=GAMING&currency=MAD"
@@ -94,7 +94,7 @@ it as the baseline; do not "fix" it here).
 ```bash
 curl -sS "$APP/v1/health"          # engine_version MUST equal the new sha, db "ok"
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-deployed-role.js \
-  --target=env:TARGET_DATABASE_URL  # RESULT: PASS - every session is morocco_pc_api
+  --target=env:EU_DATABASE_URL  # RESULT: PASS - every session is morocco_pc_api
 ```
 
 - [ ] **One read-only recommendation GET.** Take an id from the shelf response of step 1(d) and read
@@ -117,19 +117,19 @@ suspect, not the code (`docs/database/recipes/provision-the-api-role.md`, `deplo
 
 Order: **restore point → seed → import → pin + deploy → regenerate presets → gates → accept.**
 Step 1 creates the restore point; steps 2, 3 and 5 WRITE to the EU database, so each of those takes
-`--target-env=TARGET_DATABASE_URL` and that restore point.
+`--target-env=EU_DATABASE_URL` and that restore point.
 
 How the EU variable reaches a command: load `.env.eu` for that ONE command and leave `DATABASE_URL`
 alone. `DATABASE_URL` must keep naming the **shared** database, because that is the baseline the
 named-target guard compares against — a command that cannot prove its target differs from shared
-REFUSES. `.env.eu` defines `TARGET_DATABASE_URL` (and `TARGET_DIRECT_URL`) and no `DATABASE_URL`, so
+REFUSES. `.env.eu` defines `EU_DATABASE_URL` and no `DATABASE_URL`, so
 preloading it is enough; the script's own dotenv pass then supplies the shared baseline from `.env`.
 
 ```bash
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/<tool>.js ...
 ```
 
-Do **not** copy the variable out with `export TARGET_DATABASE_URL="$(sed ... .env.eu)"`: `.env.eu` is
+Do **not** copy the variable out with `export EU_DATABASE_URL="$(sed ... .env.eu)"`: `.env.eu` is
 CRLF, so the captured value keeps a trailing `\r` and the guard rejects it as "not a usable
 connection string" (verified 2026-11-10).
 
@@ -145,7 +145,7 @@ Rehearse first (`--dry-run` connects to nothing, so it needs no restore point):
 ```bash
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/apply-seed.js \
   database/seeds/029_scoring_model_launch_v2_decay_off.sql \
-  --target-env=TARGET_DATABASE_URL --dry-run
+  --target-env=EU_DATABASE_URL --dry-run
 ```
 
 Then apply it with the rollback named:
@@ -153,13 +153,13 @@ Then apply it with the rollback named:
 ```bash
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/apply-seed.js \
   database/seeds/029_scoring_model_launch_v2_decay_off.sql \
-  --target-env=TARGET_DATABASE_URL --restore-point=<id>
+  --target-env=EU_DATABASE_URL --restore-point=<id>
 ```
 
 Read the two lines printed **before** it connects and stop if either is wrong:
 
 ```
-target: TARGET_DATABASE_URL (db:<12 hex>)
+target: EU_DATABASE_URL (db:<12 hex>)
 AUDIT TARGET: db:<12 hex> restore-point=<id>
 ```
 
@@ -179,18 +179,18 @@ though the pin still names 2.4.0. That is expected, not a regression — steps 3
 
 The importer is a **dry run by default** and needs the adapter and the file explicitly; the full
 procedure and the file format are `docs/ingestion/recipes/import-offers.md`. Same shape as step 2 — export
-`TARGET_DATABASE_URL`, keep `DATABASE_URL` on shared.
+`EU_DATABASE_URL`, keep `DATABASE_URL` on shared.
 
 ```bash
 # 1. dry run: prints `target:` and `AUDIT TARGET:` before connecting, writes nothing
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/ingest-offers.js \
   --adapter=manual --file=<approved-import.csv> \
-  --target-env=TARGET_DATABASE_URL
+  --target-env=EU_DATABASE_URL
 
 # 2. commit, with the rollback named
 DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/ingest-offers.js \
   --adapter=manual --file=<approved-import.csv> --commit \
-  --target-env=TARGET_DATABASE_URL --restore-point=<id>
+  --target-env=EU_DATABASE_URL --restore-point=<id>
 ```
 
 `<approved-import.csv>` and `<id>` are the operator's to supply: there is no committed import file for
@@ -216,11 +216,11 @@ named row must be ACTIVE on the target: a pin matching no active row (or more th
 
 ```bash
 # dry-run first: it prints the plan and the catalog version it will stamp
-node scripts/generate-presets.js --target-env=TARGET_DATABASE_URL \
+node scripts/generate-presets.js --target-env=EU_DATABASE_URL \
   --restore-point=<id> --model=launch-v2@2.5.0
 
 # then commit, same explicit pin
-node scripts/generate-presets.js --target-env=TARGET_DATABASE_URL \
+node scripts/generate-presets.js --target-env=EU_DATABASE_URL \
   --restore-point=<id> --model=launch-v2@2.5.0 --commit
 ```
 
@@ -235,23 +235,23 @@ preset id reads back through `GET /v1/recommendations/{id}` with builds.
 
 ```bash
 # These three take a variable NAME:
-DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-offer-provenance.js --target=env:TARGET_DATABASE_URL
-DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-catalog-identity.js --target=env:TARGET_DATABASE_URL
-DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-assessment-age.js --target=env:TARGET_DATABASE_URL  # WARNING only, never a gate
+DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-offer-provenance.js --target=env:EU_DATABASE_URL
+DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-catalog-identity.js --target=env:EU_DATABASE_URL
+DOTENV_CONFIG_PATH=.env.eu node -r dotenv/config scripts/check-assessment-age.js --target=env:EU_DATABASE_URL  # WARNING only, never a gate
 
 # These three have NO --target flag: they read DATABASE_URL directly, so point that variable at the
 # EU database for the call. Without the prefix they measure the SHARED database from .env and report
 # a green result about the wrong catalogue.
 #
 # Export the EU variables into THIS shell first (values are never printed). A bare
-# DATABASE_URL="$TARGET_DATABASE_URL" prefix WITHOUT this export is the documented trap: the outer
+# DATABASE_URL="$EU_DATABASE_URL" prefix WITHOUT this export is the documented trap: the outer
 # shell has no such variable, so the prefix exports an empty value.
 # If .env.eu also defines DATABASE_URL, `unset DATABASE_URL` after sourcing, or the explicit prefix
 # below is the only thing keeping these three off the shared database.
 set -a; . ./.env.eu; set +a
-DATABASE_URL="$TARGET_DATABASE_URL" node scripts/check-offer-freshness.js --fail-days=14
-DATABASE_URL="$TARGET_DATABASE_URL" node scripts/check-deferred-rules.js
-DATABASE_URL="$TARGET_DATABASE_URL" node scripts/check-og01-coverage.js --model=launch-v2@2.5.0
+DATABASE_URL="$EU_DATABASE_URL" node scripts/check-offer-freshness.js --fail-days=14
+DATABASE_URL="$EU_DATABASE_URL" node scripts/check-deferred-rules.js
+DATABASE_URL="$EU_DATABASE_URL" node scripts/check-og01-coverage.js --model=launch-v2@2.5.0
 ```
 
 `check-offer-provenance` and `check-offer-freshness` answer **INCONCLUSIVE** while the catalogue is

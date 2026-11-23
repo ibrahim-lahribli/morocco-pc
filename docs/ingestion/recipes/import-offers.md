@@ -138,7 +138,7 @@ A refresh is the same path as an import; what differs is the discipline around i
 6. **Verify provenance and freshness on the same target:** `node scripts/check-offer-provenance.js`
    (PASS means every non-seed offer has a retailer page, a seller, a listing id, a matching store host
    and a timestamped observation) and `node scripts/check-offer-freshness.js`. Both accept
-   `--target=env:NAME`, e.g. `--target=env:TARGET_DATABASE_URL` for the EU database.
+   `--target=env:NAME`, e.g. `--target=env:EU_DATABASE_URL` for the EU database.
 7. **Clean up probe rows** (`price_history`, `spec_provenance`, `product_candidate`, `store_offer`,
    `ingestion_record`) and confirm residue is 0.
 8. **Shared or production:** `--commit` against `DATABASE_URL` is REFUSED unless `--confirm-shared`
@@ -152,14 +152,14 @@ command at the wrong database with nothing checking either.
 
 1. **Dry-run against the named variable** (read-only is still the default):
    `node -r dotenv/config scripts/ingest-offers.js --adapter=manual --file=<path> \
-     --target-env=TARGET_DATABASE_URL`
+     --target-env=EU_DATABASE_URL`
    `.env.eu` is NOT loaded by a bare `node scripts/...`; preload it with `-r dotenv/config` and
    `DOTENV_CONFIG_PATH=.env.eu`, or export the variable for that one command only.
-2. **Read the lines the run prints BEFORE it connects:** `target: TARGET_DATABASE_URL (db:<12 hex>)`
+2. **Read the lines the run prints BEFORE it connects:** `target: EU_DATABASE_URL (db:<12 hex>)`
    and `AUDIT TARGET: db:<12 hex>`. The digest must be the EU digest already recorded in
    `database/migration-applies.jsonl`; a different digest means stop. No host is ever printed.
 3. **Commit with the rollback named:**
-   `... --commit --target-env=TARGET_DATABASE_URL --restore-point=<neon-restore-point>`
+   `... --commit --target-env=EU_DATABASE_URL --restore-point=<neon-restore-point>`
    `--commit` against a named target is REFUSED without a restore point matching
    `^[A-Za-z0-9_-]{8,}$`, and a target whose digest equals the shared database's is refused whatever
    the variable is called. `--test-db` with `--target-env`, and `--confirm-shared` with
@@ -168,9 +168,9 @@ command at the wrong database with nothing checking either.
    rollback plan.
 4. **Regenerate the preset shelf on the SAME target,** or the API serves no presets for the new
    catalog version:
-   `node scripts/generate-presets.js --target-env=TARGET_DATABASE_URL --restore-point=<id>`
-5. **Verify on the same target:** `check-offer-provenance.js --target=env:TARGET_DATABASE_URL`
-   (retailer evidence per offer) and `check-offer-coverage.js --target=env:TARGET_DATABASE_URL`
+   `node scripts/generate-presets.js --target-env=EU_DATABASE_URL --restore-point=<id>`
+5. **Verify on the same target:** `check-offer-provenance.js --target=env:EU_DATABASE_URL`
+   (retailer evidence per offer) and `check-offer-coverage.js --target=env:EU_DATABASE_URL`
    (per-role eligible VERIFIED offers and distinct stores), both read-only.
    `check-offer-freshness.js` still reads `DATABASE_URL` only.
 
