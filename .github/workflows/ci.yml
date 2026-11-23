@@ -240,6 +240,15 @@ jobs:
         run: node scripts/run-seeds.js
       - name: Golden scenario harness (ephemeral)
         run: npm run eval:scenarios -- --model=launch-v2@2.5.0 --no-baseline --no-volatile
+      # The real loaders against the frozen loader fixtures, on the SAME fresh
+      # database. The fixtures carry TEST ids, so the suite pairs candidates by
+      # content identity and reports the database side by natural key; it also
+      # asserts each loader statement's ORDER BY against the rows PostgreSQL
+      # actually returned, which a returned value cannot show. It runs after the
+      # harness for the same reason the API suite does (eval refuses unmarked
+      # query rows) and cleans its own rows by id (golden-loaders-* profile).
+      - name: Loader identity and order (ephemeral)
+        run: npm run test:loaders:ephemeral
       # After the harness, never before: eval-scenarios.js refuses to start while
       # any unmarked recommendation_query row exists, and this suite creates such
       # rows (and deletes them by id). Job env already pins the localhost/127.0.0.1
