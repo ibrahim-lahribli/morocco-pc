@@ -59,5 +59,9 @@ shape of the old tree before the API has moved, and would break the pinned owner
 3. **The old barrel's test is not touched.** `src/recommendation/filtering/index.test.js` is the
    pinned `SPLIT_FACTS.runtimeBarrel` row in `scripts/audit-pr2-test-ownership.js` (7 assertions).
    It follows the old barrel and is step 6 material.
-4. **SQL stays visible.** The runtime's `loaders` namespace carries the SQL constants their callers
-   use (`SELECT_*_SQL`), because a loader and its query are one unit; the pure halves carry none.
+4. **SQL stays visible.** A loader keeps its query in its own module, and the SQL constants stay
+   public at the old stage barrels (`scoring/index.js` still publishes `SELECT_SCORING_MODEL_SQL`,
+   for example); they never appear at the pure core surface. The published `loaders` namespace is
+   the RFC §11.5 eight-function table and deliberately carries none of them, because that approved
+   table lists functions only. This corrects the earlier wording of this rule, which had the
+   namespace carrying the constants.

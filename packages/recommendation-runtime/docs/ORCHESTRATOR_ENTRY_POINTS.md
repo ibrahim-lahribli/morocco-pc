@@ -73,13 +73,16 @@ These are W1 work, not W0: they test the runtime once the modules have moved.
 
 ## Step-5 ownership and prerequisites
 
-- **W1 is in progress.** Five modules have moved (the Engine 2 offer query, then the two query and
-  two scoring loaders, each behind an identity shim at its old path); the candidates and filtering
-  loaders are next, and `src/index.js` still exports `{}` until the `loaders` namespace is published.
+- **W1 is complete.** Ten modules have moved (the Engine 2 offer query and its barrel, the two query
+  loaders and their barrel, the two scoring loaders, the candidate and filtering-context loaders, and
+  the filtering composition), each behind an identity shim at its old path; `src/index.js` now
+  publishes the `loaders` namespace with the eight RFC §11.5 names. `persistence` (W2) and
+  `orchestrator` (W3) are still absent from the surface.
 - **Root CI integration belongs to Agent 1.** The root `test:runtime` script and the
   `.github/workflows/ci.yml` step are Agent 1's; W0 does not touch either.
-- **Step 4 acceptance belongs to Agent 2.** Step 4 (recommendation-core) is still in progress; W1
-  waits for Agent 2's final interface acceptance before moving any runtime module.
-- **Docker COPY ownership (review C7) must be resolved before W1.** `apps/api/Dockerfile` must be
-  updated to carry `packages/recommendation-runtime` when the API starts importing it; W0 does not
-  change the Dockerfile, and that change is a W1 prerequisite.
+- **Step 4 acceptance belonged to Agent 2.** Agent 2's interface acceptance of step 4
+  (recommendation-core) was a prerequisite before W1 could extract any runtime module; W1 has since
+  moved the ten modules above.
+- **Docker COPY ownership (review C7) is resolved.** `apps/api/Dockerfile` copies both
+  `packages/recommendation-core` and `packages/recommendation-runtime` (manifest plus `src`), which
+  is what the old-path shims require at run time; W0 did not change the Dockerfile.
