@@ -80,8 +80,9 @@ These are W1 work, not W0: they test the runtime once the modules have moved.
   `orchestrator` (W3) are still absent from the surface.
 - **Root CI integration belongs to Agent 1.** The root `test:runtime` script and the
   `.github/workflows/ci.yml` step are Agent 1's; W0 does not touch either.
-- **Step 4 acceptance belongs to Agent 2.** Step 4 (recommendation-core) is still in progress; W1
-  waits for Agent 2's final interface acceptance before moving any runtime module.
+- **Step 4 acceptance belonged to Agent 2.** Agent 2's interface acceptance of step 4
+  (recommendation-core) was a prerequisite before W1 could extract any runtime module; W1 has since
+  moved the ten modules above.
 - **Docker COPY ownership (review C7) is resolved.** `apps/api/Dockerfile` copies both
   `packages/recommendation-core` and `packages/recommendation-runtime` (manifest plus `src`), which
   is what the old-path shims require at run time; W0 did not change the Dockerfile.
