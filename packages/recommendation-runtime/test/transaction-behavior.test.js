@@ -54,8 +54,9 @@ const candidates = require('../../../src/recommendation/candidates');
 const offers = require('../../../src/recommendation/offers');
 const filtering = require('../../../src/recommendation/filtering');
 const scoring = require('../../../src/recommendation/scoring');
+const assembly = require('../../../src/recommendation/assembly');
 const compute = require('../../../src/recommendation/orchestrator/compute');
-const { CandidateSelectionError } = require('../../../src/recommendation/candidates/errors');
+const { CandidateSelectionError, ERROR_CODES } = require('../../../src/recommendation/candidates/errors');
 
 const {
   createRecordingClient,
@@ -121,6 +122,200 @@ const SNAP = Object.freeze({
   budget_floor: Object.freeze({ cheapest_total: 9000, currency: 'MAD', within_budget: true }),
   filter_verdicts: Object.freeze([]),
 });
+
+// ---------------------------------------------------------------------------
+// C3 fixtures — a VALID `commitSwap` call.
+//
+// Same ids, same persisted build and same Stage 1 carrier as
+// `src/recommendation/orchestrator/swap-commit.test.js`, so the statement log
+// C3 records below is a REAL swap commit (BEGIN-less, on the caller's handle)
+// rather than a validation failure. The read half is stubbed through the
+// documented namespace seam; only the write path reaches the recording client.
+// ---------------------------------------------------------------------------
+
+const swapUuid = (n) => '00000000-0000-4000-8000-' + String(n).padStart(12, '0');
+const swapVariantUuid = (n) => '00000000-0000-4000-9000-' + String(n).padStart(12, '0');
+
+const SWAP_QUERY_ID = swapUuid(901);
+const SWAP_RESULT_ID = swapUuid(904);
+const SWAP_MODEL_ID = swapUuid(902);
+const SWAP_STORE_ID = swapUuid(903);
+const ALT_CPU_ID = swapUuid(11);
+const GPU_VARIANT_ID = swapVariantUuid(1);
+
+/** The persisted build's identity per role, in EXPANSION_ORDER. */
+const SWAP_ROLE_IDS = Object.freeze({
+  CPU: swapUuid(1),
+  MOTHERBOARD: swapUuid(2),
+  RAM: swapUuid(3),
+  GPU: swapUuid(4),
+  PSU: swapUuid(5),
+  CASE: swapUuid(6),
+  CPU_COOLER: swapUuid(7),
+  SSD_BOOT: swapUuid(8),
+});
+
+/** Deliberately NOT the carrier's CPU price: the swap reprices ONE role only. */
+const SWAP_PERSISTED_PRICES = Object.freeze({
+  CPU: 1999,
+  MOTHERBOARD: 1200,
+  RAM: 700,
+  GPU: 3200,
+  PSU: 650,
+  CASE: 900,
+  CPU_COOLER: 350,
+  SSD_BOOT: 800,
+});
+const SWAP_PERSISTED_TOTAL = 9799;
+const SWAP_CANDIDATE_PRICE = 2400;
+
+const SWAP_QUERY_INPUT = Object.freeze({
+  query_id: SWAP_QUERY_ID,
+  scoring_model_id: SWAP_MODEL_ID,
+  input: Object.freeze({ budget_amount: 20000, currency: 'MAD', use_case: 'GAMING' }),
+  priority: null,
+  resolution: null,
+});
+
+/** One live Engine 2D verdict, in the shape `composeSwap` indexes by identity. */
+function swapVerdict(role, productId, variantId, status) {
+  return Object.freeze({
+    product_id: productId,
+    product_variant_id: variantId,
+    category: candidates.expectedCategoryForRole(role),
+    component_role: role,
+    status,
+    reason: null,
+    relationships: Object.freeze({}),
+    unknown_pairwise_count: 0,
+    compatibility_notes: Object.freeze([]),
+  });
+}
+
+/** The persisted build as the API reads it: identity AND the carrier columns. */
+function swapPersistedBuild() {
+  return Object.keys(SWAP_ROLE_IDS).map((role) => Object.freeze({
+    role,
+    product_id: SWAP_ROLE_IDS[role],
+    product_variant_id: role === 'GPU' ? GPU_VARIANT_ID : null,
+    selected_price: SWAP_PERSISTED_PRICES[role].toFixed(2),
+    currency: 'MAD',
+    store_id: SWAP_STORE_ID,
+    price_checked_at: '2026-10-01T00:00:00.000Z',
+    offer_class: 'SEED_UNVERIFIED',
+    store_offer_id: swapUuid(500 + Object.keys(SWAP_ROLE_IDS).indexOf(role)),
+  }));
+}
+
+/** The live 2C pool: every persisted identity, plus the CPU candidate. */
+const SWAP_POOL = Object.keys(SWAP_ROLE_IDS).map((role) => ({
+  component_role: role,
+  product_id: SWAP_ROLE_IDS[role],
+  product_variant_id: role === 'GPU' ? GPU_VARIANT_ID : null,
+  category: candidates.expectedCategoryForRole(role),
+})).concat([
+  { component_role: 'CPU', product_id: ALT_CPU_ID, product_variant_id: null, category: 'CPU' },
+]);
+
+/** Stage 1's carrier, built by the REAL validator from fixed rows. */
+function swapCarrier() {
+  const rows = Object.keys(SWAP_ROLE_IDS).map((role) => ({
+    component_role: role,
+    product_id: SWAP_ROLE_IDS[role],
+    product_variant_id: role === 'GPU' ? GPU_VARIANT_ID : null,
+    selected_price: SWAP_PERSISTED_PRICES[role],
+  }));
+  rows.push({
+    component_role: 'CPU',
+    product_id: ALT_CPU_ID,
+    product_variant_id: null,
+    selected_price: SWAP_CANDIDATE_PRICE,
+  });
+
+  const raw = Object.create(null);
+  for (const row of rows) {
+    raw[assembly.priceKey(row.product_id, row.product_variant_id, row.component_role)] = {
+      selected_price: row.selected_price,
+      currency: 'MAD',
+      store_id: SWAP_STORE_ID,
+      price_checked_at: '2030-01-01T00:00:00.000Z',
+      offer_id: swapUuid(600),
+      offer_class: 'SEED_UNVERIFIED',
+    };
+  }
+  return assembly.validatePrices(raw);
+}
+
+/** The read half `commitSwap` composes, stubbed at the namespace seam. */
+function swapCompositionStubs() {
+  const filteringContext = Object.freeze({ candidates: Object.freeze({}) });
+  return [
+    [query, 'loadQueryInput', async () => SWAP_QUERY_INPUT],
+    [candidates, 'loadCandidates', async () => ({ input: SWAP_QUERY_INPUT.input, candidates: SWAP_POOL })],
+    [candidates, 'selectCandidatePool', (input) => ({ input, pool: SWAP_POOL })],
+    [offers, 'selectOfferPrices', () => ({
+      input: SWAP_QUERY_INPUT.input,
+      pool: SWAP_POOL,
+      prices: swapCarrier(),
+    })],
+    [filtering, 'loadFilteringContext', async () => filteringContext],
+    [filtering, 'filterCandidates', () => ({
+      results: [
+        swapVerdict('CPU', SWAP_ROLE_IDS.CPU, null, 'PASS'),
+        swapVerdict('CPU', ALT_CPU_ID, null, 'PASS'),
+        swapVerdict('MOTHERBOARD', SWAP_ROLE_IDS.MOTHERBOARD, null, 'PASS'),
+        swapVerdict('RAM', SWAP_ROLE_IDS.RAM, null, 'PASS'),
+        swapVerdict('GPU', SWAP_ROLE_IDS.GPU, GPU_VARIANT_ID, 'PASS'),
+        swapVerdict('PSU', SWAP_ROLE_IDS.PSU, null, 'PASS'),
+        swapVerdict('CASE', SWAP_ROLE_IDS.CASE, null, 'PASS'),
+        swapVerdict('CPU_COOLER', SWAP_ROLE_IDS.CPU_COOLER, null, 'PASS'),
+        swapVerdict('SSD_BOOT', SWAP_ROLE_IDS.SSD_BOOT, null, 'PASS'),
+      ],
+    })],
+    [assembly, 'evaluateBuildReplacement', () => ({
+      status: 'PASS',
+      pairs: Object.freeze([]),
+      unknown_pairwise_count: 0,
+    })],
+    [assembly, 'evaluateBuild', () => ({
+      status: 'PASS',
+      pairs: Object.freeze([]),
+      unknown_pairwise_count: 2,
+    })],
+    [scoring, 'loadScoringModel', async () => ({ id: SWAP_MODEL_ID, configuration: Object.freeze({}) })],
+    [scoring, 'loadComponentAssessments', async () => ({ assessments: Object.freeze({}), loaded_at: null })],
+    [scoring, 'computeBuildScore', () => 74.256],
+  ];
+}
+
+/** The VALID argument object: every field `commitSwap` documents as required. */
+function swapCommitArgs(client) {
+  return {
+    db: client,
+    queryId: SWAP_QUERY_ID,
+    sourceResultId: SWAP_RESULT_ID,
+    role: 'CPU',
+    productId: ALT_CPU_ID,
+    buildComponents: swapPersistedBuild(),
+    persistedTotalPrice: SWAP_PERSISTED_TOTAL,
+    catalogVersion: 'a'.repeat(32),
+    engineVersion: 'test-deploy',
+  };
+}
+
+/** A client that answers the write path, so a commit can actually complete. */
+function swapWriteClient() {
+  return createRecordingClient({
+    onQuery(sql, params) {
+      if (sql === NOW_SQL) return { rows: [{ now: new Date('2026-01-01T00:00:00.000Z') }] };
+      if (sql === swapCommitModule.INSERT_BUILD_CANDIDATE_SQL) return { rows: [{ id: params[0] }] };
+      if (sql === swapCommitModule.INSERT_RECOMMENDATION_SWAP_SQL) {
+        return { rows: [{ created_at: new Date('2026-01-01T00:00:00.000Z') }] };
+      }
+      return undefined;
+    },
+  });
+}
 
 /**
  * Replace properties on collaborator namespaces for the duration of `body`.
@@ -307,14 +502,61 @@ test('C3: commitSwapInTransaction opens and rolls back its own boundary, and nev
 });
 
 test('C3: commitSwap itself owns no transaction control - it runs on the caller\'s handle', async () => {
+  const client = swapWriteClient();
+
+  const result = await withStubs(
+    swapCompositionStubs(),
+    () => orchestrator.commitSwap(swapCommitArgs(client))
+  );
+
+  // The fixtures must carry the commit all the way through: a refusal here
+  // would issue no statement and the invariants below would be vacuous.
+  assert.equal(result.committed, true, 'the commit must succeed, not refuse');
+  assert.equal(result.build.total_price, SWAP_PERSISTED_TOTAL - SWAP_PERSISTED_PRICES.CPU + SWAP_CANDIDATE_PRICE);
+
+  const statements = statementsOf(client);
+  assert.ok(statements.length > 0, 'the recorded statement log must be non-empty');
+  assert.deepEqual(statements, [
+    NOW_SQL,
+    swapCommitModule.INSERT_BUILD_CANDIDATE_SQL,
+    swapCommitModule.INSERT_BUILD_COMPONENT_SQL,
+    swapCommitModule.INSERT_RECOMMENDATION_SWAP_SQL,
+  ]);
+
+  // No transaction control of its own: the caller owns BEGIN/COMMIT/ROLLBACK.
+  assert.ok(issuesNoTransactionControl(client), 'commitSwap must not BEGIN, COMMIT or ROLLBACK');
+  assert.deepEqual(transactionLog(client), []);
+  for (const keyword of ['BEGIN', 'COMMIT', 'ROLLBACK']) {
+    assert.ok(
+      !statements.some((sql) => sql === keyword || sql.startsWith(keyword + ' ')),
+      `commitSwap must never issue ${keyword}`
+    );
+  }
+  assert.equal(maxOpenTransactions(client), 0);
+
+  // One handle: every statement lands on the injected client, and its
+  // lifecycle is untouched.
+  assert.equal(new Set(client.calls.map((call) => call.receiver)).size, 1);
+  assert.ok(client.calls.every((call) => call.receiver === client));
+  assert.equal(client.lifecycle.connect, 0, 'no second connection is opened');
+  assert.equal(client.lifecycle.release, 0, 'the caller owns the handle');
+  assert.equal(client.lifecycle.end, 0);
+  assert.equal(lifecycleCalls(client), 0);
+});
+
+test('C3: commitSwap refuses an incomplete argument object before any statement', async () => {
+  // The validation-failure behaviour the old C3 case was accidentally pinning,
+  // now pinned deliberately and named as such.
   const client = createRecordingClient();
 
   await assert.rejects(
-    orchestrator.commitSwap(Object.assign({}, {}, { db: client })),
-    (error) => error instanceof Error
+    orchestrator.commitSwap({ db: client }),
+    (error) => error instanceof CandidateSelectionError
+      && error.code === ERROR_CODES.INVALID_INPUT
+      && error.field === 'sourceResultId'
   );
 
-  assert.ok(issuesNoTransactionControl(client), 'commitSwap must not BEGIN, COMMIT or ROLLBACK');
+  assert.deepEqual(statementsOf(client), [], 'validation precedes every statement');
   assert.equal(lifecycleCalls(client), 0);
 });
 
