@@ -359,5 +359,5 @@ test('boundary: DML only, UPDATE-only, no transaction control, no clock, no pool
 test('boundary: the writer imports only the error vocabulary', () => {
   const source = fs.readFileSync(path.join(__dirname, 'persist-pass-facts.js'), 'utf8');
   const requires = [...source.matchAll(/require\('([^']+)'\)/g)].map((match) => match[1]).sort();
-  assert.deepEqual(requires, ['../candidates/errors']);
+  assert.deepEqual(requires, ['../core-entry']);
 });

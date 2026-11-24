@@ -52,7 +52,9 @@
  * NULL != 0 rule, AGENTS.md section 8).
  */
 
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const core = require('../core-entry');
+
+const { CandidateSelectionError, ERROR_CODES } = core.candidates;
 
 /** The one status this writer persists. */
 const REJECT_STATUS = 'REJECT';

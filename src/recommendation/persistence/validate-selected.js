@@ -9,8 +9,9 @@
  */
 'use strict';
 
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
-const { COMPONENT_ROLES } = require('../candidates/roles');
+const core = require('../core-entry');
+
+const { CandidateSelectionError, ERROR_CODES, COMPONENT_ROLES } = core.candidates;
 
 function fail(code, field, message) {
   throw new CandidateSelectionError(code, message, field);

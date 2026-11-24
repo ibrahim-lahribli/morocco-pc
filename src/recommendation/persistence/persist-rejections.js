@@ -85,7 +85,9 @@
  */
 
 const { randomUUID } = require('node:crypto');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const core = require('../core-entry');
+
+const { CandidateSelectionError, ERROR_CODES } = core.candidates;
 const { validateRejections } = require('./validate-rejections');
 
 /**
