@@ -25,9 +25,16 @@
 // table lists functions only, and they remain public at their old stage
 // barrels. See docs/MIXED_BARRELS.md rule 4.
 //
+// Step 5 W2 moved the five persistence modules — the three writers and the two
+// validators — into this package's src/persistence/ behind identity shims at
+// their old paths, but publishes NO `persistence` namespace: the RFC §11.5
+// table is an orchestrator-facing surface, and slicing it before its consumers
+// exist would fix a shape the W3 batch has to review against the real call
+// sites. test/export-surface.json therefore still lists `["loaders"]` only.
+//
 // Still absent, added by later batches, each updating test/export-surface.json
 // in the same commit:
-//   persistence   W2 — the three writers and the two validators
+//   persistence   W2 — moved into the package, deliberately not published
 //   orchestrator  W3 — run, snapshot, full-run, commit, swap-preview, swap-commit
 
 const { loadQueryInput } = require('./query/load-query-input');

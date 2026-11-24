@@ -358,6 +358,35 @@
           "destination": "packages/recommendation-runtime/src/query/index.js"
         }
       ]
+    },
+    {
+      "id": "step-5-w2-persistence",
+      "description": "Step 5 W2: the five persistence modules - the three Engine 5b writers (persist-ranked's three batched UNNEST INSERTs, persist-pass-facts' UPDATE-only pass facts, persist-rejections' Decision 31 replace DELETE plus INSERT) and the two write-shaped payload validators (validate-selected, validate-rejections) - moved out of src/recommendation/persistence/ into packages/recommendation-runtime/src/persistence/, leaving identity re-export shims at the old paths. All five are runtime-owned: three execute DML on the caller's client and two are pure code whose contract is a write payload, which RFC 11.3 keeps out of the pure domain. They own no transaction boundary and touch no pool (proved before the move: no BEGIN/COMMIT/ROLLBACK, no new Pool, no process.env read, one injected client), so orchestrator/commit.js keeps the single write transaction and this batch moves no behaviour. The move is byte-identical relative to THIS batch's baseline, which is commit A on the branch: 'refactor(persistence): reach the core through the core-entry adapter' rewrote the four core-importing modules' requires into one '../core-entry' require, so the same bytes resolve the core package root from either depth (the runtime tree answers the same specifier with its own packages/recommendation-runtime/src/core-entry). persist-ranked needed no specifier change. No persistence namespace is published: src/index.js still exports only `loaders`, because the RFC 11.5 persistence table is the W2 surface the orchestrator batch will need to slice, and publishing it here would fix a shape before its consumers exist. Behaviour is pinned by the L1 suites that stayed at the old paths - src/recommendation/persistence/*.test.js, which inject a recording fake client and now exercise the modules through the shims - and by the five DB-free suites added under packages/recommendation-runtime/test/ in this batch, which freeze each writer's exact SQL text, its parameter arrays and its statement ORDER, prove the old path is the same module by identity, and prove every validator accept/reject case yields the same result and the same error through both paths. No characterization fixture is recorded: a module whose whole contract is exercised through an injected client needs no captured surface beyond the suites that already run in CI.",
+      "baseline_sha": "9e8d1525bf5cf3f2fddc0772fd08cd49524db380",
+      "identity_policy": "byte-identical",
+      "characterization": null,
+      "modules": [
+        {
+          "source": "src/recommendation/persistence/persist-ranked.js",
+          "destination": "packages/recommendation-runtime/src/persistence/persist-ranked.js"
+        },
+        {
+          "source": "src/recommendation/persistence/persist-pass-facts.js",
+          "destination": "packages/recommendation-runtime/src/persistence/persist-pass-facts.js"
+        },
+        {
+          "source": "src/recommendation/persistence/persist-rejections.js",
+          "destination": "packages/recommendation-runtime/src/persistence/persist-rejections.js"
+        },
+        {
+          "source": "src/recommendation/persistence/validate-selected.js",
+          "destination": "packages/recommendation-runtime/src/persistence/validate-selected.js"
+        },
+        {
+          "source": "src/recommendation/persistence/validate-rejections.js",
+          "destination": "packages/recommendation-runtime/src/persistence/validate-rejections.js"
+        }
+      ]
     }
   ]
 }

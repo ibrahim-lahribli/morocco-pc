@@ -309,7 +309,7 @@ test('category and build.currency are ignored, never read', () => {
 });
 
 test('validate-selected.js reuses ranking error vocabulary, has no SQL or DB', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'validate-selected.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-runtime', 'src', 'persistence', 'validate-selected.js'), 'utf8');
   assert.ok(source.includes("require('../core-entry')"), 'must reach the core through the core-entry adapter');
   assert.ok(source.includes('COMPONENT_ROLES'), 'must reuse the role vocabulary through core.candidates');
   assert.ok(source.includes('MISSING_REQUIRED_FIELD'), 'must use MISSING_REQUIRED_FIELD');

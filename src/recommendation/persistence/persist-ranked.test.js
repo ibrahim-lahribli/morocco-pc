@@ -236,7 +236,7 @@ test('the returned ids are the ids the database was given', async () => {
   for (const id of compIds) { assert.match(id, UUID_V4_RE); }
 });
 test('boundary persistence only', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'persist-ranked.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-runtime', 'src', 'persistence', 'persist-ranked.js'), 'utf8');
   assert.ok(source.includes("require('./validate-selected')"));
   const stripped = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
   assert.ok(stripped.includes('client.query'));
