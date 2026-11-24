@@ -1,8 +1,11 @@
 # Recommendation runtime — orchestrator entry points and transaction ownership
 
-Status: TARGET (RFC §11.5). The six orchestrator modules still live under
-`src/recommendation/orchestrator/`; step 5 W3 moves them to
-`packages/recommendation-runtime/src/orchestrator/` with their behaviour unchanged. This document is
+Status: TARGET (RFC §11.5). **Six** of the **eight** files under `src/recommendation/orchestrator/` own a
+transaction boundary — `run.js`, `snapshot.js`, `full-run.js`, `commit.js`, `swap-preview.js` and
+`swap-commit.js`. The other two are `index.js` (the barrel) and `compute.js` (the pure
+assemble-and-score seam, which owns no transaction and is not one of the entry points below). Step 5
+W3 moves all **eight** to `packages/recommendation-runtime/src/orchestrator/` with their behaviour
+unchanged. This document is
 the contract the move must preserve, not a redesign: every transaction boundary below is the one the
 code already has. `packages/recommendation-runtime/test/transaction-ownership.test.js` reads the
 source and fails when a file's transaction keywords disagree with this table.
@@ -51,7 +54,7 @@ A failing `ROLLBACK` never masks the original error.
 - The only randomness is `randomUUID()` from `node:crypto`, used for persisted row ids. `Math.random`
   is unused.
 
-## W1 acceptance — behavioural transaction tests (required)
+## Behavioural transaction tests (required; landed in PR #67, move with W3)
 
 The keyword parity check in `test/transaction-ownership.test.js` is a **static pre-check**, not final
 acceptance of the transaction contract. It can prove that a file mentions `BEGIN`/`COMMIT`/`ROLLBACK`
@@ -69,7 +72,12 @@ suites use, no database) that prove:
 - `full-run.js` and `swap-preview.js` — never nest; the snapshot transaction closes before the write
   transaction opens, on the same client.
 
-These are W1 work, not W0: they test the runtime once the modules have moved.
+**These landed in PR #67 (merged 2026-11-24 as `d21ec21`), at the legacy paths** —
+`src/recommendation/orchestrator/*.test.js`, beside the modules they characterise — and not on the
+runtime side, because the modules are still there. `test/transaction-behavior.test.js` in this package
+is the behavioural half; it and the legacy suites move with the modules in W3. Characterising at the
+legacy path is what makes the move reviewable: the same assertions run before and after, so a
+behaviour change cannot hide inside a path change.
 
 ## Step-5 ownership and prerequisites
 
