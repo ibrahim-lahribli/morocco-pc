@@ -2,7 +2,7 @@
   "name": "@morocco-pc/recommendation-runtime",
   "version": "0.1.0",
   "private": true,
-  "description": "Database-backed recommendation execution over an injected client: step 5 W1 publishes the `loaders` namespace, with persistence (W2) and orchestrator (W3) still to come.",
+  "description": "Database-backed recommendation execution over an injected client: step 5 W1 publishes the `loaders` namespace and W2 moves the five persistence modules in behind identity shims without publishing them, with orchestrator (W3) still to come.",
   "main": "src/index.js",
   "engines": {
     "node": ">=22"

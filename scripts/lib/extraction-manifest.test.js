@@ -77,9 +77,9 @@ test('the committed manifest is valid and pins PR 2 as its first batch', () => {
   const loaded = loadManifest(manifestFile(REPO_ROOT));
   assert.deepEqual(loaded.errors, []);
   // One batch per extraction PR: PR 2 first, later batches appended after it.
-  // Step 5 W1 PR 3 appended the tenth and final loaders batch
-  // (step-5-w1-final-loaders).
-  assert.equal(loaded.batches.length, 10);
+  // Step 5 W2 appended the eleventh batch (step-5-w2-persistence), the five
+  // persistence modules that follow the loaders into the runtime package.
+  assert.equal(loaded.batches.length, 11);
 
   const pr2 = loaded.batches[0];
   assert.equal(pr2.id, 'step-4b-pr2');
@@ -157,6 +157,15 @@ test('the committed manifest is valid and pins PR 2 as its first batch', () => {
   assert.equal(finalLoaders.modules.length, 3);
   assert.equal(finalLoaders.baseline_sha, '629d3e8d08230ecbbeb3387adffd339be33b344c');
   assert.equal(finalLoaders.characterization, null);
+
+  // The persistence batch is not characterized either: every writer and
+  // validator is exercised entirely through injected clients.
+  const persistence = loaded.batches[10];
+  assert.equal(persistence.id, 'step-5-w2-persistence');
+  assert.equal(persistence.identity_policy, 'byte-identical');
+  assert.equal(persistence.modules.length, 5);
+  assert.equal(persistence.baseline_sha, '9e8d1525bf5cf3f2fddc0772fd08cd49524db380');
+  assert.equal(persistence.characterization, null);
 });
 
 test('the manifest baseline is the fixture baseline, never the working tree', () => {

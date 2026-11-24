@@ -76,8 +76,14 @@ These are W1 work, not W0: they test the runtime once the modules have moved.
 - **W1 is complete.** Ten modules have moved (the Engine 2 offer query and its barrel, the two query
   loaders and their barrel, the two scoring loaders, the candidate and filtering-context loaders, and
   the filtering composition), each behind an identity shim at its old path; `src/index.js` now
-  publishes the `loaders` namespace with the eight RFC §11.5 names. `persistence` (W2) and
-  `orchestrator` (W3) are still absent from the surface.
+  publishes the `loaders` namespace with the eight RFC §11.5 names.
+- **W2 has moved the persistence modules, and publishes none of them.** The batch
+  `step-5-w2-persistence` moved the three writers (`persist-ranked`, `persist-rejections`,
+  `persist-pass-facts`) and the two validators (`validate-selected`, `validate-rejections`) into
+  `packages/recommendation-runtime/src/persistence/`, each behind an identity shim at its old path.
+  `src/index.js` still exports only `loaders`: the RFC §11.5 persistence table is an
+  orchestrator-facing surface, and it is sliced when W3's call sites exist to review it against.
+  `orchestrator` (W3) remains absent from the surface and still owns every transaction boundary.
 - **Root CI integration belongs to Agent 1.** The root `test:runtime` script and the
   `.github/workflows/ci.yml` step are Agent 1's; W0 does not touch either.
 - **Step 4 acceptance belonged to Agent 2.** Agent 2's interface acceptance of step 4

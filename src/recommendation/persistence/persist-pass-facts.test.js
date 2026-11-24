@@ -318,7 +318,7 @@ test('persist-pass-facts: the input is never mutated and the normalized facts ar
 // --- 7. boundary -------------------------------------------------------------
 
 test('boundary: DML only, UPDATE-only, no transaction control, no clock, no pool', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'persist-pass-facts.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-runtime', 'src', 'persistence', 'persist-pass-facts.js'), 'utf8');
   const stripped = source
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
@@ -357,7 +357,7 @@ test('boundary: DML only, UPDATE-only, no transaction control, no clock, no pool
 });
 
 test('boundary: the writer imports only the error vocabulary', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'persist-pass-facts.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-runtime', 'src', 'persistence', 'persist-pass-facts.js'), 'utf8');
   const requires = [...source.matchAll(/require\('([^']+)'\)/g)].map((match) => match[1]).sort();
-  assert.deepEqual(requires, ['../candidates/errors']);
+  assert.deepEqual(requires, ['../core-entry']);
 });

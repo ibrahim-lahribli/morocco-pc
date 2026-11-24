@@ -12,7 +12,7 @@ are authoritative where they disagree.
 
 ## Transaction and loader ownership (TARGET boundary)
 
-The pure stages never touch the database. Everything below is the responsibility of the `recommendation-runtime` project. The loaders and their public barrels - offers, query, scoring, candidates, filtering-context and the `filterCandidatesForRecommendation` composition - already live in `packages/recommendation-runtime/src/` (W1, batches `step-5-w1-offers`, `step-5-w1-query-scoring`, `step-5-w1-candidates-filtering` and `step-5-w1-final-loaders`); the read/write transaction owners and the persistence writers still live under `src/recommendation/` (for example `src/recommendation/orchestrator/run.js`) until W2/W3 run:
+The pure stages never touch the database. Everything below is the responsibility of the `recommendation-runtime` project. The loaders and their public barrels - offers, query, scoring, candidates, filtering-context and the `filterCandidatesForRecommendation` composition - already live in `packages/recommendation-runtime/src/` (W1, batches `step-5-w1-offers`, `step-5-w1-query-scoring`, `step-5-w1-candidates-filtering` and `step-5-w1-final-loaders`), and so do the five persistence modules (W2, batch `step-5-w2-persistence`: the three writers and the two validators, moved behind identity shims and deliberately unpublished); the read/write transaction owners still live under `src/recommendation/` (for example `src/recommendation/orchestrator/run.js`) until W3 runs:
 
 - **Loaders** read the tables listed in section 1 and hand plain rows/objects to the stages:
   `candidates/loader`, `filtering/context-loader`, `scoring/load-*`, `offers/`, `query/`.

@@ -609,7 +609,12 @@ test('the real manifest still verifies every batch (21/21, 7/7, 4/4, 5/5, 5/5, 5
   assert.match(result.stdout, /## batch step-5-w1-final-loaders/);
   assert.match(result.stdout, /baseline: 629d3e8d08230ecbbeb3387adffd339be33b344c/);
   assert.match(result.stdout, /blob-identical in 'step-5-w1-final-loaders': 3 \/ 3/);
-  assert.match(result.stdout, /blob-identical: 57 \/ 57/);
+  // Step 5 W2 appended an eleventh batch: the five persistence modules, the
+  // last runtime modules before the orchestrator itself.
+  assert.match(result.stdout, /## batch step-5-w2-persistence/);
+  assert.match(result.stdout, /baseline: 9e8d1525bf5cf3f2fddc0772fd08cd49524db380/);
+  assert.match(result.stdout, /blob-identical in 'step-5-w2-persistence': 5 \/ 5/);
+  assert.match(result.stdout, /blob-identical: 62 \/ 62/);
   assert.match(
     result.stdout,
     /characterization verified for: step-4b-pr2, step-4b-pr3, step-4b-pr4, step-4b-pr5, step-4b-pr6, step-4b-pr7/

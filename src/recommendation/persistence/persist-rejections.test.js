@@ -489,7 +489,7 @@ test('validateRejections does not mutate its input and returns frozen rows', () 
 // --- boundary --------------------------------------------------------------
 
 test('boundary: DML only, no transaction control, no clock, no pool', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'persist-rejections.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-runtime', 'src', 'persistence', 'persist-rejections.js'), 'utf8');
   const stripped = source
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
@@ -522,7 +522,7 @@ test('boundary: DML only, no transaction control, no clock, no pool', () => {
 });
 
 test('boundary: the validator imports only the error vocabulary', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'validate-rejections.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'packages', 'recommendation-runtime', 'src', 'persistence', 'validate-rejections.js'), 'utf8');
   const requires = [...source.matchAll(/require\('([^']+)'\)/g)].map((match) => match[1]).sort();
-  assert.deepEqual(requires, ['../candidates/errors']);
+  assert.deepEqual(requires, ['../core-entry']);
 });
