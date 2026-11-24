@@ -1,8 +1,8 @@
 'use strict';
 
 // packages/recommendation-runtime/test/index.test.js — the package loads
-// through its declared `main`, exports nothing yet, and the export surface is
-// pinned.
+// through its declared `main`, publishes the `loaders` namespace, and the
+// export surface is pinned.
 //
 // The snapshot (test/export-surface.json) exists so an extraction batch cannot
 // grow the public surface by accident: adding an export fails here until the
@@ -32,10 +32,11 @@ describe('recommendation-runtime entry point', () => {
   });
 
   it('exports the extracted namespaces as objects', () => {
-    // Step 5 W0 ships an empty surface on purpose; W1 adds loaders, W2 adds
-    // persistence and W3 adds orchestrator. This asserts the SHAPE (every
-    // export is a namespace object); the snapshot test below asserts the exact
-    // committed list, so growth is still a deliberate, reviewable edit.
+    // Step 5 W1 published `loaders`; W2 adds persistence and W3 adds
+    // orchestrator. This asserts the SHAPE (every export is a namespace
+    // object); the snapshot test below asserts the exact committed list, so
+    // growth is still a deliberate, reviewable edit, and
+    // test/loaders-surface.test.js pins the members of `loaders` itself.
     assert.equal(typeof runtime, 'object');
     assert.notEqual(runtime, null);
     for (const name of Object.keys(runtime)) {
