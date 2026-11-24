@@ -40,9 +40,9 @@ function verdict(overrides) {
   );
 }
 
-function attempt(input) {
+function attempt(validator, input) {
   try {
-    return { ok: true, value: validateRejections(input) };
+    return { ok: true, value: validator(input) };
   } catch (error) {
     return {
       ok: false,
@@ -85,13 +85,9 @@ test('loads from the runtime package and the old path is the same module', () =>
 
 test('every accept and reject case is identical through both paths', () => {
   for (const [label, input] of CASES) {
-    const fromNewPath = attempt(input);
-    assert.deepEqual(attempt(input), fromNewPath, label);
-    try {
-      assert.deepEqual(shim.validateRejections(input), fromNewPath.value, label);
-    } catch (error) {
-      if (fromNewPath.ok) throw error;
-    }
+    const fromNewPath = attempt(validateRejections, input);
+    const fromOldPath = attempt(shim.validateRejections, input);
+    assert.deepEqual(fromOldPath, fromNewPath, label);
   }
 });
 
