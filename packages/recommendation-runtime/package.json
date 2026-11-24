@@ -2,7 +2,7 @@
   "name": "@morocco-pc/recommendation-runtime",
   "version": "0.1.0",
   "private": true,
-  "description": "Database-backed recommendation execution: loaders, persistence and orchestration over an injected client. Step 5 W0 shipped the package harness (boundary, surface and transaction-ownership tests); W1 has since moved seven modules - the Engine 2 offer pre-selection query, the two query loaders, the two scoring loaders and the candidate and filtering-context loaders (src/{offers,query,scoring,candidates,filtering}/, each behind an identity shim at its old path) - and the public surface is still empty until W1 completes its loaders namespace.",
+  "description": "Database-backed recommendation execution: loaders, persistence and orchestration over an injected client. Step 5 W0 shipped the package harness (boundary, surface and transaction-ownership tests); W1 has since moved ten modules - the Engine 2 offer pre-selection query and its public barrel, the two query loaders and their barrel, the two scoring loaders, the candidate and filtering-context loaders, and the filtering composition filterCandidatesForRecommendation (src/{offers,query,scoring,candidates,filtering}/, each behind an identity shim at its old path) - and the public surface is still empty until W1 completes its loaders namespace.",
   "main": "src/index.js",
   "engines": {
     "node": ">=22"
