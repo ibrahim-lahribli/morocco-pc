@@ -30,8 +30,15 @@ mirror is `docs/SCHEMA_REFERENCE.md` (never hand-edit it).
 - **A seed carrying its own `BEGIN`/`COMMIT` cannot be rollback-rehearsed** by wrapping it in an outer
   transaction — the inner `COMMIT` ends the outer one and your `ROLLBACK` is a no-op. Rehearse on a
   throwaway branch, or strip the transaction markers first.
-- **`run-seeds.js` always targets the shared `DATABASE_URL`.** It ignores `--test-db` and has no
-  `getWriteTestDbUrl()` routing. To apply branch-first, connect through the branch client, run
+- **`run-seeds.js` writes only where you tell it to, and says so.** A `DATABASE_URL` apply needs
+  `--confirm-shared` or `--restore-point=<id>`; a `--test-db` apply routes through
+  `getWriteTestDbUrl()` **and** needs `--confirm-test-db`. That flag is an **operator attestation**,
+  not a check: `getWriteTestDbUrl()` compares normalized hostnames only, and a hostname cannot
+  establish the destination behind a tunnel — TEST at `127.0.0.1:55432` may forward to the shared
+  database and still compare as a different host. Verify the destination out of band before you
+  attest, and remember `--restore-point=<id>` never authorizes a TEST-target apply. An agent must
+  never pass `--confirm-test-db` on the operator's behalf: a refusal is a stop, not a flag to add.
+  To apply branch-first without the CLI, connect through the branch client, run
   `SET search_path = public` (the branch client defaults to `pg_temp`), then send the whole file.
 - **`--dry-run` only counts statements and characters; it never executes**, so it cannot catch a
   broken `INSERT`.
@@ -52,6 +59,7 @@ mirror is `docs/SCHEMA_REFERENCE.md` (never hand-edit it).
 node scripts/run-migrations.js --check                 # pending files
 node scripts/run-migrations.js --test-db               # apply pending to the TEST branch
 node scripts/run-seeds.js --dry-run                    # count statements (no execution)
+node scripts/run-seeds.js --test-db --confirm-test-db   # TEST branch, after verifying the destination
 node scripts/verify-replay.js --test-db                # replay 001..023 into an empty DB, diff by definition
 node scripts/check-target-parity.js --a=env:DATABASE_URL --b=env:TARGET_DATABASE_URL
 node scripts/check-deferred-rules.js                    # Decision 26 item B data gate

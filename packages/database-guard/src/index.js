@@ -29,6 +29,15 @@
 // suffix from the first host label (pooled-vs-direct same endpoint counts as
 // the same endpoint). Only the hostname is compared; ports, users, and paths
 // are ignored.
+//
+// LIMIT, stated here because a caller's safety depends on it: comparing
+// hostnames is NOT proof of physical database isolation. A connection string
+// naming 127.0.0.1:55432 may reach a shared database through an SSH tunnel, a
+// TCP proxy or another forwarding process, and it compares as different from
+// the shared endpoint. This package therefore refuses the OBVIOUS shared
+// target and nothing more; a caller that authorizes a WRITE must carry its own
+// explicit operator attestation about the destination (scripts/run-seeds.js
+// `--confirm-test-db` is the first such caller).
 
 const CONNECTION_TIMEOUT_MILLIS = 15000;
 

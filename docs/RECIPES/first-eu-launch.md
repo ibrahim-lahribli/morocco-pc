@@ -148,11 +148,12 @@ the apply, because both are behaviour changes, not cosmetics:
 
 If the answer is **"align shared"**:
 
-- [ ] Create a Neon restore point on shared and record its id. `run-seeds.js` does NOT ask for one,
-      and it applies to whatever `DATABASE_URL` names — there is no `--test-db` routing in it.
+- [ ] Create a Neon restore point on shared and record its id. A `DATABASE_URL` apply REQUIRES it
+      (`--restore-point=<id>`) or `--confirm-shared`; there is no loopback exemption.
 - [ ] `node scripts/run-seeds.js --dry-run` → per-file statement counts. Read them; a `;` inside a
       SQL comment inflates the count, so only a wildly different file is worth investigating.
-- [ ] `npm run seed` → `SEEDED: <file>` per file. Seed 013 activates `launch-v2@1.0.0` and
+- [ ] `npm run seed -- --confirm-shared` (or `--restore-point=<id>`) → `SEEDED: <file>` per file.
+      Seed 013 activates `launch-v2@1.0.0` and
       deactivates v1; 014–016 insert the pair-quota experiment versions; 017 deletes them again
       (guarded by an FK check, so a version any pass references is kept). The END STATE is stable
       across repeated runs even though a second run re-inserts and re-deletes.

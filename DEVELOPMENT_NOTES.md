@@ -1853,6 +1853,12 @@ branch - so its side of the claim rests on the stored baselines.
 54 profiles); every Layer 4 table reads 0 after both runs. Generating presets and running the golden
 harness remain mutually exclusive on one branch until generated passes carry a marker.
 
+> **Correction, 2026-11-25.** The bare `--cleanup` in the paragraph above is now REFUSED (exit 2):
+> a cleanup run must state its scope. The equivalent of that historical run is
+> `node scripts/generate-presets.js --cleanup=all` (every catalog version) or
+> `--cleanup=<catalog-version>` for one version. The 2026-10-23 measurement is unchanged; only the
+> invocation a reader should copy is.
+
 ## 2026-10-23 — environment consistency, the EU role, and offer provenance
 
 **(1) The parity gate now compares the ACTIVE scoring model, not just its row count.**
@@ -2142,3 +2148,43 @@ The lesson is not "never apply seeds". It is that seed 013's own header rule - a
 COORDINATED STEP, not a routine seed run - binds EVERY seed run aimed at a database that has never
 seen the tail, because the runner offers no way to apply one file. Check `scoring_model` before and
 after, and read which model the API will SELECT rather than assuming the pin is what gets served.
+
+## 2026-11-25 — a TEST-target seed apply now needs its own attestation
+
+`scripts/run-seeds.js --test-db` now refuses without `--confirm-test-db`. The reason is the one that
+removed the loopback exemption from the `DATABASE_URL` path: `getWriteTestDbUrl()` compares normalized
+hostnames, and a hostname cannot establish the destination. `DATABASE_URL` at a Neon endpoint and
+`TEST_DATABASE_URL` at `127.0.0.1:55432` compare as different hosts even when that local port forwards
+to the shared database, so a passing guard is not proof of an isolated branch.
+
+`--confirm-test-db` is therefore an operator attestation, not a check: it says the destination was
+verified out of band. It never bypasses the equal-host refusal, `--restore-point=<id>` never authorizes
+a TEST-target apply, and `--confirm-test-db` without `--test-db` is a usage error (exit 2). The same
+limitation applies to every other `getWriteTestDbUrl()` / `resolveTestDbUrl()` consumer that writes
+(`apps/api/src/db.js`, `apps/api/test/run-db-tests.js`, the `*.db.test.js` suites, `eval-scenarios.js`,
+`generate-presets.js`, the `measure-*` scripts, `scripts/lib/apply-seed-args.js`,
+`scripts/lib/ingest-args.js`); each still rests on host comparison alone and deserves its own review.
+
+## 2026-11-25 - the seed CLI incident, and the read-only check that has NOT run
+
+The incident behind PR #69 is not the TEST attestation gap; that is the follow-on. The incident is
+that `scripts/run-seeds.js` read argv with a single `process.argv.includes('--dry-run')` and then
+connected to `process.env.DATABASE_URL`. Every other command line - `--help`, a typo, an unknown flag
+- was therefore the apply path, so probing the CLI applied EVERY seed to the shared database. The
+file's first statement also called `require('dotenv').config()`, so `require()`ing the module was
+enough to load `.env`. `scripts/generate-presets.js --cleanup` had the same shape in the DELETE
+direction: the bare flag built the empty scope `{}`, every predicate NULL, so `DELETE FROM
+recommendation_preset` matched the whole table - the 52-preset EU shelf included.
+
+At `807df24` both shapes are closed: an unknown argument exits 2, `--help` exits 0 before any file is
+read, a `DATABASE_URL` write needs `--confirm-shared` or `--restore-point=<id>`, `--cleanup` requires
+a stated scope (`--cleanup=<catalog-version>` or `--cleanup=all`), and `cleanupScope()` refuses a null
+scope even for a caller that bypasses `parseArgs`.
+
+**Read-only post-incident verification on the shared database: NOT RUN - UNKNOWN, not PASS.** This
+work was restricted to disposable `postgres:18` containers; no `.env` was read and no shared
+connection was opened, so nothing here proves the shared shelf's state after the incident. An
+operator should establish it read-only before relying on the shelf: the `recommendation_preset` count
+(the EU shelf was 52), the per-file statement counts from `run-seeds.js --dry-run`, and the
+`recommendation_query` rows that carry no profile marker (the golden harness's blocker). Until that
+is measured and recorded, treat the shared state as UNKNOWN.

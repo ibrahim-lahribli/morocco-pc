@@ -237,7 +237,11 @@ jobs:
       - name: Apply migrations 001-023 (ephemeral)
         run: node scripts/run-migrations.js --test-db
       - name: Apply all seeds (ephemeral)
-        run: node scripts/run-seeds.js
+        # --confirm-shared is the opt-in, and it is deliberate here: the seeder
+        # no longer treats a loopback host as proof of a disposable target (a
+        # local port can forward to a shared database), so the job states what
+        # it means instead of relying on 127.0.0.1 being an authorization.
+        run: node scripts/run-seeds.js --confirm-shared
       - name: Golden scenario harness (ephemeral)
         run: npm run eval:scenarios -- --model=launch-v2@2.5.0 --no-baseline --no-volatile
       # The real loaders against the frozen loader fixtures, on the SAME fresh

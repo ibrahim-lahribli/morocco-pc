@@ -30,6 +30,7 @@ const { spawnSync } = require('node:child_process');
 
 const {
   parseArgs, budgetRibbon, USAGE, resolveTarget, targetLine, auditTargetLine, generateOne,
+  cleanupScope, CLEANUP_SCOPE_ALL, UsageError,
 } = require('../../scripts/generate-presets');
 const modelPin = require('./model-pin');
 
@@ -70,19 +71,21 @@ test('carries the ribbon, currency, use cases and pin in their `=` forms', () =>
 test('the three modes are MUTUALLY EXCLUSIVE, not last-wins', () => {
   assert.equal(parseArgs(ARGV.concat(['--commit']), NO_ENV).mode, 'commit');
   assert.equal(parseArgs(ARGV.concat(['--dry-run']), NO_ENV).mode, 'dry-run');
-  assert.equal(parseArgs(ARGV.concat(['--cleanup']), NO_ENV).mode, 'cleanup');
+  // The bare form is no longer a valid command line (see the destructive-scope
+  // tests below): a scope must be stated, so `all` stands in for "every preset".
+  assert.equal(parseArgs(ARGV.concat(['--cleanup=all']), NO_ENV).mode, 'cleanup');
   assert.equal(parseArgs(ARGV.concat(['--cleanup=abc']), NO_ENV).cleanupVersion, 'abc');
 
   // The refusal matters most for --dry-run + --commit: honouring the later flag
   // would turn an intended dry run into a committed ribbon.
   assert.throws(() => parseArgs(ARGV.concat(['--dry-run', '--commit']), NO_ENV), /mutually exclusive/);
-  assert.throws(() => parseArgs(ARGV.concat(['--commit', '--cleanup']), NO_ENV), /mutually exclusive/);
+  assert.throws(() => parseArgs(ARGV.concat(['--commit', '--cleanup=all']), NO_ENV), /mutually exclusive/);
   // The same mode twice is not a conflict.
   assert.equal(parseArgs(ARGV.concat(['--commit', '--commit']), NO_ENV).mode, 'commit');
 });
 
 test('a cleanup run takes no ribbon: it is a maintenance mode, not a generation run', () => {
-  const args = parseArgs(ARGV.concat(['--cleanup', '--use-case=GAMING', '--budget-from=1']), NO_ENV);
+  const args = parseArgs(ARGV.concat(['--cleanup=all', '--use-case=GAMING', '--budget-from=1']), NO_ENV);
   assert.equal(args.mode, 'cleanup');
   assert.deepEqual(args.useCases, [], 'the collected use cases are dropped rather than silently scoping a delete');
 });
@@ -157,6 +160,68 @@ test('a rollout flag is refused by name, and never looks like a successful dry r
   assert.match(child.stderr, /unknown argument: --budget=15000/);
 });
 
+// --- the DESTRUCTIVE scope: an empty one must be unrepresentable ---------------
+//
+// `--cleanup` used to mean "every preset + its pass" with no other argument, and
+// the scope it built was `{}` - every predicate NULL, so `DELETE_PRESETS_SQL`
+// matched the whole table. That is a defensible maintenance MODE, but it was
+// reachable by typing one word, and a single mistyped invocation deleted a shelf
+// nobody meant to touch. The mode is kept (R-24 and AGENTS section 6 both tell an
+// operator to use it); what is removed is the IMPLICIT form. A scope must now be
+// stated: a catalog version, or the word `all`.
+
+test('a bare --cleanup is a usage error, never a full-table wipe', () => {
+  assert.throws(
+    () => parseArgs(ARGV.concat(['--cleanup']), NO_ENV),
+    /--cleanup=all/,
+    'an empty scope is the defect: it must be refused, and the message must name both valid forms'
+  );
+  // A restore point does not make an unscoped delete safe - it is not a scope.
+  assert.throws(
+    () => parseArgs(ARGV.concat(['--cleanup', '--restore-point=br-eu-backup-20261103']), NO_ENV),
+    /--cleanup=all/,
+    'a restore point is a rollback plan, not a scope'
+  );
+});
+
+test('--cleanup=all is the explicit full wipe, and a catalog version still scopes', () => {
+  const all = parseArgs(ARGV.concat(['--cleanup=all']), NO_ENV);
+  assert.equal(all.mode, 'cleanup');
+  assert.equal(all.cleanupVersion, 'all', 'the sentinel is the ONLY way to ask for every row');
+
+  const one = parseArgs(ARGV.concat(['--cleanup=0123456789abcdef0123456789abcdef']), NO_ENV);
+  assert.equal(one.mode, 'cleanup');
+  assert.equal(one.cleanupVersion, '0123456789abcdef0123456789abcdef', 'the scoped form is unchanged');
+});
+
+test('cleanupScope refuses an unrepresentable scope as a USAGE error, not a run failure', () => {
+  // parseArgs already refuses the bare flag, but cleanupScope is the second line
+  // of defence for a caller that bypasses it. A plain Error would be reported as
+  // exit 1 ("the run failed"); a UsageError is exit 2 ("fix the invocation"),
+  // which is the only honest answer for a scope that was never stated.
+  assert.throws(() => cleanupScope(null), UsageError, 'a null scope is a usage problem');
+  assert.throws(() => cleanupScope(''), UsageError, 'an empty scope is a usage problem');
+  assert.throws(() => cleanupScope('   '), UsageError, 'whitespace is not a scope');
+  assert.throws(() => cleanupScope(undefined), /cleanup scope is unrepresentable/);
+
+  // The two REPRESENTABLE scopes are unchanged: the explicit full wipe and one
+  // catalog version.
+  assert.deepEqual(cleanupScope(CLEANUP_SCOPE_ALL), {}, 'the sentinel is the full wipe');
+  assert.deepEqual(
+    cleanupScope('0123456789abcdef0123456789abcdef'),
+    { catalogVersion: '0123456789abcdef0123456789abcdef' },
+    'a catalog version still scopes the delete'
+  );
+});
+
+test('the full wipe cannot be reached implicitly, and a refused one deletes nothing', () => {
+  const child = spawnCli(['--cleanup']);
+  assert.equal(child.status, 2, 'an unscoped --cleanup is a usage problem, not a run failure');
+  assert.match(child.stderr, /--cleanup=all/, 'the refusal names the explicit form');
+  assert.match(child.stderr, /--cleanup=<catalog-version>/, 'and the scoped form');
+  assert.doesNotMatch(child.stdout + child.stderr, /CLEANUP: removed/);
+});
+
 test('requiring the script does not start a run (the require.main guard)', () => {
   const child = spawnSync(
     process.execPath,
@@ -210,7 +275,7 @@ test('a WRITE against a named target requires a real restore point; a dry run ne
     'a placeholder fails the shape on purpose'
   );
   const cleanup = parseArgs(ARGV.concat([
-    '--target-env=TARGET_DATABASE_URL', '--cleanup', '--restore-point=br-eu-backup-20261103',
+    '--target-env=TARGET_DATABASE_URL', '--cleanup=all', '--restore-point=br-eu-backup-20261103',
   ]), NO_ENV);
   assert.equal(cleanup.mode, 'cleanup');
   assert.equal(cleanup.restorePoint, 'br-eu-backup-20261103');
