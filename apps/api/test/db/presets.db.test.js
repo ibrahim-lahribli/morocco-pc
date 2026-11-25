@@ -183,6 +183,38 @@ async function presetRowsFor(db, key) {
   )).rows[0].n;
 }
 
+/** How many pass rows exist for these exact ids. */
+async function queryRowsFor(db, queryIds) {
+  return (await db.query(
+    'SELECT count(*)::int AS n FROM recommendation_query WHERE id = ANY($1::uuid[])',
+    [queryIds]
+  )).rows[0].n;
+}
+
+/**
+ * Insert a preset row for a key WITHOUT replacing an existing one, and return
+ * the query id it wrote - or null when the key was already occupied.
+ *
+ * `repository.upsertPreset` is deliberately replace-idempotent
+ * (`ON CONFLICT ... DO UPDATE SET query_id = EXCLUDED.query_id`), which is right
+ * for the generator and wrong for an ownership fixture: on a database that
+ * already carries the key, an upsert would MOVE a preset this test does not own,
+ * and the cleanup that follows would delete the pointer it had just moved while
+ * the original pass stayed behind, orphaned. `DO NOTHING` makes a collision a
+ * no-op instead, so the fixture fails loudly and the pre-existing row keeps its
+ * original query id and pass.
+ */
+async function insertOwnedPresetRow(db, key, queryId) {
+  const rows = (await db.query(
+    'INSERT INTO recommendation_preset (use_case, currency, catalog_version, budget_amount, query_id)'
+    + ' VALUES ($1, $2, $3, $4, $5)'
+    + ' ON CONFLICT (use_case, currency, catalog_version, budget_amount) DO NOTHING'
+    + ' RETURNING query_id',
+    [key.useCase, key.currency, key.catalogVersion, key.budgetAmount, queryId]
+  )).rows;
+  return rows.length === 1 ? rows[0].query_id : null;
+}
+
 /**
  * Remove ONLY the preset rows this run created, named by the passes they point
  * at. Never by key scope: every sibling budget at the same catalog version
@@ -578,8 +610,22 @@ test('cleanup deletes only the rows this run created: a sibling budget in the sa
     const mineQueryId = await insertQuery(writer, model.id, useCase, mineKey.budgetAmount, catalogVersion);
     createdIds.push(mineQueryId, siblingQueryId);
 
-    await repository.upsertPreset(writer, { ...siblingKey, queryId: siblingQueryId });
-    await repository.upsertPreset(writer, { ...mineKey, queryId: mineQueryId });
+    // Insert-only, never `upsertPreset`: a fixture that REPLACED an existing
+    // pointer would take ownership of a row this test did not write, and the
+    // cleanup below would then delete the pointer it had just moved. A null here
+    // means another run already owns the key; the assertion is the failure, the
+    // pre-existing row keeps its own query_id and pass, and `finally` deletes
+    // only the ids in `createdIds`.
+    assert.equal(
+      await insertOwnedPresetRow(writer, siblingKey, siblingQueryId),
+      siblingQueryId,
+      'the sibling fixture key must be free for this run'
+    );
+    assert.equal(
+      await insertOwnedPresetRow(writer, mineKey, mineQueryId),
+      mineQueryId,
+      'the fixture key must be free for this run'
+    );
 
     // Precondition: without two live rows in one scope the assertion below would
     // pass on an empty database for the wrong reason.
@@ -617,6 +663,124 @@ test('cleanup deletes only the rows this run created: a sibling budget in the sa
     // and the assertion below could never reach `queries: 0`.
     try {
       residue = await residueFor(writer, createdIds, []);
+    } catch (error) {
+      failures.push('residueFor: ' + error.message);
+    }
+    await writer.end().catch(() => {});
+    assert.deepEqual(failures, [], 'cleanup must run to completion');
+    assert.deepEqual(residue, {
+      preset_rows: 0,
+      queries: 0,
+      profiles: 0,
+      results: 0,
+      candidates: 0,
+      components: 0,
+      rejections: 0,
+    }, 'this test leaves nothing of its own behind');
+  }
+});
+
+/**
+ * THE FIXTURE'S OTHER HALF: the key is ALREADY taken.
+ *
+ * The regression test above proves the cleanup is id-safe, but it used to create
+ * its fixtures with `repository.upsertPreset` - replace-idempotent on purpose.
+ * On a persistent TEST database that already carried either fixture key, the
+ * fixture would have MOVED the existing pointer, and the cleanup would then have
+ * deleted the row it had just moved: a preset the test never wrote, destroyed,
+ * with its original pass left orphaned. The throwaway shelf that verified this
+ * PR avoided those two budgets, so the collision was never exercised.
+ *
+ * The fixture is insert-only now (`ON CONFLICT DO NOTHING`), and this test proves
+ * the consequence rather than the statement text: a taken key reports that no
+ * row was inserted, the pre-existing row keeps its original pointer and pass, and
+ * the cleanup path run afterwards deletes neither.
+ */
+test('a fixture key that is already taken fails without touching the row that owns it', async () => {
+  const writer = new Client({ ...getWriteTestDbUrl(), connectionTimeoutMillis: 15000 });
+  const createdIds = []; // passes this test wrote for the ATTEMPT
+  const plantedIds = []; // the pre-existing preset's pass
+  let key = null;
+
+  try {
+    await writer.connect();
+    const model = await activeModel(writer);
+    const vocabulary = engine.useCaseVocabulary(model.configuration);
+    const useCase = vocabulary.includes('GAMING') ? 'GAMING' : vocabulary[0];
+    const catalogVersion = await engine.catalogVersion(writer);
+
+    // A third budget outside the ribbon (6 000-40 000 in 2 000 steps) and
+    // distinct from the two the sibling test uses, so the fixtures cannot
+    // collide with each other.
+    key = {
+      scoringModelId: model.id, useCase, currency: CURRENCY, catalogVersion, budgetAmount: 43000,
+    };
+
+    // The PRE-EXISTING preset: a row at this key that this test must not own.
+    const plantedQueryId = await insertQuery(writer, model.id, useCase, key.budgetAmount, catalogVersion);
+    plantedIds.push(plantedQueryId);
+    assert.equal(
+      await insertOwnedPresetRow(writer, key, plantedQueryId),
+      plantedQueryId,
+      'the planted row must be new; a null here is residue from an earlier failed run'
+    );
+
+    // The fixture attempt at the SAME key, carrying a pass of its own.
+    const attemptQueryId = await insertQuery(writer, model.id, useCase, key.budgetAmount, catalogVersion);
+    createdIds.push(attemptQueryId);
+
+    // The insert reports that NOTHING was written...
+    assert.equal(
+      await insertOwnedPresetRow(writer, key, attemptQueryId),
+      null,
+      'a taken key must report that no row was inserted, never replace the pointer'
+    );
+    // ...the key still has exactly one row, pointing at the pre-existing pass...
+    assert.equal(await presetRowsFor(writer, key), 1, 'the collision must neither add nor remove a row');
+    assert.equal(
+      await repository.findPresetQueryId(writer, key),
+      plantedQueryId,
+      'the pre-existing pointer is unchanged'
+    );
+    // ...and neither pass was replaced or removed.
+    assert.equal(await queryRowsFor(writer, [plantedQueryId]), 1, 'the pre-existing pass survives');
+    assert.equal(await queryRowsFor(writer, [attemptQueryId]), 1, 'the attempt has its own pass to clean up');
+
+    // Now the cleanup path a failed fixture would run, by the ids the FIXTURE
+    // created. It names nothing the pre-existing row points at, so it removes
+    // no preset row at all.
+    assert.deepEqual(
+      await deleteCreatedPresets(writer, createdIds),
+      [],
+      'the fixture ids own no preset row, so nothing is deleted'
+    );
+    assert.equal(await presetRowsFor(writer, key), 1, 'the pre-existing preset survives the cleanup');
+    assert.equal(await repository.findPresetQueryId(writer, key), plantedQueryId);
+    assert.equal(await queryRowsFor(writer, [plantedQueryId]), 1, 'and so does its pass');
+  } finally {
+    const failures = [];
+    try {
+      await deleteCreatedPresets(writer, createdIds);
+    } catch (error) {
+      failures.push('deleteCreatedPresets (attempt): ' + error.message);
+    }
+    try {
+      // The planted row is this test's own residue, so it goes too - by id.
+      await deleteCreatedPresets(writer, plantedIds);
+    } catch (error) {
+      failures.push('deleteCreatedPresets (planted): ' + error.message);
+    }
+    try {
+      await generator.deletePasses(writer, createdIds.concat(plantedIds));
+    } catch (error) {
+      failures.push('deletePasses: ' + error.message);
+    }
+    let residue = null;
+    try {
+      // AFTER the passes are gone, for the same reason as the sibling test:
+      // residueFor counts them by id and would otherwise report rows this very
+      // block is about to delete.
+      residue = await residueFor(writer, createdIds.concat(plantedIds), []);
     } catch (error) {
       failures.push('residueFor: ' + error.message);
     }
