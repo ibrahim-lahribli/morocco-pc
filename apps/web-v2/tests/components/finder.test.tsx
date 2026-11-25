@@ -174,7 +174,7 @@ describe("BudgetUsageFinder", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Études et bureautique/ }));
     fireEvent.click(cta());
 
-    expect(push).toHaveBeenCalledWith("/configurateur?use_case=OFFICE&budget=12000");
+    expect(push).toHaveBeenCalledWith("/configurateur?step=2&use_case=OFFICE&budget=12000");
     expect(push).toHaveBeenCalledTimes(1);
     expect(useHomepageStore.getState().budgetAmount).toBe(12_000);
     expect(useHomepageStore.getState().useCase).toBe("OFFICE");

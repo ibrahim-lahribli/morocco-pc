@@ -1,134 +1,65 @@
 /**
- * The configurator's URL and form contract.
+ * The configurator's URL contract.
  *
- * The route is entered from a homepage handoff, so every answer may arrive as
- * text in `searchParams`. Parsing is per field: one bad value produces one
- * visible error and never discards a valid neighbour. Values are never clamped
- * and the URL is never rewritten here.
+ * The route is entered either from a homepage handoff (quick start) or from
+ * the navigation ("Configurer"), so every answer may arrive as text in
+ * `searchParams`. Parsing is per field: one bad value is dropped to `null`
+ * without affecting a valid neighbour. Nothing is rewritten and the URL is
+ * never modified here — a `step=2` that arrives incomplete renders Step 1
+ * content while keeping the URL the visitor arrived with.
  *
- * The form schema receives its messages from the dictionary, exactly like the
- * homepage finder, so both locales validate identically but speak their own
- * language.
+ * One module owns both directions of the URL contract, so the link the
+ * homepage builds and the seed the route parses cannot drift apart.
  */
-import { z } from "zod";
-
 import { HOME_USE_CASES, type HomeUseCase } from "@/lib/homepage/builds";
 import { BUDGET_MAX, BUDGET_MIN } from "@/lib/homepage/finder-schema";
 
 export type ConfiguratorUseCase = HomeUseCase;
 
-/**
- * The API's use-case value mapped to the dictionary branch that names it.
- *
- * One map, read by the summary header and the no-`from` recap, so a label can
- * never disagree with the radio that produced the answer. The generated
- * contract types `use_case` as `string`, so a caller indexes through a
- * `Record<string, …>` and omits the label when the value is not one of ours.
- */
-export const USE_CASE_MESSAGE_KEYS: Record<ConfiguratorUseCase, "gaming" | "office" | "creation"> =
-  {
-    GAMING: "gaming",
-    OFFICE: "office",
-    WORKSTATION: "creation",
-  };
+export type ConfiguratorStep = 1 | 2;
 
-export type ConfiguratorErrorCode =
-  "USE_CASE_INVALID" | "BUDGET_INVALID" | "BUDGET_RANGE" | "FROM_INVALID";
-
-export type ConfiguratorField = "useCase" | "budget" | "from";
-
-/** What the server hands the client shell; serialisable and already validated. */
+/** What the server hands the page; serialisable and already validated. */
 export interface ConfiguratorSeed {
+  step: ConfiguratorStep;
+  /** Guaranteed non-null when `step === 2`; parsed but unused on Step 1. */
   useCase: ConfiguratorUseCase | null;
+  /** Guaranteed non-null when `step === 2`; parsed but unused on Step 1. */
   budgetAmount: number | null;
-  /** Raw budget text when the URL supplied an invalid one; null otherwise. */
-  budgetText: string | null;
-  recommendationId: string | null;
-  fieldErrors: Partial<Record<ConfiguratorField, ConfiguratorErrorCode>>;
 }
 
 /** `searchParams` as Next.js supplies them: one value, repeated values, or absent. */
 export type RawSearchParams = Readonly<Record<string, string | readonly string[] | undefined>>;
 
-export interface RequirementsValues {
-  useCase: ConfiguratorUseCase | null;
-  /** The field's raw text, so a partially typed amount is not erased. */
-  budget: string;
-}
-
-export interface RequirementsMessages {
-  useCaseRequired: string;
-  budgetRequired: string;
-  budgetRange: string;
-}
-
-/** Canonical 8-4-4-4-12 hex; the contract declares no `format: uuid`. */
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function parseBudget(raw: string): {
-  value: number | null;
-  error: ConfiguratorErrorCode | null;
-} {
+function parseBudget(raw: string): number | null {
   if (!/^\d+$/.test(raw)) {
-    return { value: null, error: "BUDGET_INVALID" };
+    return null;
   }
 
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || value < BUDGET_MIN || value > BUDGET_MAX) {
-    return { value: null, error: "BUDGET_RANGE" };
+    return null;
   }
 
-  return { value, error: null };
-}
-
-export function parseBudgetInput(raw: string): number | null {
-  const parsed = parseBudget(raw.trim());
-  return parsed.error === null ? parsed.value : null;
+  return value;
 }
 
 export function parseConfiguratorSearchParams(params: RawSearchParams): ConfiguratorSeed {
-  const fieldErrors: ConfiguratorSeed["fieldErrors"] = {};
-
   const useCaseRaw = params.use_case;
-  let useCase: ConfiguratorUseCase | null = null;
-  if (useCaseRaw !== undefined) {
-    if (
-      typeof useCaseRaw === "string" &&
-      (HOME_USE_CASES as readonly string[]).includes(useCaseRaw)
-    ) {
-      useCase = useCaseRaw as ConfiguratorUseCase;
-    } else {
-      fieldErrors.useCase = "USE_CASE_INVALID";
-    }
-  }
+  const useCase =
+    typeof useCaseRaw === "string" && (HOME_USE_CASES as readonly string[]).includes(useCaseRaw)
+      ? (useCaseRaw as ConfiguratorUseCase)
+      : null;
 
   const budgetRaw = params.budget;
-  let budgetAmount: number | null = null;
-  let budgetText: string | null = null;
-  if (budgetRaw !== undefined) {
-    if (typeof budgetRaw !== "string") {
-      fieldErrors.budget = "BUDGET_INVALID";
-    } else {
-      const parsed = parseBudget(budgetRaw);
-      budgetAmount = parsed.value;
-      if (parsed.error !== null) {
-        fieldErrors.budget = parsed.error;
-        budgetText = budgetRaw;
-      }
-    }
-  }
+  const budgetAmount = typeof budgetRaw === "string" ? parseBudget(budgetRaw) : null;
 
-  const fromRaw = params.from;
-  let recommendationId: string | null = null;
-  if (fromRaw !== undefined) {
-    if (typeof fromRaw === "string" && UUID_PATTERN.test(fromRaw)) {
-      recommendationId = fromRaw.toLowerCase();
-    } else {
-      fieldErrors.from = "FROM_INVALID";
-    }
-  }
+  // Only the exact string "2" can promote to Step 2, and only with both
+  // answers present: "1", "02", repeats and every other value are Step 1.
+  const stepTwoRequested = params.step === "2";
+  const step: ConfiguratorStep =
+    stepTwoRequested && useCase !== null && budgetAmount !== null ? 2 : 1;
 
-  return { useCase, budgetAmount, budgetText, recommendationId, fieldErrors };
+  return { step, useCase, budgetAmount };
 }
 
 export interface ConfiguratorHandoffAnswers {
@@ -139,11 +70,10 @@ export interface ConfiguratorHandoffAnswers {
 /**
  * The inverse of `parseConfiguratorSearchParams`, for the homepage handoff.
  *
- * One module owns both directions of the URL contract, so the link the finder
- * builds and the seed the route parses cannot drift apart. Returns `null`
- * rather than inventing an answer: an incomplete or out-of-contract pair must
- * leave the visitor on the page, never navigate to a link the route would have
- * to flag as invalid.
+ * Returns `null` rather than inventing an answer: an incomplete or
+ * out-of-contract pair must leave the visitor on the page, never navigate to a
+ * link the route would render as Step 1. A returned href always carries
+ * `step=2` — the same completeness rule both sides apply.
  */
 export function buildConfiguratorHref(answers: ConfiguratorHandoffAnswers): string | null {
   const { useCase, budgetAmount } = answers;
@@ -158,35 +88,10 @@ export function buildConfiguratorHref(answers: ConfiguratorHandoffAnswers): stri
     return null;
   }
 
-  const params = new URLSearchParams({ use_case: useCase, budget: String(budgetAmount) });
+  const params = new URLSearchParams({
+    step: "2",
+    use_case: useCase,
+    budget: String(budgetAmount),
+  });
   return `/configurateur?${params.toString()}`;
-}
-
-export function createRequirementsSchema(
-  messages: RequirementsMessages,
-): z.ZodType<RequirementsValues, RequirementsValues> {
-  return z
-    .object({
-      useCase: z.enum(HOME_USE_CASES).nullable(),
-      budget: z.string(),
-    })
-    .superRefine((values, ctx) => {
-      if (values.useCase === null) {
-        ctx.addIssue({ code: "custom", message: messages.useCaseRequired, path: ["useCase"] });
-      }
-
-      const raw = values.budget.trim();
-      if (raw === "") {
-        ctx.addIssue({ code: "custom", message: messages.budgetRequired, path: ["budget"] });
-        return;
-      }
-
-      if (parseBudgetInput(raw) === null) {
-        ctx.addIssue({ code: "custom", message: messages.budgetRange, path: ["budget"] });
-      }
-    });
-}
-
-export function resolveRequirementsBudget(values: RequirementsValues): number | null {
-  return parseBudgetInput(values.budget);
 }

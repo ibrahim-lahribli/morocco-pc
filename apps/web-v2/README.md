@@ -103,12 +103,12 @@ app/[locale]/          locale-rooted layout, homepage, configurateur, 404
 components/ui/         shared kit: Button, Badge, Card, TextField (barrel index.ts)
 components/layout/     header, primary/mobile nav, logo, locale switcher, footer
 components/home/       seven homepage sections; islands: finder, cards, pathways, closing CTA
-components/configurator/ requirements form, summary panel, client shell
+components/configurator/ step placeholders (Step 1, Step 2)
 i18n/                  routing, request config, locale-aware navigation
 messages/              fr.json, ar.json
 lib/                   utils, price formatter, demo budget presets
 lib/homepage/          finder schema, store, guides, build view-model, flags, use-presets
-lib/configurator/      URL contract, form schema, per-mount store, queries
+lib/configurator/      URL contract: step + handoff parsing, href builder
 lib/api/               generated schema, client, config, errors, query defaults, derived types
 components/providers/  ApiProvider (TanStack Query, client component)
 scripts/               OpenAPI type generation and drift check, screenshot capture
@@ -122,22 +122,26 @@ The supplied Stitch references stay untouched in
 
 ## Configurator
 
-`/{locale}/configurateur` asks two questions — use case and budget — and renders a
-build summary beside them. The homepage finder's CTA hands its two answers to this route
-(`use_case`, `budget`) and posts nothing. The URL is the only input:
+`/{locale}/configurateur` is one route with two steps, resolved from the URL
+alone on the server — no API request, no client state, so a refresh always
+lands back on the same step:
 
-| Query      | Accepted                          | Invalid value                    |
-| ---------- | --------------------------------- | -------------------------------- |
-| `use_case` | `GAMING`, `OFFICE`, `WORKSTATION` | cleared, message under the group |
-| `budget`   | integer in `[3 500, 100 000]`     | kept verbatim, range message     |
-| `from`     | canonical 8-4-4-4-12 hex UUID     | link error, no request issued    |
+- **Step 1** (`?step=1`, or no `step`) — placeholder: "Étape 1 — Définissons vos
+  besoins". The `Configurer` links in the desktop header and the mobile bottom
+  navigation both land here.
+- **Step 2** (`?step=2&use_case=…&budget=…`) — placeholder: "Étape 2 — Affinons
+  votre configuration". Reached from the homepage finder's CTA, which hands
+  its two answers over as query params and posts nothing.
 
-Invalid values are shown, never clamped, and valid neighbours survive. The page
-does not rewrite the URL. `Continuer` validates, stores the answers and moves
-focus to the summary heading; it generates nothing. A `from` link loads that
-pass (loading, ready, not-found and error-with-retry states); a build's missing
-price stays absent rather than becoming `0`. Arabic is authored with key parity
-and is not native-approved.
+`step=2` renders Step 2 only with a complete, valid handoff: `use_case` must
+be one of `GAMING`, `OFFICE`, `WORKSTATION` and `budget` an integer in
+`[3 500, 100 000]`. Any missing or invalid value — like a missing or invalid
+`step` — falls back to Step 1 content while keeping the URL the visitor
+arrived with; nothing is rewritten. The homepage handoff
+(`buildConfiguratorHref`) and the route's parser share one module
+(`lib/configurator/schema.ts`), so the href a link builds and the seed the
+route parses cannot drift apart. Arabic is authored with key parity and is not
+native-approved.
 
 ## Design system
 

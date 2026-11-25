@@ -75,20 +75,21 @@ export default async function LocaleLayout({
   const dir = locale === "ar" ? "rtl" : "ltr";
   const appLocale = locale as AppLocale;
 
-  // Anchors only: every destination is a section of this page, so the nav never
-  // points at a route that does not exist.
+  // Homepage anchors for the sections of this page, plus one route link: the
+  // configurator. Currency is derived from the pathname inside the navs, not
+  // hardcoded here.
   const primaryNavItems: readonly PrimaryNavItem[] = [
-    { href: "#top", label: t("nav.home"), current: true },
-    { href: "#simulateur", label: t("nav.configure") },
+    { href: "#top", label: t("nav.home") },
+    { href: "/configurateur?step=1", label: t("nav.configure") },
     { href: "#guides", label: t("nav.guides") },
   ];
 
   const mobileNavItems: readonly MobileNavItem[] = [
-    { key: "home", href: "#top", label: t("nav.home"), current: true },
+    { key: "home", href: "#top", label: t("nav.home") },
     // Components and Saved have no route yet: visibly disabled rather than
     // pointed somewhere unrelated.
     { key: "components", label: t("nav.components") },
-    { key: "configure", href: "#simulateur", label: t("nav.configure") },
+    { key: "configure", href: "/configurateur?step=1", label: t("nav.configure") },
     { key: "guides", href: "#guides", label: t("nav.guides") },
     { key: "saved", label: t("nav.saved") },
   ];

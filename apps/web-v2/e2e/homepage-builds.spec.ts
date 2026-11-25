@@ -97,7 +97,7 @@ test.describe("recommended configurations", () => {
     // The CTA leaves for the configurator, carrying the same two answers the
     // cards just narrowed to.
     await page.getByRole("button", { name: "Trouver mon PC", exact: true }).click();
-    await expect(page).toHaveURL(/\/fr\/configurateur\?use_case=OFFICE&budget=8000$/);
+    await expect(page).toHaveURL(/\/fr\/configurateur\?step=2&use_case=OFFICE&budget=8000$/);
 
     expect(posts).toEqual([]);
   });
@@ -319,12 +319,16 @@ test.describe("recommended configurations", () => {
     });
     const cta = gaming.getByRole("link", { name: "Voir la config" });
 
-    await expect(cta).toHaveAttribute("href", "/fr/configurateur?use_case=GAMING&budget=12000");
+    await expect(cta).toHaveAttribute(
+      "href",
+      "/fr/configurateur?step=2&use_case=GAMING&budget=12000",
+    );
     await cta.click();
 
-    await expect(page).toHaveURL(/\/fr\/configurateur\?use_case=GAMING&budget=12000$/);
-    await expect(page.getByRole("radio", { name: /Jeux vidéo & Gaming/ })).toBeChecked();
-    await expect(page.getByRole("spinbutton", { name: "Budget (DH)" })).toHaveValue("12000");
+    await expect(page).toHaveURL(/\/fr\/configurateur\?step=2&use_case=GAMING&budget=12000$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Étape 2 — Affinons votre configuration" }),
+    ).toBeVisible();
     expect(posts).toEqual([]);
   });
 
@@ -347,7 +351,7 @@ test.describe("recommended configurations", () => {
     await expect(gaming.getByText(/Configuration pré-générée la plus élevée/)).toBeVisible();
     await expect(gaming.getByRole("link", { name: "Voir la config" })).toHaveAttribute(
       "href",
-      "/fr/configurateur?use_case=GAMING&budget=15000",
+      "/fr/configurateur?step=2&use_case=GAMING&budget=15000",
     );
   });
 

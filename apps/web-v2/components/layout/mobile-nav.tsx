@@ -1,18 +1,24 @@
+"use client";
+
 import { BookOpen, Heart, Home, LayoutGrid, Sparkles, type LucideIcon } from "lucide-react";
 
+import { Link, usePathname } from "@/i18n/navigation";
+
 import { cn } from "@/lib/utils";
+import { isNavItemCurrent } from "./nav-current";
 
 export interface MobileNavItem {
   /** Stable key, also selects the icon. */
   key: "home" | "components" | "configure" | "guides" | "saved";
   /**
-   * Omitted when the destination has no route yet: the item keeps its geometry
-   * and label but renders as an `aria-disabled` span — not focusable, no href,
-   * and never pointed at an unrelated homepage anchor.
+   * A homepage section anchor (`#top`, `#guides`) or a locale-aware route
+   * (`/configurateur?step=1`). Omitted when the destination has no route yet:
+   * the item keeps its geometry and label but renders as an `aria-disabled`
+   * span — not focusable, no href, and never pointed at an unrelated homepage
+   * anchor.
    */
   href?: string;
   label: string;
-  current?: boolean;
 }
 
 const ICONS: Record<MobileNavItem["key"], LucideIcon> = {
@@ -35,9 +41,52 @@ const FAB_CLASSES =
  * `lg` up, where the header carries navigation.
  *
  * A destination whose route does not exist yet ships without an `href`, so
- * nothing here pretends to navigate to a page that 404s.
+ * nothing here pretends to navigate to a page that 404s. Currency is derived
+ * from the pathname — the Configurer action stays highlighted on every step
+ * of the configurator.
  */
 export function MobileNav({ label, items }: { label: string; items: readonly MobileNavItem[] }) {
+  const pathname = usePathname();
+
+  const renderNavItem = (item: MobileNavItem, className: string, withLabel: boolean) => {
+    const Icon = ICONS[item.key];
+    const content = withLabel ? (
+      <>
+        <Icon aria-hidden="true" className="size-6" />
+        <span>{item.label}</span>
+      </>
+    ) : (
+      <Icon aria-hidden="true" className="size-6" />
+    );
+
+    if (item.href === undefined) {
+      return (
+        <span aria-disabled="true" className={className}>
+          {content}
+        </span>
+      );
+    }
+
+    const current = isNavItemCurrent(item.href, pathname);
+    const ariaCurrent = current ? ("page" as const) : undefined;
+    const ariaLabel = withLabel ? undefined : item.label;
+
+    return item.href.startsWith("/") ? (
+      <Link
+        href={item.href}
+        aria-current={ariaCurrent}
+        aria-label={ariaLabel}
+        className={className}
+      >
+        {content}
+      </Link>
+    ) : (
+      <a href={item.href} aria-current={ariaCurrent} aria-label={ariaLabel} className={className}>
+        {content}
+      </a>
+    );
+  };
+
   return (
     <nav
       aria-label={label}
@@ -46,7 +95,6 @@ export function MobileNav({ label, items }: { label: string; items: readonly Mob
     >
       <ul className="mx-auto flex h-20 w-full max-w-page items-center justify-around px-space-xs">
         {items.map((item) => {
-          const Icon = ICONS[item.key];
           const isCenter = item.key === "configure";
 
           if (isCenter) {
@@ -59,15 +107,7 @@ export function MobileNav({ label, items }: { label: string; items: readonly Mob
 
             return (
               <li key={item.key} className="-mt-5 flex flex-col items-center">
-                {item.href === undefined ? (
-                  <span aria-disabled="true" className={fabClassName}>
-                    <Icon aria-hidden="true" className="size-6" />
-                  </span>
-                ) : (
-                  <a href={item.href} aria-label={item.label} className={fabClassName}>
-                    <Icon aria-hidden="true" className="size-6" />
-                  </a>
-                )}
+                {renderNavItem(item, fabClassName, false)}
                 <span
                   className={cn(
                     "mt-1 text-label-sm font-semibold tracking-tight",
@@ -84,28 +124,14 @@ export function MobileNav({ label, items }: { label: string; items: readonly Mob
             ITEM_CLASSES,
             item.href === undefined
               ? "text-subtle opacity-70"
-              : item.current
+              : isNavItemCurrent(item.href, pathname)
                 ? "text-primary"
                 : "text-muted hover:text-primary",
           );
 
           return (
             <li key={item.key} className="flex-1">
-              {item.href === undefined ? (
-                <span aria-disabled="true" className={itemClassName}>
-                  <Icon aria-hidden="true" className="size-6" />
-                  <span>{item.label}</span>
-                </span>
-              ) : (
-                <a
-                  href={item.href}
-                  aria-current={item.current ? "page" : undefined}
-                  className={itemClassName}
-                >
-                  <Icon aria-hidden="true" className="size-6" />
-                  <span>{item.label}</span>
-                </a>
-              )}
+              {renderNavItem(item, itemClassName, true)}
             </li>
           );
         })}

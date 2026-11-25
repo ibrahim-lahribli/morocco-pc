@@ -2,19 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { buildConfiguratorHref, parseConfiguratorSearchParams } from "@/lib/configurator/schema";
 
-const queryOf = (href: string) =>
-  Object.fromEntries(new URLSearchParams(href.slice(href.indexOf("?") + 1)));
-
 describe("buildConfiguratorHref", () => {
-  it("builds the canonical href for every use case", () => {
-    expect(buildConfiguratorHref({ useCase: "GAMING", budgetAmount: 12_000 })).toBe(
-      "/configurateur?use_case=GAMING&budget=12000",
+  it("builds the canonical step-2 href for every use case", () => {
+    expect(buildConfiguratorHref({ useCase: "GAMING", budgetAmount: 8_000 })).toBe(
+      "/configurateur?step=2&use_case=GAMING&budget=8000",
     );
-    expect(buildConfiguratorHref({ useCase: "OFFICE", budgetAmount: 8_000 })).toBe(
-      "/configurateur?use_case=OFFICE&budget=8000",
+    expect(buildConfiguratorHref({ useCase: "OFFICE", budgetAmount: 6_000 })).toBe(
+      "/configurateur?step=2&use_case=OFFICE&budget=6000",
     );
     expect(buildConfiguratorHref({ useCase: "WORKSTATION", budgetAmount: 15_000 })).toBe(
-      "/configurateur?use_case=WORKSTATION&budget=15000",
+      "/configurateur?step=2&use_case=WORKSTATION&budget=15000",
     );
   });
 
@@ -31,24 +28,24 @@ describe("buildConfiguratorHref", () => {
   });
 
   it("round-trips through the parser the route uses", () => {
-    const href = buildConfiguratorHref({ useCase: "OFFICE", budgetAmount: 8_000 });
+    const href = buildConfiguratorHref({ useCase: "OFFICE", budgetAmount: 6_000 });
     expect(href).not.toBeNull();
 
-    expect(parseConfiguratorSearchParams(queryOf(href ?? ""))).toEqual({
+    const query = Object.fromEntries(
+      new URLSearchParams((href ?? "").slice((href ?? "").indexOf("?") + 1)),
+    );
+    expect(parseConfiguratorSearchParams(query)).toEqual({
+      step: 2,
       useCase: "OFFICE",
-      budgetAmount: 8000,
-      budgetText: null,
-      recommendationId: null,
-      fieldErrors: {},
+      budgetAmount: 6000,
     });
   });
 
-  it("emits exactly two canonical parameters and never a from", () => {
+  it("emits exactly the three canonical parameters", () => {
     const href = buildConfiguratorHref({ useCase: "GAMING", budgetAmount: 12_000 }) ?? "";
     const params = new URLSearchParams(href.slice(href.indexOf("?") + 1));
 
-    expect([...params.keys()]).toEqual(["use_case", "budget"]);
-    expect(params.has("from")).toBe(false);
+    expect([...params.keys()]).toEqual(["step", "use_case", "budget"]);
     expect(href.startsWith("/configurateur?")).toBe(true);
   });
 });

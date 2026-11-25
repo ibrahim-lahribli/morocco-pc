@@ -114,12 +114,13 @@ test.describe("homepage finder", () => {
 
     await page.getByRole("button", { name: CTA, exact: true }).click();
 
-    // One URL contract: the two answers become query params, and the destination
-    // parses them back into its own radio and budget field rather than
-    // re-asking. The swap is a GET, so nothing is posted along the way.
-    await expect(page).toHaveURL(/\/fr\/configurateur\?use_case=OFFICE&budget=8000$/);
-    await expect(page.getByRole("radio", { name: /Études et bureautique/ })).toBeChecked();
-    await expect(page.getByRole("spinbutton", { name: "Budget (DH)" })).toHaveValue("8000");
+    // One URL contract: the two answers become query params (step 2 plus the
+    // pair), and the destination renders its Step 2 placeholder. The swap is a
+    // GET, so nothing is posted along the way.
+    await expect(page).toHaveURL(/\/fr\/configurateur\?step=2&use_case=OFFICE&budget=8000$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Étape 2 — Affinons votre configuration" }),
+    ).toBeVisible();
     expect(posts).toEqual([]);
   });
 });

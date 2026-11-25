@@ -104,7 +104,7 @@ describe("a preset whose detail does not exist", () => {
     await waitFor(() => expect(screen.getByText("PC Gaming")).toBeInTheDocument());
     expect(screen.getByRole("link", { name: fr.Homepage.builds.cta })).toHaveAttribute(
       "href",
-      "/configurateur?use_case=GAMING&budget=12000",
+      "/configurateur?step=2&use_case=GAMING&budget=12000",
     );
     expect(screen.queryByText(/11\s500/)).not.toBeInTheDocument();
 

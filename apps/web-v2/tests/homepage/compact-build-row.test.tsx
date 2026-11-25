@@ -55,7 +55,7 @@ describe("CompactBuildRow", () => {
 
     expect(screen.getByRole("link", { name: /Détails/ })).toHaveAttribute(
       "href",
-      "/configurateur?use_case=OFFICE&budget=12000",
+      "/configurateur?step=2&use_case=OFFICE&budget=12000",
     );
   });
 
