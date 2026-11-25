@@ -135,8 +135,21 @@ async function anyProductId(db) {
  * A minimal, valid query row. `id` is OMITTED rather than passed as NULL - the
  * column's `gen_random_uuid()` DEFAULT applies only to an omitted column, so the
  * `RETURNING id` is the only id and it is the one the row really has.
+ *
+ * `explicitId` exists for exactly one purpose: forcing a DETERMINISTIC failure.
+ * Passing an id that is already taken raises 23505 without a race, a timeout or
+ * an outage, which is how the partial-setup test drives its second insert to
+ * fail.
  */
-async function insertQuery(db, modelId, useCase, budgetAmount, catalogVersion) {
+async function insertQuery(db, modelId, useCase, budgetAmount, catalogVersion, explicitId = null) {
+  if (explicitId !== null) {
+    return (await db.query(
+      'INSERT INTO recommendation_query'
+      + ' (id, scoring_model_id, budget_amount, currency, use_case, catalog_version)'
+      + ' VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+      [explicitId, modelId, budgetAmount, CURRENCY, useCase, catalogVersion]
+    )).rows[0].id;
+  }
   return (await db.query(
     'INSERT INTO recommendation_query'
     + ' (scoring_model_id, budget_amount, currency, use_case, catalog_version)'
@@ -213,6 +226,54 @@ async function insertOwnedPresetRow(db, key, queryId) {
     [key.useCase, key.currency, key.catalogVersion, key.budgetAmount, queryId]
   )).rows;
   return rows.length === 1 ? rows[0].query_id : null;
+}
+
+/**
+ * THE CLEANUP CONTRACT, in one place: every pass id this run OWNS, removed by
+ * identity, in dependency order, each step independent of the last.
+ *
+ * The callers all register an id the moment its insert COMMITS - never after the
+ * whole fixture succeeded - because a setup that throws between two inserts must
+ * still be able to name the row the first one wrote. A registration that waited
+ * for the end of the setup would leave that row orphaned, which is the state the
+ * golden harness refuses to run beside.
+ *
+ * @param {object} client the writer connection
+ * @param {string[]} createdIds every pass id this run created and owns
+ * @returns {Promise<{failures: string[], profileIds: string[]}>} what failed, and
+ *   the profile ids captured before their passes went (the FK query -> profile
+ *   runs with NO ACTION, so the query must be deleted first and its profile id
+ *   read while the row still exists)
+ */
+async function runOwnedCleanup(client, createdIds) {
+  const failures = [];
+  let profileIds = [];
+
+  try {
+    profileIds = (await client.query(
+      'SELECT DISTINCT recommendation_profile_id AS id FROM recommendation_query'
+      + ' WHERE id = ANY($1::uuid[]) AND recommendation_profile_id IS NOT NULL',
+      [createdIds]
+    )).rows.map((row) => row.id);
+  } catch (error) {
+    failures.push('capture profile ids: ' + error.message);
+  }
+  try {
+    // By the ids this run created - never by key scope, and never global, so a
+    // sibling budget or a concurrent run's rows are not collaterally deleted.
+    await deleteCreatedPresets(client, createdIds);
+  } catch (error) {
+    failures.push('deleteCreatedPresets: ' + error.message);
+  }
+  try {
+    // EVERY pass this run created, tracked rather than derived from the preset
+    // rows: a pointer that moved would leave its pass unreferenced.
+    await generator.deletePasses(client, createdIds);
+  } catch (error) {
+    failures.push('deletePasses: ' + error.message);
+  }
+
+  return { failures, profileIds };
 }
 
 /**
@@ -512,33 +573,9 @@ test('a generated ribbon is idempotent per key and is served by GET /v1/presets'
     let profileIds = [];
 
     if (writer !== null) {
-      // Captured BEFORE the passes are deleted: the profile id lives on the
-      // query row, and the FK runs query -> profile with NO ACTION.
-      try {
-        profileIds = (await writer.query(
-          'SELECT DISTINCT recommendation_profile_id AS id FROM recommendation_query'
-          + ' WHERE id = ANY($1::uuid[]) AND recommendation_profile_id IS NOT NULL',
-          [createdIds]
-        )).rows.map((row) => row.id);
-      } catch (error) {
-        failures.push('capture profile ids: ' + error.message);
-      }
-      try {
-        // By the ids this run created - never by key scope, and never global, so
-        // a sibling budget or a concurrent run's rows are not collaterally
-        // deleted.
-        await deleteCreatedPresets(writer, createdIds);
-      } catch (error) {
-        failures.push('deleteCreatedPresets: ' + error.message);
-      }
-      try {
-        // EVERY pass this test created, tracked rather than derived from the
-        // preset rows: a pointer that moved would leave its pass unreferenced,
-        // and an unreferenced query row is what blocks the golden harness.
-        await generator.deletePasses(writer, createdIds);
-      } catch (error) {
-        failures.push('deletePasses: ' + error.message);
-      }
+      const cleanup = await runOwnedCleanup(writer, createdIds);
+      failures.push(...cleanup.failures);
+      profileIds = cleanup.profileIds;
       await writer.end().catch(() => {});
     }
 
@@ -606,9 +643,12 @@ test('cleanup deletes only the rows this run created: a sibling budget in the sa
       scoringModelId: model.id, useCase, currency: CURRENCY, catalogVersion, budgetAmount: 42000,
     };
 
+    // Registered the moment each insert COMMITS: a throw between the two must
+    // still leave the first pass known to the cleanup below.
     const siblingQueryId = await insertQuery(writer, model.id, useCase, siblingKey.budgetAmount, catalogVersion);
+    createdIds.push(siblingQueryId);
     const mineQueryId = await insertQuery(writer, model.id, useCase, mineKey.budgetAmount, catalogVersion);
-    createdIds.push(mineQueryId, siblingQueryId);
+    createdIds.push(mineQueryId);
 
     // Insert-only, never `upsertPreset`: a fixture that REPLACED an existing
     // pointer would take ownership of a row this test did not write, and the
@@ -644,25 +684,17 @@ test('cleanup deletes only the rows this run created: a sibling budget in the sa
     assert.equal(await presetRowsFor(writer, siblingKey), 1, 'a sibling budget in the same scope must survive');
     assert.equal(await repository.findPresetQueryId(writer, siblingKey), siblingQueryId);
   } finally {
-    // Corners are cleaned even on a failed assertion, by id, and each step
-    // independent of the last.
+    // Corners are cleaned even on a failed assertion, through the SAME helper
+    // the fixture uses: by id, each step independent of the last.
     const failures = [];
     let residue = null;
-    try {
-      await deleteCreatedPresets(writer, createdIds);
-    } catch (error) {
-      failures.push('deleteCreatedPresets: ' + error.message);
-    }
-    try {
-      await generator.deletePasses(writer, createdIds);
-    } catch (error) {
-      failures.push('deletePasses: ' + error.message);
-    }
+    const cleanup = await runOwnedCleanup(writer, createdIds);
+    failures.push(...cleanup.failures);
     // Measured AFTER the passes are gone: residueFor counts them by id, so
     // measuring first would report the rows this very block is about to delete
     // and the assertion below could never reach `queries: 0`.
     try {
-      residue = await residueFor(writer, createdIds, []);
+      residue = await residueFor(writer, createdIds, cleanup.profileIds);
     } catch (error) {
       failures.push('residueFor: ' + error.message);
     }
@@ -795,5 +827,146 @@ test('a fixture key that is already taken fails without touching the row that ow
       components: 0,
       rejections: 0,
     }, 'this test leaves nothing of its own behind');
+  }
+});
+
+/**
+ * THE THIRD FAILURE MODE: the setup dies halfway.
+ *
+ * The collision test proves a taken key is refused, and the sibling test proves
+ * an id-scoped cleanup spares rows it does not own. Neither covers a setup that
+ * COMMITS one pass and then throws before the next one. When the ids were
+ * recorded only after the whole setup succeeded, that committed pass was
+ * invisible to the `finally` block: `createdIds` stayed empty, the cleanup had
+ * nothing to name, and the run left an orphaned `recommendation_query` behind -
+ * exactly the row the golden harness refuses to run beside.
+ *
+ * The failure here is deliberate and deterministic: the second insert reuses the
+ * first pass's primary key, so PostgreSQL raises 23505 without a race, a timeout
+ * or an outage. What is under test is not the error but the CONSEQUENCE - the id
+ * registered immediately after the first insert is enough for the cleanup to find
+ * and remove it, and nothing belonging to another owner is touched.
+ */
+test('a partial setup failure still removes the pass it already committed', async () => {
+  const writer = new Client({ ...getWriteTestDbUrl(), connectionTimeoutMillis: 15000 });
+  const createdIds = []; // every pass THIS attempt committed, registered on commit
+  const foreignIds = []; // the planted owner's pass, which must survive
+  let foreignKey = null;
+  let presetsBefore = null;
+  let cleanup = null;
+  let profileIds = [];
+
+  try {
+    await writer.connect();
+    presetsBefore = await presetCount(writer);
+    const model = await activeModel(writer);
+    const vocabulary = engine.useCaseVocabulary(model.configuration);
+    const useCase = vocabulary.includes('GAMING') ? 'GAMING' : vocabulary[0];
+    const catalogVersion = await engine.catalogVersion(writer);
+
+    // A planted owner in the SAME scope, at a budget no other fixture uses: if
+    // the partial-setup cleanup reached for a scope instead of ids, this row is
+    // what it would destroy.
+    foreignKey = {
+      scoringModelId: model.id, useCase, currency: CURRENCY, catalogVersion, budgetAmount: 44000,
+    };
+    const foreignQueryId = await insertQuery(writer, model.id, useCase, foreignKey.budgetAmount, catalogVersion);
+    foreignIds.push(foreignQueryId);
+    assert.equal(
+      await insertOwnedPresetRow(writer, foreignKey, foreignQueryId),
+      foreignQueryId,
+      'the planted owner key must be free for this run'
+    );
+
+    // The setup under test. The first pass is registered the moment it commits -
+    // that single line is the fix this test exists to pin.
+    const partialKey = { ...foreignKey, budgetAmount: 45000 };
+    const firstId = await insertQuery(writer, model.id, useCase, partialKey.budgetAmount, catalogVersion);
+    createdIds.push(firstId);
+    assert.equal(await queryRowsFor(writer, [firstId]), 1, 'the first setup insert committed');
+
+    // The SECOND setup operation is made to fail on purpose.
+    await assert.rejects(
+      () => insertQuery(writer, model.id, useCase, partialKey.budgetAmount, catalogVersion, firstId),
+      (error) => error.code === '23505',
+      'the second insert must fail on the reused primary key'
+    );
+
+    // The SAME cleanup the fixture's `finally` block runs, run now because the
+    // setup threw. Nothing here is special-cased for the failure.
+    cleanup = await runOwnedCleanup(writer, createdIds);
+    profileIds = cleanup.profileIds;
+    assert.deepEqual(cleanup.failures, [], 'cleanup must run to completion');
+
+    assert.deepEqual(
+      await residueFor(writer, createdIds, profileIds),
+      {
+        preset_rows: 0,
+        queries: 0,
+        profiles: 0,
+        results: 0,
+        candidates: 0,
+        components: 0,
+        rejections: 0,
+      },
+      'the pass the first insert committed must be gone'
+    );
+    assert.equal(await queryRowsFor(writer, createdIds), 0, 'no recommendation_query residue remains');
+
+    // And the owner this run never wrote is untouched: pointer and pass.
+    assert.equal(await presetRowsFor(writer, foreignKey), 1, 'a preset this run did not write must survive');
+    assert.equal(await repository.findPresetQueryId(writer, foreignKey), foreignQueryId);
+    assert.equal(await queryRowsFor(writer, [foreignQueryId]), 1, 'and so must its pass');
+    // The planted row is still there, so the count is what it was plus exactly
+    // one: the cleanup removed its own row and nothing else anywhere.
+    assert.equal(
+      await presetCount(writer),
+      presetsBefore + 1,
+      'the partial cleanup deleted nothing beyond the pass it owned'
+    );
+  } finally {
+    // The failure path above already cleaned up; a throw from an assertion (or
+    // the connect) has not, so the finally block covers both by re-running the
+    // same idempotent helper only when it has not run.
+    const failures = cleanup === null ? [] : cleanup.failures.slice();
+    if (cleanup === null) {
+      const fallback = await runOwnedCleanup(writer, createdIds);
+      failures.push(...fallback.failures);
+      profileIds = fallback.profileIds;
+    }
+    // The planted row is this test's own residue, so it goes too - by id.
+    const foreignCleanup = await runOwnedCleanup(writer, foreignIds);
+    failures.push(...foreignCleanup.failures);
+    let residue = null;
+    try {
+      residue = await residueFor(
+        writer,
+        createdIds.concat(foreignIds),
+        profileIds.concat(foreignCleanup.profileIds)
+      );
+    } catch (error) {
+      failures.push('residueFor: ' + error.message);
+    }
+    let finalCount = null;
+    try {
+      finalCount = await presetCount(writer);
+    } catch (error) {
+      failures.push('presetCount: ' + error.message);
+    }
+    await writer.end().catch(() => {});
+    assert.deepEqual(failures, [], 'cleanup must run to completion');
+    assert.deepEqual(residue, {
+      preset_rows: 0,
+      queries: 0,
+      profiles: 0,
+      results: 0,
+      candidates: 0,
+      components: 0,
+      rejections: 0,
+    }, 'this test leaves nothing of its own behind');
+    if (presetsBefore !== null) {
+      // Global on purpose, the same tripwire the fixture uses.
+      assert.equal(finalCount, presetsBefore, 'no preset row anywhere leaked');
+    }
   }
 });
