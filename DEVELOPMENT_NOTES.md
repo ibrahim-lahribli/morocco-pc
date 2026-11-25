@@ -2148,3 +2148,19 @@ The lesson is not "never apply seeds". It is that seed 013's own header rule - a
 COORDINATED STEP, not a routine seed run - binds EVERY seed run aimed at a database that has never
 seen the tail, because the runner offers no way to apply one file. Check `scoring_model` before and
 after, and read which model the API will SELECT rather than assuming the pin is what gets served.
+
+## 2026-11-25 — a TEST-target seed apply now needs its own attestation
+
+`scripts/run-seeds.js --test-db` now refuses without `--confirm-test-db`. The reason is the one that
+removed the loopback exemption from the `DATABASE_URL` path: `getWriteTestDbUrl()` compares normalized
+hostnames, and a hostname cannot establish the destination. `DATABASE_URL` at a Neon endpoint and
+`TEST_DATABASE_URL` at `127.0.0.1:55432` compare as different hosts even when that local port forwards
+to the shared database, so a passing guard is not proof of an isolated branch.
+
+`--confirm-test-db` is therefore an operator attestation, not a check: it says the destination was
+verified out of band. It never bypasses the equal-host refusal, `--restore-point=<id>` never authorizes
+a TEST-target apply, and `--confirm-test-db` without `--test-db` is a usage error (exit 2). The same
+limitation applies to every other `getWriteTestDbUrl()` / `resolveTestDbUrl()` consumer that writes
+(`apps/api/src/db.js`, `apps/api/test/run-db-tests.js`, the `*.db.test.js` suites, `eval-scenarios.js`,
+`generate-presets.js`, the `measure-*` scripts, `scripts/lib/apply-seed-args.js`,
+`scripts/lib/ingest-args.js`); each still rests on host comparison alone and deserves its own review.

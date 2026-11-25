@@ -22,6 +22,17 @@
 //     nothing about the destination it actually reaches;
 //   * `--test-db` routes through the shared TEST_DATABASE_URL guard instead
 //     (packages/database-guard/src), which refuses a host equal to DATABASE_URL;
+//   * a `--test-db` apply ALSO needs `--confirm-test-db`, an operator
+//     attestation that TEST_DATABASE_URL reaches the intended isolated TEST
+//     database. The guard compares normalized HOSTNAMES, and a hostname cannot
+//     establish the destination behind a tunnel: DATABASE_URL at a Neon endpoint
+//     and TEST_DATABASE_URL at 127.0.0.1:55432 read as different hosts even when
+//     that local port forwards to the shared database. So the comparison is not
+//     proof of physical isolation - it is a cheap refusal of the obvious
+//     mistake - and `--confirm-test-db` is a statement the operator makes, not a
+//     property this code can verify;
+//   * `--restore-point=<id>` authorizes a DATABASE_URL apply only; it never
+//     stands in for the TEST attestation;
 //   * `dotenv` is loaded by the BOOTSTRAP, not by `require()`ing this module,
 //     so a test that loads it cannot read a developer's .env.
 //
@@ -33,14 +44,18 @@ const fs = require('fs');
 const path = require('path');
 
 const USAGE = [
-  'usage: node scripts/run-seeds.js [--dry-run] [--test-db] [--confirm-shared]',
-  '                                 [--restore-point=<id>] [--help]',
+  'usage: node scripts/run-seeds.js [--dry-run] [--test-db --confirm-test-db]',
+  '                                 [--confirm-shared] [--restore-point=<id>] [--help]',
   '',
   '  --dry-run            parse and report each seed file; write nothing.',
   '  --test-db            apply to TEST_DATABASE_URL through the shared-target guard.',
+  '  --confirm-test-db    attest that TEST_DATABASE_URL reaches the intended isolated',
+  '                       TEST database, not a forwarded or shared destination.',
+  '                       Required with --test-db; invalid on its own.',
   '  --confirm-shared     apply to DATABASE_URL on purpose.',
   '  --restore-point=<id> the Neon restore point a DATABASE_URL apply relies on',
-  '                       (^[A-Za-z0-9_-]{8,}$); accepted instead of --confirm-shared.',
+  '                       (^[A-Za-z0-9_-]{8,}$); accepted instead of --confirm-shared,',
+  '                       and never for a TEST-target apply.',
   '  --help               print this text and exit 0.',
   '',
   'Without --test-db the target is DATABASE_URL, and a write there needs',
@@ -48,6 +63,10 @@ const USAGE = [
   'local port can forward to a shared database. Seed files are idempotent, so a',
   're-run applies nothing new; the guard is about the TARGET being deliberate, not',
   'about the writes being unsafe.',
+  '',
+  'A --test-db apply needs --confirm-test-db. That flag is an OPERATOR ATTESTATION:',
+  'the shared-target guard compares normalized hostnames, and a hostname cannot',
+  'establish the database actually reached behind a tunnel, proxy or forwarded port.',
 ].join('\n');
 
 const DEFAULT_SEEDS_DIR = path.join(process.cwd(), 'database', 'seeds');
@@ -81,6 +100,7 @@ function parseArgs(argv) {
   const args = {
     dryRun: false,
     testDb: false,
+    confirmTestDb: false,
     confirmShared: false,
     restorePoint: null,
     help: false,
@@ -93,6 +113,8 @@ function parseArgs(argv) {
       args.dryRun = true;
     } else if (arg === '--test-db') {
       args.testDb = true;
+    } else if (arg === '--confirm-test-db') {
+      args.confirmTestDb = true;
     } else if (arg === '--confirm-shared') {
       args.confirmShared = true;
     } else if (arg.startsWith(RESTORE_POINT_FLAG)) {
@@ -112,6 +134,14 @@ function parseArgs(argv) {
     fail('--test-db and --confirm-shared are mutually exclusive: a guarded TEST branch'
       + ' needs no confirmation, and a confirmation does not make a shared write a TEST write.');
   }
+  if (args.testDb && args.restorePoint !== null) {
+    fail('--restore-point=<id> authorizes a DATABASE_URL apply only; a TEST-target apply'
+      + ' is authorized by --confirm-test-db.');
+  }
+  if (args.confirmTestDb && !args.testDb) {
+    fail('--confirm-test-db requires --test-db: it attests that TEST_DATABASE_URL reaches'
+      + ' the isolated TEST database, and on its own it authorizes nothing.');
+  }
   return args;
 }
 
@@ -130,6 +160,22 @@ function resolveConnection(args, env) {
   if (args.help || args.dryRun) return null;
 
   if (args.testDb) {
+    // The hostname guard cannot see through a tunnel. DATABASE_URL at a Neon
+    // endpoint and TEST_DATABASE_URL at 127.0.0.1:55432 compare as DIFFERENT
+    // hosts even when that local port forwards to the shared database, so the
+    // comparison is not proof of destination isolation. A TEST-target apply
+    // therefore needs its own authorization, and that authorization is an
+    // attestation by the operator.
+    if (!args.confirmTestDb) {
+      fail('refusing to apply seeds to TEST_DATABASE_URL without --confirm-test-db.\n'
+        + '       The shared-target guard compares normalized hostnames only, and a\n'
+        + '       hostname cannot prove the destination: a local port can forward to\n'
+        + '       the shared database through a tunnel, a TCP proxy or another\n'
+        + '       forwarding process, while the two strings still look different.\n'
+        + '       Re-run with --test-db --confirm-test-db once you have verified out of\n'
+        + '       band that TEST_DATABASE_URL reaches the intended isolated TEST\n'
+        + '       database, not a forwarded or shared destination.');
+    }
     const { getWriteTestDbUrl } = require('../packages/database-guard/src');
     let config;
     try {

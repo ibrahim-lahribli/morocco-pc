@@ -20,6 +20,13 @@
 //      refusal below is asserted for `localhost`, `127.0.0.1` and a Neon host
 //      alike, because "loopback is safe" was the defect.
 //
+// The fourth part is the TEST target's own authorization: `--test-db` routes
+// through `getWriteTestDbUrl()`, but that guard only compares normalized
+// hostnames, and a tunnel makes the strings differ while the destination is
+// shared. So a TEST apply needs `--confirm-test-db`, an operator attestation
+// that the destination really is the isolated database - pinned below as
+// required, non-bypassing, and refused on its own.
+//
 // Everything is checked with a recording fake or by SPAWNING with blanked
 // environment variables. Nothing here connects to a database, and `require()`ing
 // the script must not read a developer's `.env` (the bootstrap owns dotenv, which
@@ -101,6 +108,26 @@ test('a malformed restore point is refused, and the flags that conflict are refu
     /mutually exclusive/,
     'a confirmation does not turn a shared write into a TEST write'
   );
+  assert.throws(
+    () => parseArgs(ARGV.concat(['--test-db', '--confirm-shared', '--confirm-test-db'])),
+    /mutually exclusive/,
+    'adding the TEST attestation does not rescue --confirm-shared either'
+  );
+
+  // The TEST attestation is not a free-floating opt-in: on its own it authorizes
+  // nothing, because it only ever says something ABOUT a TEST target.
+  assert.throws(
+    () => parseArgs(ARGV.concat(['--confirm-test-db'])),
+    /requires --test-db/,
+    '--confirm-test-db without --test-db is an invalid invocation'
+  );
+
+  // And a restore point is a DATABASE_URL authorization, never a TEST one.
+  assert.throws(
+    () => parseArgs(ARGV.concat(['--test-db', '--restore-point=br-eu-backup-20261103'])),
+    /DATABASE_URL apply only/,
+    'a restore point must not silently authorize a TEST-target apply'
+  );
 });
 
 test('a DATABASE_URL apply is refused without confirmation, whatever the host looks like', () => {
@@ -158,18 +185,73 @@ test('the explicit authorization applies to a loopback and a remote target alike
   assert.equal(resolveConnection(parseArgs(ARGV.concat(['--dry-run'])), { DATABASE_URL: LOOPBACK }), null);
 });
 
-test('--test-db goes through the shared-target guard instead of the confirmation', () => {
+test('--test-db needs its own authorization, then still goes through the shared-target guard', () => {
   const TEST = 'postgresql://u:p@ep-test-1.eu-central-1.aws.neon.tech/neondb?sslmode=require';
   const env = { DATABASE_URL: NEON, TEST_DATABASE_URL: TEST };
-  assert.equal(resolveConnection(parseArgs(ARGV.concat(['--test-db'])), env).connectionString, TEST);
+  assert.equal(
+    resolveConnection(parseArgs(ARGV.concat(['--test-db', '--confirm-test-db'])), env).connectionString,
+    TEST
+  );
 
-  // The guard the migrations CLI already relies on: TEST must not be the shared host.
+  // The guard the migrations CLI already relies on stays ACTIVE: the explicit
+  // attestation says the destination is isolated, it does not overrule a host
+  // that IS the shared endpoint.
   assert.throws(
-    () => resolveConnection(parseArgs(ARGV.concat(['--test-db'])), { DATABASE_URL: NEON, TEST_DATABASE_URL: NEON }),
-    /must not target the shared database/
+    () => resolveConnection(
+      parseArgs(ARGV.concat(['--test-db', '--confirm-test-db'])),
+      { DATABASE_URL: NEON, TEST_DATABASE_URL: NEON }
+    ),
+    /must not target the shared database/,
+    'the attestation must not bypass the identical-host refusal'
   );
   // And a missing one is a usage problem, not a silent fallback to DATABASE_URL.
-  assert.throws(() => resolveConnection(parseArgs(ARGV.concat(['--test-db'])), { DATABASE_URL: NEON }), /TEST_DATABASE_URL is not set/);
+  assert.throws(
+    () => resolveConnection(parseArgs(ARGV.concat(['--test-db', '--confirm-test-db'])), { DATABASE_URL: NEON }),
+    /TEST_DATABASE_URL is not set/
+  );
+});
+
+test('a TEST apply is refused without the attestation, and the attestation is an attestation', () => {
+  const TEST_REMOTE = 'postgresql://u:p@ep-test-9.eu-central-1.aws.neon.tech/neondb?sslmode=require';
+
+  // The finding: normalized hosts differ for a tunnel too, so neither a loopback
+  // TEST URL nor a remote one is authorized by the connection string.
+  for (const testUrl of [LOOPBACK, TEST_REMOTE]) {
+    const env = { DATABASE_URL: NEON, TEST_DATABASE_URL: testUrl };
+    assert.throws(
+      () => resolveConnection(parseArgs(ARGV.concat(['--test-db'])), env),
+      /--confirm-test-db/,
+      'a TEST apply without its attestation is refused: ' + testUrl
+    );
+    // The refusal says WHY the string cannot be trusted, so an operator cannot
+    // read it as "add the flag and the check does the rest".
+    assert.throws(
+      () => resolveConnection(parseArgs(ARGV.concat(['--test-db'])), env),
+      /verified out of\s+band/,
+      'the refusal asks for out-of-band verification of the destination: ' + testUrl
+    );
+
+    // Explicit TEST authorization works for a DIFFERENT normalized host...
+    assert.equal(
+      resolveConnection(
+        parseArgs(ARGV.concat(['--test-db', '--confirm-test-db'])),
+        env
+      ).connectionString,
+      testUrl,
+      'the attestation authorizes a different normalized host: ' + testUrl
+    );
+  }
+
+  // ...but not for the same endpoint spelled pooled: normalization still wins.
+  const pooled = 'postgresql://u:p@ep-shared-2-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require';
+  assert.throws(
+    () => resolveConnection(
+      parseArgs(ARGV.concat(['--test-db', '--confirm-test-db'])),
+      { DATABASE_URL: NEON, TEST_DATABASE_URL: pooled }
+    ),
+    /must not target the shared database/,
+    'pooled-vs-direct is still the same endpoint, attestation or not'
+  );
 });
 
 test('applySeeds runs every file in order and then the three counts, on the client it is given', async () => {
@@ -219,6 +301,19 @@ test('a refused run never constructs a client (the guard runs before the connect
       assert.equal(constructed, 0, 'no Client was constructed, so nothing could have been written: ' + url);
       assert.equal(connected, 0, 'and no connection was opened: ' + url);
     }
+
+    // The same consequence for an unattested TEST target, loopback included:
+    // the id check runs before `pg` is even required.
+    const TEST_REMOTE = 'postgresql://u:p@ep-test-9.eu-central-1.aws.neon.tech/neondb?sslmode=require';
+    for (const testUrl of [LOOPBACK, TEST_REMOTE]) {
+      await assert.rejects(
+        () => main(ARGV.concat(['--test-db']), { DATABASE_URL: NEON, TEST_DATABASE_URL: testUrl }),
+        /--confirm-test-db/,
+        'an unattested TEST target is refused: ' + testUrl
+      );
+      assert.equal(constructed, 0, 'no Client was constructed for the TEST refusal: ' + testUrl);
+      assert.equal(connected, 0, 'and no connection was opened: ' + testUrl);
+    }
   } finally {
     pg.Client = OriginalClient;
   }
@@ -241,7 +336,7 @@ test('requiring the script neither runs a seed nor reads a .env', () => {
 });
 
 test('the usage text documents every accepted flag', () => {
-  for (const flag of ['--dry-run', '--test-db', '--confirm-shared', '--restore-point=<id>', '--help']) {
+  for (const flag of ['--dry-run', '--test-db', '--confirm-test-db', '--confirm-shared', '--restore-point=<id>', '--help']) {
     assert.ok(USAGE.includes(flag), 'usage must document ' + flag);
   }
 });
