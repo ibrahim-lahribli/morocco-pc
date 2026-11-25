@@ -184,30 +184,43 @@ async function presetRowsFor(db, key) {
 }
 
 /**
- * Residue for THIS test, scoped to the key and ids it created (see the header
- * for why a whole-table comparison is not stable here).
- *
- * `preset_rows_in_scope` counts every preset of this test's `(use_case,
- * currency, catalog_version)` scope, not just its own ids: the cleanup deletes
- * that scope, so a surviving row would be an untracked leak. The remaining
- * counts are by id - the passes this run created, their result/candidate/
- * component/rejection rows, and the profiles captured before the passes were
- * removed (the FK runs query -> profile with NO ACTION, so the query must go
- * first and the profile id has to be captured while it still exists).
+ * Remove ONLY the preset rows this run created, named by the passes they point
+ * at. Never by key scope: every sibling budget at the same catalog version
+ * shares that scope, and a sibling is not this run's row to delete. Measured
+ * 2026-11-25 on the nightly: a scope delete removed 17 sibling rows and the
+ * global tripwire below reported `36 !== 53` for a cleanup that was entirely
+ * successful. The failure was in the CLAIM, not the cleanup.
  */
-async function residueFor(db, key, queryIds, profileIds) {
+async function deleteCreatedPresets(client, createdIds) {
+  return repository.deletePresetByQueryId(client, createdIds);
+}
+
+/**
+ * Residue for THIS test, scoped to the ids it created (see the header for why a
+ * whole-table comparison is not stable here).
+ *
+ * Every count is by id, `preset_rows` included: the cleanup deletes the preset
+ * rows whose `query_id` is this run's, so a row still pointing at one of these
+ * passes is a leak, while a sibling preset pointing somewhere else is simply not
+ * this test's business. The remaining counts are the passes this run created,
+ * their result/candidate/component/rejection rows, and the profiles captured
+ * before the passes were removed (the FK runs query -> profile with NO ACTION,
+ * so the query must go first and the profile id has to be captured while it
+ * still exists).
+ */
+async function residueFor(db, queryIds, profileIds) {
   const result = await db.query(
     'SELECT'
     + ' (SELECT count(*)::int FROM recommendation_preset'
-    + '   WHERE use_case = $1 AND currency = $2 AND catalog_version = $3) AS preset_rows_in_scope,'
-    + ' (SELECT count(*)::int FROM recommendation_query WHERE id = ANY($4::uuid[])) AS queries,'
-    + ' (SELECT count(*)::int FROM recommendation_profile WHERE id = ANY($5::uuid[])) AS profiles,'
-    + ' (SELECT count(*)::int FROM recommendation_result WHERE recommendation_query_id = ANY($4::uuid[])) AS results,'
-    + ' (SELECT count(*)::int FROM build_candidate WHERE recommendation_query_id = ANY($4::uuid[])) AS candidates,'
+    + '   WHERE query_id = ANY($1::uuid[])) AS preset_rows,'
+    + ' (SELECT count(*)::int FROM recommendation_query WHERE id = ANY($1::uuid[])) AS queries,'
+    + ' (SELECT count(*)::int FROM recommendation_profile WHERE id = ANY($2::uuid[])) AS profiles,'
+    + ' (SELECT count(*)::int FROM recommendation_result WHERE recommendation_query_id = ANY($1::uuid[])) AS results,'
+    + ' (SELECT count(*)::int FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[])) AS candidates,'
     + ' (SELECT count(*)::int FROM build_component WHERE build_candidate_id IN'
-    + '   (SELECT id FROM build_candidate WHERE recommendation_query_id = ANY($4::uuid[]))) AS components,'
-    + ' (SELECT count(*)::int FROM build_rejection WHERE recommendation_query_id = ANY($4::uuid[])) AS rejections',
-    [key.useCase, key.currency, key.catalogVersion, queryIds, profileIds]
+    + '   (SELECT id FROM build_candidate WHERE recommendation_query_id = ANY($1::uuid[]))) AS components,'
+    + ' (SELECT count(*)::int FROM build_rejection WHERE recommendation_query_id = ANY($1::uuid[])) AS rejections',
+    [queryIds, profileIds]
   );
   return result.rows[0];
 }
@@ -479,15 +492,12 @@ test('a generated ribbon is idempotent per key and is served by GET /v1/presets'
         failures.push('capture profile ids: ' + error.message);
       }
       try {
-        // Scoped to this key - never global, so a concurrent run's rows are not
-        // collaterally deleted.
-        await repository.deletePresets(writer, {
-          useCase: key ? key.useCase : null,
-          currency: CURRENCY,
-          catalogVersion: key ? key.catalogVersion : null,
-        });
+        // By the ids this run created - never by key scope, and never global, so
+        // a sibling budget or a concurrent run's rows are not collaterally
+        // deleted.
+        await deleteCreatedPresets(writer, createdIds);
       } catch (error) {
-        failures.push('deletePresets: ' + error.message);
+        failures.push('deleteCreatedPresets: ' + error.message);
       }
       try {
         // EVERY pass this test created, tracked rather than derived from the
@@ -503,9 +513,9 @@ test('a generated ribbon is idempotent per key and is served by GET /v1/presets'
     assert.deepEqual(failures, [], 'cleanup must run to completion');
     if (key !== null) {
       assert.deepEqual(
-        await residueFor(pool, key, createdIds, profileIds),
+        await residueFor(pool, createdIds, profileIds),
         {
-          preset_rows_in_scope: 0,
+          preset_rows: 0,
           queries: 0,
           profiles: 0,
           results: 0,
@@ -522,5 +532,104 @@ test('a generated ribbon is idempotent per key and is served by GET /v1/presets'
       assert.equal(await presetCount(pool), presetsBefore, 'no preset row anywhere leaked');
     }
     await pool.end();
+  }
+});
+
+/**
+ * THE CLEANUP CONTRACT, which the nightly test:api:db run found broken.
+ *
+ * The cleanup above used to delete by KEY SCOPE - `deletePresets` with
+ * (use_case, currency, catalog_version) - while the tripwire below it asserts a
+ * GLOBAL preset count. On a database carrying a real shelf (a catalog version
+ * with 17 generated budgets), the cleanup deleted 17 rows it never wrote and the
+ * tripwire reported `36 !== 53`: the test destroyed data, then blamed itself.
+ *
+ * So the property is not "the scope is empty afterwards". It is "what this run
+ * wrote is gone, and what it did not write is untouched" - which only ids can
+ * decide. This test plants both: one sibling row in exactly the same scope and
+ * one row of its own, then runs the SAME cleanup helper the suite's finally
+ * block runs. On a scope delete the sibling disappears; on an id delete it must
+ * survive.
+ */
+test('cleanup deletes only the rows this run created: a sibling budget in the same scope survives', async () => {
+  const writer = new Client({ ...getWriteTestDbUrl(), connectionTimeoutMillis: 15000 });
+  let mineKey = null;
+  let siblingKey = null;
+  const createdIds = [];
+
+  try {
+    await writer.connect();
+    const model = await activeModel(writer);
+    const vocabulary = engine.useCaseVocabulary(model.configuration);
+    const useCase = vocabulary.includes('GAMING') ? 'GAMING' : vocabulary[0];
+    const catalogVersion = await engine.catalogVersion(writer);
+
+    // Two budgets in ONE scope - same use case, currency and catalog version.
+    // Deliberately not the suite's TEST_BUDGET: this test asserts survival, not
+    // generation, so it must not race the other test's key for any reason.
+    mineKey = {
+      scoringModelId: model.id, useCase, currency: CURRENCY, catalogVersion, budgetAmount: 41000,
+    };
+    siblingKey = {
+      scoringModelId: model.id, useCase, currency: CURRENCY, catalogVersion, budgetAmount: 42000,
+    };
+
+    const siblingQueryId = await insertQuery(writer, model.id, useCase, siblingKey.budgetAmount, catalogVersion);
+    const mineQueryId = await insertQuery(writer, model.id, useCase, mineKey.budgetAmount, catalogVersion);
+    createdIds.push(mineQueryId, siblingQueryId);
+
+    await repository.upsertPreset(writer, { ...siblingKey, queryId: siblingQueryId });
+    await repository.upsertPreset(writer, { ...mineKey, queryId: mineQueryId });
+
+    // Precondition: without two live rows in one scope the assertion below would
+    // pass on an empty database for the wrong reason.
+    assert.equal(await presetRowsFor(writer, siblingKey), 1);
+    assert.equal(await presetRowsFor(writer, mineKey), 1);
+
+    const deleted = await deleteCreatedPresets(writer, [mineQueryId]);
+    assert.deepEqual(deleted, [mineQueryId], 'it removes the row it was given, by id');
+
+    // The row this run created is gone...
+    assert.equal(await presetRowsFor(writer, mineKey), 0);
+    assert.equal(await repository.findPresetQueryId(writer, mineKey), null);
+
+    // ...and the sibling, in the SAME scope, is untouched. A scope delete makes
+    // this assertion fail, which is exactly the nightly's `36 !== 53`.
+    assert.equal(await presetRowsFor(writer, siblingKey), 1, 'a sibling budget in the same scope must survive');
+    assert.equal(await repository.findPresetQueryId(writer, siblingKey), siblingQueryId);
+  } finally {
+    // Corners are cleaned even on a failed assertion, by id, and each step
+    // independent of the last.
+    const failures = [];
+    let residue = null;
+    try {
+      await deleteCreatedPresets(writer, createdIds);
+    } catch (error) {
+      failures.push('deleteCreatedPresets: ' + error.message);
+    }
+    try {
+      await generator.deletePasses(writer, createdIds);
+    } catch (error) {
+      failures.push('deletePasses: ' + error.message);
+    }
+    // Measured AFTER the passes are gone: residueFor counts them by id, so
+    // measuring first would report the rows this very block is about to delete
+    // and the assertion below could never reach `queries: 0`.
+    try {
+      residue = await residueFor(writer, createdIds, []);
+    } catch (error) {
+      failures.push('residueFor: ' + error.message);
+    }
+    await writer.end().catch(() => {});
+    assert.deepEqual(failures, [], 'cleanup must run to completion');
+    assert.deepEqual(residue, {
+      preset_rows: 0,
+      queries: 0,
+      profiles: 0,
+      results: 0,
+      candidates: 0,
+      components: 0,
+      rejections: 0,
+    }, 'this test leaves nothing of its own behind');
   }
 });
