@@ -39,10 +39,12 @@
 // internal step-6 material. The surface is pinned by test/export-surface.json
 // and each namespace by its own surface suite; growing it is a reviewable diff.
 //
-// One prerequisite remains open and is recorded, not hidden: the runtime export
-// surface itself is still to be ratified by the owner (see
-// docs/MIXED_BARRELS.md §5). Runtime characterization and provenance are
-// verified by the manifest batch in extraction-manifest.json, not by this file.
+// What this file does NOT close, all recorded rather than hidden: the runtime
+// export surface is still to be ratified by the owner as part of the Step 5
+// acceptance review, and the three composite seam barrels this package carries
+// for the orchestrator's both-depth specifiers await the decision documented in
+// docs/MIXED_BARRELS.md §5. Runtime characterization and provenance are verified
+// by the manifest batch in extraction-manifest.json, not by this file.
 
 const loaders = require('./loaders');
 const orchestrator = require('./orchestrator');

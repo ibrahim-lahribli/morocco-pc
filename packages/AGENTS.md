@@ -10,7 +10,7 @@ all of them.
 | Package | Responsibility | May import |
 |---|---|---|
 | `recommendation-core/` (step 4B: harness, plus the pure candidates, compatibility, filtering, assembly, ranking, retention, scoring, explanation and offers/as-of modules moved) | pure recommendation logic: selection, filtering, assembly, scoring, retention, ranking, explanation | relative paths inside itself, and nothing else |
-| `recommendation-runtime/` (step 5) | SQL, loaders, persistence and orchestration over an injected `pg`-compatible handle | core's public entry points, and `database-guard` in tests |
+| `recommendation-runtime/` (step 5: harness, eight loaders, five persistence modules, eight orchestrator modules, and the three legacy composite seams) | SQL, loaders, persistence and orchestration over an injected `pg`-compatible handle | core's public entry points, and `database-guard` in tests |
 | `database-guard/` (implemented, step 3a) | the write-target guard: normalised-host comparison, target descriptors, direct-host derivation | nothing at all |
 
 `database-guard` is implemented (step 3a), and `recommendation-core` carries its boundary harness (step 4B
@@ -21,9 +21,27 @@ scanner `test/purity-scanner.js` gates every file under `src/`, `test/index.test
 the pure `candidates`, `compatibility`, `filtering`, `assembly`, `ranking`, `retention`, `scoring`,
 `explanation` and `offers/as-of` modules only; their old paths in
 `src/recommendation/**` are identity re-export shims. **A shim is not a copy**: the implementation exists
-once, in the package, and a shim is six lines that re-export it. `recommendation-runtime` still has no
-`src/` at all, and the runtime loaders, the three mixed barrels (`candidates`, `filtering`, `scoring`) plus
-the runtime-only `offers` barrel are still in `src/recommendation/`.
+once, in the package, and a shim is six lines that re-export it.
+
+`recommendation-runtime` now holds the whole impure half under `src/`: the boundary harness
+(`test/boundary.test.js` + `test/boundary-scanner.js`, `test/surface.test.js`,
+`test/transaction-ownership.test.js`, `test/export-surface.json`), the eight W1 loaders
+(`query/`, `candidates/loader.js`, `offers/select.js`, `filtering/{context-loader,pipeline}.js`,
+`scoring/load-*.js`), the five W2 persistence modules (`persistence/`), the eight W3 orchestrator
+modules (`orchestrator/`), and the package adapter `core-entry.js`. Its entry point
+`src/index.js` publishes exactly `{ loaders, orchestrator, persistence }` (RFC §11.5, decision A2), each
+namespace is its own module so the root and the declared subpaths are the same objects, and
+`package.json` declares the §11.5 `exports` map. `scripts/lib/runtime-package-exports.test.js` proves
+the map through Node's resolver from outside the repository, including that `./package.json`, deep
+`src` paths and the composite seams are unreachable. Every old path in `src/recommendation/**` is an
+identity shim.
+
+One deviation is open, not approved: `src/{candidates,filtering,scoring}/index.js` are the legacy mixed
+barrels relocated into this package (unpublished, not in `exports`), because the byte-identical
+orchestrator's `require('../candidates')` and the tests' patch seam both need one object at both depths.
+`docs/MIXED_BARRELS.md` §5 states the RFC requirement, the alternatives and the owner decision
+requested. `src/recommendation/{candidates,filtering,scoring}/index.js` therefore publish the same
+composite object through identity shims; the physical split is step 6 work.
 
 ## database-guard: non-negotiables
 

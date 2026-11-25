@@ -143,3 +143,17 @@ unpublished, step-6-scoped relocation?
 manifest `edits[]` record plus a replacement for the patch seam (B), or the API barrel churn and a
 step-6 pull-forward (C). This document does not choose for the owner, and the PR is not merge-ready on
 this point until the answer is recorded.
+
+**Test consequences of the answer.** Under A (current) no test changes: the composites' key sets,
+`scoring`'s key order, member identity through both paths, the patch-seam proof and the
+unpublished/inaccessible assertions all run today (`test/namespace-barrels.test.js`,
+`test/surface.test.js`, `scripts/lib/runtime-package-exports.test.js`). Under B the orchestrator gains
+an explicit merged namespace, so the patch-seam tests must be rewritten to patch something the
+implementation actually reads — that is a test-contract change, not a test tightening, and the
+extraction batch needs an `edits[]` record proving the implementation bytes changed after the move.
+Under C the ownership audit's `SPLIT_FACTS.runtimeBarrel` row and `src/recommendation/filtering/index.test.js`
+move with the split, and the API's six barrel imports are repointed early.
+
+**Migration consequences.** None under any option: no schema, migration, seed or database job is
+touched by this question. The only migration-shaped data at risk is provenance — the manifest batch and
+its immutable baseline — and option B is the only one that would write a new `edits[]` entry.

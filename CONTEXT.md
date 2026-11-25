@@ -154,9 +154,28 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   `src/recommendation/**` paths. `package.json` declares the RFC §11.4 `exports` map as **exactly 11
   static subpaths**: `.` → `src/index.js`, the nine namespaces → `src/<ns>/index.js`, `./errors` →
   `src/candidates/errors.js`, and `./offers` → `src/offers/as-of.js` (there is no `offers/index.js`), with
-  no `./package.json` export. The loaders, the three mixed barrels and the orchestrator still live in
-  `src/recommendation/`; `packages/recommendation-runtime/` carries the step 5 W0 harness only (no runtime
-  module has moved); and `apps/api/src/engine.js` still imports the `src/recommendation/**` barrels.
+  no `./package.json` export. **Superseded for the runtime side by the entry below; the sentence was true
+  on 2026-11-20 and is kept as the dated measurement it was.**
+- **Step 5 — runtime extractions complete, PR #72 unmerged (branch `feat/step-5-w3-orchestrator`, base
+  `f1658d9`).** All 23 runtime-target modules now live in `packages/recommendation-runtime/src/`: the
+  eight W1 loaders (`query/`, `candidates/loader.js`, `offers/select.js`,
+  `filtering/{context-loader,pipeline}.js`, `scoring/load-*.js`), the five W2 persistence modules
+  (`persistence/`: `persist-ranked`, `persist-pass-facts`, `persist-rejections`, `validate-selected`,
+  `validate-rejections`), and the eight W3 orchestrator modules (`orchestrator/`: `run`, `snapshot`,
+  `full-run`, `commit`, `swap-preview`, `swap-commit`, `compute`, `index`). Every old path in
+  `src/recommendation/**` is an identity re-export shim, and `npm run verify:extraction` reports
+  **70 / 70 blob-identical moves across 12 batches** (W3's batch `step-5-w3-orchestrator` on baseline
+  `598e442` is 8 / 8). The entry point publishes the RFC §11.5 namespaces
+  `{ loaders, orchestrator, persistence }` (the third added by W3, when its consumers existed), and
+  `package.json` declares the §11.5 `exports` map — `.`, `./loaders`, `./orchestrator`, `./persistence`,
+  no `./package.json`, no deep `src` path — proved through Node's resolver from a throwaway consumer by
+  `scripts/lib/runtime-package-exports.test.js`. Three composite seam files
+  (`src/{candidates,filtering,scoring}/index.js`, unpublished) are the legacy mixed barrels relocated so
+  the byte-identical orchestrator's `require('../candidates')` resolves at both depths; that relocation
+  is **one open architectural question**, stated with its alternatives in
+  `packages/recommendation-runtime/docs/MIXED_BARRELS.md` §5 and awaiting the owner. Still open: the
+  owner's ratification of the runtime export surface, the Step 5 acceptance review, `apps/api/src/engine.js`
+  still importing `src/recommendation/**` (step 6), and the step-6 split of the three composites.
 - **CI boundary gates (2026-11-20).** One contract, `scripts/lib/core-approved-interface.js`, is enforced
   by both sides: `scripts/lib/core-package-surface.test.js` compares the declared `exports` map as a
   whole (a missing, additional or wrongly mapped subpath fails; `./package.json` is rejected by name even
