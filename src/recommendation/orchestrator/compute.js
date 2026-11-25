@@ -43,10 +43,11 @@
  * load), ranking (Engine 5a), persistence (Engine 5b) and explanation (Engine 6).
  */
 
+const core = require('../core-entry');
 const scoring = require('../scoring');
-const retention = require('../retention');
-const assembly = require('../assembly');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const retention = core.retention;
+const assembly = core.assembly;
+const { CandidateSelectionError, ERROR_CODES } = core.candidates;
 
 function fail(code, field, message) {
   throw new CandidateSelectionError(code, message, field);

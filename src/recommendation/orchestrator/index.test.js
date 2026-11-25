@@ -121,23 +121,17 @@ test('orchestrator modules import exactly their collaborators', () => {
   // the only new edge, and no stage internal was imported to replace them.
   assert.deepEqual(requiresOf('run.js'), [
     '../candidates',
-    '../candidates/errors',
+    '../core-entry',
     '../filtering',
     '../offers',
-    '../offers/as-of',
     '../query',
     '../scoring',
     './compute',
   ]);
   // ./compute is pure composition: the three stage barrels it calls through and
   // the shared error vocabulary. No loader, no query module, no as-of parser.
-  assert.deepEqual(requiresOf('compute.js'), [
-    '../assembly',
-    '../candidates/errors',
-    '../retention',
-    '../scoring',
-  ]);
-  assert.deepEqual(requiresOf('snapshot.js'), ['../candidates/errors', './run']);
+  assert.deepEqual(requiresOf('compute.js'), ['../core-entry', '../scoring']);
+  assert.deepEqual(requiresOf('snapshot.js'), ['../core-entry', './run']);
   assert.deepEqual(requiresOf('index.js'), [
     './full-run',
     './run',
@@ -145,15 +139,14 @@ test('orchestrator modules import exactly their collaborators', () => {
     './swap-commit',
     './swap-preview',
   ]);
-  assert.deepEqual(requiresOf('full-run.js'), ['../explanation', '../ranking', './commit', './snapshot']);
+  assert.deepEqual(requiresOf('full-run.js'), ['../core-entry', './commit', './snapshot']);
   // Decision 55: the preview composes 2B/2C/Stage 1/2D through their barrels and
   // hands the verdict to Engine 3 - it never reaches for a stage internal, and
   // it deliberately does NOT require ../scoring or ../retention (see the
   // module header: neither a pass's scoring model nor its retention is read).
   assert.deepEqual(requiresOf('swap-preview.js'), [
-    '../assembly',
     '../candidates',
-    '../candidates/errors',
+    '../core-entry',
     '../filtering',
     '../offers',
     '../query',
@@ -162,8 +155,7 @@ test('orchestrator modules import exactly their collaborators', () => {
   // things a write needs - the engine's whole-build verdict and Engine 4's
   // score under the pass's own pinned model. It reaches for no stage internal.
   assert.deepEqual(requiresOf('swap-commit.js'), [
-    '../assembly',
-    '../candidates/errors',
+    '../core-entry',
     '../scoring',
     './run',
     './swap-preview',

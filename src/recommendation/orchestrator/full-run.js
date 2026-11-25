@@ -41,10 +41,11 @@
  * explained array.
  */
 
-const ranking = require('../ranking');
+const core = require('../core-entry');
+const ranking = core.ranking;
 const commit = require('./commit');
 const snapshot = require('./snapshot');
-const explanation = require('../explanation');
+const explanation = core.explanation;
 
 /**
  * Run one full recommendation pass: score, rank, diversity-select, persist.

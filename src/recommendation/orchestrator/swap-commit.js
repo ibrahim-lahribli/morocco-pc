@@ -72,9 +72,10 @@
 
 const { randomUUID } = require('node:crypto');
 
-const assembly = require('../assembly');
+const core = require('../core-entry');
+const assembly = core.assembly;
 const scoring = require('../scoring');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const { CandidateSelectionError, ERROR_CODES } = core.candidates;
 const { composeSwap } = require('./swap-preview');
 const { SELECT_NOW_SQL } = require('./run');
 

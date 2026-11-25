@@ -44,7 +44,8 @@
  * close (the caller owns the client), no logging.
  */
 
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const core = require('../core-entry');
+const { CandidateSelectionError, ERROR_CODES } = core.candidates;
 const run = require('./run');
 
 /** The exact Decision 17.5 transaction open statement. */

@@ -106,7 +106,8 @@
  * orchestrator pass stays read-only; the caller wires this wrapper).
  */
 
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const core = require('../core-entry');
+const { CandidateSelectionError, ERROR_CODES } = core.candidates;
 const persistence = require('../persistence/persist-ranked');
 const { persistRejections } = require('../persistence/persist-rejections');
 const { persistPassFacts } = require('../persistence/persist-pass-facts');

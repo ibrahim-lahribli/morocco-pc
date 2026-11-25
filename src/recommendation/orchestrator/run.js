@@ -135,14 +135,15 @@
  */
 // --- collaborators (called through their namespace objects - see the header) --
 
-const { parseAsOf } = require('../offers/as-of');
+const core = require('../core-entry');
 const query = require('../query');
 const candidates = require('../candidates');
 const offers = require('../offers');
 const filtering = require('../filtering');
 const scoring = require('../scoring');
 const compute = require('./compute');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const { CandidateSelectionError, ERROR_CODES } = core.candidates;
+const { parseAsOf } = core.offers;
 
 /**
  * Decision 17.2: the single DB-side time source of one recommendation pass.

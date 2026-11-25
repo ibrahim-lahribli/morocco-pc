@@ -402,7 +402,7 @@ test('full-run.js keeps its source boundary (no SQL, no tx control, no driver)',
 test('full-run.js imports exactly the snapshot wrapper, the commit wrapper, the ranking barrel, and Engine 6', () => {
   const source = stripComments(fs.readFileSync(path.join(__dirname, 'full-run.js'), 'utf8'));
   const requires = [...source.matchAll(/require\('([^']+)'\)/g)].map((match) => match[1]).sort();
-  assert.deepEqual(requires, ['../explanation', '../ranking', './commit', './snapshot']);
+  assert.deepEqual(requires, ['../core-entry', './commit', './snapshot']);
 });
 
 test("Decision 38: full-run forwards explicit asOf unchanged into the snapshot", async () => {

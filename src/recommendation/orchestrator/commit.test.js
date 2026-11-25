@@ -508,7 +508,7 @@ test('commit.js imports exactly the error vocabulary and the writer modules', ()
   // OG-04 added the rejection writer and Decision 46 the pass-facts writer;
   // the pin is deliberately EXACT so a new import cannot slip in unreviewed.
   assert.deepEqual(requires, [
-    '../candidates/errors',
+    '../core-entry',
     '../persistence/persist-pass-facts',
     '../persistence/persist-ranked',
     '../persistence/persist-rejections',

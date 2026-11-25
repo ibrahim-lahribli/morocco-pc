@@ -72,12 +72,13 @@
 
 // --- collaborators (called through their namespace objects - see run.js) -----
 
+const core = require('../core-entry');
 const query = require('../query');
 const candidates = require('../candidates');
 const offers = require('../offers');
 const filtering = require('../filtering');
-const assembly = require('../assembly');
-const { CandidateSelectionError, ERROR_CODES } = require('../candidates/errors');
+const assembly = core.assembly;
+const { CandidateSelectionError, ERROR_CODES } = core.candidates;
 
 /** The exact Decision 17.5 transaction open statement, as in ./snapshot. */
 const BEGIN_SQL = 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY';

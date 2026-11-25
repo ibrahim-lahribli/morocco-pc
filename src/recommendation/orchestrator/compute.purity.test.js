@@ -43,10 +43,8 @@ const FORBIDDEN = [
 
 /** The only relative modules the seam may require. */
 const ALLOWED_REQUIRES = [
+  '../core-entry',
   '../scoring',
-  '../retention',
-  '../assembly',
-  '../candidates/errors',
 ];
 
 function violations(source) {
