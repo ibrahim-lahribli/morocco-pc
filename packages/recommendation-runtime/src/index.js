@@ -29,13 +29,20 @@
 // validators — into this package's src/persistence/ behind identity shims at
 // their old paths, but publishes NO `persistence` namespace: the RFC §11.5
 // table is an orchestrator-facing surface, and slicing it before its consumers
-// exist would fix a shape the W3 batch has to review against the real call
-// sites. test/export-surface.json therefore still lists `["loaders"]` only.
+// exist would fix a shape a later batch has to review against the real call
+// sites.
 //
-// Still absent, added by later batches, each updating test/export-surface.json
-// in the same commit:
-//   persistence   W2 — moved into the package, deliberately not published
-//   orchestrator  W3 — run, snapshot, full-run, commit, swap-preview, swap-commit
+// Step 5 W3 moves the eight orchestrator modules into src/orchestrator/ behind
+// identity shims at their old paths and publishes `orchestrator`: the eight
+// entry points of ORCHESTRATOR_ENTRY_POINTS.md, in the order that table lists
+// them. `runRecommendationCommit` is deliberately NOT here — it is internal to
+// orchestrator/commit.js (required directly by full-run.js) and is not one of
+// the eight.
+//
+// Its two prerequisites are recorded as NOT yet closed by this batch:
+//   * the runtime export surface itself is still to be decided/ratified;
+//   * runtime characterization and provenance are verified by the manifest
+//     batch recorded in extraction-manifest.json, not by this file.
 
 const { loadQueryInput } = require('./query/load-query-input');
 const { catalogVersion } = require('./query/catalog-version');
@@ -45,6 +52,7 @@ const { loadFilteringContext } = require('./filtering/context-loader');
 const { filterCandidatesForRecommendation } = require('./filtering/pipeline');
 const { loadScoringModel } = require('./scoring/load-scoring-model');
 const { loadComponentAssessments } = require('./scoring/load-assessments');
+const orchestrator = require('./orchestrator');
 
 const loaders = {
   loadQueryInput,
@@ -57,4 +65,4 @@ const loaders = {
   loadComponentAssessments,
 };
 
-module.exports = { loaders };
+module.exports = { loaders, orchestrator };

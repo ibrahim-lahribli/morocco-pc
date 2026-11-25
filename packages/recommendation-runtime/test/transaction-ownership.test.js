@@ -49,6 +49,12 @@ const EXPECTED = {
   'commit.js': { begin: true, commit: true, rollback: true, readOnlyBegin: false },
   'swap-preview.js': { begin: true, commit: false, rollback: true, readOnlyBegin: true },
   'swap-commit.js': { begin: true, commit: true, rollback: true, readOnlyBegin: false },
+  // The barrel and the pure assemble-and-score seam moved with the six above in
+  // step 5 W3, and neither owns a transaction: index.js only re-exports, and
+  // compute.js is the pure half (its own purity gate is
+  // src/recommendation/orchestrator/compute.purity.test.js).
+  'index.js': { begin: false, commit: false, rollback: false, readOnlyBegin: false },
+  'compute.js': { begin: false, commit: false, rollback: false, readOnlyBegin: false },
 };
 
 /**
@@ -121,11 +127,11 @@ describe('transaction ownership: the source', () => {
     ? fs.readdirSync(ORCHESTRATOR_DIR).filter((name) => name.endsWith('.js')).sort()
     : [];
 
-  it('ships all six orchestrator files or none (a partial move fails)', () => {
+  it('ships all eight orchestrator files or none (a partial move fails)', () => {
     assert.ok(
       present.length === 0 || present.length === Object.keys(EXPECTED).length,
       'the orchestrator move is partial: found ' + JSON.stringify(present) +
-        '. Land all six files with their shims in the same commit.'
+        '. Land all eight files with their shims in the same commit.'
     );
     for (const name of present) {
       assert.ok(name in EXPECTED, 'unexpected module in src/orchestrator: ' + name);

@@ -1,14 +1,14 @@
 # Recommendation runtime — orchestrator entry points and transaction ownership
 
-Status: TARGET (RFC §11.5). **Four** of the **eight** files under `src/recommendation/orchestrator/`
-**own** a transaction boundary — `snapshot.js`, `commit.js`, `swap-preview.js` and `swap-commit.js`.
+Status: IMPLEMENTED (RFC §11.5; step 5 W3, batch `step-5-w3-orchestrator`). **Four** of the **eight**
+files under `packages/recommendation-runtime/src/orchestrator/` **own** a transaction boundary — `snapshot.js`, `commit.js`, `swap-preview.js` and `swap-commit.js`.
 Two more issue no transaction control of their own but are part of the pass composition — `run.js`
-and `full-run.js`, which run on the client they are handed. The remaining two are `index.js` (the
-barrel) and `compute.js` (the pure assemble-and-score seam, which owns no transaction and is not one
-of the entry points below). Step 5
-W3 moves all **eight** to `packages/recommendation-runtime/src/orchestrator/` with their behaviour
-unchanged. This document is
-the contract the move must preserve, not a redesign: every transaction boundary below is the one the
+and `full-run.js`, which run on the client they are handed. The remaining two are `orchestrator/index.js`
+(the barrel) and `orchestrator/compute.js` (the pure assemble-and-score seam, which owns no
+transaction and is not one of the entry points below). Step 5
+W3 moved all **eight** to `packages/recommendation-runtime/src/orchestrator/` with their behaviour
+unchanged, each behind an identity shim at its old path. This document is
+the contract the move preserves, not a redesign: every transaction boundary below is the one the
 code already has. `packages/recommendation-runtime/test/transaction-ownership.test.js` reads the
 source and fails when a file's transaction keywords disagree with this table.
 
@@ -80,7 +80,9 @@ two files, `test/transaction-behavior.test.js` and the recording fake in `test/r
 that it runs on, and added no suite under `src/recommendation/`. The behavioural suite drives the
 modules through their **legacy paths**, because that is where they still are; when W3 moves them only
 the requires change. That is what makes the move reviewable: the same assertions run before and after,
-so a behaviour change cannot hide inside a path change.
+so a behaviour change cannot hide inside a path change. Since W3 they still drive the modules through
+the identity shims at the legacy paths, while `test/transaction-ownership.test.js` reads the moved
+implementation's source directly.
 
 ## Step-5 ownership and prerequisites
 
@@ -94,7 +96,17 @@ so a behaviour change cannot hide inside a path change.
   `packages/recommendation-runtime/src/persistence/`, each behind an identity shim at its old path.
   `src/index.js` still exports only `loaders`: the RFC §11.5 persistence table is an
   orchestrator-facing surface, and it is sliced when W3's call sites exist to review it against.
-  `orchestrator` (W3) remains absent from the surface and still owns every transaction boundary.
+- **W3 has moved the orchestrator, and publishes `orchestrator`.** The batch
+  `step-5-w3-orchestrator` moved all eight modules into this package's `src/orchestrator/`, each
+  behind an identity shim at its old path, and published the eight entry points above as the
+  `orchestrator` namespace (`src/index.js` and `test/export-surface.json` in the same commit).
+  `runRecommendationCommit` stays internal. The three namespaces the orchestrator resolves from both
+  depths now have their own runtime barrels (`src/candidates/`, `src/filtering/`, `src/scoring/`),
+  each composed from the pure core namespace plus the SQL members and pinned by
+  `test/namespace-barrels.test.js`.
+- **W3's own prerequisites are NOT closed by the move.** Step 5 remains open until the runtime
+  export surface is ratified, runtime characterization and provenance are verified, and the Step 5
+  acceptance review happens.
 - **Root CI integration belongs to Agent 1.** The root `test:runtime` script and the
   `.github/workflows/ci.yml` step are Agent 1's; W0 does not touch either.
 - **Step 4 acceptance belonged to Agent 2.** Agent 2's interface acceptance of step 4

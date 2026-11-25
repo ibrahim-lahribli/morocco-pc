@@ -88,7 +88,7 @@ describe('runtime loaders namespace', () => {
   const loaders = runtime.loaders;
 
   it('is published at the package root', () => {
-    assert.deepEqual(Object.keys(runtime).sort(), ['loaders']);
+    assert.deepEqual(Object.keys(runtime).sort(), ['loaders', 'orchestrator']);
     assert.equal(typeof loaders, 'object');
     assert.notEqual(loaders, null);
     assert.equal(require('..').loaders, loaders);
