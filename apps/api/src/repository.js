@@ -455,8 +455,9 @@ const UPSERT_PRESET_SQL = [
  * the caller can delete those too (the preset rows would cascade from the
  * query, but the caller owns the pass cleanup and reports it). Every scope
  * field is OPTIONAL: a null parameter widens the scope instead of filtering,
- * which is what lets `generate-presets.js --cleanup=all` mean "every preset" or
- * "one catalog version" with one statement.
+ * which is what lets
+ * `generate-presets.js --cleanup-every-preset-across-all-catalog-versions` mean
+ * "every preset" or "one catalog version" with one statement.
  */
 const DELETE_PRESETS_SQL = [
   'DELETE FROM recommendation_preset',

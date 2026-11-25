@@ -46,19 +46,21 @@
  * profile marker - it never deletes rows it does not own. So after a `--commit`
  * that harness stays blocked until the generated passes are removed:
  *
- *     node scripts/generate-presets.js --cleanup=all    # every preset + its pass
+ *     node scripts/generate-presets.js --cleanup-every-preset-across-all-catalog-versions    # every preset + its pass
  *     node scripts/generate-presets.js --cleanup=<sha>  # just one catalog version
  *
- * A BARE `--cleanup` is refused (exit 2). It used to mean the first form, and the
- * scope it built was `{}` - every predicate NULL, so the DELETE matched the whole
- * table. The mode survives; the implicit form does not.
+ * A BARE `--cleanup` is refused (exit 2), and so is the short `--cleanup=all`
+ * that briefly replaced it. The first used to mean "every preset", and the scope
+ * it built was `{}` - every predicate NULL, so the DELETE matched the whole
+ * table. The mode survives; the implicit AND the easy-to-type full-wipe forms
+ * do not. The full wipe is now the long, deliberate flag above.
  *
  * The script prints that reminder itself at the end of a commit run, so the
  * consequence is stated where it happens rather than only in a document.
  *
  * Usage: node scripts/generate-presets.js [--budget-from=N] [--budget-to=N]
  *          [--step=N] [--use-case=U]... [--currency=CCC]
- *          [--model=<name@version>] [--dry-run|--commit|--cleanup=<version>|--cleanup=all]
+ *          [--model=<name@version>] [--dry-run|--commit|--cleanup=<version>|--cleanup-every-preset-across-all-catalog-versions]
  *          [--target-env=<NAME> [--restore-point=<id>]] [--help]
  *
  * `--dry-run` is the DEFAULT: the ribbon is printed and nothing is written. The
@@ -107,13 +109,23 @@ const DEFAULT_STEP = 2000;
 const DEFAULT_CURRENCY = 'MAD';
 
 /**
- * The word that asks a cleanup run for EVERY preset, explicitly.
+ * The long, explicit flag that asks a cleanup run for EVERY preset.
  *
- * It exists because the alternative - defaulting to an empty scope - made one
- * word enough to delete the whole table (§ E1). A catalog version is a hex
- * digest, so this sentinel cannot collide with one.
+ * Deliberately hard to type. The short `--cleanup=all` this replaced was one
+ * keystroke away from an accidental full-table delete, which is the same defect
+ * the bare `--cleanup` had in a different spelling. A catalog version is a hex
+ * digest, so this flag can never be confused with one.
  */
-const CLEANUP_SCOPE_ALL = 'all';
+const CLEANUP_ALL_FLAG = '--cleanup-every-preset-across-all-catalog-versions';
+
+/**
+ * The internal sentinel the explicit flag sets.
+ *
+ * Never accepted as a `--cleanup=` value: the value path refuses this string and
+ * the retired `all` explicitly, so the ONLY way to reach a full wipe is the long
+ * flag above.
+ */
+const CLEANUP_SCOPE_ALL = '<every-preset-across-all-catalog-versions>';
 
 /**
  * The DELETE scope for a cleanup run. ALWAYS stated, never empty by omission.
@@ -135,7 +147,7 @@ function cleanupScope(cleanupVersion) {
     return { catalogVersion: cleanupVersion };
   }
   throw new UsageError('cleanup scope is unrepresentable: a cleanup run must name a catalog version'
-    + ' or pass ' + CLEANUP_SCOPE_ALL + ' explicitly');
+    + ' or pass ' + CLEANUP_ALL_FLAG + ' explicitly');
 }
 
 /**
@@ -151,7 +163,7 @@ const ENGINE_VERSION = process.env.ENGINE_VERSION || 'generate-presets';
 const USAGE = [
   'usage: node scripts/generate-presets.js [--budget-from=N] [--budget-to=N] [--step=N]',
   '         [--use-case=U]... [--currency=CCC] [--model=<name@version>]',
-  '         [--dry-run|--commit|--cleanup=<catalog-version>|--cleanup=' + CLEANUP_SCOPE_ALL + ']',
+  '         [--dry-run|--commit|--cleanup=<catalog-version>|' + CLEANUP_ALL_FLAG + ']',
   '         [--target-env=<NAME> [--restore-point=<id>]] [--help]',
   'Environment: SCORING_MODEL_PIN (overridden by --model=<name@version>; else the default seed-minimal-v1@1.0.0).',
   'Default is --dry-run: nothing is written. Without --target-env, writes go to TEST_DATABASE_URL only.',
@@ -264,6 +276,10 @@ function parseArgs(argv, env = process.env) {
       setMode('dry-run');
     } else if (arg === '--commit') {
       setMode('commit');
+    } else if (arg === CLEANUP_ALL_FLAG) {
+      // The ONLY full wipe: long, explicit and hard to type by accident.
+      setMode('cleanup');
+      args.cleanupVersion = CLEANUP_SCOPE_ALL;
     } else if (arg === '--cleanup') {
       // A bare --cleanup used to mean "every preset", and it built the EMPTY
       // scope that made DELETE_PRESETS_SQL match the whole table. The MODE is
@@ -271,12 +287,19 @@ function parseArgs(argv, env = process.env) {
       // tell an operator to use it - but only when the scope is STATED. One word
       // must never be enough to delete a shelf.
       fail('--cleanup needs a scope: --cleanup=<catalog-version> for one version,'
-        + ' or --cleanup=' + CLEANUP_SCOPE_ALL + ' for every preset.'
+        + ' or ' + CLEANUP_ALL_FLAG + ' for every preset.'
         + ' The bare form is refused because it deletes the whole table.');
     } else if (arg.startsWith('--cleanup=')) {
       const value = arg.slice('--cleanup='.length);
       if (value.length === 0) {
-        fail('--cleanup= needs a catalog version, or --cleanup=' + CLEANUP_SCOPE_ALL + ' for every preset');
+        fail('--cleanup= needs a catalog version, or ' + CLEANUP_ALL_FLAG + ' for every preset');
+      }
+      if (value === 'all' || value === CLEANUP_SCOPE_ALL) {
+        // The short form this change retires. Reading `all` as a catalog version
+        // would delete nothing (no such version), but it would also report a
+        // successful cleanup - so it is refused by name instead.
+        fail('--cleanup=' + value + ' is refused: the full wipe is spelled ' + CLEANUP_ALL_FLAG
+          + ', and --cleanup=<catalog-version> scopes the delete to one version.');
       }
       setMode('cleanup');
       args.cleanupVersion = value;
@@ -728,7 +751,7 @@ async function main() {
           + ' unaffected; `check-target-parity` against shared will report these as EXPECTED DIFFs (R-14).'
         : 'NOTE: the generated passes are unmarked `recommendation_query` rows, so'
           + ' `npm run eval:scenarios` will refuse to run until they are removed:'
-          + ' node scripts/generate-presets.js --cleanup=' + CLEANUP_SCOPE_ALL);
+          + ' node scripts/generate-presets.js ' + CLEANUP_ALL_FLAG);
     }
   } finally {
     await client.end();
@@ -739,6 +762,7 @@ module.exports = {
   parseArgs,
   cleanupScope,
   CLEANUP_SCOPE_ALL,
+  CLEANUP_ALL_FLAG,
   budgetRibbon,
   deletePasses,
   generateOne,
