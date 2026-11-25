@@ -30,7 +30,7 @@ const { spawnSync } = require('node:child_process');
 
 const {
   parseArgs, budgetRibbon, USAGE, resolveTarget, targetLine, auditTargetLine, generateOne,
-  cleanupScope, CLEANUP_SCOPE_ALL, UsageError,
+  cleanupScope, CLEANUP_SCOPE_ALL, CLEANUP_ALL_FLAG, UsageError,
 } = require('../../scripts/generate-presets');
 const modelPin = require('./model-pin');
 
@@ -72,20 +72,21 @@ test('the three modes are MUTUALLY EXCLUSIVE, not last-wins', () => {
   assert.equal(parseArgs(ARGV.concat(['--commit']), NO_ENV).mode, 'commit');
   assert.equal(parseArgs(ARGV.concat(['--dry-run']), NO_ENV).mode, 'dry-run');
   // The bare form is no longer a valid command line (see the destructive-scope
-  // tests below): a scope must be stated, so `all` stands in for "every preset".
-  assert.equal(parseArgs(ARGV.concat(['--cleanup=all']), NO_ENV).mode, 'cleanup');
+  // tests below): a scope must be stated, so the explicit full-wipe flag stands
+  // in for "every preset".
+  assert.equal(parseArgs(ARGV.concat([CLEANUP_ALL_FLAG]), NO_ENV).mode, 'cleanup');
   assert.equal(parseArgs(ARGV.concat(['--cleanup=abc']), NO_ENV).cleanupVersion, 'abc');
 
   // The refusal matters most for --dry-run + --commit: honouring the later flag
   // would turn an intended dry run into a committed ribbon.
   assert.throws(() => parseArgs(ARGV.concat(['--dry-run', '--commit']), NO_ENV), /mutually exclusive/);
-  assert.throws(() => parseArgs(ARGV.concat(['--commit', '--cleanup=all']), NO_ENV), /mutually exclusive/);
+  assert.throws(() => parseArgs(ARGV.concat(['--commit', CLEANUP_ALL_FLAG]), NO_ENV), /mutually exclusive/);
   // The same mode twice is not a conflict.
   assert.equal(parseArgs(ARGV.concat(['--commit', '--commit']), NO_ENV).mode, 'commit');
 });
 
 test('a cleanup run takes no ribbon: it is a maintenance mode, not a generation run', () => {
-  const args = parseArgs(ARGV.concat(['--cleanup=all', '--use-case=GAMING', '--budget-from=1']), NO_ENV);
+  const args = parseArgs(ARGV.concat([CLEANUP_ALL_FLAG, '--use-case=GAMING', '--budget-from=1']), NO_ENV);
   assert.equal(args.mode, 'cleanup');
   assert.deepEqual(args.useCases, [], 'the collected use cases are dropped rather than silently scoping a delete');
 });
@@ -167,31 +168,105 @@ test('a rollout flag is refused by name, and never looks like a successful dry r
 // matched the whole table. That is a defensible maintenance MODE, but it was
 // reachable by typing one word, and a single mistyped invocation deleted a shelf
 // nobody meant to touch. The mode is kept (R-24 and AGENTS section 6 both tell an
-// operator to use it); what is removed is the IMPLICIT form. A scope must now be
-// stated: a catalog version, or the word `all`.
+// operator to use it); what is removed is the IMPLICIT form, and the SHORT full
+// wipe (`--cleanup=all`) that replaced it. A scope must now be stated: a catalog
+// version, or the long, hard-to-type full-wipe flag.
 
 test('a bare --cleanup is a usage error, never a full-table wipe', () => {
   assert.throws(
     () => parseArgs(ARGV.concat(['--cleanup']), NO_ENV),
-    /--cleanup=all/,
+    new RegExp(CLEANUP_ALL_FLAG),
     'an empty scope is the defect: it must be refused, and the message must name both valid forms'
   );
   // A restore point does not make an unscoped delete safe - it is not a scope.
   assert.throws(
     () => parseArgs(ARGV.concat(['--cleanup', '--restore-point=br-eu-backup-20261103']), NO_ENV),
-    /--cleanup=all/,
+    new RegExp(CLEANUP_ALL_FLAG),
     'a restore point is a rollback plan, not a scope'
   );
 });
 
-test('--cleanup=all is the explicit full wipe, and a catalog version still scopes', () => {
-  const all = parseArgs(ARGV.concat(['--cleanup=all']), NO_ENV);
+test('the retired --cleanup=all is refused, and the refusal names the explicit full-wipe flag', () => {
+  // The short form is the one this change retires: it is easy to type by accident
+  // and it deletes every preset. It must not be read as a catalog version either.
+  assert.throws(
+    () => parseArgs(ARGV.concat(['--cleanup=all']), NO_ENV),
+    new RegExp(CLEANUP_ALL_FLAG),
+    'the short full-wipe form must be refused, and the message must name the replacement'
+  );
+
+  const child = spawnCli(['--cleanup=all']);
+  assert.equal(child.status, 2, 'a retired full-wipe form is a usage problem, not a run');
+  assert.match(child.stderr, new RegExp(CLEANUP_ALL_FLAG), 'the refusal names the replacement flag');
+  assert.doesNotMatch(child.stdout + child.stderr, /CLEANUP: removed/, 'and deletes nothing');
+});
+
+test('the explicit full-wipe flag is the only way to ask for every row, and a catalog version still scopes', () => {
+  const all = parseArgs(ARGV.concat([CLEANUP_ALL_FLAG]), NO_ENV);
   assert.equal(all.mode, 'cleanup');
-  assert.equal(all.cleanupVersion, 'all', 'the sentinel is the ONLY way to ask for every row');
+  assert.equal(all.cleanupVersion, CLEANUP_SCOPE_ALL, 'the sentinel is the ONLY way to ask for every row');
 
   const one = parseArgs(ARGV.concat(['--cleanup=0123456789abcdef0123456789abcdef']), NO_ENV);
   assert.equal(one.mode, 'cleanup');
   assert.equal(one.cleanupVersion, '0123456789abcdef0123456789abcdef', 'the scoped form is unchanged');
+});
+
+test('conflicting cleanup scope selectors are refused in either order', () => {
+  const VERSION = '--cleanup=0123456789abcdef0123456789abcdef';
+  for (const selectors of [
+    [VERSION, CLEANUP_ALL_FLAG],
+    [CLEANUP_ALL_FLAG, VERSION],
+  ]) {
+    assert.throws(
+      () => parseArgs(ARGV.concat(selectors), NO_ENV),
+      (error) => error instanceof UsageError
+        && /cleanup scope selectors are mutually exclusive/.test(error.message)
+        && /--cleanup=<catalog-version>/.test(error.message)
+        && error.message.includes(CLEANUP_ALL_FLAG),
+      selectors.join(' ') + ' must not let the later scope win'
+    );
+
+    const child = spawnCli(selectors);
+    assert.equal(child.status, 2, selectors.join(' ') + ' must be a usage problem, not a run');
+    const output = child.stdout + child.stderr;
+    assert.match(output, /cleanup scope selectors are mutually exclusive/);
+    assert.match(output, /--cleanup=<catalog-version>/, 'the error names the scoped form');
+    assert.match(output, new RegExp(CLEANUP_ALL_FLAG), 'and the full-wipe form');
+    assert.doesNotMatch(output, /CLEANUP: removed/, 'a refused command deletes nothing');
+    assert.doesNotMatch(
+      output,
+      /TEST_DATABASE_URL|ECONNREFUSED|getaddrinfo|ENOTFOUND/,
+      'the conflict is rejected during parsing, before target resolution or a connection'
+    );
+  }
+});
+
+test('a repeated cleanup scope selector is refused, even when identical', () => {
+  const VERSION = '--cleanup=0123456789abcdef0123456789abcdef';
+  for (const selectors of [
+    [VERSION, VERSION],
+    [CLEANUP_ALL_FLAG, CLEANUP_ALL_FLAG],
+  ]) {
+    assert.throws(
+      () => parseArgs(ARGV.concat(selectors), NO_ENV),
+      (error) => error instanceof UsageError
+        && /cleanup scope selectors are mutually exclusive/.test(error.message)
+        && /repeated selector/.test(error.message),
+      selectors.join(' ') + ' must not be accepted twice'
+    );
+
+    const child = spawnCli(selectors);
+    assert.equal(child.status, 2, selectors.join(' ') + ' must be a usage problem, not a run');
+    const output = child.stdout + child.stderr;
+    assert.match(output, /cleanup scope selectors are mutually exclusive/);
+    assert.match(output, /repeated selector/);
+    assert.doesNotMatch(output, /CLEANUP: removed/, 'a refused command deletes nothing');
+    assert.doesNotMatch(
+      output,
+      /TEST_DATABASE_URL|ECONNREFUSED|getaddrinfo|ENOTFOUND/,
+      'the repeat is rejected during parsing, before target resolution or a connection'
+    );
+  }
 });
 
 test('cleanupScope refuses an unrepresentable scope as a USAGE error, not a run failure', () => {
@@ -217,7 +292,7 @@ test('cleanupScope refuses an unrepresentable scope as a USAGE error, not a run 
 test('the full wipe cannot be reached implicitly, and a refused one deletes nothing', () => {
   const child = spawnCli(['--cleanup']);
   assert.equal(child.status, 2, 'an unscoped --cleanup is a usage problem, not a run failure');
-  assert.match(child.stderr, /--cleanup=all/, 'the refusal names the explicit form');
+  assert.match(child.stderr, new RegExp(CLEANUP_ALL_FLAG), 'the refusal names the explicit form');
   assert.match(child.stderr, /--cleanup=<catalog-version>/, 'and the scoped form');
   assert.doesNotMatch(child.stdout + child.stderr, /CLEANUP: removed/);
 });
@@ -275,7 +350,7 @@ test('a WRITE against a named target requires a real restore point; a dry run ne
     'a placeholder fails the shape on purpose'
   );
   const cleanup = parseArgs(ARGV.concat([
-    '--target-env=TARGET_DATABASE_URL', '--cleanup=all', '--restore-point=br-eu-backup-20261103',
+    '--target-env=TARGET_DATABASE_URL', CLEANUP_ALL_FLAG, '--restore-point=br-eu-backup-20261103',
   ]), NO_ENV);
   assert.equal(cleanup.mode, 'cleanup');
   assert.equal(cleanup.restorePoint, 'br-eu-backup-20261103');
