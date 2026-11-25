@@ -387,6 +387,47 @@
           "destination": "packages/recommendation-runtime/src/persistence/validate-rejections.js"
         }
       ]
+    },
+    {
+      "id": "step-5-w3-orchestrator",
+      "description": "Step 5 W3: all eight orchestrator modules - the two no-writes entry points (run's one-pass composition, full-run's snapshot->rank->select->persist composition), the four transaction-owning wrappers (snapshot and swap-preview's read-only BEGIN/ROLLBACK, commit's and swap-commit's writes), the pure assemble-and-score seam (compute) and the public barrel (index) - moved out of src/recommendation/orchestrator/ into packages/recommendation-runtime/src/orchestrator/, leaving an identity re-export shim at every old path. They execute SQL and own the pass's transaction boundaries, so they belong to the runtime package, not the pure core. The move is byte-identical relative to THIS batch's baseline, which is commit A on the branch: 'refactor(orchestrator): reach the core through the core-entry adapter' replaced each module's direct core requires (../assembly, ../retention, ../ranking, ../explanation, ../offers/as-of, ../candidates/errors) with one '../core-entry' require plus namespace member reads, so the same bytes resolve the core package root from either depth (the runtime tree answers the same specifier with its own packages/recommendation-runtime/src/core-entry.js). The three namespaces the orchestrator reaches from both depths - candidates, filtering, scoring - gained a runtime barrel in the same batch (composed from the pure core namespace plus the SQL members, with the old path turned into an identity shim), so their require specifiers needed no change; that composition is NOT a declared move and is pinned by packages/recommendation-runtime/test/namespace-barrels.test.js. Behaviour is pinned by the L1 suites that stayed at the old paths - src/recommendation/orchestrator/*.test.js, including compute.golden.test.js and the Decision 17.3 call-order pin - which now exercise the modules through the shims (their source-reading assertions were repointed to the implementation in the following commit), and by the DB-free packages/recommendation-runtime/test/orchestrator-index.test.js added in this batch, which pins the namespace key set, the old-path identity and that runRecommendationCommit stays internal. No characterization fixture is recorded: the behavioural transaction suites test/transaction-behavior.test.js and test/transaction-ownership.test.js already drive these modules and are run by CI (RFC 11.5; docs/ORCHESTRATOR_ENTRY_POINTS.md).",
+      "baseline_sha": "598e4423d52da20479db39887aee26456a27e3d4",
+      "identity_policy": "byte-identical",
+      "characterization": null,
+      "modules": [
+        {
+          "source": "src/recommendation/orchestrator/run.js",
+          "destination": "packages/recommendation-runtime/src/orchestrator/run.js"
+        },
+        {
+          "source": "src/recommendation/orchestrator/snapshot.js",
+          "destination": "packages/recommendation-runtime/src/orchestrator/snapshot.js"
+        },
+        {
+          "source": "src/recommendation/orchestrator/full-run.js",
+          "destination": "packages/recommendation-runtime/src/orchestrator/full-run.js"
+        },
+        {
+          "source": "src/recommendation/orchestrator/commit.js",
+          "destination": "packages/recommendation-runtime/src/orchestrator/commit.js"
+        },
+        {
+          "source": "src/recommendation/orchestrator/swap-preview.js",
+          "destination": "packages/recommendation-runtime/src/orchestrator/swap-preview.js"
+        },
+        {
+          "source": "src/recommendation/orchestrator/swap-commit.js",
+          "destination": "packages/recommendation-runtime/src/orchestrator/swap-commit.js"
+        },
+        {
+          "source": "src/recommendation/orchestrator/compute.js",
+          "destination": "packages/recommendation-runtime/src/orchestrator/compute.js"
+        },
+        {
+          "source": "src/recommendation/orchestrator/index.js",
+          "destination": "packages/recommendation-runtime/src/orchestrator/index.js"
+        }
+      ]
     }
   ]
 }
