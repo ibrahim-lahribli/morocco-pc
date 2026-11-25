@@ -49,9 +49,11 @@ Node's real resolver from a throwaway consumer. Three composite seam files
 orchestrator's `require('../candidates')` resolves at both depths; they are unpublished and carry one open
 architectural question recorded in `packages/recommendation-runtime/docs/MIXED_BARRELS.md` §5.
 **Remaining work**: `apps/api/src/engine.js` still imports `src/recommendation/**` directly (step 6), the
-three composites are split in step 6, PR #72 awaits review, and the Step 5 acceptance items — the runtime
-export surface ratified by the owner, runtime characterization and provenance verified, and the Step 5
-acceptance review — are not closed. B1-B8 are open. Do not start the extraction from a documentation task.
+three composites are split in step 6, PR #72 awaits review, and the Step 5 acceptance items — the Step 5
+acceptance review of the §11.5 surface (A2 approved that interface as written on 2026-11-11; this branch
+implements it, so no further owner ratification of the interface is pending), runtime characterization and
+provenance (`verify:extraction` 70/70 and `check:characterization` pr2-pr7 OK on the branch head), and the
+isolated TEST-branch database suite (UNKNOWN, not run) — are not closed. B1-B8 are open. Do not start the extraction from a documentation task.
 
 ## 2. Read order
 

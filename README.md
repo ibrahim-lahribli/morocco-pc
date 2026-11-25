@@ -20,14 +20,22 @@ below.
 
 ```bash
 npm install
-npm run test:unit        # engine suite, no database needed (726 tests)
+npm run test:unit        # engine suite, no database needed (774 on the W3 branch; 726 on master)
 npm run test:core        # extracted pure core, no database needed (697 tests: 697 pass on Node 22 CI)
-npm run test:runtime     # runtime package harness, no database needed (205 tests on the W3 branch; 85 on master)
-npm run test:scripts     # gate/CLI suites (894)
+npm run test:runtime     # runtime package harness, no database needed (205 on the W3 branch; 85 on master)
+npm run test:scripts     # gate/CLI suites (970 on the W3 branch; 894 on master)
 npm run test:api         # HTTP contract suites, DB-free (193)
 npm run test:db          # connectivity + table listing
 npm run start:api        # TEST branch, or API_ALLOW_SHARED=1
 ```
+
+The counts marked "W3 branch" were measured on `feat/step-5-w3-orchestrator` at
+`caa236fe063f2a570606f06babcf45973159f718` (2026-11-25: `test:unit` 774 / 774, `test:scripts`
+970 / 970, `test:core` 697 (695 pass / 2 skipped locally, 697 / 697 on Node 22 CI), `test:runtime`
+205 / 205, `test:api` 193 / 193, `test:database-guard` 15 / 15). The counts marked "master" are that branch's base,
+`master` = `d21ec21`, and they are the merged-`master` figures: PR #72 is open and unmerged, so neither
+set is a claim about merged `master`. On a Windows checkout `test:core` reports 695 pass / 2 skipped
+(both skip cases need file symlinks); CI on Node 22 is the authoritative 697.
 
 `DATABASE_URL` (shared dev), `TEST_DATABASE_URL` (an isolated Neon branch) and
 `TARGET_DATABASE_URL` (EU) come from `.env`, which is never committed and never printed. Nothing

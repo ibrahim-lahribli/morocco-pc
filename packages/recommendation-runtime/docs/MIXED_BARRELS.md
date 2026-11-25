@@ -60,17 +60,18 @@ shape of the old tree before the API has moved, and would break the pinned owner
    two surfaces do not overlap. `packages/recommendation-core/test/surface.test.js` asserts the
    runtime names are absent from core; `packages/recommendation-runtime/test/surface.test.js`
    asserts no runtime public name is a core name.
-2. **No *published* runtime module re-exports a core name.** The published surface is `loaders`,
-   `orchestrator`, `persistence`; each is proved free of core names by
-   `test/loaders-surface.test.js`, `test/orchestrator-index.test.js` and
-   `test/persistence-surface.test.js`. The relocated composites of §5 are deliberately outside that
-   surface — absent from `package.json` `exports`, from `src/index.js` and from
-   `test/export-surface.json` — so the package name cannot reach them
-   (`scripts/lib/runtime-package-exports.test.js` proves `ERR_PACKAGE_PATH_NOT_EXPORTED`). This rule
-   previously read "no runtime module re-exports a core name" and prescribed that orchestrators build
-   `Object.assign({}, core.candidates, { loadCandidates })`; §5 records why that prescription is
-   incompatible with a byte-identical move plus the patch seam, and asks the owner to ratify or reject
-   the relocation.
+2. **No runtime module re-exports a core name (RFC §11.3), and the three composites of §5 are a
+   proposed exception to that rule — not compliance with it.** The rule is not narrowed here to a
+   "published" surface: RFC §11.3 applies to every module in this package and stays authoritative as
+   written. On the published surface the rule holds and is enforced — `loaders`, `orchestrator` and
+   `persistence` are each proved free of core names by `test/loaders-surface.test.js`,
+   `test/orchestrator-index.test.js` and `test/persistence-surface.test.js`. The relocated composites
+   violate it: they re-export core names beside this package's SQL members. That they are unpublished —
+   absent from `package.json` `exports`, from `src/index.js` and from `test/export-surface.json`, so the
+   package name cannot reach them (`scripts/lib/runtime-package-exports.test.js` proves
+   `ERR_PACKAGE_PATH_NOT_EXPORTED`) — is a mitigation, not a compliance argument, and being unpublished
+   does not make the file compliant. §5 states the deviation, the alternatives and the decision the
+   owner has to make; it does not approve the relocation, and neither does this rule.
 3. **The old barrel's test is not touched.** `src/recommendation/filtering/index.test.js` is the
    pinned `SPLIT_FACTS.runtimeBarrel` row in `scripts/audit-pr2-test-ownership.js` (7 assertions).
    It follows the old barrel and is step 6 material.
@@ -104,7 +105,7 @@ That object is the legacy composite, implemented once, with the old path as an i
 ### 5.2 The deviation, stated exactly
 
 `packages/recommendation-runtime/src/{candidates,filtering,scoring}/index.js` each re-export core names
-beside this package's SQL members. §5.1's rule 2 (as written before this revision) forbids that in a
+beside this package's SQL members. RFC §11.3 (and rule 2 above, which keeps it) forbids that in a
 runtime module, and §11.2's file mapping does not list these files. The composition is safe — every
 pure member is the core's own function object, the key sets are committed and pinned, and no accessor
 or non-enumerable member exists (`test/namespace-barrels.test.js`) — but safety is not compliance.

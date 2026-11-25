@@ -39,9 +39,10 @@
 // internal step-6 material. The surface is pinned by test/export-surface.json
 // and each namespace by its own surface suite; growing it is a reviewable diff.
 //
-// What this file does NOT close, all recorded rather than hidden: the runtime
-// export surface is still to be ratified by the owner as part of the Step 5
-// acceptance review, and the three composite seam barrels this package carries
+// What this file does NOT close, all recorded rather than hidden: the Step 5
+// acceptance review of this implementation (the §11.5 interface itself was
+// approved as written by decision A2 on 2026-11-11, so no owner ratification of
+// the surface is pending), and the three composite seam barrels this package carries
 // for the orchestrator's both-depth specifiers await the decision documented in
 // docs/MIXED_BARRELS.md §5. Runtime characterization and provenance are verified
 // by the manifest batch in extraction-manifest.json, not by this file.

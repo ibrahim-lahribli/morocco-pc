@@ -173,8 +173,14 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   (`src/{candidates,filtering,scoring}/index.js`, unpublished) are the legacy mixed barrels relocated so
   the byte-identical orchestrator's `require('../candidates')` resolves at both depths; that relocation
   is **one open architectural question**, stated with its alternatives in
-  `packages/recommendation-runtime/docs/MIXED_BARRELS.md` §5 and awaiting the owner. Still open: the
-  owner's ratification of the runtime export surface, the Step 5 acceptance review, `apps/api/src/engine.js`
+  `packages/recommendation-runtime/docs/MIXED_BARRELS.md` §5 and awaiting the owner. The published
+  surface is the one decision A2 approved as written on 2026-11-11 (§11.4/§11.5), so this branch
+  implements an approved contract and what remains is the Step 5 **acceptance review** of that
+  implementation, not a ratification of the interface. Measured on the branch head `caa236f`
+  (2026-11-25): `test:unit` **774**, `test:scripts` **970**, `test:core` **697** (695 pass / 2 skipped
+  on Windows), `test:runtime` **205**, `test:api` **193**, `test:database-guard` **15**. Still open: the
+  Step 5 acceptance review, including the DB-backed suite on the isolated TEST branch required by
+  RFC §19.3 (UNKNOWN — not run for this branch), `apps/api/src/engine.js`
   still importing `src/recommendation/**` (step 6), and the step-6 split of the three composites.
 - **CI boundary gates (2026-11-20).** One contract, `scripts/lib/core-approved-interface.js`, is enforced
   by both sides: `scripts/lib/core-package-surface.test.js` compares the declared `exports` map as a

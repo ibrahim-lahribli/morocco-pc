@@ -116,9 +116,11 @@ implementation's source directly.
   `src/index.js` and from `test/export-surface.json`, and
   `packages/recommendation-runtime/docs/MIXED_BARRELS.md` §5 records the RFC question the relocation
   raises, its alternatives and the owner decision it requests.
-- **W3's own prerequisites are NOT closed by the move.** Step 5 remains open until the runtime
-  export surface is ratified, runtime characterization and provenance are verified, and the Step 5
-  acceptance review happens.
+- **W3's own prerequisites are NOT closed by the move.** Step 5 remains open until the Step 5
+  **acceptance review** of this implementation happens — the §11.5 surface itself was approved as
+  written by decision A2 on 2026-11-11, so the interface is not awaiting ratification. Runtime
+  characterization and provenance are the evidence that review consumes (`check:characterization`
+  pr2-pr7 OK and `verify:extraction` 70 / 70 on the branch head), not the review itself.
 - **Root CI integration belongs to Agent 1.** The root `test:runtime` script and the
   `.github/workflows/ci.yml` step are Agent 1's; W0 does not touch either.
 - **Step 4 acceptance belonged to Agent 2.** Agent 2's interface acceptance of step 4
