@@ -1,9 +1,11 @@
 # Recommendation runtime — orchestrator entry points and transaction ownership
 
-Status: TARGET (RFC §11.5). **Six** of the **eight** files under `src/recommendation/orchestrator/` own a
-transaction boundary — `run.js`, `snapshot.js`, `full-run.js`, `commit.js`, `swap-preview.js` and
-`swap-commit.js`. The other two are `index.js` (the barrel) and `compute.js` (the pure
-assemble-and-score seam, which owns no transaction and is not one of the entry points below). Step 5
+Status: TARGET (RFC §11.5). **Four** of the **eight** files under `src/recommendation/orchestrator/`
+**own** a transaction boundary — `snapshot.js`, `commit.js`, `swap-preview.js` and `swap-commit.js`.
+Two more issue no transaction control of their own but are part of the pass composition — `run.js`
+and `full-run.js`, which run on the client they are handed. The remaining two are `index.js` (the
+barrel) and `compute.js` (the pure assemble-and-score seam, which owns no transaction and is not one
+of the entry points below). Step 5
 W3 moves all **eight** to `packages/recommendation-runtime/src/orchestrator/` with their behaviour
 unchanged. This document is
 the contract the move must preserve, not a redesign: every transaction boundary below is the one the
@@ -25,8 +27,9 @@ Exported from `packages/recommendation-runtime/src/orchestrator/index.js`.
 | 7 | `commitSwapInTransaction` | `orchestrator/swap-commit.js` | **Write transaction.** Its own `BEGIN` … `COMMIT` on the success path, `ROLLBACK` on error; `COMMIT` is issued on the success path only. Append-only: no `UPDATE`/`DELETE`. |
 | 8 | `readCommittedSwap` | `orchestrator/swap-commit.js` | **None.** One autocommit `SELECT`. |
 
-`runRecommendationCommit` is **internal** — it is exported from `orchestrator/commit.js` for the
-barrel and for `full-run`, but it is not one of the eight entry points. It owns the pass's single
+`runRecommendationCommit` is **internal** — exported from `orchestrator/commit.js` and required
+directly by `full-run.js`; `orchestrator/index.js` deliberately does not re-export it, so it is not
+one of the eight entry points. It owns the pass's single
 write transaction: `BEGIN`, the `recommendation_query` `FOR UPDATE` guard, the existing-candidate
 guard, the REPLACE-style writers, then `COMMIT` on the success path and `ROLLBACK` on any failure.
 A failing `ROLLBACK` never masks the original error.
@@ -58,9 +61,9 @@ A failing `ROLLBACK` never masks the original error.
 
 The keyword parity check in `test/transaction-ownership.test.js` is a **static pre-check**, not final
 acceptance of the transaction contract. It can prove that a file mentions `BEGIN`/`COMMIT`/`ROLLBACK`
-and cannot prove when, on which path, or in which order. W1 must therefore add behavioural tests
-against a recording fake client (the `(sql, params)` style the existing `orchestrator/*.test.js`
-suites use, no database) that prove:
+and cannot prove when, on which path, or in which order. Behavioural tests against a recording fake
+client — the same `(sql, params)` style the `orchestrator/*.test.js` suites use, no database — must
+therefore prove:
 
 - `snapshot.js` — `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` precedes the reads, `ROLLBACK` is
   issued on **both** the success and the error path, and `COMMIT` is never issued.
@@ -72,12 +75,12 @@ suites use, no database) that prove:
 - `full-run.js` and `swap-preview.js` — never nest; the snapshot transaction closes before the write
   transaction opens, on the same client.
 
-**These landed in PR #67 (merged 2026-11-24 as `d21ec21`), at the legacy paths** —
-`src/recommendation/orchestrator/*.test.js`, beside the modules they characterise — and not on the
-runtime side, because the modules are still there. `test/transaction-behavior.test.js` in this package
-is the behavioural half; it and the legacy suites move with the modules in W3. Characterising at the
-legacy path is what makes the move reviewable: the same assertions run before and after, so a
-behaviour change cannot hide inside a path change.
+**Those tests landed in PR #67 (merged 2026-11-24 as `d21ec21`), in this package:** it added exactly
+two files, `test/transaction-behavior.test.js` and the recording fake in `test/recording-client.js`
+that it runs on, and added no suite under `src/recommendation/`. The behavioural suite drives the
+modules through their **legacy paths**, because that is where they still are; when W3 moves them only
+the requires change. That is what makes the move reviewable: the same assertions run before and after,
+so a behaviour change cannot hide inside a path change.
 
 ## Step-5 ownership and prerequisites
 
