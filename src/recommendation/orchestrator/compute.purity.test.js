@@ -19,7 +19,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const SOURCE_FILE = path.join(__dirname, 'compute.js');
+// Step 5 W3: scan the IMPLEMENTATION under the runtime package, never the
+// identity shim that now sits beside this test at the old path.
+const SOURCE_FILE = path.resolve(
+  __dirname,
+  '../../../packages/recommendation-runtime/src/orchestrator/compute.js'
+);
 
 /** Drop // and /* *\/ comments so a comment about a rule is not a violation. */
 function stripComments(source) {

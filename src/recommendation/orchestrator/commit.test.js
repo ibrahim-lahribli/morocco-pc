@@ -458,7 +458,14 @@ function stripComments(source) {
 }
 
 /** Comment-stripped commit.js source, read once for the boundary assertions. */
-const SOURCE = stripComments(fs.readFileSync(path.join(__dirname, 'commit.js'), 'utf8'));
+// Step 5 W3: scan the IMPLEMENTATION, not the identity shim this directory now
+// holds. `__dirname` is still the old path, so the source is resolved into the
+// runtime package explicitly.
+const IMPLEMENTATION_DIR = path.resolve(
+  __dirname,
+  '../../../packages/recommendation-runtime/src/orchestrator'
+);
+const SOURCE = stripComments(fs.readFileSync(path.join(IMPLEMENTATION_DIR, 'commit.js'), 'utf8'));
 
 test('commit.js keeps its source boundary (no DML, no driver, no read pass)', () => {
   for (const token of [

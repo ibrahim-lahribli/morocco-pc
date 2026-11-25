@@ -1093,8 +1093,14 @@ test('the orchestrator calls its collaborators in the Decision 17.3 order, each 
   // into. The list below is the EXECUTION order, so the two sources are merged
   // in that order and `compute.computeFromLoaded(` marks the seam. Each name
   // must still appear exactly once, in this order - the pin is not relaxed.
-  const runSource = stripComments(fs.readFileSync(path.join(__dirname, 'run.js'), 'utf8'));
-  const computeSource = stripComments(fs.readFileSync(path.join(__dirname, 'compute.js'), 'utf8'));
+  // Step 5 W3: scan the IMPLEMENTATION under the runtime package, never the
+  // identity shim at this test's own path.
+  const IMPLEMENTATION_DIR = path.resolve(
+    __dirname,
+    '../../../packages/recommendation-runtime/src/orchestrator'
+  );
+  const runSource = stripComments(fs.readFileSync(path.join(IMPLEMENTATION_DIR, 'run.js'), 'utf8'));
+  const computeSource = stripComments(fs.readFileSync(path.join(IMPLEMENTATION_DIR, 'compute.js'), 'utf8'));
   const source = runSource + '\n' + computeSource;
   const sequence = [
     'query.loadQueryInput(',

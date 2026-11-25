@@ -28,7 +28,14 @@ function stripComments(source) {
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 }
 
-const readSource = (file) => fs.readFileSync(path.join(__dirname, file), 'utf8');
+// Step 5 W3: every source assertion scans the IMPLEMENTATION under the runtime
+// package. The barrel/identity tests below still load the old path, which is an
+// identity shim - but reading the shim's TEXT would prove nothing.
+const IMPLEMENTATION_DIR = path.resolve(
+  __dirname,
+  '../../../packages/recommendation-runtime/src/orchestrator'
+);
+const readSource = (file) => fs.readFileSync(path.join(IMPLEMENTATION_DIR, file), 'utf8');
 const requiresOf = (file) => [...stripComments(readSource(file)).matchAll(/require\('([^']+)'\)/g)]
   .map((match) => match[1])
   .sort();
