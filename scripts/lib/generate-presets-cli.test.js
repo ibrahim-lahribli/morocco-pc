@@ -211,6 +211,64 @@ test('the explicit full-wipe flag is the only way to ask for every row, and a ca
   assert.equal(one.cleanupVersion, '0123456789abcdef0123456789abcdef', 'the scoped form is unchanged');
 });
 
+test('conflicting cleanup scope selectors are refused in either order', () => {
+  const VERSION = '--cleanup=0123456789abcdef0123456789abcdef';
+  for (const selectors of [
+    [VERSION, CLEANUP_ALL_FLAG],
+    [CLEANUP_ALL_FLAG, VERSION],
+  ]) {
+    assert.throws(
+      () => parseArgs(ARGV.concat(selectors), NO_ENV),
+      (error) => error instanceof UsageError
+        && /cleanup scope selectors are mutually exclusive/.test(error.message)
+        && /--cleanup=<catalog-version>/.test(error.message)
+        && error.message.includes(CLEANUP_ALL_FLAG),
+      selectors.join(' ') + ' must not let the later scope win'
+    );
+
+    const child = spawnCli(selectors);
+    assert.equal(child.status, 2, selectors.join(' ') + ' must be a usage problem, not a run');
+    const output = child.stdout + child.stderr;
+    assert.match(output, /cleanup scope selectors are mutually exclusive/);
+    assert.match(output, /--cleanup=<catalog-version>/, 'the error names the scoped form');
+    assert.match(output, new RegExp(CLEANUP_ALL_FLAG), 'and the full-wipe form');
+    assert.doesNotMatch(output, /CLEANUP: removed/, 'a refused command deletes nothing');
+    assert.doesNotMatch(
+      output,
+      /TEST_DATABASE_URL|ECONNREFUSED|getaddrinfo|ENOTFOUND/,
+      'the conflict is rejected during parsing, before target resolution or a connection'
+    );
+  }
+});
+
+test('a repeated cleanup scope selector is refused, even when identical', () => {
+  const VERSION = '--cleanup=0123456789abcdef0123456789abcdef';
+  for (const selectors of [
+    [VERSION, VERSION],
+    [CLEANUP_ALL_FLAG, CLEANUP_ALL_FLAG],
+  ]) {
+    assert.throws(
+      () => parseArgs(ARGV.concat(selectors), NO_ENV),
+      (error) => error instanceof UsageError
+        && /cleanup scope selectors are mutually exclusive/.test(error.message)
+        && /repeated selector/.test(error.message),
+      selectors.join(' ') + ' must not be accepted twice'
+    );
+
+    const child = spawnCli(selectors);
+    assert.equal(child.status, 2, selectors.join(' ') + ' must be a usage problem, not a run');
+    const output = child.stdout + child.stderr;
+    assert.match(output, /cleanup scope selectors are mutually exclusive/);
+    assert.match(output, /repeated selector/);
+    assert.doesNotMatch(output, /CLEANUP: removed/, 'a refused command deletes nothing');
+    assert.doesNotMatch(
+      output,
+      /TEST_DATABASE_URL|ECONNREFUSED|getaddrinfo|ENOTFOUND/,
+      'the repeat is rejected during parsing, before target resolution or a connection'
+    );
+  }
+});
+
 test('cleanupScope refuses an unrepresentable scope as a USAGE error, not a run failure', () => {
   // parseArgs already refuses the bare flag, but cleanupScope is the second line
   // of defence for a caller that bypasses it. A plain Error would be reported as

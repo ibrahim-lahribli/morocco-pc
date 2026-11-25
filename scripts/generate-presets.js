@@ -262,6 +262,23 @@ function parseArgs(argv, env = process.env) {
     args.modeSet = true;
   };
 
+  // A cleanup SCOPE is a destructive selector in its own right. Both
+  // `--cleanup=<version>` and the long full-wipe flag set mode 'cleanup', so
+  // setMode alone cannot see two of them: the later selector would silently win
+  // and could turn a scoped delete into a full wipe (or the reverse). Track the
+  // selector explicitly and refuse a second one, in either order.
+  let cleanupScopeSet = false;
+  const setCleanupScope = (scope) => {
+    if (cleanupScopeSet) {
+      fail('cleanup scope selectors are mutually exclusive: supply exactly one of'
+        + ' --cleanup=<catalog-version> or ' + CLEANUP_ALL_FLAG + '.'
+        + ' A repeated selector is refused as well.');
+    }
+    setMode('cleanup');
+    args.cleanupVersion = scope;
+    cleanupScopeSet = true;
+  };
+
   const number = (name, raw) => {
     const value = Number(raw);
     if (!Number.isFinite(value) || value <= 0) {
@@ -278,8 +295,7 @@ function parseArgs(argv, env = process.env) {
       setMode('commit');
     } else if (arg === CLEANUP_ALL_FLAG) {
       // The ONLY full wipe: long, explicit and hard to type by accident.
-      setMode('cleanup');
-      args.cleanupVersion = CLEANUP_SCOPE_ALL;
+      setCleanupScope(CLEANUP_SCOPE_ALL);
     } else if (arg === '--cleanup') {
       // A bare --cleanup used to mean "every preset", and it built the EMPTY
       // scope that made DELETE_PRESETS_SQL match the whole table. The MODE is
@@ -301,8 +317,7 @@ function parseArgs(argv, env = process.env) {
         fail('--cleanup=' + value + ' is refused: the full wipe is spelled ' + CLEANUP_ALL_FLAG
           + ', and --cleanup=<catalog-version> scopes the delete to one version.');
       }
-      setMode('cleanup');
-      args.cleanupVersion = value;
+      setCleanupScope(value);
     } else if (arg.startsWith('--budget-from=')) {
       args.budgetFrom = number('budget-from', arg.slice('--budget-from='.length));
     } else if (arg.startsWith('--budget-to=')) {
