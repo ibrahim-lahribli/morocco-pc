@@ -125,14 +125,16 @@ const CLEANUP_SCOPE_ALL = 'all';
  *
  * @param {string|null} cleanupVersion the parsed `--cleanup=` value
  * @returns {object} the `deletePresets` scope
- * @throws {Error} when no scope was stated
+ * @throws {UsageError} when no scope was stated - the same usage semantics the
+ *   CLI reports (exit 2), so a direct caller cannot be told "the run failed"
+ *   when what it did was ask for something unrepresentable
  */
 function cleanupScope(cleanupVersion) {
   if (cleanupVersion === CLEANUP_SCOPE_ALL) return {};
   if (typeof cleanupVersion === 'string' && cleanupVersion.trim() !== '') {
     return { catalogVersion: cleanupVersion };
   }
-  throw new Error('cleanup scope is unrepresentable: a cleanup run must name a catalog version'
+  throw new UsageError('cleanup scope is unrepresentable: a cleanup run must name a catalog version'
     + ' or pass ' + CLEANUP_SCOPE_ALL + ' explicitly');
 }
 

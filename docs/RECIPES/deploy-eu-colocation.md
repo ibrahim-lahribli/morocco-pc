@@ -171,12 +171,12 @@ tail. Do not re-run the whole set by hand.
 
 ## 6. Step 5c — replay the seeds
 
-`run-seeds.js` reads `DATABASE_URL` and has **no routing** (`--test-db` does nothing there), so
-point it at the new project explicitly. Direct host, every file as-is (`client.query(rawText)`,
-never split on `;`):
+`run-seeds.js` writes to whatever `DATABASE_URL` names, so point it at the new project explicitly.
+A `DATABASE_URL` apply needs `--confirm-shared` or `--restore-point=<id>` — there is no loopback
+exemption — and every file is applied as-is (`client.query(rawText)`, never split on `;`):
 
 ```bash
-DATABASE_URL="$TARGET_DIRECT_URL" node scripts/run-seeds.js
+DATABASE_URL="$TARGET_DIRECT_URL" node scripts/run-seeds.js --restore-point=<id>
 ```
 
 Expected: one `SEEDED: <file>` per seed file, then

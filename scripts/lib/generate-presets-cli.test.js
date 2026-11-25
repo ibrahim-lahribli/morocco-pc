@@ -30,6 +30,7 @@ const { spawnSync } = require('node:child_process');
 
 const {
   parseArgs, budgetRibbon, USAGE, resolveTarget, targetLine, auditTargetLine, generateOne,
+  cleanupScope, CLEANUP_SCOPE_ALL, UsageError,
 } = require('../../scripts/generate-presets');
 const modelPin = require('./model-pin');
 
@@ -191,6 +192,26 @@ test('--cleanup=all is the explicit full wipe, and a catalog version still scope
   const one = parseArgs(ARGV.concat(['--cleanup=0123456789abcdef0123456789abcdef']), NO_ENV);
   assert.equal(one.mode, 'cleanup');
   assert.equal(one.cleanupVersion, '0123456789abcdef0123456789abcdef', 'the scoped form is unchanged');
+});
+
+test('cleanupScope refuses an unrepresentable scope as a USAGE error, not a run failure', () => {
+  // parseArgs already refuses the bare flag, but cleanupScope is the second line
+  // of defence for a caller that bypasses it. A plain Error would be reported as
+  // exit 1 ("the run failed"); a UsageError is exit 2 ("fix the invocation"),
+  // which is the only honest answer for a scope that was never stated.
+  assert.throws(() => cleanupScope(null), UsageError, 'a null scope is a usage problem');
+  assert.throws(() => cleanupScope(''), UsageError, 'an empty scope is a usage problem');
+  assert.throws(() => cleanupScope('   '), UsageError, 'whitespace is not a scope');
+  assert.throws(() => cleanupScope(undefined), /cleanup scope is unrepresentable/);
+
+  // The two REPRESENTABLE scopes are unchanged: the explicit full wipe and one
+  // catalog version.
+  assert.deepEqual(cleanupScope(CLEANUP_SCOPE_ALL), {}, 'the sentinel is the full wipe');
+  assert.deepEqual(
+    cleanupScope('0123456789abcdef0123456789abcdef'),
+    { catalogVersion: '0123456789abcdef0123456789abcdef' },
+    'a catalog version still scopes the delete'
+  );
 });
 
 test('the full wipe cannot be reached implicitly, and a refused one deletes nothing', () => {

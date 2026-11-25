@@ -15,15 +15,17 @@
 //
 //   * an unknown argument is a usage error (exit 2), never the default path;
 //   * `--help` prints the usage text and exits 0, touching nothing;
-//   * a real apply against `DATABASE_URL` needs `--confirm-shared` or a valid
-//     `--restore-point=<id>` UNLESS the target is loopback, because a loopback
-//     database is disposable by construction while a Neon host is not;
+//   * a real apply against `DATABASE_URL` ALWAYS needs `--confirm-shared` or a
+//     valid `--restore-point=<id>`. A loopback HOST is not an authorization: a
+//     local port can forward to a shared database through an SSH tunnel, a TCP
+//     proxy or another forwarding process, so the connection string proves
+//     nothing about the destination it actually reaches;
 //   * `--test-db` routes through the shared TEST_DATABASE_URL guard instead
 //     (packages/database-guard/src), which refuses a host equal to DATABASE_URL;
 //   * `dotenv` is loaded by the BOOTSTRAP, not by `require()`ing this module,
 //     so a test that loads it cannot read a developer's .env.
 //
-// The pure parts (parseArgs, isLoopbackHost, resolveConnection, applySeeds) are
+// The pure parts (parseArgs, resolveConnection, applySeeds) are
 // exported so the contract is testable with a recording fake and no database
 // (scripts/lib/run-seeds-cli.test.js), the same split run-migrations.js uses.
 
@@ -36,12 +38,14 @@ const USAGE = [
   '',
   '  --dry-run            parse and report each seed file; write nothing.',
   '  --test-db            apply to TEST_DATABASE_URL through the shared-target guard.',
-  '  --confirm-shared     apply to a NON-loopback DATABASE_URL on purpose.',
-  '  --restore-point=<id> the Neon restore point a non-loopback apply relies on',
+  '  --confirm-shared     apply to DATABASE_URL on purpose.',
+  '  --restore-point=<id> the Neon restore point a DATABASE_URL apply relies on',
   '                       (^[A-Za-z0-9_-]{8,}$); accepted instead of --confirm-shared.',
   '  --help               print this text and exit 0.',
   '',
-  'Without --test-db the target is DATABASE_URL. Seed files are idempotent, so a',
+  'Without --test-db the target is DATABASE_URL, and a write there needs',
+  '--confirm-shared or --restore-point=<id> even when the host looks loopback: a',
+  'local port can forward to a shared database. Seed files are idempotent, so a',
   're-run applies nothing new; the guard is about the TARGET being deliberate, not',
   'about the writes being unsafe.',
 ].join('\n');
@@ -112,36 +116,13 @@ function parseArgs(argv) {
 }
 
 /**
- * Is this connection string a loopback target - disposable by construction?
- *
- * The seed CLI's default target is the SHARED database, and that is deliberate
- * (seeds are the catalogue, not test data). So the guard cannot be "never write
- * to DATABASE_URL"; it is "a write to a database that is not obviously
- * disposable must be asked for". A CI service container and a local throwaway are
- * loopback; a Neon host never is.
- *
- * @param {string} urlString
- * @returns {boolean}
- */
-function isLoopbackHost(urlString) {
-  if (typeof urlString !== 'string' || urlString.trim() === '') return false;
-  try {
-    const host = new URL(urlString).hostname.toLowerCase();
-    // URL keeps IPv6 brackets in `hostname`.
-    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
-  } catch (_err) {
-    return false;
-  }
-}
-
-/**
  * The connection config for a parsed command line, or null for a run that must
  * not connect (a dry run, or --help).
  *
  * @param {object} args the parsed argv
  * @param {object} env an environment-like object (never read implicitly)
  * @returns {{connectionString: string, connectionTimeoutMillis?: number, target: string}|null}
- * @throws {UsageError} when a non-loopback apply was not asked for, or a guard
+ * @throws {UsageError} when a DATABASE_URL apply was not asked for, or a guard
  *   refuses the target
  */
 function resolveConnection(args, env) {
@@ -163,10 +144,15 @@ function resolveConnection(args, env) {
   if (typeof connectionString !== 'string' || connectionString.trim() === '') {
     fail('DATABASE_URL is not set. Set it, or pass --test-db to target TEST_DATABASE_URL.');
   }
-  const deliberate = args.confirmShared || isValidRestorePointId(args.restorePoint);
-  if (!isLoopbackHost(connectionString) && !deliberate) {
-    fail('refusing to apply seeds to a non-loopback DATABASE_URL without confirmation.\n'
-      + '       Seeds are DML-only and idempotent, but this target is a real database.\n'
+  // EVERY DATABASE_URL apply is deliberate only when the operator says so. The
+  // host is not consulted: `localhost` and `127.0.0.1` are indistinguishable
+  // from a forwarded port to the shared database, so treating them as proof of a
+  // disposable target would let one typo reach a shelf nobody meant to touch.
+  if (!(args.confirmShared || isValidRestorePointId(args.restorePoint))) {
+    fail('refusing to apply seeds to DATABASE_URL without confirmation.\n'
+      + '       Seeds are DML-only and idempotent, but this target is a real database,\n'
+      + '       and a loopback host does not make one disposable: a local port can\n'
+      + '       forward to a shared database through a tunnel or proxy.\n'
       + '       Re-run with --confirm-shared, or with --restore-point=<id> matching '
       + RESTORE_POINT_PATTERN.source + '.');
   }
@@ -267,7 +253,6 @@ async function main(argv = process.argv, env = process.env) {
 module.exports = {
   main,
   parseArgs,
-  isLoopbackHost,
   resolveConnection,
   applySeeds,
   readSeeds,

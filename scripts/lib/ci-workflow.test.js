@@ -308,6 +308,12 @@ test('the ephemeral-eval job runs the golden harness on a throwaway postgres', (
   assert.ok(seed > migrate, 'the seeds follow the migrations');
   assert.ok(evalRun > seed, 'the harness follows the seeds');
 
+  // The seed apply must STATE its opt-in. The job's DATABASE_URL is loopback,
+  // and the seeder no longer reads that as authorization (a local port can
+  // forward anywhere), so a bare invocation here would exit 2 and stop the job.
+  assert.ok(job.includes('node scripts/run-seeds.js --confirm-shared'),
+    'the ephemeral seed apply must pass --confirm-shared: loopback is not an authorization');
+
   // One container, two host spellings: database-guard's getWriteTestDbUrl()
   // requires TEST_DATABASE_URL and DATABASE_URL to name DIFFERENT hosts, and
   // the ephemeral job must point at the service container, never at a secret -

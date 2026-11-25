@@ -1853,6 +1853,12 @@ branch - so its side of the claim rests on the stored baselines.
 54 profiles); every Layer 4 table reads 0 after both runs. Generating presets and running the golden
 harness remain mutually exclusive on one branch until generated passes carry a marker.
 
+> **Correction, 2026-11-25.** The bare `--cleanup` in the paragraph above is now REFUSED (exit 2):
+> a cleanup run must state its scope. The equivalent of that historical run is
+> `node scripts/generate-presets.js --cleanup=all` (every catalog version) or
+> `--cleanup=<catalog-version>` for one version. The 2026-10-23 measurement is unchanged; only the
+> invocation a reader should copy is.
+
 ## 2026-10-23 — environment consistency, the EU role, and offer provenance
 
 **(1) The parity gate now compares the ACTIVE scoring model, not just its row count.**

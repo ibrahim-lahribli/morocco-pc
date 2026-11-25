@@ -12,10 +12,13 @@
 // The fix has three parts and each is pinned here:
 //   1. `--help` prints the usage text and exits 0, touching nothing.
 //   2. an unknown argument is a usage error (exit 2), not a run.
-//   3. an apply to a NON-loopback `DATABASE_URL` needs `--confirm-shared` or a
-//      valid `--restore-point=<id>`; a loopback target is disposable and needs
-//      neither, which is what keeps CI's service container and local throwaways
-//      frictionless.
+//   3. an apply to `DATABASE_URL` needs `--confirm-shared` or a valid
+//      `--restore-point=<id>`, WHATEVER THE HOST LOOKS LIKE. A loopback hostname
+//      is not an authorization: a local port can forward to a shared database
+//      through an SSH tunnel, a TCP proxy or another forwarding process, so the
+//      connection string cannot prove the destination is disposable. Every
+//      refusal below is asserted for `localhost`, `127.0.0.1` and a Neon host
+//      alike, because "loopback is safe" was the defect.
 //
 // Everything is checked with a recording fake or by SPAWNING with blanked
 // environment variables. Nothing here connects to a database, and `require()`ing
@@ -28,13 +31,15 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const {
-  main, parseArgs, isLoopbackHost, resolveConnection, applySeeds, isValidRestorePointId, USAGE, UsageError,
+  main, parseArgs, resolveConnection, applySeeds, isValidRestorePointId, USAGE, UsageError,
 } = require('../../scripts/run-seeds');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const ARGV = ['node', 'scripts/run-seeds.js'];
 const NEON = 'postgresql://u:p@ep-shared-2.us-east-1.aws.neon.tech/neondb?sslmode=require';
 const LOOPBACK = 'postgres://postgres:pg@127.0.0.1:55432/morocco_pc';
+/** The same local port spelled `localhost` - one SSH tunnel away from anywhere. */
+const TUNNEL = 'postgres://postgres:pg@localhost:55432/morocco_pc';
 
 /**
  * A client that records what it was asked to run and returns the three count rows
@@ -98,41 +103,59 @@ test('a malformed restore point is refused, and the flags that conflict are refu
   );
 });
 
-test('loopback is the only target treated as disposable', () => {
-  assert.equal(isLoopbackHost(LOOPBACK), true);
-  assert.equal(isLoopbackHost('postgres://u:p@localhost:5432/db'), true);
-  assert.equal(isLoopbackHost('postgres://u:p@[::1]:5432/db'), true);
-  assert.equal(isLoopbackHost(NEON), false);
-  assert.equal(isLoopbackHost(''), false);
-  assert.equal(isLoopbackHost('not a url'), false);
+test('a DATABASE_URL apply is refused without confirmation, whatever the host looks like', () => {
+  // The finding: `localhost`, `127.0.0.1` and `::1` were treated as proof that
+  // the database is disposable. They are not - a local port can forward to the
+  // shared database - so BOTH spellings are refused exactly like a Neon host,
+  // and the refusal names both ways to say yes.
+  for (const url of [NEON, LOOPBACK, TUNNEL]) {
+    assert.throws(
+      () => resolveConnection(parseArgs(ARGV), { DATABASE_URL: url }),
+      /--confirm-shared/,
+      'an unstated write to DATABASE_URL is refused: ' + url
+    );
+    assert.throws(
+      () => resolveConnection(parseArgs(ARGV), { DATABASE_URL: url }),
+      /--restore-point=<id>/,
+      'and the refusal names the other accepted form: ' + url
+    );
+    // The refusal is about the TARGET, not the host: the message must not claim
+    // the host was checked, because it no longer is.
+    assert.throws(
+      () => resolveConnection(parseArgs(ARGV), { DATABASE_URL: url }),
+      /loopback host does not make one disposable/,
+      'the message explains why loopback is not an authorization: ' + url
+    );
+  }
 });
 
-test('a non-loopback DATABASE_URL needs an explicit confirmation; a loopback one does not', () => {
-  // No confirmation: refused, and the message names both ways to say yes.
-  assert.throws(
-    () => resolveConnection(parseArgs(ARGV), { DATABASE_URL: NEON }),
-    /--confirm-shared/,
-    'the whole point: an unstated write to a real database is refused'
-  );
-  assert.throws(
-    () => resolveConnection(parseArgs(ARGV), { DATABASE_URL: NEON }),
-    /--restore-point=<id>/,
-    'and a restore point is the other accepted form'
-  );
+test('the explicit authorization applies to a loopback and a remote target alike', () => {
+  for (const url of [NEON, LOOPBACK]) {
+    assert.equal(
+      resolveConnection(parseArgs(ARGV.concat(['--confirm-shared'])), { DATABASE_URL: url }).connectionString,
+      url,
+      '--confirm-shared is the opt-in for any DATABASE_URL: ' + url
+    );
+    assert.equal(
+      resolveConnection(
+        parseArgs(ARGV.concat(['--restore-point=br-eu-backup-20261103'])),
+        { DATABASE_URL: url }
+      ).connectionString,
+      url,
+      'a valid restore point is the other accepted opt-in: ' + url
+    );
+  }
 
-  // Confirmed, by flag or by a real restore point.
-  assert.equal(resolveConnection(parseArgs(ARGV.concat(['--confirm-shared'])), { DATABASE_URL: NEON }).connectionString, NEON);
+  // A restore point is kept as parsed, so the run can print what the write
+  // relied on; a malformed one never reaches the apply (pinned below).
   assert.equal(
-    resolveConnection(parseArgs(ARGV.concat(['--restore-point=br-eu-backup-20261103'])), { DATABASE_URL: NEON }).connectionString,
-    NEON
+    parseArgs(ARGV.concat(['--restore-point=br-eu-backup-20261103'])).restorePoint,
+    'br-eu-backup-20261103'
   );
-
-  // Loopback: no ceremony, because it is disposable by construction (CI's
-  // service container and any local throwaway).
-  assert.equal(resolveConnection(parseArgs(ARGV), { DATABASE_URL: LOOPBACK }).connectionString, LOOPBACK);
 
   // A dry run resolves no connection at all, whatever the target.
   assert.equal(resolveConnection(parseArgs(ARGV.concat(['--dry-run'])), { DATABASE_URL: NEON }), null);
+  assert.equal(resolveConnection(parseArgs(ARGV.concat(['--dry-run'])), { DATABASE_URL: LOOPBACK }), null);
 });
 
 test('--test-db goes through the shared-target guard instead of the confirmation', () => {
@@ -186,13 +209,16 @@ test('a refused run never constructs a client (the guard runs before the connect
     return instance;
   };
   try {
-    await assert.rejects(
-      () => main(ARGV, { DATABASE_URL: NEON }),
-      /--confirm-shared/,
-      'a non-loopback target without confirmation is refused'
-    );
-    assert.equal(constructed, 0, 'no Client was constructed, so nothing could have been written');
-    assert.equal(connected, 0);
+    // Both a remote host and the loopback spelling: neither may open anything.
+    for (const url of [NEON, LOOPBACK]) {
+      await assert.rejects(
+        () => main(ARGV, { DATABASE_URL: url }),
+        /--confirm-shared/,
+        'an unconfirmed target is refused: ' + url
+      );
+      assert.equal(constructed, 0, 'no Client was constructed, so nothing could have been written: ' + url);
+      assert.equal(connected, 0, 'and no connection was opened: ' + url);
+    }
   } finally {
     pg.Client = OriginalClient;
   }
