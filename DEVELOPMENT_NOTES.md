@@ -2164,3 +2164,27 @@ limitation applies to every other `getWriteTestDbUrl()` / `resolveTestDbUrl()` c
 (`apps/api/src/db.js`, `apps/api/test/run-db-tests.js`, the `*.db.test.js` suites, `eval-scenarios.js`,
 `generate-presets.js`, the `measure-*` scripts, `scripts/lib/apply-seed-args.js`,
 `scripts/lib/ingest-args.js`); each still rests on host comparison alone and deserves its own review.
+
+## 2026-11-25 - the seed CLI incident, and the read-only check that has NOT run
+
+The incident behind PR #69 is not the TEST attestation gap; that is the follow-on. The incident is
+that `scripts/run-seeds.js` read argv with a single `process.argv.includes('--dry-run')` and then
+connected to `process.env.DATABASE_URL`. Every other command line - `--help`, a typo, an unknown flag
+- was therefore the apply path, so probing the CLI applied EVERY seed to the shared database. The
+file's first statement also called `require('dotenv').config()`, so `require()`ing the module was
+enough to load `.env`. `scripts/generate-presets.js --cleanup` had the same shape in the DELETE
+direction: the bare flag built the empty scope `{}`, every predicate NULL, so `DELETE FROM
+recommendation_preset` matched the whole table - the 52-preset EU shelf included.
+
+At `807df24` both shapes are closed: an unknown argument exits 2, `--help` exits 0 before any file is
+read, a `DATABASE_URL` write needs `--confirm-shared` or `--restore-point=<id>`, `--cleanup` requires
+a stated scope (`--cleanup=<catalog-version>` or `--cleanup=all`), and `cleanupScope()` refuses a null
+scope even for a caller that bypasses `parseArgs`.
+
+**Read-only post-incident verification on the shared database: NOT RUN - UNKNOWN, not PASS.** This
+work was restricted to disposable `postgres:18` containers; no `.env` was read and no shared
+connection was opened, so nothing here proves the shared shelf's state after the incident. An
+operator should establish it read-only before relying on the shelf: the `recommendation_preset` count
+(the EU shelf was 52), the per-file statement counts from `run-seeds.js --dry-run`, and the
+`recommendation_query` rows that carry no profile marker (the golden harness's blocker). Until that
+is measured and recorded, treat the shared state as UNKNOWN.

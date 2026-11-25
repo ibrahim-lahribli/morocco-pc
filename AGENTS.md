@@ -128,6 +128,11 @@ picking a side.
 - **Never execute a repo script to probe its flags.** Read its source: `--help` is not guaranteed,
   and an unknown argument may run the default path. `scripts/run-seeds.js` ignored argv, loaded
   `.env` and targeted `DATABASE_URL`, so `--help` applied every seed to the shared database.
+- **The TEST-target attestation is the operator's, never an agent's.** `--confirm-test-db` says the
+  destination was verified out of band, and no code can check that claim - so if an agent can pass
+  the flag, it protects nothing. Never add `--confirm-test-db` to a command to make a refusal go
+  away, and never pass it on the operator's behalf: stop, report the refusal, and let the operator
+  verify the destination and run the apply.
 - **Do not change a count, test figure, decision range or migration range without re-measuring it.**
 - **A gate verdict is evidence; prose is a claim.** Report PASS / FAIL / BLOCKED and say which ran.
 
