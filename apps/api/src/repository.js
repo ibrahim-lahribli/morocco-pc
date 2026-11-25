@@ -467,6 +467,21 @@ const DELETE_PRESETS_SQL = [
 ].join(' ');
 
 /**
+ * Remove specific preset rows, named by the passes they point at.
+ *
+ * This is the DELETE a test's cleanup must use. `DELETE_PRESETS_SQL` above is
+ * keyed by SCOPE, and a scope is not ownership: every sibling budget at the same
+ * catalog version shares it, so a cleanup that deletes by scope destroys rows the
+ * run never wrote. Naming the ids is the difference between "undo my writes" and
+ * "delete this shelf".
+ */
+const DELETE_PRESET_BY_QUERY_ID_SQL = [
+  'DELETE FROM recommendation_preset',
+  'WHERE query_id = ANY($1::uuid[])',
+  'RETURNING query_id',
+].join(' ');
+
+/**
  * Prune a family (use case, currency, budget) down to ONE catalog version
  * (Decision 48's retention policy): the rows of every other version go, and the
  * passes they pointed at are returned so the caller can remove those as well.
@@ -1116,6 +1131,19 @@ async function deletePresets(client, scope) {
 }
 
 /**
+ * Delete the preset rows pointing at these passes, and only those.
+ *
+ * @param {object} client a single dedicated connection
+ * @param {string[]} queryIds the passes whose preset rows go
+ * @returns {Promise<string[]>} the deleted rows' query ids
+ */
+async function deletePresetByQueryId(client, queryIds) {
+  if (!Array.isArray(queryIds) || queryIds.length === 0) return [];
+  const result = await client.query(DELETE_PRESET_BY_QUERY_ID_SQL, [queryIds]);
+  return result.rows.map((row) => row.query_id);
+}
+
+/**
  * Prune the family's superseded rows (every catalog version but the key's own)
  * and return their pass ids so the caller can delete the passes too.
  *
@@ -1163,6 +1191,7 @@ module.exports = {
   FIND_PRESET_QUERY_ID_SQL,
   UPSERT_PRESET_SQL,
   DELETE_PRESETS_SQL,
+  DELETE_PRESET_BY_QUERY_ID_SQL,
   DELETE_SUPERSEDED_PRESETS_SQL,
   CATALOG_CATEGORY_EXPRESSION,
   CATALOG_SPEC_SQL_BY_CATEGORY,
@@ -1183,5 +1212,6 @@ module.exports = {
   countBuildCandidates,
   upsertPreset,
   deletePresets,
+  deletePresetByQueryId,
   deleteSupersededPresets,
 };
