@@ -1,6 +1,7 @@
+import { ArrowRight } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
-import { GUIDES } from "@/lib/homepage/guides";
+import { GUIDES, TOTAL_GUIDE_COUNT } from "@/lib/homepage/guides";
 
 import { GuideCard } from "./guide-card";
 import { SectionHeading } from "./section-heading";
@@ -12,8 +13,8 @@ import { SectionHeading } from "./section-heading";
  * the last two are `max-lg:hidden`, so nothing is duplicated in the markup.
  * Titles live in the dictionary, keyed by `titleKey`; the module holds no copy.
  *
- * The "all guides" link is `aria-disabled` text until guide routes exist, and
- * no count is rendered because only four guides are authored.
+ * The "all guides" link sits below the cards per the frame, count included; it
+ * is `aria-disabled` text until guide routes exist.
  */
 export async function FeaturedGuides() {
   const t = await getTranslations("Homepage.guides");
@@ -29,27 +30,28 @@ export async function FeaturedGuides() {
         eyebrow={t("eyebrow")}
         title={t("title")}
         intro={t("intro")}
-        action={
-          <p className="text-start lg:text-end">
-            <span aria-disabled="true" className="text-label-lg text-primary">
-              {t("all")}
-            </span>
-          </p>
-        }
       />
 
-      <ul className="mt-5 grid gap-4 md:grid-cols-2 lg:mt-8 lg:grid-cols-4">
+      <ul className="mt-5 grid gap-3 md:grid-cols-2 lg:mt-8">
         {GUIDES.map((guide, index) => (
           <li key={guide.slug} className={index > 1 ? "max-lg:hidden" : undefined}>
             <GuideCard
-              category={t(`categories.${guide.category}`)}
               minutes={t("readingTime", { minutes: guide.minutes })}
               title={t(`items.${guide.titleKey}.title`)}
-              cta={t("cta")}
             />
           </li>
         ))}
       </ul>
+
+      <p className="mt-5 text-start lg:text-center">
+        <span
+          aria-disabled="true"
+          className="inline-flex items-center gap-1.5 text-label-lg text-primary"
+        >
+          {t("allCount", { count: TOTAL_GUIDE_COUNT })}
+          <ArrowRight aria-hidden="true" className="size-4 rtl:-scale-x-100" />
+        </span>
+      </p>
     </section>
   );
 }

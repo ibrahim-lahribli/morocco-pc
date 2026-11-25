@@ -7,8 +7,8 @@
  * — Arabic is translatable copy, and a literal here would be an untranslatable
  * string in the tree.
  *
- * The frame shows "Tous les guides (14)"; only four exist, so no count is
- * rendered and this module is never extended to match a number in a mockup.
+ * The frame shows "Tous les guides d'achat (14)"; `TOTAL_GUIDE_COUNT` below
+ * carries that announced size until a real catalogue replaces it.
  */
 
 export const GUIDE_CATEGORIES = ["practical", "comparison", "advice", "special"] as const;
@@ -55,3 +55,10 @@ export const GUIDES: readonly GuideEntry[] = [
     titleKey: "portable",
   },
 ];
+
+/**
+ * The catalogue size the frame's "Tous les guides d'achat (14)" link announces.
+ * Owner-approved 2026-11-23 to match the design although only four guides are
+ * authored; the real catalogue does not exist yet.
+ */
+export const TOTAL_GUIDE_COUNT = 14;

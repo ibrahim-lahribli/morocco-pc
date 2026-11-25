@@ -150,7 +150,7 @@
       "eyebrow": "Conseils pratiques",
       "title": "Bien choisir son PC au Maroc",
       "intro": "Nos guides d'achat indépendants pour comprendre le matériel avant de dépenser.",
-      "all": "Tous les guides d'achat",
+      "allCount": "Tous les guides d'achat ({count})",
       "readingTime": "{minutes} min de lecture",
       "cta": "Lire le guide",
       "categories": {
