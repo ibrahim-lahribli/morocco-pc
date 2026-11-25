@@ -125,6 +125,9 @@ picking a side.
   before relying on a row id or file state, and never rewrite another agent's commit.
 - **`PASS | FAIL | UNKNOWN | CONDITIONAL` is load-bearing.** NULL is UNKNOWN; UNKNOWN is never PASS
   and never FAIL. Determinism is a requirement, not a preference.
+- **Never execute a repo script to probe its flags.** Read its source: `--help` is not guaranteed,
+  and an unknown argument may run the default path. `scripts/run-seeds.js` ignored argv, loaded
+  `.env` and targeted `DATABASE_URL`, so `--help` applied every seed to the shared database.
 - **Do not change a count, test figure, decision range or migration range without re-measuring it.**
 - **A gate verdict is evidence; prose is a claim.** Report PASS / FAIL / BLOCKED and say which ran.
 

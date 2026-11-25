@@ -46,15 +46,19 @@
  * profile marker - it never deletes rows it does not own. So after a `--commit`
  * that harness stays blocked until the generated passes are removed:
  *
- *     node scripts/generate-presets.js --cleanup        # every preset + its pass
+ *     node scripts/generate-presets.js --cleanup=all    # every preset + its pass
  *     node scripts/generate-presets.js --cleanup=<sha>  # just one catalog version
+ *
+ * A BARE `--cleanup` is refused (exit 2). It used to mean the first form, and the
+ * scope it built was `{}` - every predicate NULL, so the DELETE matched the whole
+ * table. The mode survives; the implicit form does not.
  *
  * The script prints that reminder itself at the end of a commit run, so the
  * consequence is stated where it happens rather than only in a document.
  *
  * Usage: node scripts/generate-presets.js [--budget-from=N] [--budget-to=N]
  *          [--step=N] [--use-case=U]... [--currency=CCC]
- *          [--model=<name@version>] [--dry-run|--commit|--cleanup[=<version>]]
+ *          [--model=<name@version>] [--dry-run|--commit|--cleanup=<version>|--cleanup=all]
  *          [--target-env=<NAME> [--restore-point=<id>]] [--help]
  *
  * `--dry-run` is the DEFAULT: the ribbon is printed and nothing is written. The
@@ -103,6 +107,36 @@ const DEFAULT_STEP = 2000;
 const DEFAULT_CURRENCY = 'MAD';
 
 /**
+ * The word that asks a cleanup run for EVERY preset, explicitly.
+ *
+ * It exists because the alternative - defaulting to an empty scope - made one
+ * word enough to delete the whole table (§ E1). A catalog version is a hex
+ * digest, so this sentinel cannot collide with one.
+ */
+const CLEANUP_SCOPE_ALL = 'all';
+
+/**
+ * The DELETE scope for a cleanup run. ALWAYS stated, never empty by omission.
+ *
+ * This is the second line of defence, and it is deliberately not redundant with
+ * parseArgs: parseArgs refuses the bare flag, but a future caller (a test, a
+ * script) could still hand this function a null. An unrepresentable scope must
+ * throw HERE too, so that no refactor can quietly restore the whole-table delete.
+ *
+ * @param {string|null} cleanupVersion the parsed `--cleanup=` value
+ * @returns {object} the `deletePresets` scope
+ * @throws {Error} when no scope was stated
+ */
+function cleanupScope(cleanupVersion) {
+  if (cleanupVersion === CLEANUP_SCOPE_ALL) return {};
+  if (typeof cleanupVersion === 'string' && cleanupVersion.trim() !== '') {
+    return { catalogVersion: cleanupVersion };
+  }
+  throw new Error('cleanup scope is unrepresentable: a cleanup run must name a catalog version'
+    + ' or pass ' + CLEANUP_SCOPE_ALL + ' explicitly');
+}
+
+/**
  * The deploy identity recorded on each generated result row (Decision 46).
  *
  * A caller-supplied string, never an engine constant: whoever knows which
@@ -115,7 +149,7 @@ const ENGINE_VERSION = process.env.ENGINE_VERSION || 'generate-presets';
 const USAGE = [
   'usage: node scripts/generate-presets.js [--budget-from=N] [--budget-to=N] [--step=N]',
   '         [--use-case=U]... [--currency=CCC] [--model=<name@version>]',
-  '         [--dry-run|--commit|--cleanup[=<catalog-version>]]',
+  '         [--dry-run|--commit|--cleanup=<catalog-version>|--cleanup=' + CLEANUP_SCOPE_ALL + ']',
   '         [--target-env=<NAME> [--restore-point=<id>]] [--help]',
   'Environment: SCORING_MODEL_PIN (overridden by --model=<name@version>; else the default seed-minimal-v1@1.0.0).',
   'Default is --dry-run: nothing is written. Without --target-env, writes go to TEST_DATABASE_URL only.',
@@ -229,11 +263,18 @@ function parseArgs(argv, env = process.env) {
     } else if (arg === '--commit') {
       setMode('commit');
     } else if (arg === '--cleanup') {
-      setMode('cleanup');
+      // A bare --cleanup used to mean "every preset", and it built the EMPTY
+      // scope that made DELETE_PRESETS_SQL match the whole table. The MODE is
+      // still supported - R-24's remediation and the AGENTS section 6 rule both
+      // tell an operator to use it - but only when the scope is STATED. One word
+      // must never be enough to delete a shelf.
+      fail('--cleanup needs a scope: --cleanup=<catalog-version> for one version,'
+        + ' or --cleanup=' + CLEANUP_SCOPE_ALL + ' for every preset.'
+        + ' The bare form is refused because it deletes the whole table.');
     } else if (arg.startsWith('--cleanup=')) {
       const value = arg.slice('--cleanup='.length);
       if (value.length === 0) {
-        fail('--cleanup= needs a catalog version (use --cleanup for every version)');
+        fail('--cleanup= needs a catalog version, or --cleanup=' + CLEANUP_SCOPE_ALL + ' for every preset');
       }
       setMode('cleanup');
       args.cleanupVersion = value;
@@ -605,13 +646,13 @@ async function main() {
   await client.connect();
   try {
     if (args.mode === 'cleanup') {
-      const scope = args.cleanupVersion === null ? {} : { catalogVersion: args.cleanupVersion };
+      const scope = cleanupScope(args.cleanupVersion);
       const queryIds = await repository.deletePresets(client, scope);
       const removed = await deletePasses(client, queryIds);
       console.log('CLEANUP: removed ' + queryIds.length + ' preset row(s) and '
         + removed.queries + ' pass(es), ' + removed.results + ' result row(s), '
         + removed.components + ' component row(s), ' + removed.profiles + ' profile(s)'
-        + (args.cleanupVersion === null ? '' : ' for catalog version ' + args.cleanupVersion));
+        + (args.cleanupVersion === CLEANUP_SCOPE_ALL ? ' for EVERY catalog version' : ' for catalog version ' + args.cleanupVersion));
       return;
     }
 
@@ -685,7 +726,7 @@ async function main() {
           + ' unaffected; `check-target-parity` against shared will report these as EXPECTED DIFFs (R-14).'
         : 'NOTE: the generated passes are unmarked `recommendation_query` rows, so'
           + ' `npm run eval:scenarios` will refuse to run until they are removed:'
-          + ' node scripts/generate-presets.js --cleanup');
+          + ' node scripts/generate-presets.js --cleanup=' + CLEANUP_SCOPE_ALL);
     }
   } finally {
     await client.end();
@@ -694,6 +735,8 @@ async function main() {
 
 module.exports = {
   parseArgs,
+  cleanupScope,
+  CLEANUP_SCOPE_ALL,
   budgetRibbon,
   deletePasses,
   generateOne,
