@@ -94,16 +94,28 @@ implementation's source directly.
   `step-5-w2-persistence` moved the three writers (`persist-ranked`, `persist-rejections`,
   `persist-pass-facts`) and the two validators (`validate-selected`, `validate-rejections`) into
   `packages/recommendation-runtime/src/persistence/`, each behind an identity shim at its old path.
-  `src/index.js` still exports only `loaders`: the RFC §11.5 persistence table is an
-  orchestrator-facing surface, and it is sliced when W3's call sites exist to review it against.
+  W2 published none of them: the RFC §11.5 persistence table is an orchestrator-facing surface, and
+  it is sliced when W3's call sites exist to review it against. **W3 supplied them**, so
+  `src/index.js` now publishes `persistence` (see the W3 bullet).
 - **W3 has moved the orchestrator, and publishes `orchestrator`.** The batch
   `step-5-w3-orchestrator` moved all eight modules into this package's `src/orchestrator/`, each
   behind an identity shim at its old path, and published the eight entry points above as the
   `orchestrator` namespace (`src/index.js` and `test/export-surface.json` in the same commit).
-  `runRecommendationCommit` stays internal. The three namespaces the orchestrator resolves from both
-  depths now have their own runtime barrels (`src/candidates/`, `src/filtering/`, `src/scoring/`),
-  each composed from the pure core namespace plus the SQL members and pinned by
-  `test/namespace-barrels.test.js`.
+  `runRecommendationCommit` stays internal. W3 also **reconciled the root with RFC §11.5** by
+  publishing `persistence` (`persistRanked`, `persistPassFacts`, `persistRejections`, plus the two
+  validators §11.5 authorises for their callers), pinned by `test/persistence-surface.test.js` and
+  `test/export-surface.json`, so the root is `{ loaders, orchestrator, persistence }` and
+  `package.json` declares the §11.5 `exports` map (`.`, `./loaders`, `./orchestrator`,
+  `./persistence`) — resolved through Node from outside the repository by
+  `scripts/lib/runtime-package-exports.test.js`.
+
+  The three namespaces the orchestrator resolves from both depths keep their runtime composites
+  (`src/candidates/`, `src/filtering/`, `src/scoring/`), each composed from the pure core namespace
+  plus the SQL members and pinned by `test/namespace-barrels.test.js`. Those composites are the
+  legacy mixed barrels RELOCATED, not published namespaces: they are absent from `exports`, from
+  `src/index.js` and from `test/export-surface.json`, and
+  `packages/recommendation-runtime/docs/MIXED_BARRELS.md` §5 records the RFC question the relocation
+  raises, its alternatives and the owner decision it requests.
 - **W3's own prerequisites are NOT closed by the move.** Step 5 remains open until the runtime
   export surface is ratified, runtime characterization and provenance are verified, and the Step 5
   acceptance review happens.

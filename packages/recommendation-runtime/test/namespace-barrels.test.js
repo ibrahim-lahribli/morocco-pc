@@ -22,6 +22,13 @@
 //      a consumer (and the orchestrator's patch seam) cannot observe two
 //      different modules.
 //
+// The three barrels are the LEGACY MIXED BARRELS RELOCATED, not published
+// namespaces (docs/MIXED_BARRELS.md §5). The last block proves the half of that
+// claim a key list cannot: the patch seam. The behavioural suites patch
+// `require('../candidates')` — the OLD path — and expect the moved
+// implementation to call through the same object. A locally built merged
+// namespace would satisfy a key list and still detach that seam.
+//
 // DB-free and dependency-free: loading the barrels executes no query.
 //
 //   npm run test:runtime        (from the repo root)
@@ -200,6 +207,56 @@ describe('the composition adds no wrapper: every member is the same function obj
         ? sources[key]
         : core.scoring[key];
       assert.equal(barrels.scoring.barrel[key], expected, 'scoring.' + key + ' is not the original');
+    }
+  });
+});
+
+describe('the composites are the move seam, not a publication', () => {
+  it('no composite is a published namespace', () => {
+    // Publication is what RFC §11.2 splits; these three objects are outside it.
+    // test/surface.test.js already asserts the root key list exactly, and
+    // scripts/lib/runtime-package-exports.test.js asserts the package name
+    // cannot reach them. This adds the negative in the same place the composite
+    // surfaces are pinned, so a reader cannot mistake one for a namespace.
+    const runtime = require('..');
+    for (const name of Object.keys(barrels)) {
+      assert.equal(
+        Object.prototype.hasOwnProperty.call(runtime, name),
+        false,
+        name + ' is a composite seam and must not be published as a runtime namespace'
+      );
+    }
+  });
+
+  it('patching the OLD path is visible to the moved implementation', async () => {
+    // The seam the behavioural suites rely on
+    // (src/recommendation/orchestrator/run.test.js: `spyOn(candidatesModule, ...)`
+    // where candidatesModule is `require('../candidates')` from the OLD tree).
+    // `query.loadQueryInput` is the FIRST collaborator runRecommendation calls,
+    // so a sentinel thrown from the old path proves the implementation is
+    // calling through that exact object and not a private copy.
+    const run = require('../src/orchestrator/run');
+    const oldQuery = require('../../../src/recommendation/query');
+    const original = oldQuery.loadQueryInput;
+    const sentinel = new Error('the moved orchestrator must call the old-path object');
+    oldQuery.loadQueryInput = () => {
+      throw sentinel;
+    };
+    try {
+      const db = {
+        query() {
+          throw new Error('the patched loader must run before any statement');
+        },
+      };
+      await assert.rejects(
+        () => run.runRecommendation({ db, queryId: '00000000-0000-4000-8000-000000000000' }),
+        (err) => {
+          assert.equal(err, sentinel, 'the implementation did not call the patched old-path loader');
+          return true;
+        }
+      );
+    } finally {
+      oldQuery.loadQueryInput = original;
     }
   });
 });
