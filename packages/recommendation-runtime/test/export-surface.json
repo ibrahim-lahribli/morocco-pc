@@ -1,6 +1,6 @@
 {
   "package": "@morocco-pc/recommendation-runtime",
   "entry": "src/index.js",
-  "note": "Committed export surface of the runtime package, pinned by test/index.test.js. Step 5 W0 shipped an empty surface on purpose: the harness exists before any module moves. W1 added loaders, W2 moved the persistence modules without publishing them, and W3 adds orchestrator; each batch adds its namespace to src/index.js and to this list in the same commit, so growing the surface is always a reviewable diff. `loaders` is the eight-name RFC §11.5 table (test/loaders-surface.test.js pins the members); `orchestrator` is the eight entry points of docs/ORCHESTRATOR_ENTRY_POINTS.md (test/orchestrator-index.test.js pins the members and the old-path identity).",
-  "exports": ["loaders", "orchestrator"]
+  "note": "Committed export surface of the runtime package, pinned by test/index.test.js. Step 5 W0 shipped an empty surface on purpose: the harness exists before any module moves. W1 added loaders, W2 moved the persistence modules, W3 added orchestrator and reconciled the root with RFC SS11.5 by adding persistence; each batch adds its namespace to src/index.js and to this list in the same commit, so growing the surface is always a reviewable diff. `loaders` is the eight-name RFC SS11.5 table (test/loaders-surface.test.js), `orchestrator` is the eight entry points of docs/ORCHESTRATOR_ENTRY_POINTS.md (test/orchestrator-index.test.js), and `persistence` is the three approved writers plus the two validators §11.5 authorises for their callers (test/persistence-surface.test.js).",
+  "exports": ["loaders", "orchestrator", "persistence"]
 }

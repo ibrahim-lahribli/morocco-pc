@@ -8,8 +8,9 @@
 //   1. MEMBERSHIP. `APPROVED_LOADERS` is RFC §11.5's table, transcribed. The
 //      namespace must expose exactly those names — an added name fails (nothing
 //      internal leaks) and a removed name fails (the approved surface shrank).
-//   2. ROOT SHAPE. The package root publishes `loaders` and nothing else until
-//      W2 (persistence) and W3 (orchestrator). Every member must be a function.
+//   2. ROOT SHAPE. The package root publishes the RFC §11.5 namespaces
+//      (`loaders`, `orchestrator`, `persistence`) and nothing else. Every loader
+//      must be a function, and the `./loaders` subpath must be the same object.
 //   3. IDENTITY. Each published name must be `===` the export reached through
 //      its legacy shim under src/recommendation/**, and through the old stage
 //      barrels where they publish it. A copy, a wrapper or a second
@@ -88,7 +89,7 @@ describe('runtime loaders namespace', () => {
   const loaders = runtime.loaders;
 
   it('is published at the package root', () => {
-    assert.deepEqual(Object.keys(runtime).sort(), ['loaders', 'orchestrator']);
+    assert.deepEqual(Object.keys(runtime).sort(), ['loaders', 'orchestrator', 'persistence']);
     assert.equal(typeof loaders, 'object');
     assert.notEqual(loaders, null);
     assert.equal(require('..').loaders, loaders);
