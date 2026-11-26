@@ -20,6 +20,7 @@ const path = require('node:path');
 
 const REQUIRED = [
   'boundary.test.js',
+  'composite-lifecycle.test.js',
   'index.test.js',
   'loaders-surface.test.js',
   'namespace-barrels.test.js',

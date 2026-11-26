@@ -59,8 +59,9 @@ jobs:
       # `node --test` exits 0 when a glob matches nothing - a gate that passes
       # because it discovered no tests is worse than no gate. The quoted glob is
       # expanded by Node (same mechanism as test:core) and matches only the
-      # *.test.js suites (24 after W3), never the helpers
-      # (`assert-discovery.js`, `boundary-scanner.js`, `recording-client.js`).
+      # *.test.js suites (25 after W3 + F1), never the helpers
+      # (`assert-discovery.js`, `boundary-scanner.js`,
+      # `composite-lifecycle-scanner.js`, `recording-client.js`).
       - name: Runtime package harness (step 5)
         run: npm run test:runtime
       # --- Step 4B extraction evidence (PR 3) -------------------------------
