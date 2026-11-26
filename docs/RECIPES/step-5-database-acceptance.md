@@ -265,6 +265,15 @@ numbers **measured on an acceptance branch** (the §4.2 output), with the measur
 PR. Until that merge, Part II does not run and the acceptance is **BLOCKED**, not failed. Nothing in this
 runbook authorises editing `EXPECTED` directly.
 
+**Both derivations must agree.** The reconciling PR has to carry (a) the **static per-seed derivation** of the
+seeded catalogue - the `product` / `store_offer` / `component_assessment` tuple counts read from
+`database/seeds/*.sql` (the table in §2.2) - and (b) the **§4.2 measurement from the acceptance branch**, and
+the two must produce the same number for products, for offers and for assessments. Neither alone is enough: a
+measured figure with no static derivation behind it cannot be re-checked by a reviewer, and a static figure
+with no measurement is arithmetic about seeds whose `NOT EXISTS` guards only a real apply exercises. If they
+**disagree, STOP** - the branch is not seeded as this runbook assumes, and the difference is its own finding,
+not a number to write into `EXPECTED`.
+
 ### 5.2 Re-verify the zero baseline first
 
 On the branch Part II will use, run — read-only:
