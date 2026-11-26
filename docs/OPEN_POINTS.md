@@ -91,8 +91,7 @@ seed or DB-writing test.
   `swap-preview.db.test.js`. `catalog` and `scoring-model-pin` are read-only by construction;
   `dedupe` is one rolled-back transaction; `presets` is id-scoped plus one global
   `recommendation_preset` count; both orchestrator scripts are id-scoped only, and the full-run one
-  substitutes a zero preflight baseline for an after-comparison. The runbook is
-  `docs/RECIPES/step-5-database-acceptance.md`.
+  substitutes a zero preflight baseline for an after-comparison.
 ## Checked while compiling this list (2026-11-02)
 
 - Engine, script and API suites: 1261 / 452 / 193 tests, 0 failed, no cancelled (`test:api:db` 17 was

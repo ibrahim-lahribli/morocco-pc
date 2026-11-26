@@ -2206,8 +2206,7 @@ full-run harness's preflight requires a zero global `recommendation_query` count
 that must be left alone) and a zero `build_candidate` baseline; and its `EXPECTED` pins `models: 1`
 for `seed-minimal-v1@1.0.0`, which seed 029 makes INACTIVE, so `--model=launch-v2@2.5.0` is required
 and the seeded counts must be measured rather than assumed. The resolution is an isolated, fully seeded
-acceptance branch provisioned by the operator (Option A), recorded in
-`docs/RECIPES/step-5-database-acceptance.md`, which also carries the corrected per-file residue map:
+acceptance branch provisioned by the operator (Option A). The corrected per-file residue map:
 whole-table before/after comparison exists only in `recommendations.db.test.js`,
 `swap-commit.db.test.js` and `swap-preview.db.test.js`, while `catalog` and `scoring-model-pin`
 are read-only, `dedupe` is rolled back, `presets` is id-scoped plus one global
