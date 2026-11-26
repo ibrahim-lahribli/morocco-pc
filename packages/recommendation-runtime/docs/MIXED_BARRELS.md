@@ -1,9 +1,11 @@
 # Recommendation runtime — the three mixed-barrel splits
 
 Status: CURRENT for the publication split (RFC §11.2, §11.5) and for the W3 relocation recorded in §5.
-`packages/recommendation-runtime/src/loaders/` exists (step 5 W1) and is a published subpath; the three
+`packages/recommendation-runtime/src/loaders/` exists (step 5 W1) and is a published subpath. The three
 composites `src/{candidates,filtering,scoring}/index.js` are the legacy mixed barrels relocated, NOT a
-publication, and they carry an open architectural question (§5) that this document does not self-approve.
+publication: **the repository owner approved them on 2026-11-26 as a temporary, step-6-scoped exception
+(Option A) that step 6 must delete** (§5.4). The general RFC boundary rule is unchanged — one scoped
+exception, not a relaxation of the Core/Runtime separation.
 
 ## What a publication split is
 
@@ -60,18 +62,18 @@ shape of the old tree before the API has moved, and would break the pinned owner
    two surfaces do not overlap. `packages/recommendation-core/test/surface.test.js` asserts the
    runtime names are absent from core; `packages/recommendation-runtime/test/surface.test.js`
    asserts no runtime public name is a core name.
-2. **No runtime module re-exports a core name (RFC §11.3), and the three composites of §5 are a
-   proposed exception to that rule — not compliance with it.** The rule is not narrowed here to a
-   "published" surface: RFC §11.3 applies to every module in this package and stays authoritative as
-   written. On the published surface the rule holds and is enforced — `loaders`, `orchestrator` and
+2. **No runtime module re-exports a core name — RFC §6.4 requires the split, RFC §9.3 is how a
+   forbidden import is caught — and the three composites of §5 are a scoped, OWNER-APPROVED exception
+   to that rule, not compliance with it.** The rule is not narrowed here to a "published" surface: it
+   applies to every module in this package and stays authoritative as written. On the published surface the rule holds and is enforced — `loaders`, `orchestrator` and
    `persistence` are each proved free of core names by `test/loaders-surface.test.js`,
    `test/orchestrator-index.test.js` and `test/persistence-surface.test.js`. The relocated composites
    violate it: they re-export core names beside this package's SQL members. That they are unpublished —
    absent from `package.json` `exports`, from `src/index.js` and from `test/export-surface.json`, so the
    package name cannot reach them (`scripts/lib/runtime-package-exports.test.js` proves
-   `ERR_PACKAGE_PATH_NOT_EXPORTED`) — is a mitigation, not a compliance argument, and being unpublished
-   does not make the file compliant. §5 states the deviation, the alternatives and the decision the
-   owner has to make; it does not approve the relocation, and neither does this rule.
+   `ERR_PACKAGE_PATH_NOT_EXPORTED`) — is one of the approval CONDITIONS, not the justification. The
+   exception covers exactly those three files, expires with step 6, and settles no precedent (§5.4,
+   condition 6).
 3. **The old barrel's test is not touched.** `src/recommendation/filtering/index.test.js` is the
    pinned `SPLIT_FACTS.runtimeBarrel` row in `scripts/audit-pr2-test-ownership.js` (7 assertions).
    It follows the old barrel and is step 6 material.
@@ -105,16 +107,18 @@ That object is the legacy composite, implemented once, with the old path as an i
 ### 5.2 The deviation, stated exactly
 
 `packages/recommendation-runtime/src/{candidates,filtering,scoring}/index.js` each re-export core names
-beside this package's SQL members. RFC §11.3 (and rule 2 above, which keeps it) forbids that in a
-runtime module, and §11.2's file mapping does not list these files. The composition is safe — every
-pure member is the core's own function object, the key sets are committed and pinned, and no accessor
-or non-enumerable member exists (`test/namespace-barrels.test.js`) — but safety is not compliance.
+beside this package's SQL members. RFC §6.4 requires the split and §9.3 forbids the import that makes a
+runtime module re-export a core name; §11.2's file mapping does not list a runtime `index.js` composite
+either. The composition is safe — every pure member is the core's own function object, the key sets are
+committed and pinned, and no accessor or non-enumerable member exists
+(`test/namespace-barrels.test.js`) — but safety is not the argument: the owner's scoped approval is, and
+it expires when step 6 deletes the files (§5.4).
 
 ### 5.3 Is a compliant implementation feasible? No, not under the three constraints
 
 | Alternative | What it is | Why it is not taken |
 |---|---|---|
-| **A. Relocated composite (current)** | one object at `src/<stage>/index.js`, old path shims to it | re-exports core names from a runtime file; §11.2 does not schedule the file. Needs owner ratification or a §11.2/§11.3 amendment |
+| **A. Relocated composite (current)** | one object at `src/<stage>/index.js`, old path shims to it | re-exports core names from a runtime file; §11.2 does not schedule the file. **Owner-approved 2026-11-26 as a temporary exception (§5.4)**: it needs no RFC amendment because it is scoped to three files and expires with step 6 |
 | **B. Local merged namespace** (§11.3 rule 2 as written) | each orchestrator builds `Object.assign({}, core.candidates, { loadCandidates })` at load time; no composite barrel | requires editing `run.js` and `swap-preview.js`, so the batch is no longer byte-identical (needs an `edits[]` record), AND it **breaks the patch seam**: the suites patch the old path's object, the implementation would call its own copy, and `run.test.js` / `swap-preview.test.js` would silently stop observing their own patches. Rejected on requirement 3 |
 | **C. Split the composites now** | move pure members to core-only barrels and SQL members to `runtime/loaders/*`, as §11.2's target column says | it is step 6 work by §11.2's own note (the API's imports move then); doing it now changes the published shape of `src/recommendation/**` before its only consumer moves, breaks `engine.js`'s and `import-boundary.test.js`'s six-barrel imports, and would still leave the byte-identical orchestrator needing a composite at `../candidates` |
 | **D. Defer W3's orchestrator move** | revert the batch, wait for step 6 | abandons a completed, gated move over a packaging question; the same question returns at step 6 with the orchestrator already moved |
@@ -123,38 +127,70 @@ Compatibility consequences of A: none for any caller (identity shims, same objec
 same SQL). Of B: the patch seam, plus a manifest `edits[]` record. Of C: the API's six barrel imports
 and the `engine-layout` gate. Of D: none, and no progress.
 
-### 5.4 The decision requested (owner, not this PR)
+### 5.4 The owner decision — Option A APPROVED (2026-11-26)
 
-**Question.** May `packages/recommendation-runtime/src/{candidates,filtering,scoring}/index.js` hold the
-legacy composite barrel — pure members re-exported from core by identity, SQL members owned here — as an
-unpublished, step-6-scoped relocation?
+**Status: APPROVED by the repository owner on 2026-11-26 as a TEMPORARY, STEP-6-SCOPED EXCEPTION.**
+This section no longer asks for a decision; it records one. The same approval is recorded in RFC §21.4
+(Revision 19) and in `docs/OPEN_POINTS.md` R-33 (F1).
 
-**Recommended: yes, with the following conditions, all of which are already enforced in this PR.**
+**The approved arrangement.** `packages/recommendation-runtime/src/{candidates,filtering,scoring}/index.js`
+may hold the legacy composite barrel — pure members re-exported from core by identity, SQL members owned
+by this package — as an **unpublished, step-6-scoped compatibility seam**. The approval applies to exactly
+those three files and to nothing else.
 
-1. The composites are not published: absent from `package.json` `exports`, from `src/index.js` and from
-   `test/export-surface.json`; the package name throws `ERR_PACKAGE_PATH_NOT_EXPORTED` for them
-   (`scripts/lib/runtime-package-exports.test.js`).
-2. Their exact key sets (and `scoring`'s key order) are committed and pinned
-   (`test/namespace-barrels.test.js`), and every pure member is the core's own function object.
-3. No published namespace carries a core name (`test/surface.test.js`, and the per-namespace suites).
-4. Step 6 deletes them when the orchestrator's specifiers are rewritten to the two packages; §19.4.3's
-   `exports` map already makes the deletion invisible to consumers.
+**Why it is temporary.** It exists only because the eight orchestrator modules must stay byte-identical to
+baseline `598e442`, so their `require('../candidates')`, `require('../filtering')` and
+`require('../scoring')` specifiers cannot change until step 6 rewrites them together with the API's
+imports. Once that happens the seam has no consumer and must go.
 
-**If the owner declines**, the compliant path is B or C, and the two consequences to accept are the
-manifest `edits[]` record plus a replacement for the patch seam (B), or the API barrel churn and a
-step-6 pull-forward (C). This document does not choose for the owner, and the PR is not merge-ready on
-this point until the answer is recorded.
+**The conditions of approval — all six, as approved.**
 
-**Test consequences of the answer.** Under A (current) no test changes: the composites' key sets,
-`scoring`'s key order, member identity through both paths, the patch-seam proof and the
-unpublished/inaccessible assertions all run today (`test/namespace-barrels.test.js`,
-`test/surface.test.js`, `scripts/lib/runtime-package-exports.test.js`). Under B the orchestrator gains
-an explicit merged namespace, so the patch-seam tests must be rewritten to patch something the
-implementation actually reads — that is a test-contract change, not a test tightening, and the
-extraction batch needs an `edits[]` record proving the implementation bytes changed after the move.
-Under C the ownership audit's `SPLIT_FACTS.runtimeBarrel` row and `src/recommendation/filtering/index.test.js`
-move with the split, and the API's six barrel imports are repointed early.
+1. The three composites remain **unpublished** and inaccessible through the Runtime package-name exports
+   (`package.json` `exports`, `src/index.js`, `test/export-surface.json`;
+   `scripts/lib/runtime-package-exports.test.js` proves `ERR_PACKAGE_PATH_NOT_EXPORTED`).
+2. Their **exact key sets** and `scoring`'s key order remain pinned
+   (`test/namespace-barrels.test.js`).
+3. **Every pure member remains identical** to its corresponding Core member — the core's own function
+   object, no wrapper, no copy (`test/namespace-barrels.test.js`).
+4. **No published Runtime namespace exposes a Core name** (`test/surface.test.js`, plus the per-namespace
+   suites `test/loaders-surface.test.js`, `test/orchestrator-index.test.js` and
+   `test/persistence-surface.test.js`).
+5. **The three composites must be DELETED during step 6**, once the relevant imports and compatibility
+   consumers have migrated. Deleted — not repointed to core, not emptied, not kept "just in case".
+6. **No future module may use this exception as precedent** without a separate architectural decision.
 
-**Migration consequences.** None under any option: no schema, migration, seed or database job is
-touched by this question. The only migration-shaped data at risk is provenance — the manifest batch and
-its immutable baseline — and option B is the only one that would write a new `edits[]` entry.
+Conditions 1-4 and 6 are enforced by tests that run today; condition 5 is enforced by the lifecycle gate in
+§5.4.1, whose MIGRATED branch fails while any trace of the exception survives.
+
+**What the approval does not do.** It does not narrow, amend or reinterpret the general rule. RFC §6.4
+still requires the mixed barrels to be split, RFC §9.3 still catches a forbidden import, RFC §11.2's
+mapping and RFC §11.5's published interface are unchanged, and the Core/Runtime separation is not
+relaxed. This is a scoped deferral of the split's *physical* removal — recorded so the debt has an owner, a
+scope and an expiry condition instead of being a silence. Reading the relocation as generally compliant
+would still be wrong.
+
+#### 5.4.1 The lifecycle gate (condition 5, executable)
+
+`packages/recommendation-runtime/test/composite-lifecycle.test.js` — with its pure half
+`test/composite-lifecycle-scanner.js` — runs inside `npm run test:runtime`, so it is part of the
+ordinary CI suite rather than a document nobody executes. It recognises **exactly two valid states and no
+third**:
+
+- **ACTIVE** — the orchestrator requires the composites from exactly the four committed modules
+  (`run.js` → candidates + filtering + scoring, `swap-preview.js` → candidates + filtering,
+  `swap-commit.js` → scoring, `compute.js` → scoring); the only runtime barrels that reach the core are
+  the three composites; the old paths are identity shims to them; nothing is published; the key-set proof
+  is still discoverable.
+- **MIGRATED** — no orchestrator module requires a composite, and nothing of the exception survives: no
+  composite file, no core-spreading runtime barrel, no old-path shim that still re-exports one, and no
+  in-package or path-based consumer still pointing at
+  `recommendation-runtime/src/{candidates,filtering,scoring}`.
+- **PARTIAL is a FAILURE.** A tree where some consumers were rewritten and others were not is
+  mid-migration; the gate prints the observed consumer map so the state is diagnosable instead of
+  ambiguous.
+
+The MIGRATED branch is driven by synthetic trees inside the same suite, so the check that must block a
+future merge is exercised today rather than for the first time on the day it matters.
+
+**How the question in this document closes:** step 6 deletes the three files and their old-path shims,
+every consumer migrates, and `npm run test:runtime` runs green in MIGRATED state. Nothing else is owed.
