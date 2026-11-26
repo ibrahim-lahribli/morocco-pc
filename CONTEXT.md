@@ -157,7 +157,7 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   no `./package.json` export. **Superseded for the runtime side by the entry below; the sentence was true
   on 2026-11-20 and is kept as the dated measurement it was.**
 - **Step 5 — runtime extractions complete, PR #72 unmerged (branch `feat/step-5-w3-orchestrator`, base
-  `f1658d9`).** All 23 runtime-target modules now live in `packages/recommendation-runtime/src/`: the
+  and current `master` `f1658d9`, head `b0252e0` plus the Revision-18 documentation commit).** All 23 runtime-target modules now live in `packages/recommendation-runtime/src/`: the
   eight W1 loaders (`query/`, `candidates/loader.js`, `offers/select.js`,
   `filtering/{context-loader,pipeline}.js`, `scoring/load-*.js`), the five W2 persistence modules
   (`persistence/`: `persist-ranked`, `persist-pass-facts`, `persist-rejections`, `validate-selected`,
@@ -176,9 +176,13 @@ DIFFs re-measured 2026-11-06; the baseline test counts re-measured 2026-11-15; `
   `packages/recommendation-runtime/docs/MIXED_BARRELS.md` §5 and awaiting the owner. The published
   surface is the one decision A2 approved as written on 2026-11-11 (§11.4/§11.5), so this branch
   implements an approved contract and what remains is the Step 5 **acceptance review** of that
-  implementation, not a ratification of the interface. Measured on the branch head `caa236f`
-  (2026-11-25): `test:unit` **774**, `test:scripts` **970**, `test:core` **697** (695 pass / 2 skipped
-  on Windows), `test:runtime` **205**, `test:api` **193**, `test:database-guard` **15**. Still open: the
+  implementation, not a ratification of the interface. Measured at the branch commit `caa236f`
+  (2026-11-25; the docs-and-comment-only `b0252e0` after it changes no test): `test:unit` **774**,
+  `test:scripts` **970**, `test:core` **697** (695 pass / 2 skipped on Windows), `test:runtime` **205**,
+  `test:api` **193**, `test:database-guard` **15**. For comparison, the current `master` = `f1658d9`
+  was re-measured the same way on 2026-11-26: `test:unit` **774**, `test:scripts` **963**, `test:core`
+  **697** (695 pass / 2 skipped), `test:runtime` **173**, `test:api` **193**, `test:database-guard` **15**.
+  Still open: the
   Step 5 acceptance review, including the DB-backed suite on the isolated TEST branch required by
   RFC §19.3 (UNKNOWN — not run for this branch), `apps/api/src/engine.js`
   still importing `src/recommendation/**` (step 6), and the step-6 split of the three composites.

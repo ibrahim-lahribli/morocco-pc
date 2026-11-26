@@ -34,10 +34,14 @@
 //   orchestrator/commit.js (required directly by full-run.js) and is not one of
 //   the eight.
 //
-// What this file does NOT decide: the RFC §11.5 row for persistence is
-// orchestrator-facing, so the same three writers may still be described as
-// internal step-6 material. The surface is pinned by test/export-surface.json
-// and each namespace by its own surface suite; growing it is a reviewable diff.
+// What this file does NOT decide: who CALLS these namespaces, or where their
+// implementation is owned, after step 6. `persistence` is published and
+// approved: RFC §11.5 lists `./persistence` with the three writers plus the
+// validators their callers need, and decision A2 adopted that contract as
+// written on 2026-11-11. "Internal step-6 material" therefore describes a
+// future call-site or ownership move, never the surface this file exports.
+// The surface is pinned by test/export-surface.json and each namespace by its
+// own surface suite; growing it is a reviewable diff.
 //
 // What this file does NOT close, all recorded rather than hidden: the Step 5
 // acceptance review of this implementation (the §11.5 interface itself was
