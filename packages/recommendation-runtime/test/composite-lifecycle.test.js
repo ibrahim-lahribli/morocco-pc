@@ -41,6 +41,11 @@ const {
   STAGES,
   assess,
   classifyLifecycle,
+  coreEntrySpread,
+  legacyBarrelStagesIn,
+  legacyConsumerReferences,
+  runtimeCompositeConsumers,
+  runtimeSurfacePublishers,
   stagesRequiredBy,
   stripComments,
 } = require('./composite-lifecycle-scanner');
@@ -105,55 +110,75 @@ function observe() {
     dependencies[file] = stagesRequiredBy(fs.readFileSync(path.join(ORCHESTRATOR, file), 'utf8'));
   }
 
-  const compositeFiles = [];
-  const coreSpreaders = [];
-  for (const entry of fs.readdirSync(RUNTIME_SRC, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const index = path.join(RUNTIME_SRC, entry.name, 'index.js');
-    if (!fs.existsSync(index)) continue;
-    const source = fs.readFileSync(index, 'utf8');
-    const relative = 'src/' + entry.name + '/index.js';
-    // The composite signature as this gate defines it: a top-level runtime barrel
-    // that reaches the pure core directly. Deliberately conservative - a new
-    // barrel that wants a core constant has to pass through the owner's
-    // condition 6 rather than slip into the exception.
-    if (source.includes("require('../core-entry')")) coreSpreaders.push(relative);
-    if (STAGES.includes(entry.name)) compositeFiles.push(relative);
-  }
+  // Every runtime source file, at any depth: a composite does not have to sit at
+  // `src/<stage>/index.js` to publish the core surface, so the observation must
+  // not be able to miss a nested one.
+  const runtimeSources = [];
+  walk(RUNTIME_SRC, (absolute) => {
+    runtimeSources.push({
+      path: 'src/' + path.relative(RUNTIME_SRC, absolute).split(path.sep).join('/'),
+      source: fs.readFileSync(absolute, 'utf8'),
+    });
+  });
 
+  // The composite signature as this gate defines it: a runtime file that spreads
+  // or re-exports the pure core's SURFACE. Keyed on the export behaviour, never on
+  // the bare specifier: a barrel that imports one core function to call it is not
+  // publishing a core namespace, and flagging it would make the gate accuse
+  // legitimate Core use.
+  const coreSpreaders = runtimeSurfacePublishers(runtimeSources);
+
+  // The composite FILE set, by its expected path: what the owner's condition 5
+  // names explicitly. Detected by existence, so a deleted file is a fact and not
+  // an inference from a failed read.
+  const compositeFiles = STAGES
+    .map((stage) => 'src/' + stage + '/index.js')
+    .filter((relative) => fs.existsSync(path.join(PACKAGE_ROOT, relative)));
+
+  // EXISTENCE and CONTENTS are observed separately on purpose: MIGRATED fails on
+  // the FILE existing at all, whatever it now re-exports, because the owner's
+  // condition says DELETED and a repointed shim is the same debt under a new name.
+  const shimFiles = [];
   const shimRefsRuntime = {};
   for (const stage of STAGES) {
     const shim = path.join(OLD_TREE, stage, 'index.js');
-    shimRefsRuntime[stage] = fs.existsSync(shim)
-      && RUNTIME_COMPOSITE_REFERENCE.test(stripComments(fs.readFileSync(shim, 'utf8')));
+    if (!fs.existsSync(shim)) {
+      shimRefsRuntime[stage] = false;
+      continue;
+    }
+    shimFiles.push(stage);
+    shimRefsRuntime[stage] = RUNTIME_COMPOSITE_REFERENCE.test(
+      stripComments(fs.readFileSync(shim, 'utf8'))
+    );
   }
 
+  // Consumers of the OLD path, from real require/import SPECIFIERS only: a path
+  // recorded as data (scripts/audit-pr2-test-ownership.js) or written in prose is
+  // not a consumer, and neither is a require of a subpath module.
+  const legacyReferences = [];
   const references = [];
   walk(REPO_ROOT, (absolute) => {
     if (SELF.has(absolute)) return;
-    const source = stripComments(fs.readFileSync(absolute, 'utf8'));
     const relative = relativeToRepo(absolute);
-    if (RUNTIME_COMPOSITE_REFERENCE.test(source)) {
+    const source = fs.readFileSync(absolute, 'utf8');
+    legacyReferences.push(...legacyConsumerReferences([{ path: relative, source }]));
+    if (RUNTIME_COMPOSITE_REFERENCE.test(stripComments(source))) {
       references.push(relative + ' (path into the runtime composite)');
-      return;
     }
-    if (!absolute.startsWith(RUNTIME_SRC + path.sep)) return;
-    if (!fs.readdirSync(RUNTIME_SRC).includes(path.basename(path.dirname(absolute)))) return;
-    // Inside the package, the exception is the composite specifier itself. The
-    // composite directories are allowed to BE the composite; nothing else may
-    // require one.
-    const directory = path.dirname(absolute);
-    if (STAGES.includes(path.basename(directory))) return;
-    const stages = stagesRequiredBy(source);
-    if (stages.length > 0) references.push(relative + ' requires ../' + stages.join(', ../'));
   });
+  // Inside the package the exception is the composite SPECIFIER itself, at any
+  // depth. The composite directories are allowed to BE the composite; nothing
+  // else may require one.
+  references.push(...runtimeCompositeConsumers(runtimeSources));
 
   const manifest = require('../package.json');
   return {
     dependencies,
     compositeFiles,
     coreSpreaders,
+    shimFiles,
     shimRefsRuntime,
+    legacyReferences,
     exportsKeys: Object.keys(manifest.exports),
     rootKeys: Object.keys(require('..')),
     snapshotExports: require('./export-surface.json').exports,
@@ -165,6 +190,39 @@ function observe() {
 
 const observation = observe();
 const verdict = assess(observation);
+
+// The two valid end states as observations, shared by every synthetic fixture
+// below. Kept at module scope so a test can force a MIGRATED verdict from any
+// detector without re-declaring the whole shape.
+const baseActive = {
+  dependencies: { ...EXPECTED_ACTIVE_DEPENDENCIES },
+  compositeFiles: STAGES.map((stage) => 'src/' + stage + '/index.js'),
+  coreSpreaders: STAGES.map((stage) => 'src/' + stage + '/index.js'),
+  shimFiles: [...STAGES],
+  shimRefsRuntime: { candidates: true, filtering: true, scoring: true },
+  legacyReferences: [],
+  exportsKeys: ['.', './loaders', './orchestrator', './persistence'],
+  rootKeys: ['loaders', 'orchestrator', 'persistence'],
+  snapshotExports: ['loaders', 'orchestrator', 'persistence'],
+  discoveryRequired: ['composite-lifecycle.test.js', 'namespace-barrels.test.js'],
+  compositeSuitePresent: true,
+  references: [],
+};
+
+const baseMigrated = {
+  dependencies: { 'run.js': [], 'swap-preview.js': [], 'swap-commit.js': [], 'compute.js': [] },
+  compositeFiles: [],
+  coreSpreaders: [],
+  shimFiles: [],
+  shimRefsRuntime: { candidates: false, filtering: false, scoring: false },
+  legacyReferences: [],
+  exportsKeys: ['.', './loaders', './orchestrator', './persistence'],
+  rootKeys: ['loaders', 'orchestrator', 'persistence'],
+  snapshotExports: ['loaders', 'orchestrator', 'persistence'],
+  discoveryRequired: ['composite-lifecycle.test.js', 'namespace-barrels.test.js'],
+  compositeSuitePresent: true,
+  references: [],
+};
 
 describe('F1 lifecycle — the real tree is in exactly one valid state', () => {
   it('classifies as ACTIVE or MIGRATED, and no condition is violated', () => {
@@ -264,32 +322,6 @@ describe('F1 lifecycle — state classification is total and has no gap', () => 
 });
 
 describe('F1 lifecycle — the verdicts the fixtures force, both ways', () => {
-  const baseActive = {
-    dependencies: { ...EXPECTED_ACTIVE_DEPENDENCIES },
-    compositeFiles: STAGES.map((stage) => 'src/' + stage + '/index.js'),
-    coreSpreaders: STAGES.map((stage) => 'src/' + stage + '/index.js'),
-    shimRefsRuntime: { candidates: true, filtering: true, scoring: true },
-    exportsKeys: ['.', './loaders', './orchestrator', './persistence'],
-    rootKeys: ['loaders', 'orchestrator', 'persistence'],
-    snapshotExports: ['loaders', 'orchestrator', 'persistence'],
-    discoveryRequired: ['composite-lifecycle.test.js', 'namespace-barrels.test.js'],
-    compositeSuitePresent: true,
-    references: [],
-  };
-
-  const baseMigrated = {
-    dependencies: { 'run.js': [], 'swap-preview.js': [], 'swap-commit.js': [], 'compute.js': [] },
-    compositeFiles: [],
-    coreSpreaders: [],
-    shimRefsRuntime: { candidates: false, filtering: false, scoring: false },
-    exportsKeys: ['.', './loaders', './orchestrator', './persistence'],
-    rootKeys: ['loaders', 'orchestrator', 'persistence'],
-    snapshotExports: ['loaders', 'orchestrator', 'persistence'],
-    discoveryRequired: ['composite-lifecycle.test.js', 'namespace-barrels.test.js'],
-    compositeSuitePresent: true,
-    references: [],
-  };
-
   it('a fully satisfied ACTIVE observation passes', () => {
     assert.deepEqual(assess(baseActive), {
       state: 'ACTIVE',
@@ -304,7 +336,7 @@ describe('F1 lifecycle — the verdicts the fixtures force, both ways', () => {
       coreSpreaders: [...baseActive.coreSpreaders, 'src/explanation/index.js'],
     }).problems;
     assert.equal(problems.length, 1);
-    assert.match(problems[0], /only runtime files that may spread a core namespace/);
+    assert.match(problems[0], /only runtime files that may spread or re-export a core surface/);
   });
 
   it('ACTIVE fails when a composite becomes published', () => {
@@ -345,16 +377,59 @@ describe('F1 lifecycle — the verdicts the fixtures force, both ways', () => {
   it('MIGRATED fails while a runtime barrel still spreads the core', () => {
     const problems = assess({ ...baseMigrated, coreSpreaders: ['src/filtering/index.js'] }).problems;
     assert.equal(problems.length, 1, problems.join(' | '));
-    assert.match(problems[0], /still spread a core namespace/);
+    assert.match(problems[0], /still spread or re-export a core surface/);
   });
 
   it('MIGRATED fails while an old-path shim still re-exports a composite', () => {
     const problems = assess({
       ...baseMigrated,
+      shimFiles: ['scoring'],
       shimRefsRuntime: { candidates: false, filtering: false, scoring: true },
     }).problems;
     assert.equal(problems.length, 1, problems.join(' | '));
-    assert.match(problems[0], /src\/recommendation\/scoring\/index\.js still re-exports/);
+    assert.match(problems[0], /src\/recommendation\/scoring\/index\.js still exists/);
+    assert.match(problems[0], /still re-exports the runtime composite/);
+  });
+
+  // 2.1 - the shim that outlives step 6 by being repointed instead of deleted.
+  // This is the case the old messenger could not see: contents say "not a
+  // composite", so a contents-only check passed while the compatibility path
+  // survived.
+  it('MIGRATED fails while an old-path shim survives by re-pointing elsewhere', () => {
+    const problems = assess({
+      ...baseMigrated,
+      shimFiles: ['candidates'],
+      shimRefsRuntime: { candidates: false, filtering: false, scoring: false },
+    }).problems;
+    assert.equal(problems.length, 1, problems.join(' | '));
+    assert.match(problems[0], /src\/recommendation\/candidates\/index\.js still exists/);
+    assert.match(problems[0], /DELETED, not repointed/);
+  });
+
+  // 2.2 - step 6 could delete every file and shim and still leave a consumer
+  // importing the old path; then the import resolves to nothing, or to whatever
+  // someone re-adds there later. The consumer is the failure.
+  it('MIGRATED fails while a consumer still imports a legacy barrel', () => {
+    const problems = assess({
+      ...baseMigrated,
+      legacyReferences: [
+        'apps/api/src/engine.js imports src/recommendation/candidates, src/recommendation/filtering, src/recommendation/scoring',
+      ],
+    }).problems;
+    assert.equal(problems.length, 1, problems.join(' | '));
+    assert.match(problems[0], /consumers still import a legacy compatibility barrel/);
+    assert.match(problems[0], /apps\/api\/src\/engine\.js/);
+  });
+
+  // The ACTIVE half of the same observation: the legacy importer is the patch
+  // seam the exception exists to serve, so ACTIVE must not fail on it.
+  it('ACTIVE tolerates a legacy importer, because that is the documented seam', () => {
+    const verdictActive = assess({
+      ...baseActive,
+      legacyReferences: ['apps/api/src/engine.js imports src/recommendation/candidates'],
+    });
+    assert.equal(verdictActive.state, 'ACTIVE');
+    assert.deepEqual(verdictActive.problems, []);
   });
 
   it('MIGRATED fails while an obsolete compatibility consumer still requires one', () => {
@@ -376,5 +451,188 @@ describe('F1 lifecycle — the verdicts the fixtures force, both ways', () => {
     assert.equal(partial.problems.length, 1);
     assert.match(partial.problems[0], /PARTIAL MIGRATION/);
     assert.match(partial.problems[0], /compute\.js -> \(none\)|run\.js -> candidates\+filtering\+scoring/);
+  });
+});
+
+describe('F1 lifecycle — the comment lexer (a false negative is the dangerous direction)', () => {
+  it('keeps the rest of the line after a string that contains //', () => {
+    const source = "const url = 'https://example.test/x'; require('../candidates');";
+    assert.ok(stripComments(source).includes("require('../candidates')"), stripComments(source));
+    assert.deepEqual(stagesRequiredBy(source), ['candidates']);
+  });
+
+  it('keeps a template literal that contains // intact', () => {
+    assert.deepEqual(stagesRequiredBy('const t = `a // b`; require(\'../filtering\');'), ['filtering']);
+  });
+
+  it('still removes real line and block comments', () => {
+    assert.ok(!stripComments("// require('../candidates')\nconst a = 1;").includes('candidates'));
+    assert.ok(!stripComments("/* require('../candidates') */\nconst a = 1;").includes('candidates'));
+    assert.deepEqual(stagesRequiredBy("require('../scoring'); // require('../candidates')"), ['scoring']);
+  });
+
+  it('does not let a quote inside a regex literal open a phantom string', () => {
+    assert.deepEqual(stagesRequiredBy("const re = /['\"]/; require('../candidates');"), ['candidates']);
+  });
+});
+
+describe('F1 lifecycle — core spreaders: export behaviour, quote style, nesting', () => {
+  const sealed = "const core = require('../core-entry');\n"
+    + 'module.exports = { ...core.candidates, loadCandidates };';
+
+  it('flags the committed composite shape', () => {
+    assert.equal(coreEntrySpread(sealed), true);
+  });
+
+  it('flags the shape one directory deeper, in any quote style, with or without .js', () => {
+    assert.equal(
+      coreEntrySpread('const core = require("../../core-entry.js");\nmodule.exports = { ...core };'),
+      true
+    );
+  });
+
+  it('flags every inline re-export form', () => {
+    assert.equal(coreEntrySpread("module.exports = { ...require('../core-entry') };"), true);
+    assert.equal(coreEntrySpread("module.exports = require('../core-entry');"), true);
+    assert.equal(coreEntrySpread("module.exports = Object.assign({}, require('../core-entry'));"), true);
+    assert.equal(coreEntrySpread("const core = require('../core-entry');\nmodule.exports = core;"), true);
+  });
+
+  it('flags the explicit member-by-member re-export the scoring composite uses', () => {
+    assert.equal(
+      coreEntrySpread("const pure = require('../core-entry').scoring;\n"
+        + 'module.exports = { a: pure.a, b: pure.b, load };'),
+      true
+    );
+  });
+
+  it('does not flag a core member that is called, not published', () => {
+    assert.equal(
+      coreEntrySpread("const pure = require('../core-entry');\n"
+        + 'module.exports = { a: () => pure.a() };'),
+      false
+    );
+  });
+
+  it('does not flag a module that uses one core function internally', () => {
+    assert.equal(
+      coreEntrySpread("const core = require('../core-entry');\n"
+        + 'module.exports = { load: () => core.loadCandidates() };'),
+      false
+    );
+  });
+
+  it('does not flag a spread that happens before the export', () => {
+    assert.equal(
+      coreEntrySpread("const core = require('../core-entry');\n"
+        + 'const merged = { ...core.candidates };\nmodule.exports = { merged };'),
+      false
+    );
+  });
+
+  it('does not flag a file with no core import at all', () => {
+    assert.equal(coreEntrySpread('module.exports = { loadCandidates };'), false);
+  });
+
+  // 2.3 - a composite does not have to sit at `src/<stage>/index.js`. The
+  // observation walks every source file under the package's `src/`, so a nested
+  // one is judged on the same behaviour and cannot hide from the gate.
+  it('finds a composite relocated into a nested runtime directory', () => {
+    const nested = 'src/orchestrator/filtering/index.js';
+    assert.deepEqual(
+      runtimeSurfacePublishers([
+        { path: 'src/index.js', source: "module.exports = { loaders: require('./loaders') };" },
+        { path: nested, source: sealed },
+      ]),
+      [nested]
+    );
+  });
+
+  it('rejects ACTIVE and MIGRATED when a nested composite spreads the core', () => {
+    const nested = 'src/orchestrator/filtering/index.js';
+    const activeProblems = assess({ ...baseActive, coreSpreaders: [...baseActive.coreSpreaders, nested] }).problems;
+    assert.equal(activeProblems.length, 1, activeProblems.join(' | '));
+    assert.match(activeProblems[0], /only runtime files that may spread or re-export a core surface/);
+    assert.match(activeProblems[0], /src\/orchestrator\/filtering\/index\.js/);
+
+    const migratedProblems = assess({ ...baseMigrated, coreSpreaders: [nested] }).problems;
+    assert.equal(migratedProblems.length, 1, migratedProblems.join(' | '));
+    assert.match(migratedProblems[0], /still spread or re-export a core surface/);
+    assert.match(migratedProblems[0], /src\/orchestrator\/filtering\/index\.js/);
+  });
+
+  it('does not flag a nested module that only calls a core function', () => {
+    assert.deepEqual(
+      runtimeSurfacePublishers([
+        {
+          path: 'src/orchestrator/helpers/index.js',
+          source: "const core = require('../../core-entry');\nmodule.exports = { run: () => core.selectCandidatePool() };",
+        },
+      ]),
+      []
+    );
+  });
+});
+
+describe('F1 lifecycle — legacy consumers are specifiers, not strings', () => {
+  it('finds the API engine import of all three barrels', () => {
+    const source = [
+      "const candidates = require('../../../src/recommendation/candidates');",
+      "const filtering = require('../../../src/recommendation/filtering');",
+      "const scoring = require('../../../src/recommendation/scoring');",
+    ].join('\n');
+    assert.deepEqual(legacyBarrelStagesIn(source), ['candidates', 'filtering', 'scoring']);
+  });
+
+  it('accepts the index spellings, in canonical order', () => {
+    assert.deepEqual(
+      legacyBarrelStagesIn("require('../../src/recommendation/scoring/index.js');\n"
+        + "require('../../src/recommendation/candidates/index');"),
+      ['candidates', 'scoring']
+    );
+  });
+
+  it('does not count a subpath module, the runtime package or the core adapter', () => {
+    assert.deepEqual(legacyBarrelStagesIn("require('../../../src/recommendation/candidates/loader');"), []);
+    assert.deepEqual(legacyBarrelStagesIn("require('../../../src/recommendation-runtime/src/candidates');"), []);
+    assert.deepEqual(legacyBarrelStagesIn("require('../core-entry');"), []);
+  });
+
+  it('does not count a path recorded as data or written in a comment', () => {
+    assert.deepEqual(legacyBarrelStagesIn("const old = 'test/recommendation/candidates/x.test.js';"), []);
+    assert.deepEqual(legacyBarrelStagesIn("// require('../../src/recommendation/candidates')\nconst a = 1;"), []);
+  });
+
+  // 2.2 - end to end: a real consumer SOURCE goes through the specifier detector
+  // and then into the verdict. The scanner must reject MIGRATED, not merely be
+  // handed a string that already says so.
+  it('rejects MIGRATED from a consumer source that still imports a legacy barrel', () => {
+    const sources = [
+      { path: 'apps/api/src/engine.js', source: "const candidates = require('../../../src/recommendation/candidates');" },
+      { path: 'apps/api/src/db.js', source: "const { Client } = require('pg');" },
+    ];
+    const legacyReferences = legacyConsumerReferences(sources);
+    assert.equal(legacyReferences.length, 1, legacyReferences.join(' | '));
+    assert.match(legacyReferences[0], /^apps\/api\/src\/engine\.js imports src\/recommendation\/candidates$/);
+
+    const verdictMigrated = assess({ ...baseMigrated, legacyReferences });
+    assert.equal(verdictMigrated.state, 'MIGRATED');
+    assert.equal(verdictMigrated.problems.length, 1, verdictMigrated.problems.join(' | '));
+    assert.match(verdictMigrated.problems[0], /apps\/api\/src\/engine\.js/);
+
+    // The same source in ACTIVE is the documented patch seam, so it passes.
+    assert.deepEqual(assess({ ...baseActive, legacyReferences }).problems, []);
+  });
+
+  // A nested module that still says `require('../candidates')` is the specifier
+  // step 6 has to rewrite, whatever its depth.
+  it('reports a nested in-package consumer of a composite specifier', () => {
+    assert.deepEqual(
+      runtimeCompositeConsumers([
+        { path: 'src/candidates/index.js', source: "module.exports = { a: require('./loader') };" },
+        { path: 'src/orchestrator/nested/run.js', source: "const c = require('../candidates');" },
+      ]),
+      ['src/orchestrator/nested/run.js requires ../candidates']
+    );
   });
 });

@@ -20,10 +20,27 @@
 //   ACTIVE   - the orchestrator still requires the composites from exactly the
 //              four committed modules, and every condition of the exception holds.
 //   MIGRATED - no orchestrator module requires a composite any more, and nothing
-//              of the exception survives (files, spreaders, shims, consumers).
+//              of the exception survives (files, spreaders, SHIM FILES, legacy
+//              importers).
 //   PARTIAL  - anything in between. Deliberately a FAILURE: a tree where some
 //              consumers were rewritten and others were not is mid-migration, and
 //              treating it as either end state would let the other half rot.
+//
+// WHAT THE DETECTORS DELIBERATELY DO, because each one has a way of being wrong:
+//   * Shim EXISTENCE is observed separately from shim CONTENTS. A shim that
+//     survives step 6 but re-points elsewhere is still an undeleted compatibility
+//     path, so MIGRATED fails on the file, not on what it re-exports.
+//   * Legacy-path consumers are found from SPECIFIERS, not prose: a `require` /
+//     `import` whose path segments are `recommendation/<stage>` counts, a path
+//     string in a script's own data or a sentence in a comment does not.
+//   * Core spreaders are found by the RE-EXPORT BEHAVIOUR (`...require(...)`,
+//     `...core`, `Object.assign({}, core)`, `module.exports = core`), at any depth
+//     under the runtime source, at ANY depth (`runtimeSurfacePublishers` judges every
+//     file the caller walked, so a nested composite is not invisible), in any quote
+//     style and any spacing. Importing one core function for internal use is not a
+//     spread and is not flagged.
+//   * Comments are removed by a small lexer, not a regex, so a string containing
+//     `//` (a URL) cannot swallow the rest of a real line.
 //
 // DB-free and dependency-free: no fs, no path, no require of the package. The
 // caller supplies the bytes and the observations.
@@ -45,23 +62,104 @@ const EXPECTED_ACTIVE_DEPENDENCIES = Object.freeze({
 // key-set/identity/order proof, and this gate itself.
 const REQUIRED_SUITES = Object.freeze(['composite-lifecycle.test.js', 'namespace-barrels.test.js']);
 
+// The specifier forms that can reach a Core entry adapter, e.g. `../core-entry`,
+// `../../core-entry', `../../core-entry.js` (the runtime tree nests one level
+// deeper than the legacy tree, so the relative depth must not be hard-coded).
+// No captured quote and no backreference here on purpose: this constant is
+// concatenated into regexes that have groups of their own, and a `\1` would
+// then point at the wrong group (the binding name, in the `const core = ...`
+// form) instead of the quote - which read as "not a spread" for exactly the
+// shape the three composites are written in.
+const CORE_ENTRY_SPECIFIER = String.raw`['"][^'"\n]*core-entry(?:\.js)?['"]`;
+
+// A `/` can start a regex literal only where a value may begin.
+const REGEX_PRECEDERS = '(,=:[!&|?{};+-*%<>~^';
+
 /**
- * Comments removed, line structure kept.
+ * Comments removed, everything else preserved byte for byte.
  *
- * A commented-out `require` is a note, not a dependency, and a gate that treated
- * it as one would either block a legitimate cleanup or pass a stale shim. The
- * `//` rule deliberately skips a `://` URL and a `//` that follows a quote, so a
- * string literal is not chopped mid-token; a `//` inside a string can still be
- * eaten, and that only ever costs a mention, never a real specifier (a specifier
- * cannot contain `//`).
+ * A lexer rather than a regex on purpose. The regex this replaced treated `//`
+ * as a comment wherever it was not preceded by a quote or a colon, so a line such
+ * as `const s = 'see // notes'; const c = require('../candidates');` lost the
+ * require - a false negative in exactly the direction that matters, because the
+ * missed `require` is the evidence a gate exists to find.
+ *
+ * String literals (single, double and template) are kept verbatim, escapes are
+ * respected, and regex literals are skipped as literals so a quote inside a
+ * character class cannot open a phantom string. Line structure is preserved:
+ * a `//` comment is skipped up to, not including, its newline.
  *
  * @param {string} source
  * @returns {string}
  */
 function stripComments(source) {
-  return String(source)
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/(^|[^:'"\\])\/\/[^\n]*/g, '$1');
+  const text = String(source);
+  let out = '';
+  let i = 0;
+  let quote = null;
+  while (i < text.length) {
+    const char = text[i];
+    if (quote === null) {
+      if (char === '/' && text[i + 1] === '/') {
+        while (i < text.length && text[i] !== '\n') i += 1;
+        continue;
+      }
+      if (char === '/' && text[i + 1] === '*') {
+        i += 2;
+        while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i += 1;
+        i += 2;
+        out += ' ';
+        continue;
+      }
+      if (char === '/' && REGEX_PRECEDERS.indexOf(lastSignificant(out)) !== -1) {
+        out += char;
+        i += 1;
+        let inClass = false;
+        while (i < text.length) {
+          const inner = text[i];
+          if (inner === '\\') {
+            out += inner;
+            if (i + 1 < text.length) out += text[i + 1];
+            i += 2;
+            continue;
+          }
+          out += inner;
+          i += 1;
+          if (inner === '\n') break;
+          if (inner === '[') inClass = true;
+          else if (inner === ']') inClass = false;
+          else if (inner === '/' && !inClass) break;
+        }
+        continue;
+      }
+      if (char === "'" || char === '"' || char === '`') quote = char;
+      out += char;
+      i += 1;
+      continue;
+    }
+    if (char === '\\') {
+      out += char;
+      if (i + 1 < text.length) {
+        out += text[i + 1];
+        i += 2;
+      } else {
+        i += 1;
+      }
+      continue;
+    }
+    out += char;
+    if (char === quote) quote = null;
+    i += 1;
+  }
+  return out;
+}
+
+/** The last non-whitespace character emitted so far, or '' at the start. */
+function lastSignificant(text) {
+  for (let i = text.length - 1; i >= 0; i -= 1) {
+    if (!/\s/.test(text[i])) return text[i];
+  }
+  return '';
 }
 
 /**
@@ -86,6 +184,254 @@ function stagesRequiredBy(source) {
   const found = new Set();
   for (const match of stripComments(source).matchAll(pattern)) found.add(match[1]);
   return STAGES.filter((stage) => found.has(stage));
+}
+
+/**
+ * Does this file spread or re-export the Core entry SURFACE?
+ *
+ * The rule is about exposure, not about Core usage: the three composites earn
+ * their exception by publishing a Core namespace beside this package's own
+ * members (`module.exports = { ...core.candidates, loadCandidates }`). A module
+ * that imports one Core function to call it internally is legitimate and is not
+ * flagged - that is why the detectors below key on the EXPORT POSITION and on the
+ * spread/re-export forms rather than on the bare `core-entry` specifier.
+ *
+ * Forms detected, in any quote style and any spacing:
+ *   - `module.exports = { ...require('../core-entry') }`      (inline spread)
+ *   - `module.exports = require('../core-entry')`             (whole re-export)
+ *   - `module.exports = Object.assign({}, require('...'))`    (merged re-export)
+ *   - `const core = require(...)` then `...core` / `...core.candidates` inside
+ *     `module.exports`, or `module.exports = core`, or
+ *     `Object.assign({}, core)`.
+ *   - MEMBER-BY-MEMBER re-export: `pure.a`, `pure.b` written out inside
+ *     `module.exports`. This is the `scoring` composite's shape: it cannot
+ *     spread without reordering a pinned key set, so it names every core member
+ *     explicitly. A core member READ as a value there is the same publication as
+ *     a spread; a core member CALLED (`pure.a()`) is internal use, not exposure,
+ *     and stays unflagged.
+ *
+ * @param {string} source
+ * @returns {boolean}
+ */
+function coreEntrySpread(source) {
+  const code = stripComments(source);
+  const exportAt = code.indexOf('module.exports');
+  const exported = (index) => exportAt >= 0 && typeof index === 'number' && index > exportAt;
+
+  const inlineSpread = new RegExp(String.raw`\.\.\.\s*require\s*\(\s*` + CORE_ENTRY_SPECIFIER + String.raw`\s*\)`, 'g');
+  for (const match of code.matchAll(inlineSpread)) {
+    if (exported(match.index)) return true;
+  }
+
+  const directReexport = new RegExp(String.raw`module\.exports\s*=\s*require\s*\(\s*` + CORE_ENTRY_SPECIFIER + String.raw`\s*\)`);
+  if (directReexport.test(code)) return true;
+
+  const assignInline = new RegExp(
+    String.raw`Object\.assign\s*\(\s*\{\s*\}\s*,\s*require\s*\(\s*` + CORE_ENTRY_SPECIFIER + String.raw`\s*\)`
+  );
+  if (assignInline.test(code)) return true;
+
+  const binding = new RegExp(
+    String.raw`(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*` + CORE_ENTRY_SPECIFIER + String.raw`\s*\)`,
+    'g'
+  );
+  for (const match of code.matchAll(binding)) {
+    for (const name of surfaceBindings(code, match[1])) {
+      if (publishesSurface(code, name, exportAt)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The local names that hold a core surface: the `require` binding itself, plus
+ * each name assigned directly from it (`const pure = core.scoring;` — the
+ * `scoring` composite's shape).
+ *
+ * One level, iterated to a fixed point, and no further: this repository's forms
+ * are direct, and chasing arbitrary assignment chains would turn a detector into
+ * a guesser that flags code it cannot actually justify.
+ *
+ * @param {string} code comment-stripped source
+ * @param {string} rootName the variable bound to the core entry
+ * @returns {string[]}
+ */
+function surfaceBindings(code, rootName) {
+  const names = [rootName];
+  for (let i = 0; i < names.length; i += 1) {
+    const pattern = new RegExp(
+      String.raw`(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*`
+        + escapeRegExp(names[i])
+        + String.raw`(?:\s*\.\s*[A-Za-z_$][\w$]*)?\s*;`
+    );
+    const match = code.match(pattern);
+    if (match !== null && !names.includes(match[1])) names.push(match[1]);
+  }
+  return names;
+}
+
+/**
+ * Does one bound name publish the core surface in an exported position?
+ *
+ * Spreads, whole re-exports, `Object.assign` merges and member-by-member
+ * re-exports all count. A member that is CALLED (`pure.a()`) does not: that is a
+ * module using Core, not a module handing Core's names to its consumers.
+ *
+ * @param {string} code comment-stripped source
+ * @param {string} name a local name holding a core surface
+ * @param {number} exportAt index of the first `module.exports`, or -1
+ * @returns {boolean}
+ */
+function publishesSurface(code, name, exportAt) {
+  const escaped = escapeRegExp(name);
+  const boundary = String.raw`(?![A-Za-z0-9_$])`;
+  const exported = (index) => exportAt >= 0 && typeof index === 'number' && index > exportAt;
+
+  const spread = new RegExp(String.raw`\.\.\.\s*` + escaped + boundary, 'g');
+  for (const match of code.matchAll(spread)) {
+    if (exported(match.index)) return true;
+  }
+  if (new RegExp(String.raw`module\.exports\s*=\s*` + escaped + String.raw`\s*(?:;|$)`).test(code)) return true;
+  if (new RegExp(String.raw`Object\.assign\s*\(\s*\{\s*\}\s*,\s*` + escaped + boundary).test(code)) return true;
+  if (new RegExp(String.raw`Object\.assign\s*\(\s*` + escaped + String.raw`\s*,`).test(code)) return true;
+
+  const member = new RegExp(
+    String.raw`(?<![\w$])` + escaped + String.raw`\s*\.\s*[A-Za-z_$][\w$]*`,
+    'g'
+  );
+  for (const match of code.matchAll(member)) {
+    if (!exported(match.index)) continue;
+    const after = code.slice(match.index + match[0].length);
+    if (!/^\s*\(/.test(after)) return true;
+  }
+  return false;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Every specifier a module actually imports: `require(...)`,
+ * `require.resolve(...)`, `import x from '...'` and the bare
+ * `import '...'` side-effect form.
+ *
+ * Deliberately specifier-based. The repository contains path strings that look
+ * identical but mean something else - `scripts/audit-pr2-test-ownership.js`
+ * records old test paths as DATA, and the docs describe the paths in prose - and
+ * neither is a consumer.
+ *
+ * @param {string} code comment-stripped source
+ * @returns {string[]}
+ */
+function specifiersIn(code) {
+  const patterns = [
+    /\brequire(?:\.resolve)?\s*\(\s*(['"])([^'"\n]+)\1\s*\)/g,
+    /\bfrom\s*(['"])([^'"\n]+)\1/g,
+    /\bimport\s*(['"])([^'"\n]+)\1/g,
+  ];
+  const found = [];
+  for (const pattern of patterns) {
+    for (const match of code.matchAll(pattern)) found.push(match[2]);
+  }
+  return found;
+}
+
+/**
+ * The stages whose LEGACY compatibility path this file imports, e.g.
+ * `require('../../../src/recommendation/candidates')`.
+ *
+ * Matched on PATH SEGMENTS, so `recommendation-runtime/src/candidates` (the new
+ * composite) and `recommendation/candidates/loader` (a module that still lives in
+ * the old tree) are not mistaken for the legacy barrel itself.
+ *
+ * @param {string} source
+ * @returns {string[]} stages, in STAGES order
+ */
+function legacyBarrelStagesIn(source) {
+  const found = new Set();
+  for (const specifier of specifiersIn(stripComments(source))) {
+    const segments = specifier.split(/[\\/]+/).filter((segment) => segment.length > 0);
+    for (let i = 0; i < segments.length - 1; i += 1) {
+      if (segments[i] !== 'recommendation') continue;
+      const stage = segments[i + 1];
+      if (!STAGES.includes(stage)) continue;
+      const rest = segments.slice(i + 2);
+      const isBarrel = rest.length === 0
+        || (rest.length === 1 && (rest[0] === 'index' || rest[0] === 'index.js'));
+      if (isBarrel) found.add(stage);
+    }
+  }
+  return STAGES.filter((stage) => found.has(stage));
+}
+
+/**
+ * The runtime source files that spread or re-export a core surface, at ANY
+ * depth under the package's `src/`.
+ *
+ * Depth matters: a composite that step 6 forgets, or a future module that
+ * re-creates one, does not have to sit at `src/<stage>/index.js`. A detector
+ * that only ever looked one level down would call a nested composite clean, so
+ * the caller hands in every source file it found and this function judges each
+ * one on its BEHAVIOUR instead of on its path.
+ *
+ * @param {{path: string, source: string}[]} sources package-relative paths under `src/`
+ * @returns {string[]} paths, sorted, so the verdict cannot depend on walk order
+ */
+function runtimeSurfacePublishers(sources) {
+  return (sources || [])
+    .filter((entry) => coreEntrySpread(entry.source))
+    .map((entry) => entry.path)
+    .sort();
+}
+
+/**
+ * Runtime source files that reach a composite through `../<stage>`.
+ *
+ * The composite itself is not its own consumer, so `src/<stage>/index.js` is
+ * skipped. Everything else counts, at any depth: a nested orchestrator module
+ * that still says `require('../candidates')` is exactly the specifier step 6
+ * has to rewrite.
+ *
+ * @param {{path: string, source: string}[]} sources package-relative paths under `src/`
+ * @returns {string[]} one line per offending file, sorted
+ */
+function runtimeCompositeConsumers(sources) {
+  const found = [];
+  for (const entry of sources || []) {
+    const segments = String(entry.path).split('/');
+    const isComposite = segments.length === 3
+      && segments[0] === 'src'
+      && STAGES.includes(segments[1])
+      && segments[2] === 'index.js';
+    if (isComposite) continue;
+    const stages = stagesRequiredBy(entry.source);
+    if (stages.length > 0) found.push(entry.path + ' requires ../' + stages.join(', ../'));
+  }
+  return found.sort();
+}
+
+/**
+ * Consumers of a LEGACY compatibility barrel, from real import specifiers only.
+ *
+ * This is the detector half of the MIGRATED condition: step 6 can delete every
+ * composite and every shim and still leave `apps/api/src/engine.js` importing a
+ * path that no longer exists. A path recorded as data or written in a comment is
+ * not a consumer and is not reported.
+ *
+ * @param {{path: string, source: string}[]} sources repo-relative paths
+ * @returns {string[]} one line per offending file, sorted
+ */
+function legacyConsumerReferences(sources) {
+  const found = [];
+  for (const entry of sources || []) {
+    const stages = legacyBarrelStagesIn(entry.source);
+    if (stages.length === 0) continue;
+    found.push(
+      entry.path + ' imports ' + stages.map((stage) => 'src/recommendation/' + stage).join(', ')
+    );
+  }
+  return found.sort();
 }
 
 /** Stages in canonical order, so source order cannot change the verdict. */
@@ -150,8 +496,10 @@ function mentionsStage(keys, stage) {
  * @param {object} observation
  * @param {Record<string, string[]>} observation.dependencies orchestrator file -> stages required
  * @param {string[]} observation.compositeFiles composite implementation paths that exist
- * @param {string[]} observation.coreSpreaders runtime src index files that spread a core namespace
- * @param {Record<string, boolean>} observation.shimRefsRuntime old-path shim -> re-exports the runtime composite
+ * @param {string[]} observation.coreSpreaders runtime source files that spread or re-export a core surface
+ * @param {string[]} observation.shimFiles stages whose legacy shim FILE exists, whatever it contains
+ * @param {Record<string, boolean>} observation.shimRefsRuntime stage -> that shim re-exports the runtime composite
+ * @param {string[]} [observation.legacyReferences] consumers importing `src/recommendation/<stage>`
  * @param {string[]} [observation.exportsKeys] package.json exports keys
  * @param {string[]} [observation.rootKeys] root namespace keys
  * @param {string[]} [observation.snapshotExports] committed export-surface snapshot
@@ -167,6 +515,8 @@ function assess(observation) {
   const compositeFiles = (obs.compositeFiles || []).slice().sort();
   const coreSpreaders = (obs.coreSpreaders || []).slice().sort();
   const shims = obs.shimRefsRuntime || {};
+  const shimFiles = obs.shimFiles || [];
+  const legacyReferences = obs.legacyReferences || [];
   const published = [
     ['package.json exports', obs.exportsKeys],
     ['the root namespace', obs.rootKeys],
@@ -192,23 +542,25 @@ function assess(observation) {
           + (compositeFiles.length === 0 ? '(none)' : compositeFiles.join(', '))
       );
     }
-    // A fourth file that spreads a core namespace would be a new use of the
+    // A fourth file that spreads a core surface would be a new use of the
     // exception, which condition 6 forbids without a separate decision.
     if (!sameSet(coreSpreaders, STAGES.map((stage) => 'src/' + stage + '/index.js'))) {
       problems.push(
-        'the only runtime files that may spread a core namespace are '
+        'the only runtime files that may spread or re-export a core surface are '
           + STAGES.map((stage) => 'src/' + stage + '/index.js').join(', ') + '; found '
           + (coreSpreaders.length === 0 ? '(none)' : coreSpreaders.join(', '))
       );
     }
-    // Condition 1's compatibility half: the old paths must still be identity
-    // shims to the composite, or the documented patch seam is detached.
+    // Condition 1's compatibility half: the old paths must still EXIST and be
+    // identity shims to the composite, or the documented patch seam is detached.
     for (const stage of STAGES) {
-      if (shims[stage] !== true) {
+      const shimPath = 'src/recommendation/' + stage + '/index.js';
+      if (!shimFiles.includes(stage)) {
         problems.push(
-          'src/recommendation/' + stage + '/index.js must exist and re-export the runtime composite '
-            + '(the identity shim the patch seam depends on)'
+          shimPath + ' must exist (it is the identity shim the patch seam depends on); it is missing'
         );
+      } else if (shims[stage] !== true) {
+        problems.push(shimPath + ' must re-export the runtime composite; it does not');
       }
     }
     // Condition 1's publication half: none of the three may be reachable through
@@ -231,6 +583,9 @@ function assess(observation) {
     if (obs.compositeSuitePresent === false) {
       problems.push('test/composite-lifecycle.test.js is missing, so the gate is not discoverable');
     }
+    // Legacy importers are TOLERATED here and only here: they are the documented
+    // patch seam, and their existence is why the shims exist at all. MIGRATED
+    // treats the same observation as a failure, which is where it belongs.
     return { state, problems, dependencies };
   }
 
@@ -243,17 +598,29 @@ function assess(observation) {
   }
   if (coreSpreaders.length > 0) {
     problems.push(
-      'step 6 rewrote the consumers but these runtime files still spread a core namespace: '
+      'step 6 rewrote the consumers but these runtime files still spread or re-export a core surface: '
         + coreSpreaders.join(', ') + '. The exception is over; a composite that outlives it is a plain RFC §6.4 violation.'
     );
   }
+  // EXISTENCE, not contents. A shim that outlives step 6 and re-points somewhere
+  // else is still an undeleted compatibility path: the owner's condition says
+  // DELETED, and "now it points at the core" is the repoint the condition names.
   for (const stage of STAGES) {
-    if (shims[stage] === true) {
+    if (shimFiles.includes(stage)) {
+      const detail = shims[stage] === true
+        ? 'it still re-exports the runtime composite'
+        : 'it no longer re-exports the runtime composite, but the file itself must be DELETED, not repointed';
       problems.push(
-        'the old path src/recommendation/' + stage + '/index.js still re-exports the runtime composite; '
-          + 'repoint it to the owning package or delete it'
+        'the legacy shim src/recommendation/' + stage + '/index.js still exists (' + detail + ')'
       );
     }
+  }
+  if (legacyReferences.length > 0) {
+    problems.push(
+      'consumers still import a legacy compatibility barrel: ' + legacyReferences.join('; ')
+        + '. Step 6 requires every consumer migrated off src/recommendation/{'
+        + STAGES.join(',') + '}, not merely the shim file changed or removed.'
+    );
   }
   if ((obs.references || []).length > 0) {
     problems.push(
@@ -269,7 +636,12 @@ module.exports = {
   STAGES,
   assess,
   classifyLifecycle,
+  coreEntrySpread,
   describeDependencies,
+  legacyBarrelStagesIn,
+  legacyConsumerReferences,
+  runtimeCompositeConsumers,
+  runtimeSurfacePublishers,
   stagesRequiredBy,
   stripComments,
 };

@@ -178,13 +178,15 @@ third**:
 
 - **ACTIVE** — the orchestrator requires the composites from exactly the four committed modules
   (`run.js` → candidates + filtering + scoring, `swap-preview.js` → candidates + filtering,
-  `swap-commit.js` → scoring, `compute.js` → scoring); the only runtime barrels that reach the core are
-  the three composites; the old paths are identity shims to them; nothing is published; the key-set proof
-  is still discoverable.
+  `swap-commit.js` → scoring, `compute.js` → scoring); the only runtime files that spread or re-export a
+  core surface are the three composites; the old paths **exist** as identity shims to them; nothing is
+  published; the key-set proof is still discoverable.
 - **MIGRATED** — no orchestrator module requires a composite, and nothing of the exception survives: no
-  composite file, no core-spreading runtime barrel, no old-path shim that still re-exports one, and no
-  in-package or path-based consumer still pointing at
-  `recommendation-runtime/src/{candidates,filtering,scoring}`.
+  composite file; no core-spreading runtime barrel **at any depth under `src/`** (a relocated or nested
+  composite is judged on the same export behaviour, not on its path); no old-path shim **file** — the
+  condition is DELETED, not repointed, so a shim that now re-exports something else still fails; no
+  consumer that still imports a legacy `src/recommendation/<stage>` barrel; and no in-package or
+  path-based consumer still pointing at `recommendation-runtime/src/{candidates,filtering,scoring}`.
 - **PARTIAL is a FAILURE.** A tree where some consumers were rewritten and others were not is
   mid-migration; the gate prints the observed consumer map so the state is diagnosable instead of
   ambiguous.
