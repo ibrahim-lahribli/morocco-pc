@@ -69,6 +69,30 @@ describe('compute.js is pure', () => {
       'compute.js must not reach outside the pure barrels');
   });
 
+  // Step 5 W3: '../scoring' now names the runtime COMPOSITE, which carries four
+  // SQL members beside the pure ones (loadScoringModel, its SQL constant,
+  // loadComponentAssessments, its SQL constant). The seam is pure, so it may use
+  // only the three pure scoring members - pinned exactly, not as a subset, so a
+  // dropped call and an added SQL read are both failing diffs.
+  it('uses only the pure scoring members, never a composite-only SQL member', () => {
+    const used = [...new Set([...source.matchAll(/\bscoring\.([A-Za-z_$][\w$]*)/g)]
+      .map((match) => match[1]))].sort();
+    assert.deepEqual(used, [
+      'computeBuildScoreContributions',
+      'computeBuildScores',
+      'computeCandidateScores',
+    ]);
+    for (const name of [
+      'loadScoringModel',
+      'SELECT_SCORING_MODEL_SQL',
+      'loadComponentAssessments',
+      'SELECT_COMPONENT_ASSESSMENTS_SQL',
+    ]) {
+      assert.equal(used.includes(name), false,
+        'compute.js must not read the composite-only member scoring.' + name);
+    }
+  });
+
   it('exports the seam and the four derivations the golden test pins', () => {
     const compute = require('./compute');
     for (const name of [

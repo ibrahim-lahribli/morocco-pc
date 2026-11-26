@@ -420,6 +420,23 @@ test('full-run.js imports exactly the snapshot wrapper, the commit wrapper, the 
   assert.deepEqual(requires, ['../core-entry', './commit', './snapshot']);
 });
 
+// Step 5 W3: the core-entry require is pinned per MEMBER, not just per
+// specifier - the two namespace takes and the members read from each.
+test('full-run.js takes exactly ranking.rankBuilds/selectArchetypes and explanation.explainSelection from core', () => {
+  const source = stripComments(
+    fs.readFileSync(path.join(IMPLEMENTATION_DIR, 'full-run.js'), 'utf8')
+  );
+  const takes = [...source.matchAll(/const\s+(\w+)\s*=\s*core\.(\w+);/g)].map((match) => [match[2], match[1]]);
+  assert.deepEqual(takes.map(([namespace]) => namespace).sort(), ['explanation', 'ranking']);
+  for (const [namespace, local] of takes) {
+    const used = [...new Set([...source.matchAll(new RegExp('\\b' + local + '\\.(\\w+)', 'g'))]
+      .map((match) => match[1]))].sort();
+    assert.deepEqual(used, namespace === 'ranking'
+      ? ['rankBuilds', 'selectArchetypes']
+      : ['explainSelection'], 'full-run.js must read exactly the recorded core members');
+  }
+});
+
 test("Decision 38: full-run forwards explicit asOf unchanged into the snapshot", async () => {
   const options = Object.freeze({ asOf: "2026-10-08T20:00:00.000Z" });
   await withStubbedStages(happyStubs(), async (stub) => {

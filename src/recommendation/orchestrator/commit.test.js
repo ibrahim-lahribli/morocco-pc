@@ -522,6 +522,21 @@ test('commit.js imports exactly the error vocabulary and the writer modules', ()
   ]);
 });
 
+// Step 5 W3: the specifier pin above says WHERE the error vocabulary comes from;
+// this one says WHAT it may be. '../core-entry' is the core package root, so an
+// unpinned require could take any namespace from it unreviewed.
+test('commit.js takes exactly the error vocabulary from ../core-entry', () => {
+  const takes = [...SOURCE.matchAll(/core\.(\w+)/g)].map((match) => match[1]);
+  assert.deepEqual(takes, ['candidates'], 'the core-entry take is the candidates namespace and nothing else');
+  const destructured = [...SOURCE.matchAll(/const\s*\{([^}]*)\}\s*=\s*core\.(\w+);/g)];
+  assert.equal(destructured.length, 1, 'commit.js must destructure exactly one core namespace');
+  assert.equal(destructured[0][2], 'candidates');
+  assert.deepEqual(
+    destructured[0][1].split(',').map((name) => name.trim()).filter(Boolean).sort(),
+    ['CandidateSelectionError', 'ERROR_CODES']
+  );
+});
+
 // ---------------------------------------------------------------------------
 // 7. Decision 46: the additive pass-facts seam.
 //
