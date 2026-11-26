@@ -9,6 +9,7 @@ their owner:
 | [`deploy-free-host.md`](deploy-free-host.md) | deploy the API to a free host (options checked 2026-10-28) |
 | [`first-eu-launch.md`](first-eu-launch.md) | the owner checklist for the first EU launch, in runnable order |
 | [`release-in-two-stages.md`](release-in-two-stages.md) | release the code first, then the scoring model |
+| [`step-5-database-acceptance.md`](step-5-database-acceptance.md) | the Step 5 §19.3 database acceptance on an isolated, seeded branch: preconditions, preflight counts, suite order, and the corrected per-file residue map |
 | [`add-an-agent-visible-status-claim.md`](add-an-agent-visible-status-claim.md) | how to add or change a status claim an agent reads |
 
 Elsewhere:
