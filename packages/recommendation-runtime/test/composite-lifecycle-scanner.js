@@ -222,6 +222,10 @@ function specifierMatches(code) {
     /\brequire(?:\s*\.\s*resolve)?\s*\(\s*(['"])([^'"\n]+)\1\s*\)/g,
     /\bfrom\s*(['"])([^'"\n]+)\1/g,
     /\bimport\s*(['"])([^'"\n]+)\1/g,
+    // Dynamic `import('./x')`: an ESM load with a literal specifier is as
+    // resolvable as `require`, and leaving it out made a `.mjs` consumer
+    // invisible even once the walk reached the file.
+    /\bimport\s*\(\s*(['"])([^'"\n]+)\1\s*\)/g,
   ];
   const found = [];
   for (const pattern of patterns) {
@@ -246,11 +250,24 @@ function specifierMatches(code) {
  */
 function unresolvableRequires(code) {
   const found = [];
-  const pattern = /\brequire(?:\s*\.\s*resolve)?\s*\(\s*/g;
+  const pattern = /\b(?:require(?:\s*\.\s*resolve)?|import)\s*\(\s*/g;
   for (const match of code.matchAll(pattern)) {
     const rest = code.slice(match.index + match[0].length);
     if (/^['"]/.test(rest)) continue;
     found.push(rest.slice(0, 48).replace(/\s+/g, ' ').trim());
+  }
+  // `require` used as a VALUE (`const r = require; r('../x')`) and
+  // `createRequire(...)` both load a module through a name this scanner cannot
+  // follow. They fail closed for the same reason a computed argument does: a
+  // gate that cannot see the load cannot judge it, and silence there is how a
+  // caller walks a composite past the gate.
+  const alias = /\brequire\b(?!\s*(?:\.\s*resolve)?\s*\()/g;
+  for (const match of code.matchAll(alias)) {
+    found.push('(aliased require) ' + code.slice(match.index, match.index + 32).replace(/\s+/g, ' ').trim());
+  }
+  const createRequire = /\bcreateRequire\s*\(/g;
+  for (const match of code.matchAll(createRequire)) {
+    found.push('(createRequire) ' + code.slice(match.index, match.index + 32).replace(/\s+/g, ' ').trim());
   }
   return found;
 }
@@ -507,10 +524,7 @@ function compositeDependencies(sources) {
       if (stage !== null) stages.add(stage);
       const target = candidates.find((candidate) => codeByPath.has(candidate));
       if (target === undefined) continue;
-      const directReexport = new RegExp(
-        String.raw`module\.exports\s*=\s*require\s*\(\s*['"]` + escapeRegExp(specifier) + String.raw`['"]\s*\)`
-      );
-      if (directReexport.test(entry.code)) relays.set(entry.path, target);
+      if (reexportsSpecifier(entry.code, specifier)) relays.set(entry.path, target);
     }
     if (stages.size > 0) dependencies[dependencyKey(entry.path)] = STAGES.filter((s) => stages.has(s));
     for (const text of unresolvableRequires(entry.code)) {
@@ -537,6 +551,32 @@ function compositeDependencies(sources) {
   }
 
   return { dependencies, problems };
+}
+
+/**
+ * Does this file hand another module's surface to its own consumers?
+ *
+ * Four shapes reach the same result, and a detector that knew only the first one
+ * would miss a compatibility path written the other three ways:
+ *
+ *   module.exports = require('X')
+ *   module.exports = { ...require('X') }
+ *   Object.assign(module.exports, require('X'))
+ *   module.exports = Object.assign({}, require('X'))
+ *
+ * @param {string} code comment-stripped source
+ * @param {string} specifier the literal the re-export names
+ * @returns {boolean}
+ */
+function reexportsSpecifier(code, specifier) {
+  const quoted = String.raw`['"]` + escapeRegExp(specifier) + String.raw`['"]`;
+  const forms = [
+    String.raw`module\.exports\s*=\s*require\s*\(\s*` + quoted + String.raw`\s*\)`,
+    String.raw`module\.exports\s*=\s*\{\s*\.\.\.\s*require\s*\(\s*` + quoted + String.raw`\s*\)\s*\}`,
+    String.raw`Object\.assign\s*\(\s*module\.exports\s*,\s*require\s*\(\s*` + quoted + String.raw`\s*\)`,
+    String.raw`module\.exports\s*=\s*Object\.assign\s*\(\s*\{\s*\}\s*,\s*require\s*\(\s*` + quoted + String.raw`\s*\)`,
+  ];
+  return forms.some((form) => new RegExp(form).test(code));
 }
 
 function dependencyKey(file) {
@@ -807,6 +847,7 @@ module.exports = {
   describeDependencies,
   legacyBarrelStagesIn,
   legacyConsumerReferences,
+  reexportsSpecifier,
   runtimeCompositeConsumers,
   runtimeSurfacePublishers,
   stagesRequiredBy,

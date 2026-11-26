@@ -34,6 +34,7 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const {
@@ -77,7 +78,7 @@ function walk(dir, visit) {
       walk(path.join(dir, entry.name), visit);
       continue;
     }
-    if (entry.isFile() && entry.name.endsWith('.js')) visit(path.join(dir, entry.name));
+    if (entry.isFile() && entry.name.endsWith('.js') || entry.name.endsWith('.cjs') || entry.name.endsWith('.mjs')) visit(path.join(dir, entry.name));
   }
 }
 
@@ -738,5 +739,78 @@ describe('F1 lifecycle — resolution, depth and the fail-closed require', () =>
       { path: 'src/orchestrator/lib/x.js', source: "const local = require('./candidates');" },
     ]);
     assert.deepEqual(dependencies, {});
+  });
+});
+
+// Three defects the adversarial pass found at `a846638`, where the gate returned
+// ACTIVE with zero problems on a tree that really did reach a composite.
+describe('F1 lifecycle — the inventory is complete or the verdict is not ACTIVE', () => {
+  it('(k) inventories .cjs and .mjs sources, not only .js', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-src-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'a.cjs'), "require('../../candidates');\n");
+      fs.writeFileSync(path.join(dir, 'b.mjs'), "import x from '../../candidates';\n");
+      fs.writeFileSync(path.join(dir, 'c.json'), '{}\n');
+      const found = [];
+      walk(dir, (absolute) => found.push(path.basename(absolute)));
+      assert.deepEqual(found.sort(), ['a.cjs', 'b.mjs']);
+
+      const { dependencies } = compositeDependencies([
+        { path: 'src/orchestrator/lib/a.cjs', source: "require('../../candidates');" },
+        { path: 'src/orchestrator/lib/b.mjs', source: "import x from '../../candidates';" },
+      ]);
+      assert.deepEqual(dependencies, {
+        'src/orchestrator/lib/a.cjs': ['candidates'],
+        'src/orchestrator/lib/b.mjs': ['candidates'],
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('(i) resolves a dynamic import, and fails closed on an aliased require', () => {
+    // A literal dynamic import is resolvable, so it is a dependency like any other.
+    assert.deepEqual(
+      stagesRequiredBy("module.exports = () => import('../../candidates');", 'src/orchestrator/lib/dyn.js'),
+      ['candidates']
+    );
+
+    const aliased = [
+      {
+        path: 'src/orchestrator/lib/alias.js',
+        source: "const r = require;\nmodule.exports = r('../../candidates');",
+      },
+      {
+        path: 'src/orchestrator/lib/cr.js',
+        source: "const { createRequire } = require('node:module');\nmodule.exports = createRequire(__filename)('../../candidates');",
+      },
+    ];
+    const { problems } = compositeDependencies(aliased);
+    assert.equal(problems.length, 2, problems.join(' | '));
+    assert.match(problems[0], /aliased require/);
+    assert.match(problems[1], /createRequire/);
+    for (const base of [baseActive, baseMigrated]) {
+      const verdictAliased = assess({ ...base, unresolved: problems });
+      assert.equal(verdictAliased.problems.length, 2, verdictAliased.problems.join(' | '));
+      assert.match(verdictAliased.problems[0], /aliased require/);
+    }
+  });
+
+  it('(n) detects every re-export relay shape, not just module.exports = require', () => {
+    const sources = [
+      { path: 'src/orchestrator/impl.js', source: "require('../scoring');" },
+      { path: 'src/orchestrator/r1.js', source: "module.exports = require('./impl');" },
+      { path: 'src/orchestrator/r2.js', source: "module.exports = { ...require('./impl') };" },
+      { path: 'src/orchestrator/r3.js', source: "Object.assign(module.exports, require('./impl'));" },
+      { path: 'src/orchestrator/r4.js', source: "module.exports = Object.assign({}, require('./impl'));" },
+    ];
+    const { dependencies } = compositeDependencies(sources);
+    assert.deepEqual(dependencies, {
+      'impl.js': ['scoring'],
+      'r1.js': ['scoring'],
+      'r2.js': ['scoring'],
+      'r3.js': ['scoring'],
+      'r4.js': ['scoring'],
+    });
   });
 });
