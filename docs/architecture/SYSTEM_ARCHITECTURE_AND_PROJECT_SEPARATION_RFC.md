@@ -1767,6 +1767,45 @@ Four implementation questions were confirmed by the repository owner. They **cla
 
 **Consequence:** A1-A6 were the only approval blockers, and they were approved on 2026-11-11. **B1-B8 remain open**: they are recorded so they are not lost, and each names the phase it blocks. In particular **B1 and B3 were never approval blockers**: neither changes a package boundary, a dependency direction, a contract, an ownership row, or the migration sequence.
 
+### 21.4 Owner decision — F1, the three composite barrels (2026-11-26)
+
+One implementation question was put to the owner by `packages/recommendation-runtime/docs/MIXED_BARRELS.md`
+§5, and answered. Like §21.3, it **clarifies how approved work is carried out**: it changes no
+architecture decision, package boundary, dependency direction, API semantic or recommendation behaviour.
+
+| # | Decision | Status | Effect on this document |
+|---|---|---|---|
+| **F1 / Option A** | `packages/recommendation-runtime/src/{candidates,filtering,scoring}/index.js` may hold the legacy composite barrel — pure members re-exported from core by identity, SQL members owned by the runtime — as an **unpublished, step-6-scoped compatibility seam**, on six conditions | **APPROVED 2026-11-26**, temporary | Recorded in `MIXED_BARRELS.md` §5.4 and `docs/OPEN_POINTS.md` R-33. §6.4's required split, §9.3's forbidden-import rule, §11.2's mapping and §11.5's interface are **unchanged**: this is a scoped deferral, not compliance, and it expires when step 6 deletes the three files |
+
+**The six conditions, as approved.**
+
+1. The three composites remain **unpublished** and inaccessible through the Runtime package-name exports
+   (absent from `package.json` `exports`, from `src/index.js` and from `test/export-surface.json`;
+   `scripts/lib/runtime-package-exports.test.js` proves `ERR_PACKAGE_PATH_NOT_EXPORTED`).
+2. Their **exact key sets** and `scoring`'s key order remain pinned.
+3. **Every pure member remains identical** to its corresponding Core member.
+4. **No published Runtime namespace exposes a Core name.**
+5. **The three composites must be DELETED during step 6**, once the relevant imports and compatibility
+   consumers have migrated.
+6. **No future module may use this exception as precedent** without a separate architectural decision.
+
+**Scope, stated as narrowly as the approval did.** Exactly those three files. Not a general relaxation of
+the Core/Runtime separation, and not a re-reading of §6.4 or §9.3. Any other file that re-exports a core
+name from this package is a violation of the rule, not an instance of this exception.
+
+**Enforcement.** Conditions 1-4 and 6 run in the ordinary suites today. Condition 5 — the one nothing
+executed before this revision — is enforced by
+`packages/recommendation-runtime/test/composite-lifecycle.test.js` (pure half
+`test/composite-lifecycle-scanner.js`) inside `npm run test:runtime`: it accepts only ACTIVE (the four
+committed consumers, nothing published, shims intact) or MIGRATED (no consumer, no composite file, no
+core-spreading barrel, no stale shim, no residual reference), and treats any PARTIAL tree as a failure.
+The MIGRATED branch is exercised by synthetic trees in the same suite, so the removal obligation cannot
+silently rot. R-33 in `docs/OPEN_POINTS.md` stays open until it goes green.
+
+**What is still owed.** Step 6 itself (the API's imports and the three composites' deletion), the Step 5
+acceptance review of the §11.5 implementation, and the isolated TEST-branch DB acceptance of §19.3 —
+which remains **UNKNOWN** and operator-only. This revision changes none of them.
+
 ---
 
 ## 22. Acceptance criteria
@@ -2134,45 +2173,6 @@ Three corrections, none of them a decision:
 Measured for this revision, DB-free, in a clean detached worktree at `f1658d9`: `test:unit` **774 / 774**, `test:scripts` **963 / 963** (33 suites), `test:core` **697** (695 pass / 2 skipped — the two file-symlink cases this platform refuses), `test:api` **193 / 193**, `test:database-guard` **15 / 15**, `test:runtime` **173 / 173** (18 suites), hermetic run **PASS**. These are the current-`master` figures `README.md` and `CONTEXT.md` now carry; they replace the stale `726` / `894` / `85` figures, which were a 2026-11-20 branch measurement at `36641c1` and are kept as that dated measurement in `CONTEXT.md` §5.
 
 Still open, unchanged and not decided here: the **F1** composite question (`MIXED_BARRELS.md` §5, owner decision — the composites stay an unapproved deviation), Step 5 acceptance including the isolated TEST-branch DB suite of §19.3 (**UNKNOWN — not run**; no `.env` read, no shared/TEST/EU connection, no `--confirm-*` flag), and step 6, which has not started. No database was contacted to produce this revision.
-
-### 21.4 Owner decision — F1, the three composite barrels (2026-11-26)
-
-One implementation question was put to the owner by `packages/recommendation-runtime/docs/MIXED_BARRELS.md`
-§5, and answered. Like §21.3, it **clarifies how approved work is carried out**: it changes no
-architecture decision, package boundary, dependency direction, API semantic or recommendation behaviour.
-
-| # | Decision | Status | Effect on this document |
-|---|---|---|---|
-| **F1 / Option A** | `packages/recommendation-runtime/src/{candidates,filtering,scoring}/index.js` may hold the legacy composite barrel — pure members re-exported from core by identity, SQL members owned by the runtime — as an **unpublished, step-6-scoped compatibility seam**, on six conditions | **APPROVED 2026-11-26**, temporary | Recorded in `MIXED_BARRELS.md` §5.4 and `docs/OPEN_POINTS.md` R-33. §6.4's required split, §9.3's forbidden-import rule, §11.2's mapping and §11.5's interface are **unchanged**: this is a scoped deferral, not compliance, and it expires when step 6 deletes the three files |
-
-**The six conditions, as approved.**
-
-1. The three composites remain **unpublished** and inaccessible through the Runtime package-name exports
-   (absent from `package.json` `exports`, from `src/index.js` and from `test/export-surface.json`;
-   `scripts/lib/runtime-package-exports.test.js` proves `ERR_PACKAGE_PATH_NOT_EXPORTED`).
-2. Their **exact key sets** and `scoring`'s key order remain pinned.
-3. **Every pure member remains identical** to its corresponding Core member.
-4. **No published Runtime namespace exposes a Core name.**
-5. **The three composites must be DELETED during step 6**, once the relevant imports and compatibility
-   consumers have migrated.
-6. **No future module may use this exception as precedent** without a separate architectural decision.
-
-**Scope, stated as narrowly as the approval did.** Exactly those three files. Not a general relaxation of
-the Core/Runtime separation, and not a re-reading of §6.4 or §9.3. Any other file that re-exports a core
-name from this package is a violation of the rule, not an instance of this exception.
-
-**Enforcement.** Conditions 1-4 and 6 run in the ordinary suites today. Condition 5 — the one nothing
-executed before this revision — is enforced by
-`packages/recommendation-runtime/test/composite-lifecycle.test.js` (pure half
-`test/composite-lifecycle-scanner.js`) inside `npm run test:runtime`: it accepts only ACTIVE (the four
-committed consumers, nothing published, shims intact) or MIGRATED (no consumer, no composite file, no
-core-spreading barrel, no stale shim, no residual reference), and treats any PARTIAL tree as a failure.
-The MIGRATED branch is exercised by synthetic trees in the same suite, so the removal obligation cannot
-silently rot. R-33 in `docs/OPEN_POINTS.md` stays open until it goes green.
-
-**What is still owed.** Step 6 itself (the API's imports and the three composites' deletion), the Step 5
-acceptance review of the §11.5 implementation, and the isolated TEST-branch DB acceptance of §19.3 —
-which remains **UNKNOWN** and operator-only. This revision changes none of them.
 
 ### 27.2 Revision 19 — the F1 owner decision (2026-11-26)
 
