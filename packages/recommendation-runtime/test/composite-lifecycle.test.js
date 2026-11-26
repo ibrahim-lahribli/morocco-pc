@@ -41,6 +41,7 @@ const {
   STAGES,
   assess,
   classifyLifecycle,
+  compositeDependencies,
   coreEntrySpread,
   legacyBarrelStagesIn,
   legacyConsumerReferences,
@@ -53,7 +54,6 @@ const {
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(PACKAGE_ROOT, '..', '..');
 const RUNTIME_SRC = path.join(PACKAGE_ROOT, 'src');
-const ORCHESTRATOR = path.join(RUNTIME_SRC, 'orchestrator');
 const OLD_TREE = path.join(REPO_ROOT, 'src', 'recommendation');
 
 // The two test-directory files that legitimately contain the specifier and path
@@ -69,13 +69,6 @@ const RUNTIME_COMPOSITE_REFERENCE = /recommendation-runtime[\\/]+src[\\/]+(candi
 const SKIPPED_DIRECTORIES = new Set([
   'node_modules', '.git', 'docs', '.freebuff', '.next', 'coverage', 'dist', 'build',
 ]);
-
-function listJsFiles(dir) {
-  return fs.readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.js'))
-    .map((entry) => entry.name)
-    .sort();
-}
 
 function walk(dir, visit) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -105,14 +98,12 @@ function discoveryRequired() {
 
 /** One observation of the real tree, in the shape assess() takes. */
 function observe() {
-  const dependencies = {};
-  for (const file of listJsFiles(ORCHESTRATOR)) {
-    dependencies[file] = stagesRequiredBy(fs.readFileSync(path.join(ORCHESTRATOR, file), 'utf8'));
-  }
-
   // Every runtime source file, at any depth: a composite does not have to sit at
   // `src/<stage>/index.js` to publish the core surface, so the observation must
-  // not be able to miss a nested one.
+  // not be able to miss a nested one. The SAME inventory supplies the consumer
+  // map, so a nested consumer cannot hide behind its depth either: exactly four
+  // top-level orchestrator modules are committed, so any other key in this map
+  // is a fifth consumer.
   const runtimeSources = [];
   walk(RUNTIME_SRC, (absolute) => {
     runtimeSources.push({
@@ -120,6 +111,12 @@ function observe() {
       source: fs.readFileSync(absolute, 'utf8'),
     });
   });
+
+  // Resolution-based, at any depth: a specifier counts by the FILE it resolves
+  // to, a `require` the gate cannot read statically becomes a problem the
+  // verdict must carry, and a module that only re-exports a consumer inherits
+  // that consumer's dependencies.
+  const { dependencies, problems: unresolved } = compositeDependencies(runtimeSources);
 
   // The composite signature as this gate defines it: a runtime file that spreads
   // or re-exports the pure core's SURFACE. Keyed on the export behaviour, never on
@@ -185,6 +182,7 @@ function observe() {
     discoveryRequired: discoveryRequired(),
     compositeSuitePresent: fs.existsSync(__filename),
     references,
+    unresolved,
   };
 }
 
@@ -624,15 +622,121 @@ describe('F1 lifecycle — legacy consumers are specifiers, not strings', () => 
     assert.deepEqual(assess({ ...baseActive, legacyReferences }).problems, []);
   });
 
-  // A nested module that still says `require('../candidates')` is the specifier
-  // step 6 has to rewrite, whatever its depth.
+  // A nested module that still requires a composite is the specifier step 6 has
+  // to rewrite, whatever its depth - and the SPECIFIER has to be the one that
+  // actually reaches the composite from where the file sits. From
+  // `src/orchestrator/nested/`, that is `../../candidates`.
   it('reports a nested in-package consumer of a composite specifier', () => {
     assert.deepEqual(
       runtimeCompositeConsumers([
         { path: 'src/candidates/index.js', source: "module.exports = { a: require('./loader') };" },
-        { path: 'src/orchestrator/nested/run.js', source: "const c = require('../candidates');" },
+        { path: 'src/orchestrator/nested/run.js', source: "const c = require('../../candidates');" },
       ]),
-      ['src/orchestrator/nested/run.js requires ../candidates']
+      ['src/orchestrator/nested/run.js requires src/candidates']
     );
+  });
+});
+
+// The six fixtures of the L1/L2 fix, one per way the pre-fix scanner could pass
+// a tree it had not actually judged. Each fails on the scanner at `5aab9a6`:
+// the specifier now counts by the FILE it resolves to, at any depth, and a
+// `require` the gate cannot read is a problem instead of a blind spot.
+describe('F1 lifecycle — resolution, depth and the fail-closed require', () => {
+  it('(a) resolves a composite from a nested module, one level deeper than the committed consumers', () => {
+    assert.deepEqual(
+      stagesRequiredBy("const c = require('../../candidates');", 'src/orchestrator/lib/x.js'),
+      ['candidates']
+    );
+    const { dependencies } = compositeDependencies([
+      { path: 'src/orchestrator/lib/x.js', source: "const c = require('../../candidates');" },
+    ]);
+    assert.deepEqual(dependencies, { 'src/orchestrator/lib/x.js': ['candidates'] });
+  });
+
+  it('(b) counts the /index and /index.js spellings by the file they resolve to', () => {
+    const spellings = "const a = require('../candidates/index');\nconst b = require('../candidates/index.js');";
+    assert.deepEqual(stagesRequiredBy(spellings, 'src/persistence/relay.js'), ['candidates']);
+    // One level down the same text names `src/orchestrator/candidates`, which is
+    // not the composite: resolution decides, not the spelling.
+    assert.deepEqual(stagesRequiredBy(spellings, 'src/orchestrator/lib/x.js'), []);
+  });
+
+  it('(c) reports a file that only RE-EXPORTS the module which requires a composite', () => {
+    const sources = [
+      {
+        path: 'src/orchestrator/impl.js',
+        source: "const scoring = require('../scoring');\nmodule.exports = { rank: () => scoring.rankBuilds };" },
+      { path: 'src/orchestrator/relay.js', source: "module.exports = require('./impl');" },
+    ];
+    const { dependencies, problems } = compositeDependencies(sources);
+    assert.deepEqual(problems, []);
+    assert.deepEqual(dependencies, { 'impl.js': ['scoring'], 'relay.js': ['scoring'] });
+    assert.deepEqual(runtimeCompositeConsumers(sources), [
+      'src/orchestrator/impl.js requires src/scoring',
+      'src/orchestrator/relay.js requires src/scoring',
+    ]);
+    const verdictRelay = assess({ ...baseActive, dependencies });
+    assert.equal(verdictRelay.state, 'PARTIAL');
+    assert.equal(verdictRelay.problems.length, 1, verdictRelay.problems.join(' | '));
+    assert.match(verdictRelay.problems[0], /UNEXPECTED CONSUMERS/);
+    assert.match(verdictRelay.problems[0], /relay\.js/);
+  });
+
+  it('(d) fails closed on a require it cannot read, in every state', () => {
+    const unreadable = [
+      {
+        path: 'src/orchestrator/lib/dynamic.js',
+        source: "const stage = process.argv[2];\nconst m = require(path.join(__dirname, stage));",
+      },
+      {
+        path: 'src/orchestrator/lib/templated.js',
+        source: 'const which = process.argv[2];\nconst m = require(`../${which}`);',
+      },
+    ];
+    const { problems } = compositeDependencies(unreadable);
+    assert.equal(problems.length, 2, problems.join(' | '));
+    assert.match(
+      problems[0],
+      /^src\/orchestrator\/lib\/dynamic\.js requires a module through a non-literal expression/
+    );
+    assert.match(problems[1], /^src\/orchestrator\/lib\/templated\.js/);
+    for (const base of [baseActive, baseMigrated]) {
+      const verdictUnreadable = assess({ ...base, unresolved: problems });
+      assert.equal(verdictUnreadable.problems.length, 2, verdictUnreadable.problems.join(' | '));
+      assert.match(verdictUnreadable.problems[0], /non-literal expression/);
+    }
+  });
+
+  it('(e) a nested unexpected consumer turns ACTIVE into a named failure', () => {
+    const sources = [
+      {
+        path: 'src/orchestrator/run.js',
+        source: "require('../candidates');\nrequire('../filtering');\nrequire('../scoring');",
+      },
+      { path: 'src/orchestrator/swap-preview.js', source: "require('../candidates');\nrequire('../filtering');" },
+      { path: 'src/orchestrator/swap-commit.js', source: "require('../scoring');" },
+      { path: 'src/orchestrator/compute.js', source: "require('../scoring');" },
+      { path: 'src/orchestrator/lib/extra.js', source: "require('../../scoring');" },
+    ];
+    const { dependencies } = compositeDependencies(sources);
+    assert.deepEqual(dependencies, {
+      ...EXPECTED_ACTIVE_DEPENDENCIES,
+      'src/orchestrator/lib/extra.js': ['scoring'],
+    });
+    const verdictNested = assess({ ...baseActive, dependencies });
+    assert.equal(verdictNested.state, 'PARTIAL');
+    assert.equal(verdictNested.problems.length, 1, verdictNested.problems.join(' | '));
+    assert.match(verdictNested.problems[0], /UNEXPECTED CONSUMERS/);
+    assert.match(verdictNested.problems[0], /src\/orchestrator\/lib\/extra\.js/);
+  });
+
+  it('(f) does not flag a ./candidates that does not resolve to the composite', () => {
+    assert.deepEqual(stagesRequiredBy("require('./candidates');", 'src/persistence/notes.js'), []);
+    const { dependencies } = compositeDependencies([
+      { path: 'src/persistence/notes.js', source: "const local = require('./candidates');" },
+      { path: 'src/orchestrator/lib/candidates.js', source: 'module.exports = {};' },
+      { path: 'src/orchestrator/lib/x.js', source: "const local = require('./candidates');" },
+    ]);
+    assert.deepEqual(dependencies, {});
   });
 });

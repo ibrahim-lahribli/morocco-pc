@@ -42,8 +42,13 @@
 //   * Comments are removed by a small lexer, not a regex, so a string containing
 //     `//` (a URL) cannot swallow the rest of a real line.
 //
-// DB-free and dependency-free: no fs, no path, no require of the package. The
-// caller supplies the bytes and the observations.
+// DB-free and dependency-free: no fs and no require of the package. The caller
+// supplies the bytes and the observations. `node:path`'s POSIX half is used for
+// exactly one job - RESOLVING a relative specifier against the directory of the
+// file that wrote it - because that is the one thing a string match cannot do:
+// the same composite file is `../candidates` from `src/orchestrator/run.js`,
+// `../../candidates` from `src/orchestrator/lib/x.js`, and `../candidates/index`
+// or `../candidates/index.js` in the spellings Node also accepts.
 
 const STAGES = Object.freeze(['candidates', 'filtering', 'scoring']);
 
@@ -162,27 +167,119 @@ function lastSignificant(text) {
   return '';
 }
 
+const POSIX = require('node:path').posix;
+
+// The composite implementation files, as package-relative POSIX paths. This is
+// the only definition of "is a composite" the detectors use: identity is the
+// RESOLVED file, never the shape of the specifier that reached it.
+const COMPOSITE_FILES = Object.freeze({
+  candidates: 'src/candidates/index.js',
+  filtering: 'src/filtering/index.js',
+  scoring: 'src/scoring/index.js',
+});
+
 /**
- * The composite stages one source file requires through the LEGACY BARREL
- * SPECIFIER.
+ * The forms Node resolves for a relative specifier without a known extension set:
+ * the path itself, then `<path>.js`, then `<path>/index.js`. Anything outside
+ * that list is not a module this package can reach by a relative path.
  *
- * Only the exact barrel counts: `require('../candidates')`,
- * `require('../candidates/index')` and `require('../candidates/index.js')`.
- * A subpath require such as `require('../candidates/errors')` is a different
- * thing - it names one module, not the composite - and must not be mistaken for
- * a consumer of the exception. Comments are stripped first for the same reason.
+ * @param {string} fromFile package-relative path of the importing file
+ * @param {string} specifier the literal written in the source
+ * @returns {string[] | null} package-relative candidates, or null when the
+ *   specifier is bare (`node:path`, a package name) and cannot name a composite
+ */
+function resolveSpecifier(fromFile, specifier) {
+  if (typeof specifier !== 'string' || specifier.startsWith('.') === false) return null;
+  const from = '/' + String(fromFile).replace(/\\/g, '/').replace(/^\/+/, '');
+  const resolved = POSIX.resolve(POSIX.dirname(from), specifier).replace(/^\/+/, '');
+  return [resolved, resolved + '.js', resolved + '/index.js'];
+}
+
+/**
+ * The stage whose composite implementation one resolved specifier names.
+ *
+ * @param {string[]} candidates
+ * @returns {string | null}
+ */
+function stageOfCandidates(candidates) {
+  for (const stage of STAGES) {
+    if (candidates.includes(COMPOSITE_FILES[stage])) return stage;
+  }
+  return null;
+}
+
+/**
+ * Every literal specifier a module writes, with its position: `require(...)`,
+ * `require.resolve(...)`, `import x from '...'` and the bare `import '...'`
+ * side-effect form. All four can reach a composite, and a detector that only
+ * knew `require('../<stage>')` would miss the other three.
+ *
+ * @param {string} code comment-stripped source
+ * @returns {{specifier: string, index: number}[]}
+ */
+function specifierMatches(code) {
+  const patterns = [
+    /\brequire(?:\s*\.\s*resolve)?\s*\(\s*(['"])([^'"\n]+)\1\s*\)/g,
+    /\bfrom\s*(['"])([^'"\n]+)\1/g,
+    /\bimport\s*(['"])([^'"\n]+)\1/g,
+  ];
+  const found = [];
+  for (const pattern of patterns) {
+    for (const match of code.matchAll(pattern)) {
+      found.push({ specifier: match[2], index: match.index });
+    }
+  }
+  return found;
+}
+
+/**
+ * Requires whose argument is not a literal: `require(path.join(...))`,
+ * `require(someVariable)`, `` require(`../scoring`) `` with a substitution.
+ *
+ * FAIL CLOSED. A gate that shrugs at what it cannot read is a gate a caller can
+ * walk past by computing the path; the tree this repository accepts today has no
+ * such require in the package source, so a problem here is a NEW construct that
+ * must be rewritten as a literal or reviewed deliberately.
+ *
+ * @param {string} code comment-stripped source
+ * @returns {string[]} the unresolved argument text, trimmed
+ */
+function unresolvableRequires(code) {
+  const found = [];
+  const pattern = /\brequire(?:\s*\.\s*resolve)?\s*\(\s*/g;
+  for (const match of code.matchAll(pattern)) {
+    const rest = code.slice(match.index + match[0].length);
+    if (/^['"]/.test(rest)) continue;
+    found.push(rest.slice(0, 48).replace(/\s+/g, ' ').trim());
+  }
+  return found;
+}
+
+/**
+ * The composite stages one source file requires, by resolution.
+ *
+ * Only the exact barrel counts: the resolved file must BE
+ * `src/<stage>/index.js`. A subpath require such as `../candidates/errors` is a
+ * different module and is not a consumer of the exception; so is `./candidates`
+ * written beside a file that is not the barrel.
  *
  * @param {string} source
+ * @param {string} [fromFile] package-relative path of the importing file; the
+ *   committed consumer depth is the default so a one-argument call keeps its
+ *   historical meaning
  * @returns {string[]} stages, in STAGES order
  */
-function stagesRequiredBy(source) {
-  // Built inside the function so the global flag cannot leak between calls.
-  const pattern = new RegExp(
-    "\\brequire\\(\\s*['\"]\\.\\./(candidates|filtering|scoring)(?:/index(?:\\.js)?)?['\"]\\s*\\)",
-    'g'
-  );
+function stagesRequiredBy(source, fromFile) {
+  const file = typeof fromFile === 'string' && fromFile.length > 0
+    ? fromFile
+    : 'src/orchestrator/consumer.js';
   const found = new Set();
-  for (const match of stripComments(source).matchAll(pattern)) found.add(match[1]);
+  for (const { specifier } of specifierMatches(stripComments(source))) {
+    const candidates = resolveSpecifier(file, specifier);
+    if (candidates === null) continue;
+    const stage = stageOfCandidates(candidates);
+    if (stage !== null) found.add(stage);
+  }
   return STAGES.filter((stage) => found.has(stage));
 }
 
@@ -325,16 +422,7 @@ function escapeRegExp(value) {
  * @returns {string[]}
  */
 function specifiersIn(code) {
-  const patterns = [
-    /\brequire(?:\.resolve)?\s*\(\s*(['"])([^'"\n]+)\1\s*\)/g,
-    /\bfrom\s*(['"])([^'"\n]+)\1/g,
-    /\bimport\s*(['"])([^'"\n]+)\1/g,
-  ];
-  const found = [];
-  for (const pattern of patterns) {
-    for (const match of code.matchAll(pattern)) found.push(match[2]);
-  }
-  return found;
+  return specifierMatches(code).map((match) => match.specifier);
 }
 
 /**
@@ -386,27 +474,95 @@ function runtimeSurfacePublishers(sources) {
 }
 
 /**
- * Runtime source files that reach a composite through `../<stage>`.
+ * Every in-package file that reaches a composite, directly or by re-export.
+ *
+ * The key is the bare file name for the orchestrator's own directory - that is
+ * the shape of the committed map - and the package-relative path for anything
+ * elsewhere, so a nested file can never borrow a committed name and pass.
+ *
+ * A RELAY counts: a file whose `module.exports` IS another module hands that
+ * module's surface to its consumers, so `module.exports = require('./impl')`
+ * over a file that requires a composite is a compatibility path in disguise and
+ * must be reported even though it writes no composite specifier itself.
+ *
+ * @param {{path: string, source: string}[]} sources package-relative paths under `src/`
+ * @returns {{dependencies: Record<string, string[]>, problems: string[]}}
+ */
+function compositeDependencies(sources) {
+  const list = (sources || []).map((entry) => ({
+    path: String(entry.path).replace(/\\/g, '/'),
+    code: stripComments(entry.source),
+  }));
+  const codeByPath = new Map(list.map((entry) => [entry.path, entry.code]));
+  const dependencies = {};
+  const problems = [];
+  const relays = new Map();
+
+  for (const entry of list) {
+    const stages = new Set();
+    for (const { specifier } of specifierMatches(entry.code)) {
+      const candidates = resolveSpecifier(entry.path, specifier);
+      if (candidates === null) continue;
+      const stage = stageOfCandidates(candidates);
+      if (stage !== null) stages.add(stage);
+      const target = candidates.find((candidate) => codeByPath.has(candidate));
+      if (target === undefined) continue;
+      const directReexport = new RegExp(
+        String.raw`module\.exports\s*=\s*require\s*\(\s*['"]` + escapeRegExp(specifier) + String.raw`['"]\s*\)`
+      );
+      if (directReexport.test(entry.code)) relays.set(entry.path, target);
+    }
+    if (stages.size > 0) dependencies[dependencyKey(entry.path)] = STAGES.filter((s) => stages.has(s));
+    for (const text of unresolvableRequires(entry.code)) {
+      problems.push(
+        entry.path + ' requires a module through a non-literal expression (`' + text
+          + '`), so whether it reaches a composite cannot be decided statically. The gate fails closed: '
+          + 'write the specifier as a literal, or review the new construct deliberately.'
+      );
+    }
+  }
+
+  for (const start of relays.keys()) {
+    if (dependencies[dependencyKey(start)] !== undefined) continue;
+    let current = relays.get(start);
+    const seen = new Set([start]);
+    while (current !== undefined && !seen.has(current)) {
+      seen.add(current);
+      if (dependencies[dependencyKey(current)] !== undefined) {
+        dependencies[dependencyKey(start)] = dependencies[dependencyKey(current)].slice();
+        break;
+      }
+      current = relays.get(current);
+    }
+  }
+
+  return { dependencies, problems };
+}
+
+function dependencyKey(file) {
+  return /^src\/orchestrator\/[^/]+\.js$/.test(file) ? file.slice('src/orchestrator/'.length) : file;
+}
+
+/**
+ * Runtime source files that reach a composite, at any depth.
  *
  * The composite itself is not its own consumer, so `src/<stage>/index.js` is
- * skipped. Everything else counts, at any depth: a nested orchestrator module
- * that still says `require('../candidates')` is exactly the specifier step 6
- * has to rewrite.
+ * skipped. Everything else counts: a nested module that still imports a
+ * composite is exactly the specifier step 6 has to rewrite, whatever its depth
+ * and whatever spelling Node accepts for it.
  *
  * @param {{path: string, source: string}[]} sources package-relative paths under `src/`
  * @returns {string[]} one line per offending file, sorted
  */
 function runtimeCompositeConsumers(sources) {
+  const { dependencies } = compositeDependencies(sources);
   const found = [];
   for (const entry of sources || []) {
-    const segments = String(entry.path).split('/');
-    const isComposite = segments.length === 3
-      && segments[0] === 'src'
-      && STAGES.includes(segments[1])
-      && segments[2] === 'index.js';
-    if (isComposite) continue;
-    const stages = stagesRequiredBy(entry.source);
-    if (stages.length > 0) found.push(entry.path + ' requires ../' + stages.join(', ../'));
+    const file = String(entry.path).replace(/\\/g, '/');
+    if (STAGES.some((stage) => COMPOSITE_FILES[stage] === file)) continue;
+    const stages = dependencies[dependencyKey(file)];
+    if (stages === undefined) continue;
+    found.push(file + ' requires ' + stages.map((stage) => 'src/' + stage).join(', '));
   }
   return found.sort();
 }
@@ -523,12 +679,19 @@ function assess(observation) {
     ['test/export-surface.json', obs.snapshotExports],
   ];
 
+  // A require the gate cannot read is a hole in every verdict, ACTIVE included,
+  // so it is collected exactly once, before any branch can return.
+  for (const text of obs.unresolved || []) problems.push(text);
+
   if (state === 'PARTIAL') {
+    const committed = Object.keys(EXPECTED_ACTIVE_DEPENDENCIES);
+    const extra = Object.keys(dependencies).filter((file) => !committed.includes(file)).sort();
     problems.push(
       'PARTIAL MIGRATION: the orchestrator requires a composite from a set of files that is neither the four '
         + 'committed consumers nor none. Observed: ' + describeDependencies(dependencies) + '. Either restore '
         + 'the four committed consumers (ACTIVE) or finish the step 6 migration completely (MIGRATED); a '
         + 'half-migrated tree is not a valid state.'
+        + (extra.length === 0 ? '' : ' UNEXPECTED CONSUMERS (any depth, any spelling): ' + extra.join(', ') + '.')
     );
     return { state, problems, dependencies };
   }
@@ -631,12 +794,16 @@ function assess(observation) {
 }
 
 module.exports = {
+  COMPOSITE_FILES,
   EXPECTED_ACTIVE_DEPENDENCIES,
   REQUIRED_SUITES,
   STAGES,
   assess,
   classifyLifecycle,
+  compositeDependencies,
   coreEntrySpread,
+  resolveSpecifier,
+  stageOfCandidates,
   describeDependencies,
   legacyBarrelStagesIn,
   legacyConsumerReferences,
