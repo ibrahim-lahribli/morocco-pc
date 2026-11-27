@@ -117,19 +117,36 @@ re-mark or delete the existing TEST rows to manufacture a clean parent.
 
 ### 3.2 Both connection variables, set first
 
-Set **both** variables in the operator's own shell **before running any migration or seed command**:
+Open a **fresh shell** for the acceptance run — not a window reused from development work — and disable
+its history before anything is typed, so no connection string can land in a history file:
+
+| Shell | Disable history for this session |
+|---|---|
+| bash | `unset HISTFILE` |
+| PowerShell | `Set-PSReadLineOption -HistorySaveStyle SaveNothing` |
+
+Set **both** variables **before running any migration or seed command**:
 
 | Variable | Meaning for this run |
 |---|---|
 | `TEST_DATABASE_URL` | the isolated acceptance branch — the **only** intended write target |
 | `DATABASE_URL` | an **unreachable placeholder**, never a real endpoint |
+| `API_ALLOW_SHARED` | must be **unset** |
 
-`DATABASE_URL` must name a host that cannot resolve, so that a command which reaches it by default fails to
-connect instead of writing somewhere with a real row in it:
+bash form:
 
+```sh
+export DATABASE_URL='postgres://acceptance-placeholder.invalid:5432/none'
+export TEST_DATABASE_URL='<the acceptance branch connection string>'
+unset API_ALLOW_SHARED
 ```
-DATABASE_URL='postgres://acceptance-placeholder.invalid:5432/none'
-TEST_DATABASE_URL='<the acceptance branch connection string>'
+
+PowerShell form:
+
+```powershell
+$env:DATABASE_URL = 'postgres://acceptance-placeholder.invalid:5432/none'
+$env:TEST_DATABASE_URL = '<the acceptance branch connection string>'
+Remove-Item Env:API_ALLOW_SHARED -ErrorAction SilentlyContinue
 ```
 
 `.invalid` is reserved by RFC 2606 and never resolves, so the failure is a DNS error rather than a write.
@@ -137,9 +154,48 @@ Never set `DATABASE_URL` to the shared development URL, and never to the accepta
 host comparison is a cheap typo check, not a destination proof, and the shared branch is not a scratch
 target under any circumstances.
 
+`API_ALLOW_SHARED=1` is the explicit opt-in that routes the API pool at `DATABASE_URL` as the shared
+database (`apps/api/src/db.js:52`). Left over from an earlier session it turns "the placeholder cannot
+resolve" into a routing switch, so the section above unsets it and the shell that later runs the suites
+must be this same shell.
+
+**Pre-write check — hostnames only, never credentials.** Before the first write command, run this
+one-liner (it prints two hostnames and nothing else):
+
+```sh
+node -e "const h=(s)=>{try{return new URL(s).hostname}catch(e){return '(unset or unparseable)'}};console.log('DATABASE_URL host:',h(process.env.DATABASE_URL));console.log('TEST_DATABASE_URL host:',h(process.env.TEST_DATABASE_URL))"
+```
+
+The check passes only when the two hosts **differ** and the `DATABASE_URL` host **ends in `.invalid`**.
+It is a typo check, not a destination proof (§3.3 remains the verification). Never paste a full connection
+string into any output this run produces — not the evidence file, not a note, not a ticket, not a chat
+message. Hostnames alone are safe to paste; a URL is not, because userinfo and database name ride with it.
+
+**Why the shell must win over files (static finding; nothing was executed to learn this).** Repo entry
+points call `require('dotenv').config()` (`scripts/apply-seed.js:45`, `apps/api/src/server.js:28`,
+`apps/api/test/run-db-tests.js:27`), and `dotenv.config()` does **not** override an already-set variable
+(`scripts/lib/generate-presets-cli.test.js:308` records exactly that). Two consequences:
+
+- Setting the variables first makes the shell authoritative over any `.env` present in the checkout —
+  which is why the exports above come before every command in §4.
+- The inverse is the hazard: a **forgotten** variable lets a stale `.env` silently supply the real
+  shared `DATABASE_URL`. A fresh shell with both variables set, history disabled and (for the duration)
+  no reliance on any `.env`, is what makes the forgetting case impossible.
+
 `packages/database-guard/src/index.js` refuses when the two normalized hosts are equal. That refusal is the
 guard working, not an obstacle to route around — and it is only a cheap typo guard: two different strings
 can still reach one database through a tunnel or port forward.
+
+**When the run is finished or abandoned**, clear the shell so no later command inherits a live write
+target:
+
+```sh
+unset DATABASE_URL TEST_DATABASE_URL
+```
+
+```powershell
+Remove-Item Env:DATABASE_URL, Env:TEST_DATABASE_URL
+```
 
 ### 3.3 Verify out of band, and record no secrets
 
@@ -203,8 +259,11 @@ Part I produces two things: a real-database behaviour result for the W3/W2 modul
      asserting the destination is exactly the claim the flag exists to make impossible to fake.
    - `--confirm-shared` is **not** part of this procedure. It authorizes a `DATABASE_URL` write, which here
      would be the wrong database. The CI job uses it against its own throwaway container; that is not this.
-   - **Seed `006_offer_refresh.sql` re-dates existing `store_offer` rows** (it updates offer validity and
-     observation timestamps rather than inserting offers). That is expected and correct **on an isolated
+   - **Seed `006_offer_refresh.sql` re-dates existing `store_offer` rows.** Its single statement sets
+     `store_offer.last_checked_at = NOW()` and `store_offer.updated_at = NOW()` for rows whose product
+     name matches `Seed %` and whose `last_checked_at < NOW() - INTERVAL '7 days'` — timestamp columns
+     only, no inserts and no price/currency/availability writes (its own header: "Scope: timestamp
+     columns ONLY"). That is expected and correct **on an isolated
      branch created for this run**, where it touches only inherited rows the branch owns. On shared, TEST or
      EU it would be a real change to live offer dates, which is one more reason the target must be a branch
      nobody else is writing to.
