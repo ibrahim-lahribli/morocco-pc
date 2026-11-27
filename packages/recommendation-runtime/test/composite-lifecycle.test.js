@@ -1038,6 +1038,19 @@ describe('F1 lifecycle — publication through `exports.<name>` needs no `module
     assert.equal(coreEntrySpread("exports.all = { ...require('../core-entry') };\n"), true);
   });
 
+  // Phase 5c, E3(c): the two remaining publication shapes, pinned so the o1 fix
+  // cannot regress them silently. `module.exports.<name> = core.<member>` never
+  // matches the o1 rule (its lookbehind refuses a preceding `.`), so the member
+  // loop in `publishesSurface` is what catches it; the object-literal form
+  // `module.exports = { <name>: core.<member> }` is caught by that same loop.
+  it('o1 fix: module.exports.<name> = core.<member> is a composite signature', () => {
+    assert.equal(coreEntrySpread(coreBinding + 'module.exports.candidates = core.candidates;\n'), true);
+  });
+
+  it('o1 fix: module.exports = { <name>: core.<member> } is a composite signature', () => {
+    assert.equal(coreEntrySpread(coreBinding + 'module.exports = { candidates: core.candidates };\n'), true);
+  });
+
   it('the fix keeps internal use unflagged: called members, non-core bindings', () => {
     assert.equal(coreEntrySpread(coreBinding + 'exports.value = wrap(core.purity());\n'), false);
     assert.equal(
