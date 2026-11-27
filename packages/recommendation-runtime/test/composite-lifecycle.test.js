@@ -50,6 +50,7 @@ const {
   runtimeSurfacePublishers,
   stagesRequiredBy,
   stripComments,
+  walkJs,
 } = require('./composite-lifecycle-scanner');
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
@@ -65,22 +66,10 @@ const SELF = new Set([__filename, path.join(__dirname, 'composite-lifecycle-scan
 // or (checked separately) a `require('../<stage>')` inside the package.
 const RUNTIME_COMPOSITE_REFERENCE = /recommendation-runtime[\\/]+src[\\/]+(candidates|filtering|scoring)\b/;
 
-// Directories that are never part of the consumer inventory: dependencies, Git
-// internals, documentation (prose mentions the paths on purpose) and scratch.
-const SKIPPED_DIRECTORIES = new Set([
-  'node_modules', '.git', 'docs', '.freebuff', '.next', 'coverage', 'dist', 'build',
-]);
-
-function walk(dir, visit) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      if (SKIPPED_DIRECTORIES.has(entry.name)) continue;
-      walk(path.join(dir, entry.name), visit);
-      continue;
-    }
-    if (entry.isFile() && entry.name.endsWith('.js') || entry.name.endsWith('.cjs') || entry.name.endsWith('.mjs')) visit(path.join(dir, entry.name));
-  }
-}
+// The inventory walk (skip sets, extension filter) lives with the detectors in
+// ./composite-lifecycle-scanner.js as `walkJs`, so both walks in observe() are
+// the same code and a probe can drive a fixture tree through it.
+const walk = walkJs;
 
 function relativeToRepo(absolute) {
   return path.relative(REPO_ROOT, absolute).split(path.sep).join('/');

@@ -1,7 +1,7 @@
 'use strict';
 
-// packages/recommendation-runtime/test/composite-lifecycle-scanner.js — the pure
-// half of the F1 lifecycle gate (owner decision of 2026-11-26).
+// packages/recommendation-runtime/test/composite-lifecycle-scanner.js — the
+// detector half of the F1 lifecycle gate (owner decision of 2026-11-26).
 //
 // WHY THIS IS ITS OWN FILE, AND WHY IT TAKES DATA RATHER THAN A TREE.
 // The owner approved the three composite barrels as an unpublished, step-6-scoped
@@ -15,6 +15,12 @@
 // composite-lifecycle.test.js both (a) feeds it the real tree and (b) feeds it
 // synthetic trees in each of the three possible states. The MIGRATED branch is
 // therefore executable today, and a reviewer can see it fail.
+//
+// ONE PIECE OF I/O LIVES HERE, ON PURPOSE (phase 5b): `collectSources` below is
+// the file inventory that builds every observation. Keeping it next to the
+// detectors means the skip sets, the extension filter and the fail-closed read
+// semantics are covered by this module's own tests instead of being re-derived
+// per caller. Everything else in this file stays pure over the data it is handed.
 //
 // Three states, no fourth:
 //   ACTIVE   - the orchestrator still requires the composites from exactly the
@@ -42,8 +48,9 @@
 //   * Comments are removed by a small lexer, not a regex, so a string containing
 //     `//` (a URL) cannot swallow the rest of a real line.
 //
-// DB-free and dependency-free: no fs and no require of the package. The caller
-// supplies the bytes and the observations. `node:path`'s POSIX half is used for
+// DB-free and dependency-free apart from `node:fs` + `node:path` in the
+// inventory walker: every detector takes the bytes and the observations the
+// caller supplies. `node:path`'s POSIX half is used for
 // exactly one job - RESOLVING a relative specifier against the directory of the
 // file that wrote it - because that is the one thing a string match cannot do:
 // the same composite file is `../candidates` from `src/orchestrator/run.js`,
@@ -168,6 +175,8 @@ function lastSignificant(text) {
 }
 
 const POSIX = require('node:path').posix;
+const path = require('node:path');
+const fs = require('node:fs');
 
 // The composite implementation files, as package-relative POSIX paths. This is
 // the only definition of "is a composite" the detectors use: identity is the
@@ -833,10 +842,49 @@ function assess(observation) {
   return { state, problems, dependencies };
 }
 
+// Directories that are never part of the CONSUMER inventory: dependencies, Git
+// internals, documentation (prose mentions the paths on purpose) and scratch.
+// Kept as data so a caller (and a test) can see exactly what a repo-wide walk
+// hides. The runtime-src inventory deliberately does NOT use this set: a
+// composite hidden under a build-shaped directory is still a composite (phase 5b).
+const REPO_SKIP_DIRS = Object.freeze(
+  new Set(['node_modules', '.git', 'docs', '.freebuff', '.next', 'coverage', 'dist', 'build'])
+);
+
+/**
+ * Recursively walk `dir` and hand every JavaScript-named entry to `visit` with
+ * its absolute path.
+ *
+ * This is the SAME walk for the package's `src/` tree and the repository-wide
+ * consumer search, so the inventory cannot drift between the two callers. The
+ * `skip` set is caller-supplied data: the repo walk hides build-shaped and
+ * documentation directories, the package walk must not (phase 5b).
+ *
+ * @param {string} dir absolute root to walk
+ * @param {(absolute: string, entry: import('node:fs').Dirent) => void} visit
+ * @param {{skipDirectories?: Set<string>, filter?: (absolute: string, entry: import('node:fs').Dirent) => boolean}} [options]
+ */
+function walkJs(dir, visit, options = {}) {
+  const skip = options.skipDirectories || REPO_SKIP_DIRS;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (skip.has(entry.name)) continue;
+      walkJs(path.join(dir, entry.name), visit, options);
+      continue;
+    }
+    if (entry.isFile() && entry.name.endsWith('.js') || entry.name.endsWith('.cjs') || entry.name.endsWith('.mjs')) {
+      const absolute = path.join(dir, entry.name);
+      if (options.filter && !options.filter(absolute, entry)) continue;
+      visit(absolute, entry);
+    }
+  }
+}
+
 module.exports = {
   COMPOSITE_FILES,
   EXPECTED_ACTIVE_DEPENDENCIES,
   REQUIRED_SUITES,
+  REPO_SKIP_DIRS,
   STAGES,
   assess,
   classifyLifecycle,
@@ -852,4 +900,5 @@ module.exports = {
   runtimeSurfacePublishers,
   stagesRequiredBy,
   stripComments,
+  walkJs,
 };
