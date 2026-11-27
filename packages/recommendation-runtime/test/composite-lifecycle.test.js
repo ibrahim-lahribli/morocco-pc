@@ -39,9 +39,12 @@ const path = require('node:path');
 
 const {
   EXPECTED_ACTIVE_DEPENDENCIES,
+  REPO_SKIP_DIRS,
+  SRC_SKIP_DIRS,
   STAGES,
   assess,
   classifyLifecycle,
+  collectJsSources,
   compositeDependencies,
   coreEntrySpread,
   legacyBarrelStagesIn,
@@ -66,10 +69,10 @@ const SELF = new Set([__filename, path.join(__dirname, 'composite-lifecycle-scan
 // or (checked separately) a `require('../<stage>')` inside the package.
 const RUNTIME_COMPOSITE_REFERENCE = /recommendation-runtime[\\/]+src[\\/]+(candidates|filtering|scoring)\b/;
 
-// The inventory walk (skip sets, extension filter) lives with the detectors in
-// ./composite-lifecycle-scanner.js as `walkJs`, so both walks in observe() are
-// the same code and a probe can drive a fixture tree through it.
-const walk = walkJs;
+// The inventory walk (skip sets, extension filter, fail-closed read) lives with
+// the detectors in ./composite-lifecycle-scanner.js: `walkJs` and
+// `collectJsSources`, so both observe() walks and every fixture-tree probe run
+// through the same code.
 
 function relativeToRepo(absolute) {
   return path.relative(REPO_ROOT, absolute).split(path.sep).join('/');
@@ -94,13 +97,15 @@ function observe() {
   // map, so a nested consumer cannot hide behind its depth either: exactly four
   // top-level orchestrator modules are committed, so any other key in this map
   // is a fifth consumer.
-  const runtimeSources = [];
-  walk(RUNTIME_SRC, (absolute) => {
-    runtimeSources.push({
-      path: 'src/' + path.relative(RUNTIME_SRC, absolute).split(path.sep).join('/'),
-      source: fs.readFileSync(absolute, 'utf8'),
-    });
-  });
+  // The package's own src/ tree skips ONLY node_modules (SRC_SKIP_DIRS): a
+  // composite or a consumer relocated under a build-shaped directory is still
+  // live code the gate must read. An entry the walk reports but the read cannot
+  // open (broken symlink, unreadable file) becomes a PROBLEM, never a throw.
+  const srcInventory = collectJsSources(RUNTIME_SRC, { skipDirectories: SRC_SKIP_DIRS });
+  const runtimeSources = srcInventory.files.map((entry) => ({
+    path: 'src/' + path.relative(RUNTIME_SRC, entry.path).split(path.sep).join('/'),
+    source: entry.source,
+  }));
 
   // Resolution-based, at any depth: a specifier counts by the FILE it resolves
   // to, a `require` the gate cannot read statically becomes a problem the
@@ -144,15 +149,15 @@ function observe() {
   // not a consumer, and neither is a require of a subpath module.
   const legacyReferences = [];
   const references = [];
-  walk(REPO_ROOT, (absolute) => {
-    if (SELF.has(absolute)) return;
-    const relative = relativeToRepo(absolute);
-    const source = fs.readFileSync(absolute, 'utf8');
-    legacyReferences.push(...legacyConsumerReferences([{ path: relative, source }]));
-    if (RUNTIME_COMPOSITE_REFERENCE.test(stripComments(source))) {
+  const repoInventory = collectJsSources(REPO_ROOT);
+  for (const entry of repoInventory.files) {
+    if (SELF.has(entry.path)) continue;
+    const relative = relativeToRepo(entry.path);
+    legacyReferences.push(...legacyConsumerReferences([{ path: relative, source: entry.source }]));
+    if (RUNTIME_COMPOSITE_REFERENCE.test(stripComments(entry.source))) {
       references.push(relative + ' (path into the runtime composite)');
     }
-  });
+  }
   // Inside the package the exception is the composite SPECIFIER itself, at any
   // depth. The composite directories are allowed to BE the composite; nothing
   // else may require one.
@@ -173,6 +178,7 @@ function observe() {
     compositeSuitePresent: fs.existsSync(__filename),
     references,
     unresolved,
+    inventoryProblems: srcInventory.problems.concat(repoInventory.problems),
   };
 }
 
@@ -741,7 +747,7 @@ describe('F1 lifecycle — the inventory is complete or the verdict is not ACTIV
       fs.writeFileSync(path.join(dir, 'b.mjs'), "import x from '../../candidates';\n");
       fs.writeFileSync(path.join(dir, 'c.json'), '{}\n');
       const found = [];
-      walk(dir, (absolute) => found.push(path.basename(absolute)));
+      walkJs(dir, (absolute) => found.push(path.basename(absolute)), { skipDirectories: SRC_SKIP_DIRS });
       assert.deepEqual(found.sort(), ['a.cjs', 'b.mjs']);
 
       const { dependencies } = compositeDependencies([
@@ -801,5 +807,168 @@ describe('F1 lifecycle — the inventory is complete or the verdict is not ACTIV
       'r3.js': ['scoring'],
       'r4.js': ['scoring'],
     });
+  });
+});
+
+// Phase 5b, items 1a/1b: the package's own src/ walk skipped build-shaped
+// directories (dist/, build/, docs/, .next/) exactly like the repo walk, and the
+// extension filter's operator precedence (`isFile() && .js || .cjs || .mjs`)
+// applied the .cjs/.mjs tests to EVERY non-directory entry: an unresolvable
+// symlink named x.cjs was visited and its read threw, while a symlinked .js
+// consumer was silently skipped (isFile() is false for a link). Both walks now
+// come from collectJsSources: the src inventory skips only node_modules, every
+// non-directory .js/.cjs/.mjs entry is attempted, and an entry the read cannot
+// open is a problem the verdict carries — never a throw, never silence.
+describe('F1 lifecycle — the src inventory skips only node_modules, and unreadable entries fail closed', () => {
+  // A throwaway COPY of this package (src/ and test/), so a probe exercises the
+  // real walk over a real layout instead of an array the test hand-built.
+  function makeFixturePackage() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-fixture-'));
+    const pkg = path.join(root, 'packages', 'recommendation-runtime');
+    fs.mkdirSync(pkg, { recursive: true });
+    fs.cpSync(path.join(PACKAGE_ROOT, 'src'), path.join(pkg, 'src'), { recursive: true });
+    fs.cpSync(path.join(PACKAGE_ROOT, 'test'), path.join(pkg, 'test'), { recursive: true });
+    fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: 'runtime-fixture' }));
+    return {
+      root,
+      pkg,
+      src: path.join(pkg, 'src'),
+      dispose() {
+        fs.rmSync(root, { recursive: true, force: true });
+      },
+    };
+  }
+
+  function writeConsumer(pkgSrc, relative) {
+    const file = path.join(pkgSrc, ...relative.split('/'));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "const scoring = require('../../scoring');\nmodule.exports = scoring;\n");
+    return file;
+  }
+
+  it('1a: a composite consumer under build-shaped directories IS inventoried (src walk)', () => {
+    const temp = makeFixturePackage();
+    try {
+      for (const dir of ['build', 'dist', 'docs', '.next']) {
+        writeConsumer(temp.src, 'orchestrator/' + dir + '/extra.js');
+      }
+      const inventory = collectJsSources(temp.src, { skipDirectories: SRC_SKIP_DIRS });
+      assert.deepEqual(inventory.problems, [], inventory.problems.join(' | '));
+      const { dependencies } = compositeDependencies(
+        inventory.files.map((entry) => ({
+          path: 'src/' + path.relative(temp.src, entry.path).split(path.sep).join('/'),
+          source: entry.source,
+        }))
+      );
+      for (const dir of ['build', 'dist', 'docs', '.next']) {
+        assert.deepEqual(
+          dependencies['src/orchestrator/' + dir + '/extra.js'],
+          ['scoring'],
+          'a consumer under src/orchestrator/' + dir + '/ must reach the dependency map'
+        );
+      }
+      const verdict = assess({ ...baseActive, dependencies });
+      assert.equal(verdict.state, 'PARTIAL');
+      assert.ok(
+        verdict.problems.some((text) => text.includes('PARTIAL MIGRATION')),
+        verdict.problems.join(' | ')
+      );
+    } finally {
+      temp.dispose();
+    }
+  });
+
+  it('1a: the repo-wide walk keeps hiding build-shaped directories, and SRC_SKIP_DIRS hides only node_modules', () => {
+    const temp = makeFixturePackage();
+    try {
+      writeConsumer(temp.src, 'orchestrator/dist/extra.js');
+      const repoKept = [];
+      walkJs(temp.root, (absolute) => repoKept.push(absolute), { skipDirectories: REPO_SKIP_DIRS });
+      assert.ok(
+        !repoKept.some((absolute) => absolute.includes(path.join('dist', 'extra.js'))),
+        'the consumer inventory changed the repo walk, which is scoped by design'
+      );
+      const srcKept = [];
+      walkJs(temp.root, (absolute) => srcKept.push(absolute), { skipDirectories: SRC_SKIP_DIRS });
+      assert.ok(
+        srcKept.some((absolute) => absolute.includes(path.join('dist', 'extra.js'))),
+        'the src walk must not hide build-shaped directories'
+      );
+      assert.deepEqual([...SRC_SKIP_DIRS], ['node_modules']);
+      assert.ok(REPO_SKIP_DIRS.has('node_modules') && REPO_SKIP_DIRS.has('docs'));
+    } finally {
+      temp.dispose();
+    }
+  });
+
+  it('1b: a directory named x.cjs / x.mjs is skipped, not read (no throw, no fake entry)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-dir-cjs-'));
+    try {
+      fs.mkdirSync(path.join(dir, 'fake.cjs'));
+      fs.mkdirSync(path.join(dir, 'fake.mjs'));
+      fs.writeFileSync(path.join(dir, 'real.cjs'), "require('../../candidates');\n");
+      const inventory = collectJsSources(dir, { skipDirectories: SRC_SKIP_DIRS });
+      assert.deepEqual(inventory.problems, [], inventory.problems.join(' | '));
+      assert.deepEqual(inventory.files.map((entry) => path.basename(entry.path)), ['real.cjs']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('1b: an entry whose read throws becomes a fail-closed problem on every verdict', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-unreadable-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'ok.js'), "require('../../candidates');\n");
+      fs.writeFileSync(path.join(dir, 'locked.js'), "require('../../candidates');\n");
+      const inventory = collectJsSources(dir, {
+        skipDirectories: SRC_SKIP_DIRS,
+        readFile: (absolute) => {
+          if (path.basename(absolute) === 'locked.js') {
+            const err = new Error('simulated: EPERM reading ' + absolute);
+            err.code = 'EPERM';
+            throw err;
+          }
+          return fs.readFileSync(absolute, 'utf8');
+        },
+      });
+      assert.deepEqual(inventory.files.map((entry) => path.basename(entry.path)), ['ok.js']);
+      assert.equal(inventory.problems.length, 1, inventory.problems.join(' | '));
+      assert.match(inventory.problems[0], /locked\.js/);
+      assert.match(inventory.problems[0], /EPERM/);
+      for (const base of [baseActive, baseMigrated]) {
+        const verdict = assess({ ...base, inventoryProblems: inventory.problems });
+        assert.equal(verdict.problems.length, 1, verdict.problems.join(' | '));
+        assert.match(verdict.problems[0], /fails closed/);
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('1b: a broken symlink (or a symlink the read cannot open) is a PROBLEM, never a throw', (t) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-broken-link-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'target.js'), "require('../../candidates');\n");
+      try {
+        fs.symlinkSync(path.join(dir, 'missing.js'), path.join(dir, 'broken.js'));
+      } catch (err) {
+        t.skip('this platform/checkout does not allow creating symlinks (' + err.code + ')');
+        return;
+      }
+      const inventory = collectJsSources(dir, { skipDirectories: SRC_SKIP_DIRS });
+      assert.equal(inventory.problems.length, 1, inventory.problems.join(' | '));
+      assert.match(inventory.problems[0], /broken\.js/);
+      assert.match(inventory.problems[0], /could not be read/);
+      assert.deepEqual(inventory.files.map((entry) => path.basename(entry.path)), ['target.js']);
+
+      // The observation-level wiring: an inventory problem reaches every verdict.
+      for (const base of [baseActive, baseMigrated]) {
+        const verdict = assess({ ...base, inventoryProblems: inventory.problems });
+        assert.equal(verdict.problems.length, 1, verdict.problems.join(' | '));
+        assert.match(verdict.problems[0], /fails closed/);
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

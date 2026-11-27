@@ -729,8 +729,10 @@ function assess(observation) {
   ];
 
   // A require the gate cannot read is a hole in every verdict, ACTIVE included,
-  // so it is collected exactly once, before any branch can return.
+  // so it is collected exactly once, before any branch can return. The same is
+  // true for an inventory entry that could not be read (fail closed, phase 5b).
   for (const text of obs.unresolved || []) problems.push(text);
+  for (const text of obs.inventoryProblems || []) problems.push(text);
 
   if (state === 'PARTIAL') {
     const committed = Object.keys(EXPECTED_ACTIVE_DEPENDENCIES);
@@ -845,24 +847,33 @@ function assess(observation) {
 // Directories that are never part of the CONSUMER inventory: dependencies, Git
 // internals, documentation (prose mentions the paths on purpose) and scratch.
 // Kept as data so a caller (and a test) can see exactly what a repo-wide walk
-// hides. The runtime-src inventory deliberately does NOT use this set: a
-// composite hidden under a build-shaped directory is still a composite (phase 5b).
+// hides.
 const REPO_SKIP_DIRS = Object.freeze(
   new Set(['node_modules', '.git', 'docs', '.freebuff', '.next', 'coverage', 'dist', 'build'])
 );
 
+// The runtime-src inventory skips ONLY dependencies. The package's own `src/` is
+// the one tree where every file is engine code: a composite relocated under a
+// build-shaped directory (src/orchestrator/dist/, src/build/, …) is still a live
+// composite, and skipping it made the gate certify a tree it had not read
+// (phase 5b, item 1a).
+const SRC_SKIP_DIRS = Object.freeze(new Set(['node_modules']));
+
 /**
  * Recursively walk `dir` and hand every JavaScript-named entry to `visit` with
- * its absolute path.
+ * its Dirent.
  *
- * This is the SAME walk for the package's `src/` tree and the repository-wide
- * consumer search, so the inventory cannot drift between the two callers. The
- * `skip` set is caller-supplied data: the repo walk hides build-shaped and
- * documentation directories, the package walk must not (phase 5b).
+ * The filter is `isFile() && (.js || .cjs || .mjs)` with the precedence the
+ * rule needs, then widened to EVERY non-directory entry (regular file, symlink,
+ * or anything else readdir reports): a symlink to a consumer is a consumer, and
+ * an entry that is not a directory is exactly what the caller must try to read.
+ * A directory named `x.cjs` is skipped here and never reaches the reader, so no
+ * entry shape can make the walk itself throw — unreadable entries are decided
+ * by the reader, not by the walk (phase 5b, item 1b).
  *
  * @param {string} dir absolute root to walk
  * @param {(absolute: string, entry: import('node:fs').Dirent) => void} visit
- * @param {{skipDirectories?: Set<string>, filter?: (absolute: string, entry: import('node:fs').Dirent) => boolean}} [options]
+ * @param {{skipDirectories?: Set<string>}} [options]
  */
 function walkJs(dir, visit, options = {}) {
   const skip = options.skipDirectories || REPO_SKIP_DIRS;
@@ -872,12 +883,41 @@ function walkJs(dir, visit, options = {}) {
       walkJs(path.join(dir, entry.name), visit, options);
       continue;
     }
-    if (entry.isFile() && entry.name.endsWith('.js') || entry.name.endsWith('.cjs') || entry.name.endsWith('.mjs')) {
-      const absolute = path.join(dir, entry.name);
-      if (options.filter && !options.filter(absolute, entry)) continue;
-      visit(absolute, entry);
+    const name = entry.name;
+    if ((entry.isFile() || entry.isSymbolicLink()) && (name.endsWith('.js') || name.endsWith('.cjs') || name.endsWith('.mjs'))) {
+      visit(path.join(dir, name), entry);
     }
   }
+}
+
+/**
+ * The fail-closed inventory: walk `dir` with `skipDirectories`, read every entry
+ * the walk reports, and turn a read failure into a PROBLEM instead of a throw.
+ *
+ * A broken symlink, a permission error or a racing deletion all mean the same
+ * thing to this gate: the inventory could not read a file it was supposed to
+ * certify, so the verdict must carry the hole, not silently pass over it.
+ *
+ * @param {string} dir absolute root
+ * @param {{skipDirectories?: Set<string>, readFile?: (absolute: string) => string}} [options]
+ * @returns {{files: {path: string, source: string}[], problems: string[]}} absolute paths
+ */
+function collectJsSources(dir, options = {}) {
+  const read = options.readFile || ((absolute) => fs.readFileSync(absolute, 'utf8'));
+  const files = [];
+  const problems = [];
+  walkJs(dir, (absolute, entry) => {
+    try {
+      files.push({ path: absolute, source: read(absolute) });
+    } catch (err) {
+      problems.push(
+        absolute + ' (' + (entry.isSymbolicLink() ? 'symlink' : 'entry') + ') could not be read' +
+        ' (' + (err && err.code ? err.code : String(err)) + '), so the inventory fails closed:' +
+        ' the gate cannot certify an entry it cannot read'
+      );
+    }
+  }, options);
+  return { files, problems };
 }
 
 module.exports = {
@@ -885,9 +925,11 @@ module.exports = {
   EXPECTED_ACTIVE_DEPENDENCIES,
   REQUIRED_SUITES,
   REPO_SKIP_DIRS,
+  SRC_SKIP_DIRS,
   STAGES,
   assess,
   classifyLifecycle,
+  collectJsSources,
   compositeDependencies,
   coreEntrySpread,
   resolveSpecifier,
