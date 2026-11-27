@@ -235,11 +235,23 @@ function specifierMatches(code) {
     // resolvable as `require`, and leaving it out made a `.mjs` consumer
     // invisible even once the walk reached the file.
     /\bimport\s*\(\s*(['"])([^'"\n]+)\1\s*\)/g,
+    // Template literals with no substitution are static strings: an
+    // uninterpolated `require(`../x`)` resolves exactly like a quoted one, and
+    // treating it as dynamic made a real consumer read as an unresolvable
+    // require instead of a counted dependency. `$` is excluded rather than
+    // parsed: any dollar sign sends the call to the fail-closed list, so a
+    // `${` interpolation can never be silently counted.
+    /\brequire(?:\s*\.\s*resolve)?\s*\(\s*`([^`\n$]*)`\s*\)/g,
+    /\bimport\s*\(\s*`([^`\n$]*)`\s*\)/g,
   ];
   const found = [];
   for (const pattern of patterns) {
     for (const match of code.matchAll(pattern)) {
-      found.push({ specifier: match[2], index: match.index });
+      // The quoted patterns carry the quote char in group 1 and the text in
+      // group 2; the backtick patterns have no quote group, so the text is
+      // group 1. Take whichever the pattern produced.
+      const specifier = match[2] === undefined ? match[1] : match[2];
+      found.push({ specifier, index: match.index });
     }
   }
   return found;
@@ -263,6 +275,10 @@ function unresolvableRequires(code) {
   for (const match of code.matchAll(pattern)) {
     const rest = code.slice(match.index + match[0].length);
     if (/^['"]/.test(rest)) continue;
+    // A backtick literal with no `$` anywhere inside it is a static specifier
+    // (the literal-pattern list above counted it); anything with a dollar, or
+    // with no closing backtick before the call ends, stays a problem.
+    if (/^`[^`\n$]*`\s*\)/.test(rest)) continue;
     found.push(rest.slice(0, 48).replace(/\s+/g, ' ').trim());
   }
   // `require` used as a VALUE (`const r = require; r('../x')`) and

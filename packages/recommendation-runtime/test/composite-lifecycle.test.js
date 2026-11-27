@@ -972,3 +972,41 @@ describe('F1 lifecycle — the src inventory skips only node_modules, and unread
     }
   });
 });
+
+// Phase 5b, probe h2: an uninterpolated template literal IS a static string.
+// Before the fix, `` require(`../../candidates`) `` matched neither the
+// literal-specifier patterns (quote classes excluded backticks) nor a plain
+// skip, so a real consumer read as ONE unresolved dynamic load instead of a
+// counted dependency: the right direction (never ACTIVE), the wrong form.
+// h3 pins the other side of the same line — a `$` sends the call to the
+// fail-closed list, interpolated or not.
+describe('F1 lifecycle — a backtick specifier without substitution is a literal', () => {
+  it("h2 fix: backtick require('../../candidates') counts as a dependency, not a problem", () => {
+    const { dependencies, problems } = compositeDependencies([
+      { path: 'src/orchestrator/lib/h2.js', source: 'require(`../../candidates`);\n' },
+    ]);
+    assert.deepEqual(problems, [], problems.join(' | '));
+    assert.deepEqual(dependencies, { 'src/orchestrator/lib/h2.js': ['candidates'] });
+  });
+
+  it('h3 fix-side: a $ anywhere in the template fails closed, never counts', () => {
+    const { dependencies, problems } = compositeDependencies([
+      { path: 'src/orchestrator/lib/h3.js', source: "require(`../../${'candidates'}`);\n" },
+    ]);
+    assert.deepEqual(dependencies, {});
+    assert.equal(problems.length, 1, problems.join(' | '));
+  });
+
+  it('the fix does not soften the quoted or dynamic-import paths', () => {
+    const quoted = compositeDependencies([
+      { path: 'src/orchestrator/lib/a.js', source: 'require(\'../../candidates\');\n' },
+    ]);
+    const imported = compositeDependencies([
+      { path: 'src/orchestrator/lib/b.mjs', source: 'await import(`../../scoring`);\n' },
+    ]);
+    assert.deepEqual(quoted.dependencies, { 'src/orchestrator/lib/a.js': ['candidates'] });
+    assert.deepEqual(quoted.problems, []);
+    assert.deepEqual(imported.dependencies, { 'src/orchestrator/lib/b.mjs': ['scoring'] });
+    assert.deepEqual(imported.problems, []);
+  });
+});
