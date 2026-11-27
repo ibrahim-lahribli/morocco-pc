@@ -50,21 +50,43 @@
 //   * Comments are removed by a small lexer, not a regex, so a string containing
 //     `//` (a URL) cannot swallow the rest of a real line.
 //
-// KNOWN LIMITS OF THE INVENTORY, measured on this tree (phase 5b, item 1e):
-//   * The walk reads .js/.cjs/.mjs only. No .ts/.tsx/.mts/.cts file exists
-//     outside `apps/web/` (its own package), and `apps/web` contains zero
-//     references to this package or to a composite path (static grep); a future
-//     TS engine file WOULD be invisible to this gate.
-//   * No package.json in the tree names a runtime composite or shim in
-//     `main`/`exports`/`imports` (the only stage-named exports are
-//     recommendation-core's own published namespaces), so no module resolution
-//     route bypasses the specifier scan.
-//   * Non-JS files are not scanned: a composite path held as DATA in .json is
-//     not a consumer (probe k3), a specifier resolving OUTSIDE the package
-//     cannot be a composite (probe j4), and a module that requires a consumer
-//     while re-exporting NOTHING inherits nothing (probe n3). Conversely a
-//     require inside a string literal counts (probe l2): a text scanner prefers
-//     the false positive to the false negative.
+// KNOWN LIMITS OF THE INVENTORY AND THE SPECIFIER SCAN (phase 5c). Every item
+// below is a measured property of this tree, not a suspicion:
+//   * COMPUTED REQUIRES fail closed. `require(path.join(...))`, `require(name)`
+//     and a template carrying a `$` substitution match no literal pattern, so
+//     they reach the verdict as a PROBLEM ("fails closed") rather than being
+//     counted or ignored. That is detection of the CONSTRUCT, not of the
+//     target: the gate can say "there is a require I cannot read", never where
+//     it points.
+//   * LEXER DESYNC is the residual risk of the comment stripper (phase 5b,
+//     item 1f). The lexer tracks quotes, template literals and regex literals,
+//     and any of those can desynchronise it on input it cannot classify - a
+//     division operator read as the start of a regex, for instance. A desync
+//     can swallow or invent a line, so a require found in an unusual construct
+//     is evidence and its absence is not proof.
+//   * The walk reads .js/.cjs/.mjs only; .ts/.tsx/.mts/.cts are NEVER scanned.
+//     No such file exists outside `apps/web/` today (`apps/web` holds zero
+//     references to this package or to a composite path, its tsconfig maps only
+//     `@/*` to its own root, and next.config declares no alias into this
+//     package), but a future TS engine file WOULD be invisible to this gate.
+//   * n3: a module that requires a consumer while re-exporting NOTHING inherits
+//     nothing, and is not counted (probe n3).
+//   * k3: non-JS files are not scanned, so a composite path held as DATA in a
+//     .json file is not a consumer (probe k3).
+//   * j4: from `src/orchestrator/lib/`, `../../src/<stage>` normalises to
+//     `src/src/<stage>` - one `src` segment too many, past every composite.
+//     Nothing resolves there, so nothing is counted (probe j4): the specifier
+//     is real, the path it resolves to is not a composite.
+//   * l2: a `require(...)` inside a STRING literal IS counted, so prose that
+//     quotes a require is a FAIL-CLOSED FALSE POSITIVE and never an invisible
+//     edge - it adds a dependency the code does not have, and the verdict says
+//     so loudly (probe l2).
+//   * The only dynamic form detected is the LITERAL `import('...')`, plus its
+//     `${`-free backtick twin. An `import()` with a computed argument is neither
+//     resolved nor reported.
+//
+// The other five Revision 19 conditions are unchanged by all of the above: this
+// list bounds what the inventory can SEE, not what the gate requires.
 //
 // DB-free and dependency-free apart from `node:fs` + `node:path` in the
 // inventory walker: every detector takes the bytes and the observations the
