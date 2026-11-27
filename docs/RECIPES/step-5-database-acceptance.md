@@ -44,9 +44,13 @@ order of weight:
   freedom while costing a re-validation of a Decision 21 gate.
 - TEST's unmarked rows are legitimately owned by nobody in this PR. Nothing here resets, clears, re-marks or
   deletes them.
-- The shape is already proven in CI: the `ephemeral-eval` job applies migrations `001`-`023` with
-  `--test-db` and then applies **every** seed with `node scripts/run-seeds.js --confirm-shared` against its
-  own throwaway container. An acceptance branch is the operator-provisioned version of it.
+- The shape is already proven in CI: the `ephemeral-eval` job applies migrations `001`-`023` and then
+  **every** seed inside its own throwaway container, via `node scripts/run-seeds.js` carrying the
+  shared-write attestation flag (spelled `--confirm-`*shared*: CI-only, because that container is the job's
+  own scratch database, reachable by nobody else, and the flag is the operator's claim that the destination
+  was verified out of band — here it would authorize a write to the WRONG database, so §4.1 step 7 is the
+  only seeding path this runbook uses and it takes the TEST-target attestation instead). An acceptance
+  branch is the operator-provisioned version of that CI shape.
 
 ### 2.2 The seeded catalogue does not match `EXPECTED` — measured 2026-11-26
 
