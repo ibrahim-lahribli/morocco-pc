@@ -16,7 +16,7 @@
 // synthetic trees in each of the three possible states. The MIGRATED branch is
 // therefore executable today, and a reviewer can see it fail.
 //
-// ONE PIECE OF I/O LIVES HERE, ON PURPOSE (phase 5b): `collectSources` below is
+// ONE PIECE OF I/O LIVES HERE, ON PURPOSE (phase 5b): `collectJsSources` below is
 // the file inventory that builds every observation. Keeping it next to the
 // detectors means the skip sets, the extension filter and the fail-closed read
 // semantics are covered by this module's own tests instead of being re-derived
@@ -40,13 +40,31 @@
 //     `import` whose path segments are `recommendation/<stage>` counts, a path
 //     string in a script's own data or a sentence in a comment does not.
 //   * Core spreaders are found by the RE-EXPORT BEHAVIOUR (`...require(...)`,
-//     `...core`, `Object.assign({}, core)`, `module.exports = core`), at any depth
+//     `...core`, `Object.assign({}, core)`, `module.exports = core`, and the
+//     `exports.x = core.x` twins that never name `module.exports` - phase 5b o1),
+//     at any depth
 //     under the runtime source, at ANY depth (`runtimeSurfacePublishers` judges every
 //     file the caller walked, so a nested composite is not invisible), in any quote
 //     style and any spacing. Importing one core function for internal use is not a
 //     spread and is not flagged.
 //   * Comments are removed by a small lexer, not a regex, so a string containing
 //     `//` (a URL) cannot swallow the rest of a real line.
+//
+// KNOWN LIMITS OF THE INVENTORY, measured on this tree (phase 5b, item 1e):
+//   * The walk reads .js/.cjs/.mjs only. No .ts/.tsx/.mts/.cts file exists
+//     outside `apps/web/` (its own package), and `apps/web` contains zero
+//     references to this package or to a composite path (static grep); a future
+//     TS engine file WOULD be invisible to this gate.
+//   * No package.json in the tree names a runtime composite or shim in
+//     `main`/`exports`/`imports` (the only stage-named exports are
+//     recommendation-core's own published namespaces), so no module resolution
+//     route bypasses the specifier scan.
+//   * Non-JS files are not scanned: a composite path held as DATA in .json is
+//     not a consumer (probe k3), a specifier resolving OUTSIDE the package
+//     cannot be a composite (probe j4), and a module that requires a consumer
+//     while re-exporting NOTHING inherits nothing (probe n3). Conversely a
+//     require inside a string literal counts (probe l2): a text scanner prefers
+//     the false positive to the false negative.
 //
 // DB-free and dependency-free apart from `node:fs` + `node:path` in the
 // inventory walker: every detector takes the bytes and the observations the
