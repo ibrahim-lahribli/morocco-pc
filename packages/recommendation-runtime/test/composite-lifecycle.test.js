@@ -1010,3 +1010,38 @@ describe('F1 lifecycle — a backtick specifier without substitution is a litera
     assert.deepEqual(imported.problems, []);
   });
 });
+
+// Phase 5b, item 1f (probe o1): the spreader detector keyed on the index of
+// `module.exports`, so a file that publishes the core surface ONLY through the
+// `exports` object — the shape CJS allows without ever naming `module.exports`
+// — escaped the composite signature check entirely. Every form below is the
+// same publication; internal use (a CALLED member, a non-core binding) must
+// stay unflagged, which is the rule that keeps legitimate Core use out of the
+// gate's crosshairs.
+describe('F1 lifecycle — publication through `exports.<name>` needs no `module.exports`', () => {
+  const coreBinding = "const core = require('../core-entry');\n";
+
+  it('o1 fix: exports.member = core.member is a composite signature', () => {
+    assert.equal(coreEntrySpread(coreBinding + 'exports.candidates = core.candidates;\n'), true);
+  });
+
+  it('o1 fix: Object.assign(exports, core) is a composite signature', () => {
+    assert.equal(coreEntrySpread(coreBinding + 'Object.assign(exports, core.scoring);\n'), true);
+  });
+
+  it('o1 fix: inline core-entry publication onto exports is caught too', () => {
+    assert.equal(
+      coreEntrySpread("exports.candidates = require('../core-entry').candidates;\n"),
+      true
+    );
+    assert.equal(coreEntrySpread("exports.all = { ...require('../core-entry') };\n"), true);
+  });
+
+  it('the fix keeps internal use unflagged: called members, non-core bindings', () => {
+    assert.equal(coreEntrySpread(coreBinding + 'exports.value = wrap(core.purity());\n'), false);
+    assert.equal(
+      coreEntrySpread("const own = require('./loader');\nexports.x = own.x;\n"),
+      false
+    );
+  });
+});

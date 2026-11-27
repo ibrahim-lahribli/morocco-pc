@@ -348,6 +348,10 @@ function stagesRequiredBy(source, fromFile) {
  *     explicitly. A core member READ as a value there is the same publication as
  *     a spread; a core member CALLED (`pure.a()`) is internal use, not exposure,
  *     and stays unflagged.
+ *   - PUBLICATION WITHOUT `module.exports` (phase-5b o1):
+ *     `exports.<name> = core` / `exports.<name> = core.<member>`,
+ *     `Object.assign(exports, core)`, and the inline twins
+ *     `exports.<name> = require('../core-entry')` / `= { ...require(...) }`.
  *
  * @param {string} source
  * @returns {boolean}
@@ -369,6 +373,16 @@ function coreEntrySpread(source) {
     String.raw`Object\.assign\s*\(\s*\{\s*\}\s*,\s*require\s*\(\s*` + CORE_ENTRY_SPECIFIER + String.raw`\s*\)`
   );
   if (assignInline.test(code)) return true;
+
+  // Publication through the `exports` object without ever naming
+  // `module.exports` (the phase-5b o1 escape): `exports.foo =
+  // require('../core-entry')` and `exports.foo = { ...require(...) }` hand
+  // the surface to consumers exactly like their `module.exports` twins.
+  const exportsInline = new RegExp(
+    String.raw`(?<![\w$.])exports\s*\.\s*[A-Za-z_$][\w$]*\s*=\s*(?:\{\s*\.\.\.\s*)?`
+      + String.raw`require\s*\(\s*` + CORE_ENTRY_SPECIFIER + String.raw`\s*\)(?!\s*\()`
+  );
+  if (exportsInline.test(code)) return true;
 
   const binding = new RegExp(
     String.raw`(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*` + CORE_ENTRY_SPECIFIER + String.raw`\s*\)`,
@@ -433,6 +447,25 @@ function publishesSurface(code, name, exportAt) {
   if (new RegExp(String.raw`module\.exports\s*=\s*` + escaped + String.raw`\s*(?:;|$)`).test(code)) return true;
   if (new RegExp(String.raw`Object\.assign\s*\(\s*\{\s*\}\s*,\s*` + escaped + boundary).test(code)) return true;
   if (new RegExp(String.raw`Object\.assign\s*\(\s*` + escaped + String.raw`\s*,`).test(code)) return true;
+
+  // Assignments onto the `exports` object need no `module.exports` anywhere:
+  // `exports.member = core.member;` (the o1 shape) and
+  // `Object.assign(exports, core)` publish the surface from a position the
+  // exportAt gate cannot see. The tail lookahead refuses a call
+  // (`exports.x = core.helper()` is internal use, not exposure) and a deeper
+  // chain left unconsumed, exactly like the member rule below.
+  if (
+    new RegExp(
+      String.raw`(?<![\w$.])exports\s*\.\s*[A-Za-z_$][\w$]*\s*=\s*`
+        + escaped + String.raw`(?:\s*\.\s*[A-Za-z_$][\w$]*)*(?!\s*[.(])`
+    ).test(code)
+  ) return true;
+  if (
+    new RegExp(
+      String.raw`Object\.assign\s*\(\s*exports\s*,\s*`
+        + escaped + String.raw`(?:\s*\.\s*[A-Za-z_$][\w$]*)*(?!\s*[.(])`
+    ).test(code)
+  ) return true;
 
   const member = new RegExp(
     String.raw`(?<![\w$])` + escaped + String.raw`\s*\.\s*[A-Za-z_$][\w$]*`,
