@@ -819,26 +819,27 @@ describe('F1 lifecycle — the inventory is complete or the verdict is not ACTIV
 // come from collectJsSources: the src inventory skips only node_modules, every
 // non-directory .js/.cjs/.mjs entry is attempted, and an entry the read cannot
 // open is a problem the verdict carries — never a throw, never silence.
-describe('F1 lifecycle — the src inventory skips only node_modules, and unreadable entries fail closed', () => {
-  // A throwaway COPY of this package (src/ and test/), so a probe exercises the
-  // real walk over a real layout instead of an array the test hand-built.
-  function makeFixturePackage() {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-fixture-'));
-    const pkg = path.join(root, 'packages', 'recommendation-runtime');
-    fs.mkdirSync(pkg, { recursive: true });
-    fs.cpSync(path.join(PACKAGE_ROOT, 'src'), path.join(pkg, 'src'), { recursive: true });
-    fs.cpSync(path.join(PACKAGE_ROOT, 'test'), path.join(pkg, 'test'), { recursive: true });
-    fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: 'runtime-fixture' }));
-    return {
-      root,
-      pkg,
-      src: path.join(pkg, 'src'),
-      dispose() {
-        fs.rmSync(root, { recursive: true, force: true });
-      },
-    };
-  }
+// A throwaway COPY of this package (src/ and test/), so a probe exercises the
+// real walk over a real layout instead of an array the test hand-built.
+// Module scope: the 1a/1b tests and the phase-5b probe table share it.
+function makeFixturePackage() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-fixture-'));
+  const pkg = path.join(root, 'packages', 'recommendation-runtime');
+  fs.mkdirSync(pkg, { recursive: true });
+  fs.cpSync(path.join(PACKAGE_ROOT, 'src'), path.join(pkg, 'src'), { recursive: true });
+  fs.cpSync(path.join(PACKAGE_ROOT, 'test'), path.join(pkg, 'test'), { recursive: true });
+  fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: 'runtime-fixture' }));
+  return {
+    root,
+    pkg,
+    src: path.join(pkg, 'src'),
+    dispose() {
+      fs.rmSync(root, { recursive: true, force: true });
+    },
+  };
+}
 
+describe('F1 lifecycle — the src inventory skips only node_modules, and unreadable entries fail closed', () => {
   function writeConsumer(pkgSrc, relative) {
     const file = path.join(pkgSrc, ...relative.split('/'));
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -1043,5 +1044,310 @@ describe('F1 lifecycle — publication through `exports.<name>` needs no `module
       coreEntrySpread("const own = require('./loader');\nexports.x = own.x;\n"),
       false
     );
+  });
+});
+
+// Phase 5b, item 1d: the owner's probe table, committed. 26 cases g1-n3 plus the
+// out-of-numbering o1 spreader probe. Every fixture is written into a copy of
+// this package under the OS temp directory, so the probe travels the REAL
+// inventory walk and the REAL resolution rules — file placement (top-level vs
+// lib/) is part of each probe, exactly as in the owner's list.
+//
+// Reading the expectations: for a counted row the dependency appears under its
+// resolution key and the verdict stops being clean ACTIVE; for a fail-closed row
+// the construct is NOT counted and instead rides the verdict as a problem (a
+// require the scanner cannot read must never pass silently). Rows tagged LIMIT
+// (j4, k3, l1, l2, n3) adopt the observed 32d3607 behavior as expected, per the
+// owner's ruling; each names its limit in the test title. h2 and o1 pin the
+// post-fix correct verdicts delivered by the two fix commits immediately above.
+describe('F1 lifecycle — phase 5b probe table (g1-n3 + o1)', () => {
+  function fixtureProbe(mutate) {
+    const temp = makeFixturePackage();
+    try {
+      const write = (relative, source) => {
+        const rel = relative.replace(/^src\//, '');
+        const file = path.join(temp.src, ...rel.split('/'));
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, source);
+        return file;
+      };
+      mutate(temp, write);
+      const inventory = collectJsSources(temp.src, { skipDirectories: SRC_SKIP_DIRS });
+      assert.deepEqual(inventory.problems, [], inventory.problems.join(' | '));
+      const runtimeSources = inventory.files.map((entry) => ({
+        path: 'src/' + path.relative(temp.src, entry.path).split(path.sep).join('/'),
+        source: entry.source,
+      }));
+      const { dependencies, problems } = compositeDependencies(runtimeSources);
+      const coreSpreaders = runtimeSurfacePublishers(runtimeSources);
+      const verdict = assess({ ...baseActive, dependencies, unresolved: problems, coreSpreaders });
+      return {
+        dependencies,
+        problems,
+        coreSpreaders,
+        state: verdict.state,
+        verdictProblems: verdict.problems,
+        unchanged: () => assert.deepEqual(dependencies, EXPECTED_ACTIVE_DEPENDENCIES),
+        count: (key, stages) => {
+          assert.deepEqual(dependencies[key], stages, key + ': counted stages');
+        },
+        absent: (key) => assert.ok(!(key in dependencies), key + ': unexpectedly counted'),
+      };
+    } finally {
+      temp.dispose();
+    }
+  }
+
+  const LIB = 'src/orchestrator/lib/';
+  const TOP = 'src/orchestrator/';
+
+  it('baseline: an untouched copy still observes ACTIVE with zero problems', () => {
+    const probe = fixtureProbe(() => {});
+    assert.deepEqual(probe.dependencies, EXPECTED_ACTIVE_DEPENDENCIES);
+    assert.equal(probe.state, 'ACTIVE');
+    assert.deepEqual(probe.verdictProblems, [], probe.verdictProblems.join(' | '));
+    assert.deepEqual(probe.coreSpreaders.sort(), STAGES.map((s) => 'src/' + s + '/index.js'));
+  });
+
+  it('g1: multi-line require specifier is counted', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'g1.js', "const x = require(\n  '../../candidates'\n);\nmodule.exports = x;\n")
+    );
+    probe.count(LIB + 'g1.js', ['candidates']);
+    assert.deepEqual(probe.problems, []);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('g2: space between require and the parenthesis is counted', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'g2.js', "const x = require ('../../candidates');\nmodule.exports = x;\n")
+    );
+    probe.count(LIB + 'g2.js', ['candidates']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('h1: double-quoted specifier is counted', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'h1.js', 'const x = require("../../candidates");\nmodule.exports = x;\n')
+    );
+    probe.count(LIB + 'h1.js', ['candidates']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('h2: backtick WITHOUT substitution is a literal, counted (fix commit above)', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'h2.js', 'const x = require(`../../candidates`);\nmodule.exports = x;\n')
+    );
+    probe.count(LIB + 'h2.js', ['candidates']);
+    assert.deepEqual(probe.problems, []);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('h3: backtick WITH interpolation fails closed as a problem, never counted', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'h3.js', "const x = require(`../../${'candidates'}`);\nmodule.exports = x;\n")
+    );
+    probe.absent(LIB + 'h3.js');
+    assert.equal(probe.problems.length, 1, probe.problems.join(' | '));
+    assert.ok(probe.verdictProblems.length > 0, 'the problem must ride the verdict');
+  });
+
+  it('i1: require used as a VALUE fails closed (aliased), never counted', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'i1.js', "const r = require;\nconst x = r('../../candidates');\nmodule.exports = x;\n")
+    );
+    probe.absent(LIB + 'i1.js');
+    assert.equal(probe.problems.length, 1, probe.problems.join(' | '));
+    assert.match(probe.problems[0], /aliased require/);
+  });
+
+  it('i2: module.require is counted', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'i2.js', "const x = module.require('../../candidates');\nmodule.exports = x;\n")
+    );
+    probe.count(LIB + 'i2.js', ['candidates']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('i3: createRequire fails closed, never counted', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(
+        LIB + 'i3.js',
+        "const { createRequire } = require('module');\nconst req = createRequire(__filename);\nconst x = req('../../candidates');\nmodule.exports = x;\n"
+      )
+    );
+    probe.absent(LIB + 'i3.js');
+    assert.equal(probe.problems.length, 1, probe.problems.join(' | '));
+    assert.match(probe.problems[0], /createRequire/);
+  });
+
+  it('i4: await import with a literal specifier is counted', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'i4.js', "const x = await import('../../candidates');\nmodule.exports = x;\n")
+    );
+    probe.count(LIB + 'i4.js', ['candidates']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('i5: require.resolve counts as the dependency it is (A2)', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'i5.js', "const p = require.resolve('../../candidates');\nmodule.exports = p;\n")
+    );
+    probe.count(LIB + 'i5.js', ['candidates']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it("j1: '../candidates/' resolving to the barrel is counted", () => {
+    const probe = fixtureProbe((t, write) =>
+      write(TOP + 'j1.js', "const x = require('../candidates/');\nmodule.exports = x;\n")
+    );
+    probe.count('j1.js', ['candidates']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it("j2: '../candidates/index' is counted", () => {
+    const probe = fixtureProbe((t, write) =>
+      write(TOP + 'j2.js', "const x = require('../candidates/index');\nmodule.exports = x;\n")
+    );
+    probe.count('j2.js', ['candidates']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it("j3: '../candidates/index.js' is counted", () => {
+    const probe = fixtureProbe((t, write) =>
+      write(TOP + 'j3.js', "const x = require('../candidates/index.js');\nmodule.exports = x;\n")
+    );
+    probe.count('j3.js', ['candidates']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('j4 LIMIT: ../../src/candidates from lib/ resolves OUTSIDE the package — invisible at 32d3607, adopted', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'j4.js', "const x = require('../../src/candidates');\nmodule.exports = x;\n")
+    );
+    probe.unchanged();
+    assert.deepEqual(probe.problems, []);
+    assert.equal(probe.state, 'ACTIVE');
+  });
+
+  it('k1: a consumer in a .cjs file is inventoried and counted', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'k1.cjs', "require('../../candidates');\nmodule.exports = 1;\n")
+    );
+    probe.count(LIB + 'k1.cjs', ['candidates']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('k2: a consumer in a .mjs file is inventoried and counted', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'k2.mjs', "require('../../candidates');\nexport default 1;\n")
+    );
+    probe.count(LIB + 'k2.mjs', ['candidates']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('k3 LIMIT: a .json file holding the path as DATA is not scanned — adopted', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(TOP + 'k3.json', '{ "composite": "../candidates" }\n')
+    );
+    probe.unchanged();
+    assert.deepEqual(probe.problems, []);
+    assert.equal(probe.state, 'ACTIVE');
+  });
+
+  it('l1 LIMIT: a commented-out require is stripped, clean — observed equals correct here', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'l1.js', "// const x = require('../../candidates');\nmodule.exports = 1;\n")
+    );
+    probe.unchanged();
+    assert.deepEqual(probe.problems, []);
+    assert.equal(probe.state, 'ACTIVE');
+  });
+
+  it("l2 LIMIT: require inside a STRING is a documented false positive — counted, observed adopted", () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'l2.js', 'const doc = "run: require(\'../../candidates\') for composites";\nmodule.exports = doc;\n')
+    );
+    probe.count(LIB + 'l2.js', ['candidates']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('m1: compute.js gaining ../candidates lands in the pin and fails as PARTIAL', () => {
+    const probe = fixtureProbe((t) =>
+      fs.appendFileSync(
+        path.join(t.src, 'orchestrator', 'compute.js'),
+        "\nconst extraCandidates = require('../candidates');\n"
+      )
+    );
+    assert.deepEqual(probe.dependencies['compute.js'], ['candidates', 'scoring']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('m2: run.js losing ../filtering lands in the pin and fails as PARTIAL', () => {
+    const probe = fixtureProbe((t) => {
+      const file = path.join(t.src, 'orchestrator', 'run.js');
+      const source = fs.readFileSync(file, 'utf8');
+      assert.ok(source.includes("'../filtering'"), 'fixture run.js must carry the committed filtering require');
+      fs.writeFileSync(file, source.split("'../filtering'").join("'../filtering-retired'"));
+    });
+    assert.deepEqual(probe.dependencies['run.js'], ['candidates', 'scoring']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('m3: deleting compute.js leaves three consumers and fails as PARTIAL', () => {
+    const probe = fixtureProbe((t) => {
+      fs.rmSync(path.join(t.src, 'orchestrator', 'compute.js'));
+    });
+    probe.absent('compute.js');
+    assert.equal(Object.keys(probe.dependencies).length, 3);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('m4: a NEW fifth consumer at depth (lib/extra.js) is caught, not hidden', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(LIB + 'extra.js', "require('../../scoring');\nmodule.exports = 1;\n")
+    );
+    probe.count(LIB + 'extra.js', ['scoring']);
+    assert.equal(probe.state, 'PARTIAL');
+    assert.match(
+      probe.verdictProblems.join(' | '),
+      /UNEXPECTED CONSUMERS .*src\/orchestrator\/lib\/extra\.js/
+    );
+  });
+
+  it('n1: a spread relay of a consumer inherits the consumer dependencies', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(TOP + 'n1.js', "module.exports = { ...require('./run') };\n")
+    );
+    probe.count('n1.js', ['candidates', 'filtering', 'scoring']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('n2: an Object.assign relay of a consumer inherits the consumer dependencies', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(TOP + 'n2.js', "Object.assign(module.exports, require('./run'));\n")
+    );
+    probe.count('n2.js', ['candidates', 'filtering', 'scoring']);
+    assert.equal(probe.state, 'PARTIAL');
+  });
+
+  it('n3 LIMIT: a module that requires a consumer but re-exports NOTHING is not counted — adopted', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(TOP + 'n3.js', "require('./run');\nmodule.exports = { label: 'no relay' };\n")
+    );
+    probe.unchanged();
+    assert.deepEqual(probe.problems, []);
+    assert.equal(probe.state, 'ACTIVE');
+  });
+
+  it('o1: exports.member = core.member publishes the surface with NO module.exports (fix commit above)', () => {
+    const probe = fixtureProbe((t, write) =>
+      write(TOP + 'spreader.js', "const core = require('../core-entry');\nexports.candidates = core.candidates;\n")
+    );
+    assert.ok(
+      probe.coreSpreaders.includes('src/orchestrator/spreader.js'),
+      'coreSpreaders: ' + probe.coreSpreaders.join(', ')
+    );
+    assert.ok(probe.verdictProblems.length > 0, 'a fourth core-surface publisher must carry a problem');
   });
 });
