@@ -321,6 +321,30 @@ point, and the branch's inherited rows go with it.
 
 ## 5. Part II — the post-reconciliation run (gated)
 
+### 5.0 Provision the Part II branch (procedure)
+
+Part II runs on a **new** acceptance branch, provisioned only after the §5.1 gate has merged. The Part I
+branch is deleted at §4.5 and is **not** the Part II target; wherever §5.2 says "the branch Part II will
+use", it means the branch this section provisions. This section records the procedure only — every figure
+Part II needs comes from the merged `EXPECTED` and from the fresh §4.2 output of this provisioning, never
+from a remembered number.
+
+1. Re-verify a clean parent under §3.1. Part I's branch is gone; the parent must be verified against the
+   **current** state of TEST, because Part II may run long after Part I.
+2. Create a new Neon branch from that verified parent, under its own name dated for this run.
+3. Prepare the shell exactly as §3.2 requires — fresh shell, history disabled, placeholder
+   `DATABASE_URL`, the new branch as `TEST_DATABASE_URL`, `API_ALLOW_SHARED` unset — and pass the
+   hostname-only pre-write check.
+4. Verify out of band and record the branch's restore point (§3.3).
+5. Run §4.1 against the new branch: migrations to the TEST target explicitly, then every seed with the
+   TEST-target attestation.
+6. Run §4.2 read-only and record the output; these are the counts Part II compares against the merged
+   `EXPECTED`.
+7. Continue with §5.2 on **this** branch only once the §5.1 merge is confirmed in the tree under test.
+
+If the §4.2 output of this provisioning disagrees with the merged `EXPECTED` pin, **STOP** and report:
+per §5.1 a disagreement is a finding to review, never a number to reconcile a second time.
+
 ### 5.1 The gate
 
 Part II runs **only after** a merged PR updates `EXPECTED` in `scripts/test-orchestrator-full-run.js` from
@@ -339,7 +363,7 @@ not a number to write into `EXPECTED`.
 
 ### 5.2 Re-verify the zero baseline first
 
-On the branch Part II will use, run — read-only:
+On the branch Part II will use — the §5.0 branch, never the deleted Part I one — run, read-only:
 
 ```sql
 SELECT
