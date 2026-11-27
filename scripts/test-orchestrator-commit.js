@@ -749,7 +749,7 @@ async function main() {
   try {
     await client.connect();
     connected = true;
-    console.log('target: test-scratch only (host: ' + hostOf(dbConfig.connectionString) + ')');
+    console.log('target: TEST database, not a scratch copy (host: ' + hostOf(dbConfig.connectionString) + ')');
     console.log('the shared DATABASE_URL is never contacted and never printed');
 
     const ctx = await preflight(client);

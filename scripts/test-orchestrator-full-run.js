@@ -126,11 +126,36 @@ async function readPassFacts(client, queryId) {
 }
 
 // Canonical seeded state of the test branch: seeds 001 (15 products) + 002
-// (85 products, catalog expansion) = 100 Seed products / 101 Seed offers;
-// seed 003 (connector data, no new rows) + 004a (87 GPU/PSU assessment rows,
-// OG-01 batch 1) + 004b (63 CPU/MOTHERBOARD rows + 60 SSD/RAM rows, OG-01
-// batch 2) = 235 assessments. Update this when a seed file changes the canonical
-// catalog (AGENTS.md section 8 same-session rule).
+// (85 products, catalog expansion) = 100 Seed products / 101 Seed offers.
+//
+// THREE PINS ARE STALE, and every gap is seeds 023/024/025
+// (products +4/+7/+2, offers +4/+7/+2, assessments +12/+21/+6): a fully seeded
+// branch carries 113 Seed products, 114 Seed offers and 319 Seed assessments.
+// The static seed-file derivation and the CI measurement agree — ci run
+// 45901715371, job ephemeral-eval, log "Seed rows: products=113, offers=114,
+// assessments=319" (measured 2026-11-26 on head 5aab9a6). So on today's seeds
+// this harness mismatches ALL THREE drifted counts, not assessments alone.
+//
+// `assessments` IS NOT RECONCILED, and this comment is the record of that, not a
+// second expectation. EXPECTED pins 280; the note that used to sit here claimed
+// 235; the seed files insert 319 (2026-11-26, read only): 001 = 25, 004a = 87,
+// 004b = 45 case/cooler + 63 CPU/MB + 60 SSD/RAM, 023 = 12, 024 = 21, 025 = 6.
+// The subtotal before seed 025 is 313, which is the same `313 -> 319` seed 025's
+// own header records as MEASURED on TEST on 2026-10-31, so the arithmetic is
+// corroborated and 235 is stale. 280 matches neither figure.
+//
+// Do NOT edit EXPECTED to make a run start. The effective count depends on each
+// seed's NOT EXISTS guards and on which rows carry the `Seed %` prefix counted
+// below, so it must be measured read-only on the acceptance target first and
+// reconciled in its own reviewed change
+// (docs/RECIPES/step-5-database-acceptance.md §2.1). There is no "expected to
+// refuse" step: the acceptance runbook §4.4 keeps this harness OUT of Part I —
+// a refusal that writes nothing is neither pass nor evidence — and §5.0/§5.1
+// are the Part II gate that makes it runnable only against a merged, measured
+// EXPECTED.
+//
+// Update this when a seed file changes the canonical catalog (AGENTS.md
+// section 8 same-session rule).
 // `models` counts the rows matching the PIN (Step-2 item 1 / OG-39), not the
 // active models: a two-active-model branch must still resolve its pin to one.
 const EXPECTED = { products: 100, models: 1, offers: 101, assessments: 280, queries: 0 };
@@ -330,7 +355,7 @@ async function main() {
   try {
     await client.connect();
     connected = true;
-    console.log('target: test-scratch only (host: ' + hostOf(dbConfig.connectionString) + ')');
+    console.log('target: TEST database, not a scratch copy (host: ' + hostOf(dbConfig.connectionString) + ')');
     console.log('the shared DATABASE_URL is never contacted and never printed');
     const pin = modelPin.modelPinValue(modelPin.readModelPinFlag(process.argv.slice(2)));
     const ctx = await preflight(client, pin);
