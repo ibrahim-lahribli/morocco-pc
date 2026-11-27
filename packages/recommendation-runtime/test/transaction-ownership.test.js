@@ -10,11 +10,17 @@
 // snapshot wrapper, or a `BEGIN` inside `runRecommendation`, fails here even
 // though it might still pass every behavioural test on the happy path.
 //
-// W0 has no orchestrator source under this package: step 4 is not accepted and
-// no module may move. The test therefore (a) pins the contract document, (b)
-// proves the analyzer against synthetic sources, and (c) requires the move to
-// be all-or-nothing — either the six files are absent (pre-extraction) or all
-// six are present and analysed. A partial move fails.
+// Step 5 W3 moved all EIGHT orchestrator files here (`run.js`, `snapshot.js`,
+// `full-run.js`, `commit.js`, `swap-preview.js`, `swap-commit.js`, `compute.js`
+// and `index.js`), so the move is complete and this suite analyses the real
+// tree. Four of the eight own a transaction boundary — `snapshot.js` and
+// `swap-preview.js` read (REPEATABLE READ READ ONLY, ROLLBACK only), `commit.js`
+// and `swap-commit.js` write (COMMIT on success, ROLLBACK on error) — while
+// `run.js`, `full-run.js`, `compute.js` and `index.js` own none. The test
+// therefore (a) pins the contract document, (b) proves the analyzer against
+// synthetic sources, and (c) requires the move to stay all-or-nothing: either
+// all eight files are absent (pre-extraction) or all eight are present and
+// analysed. A partial move fails.
 //
 // DB-free and dependency-free: node:test + node:assert only.
 
@@ -49,6 +55,12 @@ const EXPECTED = {
   'commit.js': { begin: true, commit: true, rollback: true, readOnlyBegin: false },
   'swap-preview.js': { begin: true, commit: false, rollback: true, readOnlyBegin: true },
   'swap-commit.js': { begin: true, commit: true, rollback: true, readOnlyBegin: false },
+  // The barrel and the pure assemble-and-score seam moved with the six above in
+  // step 5 W3, and neither owns a transaction: index.js only re-exports, and
+  // compute.js is the pure half (its own purity gate is
+  // src/recommendation/orchestrator/compute.purity.test.js).
+  'index.js': { begin: false, commit: false, rollback: false, readOnlyBegin: false },
+  'compute.js': { begin: false, commit: false, rollback: false, readOnlyBegin: false },
 };
 
 /**
@@ -121,11 +133,11 @@ describe('transaction ownership: the source', () => {
     ? fs.readdirSync(ORCHESTRATOR_DIR).filter((name) => name.endsWith('.js')).sort()
     : [];
 
-  it('ships all six orchestrator files or none (a partial move fails)', () => {
+  it('ships all eight orchestrator files or none (a partial move fails)', () => {
     assert.ok(
       present.length === 0 || present.length === Object.keys(EXPECTED).length,
       'the orchestrator move is partial: found ' + JSON.stringify(present) +
-        '. Land all six files with their shims in the same commit.'
+        '. Land all eight files with their shims in the same commit.'
     );
     for (const name of present) {
       assert.ok(name in EXPECTED, 'unexpected module in src/orchestrator: ' + name);

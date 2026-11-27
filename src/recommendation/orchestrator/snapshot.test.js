@@ -193,7 +193,14 @@ function stripComments(source) {
 }
 
 test('snapshot.js keeps its source boundary (no DML, no COMMIT, no driver)', () => {
-  const source = stripComments(fs.readFileSync(path.join(__dirname, 'snapshot.js'), 'utf8'));
+  // Step 5 W3: scan the IMPLEMENTATION under the runtime package, never the
+  // identity shim at this test's own path.
+  const source = stripComments(
+    fs.readFileSync(
+      path.resolve(__dirname, '../../../packages/recommendation-runtime/src/orchestrator/snapshot.js'),
+      'utf8'
+    )
+  );
   for (const token of [
     "require('pg')", 'new Pool', 'COMMIT', 'INSERT', 'UPDATE', 'DELETE',
     'filterCandidates', 'assembleBuilds', 'retainTopKPerRole', 'computeBuildScores',

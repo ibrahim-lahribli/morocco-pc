@@ -23,8 +23,10 @@ const path = require('node:path');
 const runtime = require('..');
 const core = require('../../recommendation-core');
 
-// RFC §11.5: the runtime publishes these three namespaces and nothing else.
-const ALLOWED_NAMESPACES = ['loaders', 'orchestrator', 'persistence'];
+// RFC §11.5, in the order the approved row lists them: the runtime publishes
+// these three namespaces and nothing else. This is an EXACT list, not an
+// allow-list a fourth name could be added to without a diff here.
+const APPROVED_NAMESPACES = ['loaders', 'orchestrator', 'persistence'];
 
 function namespaceKeys(namespaces) {
   const keys = new Set();
@@ -35,12 +37,18 @@ function namespaceKeys(namespaces) {
 }
 
 describe('runtime namespaces', () => {
-  it('publishes only the RFC §11.5 namespaces', () => {
-    for (const name of Object.keys(runtime)) {
-      assert.ok(
-        ALLOWED_NAMESPACES.includes(name),
-        'runner: ' + name + ' is not one of ' + ALLOWED_NAMESPACES.join(', ')
-      );
+  it('publishes exactly the RFC §11.5 namespaces, in the approved order', () => {
+    assert.deepEqual(Object.keys(runtime), APPROVED_NAMESPACES);
+  });
+
+  it('publishes no implementation directory as a namespace', () => {
+    // The three mixed-barrel composites (src/candidates, src/filtering,
+    // src/scoring) are the byte-identical-move seam, not a publication: a
+    // reader who mistook them for namespaces would expect the runtime to own
+    // the pure members they re-export. See docs/MIXED_BARRELS.md §5.
+    for (const name of ['candidates', 'filtering', 'scoring', 'offers', 'query', 'loaders', 'orchestrator', 'persistence']) {
+      if (APPROVED_NAMESPACES.includes(name)) continue;
+      assert.equal(Object.prototype.hasOwnProperty.call(runtime, name), false, name + ' must not be published');
     }
   });
 

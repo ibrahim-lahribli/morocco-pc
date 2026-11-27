@@ -560,7 +560,7 @@ test('a symlink destination is rejected even when its blob matches the source fi
   assert.equal(/source src\/target\.js/.test(result.stderr), false, 'the valid side must not be reported');
 });
 
-test('the real manifest still verifies every batch (21/21, 7/7, 4/4, 5/5, 5/5, 5/5, 1/1, 4/4 and 2/2)', () => {
+test('the real manifest still verifies every batch (21/21, 7/7, 4/4, 5/5, 5/5, 5/5, 1/1, 4/4, 2/2, 3/3, 5/5 and 8/8)', () => {
   const result = run([]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /## batch step-4b-pr2/);
@@ -614,7 +614,12 @@ test('the real manifest still verifies every batch (21/21, 7/7, 4/4, 5/5, 5/5, 5
   assert.match(result.stdout, /## batch step-5-w2-persistence/);
   assert.match(result.stdout, /baseline: 9e8d1525bf5cf3f2fddc0772fd08cd49524db380/);
   assert.match(result.stdout, /blob-identical in 'step-5-w2-persistence': 5 \/ 5/);
-  assert.match(result.stdout, /blob-identical: 62 \/ 62/);
+  // Step 5 W3 appended a twelfth batch: the eight orchestrator modules, moved
+  // behind identity shims against the core-entry adapter commit.
+  assert.match(result.stdout, /## batch step-5-w3-orchestrator/);
+  assert.match(result.stdout, /baseline: 598e4423d52da20479db39887aee26456a27e3d4/);
+  assert.match(result.stdout, /blob-identical in 'step-5-w3-orchestrator': 8 \/ 8/);
+  assert.match(result.stdout, /blob-identical: 70 \/ 70/);
   assert.match(
     result.stdout,
     /characterization verified for: step-4b-pr2, step-4b-pr3, step-4b-pr4, step-4b-pr5, step-4b-pr6, step-4b-pr7/

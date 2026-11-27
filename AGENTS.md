@@ -32,11 +32,28 @@ and the hermetic run are both wired into `ci.yml`. **The harness is a boundary g
 scoring half, Engine 6 `explanation` and `offers/as-of` now live in `packages/recommendation-core/src/`
 behind identity re-export shims at their old paths, and `test/export-surface.json` records the nine
 namespaces they publish (added in batch order: PR 2, PR 3, PR 4, PR 5, PR 6 then PR 7), with the RFC
-§11.4 `exports` map declared in `packages/recommendation-core/package.json`. The loaders and the three
-mixed barrels have NOT moved, `packages/recommendation-runtime/` still carries only its
-manifest and planning documentation, `apps/api/src/engine.js` still imports `src/recommendation/**`
-directly, and the RFC remains PROPOSED for the runtime work. B1-B8 are open. Do not start the extraction
-from a documentation task.
+§11.4 `exports` map declared in `packages/recommendation-core/package.json`.
+
+`packages/recommendation-runtime/` is the impure half, and **step 5's move is complete** (branch
+`feat/step-5-w3-orchestrator`, PR #72, unmerged): the W0 boundary harness (`test/boundary.test.js`
+with its scanner, `test/surface.test.js`, `test/transaction-ownership.test.js`, the export snapshot at
+`test/export-surface.json`), W1's eight loaders, W2's five persistence modules (the three writers and
+the two validators) and W3's eight orchestrator modules all live under `packages/recommendation-runtime/src/`,
+with an identity re-export shim at every old path in `src/recommendation/**`. Its entry point publishes the
+RFC §11.5 namespaces `{ loaders, orchestrator, persistence }` — pinned by `test/index.test.js`,
+`test/loaders-surface.test.js`, `test/orchestrator-index.test.js` and `test/persistence-surface.test.js` —
+and `package.json` declares the §11.5 `exports` map (`.`, `./loaders`, `./orchestrator`, `./persistence`;
+no `./package.json`, no deep `src` path), enforced by `scripts/lib/runtime-package-exports.test.js` through
+Node's real resolver from a throwaway consumer. Three composite seam files
+(`src/{candidates,filtering,scoring}/index.js`) are the legacy mixed barrels relocated so the byte-identical
+orchestrator's `require('../candidates')` resolves at both depths; they are unpublished and carry one open
+architectural question recorded in `packages/recommendation-runtime/docs/MIXED_BARRELS.md` §5.
+**Remaining work**: `apps/api/src/engine.js` still imports `src/recommendation/**` directly (step 6), the
+three composites are split in step 6, PR #72 awaits review, and the Step 5 acceptance items — the Step 5
+acceptance review of the §11.5 surface (A2 approved that interface as written on 2026-11-11; this branch
+implements it, so no further owner ratification of the interface is pending), runtime characterization and
+provenance (`verify:extraction` 70/70 and `check:characterization` pr2-pr7 OK on the branch head), and the
+isolated TEST-branch database suite (UNKNOWN, not run) — are not closed. B1-B8 are open. Do not start the extraction from a documentation task.
 
 ## 2. Read order
 

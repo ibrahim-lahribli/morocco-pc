@@ -6,8 +6,9 @@
 // `node --test "test/*.test.js"` exits 0 when the glob matches nothing (measured
 // on Node 24.22.1: "tests 0 ... pass 0" and exit status 0). A gate that passes
 // because it discovered no tests is worse than no gate, so the package's `test`
-// script runs this file first and fails when the four harness suites are not on
-// disk. Later waves add test files; this list is the floor, not the ceiling.
+// script runs this file first and fails when a required suite is not on disk —
+// the boundary harness, the export surface, and one surface suite per published
+// namespace. Later waves add test files; this list is the floor, not the ceiling.
 //
 // It is not named *.test.js on purpose: it must run BEFORE the runner, not as
 // one more test that would also vanish in the same rename.
@@ -19,7 +20,12 @@ const path = require('node:path');
 
 const REQUIRED = [
   'boundary.test.js',
+  'composite-lifecycle.test.js',
   'index.test.js',
+  'loaders-surface.test.js',
+  'namespace-barrels.test.js',
+  'orchestrator-index.test.js',
+  'persistence-surface.test.js',
   'surface.test.js',
   'transaction-ownership.test.js',
 ];

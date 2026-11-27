@@ -19,7 +19,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const SOURCE_FILE = path.join(__dirname, 'compute.js');
+// Step 5 W3: scan the IMPLEMENTATION under the runtime package, never the
+// identity shim that now sits beside this test at the old path.
+const SOURCE_FILE = path.resolve(
+  __dirname,
+  '../../../packages/recommendation-runtime/src/orchestrator/compute.js'
+);
 
 /** Drop // and /* *\/ comments so a comment about a rule is not a violation. */
 function stripComments(source) {
@@ -43,10 +48,8 @@ const FORBIDDEN = [
 
 /** The only relative modules the seam may require. */
 const ALLOWED_REQUIRES = [
+  '../core-entry',
   '../scoring',
-  '../retention',
-  '../assembly',
-  '../candidates/errors',
 ];
 
 function violations(source) {
@@ -64,6 +67,30 @@ describe('compute.js is pure', () => {
     const required = [...source.matchAll(/require\(\s*'([^']+)'\s*\)/g)].map((match) => match[1]);
     assert.deepEqual(required.slice().sort(), ALLOWED_REQUIRES.slice().sort(),
       'compute.js must not reach outside the pure barrels');
+  });
+
+  // Step 5 W3: '../scoring' now names the runtime COMPOSITE, which carries four
+  // SQL members beside the pure ones (loadScoringModel, its SQL constant,
+  // loadComponentAssessments, its SQL constant). The seam is pure, so it may use
+  // only the three pure scoring members - pinned exactly, not as a subset, so a
+  // dropped call and an added SQL read are both failing diffs.
+  it('uses only the pure scoring members, never a composite-only SQL member', () => {
+    const used = [...new Set([...source.matchAll(/\bscoring\.([A-Za-z_$][\w$]*)/g)]
+      .map((match) => match[1]))].sort();
+    assert.deepEqual(used, [
+      'computeBuildScoreContributions',
+      'computeBuildScores',
+      'computeCandidateScores',
+    ]);
+    for (const name of [
+      'loadScoringModel',
+      'SELECT_SCORING_MODEL_SQL',
+      'loadComponentAssessments',
+      'SELECT_COMPONENT_ASSESSMENTS_SQL',
+    ]) {
+      assert.equal(used.includes(name), false,
+        'compute.js must not read the composite-only member scoring.' + name);
+    }
   });
 
   it('exports the seam and the four derivations the golden test pins', () => {

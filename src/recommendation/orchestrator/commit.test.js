@@ -458,7 +458,14 @@ function stripComments(source) {
 }
 
 /** Comment-stripped commit.js source, read once for the boundary assertions. */
-const SOURCE = stripComments(fs.readFileSync(path.join(__dirname, 'commit.js'), 'utf8'));
+// Step 5 W3: scan the IMPLEMENTATION, not the identity shim this directory now
+// holds. `__dirname` is still the old path, so the source is resolved into the
+// runtime package explicitly.
+const IMPLEMENTATION_DIR = path.resolve(
+  __dirname,
+  '../../../packages/recommendation-runtime/src/orchestrator'
+);
+const SOURCE = stripComments(fs.readFileSync(path.join(IMPLEMENTATION_DIR, 'commit.js'), 'utf8'));
 
 test('commit.js keeps its source boundary (no DML, no driver, no read pass)', () => {
   for (const token of [
@@ -508,11 +515,26 @@ test('commit.js imports exactly the error vocabulary and the writer modules', ()
   // OG-04 added the rejection writer and Decision 46 the pass-facts writer;
   // the pin is deliberately EXACT so a new import cannot slip in unreviewed.
   assert.deepEqual(requires, [
-    '../candidates/errors',
+    '../core-entry',
     '../persistence/persist-pass-facts',
     '../persistence/persist-ranked',
     '../persistence/persist-rejections',
   ]);
+});
+
+// Step 5 W3: the specifier pin above says WHERE the error vocabulary comes from;
+// this one says WHAT it may be. '../core-entry' is the core package root, so an
+// unpinned require could take any namespace from it unreviewed.
+test('commit.js takes exactly the error vocabulary from ../core-entry', () => {
+  const takes = [...SOURCE.matchAll(/core\.(\w+)/g)].map((match) => match[1]);
+  assert.deepEqual(takes, ['candidates'], 'the core-entry take is the candidates namespace and nothing else');
+  const destructured = [...SOURCE.matchAll(/const\s*\{([^}]*)\}\s*=\s*core\.(\w+);/g)];
+  assert.equal(destructured.length, 1, 'commit.js must destructure exactly one core namespace');
+  assert.equal(destructured[0][2], 'candidates');
+  assert.deepEqual(
+    destructured[0][1].split(',').map((name) => name.trim()).filter(Boolean).sort(),
+    ['CandidateSelectionError', 'ERROR_CODES']
+  );
 });
 
 // ---------------------------------------------------------------------------

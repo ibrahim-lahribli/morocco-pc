@@ -8,7 +8,9 @@ summary. It was compiled from the 2026-11-02 status review (R-01 … R-22) plus 
 
 **Reading the status column.** `OPEN` = nothing has closed it. `ACCEPTED` = a decision deliberately
 takes the cost (name it when you touch the area). `BLOCKED-OWNER` = an agent cannot move it.
-`DEFERRED` = scheduled behind a named trigger. Severity: **blocker** (release cannot be called honest),
+`DEFERRED` = scheduled behind a named trigger. **`OWNER APPROVED — TEMPORARY EXCEPTION; STEP 6 REMOVAL OPEN`** = an owner approved the
+arrangement for a named scope and a named expiry, and the obligation that ends it is still open, so the
+row is neither plain `OPEN` nor `CLOSED`. Severity: **blocker** (release cannot be called honest),
 **high** (a beta would ship a known defect), **medium** (progress cost or a documented drift),
 **low** (housekeeping).
 
@@ -49,6 +51,7 @@ takes the cost (name it when you touch the area). `BLOCKED-OWNER` = an agent can
 
 | R-31 | **The frozen golden covers assemble -> score only, so nothing pins rank -> select -> explain - and that is exactly the half persistence writes.** `src/recommendation/orchestrator/compute.js` is now replayed from 21 fixture pairs (2026-11-21), but `rankBuilds`, `selectArchetypes` and `explainSelection` (composed by `full-run.js`) have no golden, so a behaviour change there is caught only by A1/A5/A6/A10, which assert SHAPE, not output. `filterCandidates` is also outside the fixture (Decision 17.3 keeps it in `run.js`), so the verdict list travels in as a frozen input. | testing | medium | OPEN | **Task 4a-3**: a `full-run` golden built with the same freeze-then-extract method - capture the three stage outputs and replay them from fixtures, offline, in `test:unit`. It must land BEFORE W2, because W2 persists the output of that second half. | engine |
 | R-32 | **80 `recommendation_query` rows on the TEST branch carry no harness marker, so `npm run eval:scenarios` refuses to start.** Its preflight counts unmarked rows and stops (the harness only ever deletes rows hanging off a `golden-eval-` profile). Measured 2026-11-21: 80 rows, 0 `golden-eval-%` profiles, attributed the same day to `generate-presets` output (78 committed + 1 aborted) plus 1 API POST, so they are not user data - they only block `eval:scenarios` on TEST, which moves to an ephemeral database in Task 4b, and they are to be LEFT ALONE. The 2026-11-21 golden capture therefore substituted an equivalent DB-backed cross-check over the same 21 scenarios rather than deleting or re-marking rows it does not own. | testing + ops | low | OPEN - BLOCKED-OWNER | Task 4b (an ephemeral CI database) makes the problem disappear; the owner may also decide to clear the rows by hand. Neither the capture nor the cross-check touched them - both cleaned up by id and left residue 0. | owner |
+| R-33 | **F1 (RFC finding) — the three Runtime composite barrels are an owner-approved, temporary exception that step 6 must delete.** `packages/recommendation-runtime/src/{candidates,filtering,scoring}/index.js` re-export core names beside this package's SQL members, which RFC §6.4 requires to be split and §9.3 forbids a runtime module to do. **The repository owner approved Option A on 2026-11-26** (RFC §21.4, Revision 19; `packages/recommendation-runtime/docs/MIXED_BARRELS.md` §5.4): the three files may remain as an **unpublished, step-6-scoped compatibility seam** on six conditions — (1) unpublished and unreachable through the package name, (2) exact key sets and `scoring`'s key order pinned, (3) every pure member identical to its Core member, (4) no published Runtime namespace exposes a Core name, (5) **the three composites must be DELETED during step 6**, (6) no future module may cite this as precedent. The general RFC boundary rule is **unchanged**: a scoped deferral, not compliance. Enforcement: `packages/recommendation-runtime/test/composite-lifecycle.test.js` (in `npm run test:runtime`, so in CI) accepts only ACTIVE and MIGRATED, fails any PARTIAL tree, and exercises its MIGRATED branch with synthetic trees — the removal obligation cannot be forgotten silently. Nothing was fixed with memory: the completion event is a green MIGRATED run | architecture | medium | **OWNER APPROVED — TEMPORARY EXCEPTION; STEP 6 REMOVAL OPEN** | Step 6 migrates every consumer, deletes the three composite files and their old-path shims, and `npm run test:runtime` runs green in MIGRATED state — close the row with that run as evidence | owner + engine |
 
 ## Measured 2026-11-08 (Decision 65 validation pass)
 
@@ -64,6 +67,31 @@ takes the cost (name it when you touch the area). `BLOCKED-OWNER` = an agent can
   Ryzen 5 7500F 1 800 SEED -> 1 899 VERIFIED) is invisible at scenario level.
 - `npm run test:api:db` after it: 17 passed / 0 failed, TEST back to 0 `recommendation_query` rows.
 - No row here re-approves a golden assertion: A1/A3/A4 stay `hypothesis` (R-12).
+
+## Measured 2026-11-26 (F1 owner decision and the Step 5 database-acceptance plan)
+
+Read-only and DB-free: no `.env` read, no shared/TEST/EU connection, no `--confirm-*` flag, no migration,
+seed or DB-writing test.
+
+- **The Step 5 DB acceptance cannot run against TEST as it stands, for two independent reasons.** (1)
+  `scripts/test-orchestrator-full-run.js`'s preflight refuses any nonzero GLOBAL `recommendation_query`
+  count and any nonzero GLOBAL `build_candidate` baseline, and R-32 records 80 unmarked
+  `recommendation_query` rows there. (2) Its `EXPECTED` pins `models: 1` for
+  `modelPin.DEFAULT_MODEL_PIN` = `seed-minimal-v1@1.0.0`, which seed 029 makes INACTIVE, so the default
+  pin fails closed even on a clean branch; `--model=launch-v2@2.5.0` is required. `EXPECTED`'s
+  `assessments: 280` also disagrees with that file's own comment (235), so the seeded counts must be
+  MEASURED on the acceptance target, never assumed.
+- **Chosen resolution: an isolated, fully seeded acceptance branch (Option A), operator-provisioned.**
+  The zero-baseline preflight is the leak proof for `runRecommendationFullRun`, so it is not weakened, and
+  R-32's 80 rows are left alone. Adapting the harness to a populated branch (Option B) would replace that
+  global invariant with a weaker one AND still require a quiescent branch, because a whole-table
+  difference cannot distinguish a harness leak from a concurrent writer.
+- **Residue claims are per file, not universal.** Whole-table before/after comparison exists only in
+  `apps/api/test/db/recommendations.db.test.js` (six Layer-4 tables), `swap-commit.db.test.js` and
+  `swap-preview.db.test.js`. `catalog` and `scoring-model-pin` are read-only by construction;
+  `dedupe` is one rolled-back transaction; `presets` is id-scoped plus one global
+  `recommendation_preset` count; both orchestrator scripts are id-scoped only, and the full-run one
+  substitutes a zero preflight baseline for an after-comparison.
 ## Checked while compiling this list (2026-11-02)
 
 - Engine, script and API suites: 1261 / 452 / 193 tests, 0 failed, no cancelled (`test:api:db` 17 was

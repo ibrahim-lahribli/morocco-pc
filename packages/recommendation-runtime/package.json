@@ -2,8 +2,14 @@
   "name": "@morocco-pc/recommendation-runtime",
   "version": "0.1.0",
   "private": true,
-  "description": "Database-backed recommendation execution over an injected client: step 5 W1 publishes the `loaders` namespace and W2 moves the five persistence modules in behind identity shims without publishing them, with orchestrator (W3) still to come.",
+  "description": "Database-backed recommendation execution over an injected client. Step 5 completed the extraction: W1 publishes `loaders`, W2 moved the five persistence modules, W3 moved the eight orchestrator modules and publishes `orchestrator`. The root publishes the RFC §11.5 namespaces { loaders, orchestrator, persistence } and package.json declares the §11.5 `exports` map (`.`, `./loaders`, `./orchestrator`, `./persistence`) with no `./package.json` and no deep src path.",
   "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./loaders": "./src/loaders/index.js",
+    "./orchestrator": "./src/orchestrator/index.js",
+    "./persistence": "./src/persistence/index.js"
+  },
   "engines": {
     "node": ">=22"
   },

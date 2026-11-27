@@ -1,99 +1,12 @@
 /**
- * Scoring model - Decision 11 public surface + Engine 4 scoring (Decision 13).
+ * Scoring model (Decision 11) + Engine 4 scoring (Decision 13) - COMPATIBILITY
+ * SHIM (step 5 W3).
  *
- * Boundary-only barrel: re-exports the scoring-model loader, the pure
- * Decision 3(a) configuration validator, and the Engine 4 scoring modules
- * (Decision 13 STEP 1-3) without wrappers, logic, orchestration, or
- * additional contracts.
- *
- * Decision 11 (scoring model):
- *   loadScoringModel()                  - pinned-ID `scoring_model` lookup +
- *     fail-fast missing/inactive handling + frozen validated domain object
- *     (see ./load-scoring-model).
- *   SELECT_SCORING_MODEL_SQL            - the single exact-ID query constant.
- *   validateScoringModelConfiguration() - the pure, DB-free Decision 3(a)
- *     configuration contract validator (see ./configuration).
- *   SCORING_MODEL_CONFIGURATION_KEYS    - the frozen required top-level key
- *     vocabulary, in documented order.
- *   OPTIONAL_CONFIGURATION_KEYS         - the frozen optional top-level keys
- *     (Decision 37: `use_case_profiles`).
- *   listUseCases()                      - the use-case vocabulary of a model
- *     (Decision 37): read from `use_case_profiles`, with the legacy
- *     `gpu_required_use_cases` fallback for a model that declares no profiles.
- *   validateUseCaseProfiles()           - the pure `use_case_profiles`
- *     contract validator (see ./use-cases).
- *   USE_CASE_PROFILES_KEY / GPU_POLICIES - the Decision 37 key and policy
- *     vocabulary.
- *
- * Engine 4 (Decision 13 STEP 1-3):
- *   loadComponentAssessments()          - component_assessment loader: the
- *     frozen { assessments, loaded_at } map (see ./load-assessments).
- *   SELECT_COMPONENT_ASSESSMENTS_SQL    - the single candidate-scoped query.
- *   selectAssessmentRow()               - STEP 1's deterministic row-selection
- *     policy (DECISION REQUIRED A2; see ./effective-score).
- *   computeEffectiveScore()             - STEP 1: effective score per
- *     (product, assessment_type) (see ./effective-score).
- *   computeCandidateScore()             - STEP 2: candidate score per
- *     (product, role) (see ./candidate-score).
- *   computeCandidateScores()            - STEP 2 batch, unsorted (ranking and
- *     the `top_k_per_role` application are owned by ../retention, Decision 12
- *     RESOLVED 2026-09-20).
- *   computeBuildScore()                 - STEP 3: build score per assembled
- *     build (see ./build-score).
- *   computeBuildScores()                - STEP 3 batch, index-aligned.
- *
- * NOT owned here: iGPU sourcing (`integrated_gpu_present`), the
- * `top_k_per_role` application and ranking (owned by ../retention since the
- * Decision 12 implementation), Engine 3 assembly, persistence, and
- * any orchestrator.
+ * The namespace barrel moved to
+ * packages/recommendation-runtime/src/scoring/index.js. Re-exported by
+ * identity, so every consumer and the orchestrator's patch seam are unchanged.
+ * Its key ORDER is still the one this path published (the loaders sit in the
+ * middle of it), and packages/recommendation-runtime/test/namespace-barrels.test.js
+ * pins it.
  */
-
-'use strict';
-
-const {
-  loadScoringModel,
-  SELECT_SCORING_MODEL_SQL,
-} = require('./load-scoring-model');
-const {
-  validateScoringModelConfiguration,
-  SCORING_MODEL_CONFIGURATION_KEYS,
-  OPTIONAL_CONFIGURATION_KEYS,
-} = require('./configuration');
-const {
-  listUseCases,
-  validateUseCaseProfiles,
-  USE_CASE_PROFILES_KEY,
-  GPU_POLICIES,
-} = require('./use-cases');
-const {
-  loadComponentAssessments,
-  SELECT_COMPONENT_ASSESSMENTS_SQL,
-} = require('./load-assessments');
-const { selectAssessmentRow, computeEffectiveScore } = require('./effective-score');
-const { computeCandidateScore, computeCandidateScores } = require('./candidate-score');
-const {
-  computeBuildScore,
-  computeBuildScores,
-  computeBuildScoreContributions,
-} = require('./build-score');
-
-module.exports = {
-  loadScoringModel,
-  SELECT_SCORING_MODEL_SQL,
-  validateScoringModelConfiguration,
-  SCORING_MODEL_CONFIGURATION_KEYS,
-  OPTIONAL_CONFIGURATION_KEYS,
-  listUseCases,
-  validateUseCaseProfiles,
-  USE_CASE_PROFILES_KEY,
-  GPU_POLICIES,
-  loadComponentAssessments,
-  SELECT_COMPONENT_ASSESSMENTS_SQL,
-  selectAssessmentRow,
-  computeEffectiveScore,
-  computeCandidateScore,
-  computeCandidateScores,
-  computeBuildScore,
-  computeBuildScores,
-  computeBuildScoreContributions,
-};
+module.exports = require('../../../packages/recommendation-runtime/src/scoring');

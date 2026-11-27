@@ -83,7 +83,12 @@ test('scoring barrel re-exports every export by identity - no wrapper, no copy',
 test('scoring barrel adds no logic of its own', () => {
   const fs = require('node:fs');
   const path = require('node:path');
-  const source = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
+  // Step 5 W3: the barrel moved into the runtime package and this path became
+  // an identity shim, so the source assertion scans the IMPLEMENTATION.
+  const source = fs.readFileSync(
+    path.resolve(__dirname, '../../../packages/recommendation-runtime/src/scoring/index.js'),
+    'utf8'
+  );
   assert.ok(source.includes('loadScoringModel'));
   assert.ok(source.includes('validateScoringModelConfiguration'));
   const banned = [

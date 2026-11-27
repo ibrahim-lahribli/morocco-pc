@@ -7,54 +7,52 @@
 // step 4B PR 1 did for the core: the harness exists before any module moves, so
 // every later batch lands behind gates that already run.
 //
-// The surface is namespaced and written by hand (RFC §11.5): the loaders, the
-// orchestrator entry points, and the persistence writers and validators —
-// nothing else. A module that appears under src/ cannot become a public export
-// by accident: there is no spread and no wildcard here.
+// The surface is namespaced and written by hand (RFC §11.5, approved as written
+// by decision A2): `loaders`, `orchestrator`, `persistence` — nothing else. A
+// module that appears under src/ cannot become a public export by accident:
+// there is no spread and no wildcard here.
 //
-// Step 5 W1 publishes `loaders`, the eight names RFC §11.5 lists, in the order
-// that table lists them:
-//   loadQueryInput, catalogVersion, loadCandidates, selectOfferPrices,
-//   loadFilteringContext, filterCandidatesForRecommendation,
-//   loadScoringModel, loadComponentAssessments
-// `filterCandidatesForRecommendation` is infrastructure composition owned at
-// orchestrator/ (RFC §11.2), not SQL, and is published here only because RFC
-// §11.5 places it under ./loaders. The SQL constants and vocabulary the
-// loaders export (`SELECT_*_SQL`, `REQUIRED_ROLES`, `CONTEXT_COMPAT_KEYS`,
-// `CATALOG_*`) are deliberately NOT part of this namespace: the approved §11.5
-// table lists functions only, and they remain public at their old stage
-// barrels. See docs/MIXED_BARRELS.md rule 4.
+// Each namespace is its own module, so the root object and the declared
+// `./loaders`, `./orchestrator` and `./persistence` subpaths are the SAME
+// objects rather than copies:
+//   require('@morocco-pc/recommendation-runtime').loaders
+//     === require('@morocco-pc/recommendation-runtime/loaders')
+// The `exports` map in package.json is what makes the subpaths a contract
+// rather than a path that happens to resolve; scripts/lib/
+// runtime-package-exports.test.js asks Node's resolver from outside the
+// repository, and test/index.test.js pins the manifest.
 //
-// Step 5 W2 moved the five persistence modules — the three writers and the two
-// validators — into this package's src/persistence/ behind identity shims at
-// their old paths, but publishes NO `persistence` namespace: the RFC §11.5
-// table is an orchestrator-facing surface, and slicing it before its consumers
-// exist would fix a shape the W3 batch has to review against the real call
-// sites. test/export-surface.json therefore still lists `["loaders"]` only.
+// W1 moved the eight loaders and published `loaders`.
+// W2 moved the five persistence modules behind identity shims and published
+//   nothing; test/persistence-surface.test.js proves the modules, not the
+//   namespace.
+// W3 moved the eight orchestrator modules behind identity shims, published
+//   `orchestrator` (the eight entry points of ORCHESTRATOR_ENTRY_POINTS.md, in
+//   that table's order), and — because W3 supplied the namespace's real
+//   consumers — reconciled the root with §11.5 by publishing `persistence`.
+//   `runRecommendationCommit` is deliberately NOT published: it is internal to
+//   orchestrator/commit.js (required directly by full-run.js) and is not one of
+//   the eight.
 //
-// Still absent, added by later batches, each updating test/export-surface.json
-// in the same commit:
-//   persistence   W2 — moved into the package, deliberately not published
-//   orchestrator  W3 — run, snapshot, full-run, commit, swap-preview, swap-commit
+// What this file does NOT decide: who CALLS these namespaces, or where their
+// implementation is owned, after step 6. `persistence` is published and
+// approved: RFC §11.5 lists `./persistence` with the three writers plus the
+// validators their callers need, and decision A2 adopted that contract as
+// written on 2026-11-11. "Internal step-6 material" therefore describes a
+// future call-site or ownership move, never the surface this file exports.
+// The surface is pinned by test/export-surface.json and each namespace by its
+// own surface suite; growing it is a reviewable diff.
+//
+// What this file does NOT close, all recorded rather than hidden: the Step 5
+// acceptance review of this implementation (the §11.5 interface itself was
+// approved as written by decision A2 on 2026-11-11, so no owner ratification of
+// the surface is pending), and the three composite seam barrels this package carries
+// for the orchestrator's both-depth specifiers await the decision documented in
+// docs/MIXED_BARRELS.md §5. Runtime characterization and provenance are verified
+// by the manifest batch in extraction-manifest.json, not by this file.
 
-const { loadQueryInput } = require('./query/load-query-input');
-const { catalogVersion } = require('./query/catalog-version');
-const { loadCandidates } = require('./candidates/loader');
-const { selectOfferPrices } = require('./offers/select');
-const { loadFilteringContext } = require('./filtering/context-loader');
-const { filterCandidatesForRecommendation } = require('./filtering/pipeline');
-const { loadScoringModel } = require('./scoring/load-scoring-model');
-const { loadComponentAssessments } = require('./scoring/load-assessments');
+const loaders = require('./loaders');
+const orchestrator = require('./orchestrator');
+const persistence = require('./persistence');
 
-const loaders = {
-  loadQueryInput,
-  catalogVersion,
-  loadCandidates,
-  selectOfferPrices,
-  loadFilteringContext,
-  filterCandidatesForRecommendation,
-  loadScoringModel,
-  loadComponentAssessments,
-};
-
-module.exports = { loaders };
+module.exports = { loaders, orchestrator, persistence };

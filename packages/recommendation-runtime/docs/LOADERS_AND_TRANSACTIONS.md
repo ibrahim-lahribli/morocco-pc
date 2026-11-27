@@ -1,7 +1,8 @@
 # Recommendation runtime - loaders and transaction contract
 
-Status: CURRENT for sections 1, 14 and 15 (moved verbatim); the ownership section below describes the
-TARGET boundary (RFC section 11.5) and is not yet extracted. This document owns the **database-facing half** of the engine contract. It was split
+Status: CURRENT for sections 1, 14 and 15 (moved verbatim), and CURRENT for the ownership section
+below: RFC section 11.5's boundary is now implemented (step 5 W1-W3, PR #72 unmerged), so the runtime
+package holds every loader, the five persistence modules and the eight orchestrator modules. This document owns the **database-facing half** of the engine contract. It was split
 out of `docs/engine/ARCHITECTURE.md` on 2026-11-11 (Roadmap Step 2, RFC §16.5). The moved text is
 verbatim; section numbers are those of the original document so that existing "section 1/14/15"
 citations in decisions and code comments keep resolving.
@@ -12,7 +13,7 @@ are authoritative where they disagree.
 
 ## Transaction and loader ownership (TARGET boundary)
 
-The pure stages never touch the database. Everything below is the responsibility of the `recommendation-runtime` project. The loaders and their public barrels - offers, query, scoring, candidates, filtering-context and the `filterCandidatesForRecommendation` composition - already live in `packages/recommendation-runtime/src/` (W1, batches `step-5-w1-offers`, `step-5-w1-query-scoring`, `step-5-w1-candidates-filtering` and `step-5-w1-final-loaders`), and so do the five persistence modules (W2, batch `step-5-w2-persistence`: the three writers and the two validators, moved behind identity shims and deliberately unpublished); the read/write transaction owners still live under `src/recommendation/` (for example `src/recommendation/orchestrator/run.js`) until W3 runs:
+The pure stages never touch the database. Everything below is the responsibility of the `recommendation-runtime` project. The loaders and their public barrels - offers, query, scoring, candidates, filtering-context and the `filterCandidatesForRecommendation` composition - already live in `packages/recommendation-runtime/src/` (W1, batches `step-5-w1-offers`, `step-5-w1-query-scoring`, `step-5-w1-candidates-filtering` and `step-5-w1-final-loaders`), and so do the five persistence modules (W2, batch `step-5-w2-persistence`: the three writers and the two validators, moved behind identity shims; W3 publishes them as the `persistence` namespace, RFC section 11.5), and so do the eight orchestrator modules including every read/write transaction owner (W3, batch `step-5-w3-orchestrator`: `run`, `snapshot`, `full-run`, `commit`, `swap-preview`, `swap-commit`, `compute`, `index`, each behind an identity shim at its old path). Every path named below now resolves inside `packages/recommendation-runtime/src/`:
 
 - **Loaders** read the tables listed in section 1 and hand plain rows/objects to the stages:
   `candidates/loader`, `filtering/context-loader`, `scoring/load-*`, `offers/`, `query/`.

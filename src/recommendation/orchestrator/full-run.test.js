@@ -20,6 +20,13 @@ const explanation = require('../explanation');
 
 const QUERY_ID = '00000000-0000-4000-8000-000000000921';
 
+// Step 5 W3: the three source-reading assertions below scan the IMPLEMENTATION
+// under the runtime package, not the identity shim at the old path.
+const IMPLEMENTATION_DIR = path.resolve(
+  __dirname,
+  '../../../packages/recommendation-runtime/src/orchestrator'
+);
+
 /** Replace the four composed entries with scripted stubs; record call order. */
 function stubStages({ snapshotResult, rankResult, selectResult, explainResult, commitResult }) {
   const order = [];
@@ -369,7 +376,11 @@ function stripComments(source) {
 }
 
 test('full-run.js keeps its source boundary (no SQL, no tx control, no driver)', () => {
-  const source = stripComments(fs.readFileSync(path.join(__dirname, 'full-run.js'), 'utf8'));
+    // Step 5 W3: scan the IMPLEMENTATION under the runtime package, never the
+  // identity shim that now sits at this test's own path.
+  const source = stripComments(
+    fs.readFileSync(path.join(IMPLEMENTATION_DIR, 'full-run.js'), 'utf8')
+  );
   for (const token of [
     "require('pg')", "require('node:pg')", 'new Pool', 'new Client', '.query(',
     'BEGIN', 'COMMIT', 'ROLLBACK', 'INSERT', 'UPDATE', 'DELETE', 'SELECT',
@@ -400,9 +411,30 @@ test('full-run.js keeps its source boundary (no SQL, no tx control, no driver)',
 });
 
 test('full-run.js imports exactly the snapshot wrapper, the commit wrapper, the ranking barrel, and Engine 6', () => {
-  const source = stripComments(fs.readFileSync(path.join(__dirname, 'full-run.js'), 'utf8'));
+    // Step 5 W3: scan the IMPLEMENTATION under the runtime package, never the
+  // identity shim that now sits at this test's own path.
+  const source = stripComments(
+    fs.readFileSync(path.join(IMPLEMENTATION_DIR, 'full-run.js'), 'utf8')
+  );
   const requires = [...source.matchAll(/require\('([^']+)'\)/g)].map((match) => match[1]).sort();
-  assert.deepEqual(requires, ['../explanation', '../ranking', './commit', './snapshot']);
+  assert.deepEqual(requires, ['../core-entry', './commit', './snapshot']);
+});
+
+// Step 5 W3: the core-entry require is pinned per MEMBER, not just per
+// specifier - the two namespace takes and the members read from each.
+test('full-run.js takes exactly ranking.rankBuilds/selectArchetypes and explanation.explainSelection from core', () => {
+  const source = stripComments(
+    fs.readFileSync(path.join(IMPLEMENTATION_DIR, 'full-run.js'), 'utf8')
+  );
+  const takes = [...source.matchAll(/const\s+(\w+)\s*=\s*core\.(\w+);/g)].map((match) => [match[2], match[1]]);
+  assert.deepEqual(takes.map(([namespace]) => namespace).sort(), ['explanation', 'ranking']);
+  for (const [namespace, local] of takes) {
+    const used = [...new Set([...source.matchAll(new RegExp('\\b' + local + '\\.(\\w+)', 'g'))]
+      .map((match) => match[1]))].sort();
+    assert.deepEqual(used, namespace === 'ranking'
+      ? ['rankBuilds', 'selectArchetypes']
+      : ['explainSelection'], 'full-run.js must read exactly the recorded core members');
+  }
 });
 
 test("Decision 38: full-run forwards explicit asOf unchanged into the snapshot", async () => {
@@ -677,7 +709,11 @@ test('full-run + REAL writers: a ZERO-BUILD pass still records its floor, and wr
 });
 
 test('Decision 46: full-run reads no environment and hardcodes no engine version', () => {
-  const source = stripComments(fs.readFileSync(path.join(__dirname, 'full-run.js'), 'utf8'));
+    // Step 5 W3: scan the IMPLEMENTATION under the runtime package, never the
+  // identity shim that now sits at this test's own path.
+  const source = stripComments(
+    fs.readFileSync(path.join(IMPLEMENTATION_DIR, 'full-run.js'), 'utf8')
+  );
   // The handoff is an OPTION. An engine-owned constant would be a second,
   // hand-maintained version that drifts from the deploy, and reading process.env
   // here would put an impure edge inside a pure module. Both are refused by
